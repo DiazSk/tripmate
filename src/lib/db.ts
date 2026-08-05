@@ -48,3 +48,7 @@ export function getTrip(id: string): TripRow | undefined {
     | TripRow
     | undefined;
 }
+
+export function updateTripItinerary(id: string, itineraryJson: string): void {
+  db.prepare(`UPDATE trips SET itinerary_json = ? WHERE id = ?`).run(itineraryJson, id);
+}
