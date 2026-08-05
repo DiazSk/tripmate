@@ -16,17 +16,27 @@ export default function TripsPage() {
   }, []);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">My trips</h1>
-        <Link href="/" className="text-sm text-orange-600 hover:underline">
+    <main className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
+      <div className="mb-10 flex items-center justify-between">
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+          My trips
+        </h1>
+        <Link href="/" className="text-sm font-medium text-accent hover:text-accent-hover">
           New trip
         </Link>
       </div>
 
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
+      {loading && <p className="text-sm text-muted">Loading…</p>}
       {!loading && trips.length === 0 && (
-        <p className="text-sm text-gray-500">No saved trips yet.</p>
+        <div className="rounded-2xl border border-dashed border-card-border p-8 text-center">
+          <p className="text-sm text-muted">No saved trips yet.</p>
+          <Link
+            href="/"
+            className="mt-3 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98]"
+          >
+            Plan your first trip
+          </Link>
+        </div>
       )}
 
       <div className="space-y-3">
@@ -34,10 +44,12 @@ export default function TripsPage() {
           <Link
             key={trip.id}
             href={`/trip/${trip.id}`}
-            className="block rounded-lg border border-gray-200 p-4 hover:border-orange-300 hover:bg-orange-50"
+            className="block rounded-2xl border border-card-border bg-card p-5 shadow-[0_1px_2px_rgba(32,28,25,0.04),0_8px_24px_-12px_rgba(32,28,25,0.12)] transition-colors hover:border-accent/40"
           >
-            <div className="font-semibold text-gray-900">{trip.destination}</div>
-            <div className="text-sm text-gray-500">
+            <div className="font-display text-base font-semibold text-foreground">
+              {trip.destination}
+            </div>
+            <div className="mt-1 text-sm text-muted">
               {trip.startDate} – {trip.endDate} · Budget ${trip.budget}
             </div>
           </Link>
