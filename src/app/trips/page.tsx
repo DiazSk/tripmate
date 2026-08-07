@@ -16,9 +16,9 @@ export default function TripsPage() {
   }, []);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
-      <div className="mb-10 flex items-center justify-between">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+    <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
           My trips
         </h1>
         <Link href="/" className="text-sm font-medium text-accent hover:text-accent-hover">
@@ -28,7 +28,7 @@ export default function TripsPage() {
 
       {loading && <p className="text-sm text-muted">Loading…</p>}
       {!loading && trips.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-card-border p-8 text-center">
+        <div className="card rounded-2xl border-dashed p-8 text-center">
           <p className="text-sm text-muted">No saved trips yet.</p>
           <Link
             href="/"
@@ -44,7 +44,7 @@ export default function TripsPage() {
           <Link
             key={trip.id}
             href={`/trip/${trip.id}`}
-            className="block rounded-2xl border border-card-border bg-card p-5 shadow-[0_1px_2px_rgba(32,28,25,0.04),0_8px_24px_-12px_rgba(32,28,25,0.12)] transition-colors hover:border-accent/40"
+            className="card block rounded-2xl p-5 transition-colors hover:border-accent/40"
           >
             <div className="font-display text-base font-semibold text-foreground">
               {trip.destination}

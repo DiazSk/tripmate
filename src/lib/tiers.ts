@@ -54,3 +54,9 @@ export function tripDays(startDate: string, endDate: string): number {
   const ms = new Date(endDate).getTime() - new Date(startDate).getTime();
   return Math.max(Math.round(ms / (1000 * 60 * 60 * 24)) + 1, 1);
 }
+
+export const MAX_TRIP_DAYS = 30;
+
+export function isTripTooLong(startDate: string, endDate: string): boolean {
+  return tripDays(startDate, endDate) > MAX_TRIP_DAYS;
+}

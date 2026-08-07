@@ -39,6 +39,9 @@ yarn-error.log*
 # sqlite db
 *.db
 
+# cesium static assets (copied by scripts/copy-cesium-assets.mjs)
+/public/cesium
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

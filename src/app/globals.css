@@ -1,14 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --background: #faf8f5;
-  --foreground: #201c19;
-  --muted: #6b6058;
-  --accent: #bf5333;
-  --accent-hover: #a8462a;
-  --accent-foreground: #fffaf7;
-  --card: #ffffff;
-  --card-border: rgba(32, 28, 25, 0.08);
+  /* "Roamly" direction: warm cream content pane + dark teal accents, contrasting
+     against the cool-toned 3D map pane. Replaces the "Overcast" steel-blue glass
+     direction — see DESIGN.md for history. */
+  --background: #f2eee6;
+  --foreground: #2b2620;
+  --muted: #7a7266;
+  --accent: #1f3a34;
+  --accent-hover: #16302b;
+  --accent-foreground: #f5f1e8;
+  --card: #faf7f1;
+  --card-border: rgba(43, 38, 32, 0.1);
+
+  --tag-neutral-bg: #e4d9c4;
+  --tag-neutral-fg: #2b2620;
+  --tag-positive-bg: #b9c9a8;
+  --tag-positive-fg: #24321f;
+  --tag-highlight-bg: #e08e6d;
+  --tag-highlight-fg: #fff8f2;
+  --tile: #c17a52;
+  --tile-foreground: #fff8f2;
 }
 
 @theme inline {
@@ -20,6 +32,14 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-card: var(--card);
   --color-card-border: var(--card-border);
+  --color-tag-neutral-bg: var(--tag-neutral-bg);
+  --color-tag-neutral-fg: var(--tag-neutral-fg);
+  --color-tag-positive-bg: var(--tag-positive-bg);
+  --color-tag-positive-fg: var(--tag-positive-fg);
+  --color-tag-highlight-bg: var(--tag-highlight-bg);
+  --color-tag-highlight-fg: var(--tag-highlight-fg);
+  --color-tile: var(--tile);
+  --color-tile-foreground: var(--tile-foreground);
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -31,4 +51,14 @@ body {
 
 .font-display {
   font-family: var(--font-display), ui-serif, Georgia, serif;
+}
+
+/* Solid card surface for the content pane — no blur/translucency, since the map
+   and the itinerary content now live in separate panes rather than layered. */
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  box-shadow:
+    0 1px 2px rgba(43, 38, 32, 0.05),
+    0 8px 24px -12px rgba(43, 38, 32, 0.18);
 }

@@ -1,11 +1,17 @@
 import { TierId } from "./tiers";
 
+export type StopCategory = "food" | "entry" | "transit" | "other";
+
 export interface Stop {
   name: string;
   lat: number;
   lng: number;
   cost: number;
   note: string;
+  time: string;
+  durationLabel: string;
+  tags: string[];
+  category: StopCategory;
   actualCost?: number;
 }
 
@@ -38,4 +44,11 @@ export interface TripSummary {
 
 export interface Trip extends TripSummary {
   itinerary: Itinerary;
+}
+
+export interface PlaceDetail {
+  history: string;
+  bestTime: string;
+  tips: string[];
+  duration: string;
 }

@@ -2,36 +2,57 @@
 
 ## Direction
 
-"Quiet Concierge" — a calm, premium travel-planning tool. Operate mode (the user is in a task: filling a form, comparing tiers, scanning a day-by-day plan), so expression stays restrained and familiar rather than expressive or decorative. Personality lives in warm neutral tone, one confident serif for structural headings, and a single terracotta accent — not in layout invention or motion.
+"Roamly" (replaces "Overcast") — a true split layout: the 3D globe (unchanged — CesiumJS + Google Photorealistic 3D Tiles) is confined to its own pane rather than a full-bleed background, and the itinerary is a solid warm-cream card in a separate pane beside it, cloned closely from a specific Dribbble reference ("Travel.Ai"/"Roamly"). The map and the card no longer layer on top of each other — that was the direct fix for a real complaint that glassmorphism over a busy, moving map was hard to read. Still Operate mode; the warmth lives in color and imagery, not in layout invention.
 
-## Palette (Restrained strategy)
+## Palette (Restrained strategy, warm register)
 
-- `--background` `#faf8f5` — warm paper, not stark white or dark.
-- `--foreground` `#201c19` — warm near-black ink for primary text.
-- `--muted` `#6b6058` — secondary text (weather, notes, dates), tinted from the ink hue rather than gray.
-- `--accent` `#bf5333` / `--accent-hover` `#a8462a` — terracotta/clay. Carries primary actions, selected states, and links only — never decoration.
-- `--card` `#ffffff` on `--card-border` `rgba(32,28,25,0.08)` — cards sit one step lighter than the paper background.
-- Semantic: red (`red-500`/`red-600`) reserved for over-budget state only.
+- `--background` `#f2eee6` (cream/"paper") — the content pane's base.
+- `--foreground` `#2b2620` (ink), `--muted` `#7a7266` — text on cream.
+- `--accent` `#1f3a34` (dark teal) / `--accent-hover` `#16302b` — the card header band, active day-pill, primary buttons. `--accent-foreground` `#f5f1e8`.
+- `--card` `#faf7f1` on `--card-border` rgba(ink, 0.1) — solid (not translucent) card surfaces; there is no glass tier anymore, since content and map are spatially separate, not layered.
+- Tag pills: `--tag-neutral-*` (tan, default), `--tag-positive-*` (sage — tags implying "recommended/local/free/must-see"), `--tag-highlight-*` (coral — tags mentioning "AI").
+- `--tile` `#c17a52` (terracotta) — the per-day budget-breakdown tiles.
+- Semantic red (over-budget/overspend) unchanged in family, tuned to sit on cream.
 
 ## Typography
 
-- Display/heading face: Source Serif 4 (self-hosted via `next/font/google`, `--font-display`), applied via the `.font-display` utility to the wordmark, page titles, and card/day headings only.
-- Body/UI/data: system sans stack (`ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`) — Operate surfaces are well served by a workhorse face; the serif carries all the personality this surface needs.
-- Numeric values (costs, budget totals) use `tabular-nums` for stable alignment.
+Unchanged: Source Serif 4 (`--font-display`) for the wordmark, page titles, and card/day headings; system sans for body/UI/data; `tabular-nums` on all costs and totals.
 
-## Components
+## Layout: split panes (`AppShell`)
 
-- **Cards**: `rounded-2xl`, 1px hairline border in `--card-border`, soft diffused shadow (`0_1px_2px_rgba(32,28,25,0.04),0_8px_24px_-12px_rgba(32,28,25,0.12)`) instead of a flat gray border. One consistent card shell reused across the form, tier picker, day cards, budget bar, feedback control, and map wrapper.
-- **Buttons**: primary = `rounded-full` terracotta pill with a soft shadow and a `scale-[0.98]` press state; secondary/ghost = text-only with a faint hover tint. No bordered secondary buttons.
-- **Inputs**: `rounded-xl`, hairline border, terracotta focus ring.
-- **Lodging line**: a drawn SVG bed/hotel glyph (not an emoji) on a tinted accent background, distinct from regular stops.
-- **Day list rows**: divided by hairline separators (`divide-y`) rather than per-row cards, so a day's stops read as one list, not nested cards.
-- **Budget bar**: pill-shaped track, terracotta fill under budget, red fill over budget, numeric readout in tabular figures.
+- `flex-col md:flex-row h-dvh` — left/top pane is the map (`h-[40vh] md:h-full md:w-[55%]`), right/bottom pane is the scrollable cream content (`md:w-[45%]`). Stacks vertically below `md`.
+- The Cesium `Viewer` (mounted once, unchanged from the prior direction) resizes to whatever box it's given — confining it to a pane instead of the full viewport needed no Cesium-side change.
+- The persistent header ("TripMate"/destination title + "My trips") lives at the top of the content pane now, plain text — no floating pill, since there's no map to float over anymore.
+
+## The itinerary card (`ItineraryCard`)
+
+Replaces the old "every day stacked vertically" `DayList` with a single active-day view, matching the reference:
+- **Header**: `{destination}: {N} Days`, tier description + budget subtitle, a destination photo (Wikipedia, darkened) as the background.
+- **Trip budget bar**: kept, sits under the header — the whole-trip view.
+- **Day-pill row**: horizontal, scrollable, one pill per day (up to the 30-day cap). Active = filled dark teal.
+- **Active day**: lodging row (no inline cost — editable "Actual" input only in the revisit/editable context, since lodging has no detail view to move it to), then stop rows (circular photo avatar or category icon, time + duration, tag pills, no inline cost), a stacked photo column (desktop only), and a **Day N — Budget Breakdown** footer: Food/Entry/Transit/Stay/Total terracotta tiles, summing that day's stops by `category` plus lodging.
+
+## Place detail — swaps the pane, doesn't overlay it
+
+`PlaceDetailPanel` is a normal (non-fixed) view now: clicking a stop swaps the content pane from `ItineraryCard` to the detail view, with a **Back** control. Cost now lives here for stops (with the actual-cost input alongside "Estimated cost") since stop rows in the day view show no `$` at all.
+
+## Photos
+
+`/api/place-photo` resolves a stop name to a Wikipedia thumbnail via full-text search (not exact-title lookup — real stop names like "Kiyomizu-dera Temple" rarely match a page title exactly), gated by a containment check (the resolved title, diacritics folded, must appear inside the stop name) to reject unrelated top hits for generic phrases like "Lunch at Kyoto Station area." A miss falls back to a category icon (food/entry/transit/pin) — expected and common for non-landmark stops, not an error state.
+
+## Duration cap
+
+30 days, enforced client-side before the tier step — no LLM call is made for an out-of-range date range.
 
 ## Motion
 
-One register throughout: 150ms transitions on buttons (color, press-scale) and a 300ms width transition on the budget bar fill. The map's flyTo (1.2s, Leaflet's own easing) is the one deliberate "authored moment" — everything else stays quiet so the itinerary content stays legible while scanning.
+The map's `flyTo` remains the one authored moment (2.5s custom easing). Everything else in the content pane is static — no slide-ins, no blur transitions; the pane swap (itinerary ↔ detail) is an instant conditional render, not an animated transition.
 
 ## What this is not
 
-No bento grids, no glass/blur decoration, no massive marketing-scale whitespace, no orchestrated scroll-reveal choreography, no kicker/eyebrow labels, no icon-plus-heading-plus-text filler cards. Those belong to Persuade-mode surfaces; this is a working tool the traveler scans and edits, not a page they're sold on.
+No layered/glassmorphic panels (retired along with "Overcast" — content and map are separate panes now, not stacked). No bento grids, no massive marketing-scale whitespace, no orchestrated scroll-reveal choreography, no kicker/eyebrow labels.
+
+## History
+
+- **"Overcast"** (superseded): full-bleed 3D globe background with translucent glass cards floating centered on top, steel-blue palette. Replaced because layering content over a busy, moving map made text legibility inconsistent — a real usability complaint, not a taste preference.
+- **"Quiet Concierge"** (superseded before that): warm-terracotta 2D-map direction, predating the 3D globe entirely.
