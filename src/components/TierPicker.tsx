@@ -23,8 +23,8 @@ export default function TierPicker({
             aria-pressed={isSelected}
             className={`rounded-xl border p-4 text-left transition-all duration-150 ${
               isSelected
-                ? "border-accent bg-accent/5 shadow-[0_1px_2px_rgba(191,83,51,0.08)]"
-                : "border-card-border bg-white hover:border-accent/40"
+                ? "border-accent bg-accent/10"
+                : "border-card-border bg-white hover:border-accent/40 hover:bg-tag-neutral-bg/40"
             }`}
           >
             <div className="font-display text-base font-semibold text-foreground">

@@ -1,19 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import DayList from "@/components/DayList";
-import BudgetBar from "@/components/BudgetBar";
+import ItineraryCard from "@/components/ItineraryCard";
 import FeedbackLoop from "@/components/FeedbackLoop";
 import TierPicker from "@/components/TierPicker";
-import { closestTier, tripDays, TierId } from "@/lib/tiers";
-import { Itinerary, Stop } from "@/lib/types";
-
-const ItineraryMap = dynamic(() => import("@/components/ItineraryMap"), {
-  ssr: false,
-});
+import PlaceDetailPanel from "@/components/PlaceDetailPanel";
+import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
+import { Itinerary } from "@/lib/types";
+import { useTripCamera } from "@/lib/useTripCamera";
 
 type Step = "form" | "tier" | "result";
 
@@ -22,9 +18,8 @@ const inputClass =
 const primaryButtonClass =
   "rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
 const ghostButtonClass =
-  "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-foreground/5";
-const cardClass =
-  "rounded-2xl border border-card-border bg-card p-5 shadow-[0_1px_2px_rgba(32,28,25,0.04),0_8px_24px_-12px_rgba(32,28,25,0.12)] sm:p-6";
+  "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg";
+const cardClass = "card rounded-2xl p-5 sm:p-6";
 
 export default function Home() {
   const router = useRouter();
@@ -36,16 +31,31 @@ export default function Home() {
   const [tier, setTier] = useState<TierId>("midrange");
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
-  const [selectedStop, setSelectedStop] = useState<Stop | null>(null);
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function chooseStyle() {
+  const {
+    flyToDestinationByName,
+    selectStop,
+    closeDetail,
+    selectedStop,
+    detail,
+    detailLoading,
+    detailError,
+  } = useTripCamera(destination);
+
+  async function chooseStyle() {
+    if (isTripTooLong(startDate, endDate)) {
+      setError(`Trips over ${MAX_TRIP_DAYS} days aren't supported — please choose a shorter date range.`);
+      return;
+    }
+    setError(null);
     const days = tripDays(startDate, endDate);
     setTier(closestTier(budget, days));
     setStep("tier");
+    await flyToDestinationByName(destination);
   }
 
   async function generate() {
@@ -114,9 +124,9 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
-      <div className="mb-10 flex items-center justify-between">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+    <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
           TripMate
         </h1>
         <Link href="/trips" className="text-sm font-medium text-accent hover:text-accent-hover">
@@ -130,7 +140,7 @@ export default function Home() {
             e.preventDefault();
             chooseStyle();
           }}
-          className={`mb-8 grid grid-cols-2 gap-4 ${cardClass}`}
+          className={`grid grid-cols-2 gap-4 ${cardClass}`}
         >
           <label className="col-span-2 text-sm font-medium text-foreground/80">
             Destination
@@ -180,7 +190,7 @@ export default function Home() {
       )}
 
       {step === "tier" && (
-        <div className={`mb-8 space-y-5 ${cardClass}`}>
+        <div className={`space-y-5 ${cardClass}`}>
           <div>
             <h2 className="font-display text-xl font-semibold text-foreground">
               Choose your style
@@ -208,25 +218,31 @@ export default function Home() {
       )}
 
       {error && (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-300/60 bg-red-50 p-3 text-sm text-red-800">
           {error}
         </div>
       )}
 
-      {step === "result" && itinerary && (
-        <div className="space-y-6">
-          <ItineraryMap destination={destination} selectedStop={selectedStop} />
-          <div className={cardClass}>
-            <BudgetBar days={itinerary.days} budget={budget} />
-          </div>
-          <DayList days={itinerary.days} onSelectStop={setSelectedStop} />
-          <FeedbackLoop
-            onSave={save}
-            onRefine={refine}
-            saving={saving}
-            refining={refining}
+      {step === "result" && itinerary && !selectedStop && (
+        <>
+          <ItineraryCard
+            itinerary={itinerary}
+            budget={budget}
+            destination={destination}
+            onSelectStop={selectStop}
           />
-        </div>
+          <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />
+        </>
+      )}
+
+      {step === "result" && itinerary && selectedStop && (
+        <PlaceDetailPanel
+          stop={selectedStop}
+          detail={detail}
+          loading={detailLoading}
+          error={detailError}
+          onBack={closeDetail}
+        />
       )}
     </main>
   );

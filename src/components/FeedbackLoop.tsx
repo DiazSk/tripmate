@@ -5,7 +5,7 @@ import { useState } from "react";
 const primaryButtonClass =
   "rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
 const ghostButtonClass =
-  "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-foreground/5";
+  "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg";
 
 export default function FeedbackLoop({
   onSave,
@@ -22,7 +22,7 @@ export default function FeedbackLoop({
   const [showFeedback, setShowFeedback] = useState(false);
 
   return (
-    <div className="rounded-2xl border border-card-border bg-card p-5 shadow-[0_1px_2px_rgba(32,28,25,0.04),0_8px_24px_-12px_rgba(32,28,25,0.12)] sm:p-6">
+    <div className="card rounded-2xl p-5 sm:p-6">
       {!showFeedback ? (
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <p className="text-sm font-medium text-foreground">Happy with this itinerary?</p>
