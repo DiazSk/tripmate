@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseJsonResponse, runClaude } from "@/lib/claude";
+import { itineraryTimeoutMs, parseJsonResponse, runClaude } from "@/lib/claude";
 import { geocodeDestination, getWeatherForDates, DayWeather } from "@/lib/weather";
 import {
   buildGeneratePrompt,
   buildRebalancePrompt,
   buildRefinePrompt,
 } from "@/lib/itineraryPrompt";
+import { tripDays } from "@/lib/tiers";
 import { DayPlan, Itinerary } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Missing rebalance fields" }, { status: 400 });
       }
       const prompt = buildRebalancePrompt({ destination, remainingDays, remainingBudget, tier });
-      const raw = await runClaude(prompt);
+      const raw = await runClaude(prompt, itineraryTimeoutMs(remainingDays.length));
       const days = parseJsonResponse<DayPlan[]>(raw);
       return NextResponse.json({ days });
     }
@@ -44,13 +45,16 @@ export async function POST(req: NextRequest) {
 
     let prompt: string;
     let effectiveTier = tier;
+    let dayCount: number;
     if (previousItinerary && feedback) {
       effectiveTier = previousItinerary.tier;
+      dayCount = previousItinerary.days.length;
       prompt = buildRefinePrompt({ destination, startDate, endDate, budget, previousItinerary, feedback });
     } else {
       if (!tier) {
         return NextResponse.json({ error: "Missing tier" }, { status: 400 });
       }
+      dayCount = tripDays(startDate, endDate);
       let weather: DayWeather[] = [];
       try {
         const geo = await geocodeDestination(destination);
@@ -63,7 +67,7 @@ export async function POST(req: NextRequest) {
       prompt = buildGeneratePrompt({ destination, startDate, endDate, budget, tier, weather });
     }
 
-    const raw = await runClaude(prompt);
+    const raw = await runClaude(prompt, itineraryTimeoutMs(dayCount));
     // The model returns just { days: [...] } — tier is known server-side, not part of its output.
     const { days } = parseJsonResponse<{ days: Itinerary["days"] }>(raw);
     const itinerary: Itinerary = { tier: effectiveTier, days };
