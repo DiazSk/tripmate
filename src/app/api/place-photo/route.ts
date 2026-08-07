@@ -12,7 +12,9 @@ async function resolveTitle(name: string): Promise<string | null> {
     name
   )}&format=json&srlimit=1`;
   const res = await fetch(url, { headers: HEADERS });
-  if (!res.ok) return null;
+  // Upstream failure (commonly a rate limit) — throw rather than returning null, so the caller
+  // can tell "lookup failed, retry later" apart from "this place genuinely has no photo".
+  if (!res.ok) throw new Error(`wikipedia search ${res.status}`);
   const data = await res.json();
   const title: string | undefined = data.query?.search?.[0]?.title;
   if (!title) return null;
@@ -35,7 +37,8 @@ export async function GET(req: NextRequest) {
   try {
     const title = await resolveTitle(name);
     if (!title) {
-      return NextResponse.json({ thumbnailUrl: null });
+      // A genuine miss (no matching page) — 200 so the client caches it rather than retrying.
+      return NextResponse.json({ thumbnailUrl: null, imageUrl: null });
     }
 
     const summaryRes = await fetch(
@@ -43,12 +46,17 @@ export async function GET(req: NextRequest) {
       { headers: HEADERS }
     );
     if (!summaryRes.ok) {
-      return NextResponse.json({ thumbnailUrl: null });
+      throw new Error(`wikipedia summary ${summaryRes.status}`);
     }
 
     const data = await summaryRes.json();
-    return NextResponse.json({ thumbnailUrl: data.thumbnail?.source ?? null });
+    return NextResponse.json({
+      thumbnailUrl: data.thumbnail?.source ?? null,
+      imageUrl: data.originalimage?.source ?? data.thumbnail?.source ?? null,
+    });
   } catch {
-    return NextResponse.json({ thumbnailUrl: null });
+    // 503 (not a 200 with a null photo) so the client treats this as retryable and doesn't
+    // cache a transient outage as "no photo exists".
+    return NextResponse.json({ error: "Lookup failed" }, { status: 503 });
   }
 }

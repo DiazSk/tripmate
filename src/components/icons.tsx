@@ -67,6 +67,52 @@ export function TransitIcon({ className }: { className?: string }) {
   );
 }
 
+export function SunIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <circle cx="10" cy="10" r="3.5" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </IconBase>
+  );
+}
+
+export function CloudIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path
+        d="M6 15h8.5a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 6 15Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </IconBase>
+  );
+}
+
+export function RainIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path
+        d="M6 12.5h8.5a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 6 12.5Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.5 15v2M10 15.5v2M12.5 15v2"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </IconBase>
+  );
+}
+
 export function PinIcon({ className }: { className?: string }) {
   return (
     <IconBase className={className}>
