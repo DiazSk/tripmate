@@ -1,180 +1,160 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import DayList from "@/components/DayList";
-import BudgetBar from "@/components/BudgetBar";
-import FeedbackLoop from "@/components/FeedbackLoop";
-import { Itinerary } from "@/lib/types";
+import PageHeader from "@/components/PageHeader";
+import PreferenceStep from "@/components/PreferenceStep";
+import TripSearchForm from "@/components/cesium/TripSearchForm";
+import TripDashboard from "@/components/cesium/TripDashboard";
+import UnboxingContainer from "@/components/cesium/UnboxingContainer";
+import { useTripState } from "@/hooks/useTripState";
+import { useAdaptiveContrast } from "@/hooks/useAdaptiveContrast";
+import type { CesiumGlobeControls } from "@/components/cesium/CesiumGlobe";
 
-const ItineraryMap = dynamic(() => import("@/components/ItineraryMap"), {
+const CesiumGlobe = dynamic(() => import("@/components/cesium/CesiumGlobe"), {
   ssr: false,
 });
 
+const NOOP_GLOBE_CONTROLS: CesiumGlobeControls = {
+  ready: false,
+  stopRotating: () => {},
+  flyTo: async () => {},
+  panTo: async () => 0,
+  resetToGlobalView: async () => {},
+  setPois: () => {},
+  setHoveredPoi: () => {},
+  clearPois: () => {},
+  sampleAverageColor: () => null,
+};
+
 export default function Home() {
   const router = useRouter();
-  const [destination, setDestination] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [budget, setBudget] = useState(1000);
+  const [globe, setGlobe] = useState<CesiumGlobeControls | null>(null);
+  const trip = useTripState(globe ?? NOOP_GLOBE_CONTROLS);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const headerIsDark = useAdaptiveContrast(globe ?? NOOP_GLOBE_CONTROLS, headerRef);
 
-  const [itinerary, setItinerary] = useState<Itinerary | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [refining, setRefining] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function generate() {
-    setGenerating(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/itinerary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, startDate, endDate, budget }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate itinerary");
-      setItinerary(data.itinerary);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally {
-      setGenerating(false);
-    }
+  async function handleSave() {
+    const id = await trip.save();
+    if (id) router.push(`/trip/${id}`);
   }
 
-  async function refine(feedback: string) {
-    setRefining(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/itinerary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          destination,
-          startDate,
-          endDate,
-          budget,
-          previousItinerary: itinerary,
-          feedback,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to refine itinerary");
-      setItinerary(data.itinerary);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally {
-      setRefining(false);
-    }
-  }
-
-  async function save() {
-    if (!itinerary) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/trips", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, startDate, endDate, budget, itinerary }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save trip");
-      router.push(`/trip/${data.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-      setSaving(false);
-    }
-  }
+  const dashboardActive = trip.status === "DASHBOARD_ACTIVE" && trip.itinerary;
+  const giftBoxState =
+    trip.status === "SEARCHING" || trip.status === "PREFERENCES"
+      ? "open"
+      : trip.status === "GENERATING"
+        ? "closed"
+        : "hidden";
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">TripMate</h1>
-        <Link href="/trips" className="text-sm text-orange-600 hover:underline">
-          My trips
-        </Link>
+    <main className="relative min-h-screen overflow-hidden bg-stone-950">
+      <div className="absolute inset-0">
+        <CesiumGlobe onReady={setGlobe} />
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          generate();
-        }}
-        className="mb-8 grid grid-cols-2 gap-4 rounded-lg border border-gray-200 p-4"
-      >
-        <label className="col-span-2 text-sm">
-          Destination
-          <input
-            required
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            placeholder="Kyoto, Japan"
-            className="mt-1 w-full rounded-md border border-gray-300 p-2"
-          />
-        </label>
-        <label className="text-sm">
-          Start date
-          <input
-            required
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 p-2"
-          />
-        </label>
-        <label className="text-sm">
-          End date
-          <input
-            required
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 p-2"
-          />
-        </label>
-        <label className="col-span-2 text-sm">
-          Total budget ($)
-          <input
-            required
-            type="number"
-            min={0}
-            value={budget}
-            onChange={(e) => setBudget(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-gray-300 p-2"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={generating}
-          className="col-span-2 rounded-md bg-orange-600 py-2 font-medium text-white hover:bg-orange-700 disabled:opacity-50"
-        >
-          {generating ? "Generating itinerary…" : "Generate itinerary"}
-        </button>
-      </form>
+      <UnboxingContainer state={giftBoxState} theme={trip.containerTheme} />
 
-      {error && (
-        <div className="mb-6 rounded-md bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      <div ref={headerRef} className="relative z-20 mx-auto max-w-3xl px-4 py-6">
+        <PageHeader
+          title="TripMate"
+          navLabel="My memories"
+          navHref="/trips"
+          variant="adaptive"
+          isDark={headerIsDark}
+        />
+      </div>
 
-      {itinerary && (
-        <div className="space-y-6">
-          <ItineraryMap days={itinerary.days} />
-          <BudgetBar days={itinerary.days} budget={budget} />
-          <DayList days={itinerary.days} />
-          <FeedbackLoop
-            onSave={save}
-            onRefine={refine}
-            saving={saving}
-            refining={refining}
-          />
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {dashboardActive ? (
+          <motion.div
+            key="dashboard"
+            className="absolute inset-0 z-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            {trip.itinerary && (
+              <TripDashboard
+                itinerary={trip.itinerary}
+                traceId={trip.traceId}
+                budget={trip.form.budget}
+                hoveredStop={trip.hoveredStop}
+                onHoverStop={trip.setHoveredStop}
+                onBack={trip.reset}
+                onSave={handleSave}
+                onRefine={trip.refine}
+                saving={trip.saving}
+                refining={trip.refining}
+              />
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="search"
+            className="relative z-10 flex flex-col items-center gap-4 px-4 pt-2 md:pt-6"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.4 }}
+          >
+            <AnimatePresence mode="wait">
+              {trip.status === "IDLE" ? (
+                <motion.div
+                  key="form"
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <TripSearchForm onSubmit={trip.submitDestination} disabled={!globe} />
+                </motion.div>
+              ) : trip.status === "SEARCHING" ? (
+                <motion.div
+                  key="searching"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="glass-panel rounded-full px-5 py-2.5 text-sm font-medium text-white"
+                >
+                  Finding {trip.form.destination}…
+                </motion.div>
+              ) : trip.status === "PREFERENCES" ? (
+                <motion.div
+                  key="preferences"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <PreferenceStep
+                    onBack={trip.reset}
+                    onSkip={() => trip.generate(null)}
+                    onContinue={(preferences) => trip.generate(preferences)}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="generating"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="glass-panel rounded-full px-5 py-2.5 text-sm font-medium text-white"
+                >
+                  Preparing your itinerary…
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {trip.error && (
+              <div className="glass-panel rounded-lg px-4 py-3 text-sm text-red-100">
+                {trip.error}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

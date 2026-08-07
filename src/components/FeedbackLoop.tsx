@@ -17,39 +17,39 @@ export default function FeedbackLoop({
   const [showFeedback, setShowFeedback] = useState(false);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+    <div className="rounded-xl border border-stone-200 bg-stone-50 p-5">
       {!showFeedback ? (
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-gray-700">Happy with this itinerary?</p>
+          <p className="text-sm text-stone-700">Happy with this itinerary?</p>
           <div className="flex gap-2">
             <button
               onClick={() => setShowFeedback(true)}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100"
             >
               Give feedback
             </button>
             <button
               onClick={onSave}
               disabled={saving}
-              className="rounded-md bg-orange-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+              className="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save trip"}
             </button>
           </div>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <textarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
             placeholder="e.g. make day 2 cheaper, add more outdoor stops"
-            className="w-full rounded-md border border-gray-300 p-2 text-sm"
+            className="w-full rounded-lg border border-stone-300 bg-white p-2.5 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
             rows={2}
           />
           <div className="flex justify-end gap-2">
             <button
               onClick={() => setShowFeedback(false)}
-              className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+              className="rounded-lg px-3 py-1.5 text-sm text-stone-600 transition-colors hover:bg-stone-100"
             >
               Cancel
             </button>
@@ -60,7 +60,7 @@ export default function FeedbackLoop({
                 setShowFeedback(false);
               }}
               disabled={!feedback.trim() || refining}
-              className="rounded-md bg-orange-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+              className="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {refining ? "Regenerating…" : "Regenerate"}
             </button>

@@ -3,6 +3,8 @@ export interface DayWeather {
   tempMaxC: number;
   tempMinC: number;
   precipitationProbability: number | null;
+  humidity: number | null;
+  weatherCode: number | null;
   historical: boolean;
 }
 
@@ -80,7 +82,7 @@ async function fetchDaily(
     "daily",
     historical
       ? "temperature_2m_max,temperature_2m_min,precipitation_sum"
-      : "temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+      : "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode"
   );
   url.searchParams.set("timezone", "auto");
 
@@ -90,6 +92,13 @@ async function fetchDaily(
   const daily = data.daily;
   if (!daily?.time) return [];
 
+  // Best-effort only: relative humidity isn't a supported "daily" aggregate on
+  // Open-Meteo, so it's fetched separately (hourly, averaged per day) and
+  // merged in. Never lets a humidity hiccup break the core forecast.
+  const humidityByDate: Record<string, number> = historical
+    ? {}
+    : await fetchHourlyHumidity(base, lat, lon, startDate, endDate);
+
   return daily.time.map((date: string, i: number) => ({
     date,
     tempMaxC: daily.temperature_2m_max[i],
@@ -97,6 +106,48 @@ async function fetchDaily(
     precipitationProbability: historical
       ? null
       : daily.precipitation_probability_max?.[i] ?? null,
+    weatherCode: historical ? null : daily.weathercode?.[i] ?? null,
+    humidity: humidityByDate[date] ?? null,
     historical,
   }));
+}
+
+async function fetchHourlyHumidity(
+  base: string,
+  lat: number,
+  lon: number,
+  startDate: string,
+  endDate: string
+): Promise<Record<string, number>> {
+  try {
+    const url = new URL(base);
+    url.searchParams.set("latitude", String(lat));
+    url.searchParams.set("longitude", String(lon));
+    url.searchParams.set("start_date", startDate);
+    url.searchParams.set("end_date", endDate);
+    url.searchParams.set("hourly", "relative_humidity_2m");
+    url.searchParams.set("timezone", "auto");
+
+    const res = await fetch(url);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const times: string[] = data?.hourly?.time ?? [];
+    const values: number[] = data?.hourly?.relative_humidity_2m ?? [];
+
+    const byDate = new Map<string, number[]>();
+    times.forEach((t, i) => {
+      const date = t.slice(0, 10);
+      const bucket = byDate.get(date) ?? [];
+      bucket.push(values[i]);
+      byDate.set(date, bucket);
+    });
+
+    const avgByDate: Record<string, number> = {};
+    for (const [date, vals] of byDate) {
+      avgByDate[date] = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    }
+    return avgByDate;
+  } catch {
+    return {};
+  }
 }
