@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 
+const primaryButtonClass =
+  "rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
+const ghostButtonClass =
+  "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg";
+
 export default function FeedbackLoop({
   onSave,
   onRefine,
@@ -17,22 +22,15 @@ export default function FeedbackLoop({
   const [showFeedback, setShowFeedback] = useState(false);
 
   return (
-    <div className="rounded-xl border border-stone-200 bg-stone-50 p-5">
+    <div className="card rounded-2xl p-5 sm:p-6">
       {!showFeedback ? (
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-stone-700">Happy with this itinerary?</p>
+        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+          <p className="text-sm font-medium text-foreground">Happy with this itinerary?</p>
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowFeedback(true)}
-              className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100"
-            >
+            <button onClick={() => setShowFeedback(true)} className={ghostButtonClass}>
               Give feedback
             </button>
-            <button
-              onClick={onSave}
-              disabled={saving}
-              className="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
+            <button onClick={onSave} disabled={saving} className={primaryButtonClass}>
               {saving ? "Saving…" : "Save trip"}
             </button>
           </div>
@@ -43,14 +41,11 @@ export default function FeedbackLoop({
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
             placeholder="e.g. make day 2 cheaper, add more outdoor stops"
-            className="w-full rounded-lg border border-stone-300 bg-white p-2.5 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+            className="w-full rounded-xl border border-card-border bg-white p-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
             rows={2}
           />
           <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setShowFeedback(false)}
-              className="rounded-lg px-3 py-1.5 text-sm text-stone-600 transition-colors hover:bg-stone-100"
-            >
+            <button onClick={() => setShowFeedback(false)} className={ghostButtonClass}>
               Cancel
             </button>
             <button
@@ -60,7 +55,7 @@ export default function FeedbackLoop({
                 setShowFeedback(false);
               }}
               disabled={!feedback.trim() || refining}
-              className="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className={primaryButtonClass}
             >
               {refining ? "Regenerating…" : "Regenerate"}
             </button>

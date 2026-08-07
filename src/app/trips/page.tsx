@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import PageHeader from "@/components/PageHeader";
 import { TripSummary } from "@/lib/types";
 
 export default function TripsPage() {
@@ -17,18 +16,25 @@ export default function TripsPage() {
   }, []);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <PageHeader title="My trips" navLabel="New trip" navHref="/" />
+    <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+          My trips
+        </h1>
+        <Link href="/" className="text-sm font-medium text-accent hover:text-accent-hover">
+          New trip
+        </Link>
+      </div>
 
-      {loading && <p className="text-sm text-stone-500">Loading…</p>}
+      {loading && <p className="text-sm text-muted">Loading…</p>}
       {!loading && trips.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-stone-300 p-10 text-center">
-          <p className="text-sm text-stone-500">No saved trips yet.</p>
+        <div className="card rounded-2xl border-dashed p-8 text-center">
+          <p className="text-sm text-muted">No saved trips yet.</p>
           <Link
             href="/"
-            className="mt-3 inline-block text-sm font-medium text-orange-700 hover:text-orange-800"
+            className="mt-3 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98]"
           >
-            Plan your first trip →
+            Plan your first trip
           </Link>
         </div>
       )}
@@ -38,10 +44,12 @@ export default function TripsPage() {
           <Link
             key={trip.id}
             href={`/trip/${trip.id}`}
-            className="block rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50"
+            className="card block rounded-2xl p-5 transition-colors hover:border-accent/40"
           >
-            <div className="font-semibold text-stone-900">{trip.destination}</div>
-            <div className="text-sm text-stone-500">
+            <div className="font-display text-base font-semibold text-foreground">
+              {trip.destination}
+            </div>
+            <div className="mt-1 text-sm text-muted">
               {trip.startDate} – {trip.endDate} · Budget ${trip.budget}
             </div>
           </Link>

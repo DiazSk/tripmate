@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTrip } from "@/lib/db";
+import { getTrip, updateTripItinerary } from "@/lib/db";
 
 export async function GET(
   _req: NextRequest,
@@ -19,4 +19,23 @@ export async function GET(
     budget: trip.budget,
     itinerary: JSON.parse(trip.itinerary_json),
   });
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const trip = getTrip(id);
+  if (!trip) {
+    return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+  }
+
+  const { itinerary } = await req.json();
+  if (!itinerary) {
+    return NextResponse.json({ error: "Missing itinerary" }, { status: 400 });
+  }
+
+  updateTripItinerary(id, JSON.stringify(itinerary));
+  return NextResponse.json({ ok: true });
 }

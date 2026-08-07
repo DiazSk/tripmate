@@ -64,6 +64,10 @@ export function getTrip(id: string): TripRow | undefined {
     | undefined;
 }
 
+export function updateTripItinerary(id: string, itineraryJson: string): void {
+  db.prepare(`UPDATE trips SET itinerary_json = ? WHERE id = ?`).run(itineraryJson, id);
+}
+
 export interface TraceRow {
   id: string;
   type: string;

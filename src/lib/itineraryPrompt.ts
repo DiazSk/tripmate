@@ -1,7 +1,9 @@
 import { DayWeather } from "./weather";
 import { Itinerary, ItineraryPreferences } from "./types";
+import { TierId, TIERS } from "./tiers";
 
-const SHAPE_HINT = `{"days":[{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","stops":[{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"note":"short note"}]}]}`;
+const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"note":"short note","time":"9:00 AM","durationLabel":"1 hour","tags":["short tag","short tag"],"category":"food|entry|transit|other"}`;
+const SHAPE_HINT = `{"days":[{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]}`;
 
 function formatPreferences(preferences?: ItineraryPreferences | null): string {
   if (!preferences || (preferences.tags.length === 0 && !preferences.vibe)) return "";
@@ -25,21 +27,35 @@ function formatWeather(weather: DayWeather[]): string {
     .join("\n");
 }
 
+function tierStyle(tierId: TierId): string {
+  const tier = TIERS.find((t) => t.id === tierId) ?? TIERS[1];
+  return `${tier.name} tier: ${tier.description}.`;
+}
+
+const BUDGET_INSTRUCTION = `The itinerary's total cost (lodging + stops combined) MUST come close to the full stated budget (aim for 85-100% of it), not just "under" it. If standard sightseeing and dining wouldn't use up a high budget, add premium extras appropriate to the tier (private guides, exclusive experiences, shopping, spa, upgraded transport) rather than leaving the budget unused.`;
+
+const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD (0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM") — times across a day's stops must be sequential and non-overlapping; a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category" — "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs, "other" for everything else.`;
+
 export function buildGeneratePrompt(params: {
   destination: string;
   startDate: string;
   endDate: string;
   budget: number;
+  tier: TierId;
   weather: DayWeather[];
   preferences?: ItineraryPreferences | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
+Style: ${tierStyle(params.tier)}
+
 Daily weather:
 ${formatWeather(params.weather)}
 ${formatPreferences(params.preferences)}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
-Each stop needs a realistic estimated cost in USD (0 is fine for free attractions) such that the stops across all days roughly fit the total budget.
+Every day except the last should include a "lodging" entry representing that night's stay, priced to the style above.
+${STOP_FIELD_INSTRUCTION}
+${BUDGET_INSTRUCTION}
 Include real, well-known places for the destination with their real approximate latitude/longitude.
 For each day, also write a short, elegant 1-2 sentence "summary" capturing that day's theme and flow, with 1-2 tasteful emojis, e.g. "A relaxing mix of historic sightseeing in Asakusa followed by local dining along the river. 🏯🍜"
 
@@ -59,11 +75,46 @@ export function buildRefinePrompt(params: {
 
 ${JSON.stringify(params.previousItinerary)}
 
+Style: ${tierStyle(params.previousItinerary.tier)}
+
 The user's feedback on this itinerary: "${params.feedback}"
 
-Revise the itinerary to address this feedback. Keep real, well-known places with real approximate latitude/longitude, and keep per-stop costs realistic and roughly within the total budget.
+Revise the itinerary to address this feedback. Keep real, well-known places with real approximate latitude/longitude, keep the lodging entries, and keep per-stop costs realistic.
 For each day, also write (or rewrite, if the feedback changes its theme) a short, elegant 1-2 sentence "summary" with 1-2 tasteful emojis capturing that day's theme and flow.
+${STOP_FIELD_INSTRUCTION}
+${BUDGET_INSTRUCTION}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 ${SHAPE_HINT}`;
+}
+
+export function buildPlaceDetailPrompt(params: {
+  name: string;
+  destination: string;
+  lat: number;
+  lng: number;
+}): string {
+  return `Give a compact travel-guide entry for "${params.name}" in ${params.destination} (approx. coordinates ${params.lat}, ${params.lng}).
+
+Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
+{"history":"1-2 sentence history or significance","bestTime":"short best time of day or season to visit","tips":["practical tip 1","practical tip 2"],"duration":"suggested visit duration, e.g. '1-2 hours'"}`;
+}
+
+export function buildRebalancePrompt(params: {
+  destination: string;
+  remainingDays: Itinerary["days"];
+  remainingBudget: number;
+  tier: TierId;
+}): string {
+  return `Here are the remaining days of a trip itinerary for ${params.destination}:
+
+${JSON.stringify(params.remainingDays)}
+
+Style: ${tierStyle(params.tier)}
+
+The traveler overspent on an earlier day. Only $${params.remainingBudget} is left for these remaining days combined (lodging + stops). Revise these remaining days so their total cost fits within $${params.remainingBudget}, keeping the same dates, weather summaries, and style. Reduce or swap stops/lodging as needed rather than just noting the overage.
+${STOP_FIELD_INSTRUCTION}
+
+Respond with ONLY valid JSON, no markdown code fences, no commentary, as a JSON array of day objects in this shape:
+[{"date":"YYYY-MM-DD","weather":"short weather summary","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]`;
 }
