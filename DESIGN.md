@@ -22,15 +22,16 @@ Unchanged: Source Serif 4 (`--font-display`) for the wordmark, page titles, and 
 
 - `flex-col md:flex-row h-dvh` — left/top pane is the map (`h-[40vh] md:h-full md:w-[55%]`), right/bottom pane is the scrollable cream content (`md:w-[45%]`). Stacks vertically below `md`.
 - The Cesium `Viewer` (mounted once, unchanged from the prior direction) resizes to whatever box it's given — confining it to a pane instead of the full viewport needed no Cesium-side change.
-- The persistent header ("TripMate"/destination title + "My trips") lives at the top of the content pane now, plain text — no floating pill, since there's no map to float over anymore.
+- The persistent header ("TripMate"/destination title + "My trips") lives at the top of the content pane now, plain text — no floating pill, since there's no map to float over anymore. The trip-detail page is an exception: it shows only the "My trips" nav link, no page-level destination title or date range, since both are redundant with what the itinerary card's own header already shows.
 
 ## The itinerary card (`ItineraryCard`)
 
 Replaces the old "every day stacked vertically" `DayList` with a single active-day view, matching the reference:
-- **Header**: `{destination}: {N} Days`, tier description + budget subtitle, a destination photo (Wikipedia, darkened) as the background.
+- **Header**: `{city}: {N} Days` (city only, not "City, Country"), tier description + budget subtitle, sitting on a layered blurred destination photo — a blurred/scaled photo layer, a dark-teal tint for legibility, text floating on top; falls back to flat `--accent` when no photo resolves.
 - **Trip budget bar**: kept, sits under the header — the whole-trip view.
-- **Day-pill row**: horizontal, scrollable, one pill per day (up to the 30-day cap). Active = filled dark teal.
-- **Active day**: lodging row (no inline cost — editable "Actual" input only in the revisit/editable context, since lodging has no detail view to move it to), then stop rows (circular photo avatar or category icon, time + duration, tag pills, no inline cost), a stacked photo column (desktop only), and a **Day N — Budget Breakdown** footer: Food/Entry/Transit/Stay/Total terracotta tiles, summing that day's stops by `category` plus lodging.
+- **Day-pill row**: horizontal, scrollable, one pill per day (up to the 30-day cap), shaped as chevron/arrow tabs (`clip-path` polygon — an arrow point on the right, a matching notch on the left of every tab after the first) with a small gap between them, so the row reads as a sequence. Fill-only distinction, no border, since `clip-path` doesn't trace along a straight CSS border. Active = filled dark teal.
+- **Active day**: a `Day N · MM-DD-YY` heading paired with a compact weather badge — the model's free-text forecast condensed to an icon (sun/cloud/rain), a temperature, and a one-word condition, with the full sentence kept as a tooltip. Then the lodging row full-width (no inline cost — editable "Actual" input only in the revisit/editable context, since lodging has no detail view to move it to), then stop rows (circular photo avatar or category icon, time + duration, tag pills, no inline cost) with the stacked photo column (desktop only) running alongside *the stops only*, so it starts level with the first stop rather than the lodging above it.
+- **Budget Breakdown footer**: a **Day N — Budget Breakdown** strip of Food/Entry/Transit/Stay/Total tiles, summing that day's stops by `category` plus lodging, on the same layered blurred-photo band as the header. Over a photo the tiles are frosted glass; they are tinted *dark*, not white — a bright photo behind a white-tinted tile drops its label to ~2.5:1, while darkening holds above 4.5:1 whatever the photo is. With no photo the band falls back to flat tan with solid terracotta tiles, which is why the glass is conditional rather than unconditional.
 
 ## Place detail — swaps the pane, doesn't overlay it
 

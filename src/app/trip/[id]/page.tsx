@@ -153,10 +153,7 @@ export default function TripPage({
 
   return (
     <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-          {trip ? trip.destination : "Trip"}
-        </h1>
+      <div className="flex justify-end">
         <Link href="/trips" className="text-sm font-medium text-accent hover:text-accent-hover">
           My trips
         </Link>
@@ -168,12 +165,6 @@ export default function TripPage({
         </div>
       )}
       {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
-
-      {trip && itinerary && (
-        <p className="-mt-4 text-sm text-muted">
-          {trip.startDate} – {trip.endDate}
-        </p>
-      )}
 
       {hasOverspend && itinerary && (
         <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-red-300/60 bg-red-50 p-4 text-sm sm:flex-row sm:items-center">
