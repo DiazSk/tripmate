@@ -1,7 +1,23 @@
 import { spawn } from "child_process";
 
 const MODEL = "claude-haiku-4-5-20251001";
-const TIMEOUT_MS = 90_000;
+const DEFAULT_TIMEOUT_MS = 90_000;
+
+const BASE_TIMEOUT_MS = 120_000;
+const PER_DAY_TIMEOUT_MS = 12_000;
+const MAX_TIMEOUT_MS = 480_000;
+
+/**
+ * Itinerary generation time scales with trip length (more days = more JSON to
+ * produce), so a flat timeout either times out long trips or waits too long
+ * on short ones. Measured: a 3-day trip took ~95s and a 10-day trip took
+ * ~85-105s — most latency is fixed overhead (CLI cold start, geocode/weather
+ * calls), not output size — so the base needs its own margin, with a smaller
+ * per-day term on top for longer trips (up to 30 days, see MAX_TRIP_DAYS).
+ */
+export function itineraryTimeoutMs(days: number): number {
+  return Math.min(BASE_TIMEOUT_MS + days * PER_DAY_TIMEOUT_MS, MAX_TIMEOUT_MS);
+}
 
 /**
  * Runs a one-shot prompt through the `claude` CLI (Haiku, no tools) instead
@@ -12,7 +28,7 @@ const TIMEOUT_MS = 90_000;
  *   binary (reproduced consistently), spawn does not. Root cause not chased
  *   further since spawn just works.
  */
-export function runClaude(prompt: string): Promise<string> {
+export function runClaude(prompt: string, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<string> {
   return new Promise((resolve, reject) => {
     const { CLAUDECODE: _drop, ...env } = process.env;
     void _drop;
@@ -42,8 +58,8 @@ export function runClaude(prompt: string): Promise<string> {
 
     const timer = setTimeout(() => {
       child.kill();
-      reject(new Error(`claude CLI timed out after ${TIMEOUT_MS}ms`));
-    }, TIMEOUT_MS);
+      reject(new Error(`claude CLI timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
 
     child.on("error", (err) => {
       clearTimeout(timer);
