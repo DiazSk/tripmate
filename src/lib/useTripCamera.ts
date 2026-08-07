@@ -7,9 +7,11 @@ import { PlaceDetail, Stop } from "./types";
 
 export function useTripCamera(destination: string) {
   const { flyToDestination, flyToPlace } = useMapCamera();
-  const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lon: number } | null>(
-    null
-  );
+  const [destinationCoords, setDestinationCoords] = useState<{
+    lat: number;
+    lon: number;
+    name: string;
+  } | null>(null);
   const [selectedStop, setSelectedStop] = useState<Stop | null>(null);
   const [detail, setDetail] = useState<PlaceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -20,7 +22,7 @@ export function useTripCamera(destination: string) {
       const geo = await geocodeDestination(name);
       if (geo) {
         setDestinationCoords(geo);
-        flyToDestination(geo.lat, geo.lon);
+        flyToDestination(geo.lat, geo.lon, geo.name);
       }
     },
     [flyToDestination]
@@ -29,7 +31,7 @@ export function useTripCamera(destination: string) {
   const selectStop = useCallback(
     async (stop: Stop) => {
       setSelectedStop(stop);
-      flyToPlace(stop.lat, stop.lng);
+      flyToPlace(stop.lat, stop.lng, stop.name);
       setDetail(null);
       setDetailError(null);
       setDetailLoading(true);
@@ -53,7 +55,8 @@ export function useTripCamera(destination: string) {
 
   const closeDetail = useCallback(() => {
     setSelectedStop(null);
-    if (destinationCoords) flyToDestination(destinationCoords.lat, destinationCoords.lon);
+    if (destinationCoords)
+      flyToDestination(destinationCoords.lat, destinationCoords.lon, destinationCoords.name);
   }, [destinationCoords, flyToDestination]);
 
   return {

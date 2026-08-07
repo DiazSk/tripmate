@@ -47,7 +47,7 @@ Replaces the old "every day stacked vertically" `DayList` with a single active-d
 
 ## Motion
 
-The map's `flyTo` remains the one authored moment (2.5s custom easing). Everything else in the content pane is static — no slide-ins, no blur transitions; the pane swap (itinerary ↔ detail) is an instant conditional render, not an animated transition.
+The map's `flyTo` remains the one authored moment (2.5s custom easing). It *frames* its target via `flyToBoundingSphere` rather than parking the camera on the target's own coordinates — a pitched camera positioned at a place leaves that place at nadir, outside the frustum, so you'd fly to Rome and never see Rome. Every flight also drops a single pin labelled with the place name, replacing the previous one, so what the camera flew to is unambiguous. The pin is a conventional red teardrop rather than a palette color — it's a map affordance readable against arbitrary satellite imagery, not part of the cream/teal content system, and Cesium's own `PinBuilder` only draws a squat rounded square. It ignores depth testing, since the photorealistic tiles would otherwise bury it inside nearby buildings. Everything else in the content pane is static — no slide-ins, no blur transitions; the pane swap (itinerary ↔ detail) is an instant conditional render, not an animated transition.
 
 ## What this is not
 
