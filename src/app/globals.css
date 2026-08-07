@@ -53,6 +53,48 @@ body {
   font-family: var(--font-display), ui-serif, Georgia, serif;
 }
 
+/* Home page hero band, pre-itinerary. The scrim covers only the top strip, behind the
+   header — legibility must not depend on what the camera is pointed at, because once a
+   destination is chosen the band shows bright daytime aerial imagery rather than space.
+   Same "darken, don't lighten" rule as the budget-breakdown tiles: over worst-case white
+   imagery, --accent at 0.70 leaves --accent-foreground at 4.36:1, at 0.75 it clears
+   5.06:1. Don't drop below 0.75 — the 14px "My trips" link needs the full 4.5:1. */
+.hero-scrim {
+  background: linear-gradient(
+    to bottom,
+    rgb(from var(--accent) r g b / 0.82) 0,
+    rgb(from var(--accent) r g b / 0.75) 72px,
+    rgb(from var(--accent) r g b / 0) 176px
+  );
+}
+
+/* Bottom seam: the band dissolves into the cream pane instead of ending on a hard line.
+   The zero-alpha stop is cream-with-0-alpha, NOT `transparent` — `transparent` is
+   rgba(0,0,0,0), and sRGB interpolation toward it fades through a gray halo. */
+.hero-seam {
+  background: linear-gradient(
+    to bottom,
+    rgb(from var(--background) r g b / 0) 0,
+    rgb(from var(--background) r g b / 0.72) 55%,
+    var(--background) 100%
+  );
+}
+
+/* Cesium's on-screen credits are required by Google's terms to stay visible. Two fixes:
+   Cesium pins them `position:absolute; left:0`, which makes them escape the shrink-to-fit
+   container we relocate them into — so flow them normally instead. And they default to
+   white-on-dark, which disappears once they sit over the cream pane. */
+.cesium-widget-credits {
+  position: static !important;
+  padding-right: 0 !important;
+}
+.cesium-widget-credits,
+.cesium-widget-credits a {
+  color: var(--muted) !important;
+  font-size: 10px !important;
+  text-shadow: none !important;
+}
+
 /* Solid card surface for the content pane — no blur/translucency, since the map
    and the itinerary content now live in separate panes rather than layered. */
 .card {
