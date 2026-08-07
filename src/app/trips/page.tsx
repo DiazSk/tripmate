@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import PageHeader from "@/components/PageHeader";
 import { TripSummary } from "@/lib/types";
 
 export default function TripsPage() {
@@ -17,16 +18,19 @@ export default function TripsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">My trips</h1>
-        <Link href="/" className="text-sm text-orange-600 hover:underline">
-          New trip
-        </Link>
-      </div>
+      <PageHeader title="My trips" navLabel="New trip" navHref="/" />
 
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
+      {loading && <p className="text-sm text-stone-500">Loading…</p>}
       {!loading && trips.length === 0 && (
-        <p className="text-sm text-gray-500">No saved trips yet.</p>
+        <div className="rounded-2xl border border-dashed border-stone-300 p-10 text-center">
+          <p className="text-sm text-stone-500">No saved trips yet.</p>
+          <Link
+            href="/"
+            className="mt-3 inline-block text-sm font-medium text-orange-700 hover:text-orange-800"
+          >
+            Plan your first trip →
+          </Link>
+        </div>
       )}
 
       <div className="space-y-3">
@@ -34,10 +38,10 @@ export default function TripsPage() {
           <Link
             key={trip.id}
             href={`/trip/${trip.id}`}
-            className="block rounded-lg border border-gray-200 p-4 hover:border-orange-300 hover:bg-orange-50"
+            className="block rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50"
           >
-            <div className="font-semibold text-gray-900">{trip.destination}</div>
-            <div className="text-sm text-gray-500">
+            <div className="font-semibold text-stone-900">{trip.destination}</div>
+            <div className="text-sm text-stone-500">
               {trip.startDate} – {trip.endDate} · Budget ${trip.budget}
             </div>
           </Link>

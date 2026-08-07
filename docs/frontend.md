@@ -1,0 +1,133 @@
+# Frontend — Feature Tracker
+
+Covers `src/app/**/page.tsx`, `src/app/globals.css`, `src/app/layout.tsx`,
+`src/components/**`. See [`project-crux.md`](./project-crux.md) for how these
+tables are maintained.
+
+## Features
+
+| Feature | Status | Since | Developer | Notes |
+|---|---|---|---|---|
+| Home page trip form (destination / dates / budget) | Active | 2026-08-04 | Aryan | |
+| `/trips` saved trips list | Active | 2026-08-04 | Aryan | |
+| `/trip/[id]` saved trip detail | Active | 2026-08-04 | Aryan | |
+| `ItineraryMap` (Leaflet) | Active | 2026-08-04 | Aryan | |
+| `BudgetBar` | Active | 2026-08-04 | Aryan | |
+| `DayList` | Active | 2026-08-04 | Aryan | |
+| `FeedbackLoop` (give feedback → regenerate, or save trip) | Active | 2026-08-04 | Aryan | |
+| `PageHeader` shared component | Active | 2026-08-05 | Aryan | One component reused across all pages instead of duplicated markup — see Eliminated below |
+| `PreferenceStep` (trending-tag chips + vibe chips + skip) | Active | 2026-08-05 | Aryan | Shown after the trip form, before generation |
+| `TraceStatusBadge` shared component | Active | 2026-08-05 | Aryan | Shared by the LLM trace list/detail views |
+| `/llm-trace` list page | <details><summary>Eliminated 2026-08-06 (Aryan)</summary>Folded into the `LlmTraceFab` widget's list view below — no route needed anymore</details> | 2026-08-05 | Aryan | |
+| `/llm-trace/[id]` detail page | <details><summary>Eliminated 2026-08-06 (Aryan)</summary>Folded into the `LlmTraceFab` widget's detail view below</details> | 2026-08-05 | Aryan | |
+| "View LLM trace for this call →" link on results | Active | 2026-08-05 | Aryan | Now calls `useLlmTraceWidget().openItem(traceId)` instead of navigating — see `LlmTraceFab` below |
+| `LlmTraceFab` — floating action button + expandable panel for LLM traces | Active | 2026-08-06 | Aryan | Bottom-right icon (collapsed) → panel with list/detail views + a collapse button (expanded), mounted once in the root layout so it's available on every page. Content selection came from `.claude/skills/dev-analytics-fab/SKILL.md` ("LLM/AI calls" was the one catalog category that fit this app); the FAB/panel UI mechanics themselves came from the separate `.claude/skills/floating-widget-ui/SKILL.md` |
+| `LlmTraceFabProvider` / `useLlmTraceWidget()` context | Active | 2026-08-06 | Aryan | Exposes `openList()` / `openItem(id)` / `close()` so any "View trace" link elsewhere in the app can open the widget pre-focused on a specific trace, without reaching into its internal state |
+| `WeatherIcon` (dynamic Lucide icon per day) | Active | 2026-08-05 | Aryan | Picks Sun/CloudSun/CloudDrizzle/CloudRain/CloudSnow/CloudLightning/CloudFog/Umbrella from WMO `weatherCode` + rain probability |
+| `WeatherPopover` (click-to-expand weather detail) | Active | 2026-08-05 | Aryan | Shows low/high temp, humidity, rain chance; falls back to the model's plain-text `weather` string when structured data is missing |
+| Daily budget progress bar per day card | Active | 2026-08-05 | Aryan | Shows each day's spend as a % of the *overall* trip budget, in `DayList` |
+| Hover-to-highlight: hovering a stop in `DayList` highlights its pin on `ItineraryMap` (and vice versa via shared state) | Active | 2026-08-05 | Aryan | Stops are keyed `${dayIndex}-${stopIndex}`; hovered marker swaps to a custom `L.divIcon` |
+| Daily narrative summary line (model-written, 1-2 sentences + emoji) | Active | 2026-08-05 | Aryan | Rendered at the bottom of each `DayList` day card; optional field, so pre-existing saved trips just render without one |
+| 3D CesiumJS globe landing experience (`CesiumGlobe`, `useCesiumViewer`) | Active | 2026-08-05 | Claude | Home page only. Continuously auto-rotating globe behind the search form; rotation stops on first canvas interaction or on search. Uses ion world imagery/terrain when `NEXT_PUBLIC_CESIUM_ION_TOKEN` is set, else falls back to Cesium's bundled offline Natural Earth II imagery + ellipsoid terrain |
+| Liquid-glass search form (`TripSearchForm`) | Active | 2026-08-05 | Claude | Replaces the old plain white home-page form; floats over the globe |
+| Cinematic camera flight on search (`useCesiumViewer.flyTo`) | <details><summary>Eliminated 2026-08-05 (Claude)</summary>Folded into the gift-box choreography below — the flight now happens after preferences are submitted, not immediately on destination resolve</details> | 2026-08-05 | Claude | |
+| Split-view Trip Dashboard (`TripDashboard`) | Active | 2026-08-05 | Claude | Home page only, shown once itinerary generation completes: globe (with POI billboards) on one side, existing `BudgetBar`/`DayList`/`FeedbackLoop` on the other |
+| POI billboards on the globe, hover-synced with `DayList` | Active | 2026-08-05 | Claude | Reuses the existing `${dayIndex}-${stopIndex}` hover-key convention so hovering a stop highlights the same pin on both the Leaflet map (saved-trip view) and the globe (home page) |
+| "← New search" back action | Active | 2026-08-05 | Claude | Resets trip state to `IDLE` and flies the camera back out to a global view, resuming auto-rotation |
+| `useTripState` state machine | <details><summary>Eliminated 2026-08-05 (Claude)</summary>Replaced by the 5-status version below (`IDLE`/`SEARCHING`/`PREFERENCES`/`GENERATING`/`DASHBOARD_ACTIVE`) — the old `FLYING` status conflated two things ("destination resolved" and "camera moving") that the gift-box choreography needed to happen at different times</details> | 2026-08-05 | Claude | |
+| `useTripState` 5-status state machine (`IDLE`/`SEARCHING`/`PREFERENCES`/`GENERATING`/`DASHBOARD_ACTIVE`) | Active | 2026-08-05 | Claude | Orchestrates the home page: form submit → geocode (`SEARCHING`) → preferences interactive, box open (`PREFERENCES`) → box closes, camera pans then flies, itinerary POST concurrently (`GENERATING`) → dashboard (`DASHBOARD_ACTIVE`). `page.tsx` derives the 2D gift box's visual state directly from `status` |
+| 3D Cesium gift-box choreography | <details><summary>Eliminated 2026-08-05 (Claude)</summary>The 3D primitive box (base + hinged lid, opening upward) looked distorted and its lid overlapped/obscured the preferences panel's chip text. Replaced by a plain 2D SVG box below</details> | 2026-08-05 | Claude | |
+| 2D unboxing container (`GiftBox2D`) | <details><summary>Renamed/expanded 2026-08-05 (Aryan)</summary>Renamed to `UnboxingContainer` and grown from a single fixed box into 4 destination-themed containers below</details> | 2026-08-05 | Claude | |
+| `UnboxingContainer` — 4 destination-themed containers (`classic_box`/`vintage_envelope`/`travel_trunk`/`furoshiki_wrap`) | Active | 2026-08-05 | Aryan | Theme (container type, title, primary color, icon) picked by a small dedicated Claude call (`GET /api/container-theme`, see `backend.md`) based on destination culture/geography — decorative and non-blocking, falls back to `DEFAULT_CONTAINER_THEME` (`classic_box`) on any failure. Each container type has its own distinct "opening" motion: box lid hinges open, envelope flap flips up, trunk lid lifts like a chest, furoshiki knot unties and the cloth corners peel back |
+| Glassmorphism on the classic box container | Active | 2026-08-05 | Claude | The literal "cardboard box" theme (`ClassicBox`) got a frosted-glass treatment: translucent fills (`withAlpha` helper) instead of solid colors, light `rgba(255,255,255,0.55)` borders on each face, and a glossy diagonal highlight sweep. Since the container floats directly over the live globe canvas with nothing else behind it, the translucent fill lets that motion genuinely show through rather than faking it with a backdrop-blur (which doesn't reliably apply to SVG shapes). Scoped to the classic box only — the other 3 themes are paper/wood/cloth and a glass look wouldn't fit them |
+| Motion/action lines on the preferences-card bubble collapse | Active | 2026-08-05 | Claude | 8 radiating speed-line accents fade in/out and travel downward in lockstep with the collapsing card (same spring transition) as it shrinks into the gift box on "Generate"/"Skip" |
+| Camera panning shot (`useCesiumViewer.panTo`) | Active | 2026-08-05 | Claude | On "Generate"/"Skip", before the existing destination `flyTo`, the camera does a fixed-position pan: heading/yaw rotates in place (via great-circle bearing to the destination) to frame it, with camera position untouched (a "tripod" shot, not a zoom) — then `flyTo` reuses that same heading so the following descent doesn't snap to a different angle |
+| `TripSearchForm`/`PreferenceStep` card-collapse + bubble-collapse animations (Framer Motion) | Active | 2026-08-05 | Claude | Submitting the search form collapses it (`scale:0, opacity:0`). `PreferenceStep`'s chips float in on mount with a fixed staggered offset (no per-frame position tracking needed now that the box is a simple fixed DOM element). On "Generate"/"Skip" the *entire* preferences card shrinks into a bubble (`scale:0`, `borderRadius:999`, translate down, fade) before the callback actually fires — replaced the earlier per-chip implosion, which no longer made sense once the box moved out of the 3D scene |
+| `TripDashboard` sidebar slide-in (`x: "100%" → "0%"`) | Active | 2026-08-05 | Claude | Spring transition on the itinerary panel specifically, independent of the outer fade-in already on the dashboard's parent `motion.div` |
+| Quick destination chips in `TripSearchForm` (Kyoto/Tokyo/Paris/Bali, one flagged 🔥 trending) | Active | 2026-08-05 | Aryan | Click populates the Destination field; no new state needed, just `setDestination` |
+| Pin decluttering on the globe via Cesium `EntityCluster` | Active | 2026-08-05 | Aryan | POIs moved from `viewer.entities` into a dedicated `CustomDataSource` with `.clustering.enabled = true` — clustering only applies to entities that belong to a DataSource, not the default collection |
+| Adaptive header contrast (`PageHeader` `variant="adaptive"`) | Active | 2026-08-05 | Aryan | Home page only. Samples the globe canvas under the "TripMate" title; dark backdrop → white text + shadow, light backdrop (terrain) → dark text in a `backdrop-blur-md` capsule badge |
+| Floating top capsule ("← New search" + live budget) in `TripDashboard` | Active | 2026-08-05 | Aryan | Centered, elevated above both the map and list halves; text goes red when over budget, matching `BudgetBar`'s color language |
+
+## Enhancements
+
+| Enhancement | Since | Developer | Notes |
+|---|---|---|---|
+| Full visual theme pass: warm `stone`/`orange` palette, consistent `rounded-xl`/`rounded-lg` + `shadow-sm` card system, input focus rings | 2026-08-05 | Aryan | Replaced plain `gray`/`white`/ad-hoc-radius styling |
+| `BudgetBar` uses green when under budget, red when over | 2026-08-05 | Aryan | Previously always orange regardless of budget status |
+| Page `<title>`/description fixed to "TripMate" copy | 2026-08-05 | Aryan | Was still the default "Create Next App" boilerplate |
+| Geist font actually renders | 2026-08-05 | Aryan | Was loaded via `next/font` but silently overridden — see Bugs |
+| `DayList` day cards get a soft sky-blue tint on high-rain (≥50%) or extreme-temperature days | 2026-08-05 | Aryan | Derived client-side from `weatherDetail`, no new model-authored field needed |
+| `DayList`/`ItineraryMap` prop signatures grew (`budget`, `hoveredStop`, `onHoverStop`) | 2026-08-05 | Aryan | Both `src/app/page.tsx` and `src/app/trip/[id]/page.tsx` updated to pass them through |
+| Added `lucide-react` dependency | 2026-08-05 | Aryan | Used by `WeatherIcon` |
+| `PreferenceStep` restyled to the `.glass-panel` treatment | 2026-08-05 | Claude | It's only ever rendered floating over the home page globe now, alongside `TripSearchForm` |
+| Added `cesium` and `framer-motion` dependencies | 2026-08-05 | Claude | `cesium` needs its static Workers/Assets/ThirdParty/Widgets copied into `public/cesium` — see `scripts/copy-cesium-assets.mjs`, wired as a `postinstall` |
+| `TripSearchForm` relayout: vertical centered card → wide, top-aligned horizontal glass bar (`bg-slate-900/60 backdrop-blur-xl border-white/10 shadow-2xl`), fields laid out inline on desktop (destination / start / end / budget / CTA) | 2026-08-05 | Aryan | Home page search step in `page.tsx` also moved from vertically-centered to top-aligned (`pt-2 md:pt-6`, no forced `min-h`) so the globe stays the unobscured hero backdrop instead of being covered by a centered card |
+| `TripSearchForm` typography/contrast pass: heading gets a text-shadow for legibility over bright globe imagery, subheading bumped to `text-white/85`, labels to `rgba(240,240,240,0.9)`, inputs to `bg-slate-900/65` + `border-white/15` + `focus:border-orange-500/80` + `placeholder:text-white/40` | 2026-08-05 | Aryan | |
+| "Plan My Trip" CTA upgraded to a gradient button (`from-orange-500 to-amber-600`) with hover scale/brightness and a glowing orange shadow | 2026-08-05 | Aryan | Previously a flat `bg-orange-600` button |
+| `useCesiumViewer` gained `sampleAverageColor()`, and the viewer now sets `contextOptions: { webgl: { preserveDrawingBuffer: true } }` | 2026-08-05 | Aryan | Draws the WebGL canvas onto an offscreen 2D canvas and averages a small box via `getImageData` — needed for adaptive header contrast. `preserveDrawingBuffer` is required or the buffer is cleared before any readback sees it |
+| `PageHeader` gained `variant`/`isDark` props | 2026-08-05 | Aryan | Defaults to the existing `"light"` behavior everywhere except the home page, which opts into `"adaptive"` — zero risk to `/trips`, `/trip/[id]`, `/llm-trace` |
+
+## Bugs
+
+| Bug | Found | Fixed | Developer | Notes |
+|---|---|---|---|---|
+| `body { font-family: Arial }` in `globals.css` overrode the Geist font that was loaded via `next/font`, so the custom font never actually rendered | 2026-08-05 | 2026-08-05 | Aryan | Removed the hardcoded override, wired `font-family` to the `--font-sans` variable instead |
+| `eslint-plugin-react-hooks`'s `static-components` rule flagged `WeatherIcon` for "creating a component during render" | 2026-08-05 | 2026-08-05 | Aryan | Was picking a Lucide icon component reference and using it as a dynamic JSX tag; refactored to a `switch` returning an explicit icon element per condition instead |
+| `TripDashboard`'s right (list) panel rendered as a sliver a few pixels tall instead of half the viewport | 2026-08-05 | 2026-08-05 | Aryan | Its `absolute inset-0` root had nothing to size against — the wrapping `motion.div` in `page.tsx` had `relative z-10` but no explicit height, and CSS auto-height ignores out-of-flow descendants. Changed the wrapper to `absolute inset-0` itself |
+| Adaptive header contrast stayed white-on-light-terrain | 2026-08-05 | 2026-08-05 | Aryan | Two compounding issues: (1) sampling the header bar's exact horizontal center landed on the map/panel seam once the dashboard splits the screen, blending both sides together — moved the sample point to sit under the title specifically; (2) the luminance threshold (150) was miscalibrated against this imagery, where empirically deep space ≈ 4 and any visible terrain/ocean ≈ 140-190 — lowered to 110 |
+| `eslint-plugin-react-hooks`'s `set-state-in-effect` rule flagged `LlmTraceFab`'s list/detail fetch effects | 2026-08-06 | 2026-08-06 | Aryan | List view: was calling `setLoading(true)` redundantly at the top of a mount-once effect — initial state was already `true`, just deleted the line. Detail view: was resetting `trace`/`error` to `null` synchronously before each fetch when `id` changed — switched to `key={selectedId}` on the component instead, so switching traces remounts it with fresh state rather than an in-effect reset |
+
+## Eliminated
+
+<details><summary>Per-page duplicated header markup — Eliminated 2026-08-05 (Aryan)</summary>
+
+Each of the three pages (`/`, `/trips`, `/trip/[id]`) had its own inline
+`<div className="flex items-center justify-between">` header block with
+slightly-diverging classnames. Replaced by the shared `PageHeader` component.
+
+</details>
+
+<details><summary>Single-step "fill form → generate immediately" flow — Eliminated 2026-08-05 (Aryan)</summary>
+
+Submitting the trip form used to call `/api/itinerary` directly. Replaced by a
+two-step flow: submitting the form now shows the `PreferenceStep`, which is
+what actually triggers generation (or skips straight to it with no
+preferences, functionally identical to the old behavior).
+
+</details>
+
+<details><summary>Plain-text weather label in DayList — Eliminated 2026-08-05 (Aryan)</summary>
+
+Each day card used to show `day.weather` (the model's free-text summary) as a
+plain `<span>`. Replaced by `WeatherPopover`, which shows a dynamic icon +
+temperature range and expands to a detail panel — falling back to the same
+plain text only when structured `weatherDetail` isn't available.
+
+</details>
+
+<details><summary>Plain white 2-column trip form + `ItineraryMap` on the home page — Eliminated 2026-08-05 (Claude)</summary>
+
+The home page (`/`) used to open straight onto a plain white form, and render
+results with the Leaflet-based `ItineraryMap`. Replaced by the 3D Cesium globe
+landing/dashboard experience: `TripSearchForm` (glass form over the globe) →
+`PreferenceStep` (now also glass) → `TripDashboard` (globe + itinerary panel
+split view). `ItineraryMap`/Leaflet is untouched and still active on
+`/trip/[id]` (saved-trip view) — this only replaced the home page's map.
+
+</details>
+
+<details><summary>`/llm-trace` + `/llm-trace/[id]` pages, and the "LLM trace" header nav link — Eliminated 2026-08-06 (Aryan)</summary>
+
+The trace viewer was a separate section of the app: a nav link in `PageHeader`
+to a `/llm-trace` list page, which linked to `/llm-trace/[id]` detail pages.
+Replaced by `LlmTraceFab` — a persistent bottom-right icon (mounted once in
+the root layout, so it's on every page without a nav link) that expands into
+a panel showing the same list/detail views inline, with a collapse button
+back to just the icon. The underlying data/API routes
+(`/api/llm-traces`, `/api/llm-traces/[id]`) are unchanged — this only changed
+how they're presented. See `.claude/skills/dev-analytics-fab/SKILL.md` (what
+to put in a widget like this) and `.claude/skills/floating-widget-ui/SKILL.md`
+(the FAB/panel UI pattern itself) for the general patterns this follows.
+
+</details>

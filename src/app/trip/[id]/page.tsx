@@ -2,9 +2,9 @@
 
 import { use, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import DayList from "@/components/DayList";
 import BudgetBar from "@/components/BudgetBar";
+import PageHeader from "@/components/PageHeader";
 import { Trip } from "@/lib/types";
 
 const ItineraryMap = dynamic(() => import("@/components/ItineraryMap"), {
@@ -19,6 +19,7 @@ export default function TripPage({
   const { id } = use(params);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hoveredStop, setHoveredStop] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/trips/${id}`)
@@ -32,28 +33,32 @@ export default function TripPage({
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">
-          {trip ? trip.destination : "Trip"}
-        </h1>
-        <Link href="/trips" className="text-sm text-orange-600 hover:underline">
-          My trips
-        </Link>
-      </div>
+      <PageHeader
+        title={trip ? trip.destination : "Trip"}
+        navLabel="My trips"
+        navHref="/trips"
+      />
 
       {error && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
       )}
-      {!trip && !error && <p className="text-sm text-gray-500">Loading…</p>}
+      {!trip && !error && <p className="text-sm text-stone-500">Loading…</p>}
 
       {trip && (
-        <div className="space-y-6">
-          <p className="text-sm text-gray-500">
+        <div className="space-y-8">
+          <p className="-mt-6 text-sm text-stone-500">
             {trip.startDate} – {trip.endDate}
           </p>
-          <ItineraryMap days={trip.itinerary.days} />
+          <ItineraryMap days={trip.itinerary.days} hoveredStop={hoveredStop} />
           <BudgetBar days={trip.itinerary.days} budget={trip.budget} />
-          <DayList days={trip.itinerary.days} />
+          <DayList
+            days={trip.itinerary.days}
+            budget={trip.budget}
+            hoveredStop={hoveredStop}
+            onHoverStop={setHoveredStop}
+          />
         </div>
       )}
     </main>

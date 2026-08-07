@@ -15,16 +15,16 @@ export default function BudgetBar({
   const over = spent > budget;
 
   return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="font-medium text-gray-700">Budget</span>
-        <span className={over ? "font-semibold text-red-600" : "text-gray-600"}>
+    <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+      <div className="mb-2 flex items-center justify-between text-sm">
+        <span className="font-medium text-stone-700">Budget</span>
+        <span className={over ? "font-semibold text-red-600" : "font-medium text-green-700"}>
           ${spent.toFixed(0)} / ${budget.toFixed(0)}
         </span>
       </div>
-      <div className="h-3 w-full overflow-hidden rounded-full bg-gray-200">
+      <div className="h-2.5 w-full overflow-hidden rounded-full bg-stone-100">
         <div
-          className={`h-full rounded-full ${over ? "bg-red-500" : "bg-orange-500"}`}
+          className={`h-full rounded-full transition-all ${over ? "bg-red-500" : "bg-green-600"}`}
           style={{ width: `${pct}%` }}
         />
       </div>

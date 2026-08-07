@@ -14,11 +14,28 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-export default function ItineraryMap({ days }: { days: DayPlan[] }) {
-  const stops = days.flatMap((d) => d.stops.filter(validCoords));
+const highlightIcon = L.divIcon({
+  className: "",
+  html: '<div style="width:18px;height:18px;border-radius:50%;background:#ea580c;border:3px solid white;box-shadow:0 0 0 4px rgba(234,88,12,0.35)"></div>',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
+
+export default function ItineraryMap({
+  days,
+  hoveredStop,
+}: {
+  days: DayPlan[];
+  hoveredStop?: string | null;
+}) {
+  const stops = days.flatMap((day, di) =>
+    day.stops
+      .map((stop, si) => ({ ...stop, key: `${di}-${si}` }))
+      .filter(validCoords)
+  );
   if (stops.length === 0) {
     return (
-      <div className="flex h-80 items-center justify-center rounded-lg bg-gray-100 text-sm text-gray-500">
+      <div className="flex h-80 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-sm text-stone-500">
         No mappable stops
       </div>
     );
@@ -30,15 +47,19 @@ export default function ItineraryMap({ days }: { days: DayPlan[] }) {
     <MapContainer
       center={center}
       zoom={12}
-      className="h-80 w-full rounded-lg"
+      className="h-80 w-full rounded-xl border border-stone-200"
       scrollWheelZoom={false}
     >
       <TileLayer
         attribution='&copy; OpenStreetMap contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {stops.map((stop, i) => (
-        <Marker key={i} position={[stop.lat, stop.lng]}>
+      {stops.map((stop) => (
+        <Marker
+          key={stop.key}
+          position={[stop.lat, stop.lng]}
+          icon={stop.key === hoveredStop ? highlightIcon : undefined}
+        >
           <Popup>
             <strong>{stop.name}</strong>
             <br />
