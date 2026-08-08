@@ -19,7 +19,7 @@ export default function TripsPage() {
     <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-          My trips
+          My memories
         </h1>
         <Link href="/" className="text-sm font-medium text-accent hover:text-accent-hover">
           New trip

@@ -220,7 +220,7 @@ export default function TripPage({
     <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
       <div className="flex justify-end">
         <Link href="/trips" className="text-sm font-medium text-accent hover:text-accent-hover">
-          My trips
+          My memories
         </Link>
       </div>
 
