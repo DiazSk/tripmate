@@ -12,6 +12,7 @@ import { useHeroLayout } from "@/components/AppShell";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { ContainerTheme, DEFAULT_CONTAINER_THEME, Itinerary } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
+import { upcomingStopsAfter } from "@/lib/itinerary";
 
 type Step = "form" | "tier" | "result";
 
@@ -42,10 +43,8 @@ const darkInputClass =
   "mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
 
 // Structural/interaction classes only — background is the animated
-// `cta-gradient-loop` sweep (globals.css), text color comes from ctaTextHex via
-// inline style (Tailwind can't generate an arbitrary-value class for a color
-// chosen at runtime). Glassmorphism: backdrop-blur + a faint top-edge
-// highlight border, so the globe behind it stays partly visible.
+// `cta-gradient-loop` sweep (globals.css). Glassmorphism: backdrop-blur + a
+// faint top-edge highlight border, so the globe behind it stays partly visible.
 const ctaButtonClass =
   "rounded-full border border-white/30 px-5 py-2.5 text-sm font-semibold backdrop-blur-md transition-all duration-150 hover:scale-[1.02] hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
 
@@ -64,7 +63,6 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [containerTheme, setContainerTheme] = useState<ContainerTheme>(DEFAULT_CONTAINER_THEME);
-  const [ctaTextHex, setCtaTextHex] = useState("#0F172A");
 
   // open while choosing a style (destination resolved), closed while generating, hidden otherwise.
   const giftBoxState = step === "tier" ? (generating ? "closed" : "open") : "hidden";
@@ -79,10 +77,13 @@ export default function Home() {
     detailError,
   } = useTripCamera(destination);
 
-  // The globe is a hero band behind the form until there's an itinerary to show, at which
-  // point the shell reverts to its split panes — the itinerary is far too dense to layer.
+  // `hero` still drives this page's own cosmetics (dark dashboard header/nav once results
+  // exist, destination-form positioning) — but AppShell itself is now always told to use the
+  // full-screen-globe overlay layout (not the split panes), even once there's an itinerary,
+  // so the globe stays visible behind the glass card instead of the shell reverting away
+  // from it.
   const hero = step !== "result";
-  useHeroLayout(hero);
+  useHeroLayout(true);
 
   async function chooseStyle() {
     if (isTripTooLong(startDate, endDate)) {
@@ -163,49 +164,27 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
+    <main
+      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 sm:p-6 ${!hero ? "dashboard-page" : ""}`}
+    >
       <UnboxingContainer state={giftBoxState} theme={containerTheme} />
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1
-            className={`font-display text-2xl font-semibold tracking-tight ${
-              hero ? "text-accent-foreground" : "text-foreground"
-            }`}
-          >
+      {/* Dashboard (result) view has no top navbar at all, per request — form/tier
+          steps keep it. */}
+      {hero && (
+        <div className="flex items-center justify-between">
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-accent-foreground">
             TripMate
           </h1>
-          {/* Text-color RGB picker for the CTA button — not part of the destination-form
-              card, deliberately placed in the navbar per the design request. Native
-              <input type="color"> gives the browser's own picker (full RGB, not a fixed list).
-              No background picker anymore: the button background is now the animated
-              cta-gradient-loop sweep instead of a single picked color. */}
-          <label
-            className={`flex items-center gap-1 text-xs ${
-              hero ? "text-accent-foreground/80" : "text-muted"
-            }`}
-          >
-            Text
-            <input
-              type="color"
-              value={ctaTextHex}
-              onChange={(e) => setCtaTextHex(e.target.value)}
-              className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
-            />
-          </label>
-        </div>
-        <Link
-          href="/trips"
-          className={`text-sm font-medium ${
+          <Link
+            href="/trips"
             // Full opacity, not /80 — at 14px this needs the full 4.5:1 against the scrim.
-            hero
-              ? "text-accent-foreground hover:underline"
-              : "text-accent hover:text-accent-hover"
-          }`}
-        >
-          My memories
-        </Link>
-      </div>
+            className="text-sm font-medium text-accent-foreground hover:underline"
+          >
+            My memories
+          </Link>
+        </div>
+      )}
 
       {/* Anchored near the top of the hero band (not vertically centred) and wider than the
           tier/result cards, per the destination-form redesign. `contents` makes this wrapper
@@ -264,7 +243,7 @@ export default function Home() {
               type="submit"
               className={`shrink-0 cta-gradient-loop ${ctaButtonClass}`}
               style={{
-                color: ctaTextHex,
+                color: "#0F172A",
                 boxShadow: "0 0 15px rgba(255, 255, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.35)",
               }}
             >
@@ -302,32 +281,47 @@ export default function Home() {
         )}
 
         {error && (
-          <div className="rounded-xl border border-red-300/60 bg-red-50 p-3 text-sm text-red-800">
+          <div
+            className={
+              hero
+                ? "rounded-xl border border-red-300/60 bg-red-50 p-3 text-sm text-red-800"
+                : "rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400"
+            }
+          >
             {error}
           </div>
         )}
       </div>
 
-      {step === "result" && itinerary && !selectedStop && (
-        <>
-          <ItineraryCard
-            itinerary={itinerary}
-            budget={budget}
-            destination={destination}
-            onSelectStop={selectStop}
-          />
-          <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />
-        </>
-      )}
+      {step === "result" && itinerary && (
+        // Docked panel floating over the full-screen globe rather than a normal-flow
+        // block — `fixed` escapes AppShell's own scrollable content pane entirely, so
+        // this positions relative to the viewport and scrolls independently.
+        <div className="fixed top-6 right-6 bottom-6 z-10 m-0 w-[40%] min-w-[360px] max-w-[520px] space-y-6 overflow-y-auto">
+          {!selectedStop && (
+            <>
+              <ItineraryCard
+                itinerary={itinerary}
+                budget={budget}
+                destination={destination}
+                onSelectStop={selectStop}
+              />
+              <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />
+            </>
+          )}
 
-      {step === "result" && itinerary && selectedStop && (
-        <PlaceDetailPanel
-          stop={selectedStop}
-          detail={detail}
-          loading={detailLoading}
-          error={detailError}
-          onBack={closeDetail}
-        />
+          {selectedStop && (
+            <PlaceDetailPanel
+              stop={selectedStop}
+              detail={detail}
+              loading={detailLoading}
+              error={detailError}
+              onBack={closeDetail}
+              upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
+              onSelectUpcoming={selectStop}
+            />
+          )}
+        </div>
       )}
     </main>
   );

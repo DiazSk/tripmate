@@ -126,3 +126,31 @@ export function PinIcon({ className }: { className?: string }) {
     </IconBase>
   );
 }
+
+export function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path
+        d="M12.5 4.5 7 10l5.5 5.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </IconBase>
+  );
+}
+
+export function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path
+        d="M7.5 4.5 13 10l-5.5 5.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </IconBase>
+  );
+}

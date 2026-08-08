@@ -78,6 +78,39 @@ body {
   text-shadow: none !important;
 }
 
+/* Defensive backstop: every Viewer constructor option that gates these (navigationHelpButton,
+   fullscreenButton, geocoder, animation, timeline, etc.) is already set to false in both
+   GlobeBackground and useCesiumViewer, so none of these containers should ever be created —
+   but force-hide them by their known Cesium class names anyway in case that ever drifts. */
+.cesium-viewer-toolbar,
+.cesium-viewer-bottom,
+.cesium-viewer-animationContainer,
+.cesium-viewer-timelineContainer,
+.cesium-viewer-fullscreenContainer,
+.cesium-viewer-geocoderContainer,
+.cesium-click-navigation-help {
+  display: none !important;
+}
+
+/* Glass navbar bar for the dark dashboard/itinerary views (not the light hero landing
+   header, which sits over the globe and is styled separately). */
+.dashboard-navbar {
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Same --foreground/--muted/--card-border override as .glass-itinerary, but for a solid dark
+   page background rather than a translucent card — lets plain text-foreground/text-muted
+   usages directly under a dark dashboard <main> (not wrapped in their own glass card) read
+   correctly too, e.g. loading/empty states. */
+.dashboard-page {
+  --foreground: #ffffff;
+  --muted: #94a3b8;
+  --card-border: rgba(255, 255, 255, 0.12);
+}
+
 /* Solid card surface for the content pane — no blur/translucency, since the map
    and the itinerary content now live in separate panes rather than layered. */
 .card {
@@ -86,6 +119,27 @@ body {
   box-shadow:
     0 1px 2px rgba(43, 38, 32, 0.05),
     0 8px 24px -12px rgba(43, 38, 32, 0.18);
+}
+
+/* Dark glassmorphism surface for the itinerary panel (ItineraryCard). Overrides the
+   --foreground/--muted/--card-border tokens *within this subtree* rather than touching
+   every className — text-foreground/text-muted/border-card-border used by this
+   component (and shared children like BudgetBar) inherit these dark-mode values
+   automatically via the normal CSS custom-property cascade, the same mechanism
+   Tailwind v4's own dark-mode pattern relies on. */
+.glass-itinerary {
+  /* Lower alpha than a typical glass card on purpose — the globe now renders
+     continuously behind this panel (see useHeroLayout(true) in page.tsx), so this
+     needs to stay translucent enough for it to show through. Don't go much lower
+     or text legibility suffers. */
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --foreground: #ffffff;
+  --muted: #94a3b8;
+  --card-border: rgba(255, 255, 255, 0.12);
 }
 
 /* Slow, continuous left-to-right sweep through the full palette, starting at
