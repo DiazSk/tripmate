@@ -7,20 +7,47 @@ import ItineraryCard from "@/components/ItineraryCard";
 import FeedbackLoop from "@/components/FeedbackLoop";
 import TierPicker from "@/components/TierPicker";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
+import UnboxingContainer from "@/components/cesium/UnboxingContainer";
 import { useHeroLayout } from "@/components/AppShell";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
-import { Itinerary } from "@/lib/types";
+import { ContainerTheme, DEFAULT_CONTAINER_THEME, Itinerary } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 
 type Step = "form" | "tier" | "result";
 
-const inputClass =
-  "mt-1 w-full rounded-xl border border-card-border bg-white px-3 py-2.5 text-sm text-foreground placeholder:text-muted/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
+// Decorative and non-blocking: the unboxing container just shows the default
+// theme until/unless this resolves, so a slow or failed call never holds up
+// the actual search flow.
+async function fetchContainerTheme(destination: string): Promise<ContainerTheme> {
+  try {
+    const res = await fetch(`/api/container-theme?destination=${encodeURIComponent(destination)}`);
+    const data = await res.json();
+    return data.theme ?? DEFAULT_CONTAINER_THEME;
+  } catch {
+    return DEFAULT_CONTAINER_THEME;
+  }
+}
+
 const primaryButtonClass =
   "rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
 const ghostButtonClass =
   "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg";
 const cardClass = "card rounded-2xl p-5 sm:p-6";
+
+// Dark variant, scoped to the destination search form only — the rest of the
+// flow (tier picker, results) stays on the light "card" theme.
+const darkCardClass = "rounded-2xl border border-white/10 bg-stone-950/90 p-5 sm:p-6";
+const darkLabelClass = "text-sm font-medium text-white/80";
+const darkInputClass =
+  "mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
+
+// Structural/interaction classes only — background is the animated
+// `cta-gradient-loop` sweep (globals.css), text color comes from ctaTextHex via
+// inline style (Tailwind can't generate an arbitrary-value class for a color
+// chosen at runtime). Glassmorphism: backdrop-blur + a faint top-edge
+// highlight border, so the globe behind it stays partly visible.
+const ctaButtonClass =
+  "rounded-full border border-white/30 px-5 py-2.5 text-sm font-semibold backdrop-blur-md transition-all duration-150 hover:scale-[1.02] hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
 
 export default function Home() {
   const router = useRouter();
@@ -36,6 +63,11 @@ export default function Home() {
   const [refining, setRefining] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [containerTheme, setContainerTheme] = useState<ContainerTheme>(DEFAULT_CONTAINER_THEME);
+  const [ctaTextHex, setCtaTextHex] = useState("#0F172A");
+
+  // open while choosing a style (destination resolved), closed while generating, hidden otherwise.
+  const giftBoxState = step === "tier" ? (generating ? "closed" : "open") : "hidden";
 
   const {
     flyToDestinationByName,
@@ -61,6 +93,7 @@ export default function Home() {
     const days = tripDays(startDate, endDate);
     setTier(closestTier(budget, days));
     setStep("tier");
+    fetchContainerTheme(destination).then(setContainerTheme);
     await flyToDestinationByName(destination);
   }
 
@@ -131,14 +164,36 @@ export default function Home() {
 
   return (
     <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
+      <UnboxingContainer state={giftBoxState} theme={containerTheme} />
+
       <div className="flex items-center justify-between">
-        <h1
-          className={`font-display text-2xl font-semibold tracking-tight ${
-            hero ? "text-accent-foreground" : "text-foreground"
-          }`}
-        >
-          TripMate
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1
+            className={`font-display text-2xl font-semibold tracking-tight ${
+              hero ? "text-accent-foreground" : "text-foreground"
+            }`}
+          >
+            TripMate
+          </h1>
+          {/* Text-color RGB picker for the CTA button — not part of the destination-form
+              card, deliberately placed in the navbar per the design request. Native
+              <input type="color"> gives the browser's own picker (full RGB, not a fixed list).
+              No background picker anymore: the button background is now the animated
+              cta-gradient-loop sweep instead of a single picked color. */}
+          <label
+            className={`flex items-center gap-1 text-xs ${
+              hero ? "text-accent-foreground/80" : "text-muted"
+            }`}
+          >
+            Text
+            <input
+              type="color"
+              value={ctaTextHex}
+              onChange={(e) => setCtaTextHex(e.target.value)}
+              className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+            />
+          </label>
+        </div>
         <Link
           href="/trips"
           className={`text-sm font-medium ${
@@ -148,59 +203,53 @@ export default function Home() {
               : "text-accent hover:text-accent-hover"
           }`}
         >
-          My trips
+          My memories
         </Link>
       </div>
 
-      {/* `mt-auto` rather than centring on the parent: an auto margin collapses to 0 once the
-          content outgrows the space, so a tall tier card on a short viewport stays fully
-          reachable instead of being centre-clipped. The bottom margin sets how far the card
-          sits down over the globe band. `contents` makes this wrapper vanish from layout in
-          split mode, so the result step renders exactly as it did before. */}
-      <div
-        className={
-          hero ? "mx-auto mt-auto mb-[12vh] w-full max-w-2xl space-y-4" : "contents"
-        }
-      >
+      {/* Anchored near the top of the hero band (not vertically centred) and wider than the
+          tier/result cards, per the destination-form redesign. `contents` makes this wrapper
+          vanish from layout in split mode, so the result step renders exactly as it did before. */}
+      <div className={hero ? "mx-auto mt-4 w-full max-w-6xl space-y-4" : "contents"}>
         {step === "form" && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
               chooseStyle();
             }}
-            className={`grid grid-cols-2 gap-4 ${cardClass}`}
+            className={`flex flex-wrap items-end gap-3 ${darkCardClass}`}
           >
-            <label className="col-span-2 text-sm font-medium text-foreground/80">
+            <label className={`min-w-[200px] flex-[2] ${darkLabelClass}`}>
               Destination
               <input
                 required
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 placeholder="Kyoto, Japan"
-                className={inputClass}
+                className={darkInputClass}
               />
             </label>
-            <label className="text-sm font-medium text-foreground/80">
+            <label className={`min-w-[140px] flex-1 ${darkLabelClass}`}>
               Start date
               <input
                 required
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className={inputClass}
+                className={darkInputClass}
               />
             </label>
-            <label className="text-sm font-medium text-foreground/80">
+            <label className={`min-w-[140px] flex-1 ${darkLabelClass}`}>
               End date
               <input
                 required
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className={inputClass}
+                className={darkInputClass}
               />
             </label>
-            <label className="col-span-2 text-sm font-medium text-foreground/80">
+            <label className={`min-w-[130px] flex-1 ${darkLabelClass}`}>
               Total budget ($)
               <input
                 required
@@ -208,10 +257,17 @@ export default function Home() {
                 min={0}
                 value={budget}
                 onChange={(e) => setBudget(Number(e.target.value))}
-                className={inputClass}
+                className={darkInputClass}
               />
             </label>
-            <button type="submit" className={`col-span-2 mt-1 ${primaryButtonClass}`}>
+            <button
+              type="submit"
+              className={`shrink-0 cta-gradient-loop ${ctaButtonClass}`}
+              style={{
+                color: ctaTextHex,
+                boxShadow: "0 0 15px rgba(255, 255, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.35)",
+              }}
+            >
               Choose your style
             </button>
           </form>

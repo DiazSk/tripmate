@@ -63,33 +63,6 @@ body {
   font-family: var(--font-display), ui-serif, Georgia, serif;
 }
 
-/* Home page hero band, pre-itinerary. The scrim covers only the top strip, behind the
-   header — legibility must not depend on what the camera is pointed at, because once a
-   destination is chosen the band shows bright daytime aerial imagery rather than space.
-   Same "darken, don't lighten" rule as the budget-breakdown tiles: over worst-case white
-   imagery, --accent at 0.70 leaves --accent-foreground at 4.36:1, at 0.75 it clears
-   5.06:1. Don't drop below 0.75 — the 14px "My trips" link needs the full 4.5:1. */
-.hero-scrim {
-  background: linear-gradient(
-    to bottom,
-    rgb(from var(--accent) r g b / 0.82) 0,
-    rgb(from var(--accent) r g b / 0.75) 72px,
-    rgb(from var(--accent) r g b / 0) 176px
-  );
-}
-
-/* Bottom seam: the band dissolves into the cream pane instead of ending on a hard line.
-   The zero-alpha stop is cream-with-0-alpha, NOT `transparent` — `transparent` is
-   rgba(0,0,0,0), and sRGB interpolation toward it fades through a gray halo. */
-.hero-seam {
-  background: linear-gradient(
-    to bottom,
-    rgb(from var(--background) r g b / 0) 0,
-    rgb(from var(--background) r g b / 0.72) 55%,
-    var(--background) 100%
-  );
-}
-
 /* Cesium's on-screen credits are required by Google's terms to stay visible. Two fixes:
    Cesium pins them `position:absolute; left:0`, which makes them escape the shrink-to-fit
    container we relocate them into — so flow them normally instead. And they default to
@@ -113,4 +86,33 @@ body {
   box-shadow:
     0 1px 2px rgba(43, 38, 32, 0.05),
     0 8px 24px -12px rgba(43, 38, 32, 0.18);
+}
+
+/* Slow, continuous left-to-right sweep through the full palette, starting at
+   rgb(255,153,153). background-size is 3x the element width so the gradient
+   has room to slide via background-position without ever showing a hard seam
+   (the gradient's own first/last stops match, so the loop point is invisible). */
+@keyframes cta-gradient-loop {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+.cta-gradient-loop {
+  background-image: linear-gradient(
+    90deg,
+    rgb(255, 153, 153),
+    #f59e0b,
+    #facc15,
+    #22c55e,
+    #06b6d4,
+    #3b82f6,
+    #8b5cf6,
+    #ec4899,
+    rgb(255, 153, 153)
+  );
+  background-size: 300% 100%;
+  animation: cta-gradient-loop 10s linear infinite;
 }

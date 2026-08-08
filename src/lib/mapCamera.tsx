@@ -40,6 +40,9 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         pendingRef.current = [lat, lng, height, pitchDeg, label];
         return;
       }
+      // Flying toward a specific place means the globe shouldn't keep auto-rotating
+      // under it — see stopAutoRotate in GlobeBackground.
+      (viewer as Viewer & { stopAutoRotate?: () => void }).stopAutoRotate?.();
       import("cesium").then((Cesium) => {
         // The viewer can be torn down while this dynamic import is in flight.
         if (viewer.isDestroyed()) return;

@@ -32,12 +32,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <MapCameraProvider>
       <HeroLayoutContext.Provider value={setHeroRequested}>
-        <div className="relative flex h-dvh flex-col overflow-hidden md:flex-row">
+        <div
+          className={`relative flex h-dvh flex-col overflow-hidden md:flex-row ${
+            hero ? "bg-[#0b0f19]" : ""
+          }`}
+        >
           <div
             className={
               hero
-                ? "absolute inset-x-0 top-0 h-1/2 sm:h-[56%]"
-                : "relative h-[40vh] w-full shrink-0 md:h-full md:w-[55%]"
+                ? "absolute inset-0 z-0 bg-[#0b0f19]"
+                : "relative h-[40vh] w-full shrink-0 bg-[#0b0f19] md:h-full md:w-[55%]"
             }
           >
             {/* GlobeBackground must stay the first child in BOTH branches — only the
@@ -50,18 +54,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
               // credits would sit on top of the form; pin them to the page corner instead.
               creditClassName={hero ? "fixed bottom-1 left-3" : "absolute bottom-1 left-3"}
             />
-            {hero && (
-              <>
-                <div
-                  aria-hidden="true"
-                  className="hero-scrim pointer-events-none absolute inset-x-0 top-0 h-44"
-                />
-                <div
-                  aria-hidden="true"
-                  className="hero-seam pointer-events-none absolute inset-x-0 bottom-0 h-28"
-                />
-              </>
-            )}
           </div>
           <div
             className={
