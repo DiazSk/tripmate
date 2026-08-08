@@ -4,8 +4,9 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import ItineraryCard from "@/components/ItineraryCard";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import { DayPlan, Itinerary, Stop, Trip } from "@/lib/types";
+import { DayPlan, Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
+import { findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
 
 type ActualCostTarget = "lodging" | number;
 
@@ -73,19 +74,6 @@ function dayPlannedTotal(day: DayPlan) {
 function dayActualTotal(day: DayPlan) {
   const lodging = day.lodging ? day.lodging.actualCost ?? day.lodging.cost : 0;
   return lodging + day.stops.reduce((s, stop) => s + (stop.actualCost ?? stop.cost), 0);
-}
-
-function findStopLocation(
-  itinerary: Itinerary,
-  stop: Stop
-): { dayIndex: number; stopIndex: number } | null {
-  for (let d = 0; d < itinerary.days.length; d++) {
-    const s = itinerary.days[d].stops.findIndex(
-      (x) => x.name === stop.name && x.lat === stop.lat && x.lng === stop.lng
-    );
-    if (s !== -1) return { dayIndex: d, stopIndex: s };
-  }
-  return null;
 }
 
 export default function TripPage({
@@ -217,23 +205,23 @@ export default function TripPage({
   const hasOverspend = overspendDayIndex !== -1;
 
   return (
-    <main className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
-      <div className="flex justify-end">
-        <Link href="/trips" className="text-sm font-medium text-accent hover:text-accent-hover">
+    <main className="dashboard-page flex min-h-full flex-col gap-6 bg-[#0B0F19] p-5 sm:p-6">
+      <div className="dashboard-navbar -mx-5 -mt-5 flex justify-end px-5 py-4 sm:-mx-6 sm:-mt-6 sm:px-6">
+        <Link href="/trips" className="text-sm font-medium text-[#94A3B8] hover:text-white">
           My memories
         </Link>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-300/60 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
           {error}
         </div>
       )}
       {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
 
       {hasOverspend && itinerary && (
-        <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-red-300/60 bg-red-50 p-4 text-sm sm:flex-row sm:items-center">
-          <p className="text-red-800">
+        <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm sm:flex-row sm:items-center">
+          <p className="text-red-400">
             Day {overspendDayIndex + 1} ran $
             {(
               dayActualTotal(itinerary.days[overspendDayIndex]) -
@@ -244,7 +232,7 @@ export default function TripPage({
           <div className="flex shrink-0 gap-2">
             <button
               onClick={() => setDismissedDays((prev) => new Set(prev).add(overspendDayIndex))}
-              className="rounded-full px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100"
+              className="rounded-full px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/10"
             >
               Dismiss
             </button>
@@ -272,7 +260,7 @@ export default function TripPage({
         />
       )}
 
-      {trip && selectedStop && (
+      {trip && itinerary && selectedStop && (
         <PlaceDetailPanel
           stop={selectedStop}
           detail={detail}
@@ -281,6 +269,8 @@ export default function TripPage({
           onBack={closeDetail}
           actualCost={selectedStop.actualCost}
           onActualCostChange={handleStopActualCostChange}
+          upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
+          onSelectUpcoming={selectStop}
         />
       )}
     </main>

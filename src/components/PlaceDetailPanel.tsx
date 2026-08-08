@@ -10,6 +10,8 @@ export default function PlaceDetailPanel({
   onBack,
   actualCost,
   onActualCostChange,
+  upcomingStops,
+  onSelectUpcoming,
 }: {
   stop: Stop;
   detail: PlaceDetail | null;
@@ -18,13 +20,16 @@ export default function PlaceDetailPanel({
   onBack: () => void;
   actualCost?: number;
   onActualCostChange?: (value: number | undefined) => void;
+  /** Remaining stops for the same day, in order — powers the "Next Up" quick-nav list. */
+  upcomingStops?: Stop[];
+  onSelectUpcoming?: (stop: Stop) => void;
 }) {
   return (
-    <div className="card flex flex-col rounded-2xl p-5 sm:p-6">
+    <div className="glass-itinerary flex flex-col rounded-2xl p-5 sm:p-6">
       <button
         type="button"
         onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 self-start rounded-full px-3 py-1.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg"
+        className="mb-4 flex items-center gap-1.5 self-start rounded-full px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-white/10"
       >
         <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5">
           <path
@@ -50,7 +55,7 @@ export default function PlaceDetailPanel({
           </div>
         )}
 
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
 
         {detail && !loading && (
           <>
@@ -78,6 +83,31 @@ export default function PlaceDetailPanel({
           </>
         )}
 
+        {onSelectUpcoming && upcomingStops && upcomingStops.length > 0 && (
+          <div className="border-t border-card-border pt-4">
+            <div className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">
+              Next up
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {upcomingStops.map((next, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onSelectUpcoming(next)}
+                  className="shrink-0 rounded-xl border border-card-border bg-white/10 px-3 py-2 text-left transition-colors hover:bg-white/15"
+                >
+                  <div className="text-sm font-medium text-foreground">{next.name}</div>
+                  {(next.time || next.durationLabel) && (
+                    <div className="text-xs text-muted">
+                      {[next.time, next.durationLabel].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between border-t border-card-border pt-4">
           <span className="font-medium tabular-nums text-foreground">
             Estimated cost: ${stop.cost}
@@ -92,7 +122,7 @@ export default function PlaceDetailPanel({
                 onBlur={(e) =>
                   onActualCostChange(e.target.value === "" ? undefined : Number(e.target.value))
                 }
-                className="w-20 rounded-md border border-card-border bg-white px-2 py-1 text-xs tabular-nums text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25"
+                className="w-20 rounded-md border border-card-border bg-white/10 px-2 py-1 text-xs tabular-nums text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25"
               />
             </label>
           )}

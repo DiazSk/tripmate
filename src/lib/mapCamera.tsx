@@ -3,11 +3,21 @@
 import { createContext, useCallback, useContext, useRef, ReactNode } from "react";
 import type { Entity, Viewer } from "cesium";
 
+interface RouteStop {
+  lat: number;
+  lng: number;
+}
+
 interface MapCameraContextValue {
   setViewer: (viewer: Viewer | null) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   flyToPlace: (lat: number, lng: number, label?: string) => void;
   resetGlobal: () => void;
+  /** Glowing cyan pins + a glowing purple/cyan arc connecting them in order,
+   *  for "the selected day's itinerary" — call again on every day-tab change. */
+  showDayRoute: (stops: RouteStop[]) => void;
+  /** Pulsing highlight ring on whichever stop is currently selected; `null` clears it. */
+  setActivePin: (stop: RouteStop | null) => void;
 }
 
 const MapCameraContext = createContext<MapCameraContextValue | null>(null);
@@ -16,6 +26,10 @@ const DESTINATION_HEIGHT_M = 15000;
 const PLACE_HEIGHT_M = 600;
 const GLOBAL_HEIGHT_M = 20000000;
 const LABEL_COLOR = "#f5f1e8";
+const ROUTE_PIN_COLOR = "#06B6D4";
+const ROUTE_ARC_COLOR = "#8B5CF6";
+const ACTIVE_PIN_COLOR = "#06B6D4";
+const PULSE_PERIOD_MS = 1400;
 
 // Cesium's PinBuilder only draws its own squat rounded-square marker, so the classic teardrop
 // comes from an inline SVG instead. `encodeURIComponent` rather than `btoa` — this module is
@@ -29,6 +43,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   const viewerRef = useRef<Viewer | null>(null);
   const markerRef = useRef<Entity | null>(null);
   const pendingRef = useRef<Flight | null>(null);
+  const routeEntitiesRef = useRef<Entity[]>([]);
+  const activePinRef = useRef<Entity | null>(null);
 
   const flyTo = useCallback(
     (lat: number, lng: number, height: number, pitchDeg: number, label?: string) => {
@@ -98,6 +114,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       viewerRef.current = viewer;
       if (!viewer) {
         markerRef.current = null;
+        routeEntitiesRef.current = [];
+        activePinRef.current = null;
         return;
       }
       const pending = pendingRef.current;
@@ -118,8 +136,86 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   );
   const resetGlobal = useCallback(() => flyTo(20, 0, GLOBAL_HEIGHT_M, -90), [flyTo]);
 
+  const showDayRoute = useCallback((stops: RouteStop[]) => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+    import("cesium").then((Cesium) => {
+      if (viewer.isDestroyed()) return;
+      for (const e of routeEntitiesRef.current) viewer.entities.remove(e);
+      routeEntitiesRef.current = [];
+      if (stops.length === 0) return;
+
+      const positions = stops.map((s) => Cesium.Cartesian3.fromDegrees(s.lng, s.lat));
+
+      // Semi-transparent glowing arc connecting the day's stops in order.
+      routeEntitiesRef.current.push(
+        viewer.entities.add({
+          polyline: {
+            positions,
+            width: 4,
+            arcType: Cesium.ArcType.GEODESIC,
+            clampToGround: true,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              glowPower: 0.25,
+              color: Cesium.Color.fromCssColorString(ROUTE_ARC_COLOR).withAlpha(0.6),
+            }),
+          },
+        })
+      );
+
+      // Glowing neon-cyan node at each stop.
+      for (const s of stops) {
+        routeEntitiesRef.current.push(
+          viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(s.lng, s.lat),
+            point: {
+              pixelSize: 10,
+              color: Cesium.Color.fromCssColorString(ROUTE_PIN_COLOR),
+              outlineColor: Cesium.Color.WHITE,
+              outlineWidth: 1.5,
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+          })
+        );
+      }
+    });
+  }, []);
+
+  const setActivePin = useCallback((stop: RouteStop | null) => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+    import("cesium").then((Cesium) => {
+      if (viewer.isDestroyed()) return;
+      if (activePinRef.current) {
+        viewer.entities.remove(activePinRef.current);
+        activePinRef.current = null;
+      }
+      if (!stop) return;
+
+      const startedAt = performance.now();
+      activePinRef.current = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(stop.lng, stop.lat),
+        point: {
+          // Pulsing halo: size oscillates continuously while this stop is active.
+          pixelSize: new Cesium.CallbackProperty(() => {
+            const phase = ((performance.now() - startedAt) % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
+            return 16 + Math.sin(phase * Math.PI * 2) * 6;
+          }, false),
+          color: Cesium.Color.fromCssColorString(ACTIVE_PIN_COLOR).withAlpha(0.35),
+          outlineColor: Cesium.Color.fromCssColorString(ACTIVE_PIN_COLOR),
+          outlineWidth: 2,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+    });
+  }, []);
+
   return (
-    <MapCameraContext.Provider value={{ setViewer, flyToDestination, flyToPlace, resetGlobal }}>
+    <MapCameraContext.Provider
+      value={{ setViewer, flyToDestination, flyToPlace, resetGlobal, showDayRoute, setActivePin }}
+    >
       {children}
     </MapCameraContext.Provider>
   );

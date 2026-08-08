@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { DayPlan, Itinerary, Stop, StopCategory } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
+import { useMapCamera } from "@/lib/mapCamera";
 import BudgetBar from "./BudgetBar";
 import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CloudIcon,
   EntryIcon,
   FoodIcon,
@@ -76,8 +80,8 @@ function WeatherBadge({ weather }: { weather: string }) {
       className="flex shrink-0 items-center gap-1.5 rounded-full bg-tag-neutral-bg/60 px-2.5 py-1 text-xs"
     >
       <Icon className="h-4 w-4 shrink-0 text-accent" />
-      {temp && <span className="font-medium tabular-nums text-foreground">{temp}</span>}
-      <span className="text-muted">{label}</span>
+      {temp && <span className="font-medium tabular-nums text-tag-neutral-fg">{temp}</span>}
+      <span className="text-tag-neutral-fg/70">{label}</span>
     </span>
   );
 }
@@ -104,28 +108,33 @@ function dayBreakdown(day: DayPlan) {
   ];
 }
 
+// Standardized 32x32 timeline node — the connector line's position (top-9 left-4
+// in the stop list below) is centered on exactly this size, so keep them in sync.
+// Glowing glass badge rather than a flat circle or a real photo — a consistent
+// "futuristic marker" look was the point, so this always shows the category icon.
+const NODE_SIZE = "h-8 w-8";
+const NODE_GLOW_STYLE = {
+  background: "rgba(6, 182, 212, 0.15)",
+  border: "1.5px solid #06B6D4",
+  boxShadow: "0 0 10px rgba(6, 182, 212, 0.4)",
+};
+
 function CategoryTile({ category }: { category: StopCategory }) {
   const Icon = CATEGORY_ICON[category ?? "other"];
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-tag-neutral-bg text-accent">
-      <Icon className="h-4 w-4" />
+    <div
+      className={`flex ${NODE_SIZE} items-center justify-center rounded-full text-[#06B6D4]`}
+      style={NODE_GLOW_STYLE}
+    >
+      <Icon className="h-3.5 w-3.5" />
     </div>
   );
-}
-
-function StopAvatar({ name, category }: { name: string; category: StopCategory }) {
-  const photo = usePlacePhoto(name);
-  if (photo) {
-    // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
-    return <img src={photo} alt="" className="h-10 w-10 rounded-full object-cover" />;
-  }
-  return <CategoryTile category={category} />;
 }
 
 function StackedPhoto({ name, category }: { name: string; category: StopCategory }) {
   const photo = usePlacePhoto(name);
   if (photo) {
-    // eslint-disable-next-line @next/next/no-img-element -- see StopAvatar
+    // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
     return <img src={photo} alt="" className="h-24 w-full rounded-xl object-cover shadow-sm" />;
   }
   const Icon = CATEGORY_ICON[category ?? "other"];
@@ -133,6 +142,62 @@ function StackedPhoto({ name, category }: { name: string; category: StopCategory
     <div className="flex h-24 w-full items-center justify-center rounded-xl bg-tag-neutral-bg text-accent">
       <Icon className="h-6 w-6" />
     </div>
+  );
+}
+
+function StopRow({
+  stop,
+  index,
+  isLast,
+  onSelect,
+}: {
+  stop: Stop;
+  index: number;
+  isLast: boolean;
+  onSelect: (stop: Stop) => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24, scale: 0.98 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: true, margin: "-10% 0px -10% 0px" }}
+      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.08 }}
+      className="relative flex gap-3 rounded-xl transition-colors hover:bg-white/5"
+    >
+      {!isLast && (
+        <div
+          className="absolute top-9 left-4 h-[calc(100%+0.5rem)] w-[2px] shadow-[0_0_6px_rgba(6,182,212,0.3)]"
+          style={{ background: "linear-gradient(180deg, #06B6D4 0%, #8B5CF6 100%)" }}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => onSelect(stop)}
+        className="relative z-10 flex flex-1 gap-3 text-left"
+      >
+        <span className="shrink-0">
+          <CategoryTile category={stop.category} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <div className="font-medium text-foreground">{stop.name}</div>
+          {(stop.time || stop.durationLabel) && (
+            <div className="text-sm text-muted">
+              {[stop.time, stop.durationLabel].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {(stop.tags ?? []).map((tag, ti) => (
+              <span
+                key={ti}
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${tagStyle(tag)}`}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        </span>
+      </button>
+    </motion.div>
   );
 }
 
@@ -155,13 +220,31 @@ export default function ItineraryCard({
   const headerPhoto = usePlacePhoto(destination, "full");
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
+  const { showDayRoute } = useMapCamera();
+  const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Glowing pins + connecting arc for whichever day is active, redrawn on every day-tab switch.
+  useEffect(() => {
+    if (!day) return;
+    showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
+  }, [day, showDayRoute]);
+
+  // Keep the active day tab scrolled into view, including when the arrows below move it.
+  useEffect(() => {
+    dayTabRefs.current[dayIndex]?.scrollIntoView({
+      behavior: "smooth",
+      inline: "nearest",
+      block: "nearest",
+    });
+  }, [dayIndex]);
+
   if (!day) return null;
   const breakdown = dayBreakdown(day);
   const photoStops = day.stops.slice(0, 3);
   const tierDescription = TIERS.find((t) => t.id === itinerary.tier)?.description ?? "";
 
   return (
-    <div className="card overflow-hidden rounded-2xl">
+    <div className="glass-itinerary overflow-hidden rounded-2xl">
       <div
         className="relative flex min-h-[9rem] flex-col justify-end overflow-hidden p-5 text-accent-foreground sm:min-h-[11rem] sm:p-6"
         style={{ backgroundColor: "var(--accent)" }}
@@ -186,32 +269,61 @@ export default function ItineraryCard({
         <BudgetBar days={itinerary.days} budget={budget} />
       </div>
 
-      <div className="flex gap-1.5 overflow-x-auto px-5 pb-3 sm:px-6">
-        {itinerary.days.map((d, i) => {
-          const isFirst = i === 0;
-          // Right edge is an arrow point; tabs after the first also carry a matching notch on
-          // their left edge, so the row reads as a sequence rather than separate buttons.
-          const clipPath = isFirst
-            ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
-            : "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%)";
-          return (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setActiveDayIndex(i)}
-              style={{ clipPath }}
-              className={`shrink-0 py-2 pr-7 text-sm font-medium transition-colors ${
-                isFirst ? "pl-5" : "pl-7"
-              } ${
-                i === dayIndex
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-tag-neutral-bg/70 text-foreground/70 hover:bg-tag-neutral-bg"
-              }`}
-            >
-              Day {i + 1}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2 px-5 pb-3 sm:px-6">
+        <button
+          type="button"
+          onClick={() => setActiveDayIndex((i) => Math.max(0, i - 1))}
+          disabled={dayIndex === 0}
+          aria-label="Previous day"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-30"
+          style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+        </button>
+
+        <div className="flex gap-1.5 overflow-x-auto">
+          {itinerary.days.map((d, i) => {
+            const isFirst = i === 0;
+            // Right edge is an arrow point; tabs after the first also carry a matching notch on
+            // their left edge, so the row reads as a sequence rather than separate buttons.
+            const clipPath = isFirst
+              ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
+              : "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%)";
+            return (
+              <button
+                key={i}
+                ref={(el) => {
+                  dayTabRefs.current[i] = el;
+                }}
+                type="button"
+                onClick={() => setActiveDayIndex(i)}
+                style={{ clipPath }}
+                className={`shrink-0 py-2 pr-7 text-sm font-medium transition-colors ${
+                  isFirst ? "pl-5" : "pl-7"
+                } ${
+                  i === dayIndex
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-white/10 text-muted hover:bg-white/15"
+                }`}
+              >
+                Day {i + 1}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setActiveDayIndex((i) => Math.min(itinerary.days.length - 1, i + 1))
+          }
+          disabled={dayIndex === itinerary.days.length - 1}
+          aria-label="Next day"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-30"
+          style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
+        >
+          <ChevronRightIcon className="h-4 w-4" />
+        </button>
       </div>
 
       <div className="px-5 pb-5 sm:px-6 sm:pb-6">
@@ -225,7 +337,7 @@ export default function ItineraryCard({
         {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
 
         {day.lodging && (
-          <div className="mb-3 flex items-center gap-3 rounded-xl bg-tag-neutral-bg/50 p-3">
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-white/10 p-3">
             <LodgingIcon className="h-5 w-5 shrink-0 text-accent" />
             <div className="min-w-0 flex-1">
               <div className="font-medium text-foreground">{day.lodging.name}</div>
@@ -244,7 +356,7 @@ export default function ItineraryCard({
                       e.target.value === "" ? undefined : Number(e.target.value)
                     )
                   }
-                  className="w-20 rounded-md border border-card-border bg-white px-2 py-1 text-xs tabular-nums text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25"
+                  className="w-20 rounded-md border border-card-border bg-white/10 px-2 py-1 text-xs tabular-nums text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25"
                 />
               </label>
             )}
@@ -257,38 +369,13 @@ export default function ItineraryCard({
           <div className="min-w-0 flex-1">
             <div className="space-y-4">
               {day.stops.map((stop, i) => (
-                <div key={i} className="relative flex gap-3">
-                  {i < day.stops.length - 1 && (
-                    <div className="absolute top-11 left-5 h-[calc(100%+0.5rem)] w-px bg-card-border" />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onSelectStop(stop)}
-                    className="relative z-10 flex flex-1 gap-3 text-left"
-                  >
-                    <span className="shrink-0">
-                      <StopAvatar name={stop.name} category={stop.category} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <div className="font-medium text-foreground">{stop.name}</div>
-                      {(stop.time || stop.durationLabel) && (
-                        <div className="text-sm text-muted">
-                          {[stop.time, stop.durationLabel].filter(Boolean).join(" · ")}
-                        </div>
-                      )}
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {(stop.tags ?? []).map((tag, ti) => (
-                          <span
-                            key={ti}
-                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${tagStyle(tag)}`}
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </span>
-                  </button>
-                </div>
+                <StopRow
+                  key={i}
+                  stop={stop}
+                  index={i}
+                  isLast={i === day.stops.length - 1}
+                  onSelect={onSelectStop}
+                />
               ))}
             </div>
           </div>
@@ -301,11 +388,7 @@ export default function ItineraryCard({
         </div>
       </div>
 
-      <div
-        className={`relative overflow-hidden border-t border-card-border p-5 sm:p-6 ${
-          headerPhoto ? "" : "bg-tag-neutral-bg/30"
-        }`}
-      >
+      <div className="relative overflow-hidden border-t border-card-border p-5 sm:p-6">
         {headerPhoto && (
           <BlurredPhotoLayer
             photo={headerPhoto}
