@@ -7,25 +7,48 @@ function foldDiacritics(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-async function resolveTitle(name: string): Promise<string | null> {
+async function searchTitle(query: string): Promise<string | null> {
   const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
-    name
+    query
   )}&format=json&srlimit=1`;
   const res = await fetch(url, { headers: HEADERS });
   // Upstream failure (commonly a rate limit) — throw rather than returning null, so the caller
   // can tell "lookup failed, retry later" apart from "this place genuinely has no photo".
   if (!res.ok) throw new Error(`wikipedia search ${res.status}`);
   const data = await res.json();
-  const title: string | undefined = data.query?.search?.[0]?.title;
-  if (!title) return null;
+  return data.query?.search?.[0]?.title ?? null;
+}
 
-  // Full-text search can surface an unrelated top hit for generic phrases (e.g. "Lunch
-  // at Kyoto Station area"). Only trust it when the resolved title is actually contained
-  // in the stop name — real landmark names pass this easily, unrelated matches don't.
+// Full-text search can surface an unrelated top hit for generic phrases (e.g. "Lunch
+// at Kyoto Station area"). Only trust it when the resolved title is actually contained
+// in the stop name — real landmark names pass this easily, unrelated matches don't.
+function passesContainment(title: string, name: string): boolean {
   const bareTitle = foldDiacritics(title.replace(/\s*\([^)]*\)$/, "").toLowerCase());
-  if (!foldDiacritics(name.toLowerCase()).includes(bareTitle)) return null;
+  return foldDiacritics(name.toLowerCase()).includes(bareTitle);
+}
 
-  return title;
+// The model's stop names are often a real landmark plus marketing/descriptive suffixes
+// ("Colosseum & Roman Forum (Skip-the-Line Tour)"), which as a single search query dilute
+// Wikipedia's full-text ranking away from the landmark's own article. Retry with
+// progressively stripped-down queries — cheap, since each extra request only fires when
+// the previous one already missed — before giving up. Containment is always checked
+// against the full original name, not the stripped candidate, so a match on a shortened
+// query still counts.
+function candidateQueries(name: string): string[] {
+  const candidates = [name];
+  const noParenthetical = name.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (noParenthetical !== name) candidates.push(noParenthetical);
+  const beforeConjunction = noParenthetical.split(/\s+(?:&|and)\s+/i)[0].trim();
+  if (beforeConjunction && beforeConjunction !== noParenthetical) candidates.push(beforeConjunction);
+  return candidates;
+}
+
+async function resolveTitle(name: string): Promise<string | null> {
+  for (const query of candidateQueries(name)) {
+    const title = await searchTitle(query);
+    if (title && passesContainment(title, name)) return title;
+  }
+  return null;
 }
 
 export async function GET(req: NextRequest) {

@@ -210,7 +210,10 @@ export default function TripPage({
           every "content over the globe" surface visually consistent. */}
       <div className="fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
         <div className="flex justify-end">
-          <Link href="/trips" className="text-sm font-medium text-muted hover:text-foreground">
+          <Link
+            href="/trips"
+            className="rounded-full bg-slate-950/70 px-3 py-1.5 text-sm font-medium text-muted backdrop-blur-sm hover:text-foreground"
+          >
             My memories
           </Link>
         </div>

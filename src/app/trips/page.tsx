@@ -20,7 +20,7 @@ export default function TripsPage() {
       {/* Same bounded, right-docked panel every other "content over the globe"
           surface uses (home page result view, /trip/[id]). */}
       <div className="fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-2xl bg-slate-950/70 px-4 py-3 backdrop-blur-sm">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
             My memories
           </h1>
