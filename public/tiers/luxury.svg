@@ -1,0 +1,29 @@
+<svg viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="luxSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1b3e"/>
+      <stop offset="55%" stop-color="#173a63"/>
+      <stop offset="100%" stop-color="#1f6f8b"/>
+    </linearGradient>
+    <linearGradient id="luxWater" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1f6f8b"/>
+      <stop offset="100%" stop-color="#0c3550"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1000" fill="url(#luxSky)"/>
+  <rect y="620" width="800" height="380" fill="url(#luxWater)"/>
+  <circle cx="580" cy="180" r="60" fill="#f4e9c9" opacity="0.9"/>
+  <g opacity="0.7" fill="#fff">
+    <circle cx="120" cy="120" r="2"/>
+    <circle cx="200" cy="90" r="1.5"/>
+    <circle cx="300" cy="150" r="2"/>
+    <circle cx="400" cy="80" r="1.5"/>
+    <circle cx="90" cy="220" r="1.5"/>
+    <circle cx="480" cy="140" r="2"/>
+  </g>
+  <path d="M180 700 L620 700 L560 780 L240 780 Z" fill="#e8e8ec"/>
+  <rect x="360" y="560" width="16" height="150" fill="#cfd3da"/>
+  <path d="M376 570 L470 690 L376 690 Z" fill="#f4f6f8"/>
+  <path d="M360 590 L300 690 L360 690 Z" fill="#dfe2e7"/>
+  <rect x="260" y="780" width="340" height="10" fill="#0c3550" opacity="0.3"/>
+</svg>
