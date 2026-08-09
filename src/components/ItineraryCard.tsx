@@ -108,27 +108,22 @@ function dayBreakdown(day: DayPlan) {
   ];
 }
 
-// Standardized 32x32 timeline node — the connector line's position (top-9 left-4
-// in the stop list below) is centered on exactly this size, so keep them in sync.
-// Glowing glass badge rather than a flat circle or a real photo — a consistent
-// "futuristic marker" look was the point, so this always shows the category icon.
-const NODE_SIZE = "h-8 w-8";
-const NODE_GLOW_STYLE = {
-  background: "rgba(6, 182, 212, 0.15)",
-  border: "1.5px solid #06B6D4",
-  boxShadow: "0 0 10px rgba(6, 182, 212, 0.4)",
-};
-
 function CategoryTile({ category }: { category: StopCategory }) {
   const Icon = CATEGORY_ICON[category ?? "other"];
   return (
-    <div
-      className={`flex ${NODE_SIZE} items-center justify-center rounded-full text-[#06B6D4]`}
-      style={NODE_GLOW_STYLE}
-    >
-      <Icon className="h-3.5 w-3.5" />
+    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-tag-neutral-bg text-accent">
+      <Icon className="h-4 w-4" />
     </div>
   );
+}
+
+function StopAvatar({ name, category }: { name: string; category: StopCategory }) {
+  const photo = usePlacePhoto(name);
+  if (photo) {
+    // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
+    return <img src={photo} alt="" className="h-10 w-10 rounded-full object-cover" />;
+  }
+  return <CategoryTile category={category} />;
 }
 
 function StackedPhoto({ name, category }: { name: string; category: StopCategory }) {
@@ -165,10 +160,7 @@ function StopRow({
       className="relative flex gap-3 rounded-xl transition-colors hover:bg-white/5"
     >
       {!isLast && (
-        <div
-          className="absolute top-9 left-4 h-[calc(100%+0.5rem)] w-[2px] shadow-[0_0_6px_rgba(6,182,212,0.3)]"
-          style={{ background: "linear-gradient(180deg, #06B6D4 0%, #8B5CF6 100%)" }}
-        />
+        <div className="absolute top-11 left-5 h-[calc(100%+0.5rem)] w-px bg-card-border" />
       )}
       <button
         type="button"
@@ -176,7 +168,7 @@ function StopRow({
         className="relative z-10 flex flex-1 gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         <span className="shrink-0">
-          <CategoryTile category={stop.category} />
+          <StopAvatar name={stop.name} category={stop.category} />
         </span>
         <span className="min-w-0 flex-1">
           <div className="font-medium text-foreground">{stop.name}</div>
@@ -388,7 +380,11 @@ export default function ItineraryCard({
         </div>
       </div>
 
-      <div className="relative overflow-hidden border-t border-card-border p-5 sm:p-6">
+      <div
+        className={`relative overflow-hidden border-t border-card-border p-5 sm:p-6 ${
+          headerPhoto ? "" : "bg-tag-neutral-bg/30"
+        }`}
+      >
         {headerPhoto && (
           <BlurredPhotoLayer
             photo={headerPhoto}
@@ -417,7 +413,10 @@ export default function ItineraryCard({
                   ? "bg-accent text-accent-foreground"
                   : "bg-tile text-tile-foreground";
               return (
-                <div key={tile.label} className={`rounded-xl p-3 ${surface}`}>
+                <div
+                  key={tile.label}
+                  className={`flex flex-col items-center rounded-xl p-3 text-center ${surface}`}
+                >
                   {tile.Icon && <tile.Icon className="h-4 w-4" />}
                   <div className="mt-1 text-xs opacity-90">{tile.label}</div>
                   <div className="font-semibold tabular-nums">${tile.amount}</div>
