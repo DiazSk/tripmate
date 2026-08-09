@@ -29,7 +29,7 @@ export default function PlaceDetailPanel({
       <button
         type="button"
         onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 self-start rounded-full px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-white/10"
+        className="mb-4 flex items-center gap-1.5 self-start rounded-full px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5">
           <path
@@ -88,13 +88,15 @@ export default function PlaceDetailPanel({
             <div className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">
               Next up
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div
+              className="flex gap-2 overflow-x-auto pb-1 [-webkit-mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]"
+            >
               {upcomingStops.map((next, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => onSelectUpcoming(next)}
-                  className="shrink-0 rounded-xl border border-card-border bg-white/10 px-3 py-2 text-left transition-colors hover:bg-white/15"
+                  className="shrink-0 rounded-xl border border-card-border bg-white/10 px-3 py-2 text-left transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                 >
                   <div className="text-sm font-medium text-foreground">{next.name}</div>
                   {(next.time || next.durationLabel) && (

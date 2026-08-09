@@ -205,74 +205,78 @@ export default function TripPage({
   const hasOverspend = overspendDayIndex !== -1;
 
   return (
-    <main className="dashboard-page flex min-h-full flex-col gap-6 bg-[#0B0F19] p-5 sm:p-6">
-      <div className="dashboard-navbar -mx-5 -mt-5 flex justify-end px-5 py-4 sm:-mx-6 sm:-mt-6 sm:px-6">
-        <Link href="/trips" className="text-sm font-medium text-[#94A3B8] hover:text-white">
-          My memories
-        </Link>
-      </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-          {error}
+    <main className="dashboard-page min-h-full">
+      {/* Same bounded, right-docked panel the home page's result view uses — keeps
+          every "content over the globe" surface visually consistent. */}
+      <div className="fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+        <div className="flex justify-end">
+          <Link href="/trips" className="text-sm font-medium text-muted hover:text-foreground">
+            My memories
+          </Link>
         </div>
-      )}
-      {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
 
-      {hasOverspend && itinerary && (
-        <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm sm:flex-row sm:items-center">
-          <p className="text-red-400">
-            Day {overspendDayIndex + 1} ran $
-            {(
-              dayActualTotal(itinerary.days[overspendDayIndex]) -
-              dayPlannedTotal(itinerary.days[overspendDayIndex])
-            ).toFixed(0)}{" "}
-            over plan — rebalance the rest of the trip?
-          </p>
-          <div className="flex shrink-0 gap-2">
-            <button
-              onClick={() => setDismissedDays((prev) => new Set(prev).add(overspendDayIndex))}
-              className="rounded-full px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/10"
-            >
-              Dismiss
-            </button>
-            <button
-              onClick={() => handleRebalance(overspendDayIndex)}
-              disabled={rebalancingDay === overspendDayIndex}
-              className="rounded-full bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-all duration-150 hover:bg-red-700 active:scale-[0.98] disabled:opacity-50"
-            >
-              {rebalancingDay === overspendDayIndex ? "Rebalancing…" : "Rebalance"}
-            </button>
+        {error && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+            {error}
           </div>
-        </div>
-      )}
+        )}
+        {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
 
-      {trip && itinerary && !selectedStop && (
-        <ItineraryCard
-          itinerary={itinerary}
-          budget={trip.budget}
-          destination={trip.destination}
-          onSelectStop={selectStop}
-          editable
-          onLodgingActualCostChange={(dayIndex, value) =>
-            handleActualCostChange(dayIndex, "lodging", value)
-          }
-        />
-      )}
+        {hasOverspend && itinerary && (
+          <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm sm:flex-row sm:items-center">
+            <p className="text-red-400">
+              Day {overspendDayIndex + 1} ran $
+              {(
+                dayActualTotal(itinerary.days[overspendDayIndex]) -
+                dayPlannedTotal(itinerary.days[overspendDayIndex])
+              ).toFixed(0)}{" "}
+              over plan — rebalance the rest of the trip?
+            </p>
+            <div className="flex shrink-0 gap-2">
+              <button
+                onClick={() => setDismissedDays((prev) => new Set(prev).add(overspendDayIndex))}
+                className="rounded-full px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/10"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={() => handleRebalance(overspendDayIndex)}
+                disabled={rebalancingDay === overspendDayIndex}
+                className="rounded-full bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-all duration-150 hover:bg-red-700 active:scale-[0.98] disabled:opacity-50"
+              >
+                {rebalancingDay === overspendDayIndex ? "Rebalancing…" : "Rebalance"}
+              </button>
+            </div>
+          </div>
+        )}
 
-      {trip && itinerary && selectedStop && (
-        <PlaceDetailPanel
-          stop={selectedStop}
-          detail={detail}
-          loading={detailLoading}
-          error={detailError}
-          onBack={closeDetail}
-          actualCost={selectedStop.actualCost}
-          onActualCostChange={handleStopActualCostChange}
-          upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
-          onSelectUpcoming={selectStop}
-        />
-      )}
+        {trip && itinerary && !selectedStop && (
+          <ItineraryCard
+            itinerary={itinerary}
+            budget={trip.budget}
+            destination={trip.destination}
+            onSelectStop={selectStop}
+            editable
+            onLodgingActualCostChange={(dayIndex, value) =>
+              handleActualCostChange(dayIndex, "lodging", value)
+            }
+          />
+        )}
+
+        {trip && itinerary && selectedStop && (
+          <PlaceDetailPanel
+            stop={selectedStop}
+            detail={detail}
+            loading={detailLoading}
+            error={detailError}
+            onBack={closeDetail}
+            actualCost={selectedStop.actualCost}
+            onActualCostChange={handleStopActualCostChange}
+            upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
+            onSelectUpcoming={selectStop}
+          />
+        )}
+      </div>
     </main>
   );
 }

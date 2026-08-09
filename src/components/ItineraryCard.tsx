@@ -173,7 +173,7 @@ function StopRow({
       <button
         type="button"
         onClick={() => onSelect(stop)}
-        className="relative z-10 flex flex-1 gap-3 text-left"
+        className="relative z-10 flex flex-1 gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         <span className="shrink-0">
           <CategoryTile category={stop.category} />
@@ -275,7 +275,7 @@ export default function ItineraryCard({
           onClick={() => setActiveDayIndex((i) => Math.max(0, i - 1))}
           disabled={dayIndex === 0}
           aria-label="Previous day"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-30"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-30"
           style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
         >
           <ChevronLeftIcon className="h-4 w-4" />
@@ -298,7 +298,7 @@ export default function ItineraryCard({
                 type="button"
                 onClick={() => setActiveDayIndex(i)}
                 style={{ clipPath }}
-                className={`shrink-0 py-2 pr-7 text-sm font-medium transition-colors ${
+                className={`shrink-0 py-2 pr-7 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70 ${
                   isFirst ? "pl-5" : "pl-7"
                 } ${
                   i === dayIndex
@@ -319,7 +319,7 @@ export default function ItineraryCard({
           }
           disabled={dayIndex === itinerary.days.length - 1}
           aria-label="Next day"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-30"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-30"
           style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
         >
           <ChevronRightIcon className="h-4 w-4" />

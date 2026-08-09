@@ -25,7 +25,7 @@ export interface ClaudeResult {
   traceId: string;
 }
 
-export type ClaudeCallType = "generate" | "refine" | "rebalance" | "place-detail" | "container-theme";
+export type ClaudeCallType = "generate" | "refine" | "rebalance" | "place-detail";
 
 /**
  * Runs a one-shot prompt through the `claude` CLI (Haiku, no tools) instead
