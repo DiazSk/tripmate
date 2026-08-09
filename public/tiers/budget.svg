@@ -1,0 +1,23 @@
+<svg viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="budgetSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff9a56"/>
+      <stop offset="45%" stop-color="#ff6b6b"/>
+      <stop offset="100%" stop-color="#4a3b6b"/>
+    </linearGradient>
+    <linearGradient id="budgetSun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe08a"/>
+      <stop offset="100%" stop-color="#ff9a56"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1000" fill="url(#budgetSky)"/>
+  <circle cx="400" cy="420" r="140" fill="url(#budgetSun)" opacity="0.9"/>
+  <path d="M0 620 L180 340 L340 560 L470 380 L620 620 Z" fill="#2e2450" opacity="0.85"/>
+  <path d="M0 700 L220 480 L400 700 L560 500 L800 700 L800 1000 L0 1000 Z" fill="#211a3d"/>
+  <path d="M560 760 L620 640 L680 760 Z" fill="#1a1530"/>
+  <rect x="585" y="720" width="70" height="4" fill="#ffe08a" opacity="0.7"/>
+  <circle cx="150" cy="180" r="3" fill="#fff" opacity="0.8"/>
+  <circle cx="230" cy="240" r="2" fill="#fff" opacity="0.6"/>
+  <circle cx="650" cy="150" r="2.5" fill="#fff" opacity="0.7"/>
+  <circle cx="700" cy="230" r="2" fill="#fff" opacity="0.5"/>
+</svg>

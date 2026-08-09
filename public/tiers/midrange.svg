@@ -1,0 +1,27 @@
+<svg viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="midSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a8d8e8"/>
+      <stop offset="60%" stop-color="#f5e6c8"/>
+      <stop offset="100%" stop-color="#e8b896"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1000" fill="url(#midSky)"/>
+  <rect x="0" y="640" width="800" height="360" fill="#d9c9a3"/>
+  <g opacity="0.9">
+    <rect x="90" y="560" width="130" height="220" rx="6" fill="#c46a4d"/>
+    <rect x="260" y="500" width="150" height="280" rx="6" fill="#e0946a"/>
+    <rect x="440" y="580" width="120" height="200" rx="6" fill="#b8563f"/>
+    <rect x="590" y="530" width="150" height="250" rx="6" fill="#d98a5e"/>
+  </g>
+  <g fill="#fff5e6" opacity="0.85">
+    <rect x="115" y="600" width="30" height="40" rx="2"/>
+    <rect x="165" y="600" width="30" height="40" rx="2"/>
+    <rect x="290" y="540" width="35" height="45" rx="2"/>
+    <rect x="345" y="540" width="35" height="45" rx="2"/>
+    <rect x="465" y="620" width="28" height="38" rx="2"/>
+    <rect x="620" y="570" width="32" height="42" rx="2"/>
+    <rect x="675" y="570" width="32" height="42" rx="2"/>
+  </g>
+  <circle cx="620" cy="220" r="70" fill="#fff8ec" opacity="0.7"/>
+</svg>
