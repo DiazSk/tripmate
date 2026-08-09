@@ -7,6 +7,7 @@ import { MapCameraProvider } from "@/lib/mapCamera";
 const GlobeBackground = dynamic(() => import("@/components/GlobeBackground"), {
   ssr: false,
 });
+const MapControls = dynamic(() => import("@/components/MapControls"), { ssr: false });
 
 /**
  * Every route gets the same full-bleed globe + overlay content layout — the
@@ -17,14 +18,21 @@ const GlobeBackground = dynamic(() => import("@/components/GlobeBackground"), {
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <MapCameraProvider>
-      <div className="relative flex h-dvh flex-col overflow-hidden bg-[#0b0f19] md:flex-row">
+      <div className="app-shell relative flex h-dvh flex-col overflow-hidden bg-[#0b0f19] md:flex-row">
         <div className="absolute inset-0 z-0 bg-[#0b0f19]">
           {/* GlobeBackground must stay mounted across route changes — Next.js already
               keeps AppShell itself stable across navigations since it's rendered from the
               root layout, so this just needs to never be conditionally unmounted here. */}
           <GlobeBackground creditClassName="fixed bottom-1 left-3" />
         </div>
-        <div className="absolute inset-0 z-10 overflow-y-auto">{children}</div>
+        {/* `pointer-events-none` is what makes the globe draggable: this container spans the
+            whole viewport, so without it every pointer event lands here and the Cesium canvas
+            at z-0 never sees one. Each real content box opts back in with `pointer-events-auto`.
+            `overflow-y-auto` stays — the home page's pre-result steps are normal-flow children
+            and overflow on short viewports, and scroll chaining from those children up to this
+            ancestor is unaffected by pointer-events. */}
+        <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto">{children}</div>
+        <MapControls />
       </div>
     </MapCameraProvider>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ItineraryCard from "@/components/ItineraryCard";
@@ -11,6 +11,7 @@ import GenerationLoader from "@/components/cesium/GenerationLoader";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { Itinerary } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
+import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 
 type Step = "form" | "tier" | "result";
@@ -21,7 +22,9 @@ const ghostButtonClass =
   "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg";
 // Shared glass-over-globe card treatment — same class the itinerary/detail
 // panels use, reused here for consistency across every step of this page.
-const cardClass = "glass-itinerary rounded-2xl p-5 sm:p-6";
+// `pointer-events-auto` opts back in from AppShell's `pointer-events-none` overlay, which
+// exists so the Cesium canvas underneath stays draggable. Every interactive box needs it.
+const cardClass = "glass-itinerary pointer-events-auto rounded-2xl p-5 sm:p-6";
 
 const darkLabelClass = "text-sm font-medium text-white/80";
 const darkInputClass =
@@ -51,6 +54,16 @@ export default function Home() {
     detailLoading,
     detailError,
   } = useTripCamera(destination);
+  const { resetToHome } = useMapCamera();
+
+  // Mount-only on purpose. The globe lives above the route boundary and never unmounts, so
+  // arriving here from /trips ("New trip") would otherwise keep the last trip's route, markers
+  // and camera. Remounting is exactly the signal we want: Back from the style step doesn't
+  // remount, so it keeps the destination framed rather than flying back out to the globe.
+  useEffect(() => {
+    resetToHome();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Drives this page's own cosmetics (dark dashboard header/nav once results exist,
   // destination-form positioning) — AppShell's layout itself no longer varies by route/step.
@@ -135,14 +148,14 @@ export default function Home() {
 
   return (
     <main
-      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 sm:p-6 ${!preResult ? "dashboard-page" : ""}`}
+      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 sm:p-6 ${!preResult ? "dashboard-page" : "map-chrome-hidden"}`}
     >
       <GenerationLoader active={generating} />
 
       {/* Dashboard (result) view has no top navbar at all, per request — form/tier
           steps keep it. */}
       {preResult && (
-        <div className="flex items-center justify-between rounded-2xl bg-slate-950/70 px-4 py-3 backdrop-blur-sm">
+        <div className="pointer-events-auto flex items-center justify-between rounded-2xl bg-slate-950/70 px-4 py-3 backdrop-blur-sm">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-accent-foreground">
             TripMate
           </h1>
@@ -235,7 +248,7 @@ export default function Home() {
         )}
 
         {error && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+          <div className="pointer-events-auto rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
             {error}
           </div>
         )}
@@ -245,7 +258,7 @@ export default function Home() {
         // Docked panel floating over the full-screen globe rather than a normal-flow
         // block — `fixed` escapes AppShell's own scrollable content pane entirely, so
         // this positions relative to the viewport and scrolls independently.
-        <div className="fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+        <div className="pointer-events-auto fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
           {!selectedStop && (
             <>
               <ItineraryCard

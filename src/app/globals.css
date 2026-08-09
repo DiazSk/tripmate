@@ -62,6 +62,83 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
 }
 
+/* The home page's form/tier steps are normal-flow cards that reach into the bottom-left corner
+   at any width under ~1292px — exactly where the map control stack sits. Those steps are a form
+   over a decorative hero globe rather than a map the user is reading, so the chrome steps aside
+   instead of fighting for the corner. The globe itself stays draggable throughout. */
+.app-shell:has(.map-chrome-hidden) .map-controls {
+  display: none;
+}
+
+/* Glass chrome for the map control stack (zoom / 2D-3D / tilt / compass). Same character as
+   .glass-itinerary but a smaller blur — these are 44px pills, and a 56px blur on a surface
+   that small just samples flat colour. Do NOT re-add a hand-written `-webkit-backdrop-filter`
+   here: Lightning CSS collapses the pair down to the prefixed property alone, which current
+   Chrome (148, verified) no longer supports, silently killing the blur. Lightning CSS emits
+   the -webkit- prefix itself when targets need it. */
+.glass-control {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.32);
+}
+
+/* Native range input for the tilt slider — no library. It's laid out horizontally and rotated
+   a quarter turn rather than using `writing-mode: vertical-lr`, which only became a vertical
+   range in Safari 17.4; rotation behaves identically everywhere and still hit-tests correctly.
+   The wrapper carries the fixed footprint so the rotation doesn't disturb layout. Track and
+   thumb need explicit rules because `appearance: none` strips the platform rendering, and
+   Tailwind has no utilities for the vendor pseudo-elements. */
+.tilt-slider-wrap {
+  position: relative;
+  width: 22px;
+  height: 92px;
+}
+.tilt-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  /* Absolute + translate(-50%,-50%) rather than grid centring: the track is wider than the
+     wrapper, and grid clamps an overflowing item back to the start instead of centring it,
+     which threw the rotated thumb outside the pill.
+     Rotating -90° puts the minimum at the bottom, so thumb height reads as camera elevation. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 92px;
+  height: 18px;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  background: transparent;
+  cursor: ns-resize;
+}
+.tilt-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.tilt-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.tilt-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.tilt-slider::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: none;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
 .font-display {
   font-family: var(--font-display), ui-serif, Georgia, serif;
 }

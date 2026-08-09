@@ -17,12 +17,18 @@ export function useTripCamera(destination: string) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  /**
+   * Geocodes `name` and records the coordinates (closeDetail flies back to them). `fly`
+   * additionally moves the camera there — pass `false` when an itinerary is about to frame
+   * its own route, since the geocode resolves a few hundred ms later and would otherwise
+   * land second and clobber the better framing with a visible double flight.
+   */
   const flyToDestinationByName = useCallback(
-    async (name: string) => {
+    async (name: string, fly = true) => {
       const geo = await geocodeDestination(name);
       if (geo) {
         setDestinationCoords(geo);
-        flyToDestination(geo.lat, geo.lon, geo.name);
+        if (fly) flyToDestination(geo.lat, geo.lon, geo.name);
       }
     },
     [flyToDestination]

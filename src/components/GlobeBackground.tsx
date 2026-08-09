@@ -47,11 +47,27 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       // which would otherwise let the page's cream background show through any gap.
       viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0b0f19");
 
+      // Everything else on the camera controller stays at Cesium's defaults — the map is
+      // meant to be freely draggable/zoomable/tiltable. These two just stop the extremes:
+      // below ~50m you're inside the photorealistic building mesh, and the ceiling has to stay
+      // above the 2,500km hero altitude or resetToHome's flight fights the clamp.
+      viewer.scene.screenSpaceCameraController.minimumZoomDistance = 50;
+      viewer.scene.screenSpaceCameraController.maximumZoomDistance = 25_000_000;
+
       let usingPhotorealistic = false;
       if (token) {
         try {
           const tileset = await Cesium.createGooglePhotorealistic3DTileset();
           if (cancelled) return;
+          // Google's tiles ship at full satellite vibrance, which reads harsh against the
+          // Apple Maps look this design targets. Blending each tile a fifth of the way toward
+          // a cool grey pulls saturation *and* contrast down together. This has to happen on
+          // the tileset rather than as a CSS filter over the canvas: a canvas filter would
+          // also desaturate the route overlay, and pure blue can't survive a round trip
+          // through one — #0A84FF comes out as rgb(36,135,234).
+          tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#9BA6B4')" });
+          tileset.colorBlendMode = Cesium.Cesium3DTileColorBlendMode.MIX;
+          tileset.colorBlendAmount = 0.2;
           viewer.scene.primitives.add(tileset);
           viewer.scene.globe.show = false;
           usingPhotorealistic = true;
@@ -128,6 +144,18 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
         locked = true;
         rotating = false;
       };
+
+      // The counterpart, for returning to the landing page. Without it `locked` is never written
+      // back, so the first flight of the session kills the idle spin for the tab's lifetime —
+      // a soft navigation home would sit still where a hard reload spins.
+      (viewer as import("cesium").Viewer & { startAutoRotate?: () => void }).startAutoRotate =
+        () => {
+          locked = false;
+          rotating = true;
+          // Load-bearing: spinListener integrates (now - lastTime), so resuming without this
+          // snaps the globe through however long the spin was paused.
+          lastTime = Date.now();
+        };
 
       setViewer(viewer);
     })();
