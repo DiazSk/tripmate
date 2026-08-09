@@ -120,17 +120,20 @@ body {
    custom-property cascade, the same mechanism Tailwind v4's own dark-mode pattern
    relies on. */
 .glass-itinerary {
-  /* Higher alpha than a typical glass card's — the globe renders continuously behind
-     every page now (AppShell), and bright/moving 3D-tile imagery (clouds, snow,
-     water glare) bleeding through a lighter glass pushes --muted text below WCAG AA
-     even against the lightened value below. At 0.70, blending this navy against a
-     worst-case pure-white backdrop holds white text
-     at ~6.6:1 and --muted at ~4.5:1 — legibility survives realistic bright scenes
-     (a true pure-white pixel directly behind text is a rare edge case) while still
-     reading as glass rather than a solid card. */
-  background: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  /* Matches an Apple Maps sidebar's frosted-glass character: heavy blur erases
+     backdrop detail into soft color blobs, saturate keeps what little color
+     bleeds through from looking washed out. Alpha tuned for that same soft/dark
+     feel, not for the contrast floor the previous (lighter-blur) version was
+     tuned for — see docs/superpowers/specs/2026-08-08-glass-blur-refinement-design.md.
+     56px is where large backdrop structures (city blocks, coastlines) stop reading
+     as recognizable shapes; 32px still leaves their edges visible. 0.62 keeps it
+     "moderately dark" — at 0.5 the muted text starts washing out over bright terrain.
+     Do NOT re-add a hand-written `-webkit-backdrop-filter` here: Lightning CSS
+     collapses the pair down to the prefixed property alone, which current Chrome
+     (148, verified) no longer supports — that silently killed the blur entirely.
+     Lightning CSS emits the -webkit- prefix itself when targets need it. */
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(56px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --foreground: #ffffff;
