@@ -137,9 +137,11 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --foreground: #ffffff;
-  /* Slate-300, not slate-400 — slate-400 clears 4.5:1 against a dark backdrop but
-     drops to ~4:1 against the worst-case bright backdrop above; slate-300 holds
-     ~6.9:1 there. */
+  /* Slate-300, not slate-400 — slate-400 only clears 4.5:1 against a dark backdrop,
+     and this panel is translucent enough that a bright backdrop pushes it under.
+     (The specific ratios that used to be quoted here were computed against the old
+     alpha 0.70; they no longer hold at 0.62, and the lower alpha is a deliberate
+     trade — recompute before relying on a number.) */
   --muted: #cbd5e1;
   --card-border: rgba(255, 255, 255, 0.12);
 }
