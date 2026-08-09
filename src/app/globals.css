@@ -49,8 +49,8 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Used by the Cesium-dashboard preview components (PreferenceStep,
-   UnboxingContainer) layered over the 3D globe/aerial imagery. */
+/* Used by the Cesium-dashboard preview component (PreferenceStep) layered
+   over the 3D globe/aerial imagery. */
 .glass-panel {
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
@@ -92,15 +92,6 @@ body {
   display: none !important;
 }
 
-/* Glass navbar bar for the dark dashboard/itinerary views (not the light hero landing
-   header, which sits over the globe and is styled separately). */
-.dashboard-navbar {
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
 /* Same --foreground/--muted/--card-border override as .glass-itinerary, but for a solid dark
    page background rather than a translucent card — lets plain text-foreground/text-muted
    usages directly under a dark dashboard <main> (not wrapped in their own glass card) read
@@ -121,52 +112,31 @@ body {
     0 8px 24px -12px rgba(43, 38, 32, 0.18);
 }
 
-/* Dark glassmorphism surface for the itinerary panel (ItineraryCard). Overrides the
-   --foreground/--muted/--card-border tokens *within this subtree* rather than touching
-   every className — text-foreground/text-muted/border-card-border used by this
-   component (and shared children like BudgetBar) inherit these dark-mode values
-   automatically via the normal CSS custom-property cascade, the same mechanism
-   Tailwind v4's own dark-mode pattern relies on. */
+/* Dark glassmorphism surface — the app-wide card treatment over the globe
+   (itinerary/detail panels, destination form, tier picker, trips list). Overrides
+   the --foreground/--muted/--card-border tokens *within this subtree* rather than
+   touching every className — text-foreground/text-muted/border-card-border used by
+   any child inherit these dark-mode values automatically via the normal CSS
+   custom-property cascade, the same mechanism Tailwind v4's own dark-mode pattern
+   relies on. */
 .glass-itinerary {
-  /* Lower alpha than a typical glass card on purpose — the globe now renders
-     continuously behind this panel (see useHeroLayout(true) in page.tsx), so this
-     needs to stay translucent enough for it to show through. Don't go much lower
-     or text legibility suffers. */
-  background: rgba(15, 23, 42, 0.55);
+  /* Higher alpha than a typical glass card's — the globe renders continuously behind
+     every page now (AppShell), and bright/moving 3D-tile imagery (clouds, snow,
+     water glare) bleeding through a lighter glass pushes --muted text below WCAG AA
+     even against the lightened value below. At 0.70, blending this navy against a
+     worst-case pure-white backdrop holds white text
+     at ~6.6:1 and --muted at ~4.5:1 — legibility survives realistic bright scenes
+     (a true pure-white pixel directly behind text is a rare edge case) while still
+     reading as glass rather than a solid card. */
+  background: rgba(15, 23, 42, 0.7);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --foreground: #ffffff;
-  --muted: #94a3b8;
+  /* Slate-300, not slate-400 — slate-400 clears 4.5:1 against a dark backdrop but
+     drops to ~4:1 against the worst-case bright backdrop above; slate-300 holds
+     ~6.9:1 there. */
+  --muted: #cbd5e1;
   --card-border: rgba(255, 255, 255, 0.12);
-}
-
-/* Slow, continuous left-to-right sweep through the full palette, starting at
-   rgb(255,153,153). background-size is 3x the element width so the gradient
-   has room to slide via background-position without ever showing a hard seam
-   (the gradient's own first/last stops match, so the loop point is invisible). */
-@keyframes cta-gradient-loop {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 200% 50%;
-  }
-}
-.cta-gradient-loop {
-  background-image: linear-gradient(
-    90deg,
-    rgb(255, 153, 153),
-    #f59e0b,
-    #facc15,
-    #22c55e,
-    #06b6d4,
-    #3b82f6,
-    #8b5cf6,
-    #ec4899,
-    rgb(255, 153, 153)
-  );
-  background-size: 300% 100%;
-  animation: cta-gradient-loop 10s linear infinite;
 }
