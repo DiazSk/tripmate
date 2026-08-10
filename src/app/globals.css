@@ -160,6 +160,17 @@ body {
   font-family: var(--font-display), ui-serif, Georgia, serif;
 }
 
+/* The day-tab row still scrolls horizontally (trips run to 30 days), but its scrollbar sat as a
+   visible track directly under the tabs. Nothing is lost by hiding it: the row is reachable by
+   the flanking arrows, by clicking a tab, and by wheel/trackpad — and ItineraryCard scrolls the
+   active tab into view itself on every day change. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Cesium's on-screen credits are required by Google's terms to stay visible. Two fixes:
    Cesium pins them `position:absolute; left:0`, which makes them escape the shrink-to-fit
    container we relocate them into — so flow them normally instead. And they default to
