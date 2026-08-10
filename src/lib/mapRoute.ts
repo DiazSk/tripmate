@@ -13,11 +13,31 @@ export interface RouteStop {
   name: string;
 }
 
-// Apple Maps' systemBlue, matching the reference: one blue for everything routed. The previous
-// neon cyan + violet-glow pairing was most of what read as "too vibrant" — Apple's route is a
-// flat stroke with a darker casing and no bloom at all.
-export const ROUTE_BLUE = "#0A84FF";
-const ROUTE_CASING = "#0060DF";
+const colorCache = new Map<string, string>();
+
+/**
+ * Read a colour token off `:root`, so the globe's palette lives in globals.css beside the rest
+ * of the design system instead of as string literals in here.
+ *
+ * Cached because `getComputedStyle` forces a style recalculation and this runs on every route
+ * rebuild. Must be called from the client-only geometry path and never at module scope — this
+ * module is reached during SSR, where there is no `document` (the same constraint that makes the
+ * pin SVG in mapCamera use `encodeURIComponent` rather than `btoa`).
+ *
+ * Throws rather than falling back to a literal: a fallback would be a second copy of the value,
+ * which is the exact thing moving these into CSS was meant to eliminate. A missing token means a
+ * broken stylesheet, and this is the one place that can say which token.
+ */
+export function cssColor(name: string): string {
+  let value = colorCache.get(name);
+  if (value === undefined) {
+    value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    if (!value) throw new Error(`mapRoute: missing colour token ${name} — see globals.css :root`);
+    colorCache.set(name, value);
+  }
+  return value;
+}
+
 /** Metres above the sampled surface to float the route. Small on purpose: enough to clear the
  *  road mesh without the line reading as detached when the camera drops to street level. */
 const ROUTE_CLEARANCE_M = 2;
@@ -103,6 +123,8 @@ export function buildRouteGeometry(
   const positionsAt = (h: number) =>
     stops.map((s) => Cesium.Cartesian3.fromDegrees(s.lng, s.lat, h));
   const positions = positionsAt(altitude);
+  const blue = Cesium.Color.fromCssColorString(cssColor("--route-blue"));
+  const casing = Cesium.Color.fromCssColorString(cssColor("--route-casing"));
 
   // Apple's route styling: a solid stroke with a darker casing, no glow. The casing is
   // what keeps it legible over both pale pavement and dark water.
@@ -112,15 +134,15 @@ export function buildRouteGeometry(
       width: 6,
       arcType: Cesium.ArcType.GEODESIC,
       material: new Cesium.PolylineOutlineMaterialProperty({
-        color: Cesium.Color.fromCssColorString(ROUTE_BLUE),
-        outlineColor: Cesium.Color.fromCssColorString(ROUTE_CASING),
+        color: blue,
+        outlineColor: casing,
         outlineWidth: 2,
       }),
       // Segments running behind or through buildings draw dimmed rather than disappearing,
       // so the whole day stays traceable from a low angle. Only available unclamped — the
       // ground path returns its geometry before the depth-fail attribute is ever attached.
       depthFailMaterial: new Cesium.ColorMaterialProperty(
-        Cesium.Color.fromCssColorString(ROUTE_BLUE).withAlpha(ROUTE_OCCLUDED_ALPHA)
+        blue.withAlpha(ROUTE_OCCLUDED_ALPHA)
       ),
     },
   });
@@ -133,7 +155,7 @@ export function buildRouteGeometry(
       position,
       point: {
         pixelSize: 11,
-        color: Cesium.Color.fromCssColorString(ROUTE_BLUE),
+        color: blue,
         outlineColor: Cesium.Color.WHITE,
         outlineWidth: 2,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
