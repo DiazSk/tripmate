@@ -10,12 +10,7 @@ import {
   RefObject,
 } from "react";
 import type { Entity, Viewer } from "cesium";
-import {
-  buildRouteGeometry,
-  ROUTE_BLUE,
-  RouteStop,
-  sampleRouteAltitude,
-} from "@/lib/mapRoute";
+import { buildRouteGeometry, cssColor, RouteStop, sampleRouteAltitude } from "@/lib/mapRoute";
 
 interface MapCameraContextValue {
   setViewer: (viewer: Viewer | null) => void;
@@ -292,6 +287,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       if (!stop) return;
 
       const startedAt = performance.now();
+      const blue = Cesium.Color.fromCssColorString(cssColor("--route-blue"));
       activePinRef.current = viewer.entities.add({
         // Same altitude the route was drawn at, so the halo sits on its stop dot rather than
         // clamping to the hidden globe at height 0.
@@ -303,8 +299,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
             const phase = ((performance.now() - startedAt) % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
             return 17 + Math.sin(phase * Math.PI * 2) * 3;
           }, false),
-          color: Cesium.Color.fromCssColorString(ROUTE_BLUE).withAlpha(0.22),
-          outlineColor: Cesium.Color.fromCssColorString(ROUTE_BLUE),
+          color: blue.withAlpha(0.22),
+          outlineColor: blue,
           outlineWidth: 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },

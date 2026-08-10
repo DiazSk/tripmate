@@ -55,6 +55,41 @@
   /* Neutral so the amber Total tile is the only one that pops. */
   --tile: rgba(255, 255, 255, 0.1);
   --tile-foreground: #e3e9f1;
+
+  /* --- Map-native (tertiary) ------------------------------------------------
+     Apple Maps' systemBlue and its casing. These are NOT part of the interface
+     palette and must never appear in a panel, chip or button — the globe gets
+     its own colours because it is photography, not a surface. They live here
+     rather than as string literals in mapRoute.ts so there is one place to
+     change them; JS reads them back through getComputedStyle, the same way
+     GlobeBackground already reads --canvas for scene.backgroundColor.
+
+     The converse of that rule has one deliberate exception: --accent reaches
+     the globe to mark the marker the user is *touching* (hover/selection) and
+     its adjacent arcs. Amber on the globe means "you are pointing at this",
+     never "this is a Tuesday" — per-day accent colours were considered and
+     rejected, since only one day is ever drawn. Keep this exception narrow. */
+  --route-blue: #0a84ff;
+  --route-casing: #0060df;
+
+  /* --- Floating stop markers -----------------------------------------------
+     The marker cards are HTML overlays positioned per frame over the globe,
+     so they are glass like every other surface: same --surface-deep origin as
+     the panels and control pills, one step lighter in blur because a marker is
+     a ~150px card and a 56px blur on something that small just samples flat
+     colour. */
+  --marker-glass: rgb(var(--surface-deep-rgb) / 0.58);
+  --marker-blur: 16px;
+  --marker-border: rgba(255, 255, 255, 0.16);
+  /* How far a hovered card rises. Small — the scale-by-distance transform is
+     already doing most of the depth work, and a big lift fights it. */
+  --marker-lift: -4px;
+  --marker-transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --marker-glow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  /* Hover/active: the amber ring is the globe's only interface-coloured mark. */
+  --marker-glow-active:
+    0 0 0 1px var(--accent), 0 6px 26px rgba(0, 0, 0, 0.5),
+    0 0 22px rgb(255 179 64 / 0.35);
 }
 
 @theme inline {
@@ -109,6 +144,76 @@ body {
    instead of fighting for the corner. The globe itself stays draggable throughout. */
 .app-shell:has(.map-chrome-hidden) .map-controls {
   display: none;
+}
+
+/* Same reasoning for the stop markers: the landing page's form steps are a form over a
+   decorative globe, not a map being read, and there is no route drawn there anyway. */
+.app-shell:has(.map-chrome-hidden) .stop-marker-layer {
+  display: none;
+}
+
+/* --- Floating stop markers -------------------------------------------------------------
+   Two nested elements, and the split is load-bearing rather than tidiness: the anchor's
+   `transform` is rewritten from JS on every `postRender` frame (screen position + distance
+   scale), so anything else that wants a transform — the hover lift — has to live on a
+   different element or the inline style overwrites it 160 times a second.
+
+   `transform-origin: bottom center` plus the `translate(-50%, -100%)` the JS applies keeps
+   the card's bottom edge pinned to the stem tip as it scales, so the card grows upward out
+   of its stem instead of drifting off it. */
+.marker-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: bottom center;
+  /* Hoists the card to its own compositor layer: this element's transform changes every
+     frame, and without it the browser repaints the layer underneath each time. */
+  will-change: transform;
+}
+
+/* The card itself. Glass like every other surface in the app — same --surface-deep origin
+   as the panels and control pills — but a smaller blur, because this is a ~150px card and
+   a 56px blur on something that small just samples flat colour.
+   Do NOT hand-write `-webkit-backdrop-filter` here: Lightning CSS collapses the pair down
+   to the prefixed property alone, which current Chrome (148, verified) no longer supports,
+   silently killing the blur. Lightning CSS emits the prefix itself when targets need it. */
+.glass-marker {
+  display: block;
+  max-width: 13rem;
+  /* Spacing xs/sm and the md radius, per DESIGN.md's scales. */
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  background: var(--marker-glass);
+  backdrop-filter: blur(var(--marker-blur)) saturate(180%);
+  border: 1px solid var(--marker-border);
+  box-shadow: var(--marker-glow);
+  color: var(--on-deep);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    transform var(--marker-transition),
+    box-shadow var(--marker-transition),
+    background var(--marker-transition);
+}
+
+/* One rule for both entry points: `:hover` covers the pointer landing on the card itself,
+   and `[data-hovered]` is set from the itinerary panel's own hover so the highlight is
+   bidirectional without the panel needing to know where the card ended up on screen. */
+.glass-marker:hover,
+.glass-marker[data-hovered="true"] {
+  transform: translateY(var(--marker-lift));
+  background: rgb(var(--surface-deep-rgb) / 0.72);
+  box-shadow: var(--marker-glow-active);
+}
+
+.glass-marker:focus-visible {
+  outline: none;
+  box-shadow: var(--marker-glow-active);
 }
 
 /* Glass chrome for the map control stack (zoom / 2D-3D / tilt / compass). Same character as
