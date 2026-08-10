@@ -46,6 +46,30 @@ const ROUTE_CLEARANCE_M = 2;
 const ROUTE_OCCLUDED_ALPHA = 0.3;
 
 /**
+ * How far above the route each stop's stem rises, in metres, and therefore where its HTML card
+ * anchors. Exported because StopMarkerLayer has to resolve the same point in world space to put
+ * the card on top of the stem — if these two ever disagree the card floats off its own stem.
+ *
+ * Fixed metres rather than a screen-space offset: the stem is a thing standing on the ground, so
+ * it should grow and shrink with everything else as the camera moves. 150m clears Paris' ~35m
+ * rooftops with room to spare, which is the point — the card has to sit above the skyline it is
+ * labelling, not behind it.
+ */
+export const STEM_HEIGHT_M = 150;
+const STEM_WIDTH = 4;
+/** Low power keeps a bright thin core with a soft falloff; higher values wash the whole width out. */
+const STEM_GLOW_POWER = 0.25;
+
+/** Ground footprint under each stop. Two concentric discs at falling alpha — Cesium ellipses take
+ *  a flat fill with no gradient, so a soft edge has to be faked by stacking. Drawn as circles, not
+ *  oblong: at any pitch the app actually frames a route at, a ground circle already reads as an
+ *  ellipse in perspective, and a real oblong would need an arbitrary rotation to point somewhere. */
+const POOL_RADIUS_M = 42;
+const POOL_OUTER_RATIO = 2.1;
+const POOL_ALPHA = 0.22;
+const POOL_OUTER_ALPHA = 0.09;
+
+/**
  * One altitude for the whole day's route, just above street level.
  *
  * `clampToHeightMostDetailed` samples the *tile surface*, and stops sit on buildings — Paris
@@ -147,30 +171,64 @@ export function buildRouteGeometry(
     },
   });
 
-  // Blue disc with a white ring at each stop, matching the reference's route pins. Placed at
-  // the same altitude as the line — CLAMP_TO_GROUND would resolve against the hidden globe
-  // (height 0) and visibly detach the dots from the line at an oblique angle.
-  const dots = positions.map((position) =>
+  const stemTopAt = (i: number, h: number) =>
+    Cesium.Cartesian3.fromDegrees(stops[i].lng, stops[i].lat, h + STEM_HEIGHT_M);
+
+  // A thin lit stem out of a pool of light on the ground, replacing the flat blue dot that used
+  // to mark each stop. The dot had nowhere to put a name; this lifts the label clear of the
+  // rooftops and gives the card something to stand on.
+  //
+  // arcType NONE is load-bearing: the default GEODESIC would try to trace a great circle between
+  // two points that differ only in altitude, which is degenerate.
+  const stems = stops.map((_, i) =>
     viewer.entities.add({
-      position,
-      point: {
-        pixelSize: 11,
-        color: blue,
-        outlineColor: Cesium.Color.WHITE,
-        outlineWidth: 2,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      polyline: {
+        positions: [positions[i], stemTopAt(i, altitude)],
+        width: STEM_WIDTH,
+        arcType: Cesium.ArcType.NONE,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: STEM_GLOW_POWER,
+          color: blue,
+        }),
       },
     })
   );
 
+  // Ellipse geometry takes its centre from `entity.position` but its altitude from `ellipse.height`
+  // — the position's own height is ignored — so both have to be written here and in `reposition`.
+  const pools = stops.map((_, i) =>
+    (
+      [
+        [POOL_RADIUS_M, POOL_ALPHA],
+        [POOL_RADIUS_M * POOL_OUTER_RATIO, POOL_OUTER_ALPHA],
+      ] as const
+    ).map(([radius, alpha]) =>
+      viewer.entities.add({
+        position: positions[i],
+        ellipse: {
+          semiMajorAxis: radius,
+          semiMinorAxis: radius,
+          height: altitude,
+          material: new Cesium.ColorMaterialProperty(blue.withAlpha(alpha)),
+        },
+      })
+    )
+  );
+
   return {
-    entities: [line, ...dots],
+    entities: [line, ...stems, ...pools.flat()],
     reposition: (h: number) => {
       const corrected = positionsAt(h);
       line.polyline!.positions = new Cesium.ConstantProperty(corrected);
-      dots.forEach((e, i) => {
-        e.position = new Cesium.ConstantPositionProperty(corrected[i]);
+      stems.forEach((e, i) => {
+        e.polyline!.positions = new Cesium.ConstantProperty([corrected[i], stemTopAt(i, h)]);
       });
+      pools.forEach((pair, i) =>
+        pair.forEach((e) => {
+          e.position = new Cesium.ConstantPositionProperty(corrected[i]);
+          e.ellipse!.height = new Cesium.ConstantProperty(h);
+        })
+      );
     },
   };
 }
