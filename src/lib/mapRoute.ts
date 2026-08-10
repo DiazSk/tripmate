@@ -69,6 +69,41 @@ const POOL_OUTER_RATIO = 2.1;
 const POOL_ALPHA = 0.22;
 const POOL_OUTER_ALPHA = 0.09;
 
+/** Points sampled along each arc. Enough that the curve reads as smooth at street level without
+ *  turning a 30-day trip into tens of thousands of vertices. */
+const ARC_SAMPLES = 96;
+/** Arc apex as a fraction of the segment's ground length, so a cross-city hop arcs and a
+ *  next-door step stays nearly flat, clamped at both ends. */
+const ARC_LIFT_RATIO = 0.18;
+const MIN_ARC_LIFT_M = 20;
+const MAX_ARC_LIFT_M = 400;
+/**
+ * Segments shorter than this get no arc at all.
+ *
+ * Consecutive stops on one coordinate are normal rather than bad data — PREVIEW_TRIP's day 1
+ * has the transfer, breakfast and shopping all at the same hotel — and a zero-length geodesic
+ * has no unique path, so EllipsoidGeodesic would produce NaN positions and Cesium would draw
+ * nothing while logging nothing. There is also no arc to see between a place and itself.
+ */
+const MIN_ARC_LENGTH_M = 5;
+
+const ARC_GLOW_WIDTH = 9;
+const ARC_GLOW_POWER = 0.2;
+const ARC_GLOW_ALPHA = 0.5;
+const ARC_DASH_WIDTH = 3;
+const ARC_DASH_LENGTH = 18;
+/** One full shimmer cycle. Slow on purpose — this is meant to read as a breath along the route,
+ *  not a chase light. */
+const SHIMMER_PERIOD_MS = 2600;
+/** Fraction of a cycle each successive arc lags by, which is what makes the pulse appear to
+ *  travel along the day rather than every arc breathing in unison. */
+const SHIMMER_ARC_LAG = 0.16;
+const SHIMMER_ALPHA_MIN = 0.5;
+const SHIMMER_ALPHA_RANGE = 0.4;
+/** Held alpha when the visitor has asked for reduced motion — mid-range, so the dashes read at
+ *  the same weight they average to when animating. */
+const SHIMMER_ALPHA_STATIC = 0.7;
+
 /**
  * One altitude for the whole day's route, just above street level.
  *
@@ -147,28 +182,102 @@ export function buildRouteGeometry(
   const positionsAt = (h: number) =>
     stops.map((s) => Cesium.Cartesian3.fromDegrees(s.lng, s.lat, h));
   const positions = positionsAt(altitude);
+  const ellipsoid = viewer.scene.globe.ellipsoid;
   const blue = Cesium.Color.fromCssColorString(cssColor("--route-blue"));
-  const casing = Cesium.Color.fromCssColorString(cssColor("--route-casing"));
 
-  // Apple's route styling: a solid stroke with a darker casing, no glow. The casing is
-  // what keeps it legible over both pale pavement and dark water.
-  const line = viewer.entities.add({
-    polyline: {
-      positions,
-      width: 6,
-      arcType: Cesium.ArcType.GEODESIC,
-      material: new Cesium.PolylineOutlineMaterialProperty({
-        color: blue,
-        outlineColor: casing,
-        outlineWidth: 2,
-      }),
-      // Segments running behind or through buildings draw dimmed rather than disappearing,
-      // so the whole day stays traceable from a low angle. Only available unclamped — the
-      // ground path returns its geometry before the depth-fail attribute is ever attached.
-      depthFailMaterial: new Cesium.ColorMaterialProperty(
-        blue.withAlpha(ROUTE_OCCLUDED_ALPHA)
-      ),
-    },
+  // --- Arcs -------------------------------------------------------------------------------
+  // One raised great-circle hop per consecutive pair, replacing the single flat cased line.
+  // Precomputed once here and re-sampled by `reposition`, since the geodesic itself does not
+  // depend on altitude — only the heights along it do.
+  const scratchCarto = new Cesium.Cartographic();
+  const segments: { geodesic: import("cesium").EllipsoidGeodesic; lift: number }[] = [];
+  for (let i = 1; i < stops.length; i++) {
+    // Measured on the drawn positions rather than via the geodesic, because constructing a
+    // geodesic is the thing being guarded against.
+    if (Cesium.Cartesian3.distance(positions[i - 1], positions[i]) < MIN_ARC_LENGTH_M) continue;
+    const geodesic = new Cesium.EllipsoidGeodesic(
+      Cesium.Cartographic.fromDegrees(stops[i - 1].lng, stops[i - 1].lat),
+      Cesium.Cartographic.fromDegrees(stops[i].lng, stops[i].lat),
+      ellipsoid
+    );
+    const lift = Math.min(
+      Math.max(geodesic.surfaceDistance * ARC_LIFT_RATIO, MIN_ARC_LIFT_M),
+      MAX_ARC_LIFT_M
+    );
+    segments.push({ geodesic, lift });
+  }
+
+  // Sine lift, so the arc leaves and meets the ground flat instead of kinking at its endpoints.
+  const arcPositionsAt = (index: number, h: number) => {
+    const { geodesic, lift } = segments[index];
+    const out: import("cesium").Cartesian3[] = new Array(ARC_SAMPLES);
+    for (let k = 0; k < ARC_SAMPLES; k++) {
+      const t = k / (ARC_SAMPLES - 1);
+      const point = geodesic.interpolateUsingFraction(t, scratchCarto);
+      out[k] = Cesium.Cartesian3.fromRadians(
+        point.longitude,
+        point.latitude,
+        h + lift * Math.sin(t * Math.PI),
+        ellipsoid
+      );
+    }
+    return out;
+  };
+
+  const startedAt = performance.now();
+  // The blanket reduced-motion rule in globals.css reaches CSS only. This shimmer is driven from
+  // performance.now() into a WebGL material, so it would pulse straight through the preference
+  // unless it is checked here.
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const arcs = segments.map((_, index) => {
+    const arcPositions = arcPositionsAt(index, altitude);
+
+    // Wide, soft, low-alpha base. This is what makes the route legible over busy photography;
+    // the dashes alone disappear against a mid-grey rooftop.
+    const glow = viewer.entities.add({
+      polyline: {
+        positions: arcPositions,
+        width: ARC_GLOW_WIDTH,
+        arcType: Cesium.ArcType.NONE,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: ARC_GLOW_POWER,
+          color: blue.withAlpha(ARC_GLOW_ALPHA),
+        }),
+      },
+    });
+
+    const dash = viewer.entities.add({
+      polyline: {
+        positions: arcPositions,
+        width: ARC_DASH_WIDTH,
+        // NONE, not GEODESIC: these vertices already describe the curve, and asking Cesium to
+        // re-trace a great circle between each adjacent pair would flatten the lift back out.
+        arcType: Cesium.ArcType.NONE,
+        material: new Cesium.PolylineDashMaterialProperty({
+          color: reduceMotion
+            ? blue.withAlpha(SHIMMER_ALPHA_STATIC)
+            : // Second argument false = "not constant", so Cesium re-evaluates every frame.
+              // `withAlpha` into the supplied result keeps this allocation-free at ~160fps.
+              new Cesium.CallbackProperty((_time, result) => {
+                const phase =
+                  (performance.now() - startedAt) / SHIMMER_PERIOD_MS - index * SHIMMER_ARC_LAG;
+                const wave = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+                return blue.withAlpha(
+                  SHIMMER_ALPHA_MIN + SHIMMER_ALPHA_RANGE * wave,
+                  result as import("cesium").Color
+                );
+              }, false),
+          gapColor: Cesium.Color.TRANSPARENT,
+          dashLength: ARC_DASH_LENGTH,
+        }),
+        // Stretches behind buildings draw dimmed rather than disappearing, so the whole day
+        // stays traceable from a low angle. Only available unclamped.
+        depthFailMaterial: new Cesium.ColorMaterialProperty(blue.withAlpha(ROUTE_OCCLUDED_ALPHA)),
+      },
+    });
+
+    return { glow, dash };
   });
 
   const stemTopAt = (i: number, h: number) =>
@@ -216,10 +325,16 @@ export function buildRouteGeometry(
   );
 
   return {
-    entities: [line, ...stems, ...pools.flat()],
+    entities: [...arcs.flatMap((a) => [a.glow, a.dash]), ...stems, ...pools.flat()],
     reposition: (h: number) => {
       const corrected = positionsAt(h);
-      line.polyline!.positions = new Cesium.ConstantProperty(corrected);
+      // Both polylines of an arc share one freshly sampled array — they trace the same curve at
+      // different widths, so re-sampling twice would only cost time.
+      arcs.forEach(({ glow, dash }, index) => {
+        const resampled = new Cesium.ConstantProperty(arcPositionsAt(index, h));
+        glow.polyline!.positions = resampled;
+        dash.polyline!.positions = resampled;
+      });
       stems.forEach((e, i) => {
         e.polyline!.positions = new Cesium.ConstantProperty([corrected[i], stemTopAt(i, h)]);
       });
