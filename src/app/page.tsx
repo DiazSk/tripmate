@@ -1,17 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ItineraryCard from "@/components/ItineraryCard";
 import FeedbackLoop from "@/components/FeedbackLoop";
 import TierPicker from "@/components/TierPicker";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import GenerationLoader from "@/components/cesium/GenerationLoader";
+import { PinIcon } from "@/components/icons";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { Itinerary } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
+import { GeoSuggestion, suggestDestinations } from "@/lib/weather";
 
 type Step = "form" | "tier" | "result";
 
@@ -25,7 +26,107 @@ const cardClass = "glass-itinerary rounded-2xl p-5 sm:p-6";
 
 const darkLabelClass = "text-sm font-medium text-white/80";
 const darkInputClass =
-  "mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
+  "mt-1 w-full rounded-xl border border-white/15 bg-[rgba(255,255,255,0.08)] px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
+
+function suggestionLabel(s: GeoSuggestion): string {
+  return s.country ? `${s.name}, ${s.country}` : s.name;
+}
+
+function DestinationField({
+  value,
+  onChange,
+  onSelect,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSelect: (suggestion: GeoSuggestion) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<GeoSuggestion[]>([]);
+  const [open, setOpen] = useState(false);
+  const requestIdRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fieldRef = useRef<HTMLLabelElement>(null);
+
+  // Debounce is driven from the input's own onChange rather than an effect watching `value` —
+  // selecting a suggestion also changes `value` via onChange(label), and an effect would have no
+  // way to tell that apart from typing without re-triggering (and re-opening) the fetch.
+  function handleInputChange(next: string) {
+    onChange(next);
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    const query = next.trim();
+    if (query.length < 2) {
+      setSuggestions([]);
+      setOpen(false);
+      return;
+    }
+    const requestId = ++requestIdRef.current;
+    timerRef.current = setTimeout(async () => {
+      const results = await suggestDestinations(query);
+      if (requestId !== requestIdRef.current) return; // a newer keystroke superseded this request
+      setSuggestions(results);
+      setOpen(results.length > 0);
+    }, 300);
+  }
+
+  // Click-outside to close, rather than input onBlur — onBlur would fire before a
+  // suggestion's onClick and close the list before the click registers.
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (fieldRef.current && !fieldRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  function handleSelect(s: GeoSuggestion) {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    requestIdRef.current++; // invalidate any in-flight fetch
+    onChange(suggestionLabel(s));
+    setSuggestions([]);
+    setOpen(false);
+    onSelect(s);
+  }
+
+  return (
+    <label ref={fieldRef} className={`relative min-w-[200px] flex-[2] ${darkLabelClass}`}>
+      Destination
+      <input
+        required
+        value={value}
+        onChange={(e) => handleInputChange(e.target.value)}
+        onFocus={() => setOpen(suggestions.length > 0)}
+        placeholder="Kyoto, Japan"
+        autoComplete="off"
+        className={darkInputClass}
+      />
+      {open && (
+        <ul className="geo-suggest-dropdown absolute inset-x-0 top-full mt-1 max-h-64 overflow-y-auto py-1">
+          {suggestions.map((s, i) => (
+            <li key={`${s.name}-${s.lat}-${s.lon}-${i}`}>
+              <button
+                type="button"
+                onClick={() => handleSelect(s)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-white/10"
+              >
+                <PinIcon className="h-4 w-4 shrink-0 text-white/50" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-white">{s.name}</span>
+                  {(s.admin1 || s.country) && (
+                    <span className="block truncate text-xs text-[#94A3B8]">
+                      {[s.admin1, s.country].filter(Boolean).join(", ")}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </label>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
@@ -44,6 +145,7 @@ export default function Home() {
 
   const {
     flyToDestinationByName,
+    flyToDestinationByCoords,
     selectStop,
     closeDetail,
     selectedStop,
@@ -139,41 +241,24 @@ export default function Home() {
     >
       <GenerationLoader active={generating} />
 
-      {/* Dashboard (result) view has no top navbar at all, per request — form/tier
-          steps keep it. */}
-      {preResult && (
-        <div className="flex items-center justify-between rounded-2xl bg-slate-950/70 px-4 py-3 backdrop-blur-sm">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-accent-foreground">
-            TripMate
-          </h1>
-          <Link href="/trips" className="text-sm font-medium text-accent-foreground hover:underline">
-            My memories
-          </Link>
-        </div>
-      )}
-
       {/* Anchored near the top of the hero band (not vertically centred) and wider than the
           tier/result cards, per the destination-form redesign. `contents` makes this wrapper
-          vanish from layout in split mode, so the result step renders exactly as it did before. */}
-      <div className={preResult ? "mx-auto mt-4 w-full max-w-6xl space-y-4" : "contents"}>
+          vanish from layout in split mode, so the result step renders exactly as it did before.
+          mt-10 (2.5rem) clears the floating "TripMate" header text above it. */}
+      <div className={preResult ? "mx-auto mt-10 w-full max-w-6xl space-y-4" : "contents"}>
         {step === "form" && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
               chooseStyle();
             }}
-            className={`flex flex-wrap items-end gap-3 ${cardClass}`}
+            className="form-card-black flex flex-wrap items-end gap-3 p-5 sm:p-6"
           >
-            <label className={`min-w-[200px] flex-[2] ${darkLabelClass}`}>
-              Destination
-              <input
-                required
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                placeholder="Kyoto, Japan"
-                className={darkInputClass}
-              />
-            </label>
+            <DestinationField
+              value={destination}
+              onChange={setDestination}
+              onSelect={(s) => flyToDestinationByCoords(s.lat, s.lon, s.name)}
+            />
             <label className={`min-w-[140px] flex-1 ${darkLabelClass}`}>
               Start date
               <input
@@ -205,7 +290,10 @@ export default function Home() {
                 className={darkInputClass}
               />
             </label>
-            <button type="submit" className={`shrink-0 ${primaryButtonClass}`}>
+            <button
+              type="submit"
+              className="btn-neon shrink-0 rounded-full px-5 py-2.5 text-sm active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+            >
               Choose your style
             </button>
           </form>
