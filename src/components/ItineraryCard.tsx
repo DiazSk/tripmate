@@ -238,13 +238,17 @@ export default function ItineraryCard({
   return (
     <div className="glass-itinerary overflow-hidden rounded-2xl">
       <div
-        className="relative flex min-h-[9rem] flex-col justify-end overflow-hidden p-5 text-accent-foreground sm:min-h-[11rem] sm:p-6"
-        style={{ backgroundColor: "var(--accent)" }}
+        className="relative flex min-h-[9rem] flex-col justify-end overflow-hidden p-5 text-on-deep sm:min-h-[11rem] sm:p-6"
+        style={{ backgroundColor: "var(--surface-deep)" }}
       >
         {headerPhoto && (
+          /* Both stops come from --surface-deep so the tint matches the flat
+             no-photo fallback above and the panel around it. A scrim's job is to
+             darken, which is why this can't ride on --accent any more — the
+             accent is a light colour now. */
           <BlurredPhotoLayer
             photo={headerPhoto}
-            tint="linear-gradient(rgba(31,58,52,0.35), rgba(31,58,52,0.88))"
+            tint="linear-gradient(rgb(var(--surface-deep-rgb) / 0.35), rgb(var(--surface-deep-rgb) / 0.88))"
           />
         )}
         <div className="relative z-10 flex flex-col gap-1">
@@ -388,25 +392,26 @@ export default function ItineraryCard({
         {headerPhoto && (
           <BlurredPhotoLayer
             photo={headerPhoto}
-            tint="linear-gradient(rgba(31,58,52,0.55), rgba(31,58,52,0.8))"
+            tint="linear-gradient(rgb(var(--surface-deep-rgb) / 0.55), rgb(var(--surface-deep-rgb) / 0.8))"
           />
         )}
         <div className="relative z-10">
           <div
-            className={`mb-3 text-sm font-semibold ${headerPhoto ? "text-accent-foreground" : "text-foreground"}`}
+            className={`mb-3 text-sm font-semibold ${headerPhoto ? "text-on-deep" : "text-foreground"}`}
           >
             Day {dayIndex + 1} — Budget Breakdown
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {breakdown.map((tile) => {
               const isTotal = tile.label === "Total";
-              // Frosted glass reads only over the photo band; without a photo the footer is pale
-              // tan, where translucent tiles would leave the labels unreadable — so that case
-              // keeps the solid terracotta fills. The glass is black-tinted rather than white:
+              // Over the photo band the tiles are black-tinted glass rather than white-tinted:
               // a bright photo behind a white-tinted tile drops the label to ~2.5:1, while
-              // darkening holds >4.5:1 whatever the photo happens to be.
+              // darkening holds >4.5:1 whatever the photo happens to be. Without a photo the
+              // band is already dark (a faint white wash over the panel), so the tiles just
+              // take flat neutral fills — and only Total takes the amber accent, keeping the
+              // "one accent" rule that the rest of the palette follows.
               const surface = headerPhoto
-                ? `border text-accent-foreground backdrop-blur-md ${
+                ? `border text-on-deep backdrop-blur-md ${
                     isTotal ? "border-white/40 bg-black/40" : "border-white/20 bg-black/25"
                   }`
                 : isTotal

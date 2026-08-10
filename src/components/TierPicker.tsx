@@ -49,7 +49,7 @@ export default function TierPicker({
             />
             <div
               className={`absolute right-3 top-3 flex flex-col items-end gap-0.5 rounded-2xl px-3 py-1 backdrop-blur-sm ${
-                overBudget ? "bg-white/10" : "bg-slate-950/70"
+                overBudget ? "bg-white/10" : "bg-surface-deep/70"
               }`}
             >
               <span

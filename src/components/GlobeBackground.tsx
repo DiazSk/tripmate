@@ -44,8 +44,13 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       });
 
       // Solid dark space behind/beyond the globe — not the default transparent canvas,
-      // which would otherwise let the page's cream background show through any gap.
-      viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0b0f19");
+      // which would otherwise let the page background show through any gap. Read from
+      // --canvas rather than repeating the literal: AppShell paints the same colour on the
+      // DOM either side of this canvas, and if the two drift a seam appears at its edge.
+      const canvasColor = getComputedStyle(document.documentElement)
+        .getPropertyValue("--canvas")
+        .trim();
+      viewer.scene.backgroundColor = Cesium.Color.fromCssColorString(canvasColor || "#0b0f19");
 
       // Everything else on the camera controller stays at Cesium's defaults — the map is
       // meant to be freely draggable/zoomable/tiltable. These two just stop the extremes:

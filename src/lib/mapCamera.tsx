@@ -42,7 +42,10 @@ const MapCameraContext = createContext<MapCameraContextValue | null>(null);
 
 const DESTINATION_HEIGHT_M = 15000;
 const PLACE_HEIGHT_M = 600;
-const LABEL_COLOR = "#f5f1e8";
+/** Mirrors --on-deep / --surface-deep. Cesium wants plain colour strings at label-build time,
+ *  so these can't be `var()` — update both here if those tokens move. */
+const LABEL_COLOR = "#f4f7fa";
+const LABEL_OUTLINE = "#0f172a";
 /** The landing-page pose, mirrored from GlobeBackground's initial `setView`. Kept in sync by
  *  hand — these are true altitudes, unlike `flyTo`'s `height` which is a HeadingPitchRange range. */
 const HERO_VIEW = { lng: 8, lat: 22, height: 2_500_000, headingDeg: 5, pitchDeg: -45 };
@@ -167,7 +170,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
                 text: label,
                 font: '500 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
                 fillColor: Cesium.Color.fromCssColorString(LABEL_COLOR),
-                outlineColor: Cesium.Color.fromCssColorString("#2b2620"),
+                outlineColor: Cesium.Color.fromCssColorString(LABEL_OUTLINE),
                 outlineWidth: 4,
                 style: Cesium.LabelStyle.FILL_AND_OUTLINE,
                 verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
