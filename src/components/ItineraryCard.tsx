@@ -160,7 +160,13 @@ function StopRow({
       className="relative flex gap-3 rounded-xl transition-colors hover:bg-white/5"
     >
       {!isLast && (
-        <div className="absolute top-11 left-5 h-[calc(100%+0.5rem)] w-px bg-card-border" />
+        /* Spans avatar-bottom to next-avatar-top, so it has to stop short of this row's own
+           height rather than exceed it: it starts at 2.75rem (top-11, a hair under the 2.5rem
+           h-10 avatar) and the next avatar begins at 100% + 1rem (the parent's space-y-4), so
+           the height is 100% + 1rem - 2.75rem. The old +0.5rem overshot by 2.25rem and drew
+           straight through the following stop's avatar and name. Update this if the avatar
+           size or the list gap changes. */
+        <div className="absolute top-11 left-5 h-[calc(100%-1.75rem)] w-px bg-card-border" />
       )}
       <button
         type="button"
@@ -277,7 +283,7 @@ export default function ItineraryCard({
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
 
-        <div className="flex gap-1.5 overflow-x-auto">
+        <div className="scrollbar-none flex gap-1.5 overflow-x-auto">
           {itinerary.days.map((d, i) => {
             const isFirst = i === 0;
             // Right edge is an arrow point; tabs after the first also carry a matching notch on
