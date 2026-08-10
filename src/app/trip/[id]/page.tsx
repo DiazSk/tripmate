@@ -1,13 +1,20 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import ItineraryCard from "@/components/ItineraryCard";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
+import { headerLinkClass } from "@/components/BrandMark";
 import { DayPlan, Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
 
 type ActualCostTarget = "lodging" | number;
+
+/** When the itinerary has stops, ItineraryCard's own effect frames the day's route — so the
+ *  destination flight must be suppressed or it lands second and clobbers that framing. */
+const hasStops = (itinerary?: Itinerary | null) =>
+  !!itinerary?.days.some((d) => d.stops.length > 0);
 
 /** Hardcoded trip for visually inspecting this page at /trip/preview without a real generation round-trip. */
 const PREVIEW_TRIP: Trip = {
@@ -102,7 +109,7 @@ export default function TripPage({
       Promise.resolve().then(() => {
         setTrip(PREVIEW_TRIP);
         setItinerary(PREVIEW_TRIP.itinerary);
-        flyToDestinationByName(PREVIEW_TRIP.destination);
+        flyToDestinationByName(PREVIEW_TRIP.destination, !hasStops(PREVIEW_TRIP.itinerary));
       });
       return;
     }
@@ -112,7 +119,7 @@ export default function TripPage({
         if (!res.ok) throw new Error(data.error || "Failed to load trip");
         setTrip(data);
         setItinerary(data.itinerary);
-        await flyToDestinationByName(data.destination);
+        await flyToDestinationByName(data.destination, !hasStops(data.itinerary));
       })
       .catch((e) => setError(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,7 +214,14 @@ export default function TripPage({
     <main className="dashboard-page min-h-full">
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
-      <div className="fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+      <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+        <div className="flex justify-end">
+          <Link href="/trips" className={headerLinkClass}>
+            My memories
+          </Link>
+        </div>
+
+
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
             {error}
