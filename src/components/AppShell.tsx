@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { ReactNode } from "react";
 import { MapCameraProvider } from "@/lib/mapCamera";
 
@@ -25,6 +26,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <GlobeBackground creditClassName="fixed bottom-1 left-3" />
         </div>
         <div className="absolute inset-0 z-10 overflow-y-auto">{children}</div>
+
+        {/* Floats over the globe canvas everywhere — no backing box, per the
+            header redesign — so it needs to sit above the per-route content (z-10). */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 sm:p-6">
+          <Link href="/" className="floating-header-text pointer-events-auto font-display text-lg sm:text-xl">
+            TripMate
+          </Link>
+          <Link href="/trips" className="floating-header-text pointer-events-auto text-sm hover:underline sm:text-base">
+            My memories
+          </Link>
+        </div>
       </div>
     </MapCameraProvider>
   );

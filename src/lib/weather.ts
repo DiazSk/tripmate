@@ -14,6 +14,14 @@ interface GeoResult {
   name: string;
 }
 
+export interface GeoSuggestion {
+  lat: number;
+  lon: number;
+  name: string;
+  admin1: string | null;
+  country: string | null;
+}
+
 const FORECAST_HORIZON_DAYS = 16;
 
 export async function geocodeDestination(name: string): Promise<GeoResult | null> {
@@ -27,6 +35,27 @@ export async function geocodeDestination(name: string): Promise<GeoResult | null
   const first = data?.results?.[0];
   if (!first) return null;
   return { lat: first.latitude, lon: first.longitude, name: first.name };
+}
+
+/** Typeahead suggestions for the destination field — same free Open-Meteo geocoder as
+ *  `geocodeDestination`, just asking for several candidates instead of the single best match. */
+export async function suggestDestinations(query: string, count = 6): Promise<GeoSuggestion[]> {
+  const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
+  url.searchParams.set("name", query);
+  url.searchParams.set("count", String(count));
+
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  const data = await res.json();
+  const results = data?.results;
+  if (!Array.isArray(results)) return [];
+  return results.map((r) => ({
+    lat: r.latitude,
+    lon: r.longitude,
+    name: r.name,
+    admin1: r.admin1 ?? null,
+    country: r.country ?? null,
+  }));
 }
 
 export async function getWeatherForDates(

@@ -221,11 +221,11 @@ export default function ItineraryCard({
     showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
   }, [day, showDayRoute]);
 
-  // Keep the active day tab scrolled into view, including when the arrows below move it.
+  // Keep the active day tab centered in its scroll row, including when the arrows below move it.
   useEffect(() => {
     dayTabRefs.current[dayIndex]?.scrollIntoView({
       behavior: "smooth",
-      inline: "nearest",
+      inline: "center",
       block: "nearest",
     });
   }, [dayIndex]);
@@ -236,7 +236,7 @@ export default function ItineraryCard({
   const tierDescription = TIERS.find((t) => t.id === itinerary.tier)?.description ?? "";
 
   return (
-    <div className="glass-itinerary overflow-hidden rounded-2xl">
+    <div className="itinerary-glass overflow-hidden">
       <div
         className="relative flex min-h-[9rem] flex-col justify-end overflow-hidden p-5 text-accent-foreground sm:min-h-[11rem] sm:p-6"
         style={{ backgroundColor: "var(--accent)" }}
@@ -267,8 +267,7 @@ export default function ItineraryCard({
           onClick={() => setActiveDayIndex((i) => Math.max(0, i - 1))}
           disabled={dayIndex === 0}
           aria-label="Previous day"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-30"
-          style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
+          className="day-arrow flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-30"
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
@@ -311,8 +310,7 @@ export default function ItineraryCard({
           }
           disabled={dayIndex === itinerary.days.length - 1}
           aria-label="Next day"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-30"
-          style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
+          className="day-arrow flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-30"
         >
           <ChevronRightIcon className="h-4 w-4" />
         </button>

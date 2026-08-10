@@ -148,3 +148,79 @@ body {
   --muted: #cbd5e1;
   --card-border: rgba(255, 255, 255, 0.12);
 }
+
+/* Deep glass treatment for the itinerary card specifically — darker and more
+   sharply blurred than the app-wide .glass-itinerary, per the itinerary-panel
+   redesign. */
+.itinerary-glass {
+  /* Do NOT re-add a hand-written `-webkit-backdrop-filter` here: Lightning CSS
+     collapses the pair down to the prefixed property alone, which current Chrome
+     no longer supports — that silently kills the blur. Lightning CSS emits the
+     -webkit- prefix itself when targets need it. */
+  background: rgba(10, 14, 23, 0.85);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+  border-radius: 20px;
+  --foreground: #ffffff;
+  --muted: #94a3b8;
+  --card-border: rgba(255, 255, 255, 0.12);
+}
+
+/* Neon/cyberpunk primary CTA — used for the "Choose your style" button. */
+.btn-neon {
+  background: linear-gradient(135deg, #00f2fe 0%, #7c3aed 100%);
+  color: #ffffff;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: all 0.25s ease;
+}
+.btn-neon:hover {
+  box-shadow: 0 0 25px rgba(0, 242, 254, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Prev/next day chevrons flanking the day-tab selector. */
+.day-arrow {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.2s ease;
+}
+.day-arrow:hover {
+  transform: scale(1.1);
+  border-color: rgba(0, 242, 254, 0.8);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+}
+
+/* Pure-black glass treatment for the destination-form card specifically —
+   darker than the shared .glass-itinerary so it reads as a distinct, more
+   deliberate first step. */
+.form-card-black {
+  background: rgba(5, 7, 12, 0.92);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+  border-radius: 16px;
+  --foreground: #ffffff;
+  --muted: #94a3b8;
+  --card-border: rgba(255, 255, 255, 0.12);
+}
+
+/* Destination-field typeahead dropdown — floats beneath the input, independent of
+   .form-card-black's own translucency so it stays legible over whatever it lands on. */
+.geo-suggest-dropdown {
+  background: rgba(10, 14, 23, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px);
+  border-radius: 12px;
+  z-index: 50;
+}
+
+/* App-wide "TripMate" / "My memories" header — floats directly over the globe
+   canvas with no background of its own, so only the text needs to stay legible
+   over whatever happens to be behind it. */
+.floating-header-text {
+  color: #ffffff;
+  font-weight: 700;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}

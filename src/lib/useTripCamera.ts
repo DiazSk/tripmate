@@ -28,6 +28,16 @@ export function useTripCamera(destination: string) {
     [flyToDestination]
   );
 
+  /** Same as flyToDestinationByName, but for callers (e.g. an autocomplete suggestion) that
+   *  already know the coordinates — skips the redundant re-geocode round-trip. */
+  const flyToDestinationByCoords = useCallback(
+    (lat: number, lon: number, name: string) => {
+      setDestinationCoords({ lat, lon, name });
+      flyToDestination(lat, lon, name);
+    },
+    [flyToDestination]
+  );
+
   const selectStop = useCallback(
     async (stop: Stop) => {
       setSelectedStop(stop);
@@ -63,6 +73,7 @@ export function useTripCamera(destination: string) {
 
   return {
     flyToDestinationByName,
+    flyToDestinationByCoords,
     selectStop,
     closeDetail,
     selectedStop,

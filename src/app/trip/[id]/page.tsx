@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Link from "next/link";
 import ItineraryCard from "@/components/ItineraryCard";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import { DayPlan, Itinerary, Trip } from "@/lib/types";
@@ -209,15 +208,6 @@ export default function TripPage({
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
       <div className="fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
-        <div className="flex justify-end">
-          <Link
-            href="/trips"
-            className="rounded-full bg-slate-950/70 px-3 py-1.5 text-sm font-medium text-muted backdrop-blur-sm hover:text-foreground"
-          >
-            My memories
-          </Link>
-        </div>
-
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
             {error}
