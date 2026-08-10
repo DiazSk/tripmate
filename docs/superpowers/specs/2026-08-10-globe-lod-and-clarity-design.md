@@ -124,6 +124,37 @@ Final visual acceptance belongs to the user — one screenshot from a real displ
   raises the triangle count in the same view. If frame time at the close tier proves bad, the
   resolution cap is the cheaper knob to back off first — it is one number and costs no detail.
 
+## Results (measured after implementation)
+
+At the real place-view altitude (344 m, −35°), both settled, `stopAutoRotate()` first:
+
+| | Mumbai before | Mumbai after | Frankfurt after |
+|---|---|---|---|
+| Min geometric error | 16.05 m | **2.01 m** | **2.01 m** |
+| Triangles | 21,242 | 101,066 | 1,049,384 |
+| Tiles selected | 110 | 510 | 551 |
+| Frame rate | — | 57 fps | 52 fps |
+| Render scale | 1.0× | 1.5× (native) | 1.5× (native) |
+
+**Primary target met and exceeded.** Mumbai reaches 2.01 m against a ≤ 8 m target, and lands on
+exactly the same minimum geometric error as Frankfurt. The LOD-selection gap is fully closed.
+
+**One acceptance criterion was wrong.** "Triangle count within 2× of Frankfurt's" is not met and
+never will be — the gap is 10×. But both cities now select tiles of *identical declared error* in
+comparable numbers (510 vs 551), which means the difference is mesh density inside Google's tiles,
+not anything a setting controls. Minimum geometric error is the correct measure of what we can
+influence; triangle count conflates that with source data richness. Recorded rather than quietly
+dropped.
+
+**SSE 4 tested and rejected.** At the close tier, dropping to SSE 4 in Mumbai left minimum
+geometric error unchanged at 2.01 m — that is Google's tree floor — while selecting 1,662 tiles
+instead of 510, pulling 1,119 MB of texture instead of 253 MB, and falling to 21 fps from 57.
+2.7× the frame time for zero additional detail where the user is looking. SSE 8 is the floor
+worth paying for.
+
+`devicePixelRatio` on the verification display was 1.5, so the resolution change is a genuine
+1.5× increase in rendered pixels, not the no-op it would be at 1.0.
+
 ## Out of scope
 
 - `dynamicScreenSpaceError`'s isolated contribution (see caveat above).
