@@ -235,7 +235,12 @@ export default function Home() {
                 the one closest to the trip you want.
               </p>
             </div>
-            <TierPicker days={tripDays(startDate, endDate)} selected={tier} onSelect={setTier} />
+            <TierPicker
+              days={tripDays(startDate, endDate)}
+              budget={budget}
+              selected={tier}
+              onSelect={setTier}
+            />
             <div className="flex justify-between pt-1">
               <button type="button" onClick={() => setStep("form")} className={ghostButtonClass}>
                 Back
