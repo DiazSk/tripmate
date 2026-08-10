@@ -1,26 +1,60 @@
 @import "tailwindcss";
 
 :root {
-  /* "Roamly" direction: warm cream content pane + dark teal accents, contrasting
-     against the cool-toned 3D map pane. Replaces the "Overcast" steel-blue glass
-     direction — see DESIGN.md for history. */
-  --background: #f2eee6;
-  --foreground: #2b2620;
-  --muted: #7a7266;
-  --accent: #1f3a34;
-  --accent-hover: #16302b;
-  --accent-foreground: #f5f1e8;
-  --card: #faf7f1;
-  --card-border: rgba(43, 38, 32, 0.1);
+  /* Frosted slate glass over live satellite imagery, with a single warm accent.
+     Supersedes the warm cream/teal "Roamly" palette, which was built for solid
+     cream cards in spatially separate panes — the app has since gone back to
+     layered glass over a full-bleed map, and warm cream on cool slate glass is
+     what made the two read as different design systems. Frosted glass wants a
+     neutral base plus ONE vivid accent; warmth is now the accent alone. */
 
-  --tag-neutral-bg: #e4d9c4;
-  --tag-neutral-fg: #2b2620;
-  --tag-positive-bg: #b9c9a8;
-  --tag-positive-fg: #24321f;
-  --tag-highlight-bg: #f8dfd4;
-  --tag-highlight-fg: #7a3a20;
-  --tile: #9d5b38;
-  --tile-foreground: #fff8f2;
+  /* Every surface in this app is dark. Without this the UA renders native controls in
+     its light scheme — the date field's calendar indicator and the number field's
+     spinners paint as dark glyphs on the near-black inputs, which is where three of the
+     four trip-form fields live. */
+  color-scheme: dark;
+
+  /* The canvas behind the globe. GlobeBackground reads this at Viewer init for
+     Cesium's own scene.backgroundColor, so the WebGL clear colour and the DOM
+     around it cannot drift apart and show a seam at the canvas edge. */
+  --canvas: #0b0f19;
+
+  /* Slate-900, as channels so alpha can vary. The frosted panels, the map
+     control pills, the itinerary header band and the photo scrims are all this
+     one colour at different alphas — that shared origin is what makes them
+     read as one material instead of four similar greys. */
+  --surface-deep-rgb: 15 23 42;
+  --surface-deep: rgb(var(--surface-deep-rgb));
+
+  --background: var(--canvas);
+  --foreground: #f4f7fa;
+  --muted: #97a3b6;
+
+  /* The one warm accent, interactive use only: buttons, active day pill, budget
+     bar, focus rings, icons. Note it is a *light* colour, so its foreground is
+     dark — do NOT reuse --accent-foreground to mean "text over something dark",
+     that is --on-deep. Conflating the two is what this palette had to untangle. */
+  --accent: #ffb340;
+  --accent-hover: #ffc266;
+  --accent-foreground: #3d2600;
+
+  /* Text over any dark surface: header band, photo overlays, scrims, the map. */
+  --on-deep: #f4f7fa;
+
+  --card-border: rgba(255, 255, 255, 0.12);
+
+  /* Chips read as glass chrome rather than warm paper. Only the AI/highlight
+     chip carries the accent — one accent means the positive chips give up their
+     green, which is the deliberate cost of the surfaces cohering. */
+  --tag-neutral-bg: rgba(255, 255, 255, 0.13);
+  --tag-neutral-fg: #e3e9f1;
+  --tag-positive-bg: rgba(255, 255, 255, 0.13);
+  --tag-positive-fg: #e3e9f1;
+  --tag-highlight-bg: rgba(255, 179, 64, 0.2);
+  --tag-highlight-fg: #ffca7a;
+  /* Neutral so the amber Total tile is the only one that pops. */
+  --tile: rgba(255, 255, 255, 0.1);
+  --tile-foreground: #e3e9f1;
 }
 
 @theme inline {
@@ -30,7 +64,9 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-foreground: var(--accent-foreground);
-  --color-card: var(--card);
+  --color-on-deep: var(--on-deep);
+  --color-canvas: var(--canvas);
+  --color-surface-deep: var(--surface-deep);
   --color-card-border: var(--card-border);
   --color-tag-neutral-bg: var(--tag-neutral-bg);
   --color-tag-neutral-fg: var(--tag-neutral-fg);
@@ -49,21 +85,227 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Used by the Cesium-dashboard preview component (PreferenceStep) layered
-   over the 3D globe/aerial imagery. */
-.glass-panel {
-  /* Do NOT re-add a hand-written `-webkit-backdrop-filter` here: Lightning CSS
-     collapses the pair down to the prefixed property alone, which current Chrome
-     (148, verified) no longer supports — that silently killed the blur entirely.
-     Lightning CSS emits the -webkit- prefix itself when targets need it. */
-  backdrop-filter: blur(16px) saturate(180%);
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+/* The `prefers-reduced-motion: no-preference` gates further down cover the keyframe
+   animations, but every Tailwind `transition-*` utility in the app was ungated — the form's
+   500ms focus wipe, the tier card's scale, the submit arrow's nudge, the ring fades. This
+   catches all of them. Near-zero rather than `none` so transitionend/animationend still fire
+   and nothing that waits on them hangs. The globe keeps turning: it's a WebGL render loop,
+   not CSS, and stopping the thing the user came to look at is not what this setting asks
+   for. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The home page's form/tier steps are normal-flow cards that reach into the bottom-left corner
+   at any width under ~1292px — exactly where the map control stack sits. Those steps are a form
+   over a decorative hero globe rather than a map the user is reading, so the chrome steps aside
+   instead of fighting for the corner. The globe itself stays draggable throughout. */
+.app-shell:has(.map-chrome-hidden) .map-controls {
+  display: none;
+}
+
+/* Glass chrome for the map control stack (zoom / 2D-3D / tilt / compass). Same character as
+   .glass-itinerary but a smaller blur — these are 44px pills, and a 56px blur on a surface
+   that small just samples flat colour. Do NOT re-add a hand-written `-webkit-backdrop-filter`
+   here: Lightning CSS collapses the pair down to the prefixed property alone, which current
+   Chrome (148, verified) no longer supports, silently killing the blur. Lightning CSS emits
+   the -webkit- prefix itself when targets need it. */
+.glass-control {
+  background: rgb(var(--surface-deep-rgb) / 0.55);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.32);
+}
+
+/* Native range input for the tilt slider — no library. It's laid out horizontally and rotated
+   a quarter turn rather than using `writing-mode: vertical-lr`, which only became a vertical
+   range in Safari 17.4; rotation behaves identically everywhere and still hit-tests correctly.
+   The wrapper carries the fixed footprint so the rotation doesn't disturb layout. Track and
+   thumb need explicit rules because `appearance: none` strips the platform rendering, and
+   Tailwind has no utilities for the vendor pseudo-elements. */
+.tilt-slider-wrap {
+  position: relative;
+  width: 22px;
+  height: 92px;
+}
+.tilt-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  /* Absolute + translate(-50%,-50%) rather than grid centring: the track is wider than the
+     wrapper, and grid clamps an overflowing item back to the start instead of centring it,
+     which threw the rotated thumb outside the pill.
+     Rotating -90° puts the minimum at the bottom, so thumb height reads as camera elevation. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 92px;
+  height: 18px;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  background: transparent;
+  cursor: ns-resize;
+}
+.tilt-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.tilt-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.tilt-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.tilt-slider::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: none;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .font-display {
   font-family: var(--font-display), ui-serif, Georgia, serif;
+}
+
+/* The landing headline, and nothing else. Archivo's width axis is doing as much work as
+   its weight — 800 alone reads bold, 800 at 125% width reads like a poster. The negative
+   tracking is what keeps a wide face from sprawling at display size; it sits just inside
+   the -0.04em floor. */
+.font-hero {
+  font-family: var(--font-hero), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
+  font-stretch: 125%;
+  letter-spacing: -0.035em;
+}
+
+/* Landing hero legibility over live satellite imagery of arbitrary brightness — the globe
+   idles anywhere from open ocean at night to a bright snowfield.
+   There is deliberately NO scrim panel behind the hero: nothing may sit between the type and
+   the globe. So all the darkening happens in the glyphs' own shadow, which hugs the letter
+   shapes instead of painting a rectangle — three layers because one can't do both jobs:
+     · 1px/3px at 0.9 — a hard edge so a letter never dissolves into a same-luminance pixel
+     · 3px/14px at 0.75 — the local pool that carries mid-frequency terrain detail
+     · 6px/44px at 0.5 — a wide, very soft halo, the closest thing to a scrim that has no
+       findable edge; it reads as depth rather than as a box
+   Known limit: text-shadow does not count toward a WCAG contrast ratio. Over worst-case
+   bright daytime terrain the computed ratio for the subline can fall under 4.5:1 even though
+   it stays legible in practice. That is a deliberate, requested trade for an unobstructed
+   globe — reinstating a scrim is the fix if it ever needs to be measurable. */
+.hero-legible {
+  text-shadow:
+    0 1px 3px rgb(var(--surface-deep-rgb) / 0.9),
+    0 3px 14px rgb(var(--surface-deep-rgb) / 0.75),
+    0 6px 44px rgb(var(--surface-deep-rgb) / 0.5);
+}
+
+/* The page's one authored entrance: the hero settles in once on arrival, staggered top to
+   bottom. Resting state is fully visible and the animation only ever plays *back to* it via
+   `backwards` fill, so a reduced-motion visitor (or a dropped stylesheet) gets the finished
+   composition rather than a blank viewport. The globe is the ongoing motion on this page —
+   nothing else here moves. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rise {
+    animation: hero-rise 600ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Two lighter siblings of hero-rise, same easing family, for state changes rather than
+   arrivals: `pop-in` for a control that appears under the cursor (the tier check badge),
+   `value-in` for a figure that has just been recalculated (a tier price re-pricing itself as
+   the dates or budget change). Both are keyed remounts — React reuses the DOM node otherwise
+   and a CSS animation only plays on mount. Same reduced-motion gate as hero-rise: the
+   resting state is the finished one, so suppressing these loses nothing but the movement. */
+@media (prefers-reduced-motion: no-preference) {
+  .pop-in {
+    animation: pop-in 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  .value-in {
+    animation: value-in 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  /* The console's own arrival, distinct from the `value-in` its neighbours use so the form
+     doesn't assemble in eight identical beats. Blur is this system's signature material —
+     every panel and pill is a blurred surface — so resolving the cells out of a blur is the
+     world's own device rather than one more translate. Applied to the four cells and not to
+     their container: a `filter` on the console would rasterize the whole trough, including
+     its hairline dividers, and cost far more than blurring four short runs of text. */
+  .settle-in {
+    animation: settle-in 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+}
+
+@keyframes value-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(5px);
+  }
+}
+
+/* The trip form's four fields sit in one recessed slate trough rather than in four separate
+   boxes, so the UA's own control chrome is redundant: each cell already supplies its own
+   icon, and the date cells open the picker from a click anywhere in the cell via
+   showPicker(). The native glyphs can only be inverted, never restyled to the system's icon
+   stroke, so they'd read as borrowed chrome sitting inside an authored control. Typing and
+   keyboard entry are untouched — this removes painting, not behaviour. */
+.field-console input[type="date"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
+.field-console input[type="number"]::-webkit-inner-spin-button,
+.field-console input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.field-console input[type="number"] {
+  appearance: textfield;
+}
+
+/* The day-tab row still scrolls horizontally (trips run to 30 days), but its scrollbar sat as a
+   visible track directly under the tabs. Nothing is lost by hiding it: the row is reachable by
+   the flanking arrows, by clicking a tab, and by wheel/trackpad — and ItineraryCard scrolls the
+   active tab into view itself on every day change. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* Cesium's on-screen credits are required by Google's terms to stay visible. Two fixes:
@@ -105,16 +347,6 @@ body {
   --card-border: rgba(255, 255, 255, 0.12);
 }
 
-/* Solid card surface for the content pane — no blur/translucency, since the map
-   and the itinerary content now live in separate panes rather than layered. */
-.card {
-  background: var(--card);
-  border: 1px solid var(--card-border);
-  box-shadow:
-    0 1px 2px rgba(43, 38, 32, 0.05),
-    0 8px 24px -12px rgba(43, 38, 32, 0.18);
-}
-
 /* Dark glassmorphism surface — the app-wide card treatment over the globe
    (itinerary/detail panels, destination form, tier picker, trips list). Overrides
    the --foreground/--muted/--card-border tokens *within this subtree* rather than
@@ -135,7 +367,7 @@ body {
      collapses the pair down to the prefixed property alone, which current Chrome
      (148, verified) no longer supports — that silently killed the blur entirely.
      Lightning CSS emits the -webkit- prefix itself when targets need it. */
-  background: rgba(15, 23, 42, 0.62);
+  background: rgb(var(--surface-deep-rgb) / 0.62);
   backdrop-filter: blur(56px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
@@ -223,4 +455,153 @@ body {
   color: #ffffff;
   font-weight: 700;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+/* "Generating" loader shown while an itinerary is being built (GenerationLoader).
+   The ring is an otherwise-empty circle whose *inset* box-shadows paint colour
+   blobs at different offsets/blurs; rotating the element sweeps them around, so
+   the gradient is a side effect of the shadows rather than a real conic
+   gradient. Palette is the app's own: deep slate disc, warm accent sweep —
+   deliberately no cyan. Blur/offset values are tuned for the 200px wrapper
+   below; shrinking the wrapper without scaling these makes the shadows read
+   much heavier. */
+.loader-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  font-weight: 300;
+  color: var(--on-deep);
+  user-select: none;
+  /* Not in the stock version of this loader, which sits on a fixed dark page.
+     This one floats over live satellite imagery, which is mid-luminance and
+     cool-desaturated (the tileset is tinted toward #9BA6B4). A translucent
+     scrim put the loader in that same luminance band and it read as a tinted
+     bubble rather than an object, so this is near-opaque — dark is the one axis
+     the imagery is not. Same --surface-deep as the panels, so the loader is
+     visibly the same material as the rest of the chrome. */
+  background-color: rgb(var(--surface-deep-rgb) / 0.95);
+  /* Defined edge + cast shadow: without these the circle dissolves into the
+     imagery at its rim no matter how opaque the centre is. */
+  border: 1px solid rgba(244, 247, 250, 0.2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.loader {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: loader-rotate 2s linear infinite;
+  z-index: 0;
+}
+
+/* z-index works without `position` here because the letters are flex items. */
+.loader-letter {
+  display: inline-block;
+  z-index: 1;
+  opacity: 0.4;
+  animation: loader-letter-anim 2s infinite;
+}
+
+.loader-letter:nth-child(1) {
+  animation-delay: 0s;
+}
+.loader-letter:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.loader-letter:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.loader-letter:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.loader-letter:nth-child(5) {
+  animation-delay: 0.4s;
+}
+.loader-letter:nth-child(6) {
+  animation-delay: 0.5s;
+}
+.loader-letter:nth-child(7) {
+  animation-delay: 0.6s;
+}
+.loader-letter:nth-child(8) {
+  animation-delay: 0.7s;
+}
+.loader-letter:nth-child(9) {
+  animation-delay: 0.8s;
+}
+.loader-letter:nth-child(10) {
+  animation-delay: 0.9s;
+}
+
+/* Sweep runs bright (paper white → warm accent) at the top edge down into
+   near-black slate, so the disc reads as a dark object with a travelling warm
+   highlight — the palette's cool-base/warm-accent rule applied to motion.
+   Stops need this much luminance spread to register as movement at all; the
+   earlier mid-tone version sat too close to both the disc and the map. */
+@keyframes loader-rotate {
+  0% {
+    transform: rotate(90deg);
+    box-shadow:
+      0 10px 20px 0 #fffdf8 inset,
+      0 20px 30px 0 var(--accent) inset,
+      0 60px 60px 0 #0b1220 inset;
+  }
+  50% {
+    transform: rotate(270deg);
+    box-shadow:
+      0 10px 20px 0 #fffdf8 inset,
+      0 20px 10px 0 var(--accent-hover) inset,
+      0 40px 60px 0 var(--surface-deep) inset;
+  }
+  100% {
+    transform: rotate(450deg);
+    box-shadow:
+      0 10px 20px 0 #fffdf8 inset,
+      0 20px 30px 0 var(--accent) inset,
+      0 60px 60px 0 #0b1220 inset;
+  }
+}
+
+/* Troughs sit higher than the stock 0.4/0.7: at 0.4 a cream letter over the
+   disc was legible on a static page but ghosted out here, and a letter you
+   can't read isn't worth animating. */
+@keyframes loader-letter-anim {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translateY(0);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  40% {
+    opacity: 0.8;
+    transform: translateY(0);
+  }
+}
+
+/* Everything the loader shows — the ring's whole sweep and the letters' brightness — lives in
+   the two keyframes above, so the blanket `animation-duration: 0.01ms` further up leaves it
+   with nothing: the disc paints flat and empty, and the word drops to its dim 0.4 resting
+   opacity. A progress indicator that reads as *absent* is worse than one that reads as
+   *still*, so pin both to a finished-looking resting state. This respects the preference
+   rather than working around it — no motion is restored here, only the appearance the motion
+   was carrying. Progress itself is communicated by the cycling caption underneath. */
+@media (prefers-reduced-motion: reduce) {
+  .loader {
+    transform: rotate(90deg);
+    box-shadow:
+      0 10px 20px 0 #fffdf8 inset,
+      0 20px 30px 0 var(--accent) inset,
+      0 60px 60px 0 #0b1220 inset;
+  }
+  .loader-letter {
+    opacity: 1;
+  }
 }

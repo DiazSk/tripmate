@@ -4,6 +4,55 @@ import { useEffect, useRef } from "react";
 import { useMapCamera } from "@/lib/mapCamera";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
+/**
+ * Detail tiers, chosen by how high the camera is.
+ *
+ * A single `maximumScreenSpaceError` does NOT mean a single real-world detail level: Google's
+ * tile tree is structured differently per region, so Cesium's default of 16 resolves to 8m
+ * geometry in Frankfurt and 16m — one whole LOD level shallower — in Mumbai. Measured at an
+ * identical pose (900m, -35°), that was 166k triangles against 21k, which is why Mumbai's
+ * buildings read as flat roofs with smeared edges while Frankfurt's read as buildings. The
+ * deeper Mumbai tiles existed the whole time; nothing was asking for them.
+ *
+ * So the ceiling is bought where it is legible and nowhere else. Boundaries come from this
+ * app's own camera targets: `flyToPlace` is a 600m range at -35° (≈344m up), `flyToDestination`
+ * is 15,000m at -45° (≈10.6km), and HERO_VIEW is a true 2,500km altitude.
+ *
+ * `dynamicScreenSpaceError` inflates the allowed error with distance from the camera, which is
+ * a real saving on a horizon-filling view and a liability on a tilted close-up where much of
+ * the frame is "far". It rides the same tier.
+ */
+const LOD_TIERS = [
+  // [ceiling in metres, maximumScreenSpaceError, dynamicScreenSpaceError]
+  [2_000, 8, false],
+  [50_000, 12, true],
+  [Infinity, 16, true],
+] as const;
+
+/**
+ * Applies the tier for the camera's current height, once per change.
+ *
+ * Runs on `preRender` rather than `camera.changed`: the latter needs a `percentageChanged`
+ * threshold and can miss a programmatic `setView`, and this is a float read plus two
+ * comparisons — cheaper than the bookkeeping to fire it less often. Only the *transition*
+ * writes to the tileset, so a steady camera costs nothing and tile traversal isn't disturbed.
+ */
+function installLodController(
+  viewer: import("cesium").Viewer,
+  tileset: import("cesium").Cesium3DTileset
+) {
+  let applied = -1;
+  viewer.scene.preRender.addEventListener(() => {
+    const height = viewer.camera.positionCartographic.height;
+    const tier = LOD_TIERS.findIndex(([ceiling]) => height < ceiling);
+    if (tier === applied) return;
+    applied = tier;
+    const [, sse, dynamic] = LOD_TIERS[tier];
+    tileset.maximumScreenSpaceError = sse;
+    tileset.dynamicScreenSpaceError = dynamic;
+  });
+}
+
 export default function GlobeBackground({ creditClassName }: { creditClassName?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const creditRef = useRef<HTMLDivElement>(null);
@@ -44,17 +93,55 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       });
 
       // Solid dark space behind/beyond the globe — not the default transparent canvas,
-      // which would otherwise let the page's cream background show through any gap.
-      viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0b0f19");
+      // which would otherwise let the page background show through any gap. Read from
+      // --canvas rather than repeating the literal: AppShell paints the same colour on the
+      // DOM either side of this canvas, and if the two drift a seam appears at its edge.
+      const canvasColor = getComputedStyle(document.documentElement)
+        .getPropertyValue("--canvas")
+        .trim();
+      viewer.scene.backgroundColor = Cesium.Color.fromCssColorString(canvasColor || "#0b0f19");
+
+      // Everything else on the camera controller stays at Cesium's defaults — the map is
+      // meant to be freely draggable/zoomable/tiltable. These two just stop the extremes:
+      // below ~50m you're inside the photorealistic building mesh, and the ceiling has to stay
+      // above the 2,500km hero altitude or resetToHome's flight fights the clamp.
+      viewer.scene.screenSpaceCameraController.minimumZoomDistance = 50;
+      viewer.scene.screenSpaceCameraController.maximumZoomDistance = 25_000_000;
+
+      // Render at the display's real pixel density instead of CSS pixels. Cesium's default
+      // (`useBrowserRecommendedResolution: true`) ignores devicePixelRatio, so on any scaled
+      // display the canvas is upscaled and building edges go soft no matter how good the mesh
+      // underneath is. Capped at 2x because fill cost grows with the square of the ratio and a
+      // 3x phone would otherwise render 9x the pixels for detail nobody can resolve. This is a
+      // no-op at devicePixelRatio 1.
+      const dpr = window.devicePixelRatio || 1;
+      viewer.useBrowserRecommendedResolution = false;
+      viewer.resolutionScale = Math.min(dpr, 2) / dpr;
 
       let usingPhotorealistic = false;
       if (token) {
         try {
           const tileset = await Cesium.createGooglePhotorealistic3DTileset();
           if (cancelled) return;
+          // Google's tiles ship at full satellite vibrance, which reads harsh against the
+          // Apple Maps look this design targets. Blending each tile toward a cool grey pulls
+          // saturation down. This has to happen on the tileset rather than as a CSS filter
+          // over the canvas: a canvas filter would also desaturate the route overlay, and
+          // pure blue can't survive a round trip through one — #0A84FF comes out as
+          // rgb(36,135,234).
+          //
+          // 0.1, halved from 0.2: MIX toward a *mid* grey pulls highlights down and shadows up
+          // at the same time, so it crushes contrast, not just saturation. Frankfurt's imagery
+          // is contrasty enough to absorb that; Mumbai's is hazy and low-contrast to begin
+          // with, and the same blend read as mud — structures stopped separating from each
+          // other. Half the amount keeps the cool register and returns the contrast.
+          tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#9BA6B4')" });
+          tileset.colorBlendMode = Cesium.Cesium3DTileColorBlendMode.MIX;
+          tileset.colorBlendAmount = 0.1;
           viewer.scene.primitives.add(tileset);
           viewer.scene.globe.show = false;
           usingPhotorealistic = true;
+          installLodController(viewer, tileset);
         } catch {
           usingPhotorealistic = false;
         }
@@ -128,6 +215,18 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
         locked = true;
         rotating = false;
       };
+
+      // The counterpart, for returning to the landing page. Without it `locked` is never written
+      // back, so the first flight of the session kills the idle spin for the tab's lifetime —
+      // a soft navigation home would sit still where a hard reload spins.
+      (viewer as import("cesium").Viewer & { startAutoRotate?: () => void }).startAutoRotate =
+        () => {
+          locked = false;
+          rotating = true;
+          // Load-bearing: spinListener integrates (now - lastTime), so resuming without this
+          // snaps the globe through however long the spin was paused.
+          lastTime = Date.now();
+        };
 
       setViewer(viewer);
     })();

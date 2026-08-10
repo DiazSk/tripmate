@@ -160,7 +160,13 @@ function StopRow({
       className="relative flex gap-3 rounded-xl transition-colors hover:bg-white/5"
     >
       {!isLast && (
-        <div className="absolute top-11 left-5 h-[calc(100%+0.5rem)] w-px bg-card-border" />
+        /* Spans avatar-bottom to next-avatar-top, so it has to stop short of this row's own
+           height rather than exceed it: it starts at 2.75rem (top-11, a hair under the 2.5rem
+           h-10 avatar) and the next avatar begins at 100% + 1rem (the parent's space-y-4), so
+           the height is 100% + 1rem - 2.75rem. The old +0.5rem overshot by 2.25rem and drew
+           straight through the following stop's avatar and name. Update this if the avatar
+           size or the list gap changes. */
+        <div className="absolute top-11 left-5 h-[calc(100%-1.75rem)] w-px bg-card-border" />
       )}
       <button
         type="button"
@@ -238,13 +244,17 @@ export default function ItineraryCard({
   return (
     <div className="itinerary-glass overflow-hidden">
       <div
-        className="relative flex min-h-[9rem] flex-col justify-end overflow-hidden p-5 text-accent-foreground sm:min-h-[11rem] sm:p-6"
-        style={{ backgroundColor: "var(--accent)" }}
+        className="relative flex min-h-[9rem] flex-col justify-end overflow-hidden p-5 text-on-deep sm:min-h-[11rem] sm:p-6"
+        style={{ backgroundColor: "var(--surface-deep)" }}
       >
         {headerPhoto && (
+          /* Both stops come from --surface-deep so the tint matches the flat
+             no-photo fallback above and the panel around it. A scrim's job is to
+             darken, which is why this can't ride on --accent any more — the
+             accent is a light colour now. */
           <BlurredPhotoLayer
             photo={headerPhoto}
-            tint="linear-gradient(rgba(31,58,52,0.35), rgba(31,58,52,0.88))"
+            tint="linear-gradient(rgb(var(--surface-deep-rgb) / 0.35), rgb(var(--surface-deep-rgb) / 0.88))"
           />
         )}
         <div className="relative z-10 flex flex-col gap-1">
@@ -272,7 +282,7 @@ export default function ItineraryCard({
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
 
-        <div className="flex gap-1.5 overflow-x-auto">
+        <div className="scrollbar-none flex gap-1.5 overflow-x-auto">
           {itinerary.days.map((d, i) => {
             const isFirst = i === 0;
             // Right edge is an arrow point; tabs after the first also carry a matching notch on
@@ -386,25 +396,26 @@ export default function ItineraryCard({
         {headerPhoto && (
           <BlurredPhotoLayer
             photo={headerPhoto}
-            tint="linear-gradient(rgba(31,58,52,0.55), rgba(31,58,52,0.8))"
+            tint="linear-gradient(rgb(var(--surface-deep-rgb) / 0.55), rgb(var(--surface-deep-rgb) / 0.8))"
           />
         )}
         <div className="relative z-10">
           <div
-            className={`mb-3 text-sm font-semibold ${headerPhoto ? "text-accent-foreground" : "text-foreground"}`}
+            className={`mb-3 text-sm font-semibold ${headerPhoto ? "text-on-deep" : "text-foreground"}`}
           >
             Day {dayIndex + 1} — Budget Breakdown
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {breakdown.map((tile) => {
               const isTotal = tile.label === "Total";
-              // Frosted glass reads only over the photo band; without a photo the footer is pale
-              // tan, where translucent tiles would leave the labels unreadable — so that case
-              // keeps the solid terracotta fills. The glass is black-tinted rather than white:
+              // Over the photo band the tiles are black-tinted glass rather than white-tinted:
               // a bright photo behind a white-tinted tile drops the label to ~2.5:1, while
-              // darkening holds >4.5:1 whatever the photo happens to be.
+              // darkening holds >4.5:1 whatever the photo happens to be. Without a photo the
+              // band is already dark (a faint white wash over the panel), so the tiles just
+              // take flat neutral fills — and only Total takes the amber accent, keeping the
+              // "one accent" rule that the rest of the palette follows.
               const surface = headerPhoto
-                ? `border text-accent-foreground backdrop-blur-md ${
+                ? `border text-on-deep backdrop-blur-md ${
                     isTotal ? "border-white/40 bg-black/40" : "border-white/20 bg-black/25"
                   }`
                 : isTotal
