@@ -166,6 +166,11 @@ body {
   top: 0;
   left: 0;
   transform-origin: bottom center;
+  /* Starts hidden here rather than as a React inline style: the render loop owns `visibility`
+     from the first frame onward, and React re-applying an inline `hidden` on every re-render
+     blanked every placed card for a frame. A card also must not flash at 0,0 before it has
+     been projected, which is why the resting state is hidden rather than visible. */
+  visibility: hidden;
   /* Hoists the card to its own compositor layer: this element's transform changes every
      frame, and without it the browser repaints the layer underneath each time. */
   will-change: transform;

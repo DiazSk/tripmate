@@ -27,9 +27,15 @@ interface MapCameraContextValue {
    *  lives above the route boundary and never unmounts, so without this a trip's route and
    *  markers survive a navigation back to the landing page. No-ops before the viewer exists. */
   resetToHome: () => void;
-  /** Apple-blue stop nodes + a cased blue route line connecting them in order, and a camera
-   *  flight framing all of them — call again on every day-tab change. */
+  /** Lit stems out of glow pools at each stop, a route line connecting them in order, and a
+   *  camera flight framing all of them — call again on every day-tab change. */
   showDayRoute: (stops: RouteStop[]) => void;
+  /** The stops currently drawn, for StopMarkerLayer to render an HTML card per stop. State
+   *  rather than a ref because the card list is real DOM that has to change when the day does. */
+  routeStops: RouteStop[];
+  /** Altitude the current route is drawn at. A ref, not state: the marker layer reads it once
+   *  per frame to place cards on top of the stems, and that must not re-render anything. */
+  routeAltitudeRef: RefObject<number>;
   /** Pulsing highlight ring on whichever stop is currently selected; `null` clears it.
    *  Coordinates only — callers reach it from a `Stop`, which has no route identity. */
   setActivePin: (stop: Pick<RouteStop, "lat" | "lng"> | null) => void;
@@ -75,6 +81,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   /** Bumped per showDayRoute call so a slow height sample from an older day can't win. */
   const routeGenerationRef = useRef(0);
   const [ready, setReady] = useState(false);
+  const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
 
   const flyTo = useCallback(
     (lat: number, lng: number, height: number, pitchDeg: number, label?: string) => {
@@ -140,6 +147,9 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   );
 
   const showDayRoute = useCallback((stops: RouteStop[]) => {
+    // Published before the viewer check: the cards are plain DOM and cost nothing to mount
+    // early, and they stay hidden until the per-frame loop has a viewer to project them with.
+    setRouteStops(stops);
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) {
       // Same race as flyTo: the itinerary renders in a few hundred ms, the tileset takes
@@ -249,6 +259,9 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     routeGenerationRef.current++;
     for (const e of routeEntitiesRef.current) viewer.entities.remove(e);
     routeEntitiesRef.current = [];
+    // Otherwise the day's marker cards survive a navigation back to the landing page — the
+    // globe never unmounts, so nothing else clears them.
+    setRouteStops([]);
     if (markerRef.current) viewer.entities.remove(markerRef.current);
     markerRef.current = null;
     if (activePinRef.current) viewer.entities.remove(activePinRef.current);
@@ -318,6 +331,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         flyToPlace,
         resetToHome,
         showDayRoute,
+        routeStops,
+        routeAltitudeRef,
         setActivePin,
       }}
     >
