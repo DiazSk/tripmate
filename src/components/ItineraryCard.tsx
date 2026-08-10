@@ -224,7 +224,7 @@ export default function ItineraryCard({
   // Glowing pins + connecting arc for whichever day is active, redrawn on every day-tab switch.
   useEffect(() => {
     if (!day) return;
-    showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
+    showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng, name: s.name })));
   }, [day, showDayRoute]);
 
   // Keep the active day tab scrolled into view, including when the arrows below move it.

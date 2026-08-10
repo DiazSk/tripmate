@@ -228,6 +228,15 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
           lastTime = Date.now();
         };
 
+      // Dev-only handle for inspecting the scene from the console or a browser-automation
+      // probe: entity counts after a day switch, camera pose, tile detail. Nothing else
+      // reaches the viewer — it lives in a closure here and in a ref in mapCamera — and the
+      // route geometry is only verifiable by counting what is actually in the collection.
+      // Stripped from production builds by the NODE_ENV check.
+      if (process.env.NODE_ENV === "development") {
+        (window as Window & { __tripmateViewer?: unknown }).__tripmateViewer = viewer;
+      }
+
       setViewer(viewer);
     })();
 
