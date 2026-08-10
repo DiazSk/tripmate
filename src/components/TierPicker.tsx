@@ -3,12 +3,20 @@
 import { Check } from "lucide-react";
 import { TIERS, TierId, estimateTierTotal } from "@/lib/tiers";
 
+// Above this multiple of the entered budget, a tier's real price is treated
+// as an aspirational stretch rather than a genuine option worth the same
+// visual weight as the others (e.g. luxury at 8x a $1,000 budget) — chosen so
+// the typical mid-range upsell (~3x budget) still reads as a normal option.
+const OVER_BUDGET_MULTIPLIER = 3;
+
 export default function TierPicker({
   days,
+  budget,
   selected,
   onSelect,
 }: {
   days: number;
+  budget: number;
   selected: TierId;
   onSelect: (tier: TierId) => void;
 }) {
@@ -16,6 +24,9 @@ export default function TierPicker({
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.3fr_1fr]">
       {TIERS.map((tier) => {
         const isSelected = selected === tier.id;
+        const total = estimateTierTotal(tier, days);
+        const ratio = budget > 0 ? total / budget : 0;
+        const overBudget = ratio > OVER_BUDGET_MULTIPLIER;
         return (
           <button
             key={tier.id}
@@ -36,8 +47,21 @@ export default function TierPicker({
                 isSelected ? "ring-accent" : "ring-white/0 group-hover:ring-white/40"
               }`}
             />
-            <div className="absolute right-3 top-3 rounded-full bg-slate-950/70 px-3 py-1 text-sm font-semibold text-white backdrop-blur-sm">
-              ~${estimateTierTotal(tier, days).toLocaleString()}
+            <div
+              className={`absolute right-3 top-3 flex flex-col items-end gap-0.5 rounded-2xl px-3 py-1 backdrop-blur-sm ${
+                overBudget ? "bg-white/10" : "bg-slate-950/70"
+              }`}
+            >
+              <span
+                className={`text-sm ${overBudget ? "font-normal text-white/60" : "font-semibold text-white"}`}
+              >
+                ~${total.toLocaleString()}
+              </span>
+              {overBudget && (
+                <span className="text-[10px] leading-none text-white/50">
+                  ~{ratio.toFixed(1)}x your budget
+                </span>
+              )}
             </div>
             {isSelected && (
               <div className="absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-accent-foreground">

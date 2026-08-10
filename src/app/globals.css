@@ -225,3 +225,131 @@ body {
   --muted: #cbd5e1;
   --card-border: rgba(255, 255, 255, 0.12);
 }
+
+/* "Generating" loader shown while an itinerary is being built (GenerationLoader).
+   The ring is an otherwise-empty circle whose *inset* box-shadows paint colour
+   blobs at different offsets/blurs; rotating the element sweeps them around, so
+   the gradient is a side effect of the shadows rather than a real conic
+   gradient. Palette is the app's own teal + cream — deliberately no cyan.
+   Blur/offset values are tuned for the 200px wrapper below; shrinking the
+   wrapper without scaling these makes the shadows read much heavier. */
+.loader-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  font-weight: 300;
+  color: #f5f1e8;
+  user-select: none;
+  /* Not in the stock version of this loader, which sits on a fixed dark page.
+     This one floats over live satellite imagery, which is mid-luminance and
+     cool-desaturated (the tileset is tinted toward #9BA6B4). A translucent
+     scrim put the loader in that same luminance band and it read as a tinted
+     bubble rather than an object, so this is near-opaque and pushed dark and
+     green — the two axes the map isn't. Cream-on-dark-teal is also the app's
+     own accent pairing (--accent / --accent-foreground), so going darker reads
+     as more on-brand, not less. */
+  background-color: rgba(18, 42, 36, 0.95);
+  /* Defined edge + cast shadow: without these the circle dissolves into the
+     imagery at its rim no matter how opaque the centre is. */
+  border: 1px solid rgba(245, 241, 232, 0.2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.loader {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: loader-rotate 2s linear infinite;
+  z-index: 0;
+}
+
+/* z-index works without `position` here because the letters are flex items. */
+.loader-letter {
+  display: inline-block;
+  z-index: 1;
+  opacity: 0.4;
+  animation: loader-letter-anim 2s infinite;
+}
+
+.loader-letter:nth-child(1) {
+  animation-delay: 0s;
+}
+.loader-letter:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.loader-letter:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.loader-letter:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.loader-letter:nth-child(5) {
+  animation-delay: 0.4s;
+}
+.loader-letter:nth-child(6) {
+  animation-delay: 0.5s;
+}
+.loader-letter:nth-child(7) {
+  animation-delay: 0.6s;
+}
+.loader-letter:nth-child(8) {
+  animation-delay: 0.7s;
+}
+.loader-letter:nth-child(9) {
+  animation-delay: 0.8s;
+}
+.loader-letter:nth-child(10) {
+  animation-delay: 0.9s;
+}
+
+/* Sweep runs bright (paper white → light mint) at the top edge down into
+   near-black teal, so the disc reads as a dark object with a travelling
+   highlight. The earlier mid-teal stops were too close in luminance to both
+   the disc and the map to register as motion at all. */
+@keyframes loader-rotate {
+  0% {
+    transform: rotate(90deg);
+    box-shadow:
+      0 10px 20px 0 #fffdf8 inset,
+      0 20px 30px 0 #a7d3c7 inset,
+      0 60px 60px 0 #0f231f inset;
+  }
+  50% {
+    transform: rotate(270deg);
+    box-shadow:
+      0 10px 20px 0 #fffdf8 inset,
+      0 20px 10px 0 #d5ebe3 inset,
+      0 40px 60px 0 #16302b inset;
+  }
+  100% {
+    transform: rotate(450deg);
+    box-shadow:
+      0 10px 20px 0 #fffdf8 inset,
+      0 20px 30px 0 #a7d3c7 inset,
+      0 60px 60px 0 #0f231f inset;
+  }
+}
+
+/* Troughs sit higher than the stock 0.4/0.7: at 0.4 a cream letter over the
+   disc was legible on a static page but ghosted out here, and a letter you
+   can't read isn't worth animating. */
+@keyframes loader-letter-anim {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translateY(0);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  40% {
+    opacity: 0.8;
+    transform: translateY(0);
+  }
+}
