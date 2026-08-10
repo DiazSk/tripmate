@@ -1,23 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ComponentType, ReactNode, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import FeedbackLoop from "@/components/FeedbackLoop";
 import TierPicker from "@/components/TierPicker";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import GenerationLoader from "@/components/cesium/GenerationLoader";
+import { headerLinkClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { Itinerary } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 
-type Step = "form" | "tier" | "result";
+type Step = "landing" | "plan" | "result";
 
-const primaryButtonClass =
-  "rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
+// Local calendar date in ISO shape. `toISOString()` would be UTC and roll the date over a
+// day early for anyone west of Greenwich in the evening; "sv-SE" formats local time as
+// YYYY-MM-DD, which is exactly what <input type="date"> wants.
+const todayISO = () => new Date().toLocaleDateString("sv-SE");
+
 const ghostButtonClass =
   "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg";
 // Shared glass-over-globe card treatment — same class the itinerary/detail
@@ -26,18 +31,101 @@ const ghostButtonClass =
 // exists so the Cesium canvas underneath stays draggable. Every interactive box needs it.
 const cardClass = "glass-itinerary pointer-events-auto rounded-2xl p-5 sm:p-6";
 
-const darkLabelClass = "text-sm font-medium text-white/80";
-const darkInputClass =
-  "mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
+// `text-base`, not the 14px body step: 16px is what stops iOS Safari zooming the viewport on
+// focus, and it's already a step the system uses (the hero subline).
+// Placeholder at /65, up from the /55 the old bordered field used: "Kyoto, Japan" is the only
+// thing teaching the `City, Country` shape the geocoder wants, so it has to be readable rather
+// than a hint of a hint — and /55 measures 4.23:1 against worst-case bright terrain, under the
+// 4.5 floor. /65 puts it at 5.2:1.
+const fieldInputClass =
+  "w-full bg-transparent text-base outline-none placeholder:font-normal placeholder:text-white/65";
+// `::placeholder` never applies to input[type=date] — an empty date cell paints the UA's own
+// "mm/dd/yyyy" at the input's own colour and weight, so two of the four cells would read as
+// filled while empty. The date inputs take their tone from their own value instead, landing
+// on the same treatment the destination placeholder gets.
+const fieldFilledTone = "font-medium text-foreground";
+const fieldEmptyTone = "font-normal text-white/65";
+
+/**
+ * One cell of the trip form's console.
+ *
+ * The four fields share a single recessed trough instead of each carrying its own box, so what
+ * separates one from the next is the hairline *between* them, not a border *around* them. That
+ * is both the more modern instrument-like read and the more on-system one: four `bg-white/5`
+ * boxes lightened the surface, which the Darken-Never-Lighten Rule forbids, while one darker
+ * slate trough inside the 0.62 panel is the One Slate Rule doing exactly what it says.
+ *
+ * Focus is the cell's whole visual job: the ground steps up, the label turns amber, and a
+ * hairline wipes across the bottom edge from the left. That wipe is the only amber that ever
+ * appears while typing, and it is the form's one recurring motion.
+ */
+function Field({
+  icon: Icon,
+  label,
+  delay,
+  onActivate,
+  grow = "flex-1",
+  children,
+}: {
+  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
+  label: string;
+  delay: number;
+  /** Supplied by the date cells, which open the native picker from a click anywhere in the
+   *  cell rather than only on the UA's own (removed) calendar glyph. */
+  onActivate?: (cell: HTMLLabelElement, target: EventTarget | null) => void;
+  /** Destination takes more of the row than the three fixed-width figures beside it. */
+  grow?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label
+      onClick={onActivate ? (e) => onActivate(e.currentTarget, e.target) : undefined}
+      style={{ animationDelay: `${delay}ms` }}
+      className={`settle-in group relative px-4 py-3 transition-colors duration-300 focus-within:bg-white/[0.05] ${grow} ${
+        onActivate ? "cursor-pointer" : "cursor-text"
+      }`}
+    >
+      <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.025em] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
+        <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+        {label}
+      </span>
+      <div className="mt-1.5">{children}</div>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-px origin-left scale-x-0 bg-accent transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-focus-within:scale-x-100"
+      />
+    </label>
+  );
+}
+
+/**
+ * Opens the native date picker from a click on the cell's chrome — its label, icon or padding.
+ * A click on the input itself is left alone: that is how you select a single date segment to
+ * type over, and hijacking it would trade a working control for a popup.
+ *
+ * `showPicker` throws when the call isn't user-activated or the picker is already open. Either
+ * way the fallback is the input's own default behaviour, exactly what happened before the cell
+ * became clickable.
+ */
+function openNativePicker(cell: HTMLLabelElement, target: EventTarget | null) {
+  const input = cell.querySelector("input");
+  if (!input || target === input) return;
+  try {
+    input.showPicker();
+  } catch {
+    /* the input's own click handling covers it */
+  }
+}
 
 export default function Home() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("form");
+  const [step, setStep] = useState<Step>("landing");
   const [destination, setDestination] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [budget, setBudget] = useState(1000);
   const [tier, setTier] = useState<TierId>("midrange");
+  const [destinationMissed, setDestinationMissed] = useState(false);
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -58,8 +146,8 @@ export default function Home() {
 
   // Mount-only on purpose. The globe lives above the route boundary and never unmounts, so
   // arriving here from /trips ("New trip") would otherwise keep the last trip's route, markers
-  // and camera. Remounting is exactly the signal we want: Back from the style step doesn't
-  // remount, so it keeps the destination framed rather than flying back out to the globe.
+  // and camera. Stepping plan → landing inside this page doesn't remount, so backToLanding()
+  // calls resetToHome() itself.
   useEffect(() => {
     resetToHome();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,21 +155,66 @@ export default function Home() {
 
   // Drives this page's own cosmetics (dark dashboard header/nav once results exist,
   // destination-form positioning) — AppShell's layout itself no longer varies by route/step.
+  // Also gates the map control stack via .map-chrome-hidden: hidden on landing (that step is
+  // a poster, not a map to read) and on plan (the panel reaches the bottom-left corner below
+  // ~1292px), shown on result. Do not "simplify" this to step === "landing".
   const preResult = step !== "result";
 
-  async function chooseStyle() {
-    if (isTripTooLong(startDate, endDate)) {
-      setError(`Trips over ${MAX_TRIP_DAYS} days aren't supported — please choose a shorter date range.`);
-      return;
-    }
-    setError(null);
-    const days = tripDays(startDate, endDate);
+  // Null until both dates are set, so the tier cards show per-day rates rather than a total
+  // derived from tripDays' floor-at-1.
+  const days = startDate && endDate ? tripDays(startDate, endDate) : null;
+
+  // Auto-pick tracks budget and dates live, right up until the user picks a card themselves —
+  // that live coupling is the whole point of merging the form and the tier step. A ref, not
+  // state, because flipping the flag must not re-run the effect that reads it.
+  const tierTouched = useRef(false);
+  useEffect(() => {
+    if (tierTouched.current || days === null) return;
     setTier(closestTier(budget, days));
-    setStep("tier");
-    await flyToDestinationByName(destination);
+  }, [budget, days]);
+
+  function pickTier(next: TierId) {
+    tierTouched.current = true;
+    setTier(next);
+  }
+
+  // One geocode per completed edit of the destination field, fired on blur. Not on a
+  // keystroke debounce: mapCamera's flyTo calls stopAutoRotate(), which is a permanent lock
+  // only resetToHome() ever clears, so the first keystroke-triggered flight would kill the
+  // idle spin for the session — and the overlapping 2.5s flights visibly lurch the camera
+  // through everywhere the prefix matched on the way to the real destination.
+  const lastFlownRef = useRef("");
+  async function flyToTypedDestination() {
+    const name = destination.trim();
+    if (!name || name === lastFlownRef.current) return;
+    lastFlownRef.current = name;
+    setDestinationMissed(!(await flyToDestinationByName(name)));
+  }
+
+  function backToLanding() {
+    setStep("landing");
+    setError(null);
+    // Required, not cosmetic: a blur-triggered flight left the spin locked and a pin dropped.
+    // resetToHome is the only thing that clears the pin and calls startAutoRotate() again.
+    resetToHome();
+  }
+
+  /** Cross-field rules the browser's own constraint validation can't express. */
+  function validate(): string | null {
+    if (endDate < startDate) return "End date must be on or after the start date.";
+    if (isTripTooLong(startDate, endDate)) {
+      return `Trips over ${MAX_TRIP_DAYS} days aren't supported — please choose a shorter date range.`;
+    }
+    return null;
   }
 
   async function generate() {
+    const invalid = validate();
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+
     setGenerating(true);
     setError(null);
     try {
@@ -152,118 +285,216 @@ export default function Home() {
     >
       <GenerationLoader active={generating} />
 
-      {/* Dashboard (result) view has no top navbar at all, per request — form/tier
-          steps keep it. */}
-      {preResult && (
-        <div className="pointer-events-auto flex items-center justify-between rounded-2xl bg-surface-deep/70 px-4 py-3 backdrop-blur-sm">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-on-deep">
-            TripMate
-          </h1>
-          <Link href="/trips" className="text-sm font-medium text-on-deep hover:underline">
+      {/* AppShell owns the wordmark on every route, so a surface only supplies its own action.
+          Landing supplies none — "My memories" is already one of the two hero CTAs, and
+          repeating it here would be the same action twice in one viewport. */}
+      {step === "plan" && (
+        <div className="flex justify-end">
+          <Link href="/trips" className={headerLinkClass}>
             My memories
           </Link>
         </div>
       )}
 
-      {/* Anchored near the top of the hero band (not vertically centred) and wider than the
-          tier/result cards, per the destination-form redesign. `contents` makes this wrapper
-          vanish from layout in split mode, so the result step renders exactly as it did before. */}
-      <div className={preResult ? "mx-auto mt-4 w-full max-w-6xl space-y-4" : "contents"}>
-        {step === "form" && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              chooseStyle();
-            }}
-            className={`flex flex-wrap items-end gap-3 ${cardClass}`}
-          >
-            <label className={`min-w-[200px] flex-[2] ${darkLabelClass}`}>
-              Destination
-              <input
-                required
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                placeholder="Kyoto, Japan"
-                className={darkInputClass}
-              />
-            </label>
-            <label className={`min-w-[140px] flex-1 ${darkLabelClass}`}>
-              Start date
-              <input
-                required
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className={darkInputClass}
-              />
-            </label>
-            <label className={`min-w-[140px] flex-1 ${darkLabelClass}`}>
-              End date
-              <input
-                required
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className={darkInputClass}
-              />
-            </label>
-            <label className={`min-w-[130px] flex-1 ${darkLabelClass}`}>
-              Total budget ($)
-              <input
-                required
-                type="number"
-                min={0}
-                value={budget}
-                onChange={(e) => setBudget(Number(e.target.value))}
-                className={darkInputClass}
-              />
-            </label>
-            <button type="submit" className={`shrink-0 ${primaryButtonClass}`}>
-              Choose your style
+      {/* `flex-1` inside <main>'s existing min-h-full flex column rather than h-dvh: <main>
+          carries its own p-5/p-6, so a viewport-height child would overflow by exactly that
+          padding and put a scrollbar on a page that should not scroll. */}
+      {step === "landing" && (
+        <section className="flex flex-1 flex-col items-center justify-center text-center">
+          <h1 className="hero-rise hero-legible font-hero text-[clamp(2.5rem,8vw,6rem)] leading-[0.88] text-on-deep">
+            <span className="block">Every day</span>
+            <span className="block">planned.</span>
+            <span className="block">Every dollar</span>
+            <span className="block">spent.</span>
+          </h1>
+          {/* Not text-sm: 96px to 14px is a jump, not a scale step, and this line carries the
+              mechanism the rest of the page only implies. */}
+          <p className="hero-rise hero-legible mt-7 max-w-xl text-balance text-base leading-relaxed text-on-deep [animation-delay:90ms] sm:text-lg">
+            Tell us where, when, and how much. Get a day-by-day plan that actually costs what
+            you said — with the weather already factored in.
+          </p>
+          <div className="hero-rise mt-9 flex flex-wrap items-center justify-center gap-3 [animation-delay:180ms]">
+            <button
+              type="button"
+              onClick={() => setStep("plan")}
+              // border-transparent, not no border: the ghost CTA beside it carries a 1px
+              // border, and without a matching one the two pills differ by 2px in height and
+              // sit a pixel apart on the baseline.
+              className="pointer-events-auto rounded-full border border-transparent bg-accent px-8 py-4 text-base font-medium text-accent-foreground shadow-lg shadow-black/30 transition-all duration-150 hover:bg-accent-hover active:scale-[0.98]"
+            >
+              Plan a trip
             </button>
-          </form>
-        )}
-
-        {step === "tier" && !generating && (
-          <div className={`space-y-5 ${cardClass}`}>
-            <div>
-              <h2 className="font-display text-xl font-semibold text-foreground">
-                Choose your style
-              </h2>
-              <p className="mt-1 text-sm text-muted">
-                Rough estimates for {tripDays(startDate, endDate)} day(s) in {destination}. Pick
-                the one closest to the trip you want.
-              </p>
-            </div>
-            <TierPicker
-              days={tripDays(startDate, endDate)}
-              budget={budget}
-              selected={tier}
-              onSelect={setTier}
-            />
-            <div className="flex justify-between pt-1">
-              <button type="button" onClick={() => setStep("form")} className={ghostButtonClass}>
-                Back
-              </button>
-              <button type="button" onClick={generate} className={primaryButtonClass}>
-                Generate itinerary
-              </button>
-            </div>
+            <Link
+              href="/trips"
+              // No backdrop-blur and no fill — the globe runs clean through this pill, so it is
+              // an outline and a label, nothing more. The border sits at /45 rather than /25
+              // because without the frost behind it there is nothing else holding the shape.
+              className="hero-legible pointer-events-auto rounded-full border border-white/45 px-7 py-4 text-base font-medium text-on-deep transition-colors hover:border-white/70 hover:bg-white/10"
+            >
+              My memories
+            </Link>
           </div>
-        )}
+        </section>
+      )}
 
-        {error && (
-          <div className="pointer-events-auto rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-            {error}
+      {/* Form and tier picker merged into one card: the dates and budget are what price the
+          tiers, so splitting them across two steps meant choosing a style blind. One <form>
+          around both halves so the browser's own constraint validation gates the submit
+          button that now sits below the tier cards. */}
+      {step === "plan" && !generating && (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="w-full max-w-5xl space-y-4">
+            {/* Same hero-rise as the landing block, so the step reads as one move in both
+                directions rather than an instant swap forward and an animated one back. */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                generate();
+              }}
+              className={`hero-rise ${cardClass}`}
+            >
+              {/* One instrument, not four widgets. The trough is `--surface-deep` at a lower
+                  alpha than the panel around it, so it reads as recessed into the glass rather
+                  than stacked on top of it, and the cells are separated by the divider between
+                  them. Stacks vertically below `md`, where four cells in a row would each be
+                  narrower than the date they have to hold. */}
+              <div className="field-console flex flex-col divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-surface-deep/50 md:flex-row md:divide-x md:divide-y-0">
+                <Field icon={MapPin} label="Destination" delay={80} grow="md:flex-[1.5] flex-1">
+                  <input
+                    required
+                    value={destination}
+                    onChange={(e) => {
+                      setDestination(e.target.value);
+                      setDestinationMissed(false);
+                    }}
+                    onBlur={flyToTypedDestination}
+                    placeholder="Kyoto, Japan"
+                    className={`${fieldInputClass} ${fieldFilledTone}`}
+                  />
+                </Field>
+                <Field
+                  icon={CalendarDays}
+                  label="Start"
+                  delay={140}
+                  onActivate={openNativePicker}
+                >
+                  <input
+                    required
+                    type="date"
+                    min={todayISO()}
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className={`${fieldInputClass} tabular-nums ${startDate ? fieldFilledTone : fieldEmptyTone}`}
+                  />
+                </Field>
+                <Field
+                  icon={CalendarCheck}
+                  label="End"
+                  delay={200}
+                  onActivate={openNativePicker}
+                >
+                  <input
+                    required
+                    type="date"
+                    min={startDate || todayISO()}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className={`${fieldInputClass} tabular-nums ${endDate ? fieldFilledTone : fieldEmptyTone}`}
+                  />
+                </Field>
+                <Field icon={Wallet} label="Total budget" delay={260}>
+                  {/* The `$` belongs in the field, not parenthesised in the label — budget is
+                      the product's whole mechanism, so it should read as a figure being
+                      entered rather than as a number with a unit noted elsewhere. */}
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-base font-medium text-muted">$</span>
+                    {/* Clearing the field used to snap the value back to a literal "0" under
+                        the cursor, because Number("") is 0. 0 renders as empty instead, and
+                        min={1} keeps it from ever submitting. */}
+                    <input
+                      required
+                      type="number"
+                      min={1}
+                      value={budget === 0 ? "" : budget}
+                      onChange={(e) => setBudget(Number(e.target.value))}
+                      className={`${fieldInputClass} tabular-nums ${budget === 0 ? fieldEmptyTone : fieldFilledTone}`}
+                    />
+                  </div>
+                </Field>
+              </div>
+
+              {/* Deliberately not the red error block: an Open-Meteo miss only costs the map
+                  flight and the weather lookup. The itinerary still generates, so blocking on
+                  a third-party geocoder would turn their outage into "the app is broken". */}
+              {/* aria-live rather than role="alert": this resolves asynchronously after a
+                  geocode the user didn't ask for and doesn't block anything, so it should
+                  wait its turn rather than interrupt. */}
+              {/* The live region is always mounted and collapses to nothing when empty —
+                  a region that appears at the same moment as its message is announced
+                  unreliably, because the assistive tech never saw it go from empty to full. */}
+              <div aria-live="polite">
+                {destinationMissed && (
+                  <p className="value-in mt-2.5 text-xs text-muted">
+                    Couldn&apos;t find that on the map — we&apos;ll still plan it.
+                  </p>
+                )}
+              </div>
+
+              <div className="value-in mt-6" style={{ animationDelay: "320ms" }}>
+                <h2 className="font-display text-xl font-semibold text-foreground">
+                  Choose your style
+                </h2>
+                <p className="mt-1 text-sm text-muted">
+                  {days === null
+                    ? "Add your dates and the per-day rates below become trip totals."
+                    : `Rough estimates for ${days} ${days === 1 ? "day" : "days"}${
+                        destination ? ` in ${destination}` : ""
+                      }. Pick the one closest to the trip you want.`}
+                </p>
+                <div className="mt-4">
+                  <TierPicker days={days} budget={budget} selected={tier} onSelect={pickTier} />
+                </div>
+              </div>
+
+              <div
+                className="value-in mt-6 flex items-center justify-between border-t border-card-border pt-5"
+                style={{ animationDelay: "440ms" }}
+              >
+                <button type="button" onClick={backToLanding} className={ghostButtonClass}>
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  className="group inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none active:scale-[0.98]"
+                >
+                  Generate itinerary
+                  <ArrowRight
+                    className="h-4 w-4 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5"
+                    strokeWidth={2.25}
+                  />
+                </button>
+              </div>
+            </form>
+
+            {/* role="alert" — this one *is* an interruption: the user pressed Generate and
+                nothing happened, and focus stays on the button they just pressed. */}
+            {error && (
+              <div
+                role="alert"
+                className="value-in pointer-events-auto rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400"
+              >
+                {error}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {step === "result" && itinerary && (
         // Docked panel floating over the full-screen globe rather than a normal-flow
         // block — `fixed` escapes AppShell's own scrollable content pane entirely, so
         // this positions relative to the viewport and scrolls independently.
-        <div className="pointer-events-auto fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+        <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
           {!selectedStop && (
             <>
               <ItineraryCard

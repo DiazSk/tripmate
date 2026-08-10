@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { ReactNode } from "react";
 import { MapCameraProvider } from "@/lib/mapCamera";
+import BrandMark from "@/components/BrandMark";
 
 const GlobeBackground = dynamic(() => import("@/components/GlobeBackground"), {
   ssr: false,
@@ -32,6 +33,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             and overflow on short viewports, and scroll chaining from those children up to this
             ancestor is unaffected by pointer-events. */}
         <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto">{children}</div>
+        {/* Sibling of the content overlay, not a child of it: the wordmark is app chrome like
+            the map controls, so it stays put no matter what shape a page's own content column
+            takes. Above z-10 so the right-docked panels can't cover it. */}
+        <BrandMark />
         <MapControls />
       </div>
     </MapCameraProvider>

@@ -22,14 +22,26 @@ export function useTripCamera(destination: string) {
    * additionally moves the camera there — pass `false` when an itinerary is about to frame
    * its own route, since the geocode resolves a few hundred ms later and would otherwise
    * land second and clobber the better framing with a visible double flight.
+   *
+   * Returns the geocode result so a caller can tell "not found" from "found", or null on
+   * either a miss or a network failure. The home page now calls this from the destination
+   * field's blur handler, where an empty string or a thrown fetch is routine rather than
+   * exceptional — hence the guard and the catch here rather than at that one call site.
    */
   const flyToDestinationByName = useCallback(
     async (name: string, fly = true) => {
-      const geo = await geocodeDestination(name);
+      if (!name.trim()) return null;
+      let geo: Awaited<ReturnType<typeof geocodeDestination>> = null;
+      try {
+        geo = await geocodeDestination(name);
+      } catch {
+        return null;
+      }
       if (geo) {
         setDestinationCoords(geo);
         if (fly) flyToDestination(geo.lat, geo.lon, geo.name);
       }
+      return geo;
     },
     [flyToDestination]
   );
