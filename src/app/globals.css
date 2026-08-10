@@ -510,15 +510,25 @@ body {
   }
 }
 
-/* Everything the loader shows — the ring's whole sweep and the letters' brightness — lives in
-   the two keyframes above, so the blanket `animation-duration: 0.01ms` further up leaves it
-   with nothing: the disc paints flat and empty, and the word drops to its dim 0.4 resting
-   opacity. A progress indicator that reads as *absent* is worse than one that reads as
-   *still*, so pin both to a finished-looking resting state. This respects the preference
-   rather than working around it — no motion is restored here, only the appearance the motion
-   was carrying. Progress itself is communicated by the cycling caption underneath. */
+/* The blanket `animation-duration: 0.01ms` further up would otherwise leave this element with
+   nothing to show: the ring's entire sweep lives in its keyframes, so the disc painted flat and
+   empty and the word sat at its dim 0.4 resting opacity.
+
+   A loading indicator is the standard exception to reduce-motion. The setting exists to stop
+   motion that provokes vestibular symptoms — parallax, large translations, zoom, bounce — not
+   to remove essential status feedback; platform spinners (iOS's activity indicator among them)
+   keep turning under it for exactly this reason. So the ring is exempted and keeps rotating,
+   while the parts that are decoration rather than status are NOT reinstated: the letters stay
+   pinned at full strength with no pulse and, crucially, no 1.15 scale bounce. The static
+   box-shadow stays as the fallback for anyone who has stopped animations outright.
+
+   `.loader` (0,1,0) outranks the blanket rule's `*` (0,0,0), so this wins between two
+   !importants. Narrow this exemption, don't widen it — nothing else in the app should
+   opt out. */
 @media (prefers-reduced-motion: reduce) {
   .loader {
+    animation-duration: 2s !important;
+    animation-iteration-count: infinite !important;
     transform: rotate(90deg);
     box-shadow:
       0 10px 20px 0 #fffdf8 inset,
