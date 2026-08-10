@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TripSummary } from "@/lib/types";
+import { headerLinkClass } from "@/components/BrandMark";
 
 export default function TripsPage() {
   const [trips, setTrips] = useState<TripSummary[]>([]);
@@ -19,12 +20,17 @@ export default function TripsPage() {
     <main className="dashboard-page min-h-full">
       {/* Same bounded, right-docked panel every other "content over the globe"
           surface uses (home page result view, /trip/[id]). */}
-      <div className="pointer-events-auto fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
-        <div className="flex items-center justify-between rounded-2xl bg-surface-deep/70 px-4 py-3 backdrop-blur-sm">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+      {/* top-16 below sm: the panel goes full-bleed there, so it has to start clear of the
+          wordmark AppShell pins to the viewport's top-left. From sm up it's right-docked and
+          the wordmark is nowhere near it. */}
+      <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+        {/* Page title and its action. The TripMate wordmark is not here — AppShell pins it to
+            the top-left of the viewport, outside this docked column. */}
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="hero-legible font-display text-2xl font-semibold tracking-tight text-foreground">
             My memories
           </h1>
-          <Link href="/" className="text-sm font-medium text-on-deep hover:underline">
+          <Link href="/" className={headerLinkClass}>
             New trip
           </Link>
         </div>

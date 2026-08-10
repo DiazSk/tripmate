@@ -8,6 +8,12 @@
      what made the two read as different design systems. Frosted glass wants a
      neutral base plus ONE vivid accent; warmth is now the accent alone. */
 
+  /* Every surface in this app is dark. Without this the UA renders native controls in
+     its light scheme — the date field's calendar indicator and the number field's
+     spinners paint as dark glyphs on the near-black inputs, which is where three of the
+     four trip-form fields live. */
+  color-scheme: dark;
+
   /* The canvas behind the globe. GlobeBackground reads this at Viewer init for
      Cesium's own scene.backgroundColor, so the WebGL clear colour and the DOM
      around it cannot drift apart and show a seam at the canvas edge. */
@@ -77,6 +83,24 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+/* The `prefers-reduced-motion: no-preference` gates further down cover the keyframe
+   animations, but every Tailwind `transition-*` utility in the app was ungated — the form's
+   500ms focus wipe, the tier card's scale, the submit arrow's nudge, the ring fades. This
+   catches all of them. Near-zero rather than `none` so transitionend/animationend still fire
+   and nothing that waits on them hangs. The globe keeps turning: it's a WebGL render loop,
+   not CSS, and stopping the thing the user came to look at is not what this setting asks
+   for. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* The home page's form/tier steps are normal-flow cards that reach into the bottom-left corner
@@ -158,6 +182,119 @@ body {
 
 .font-display {
   font-family: var(--font-display), ui-serif, Georgia, serif;
+}
+
+/* The landing headline, and nothing else. Archivo's width axis is doing as much work as
+   its weight — 800 alone reads bold, 800 at 125% width reads like a poster. The negative
+   tracking is what keeps a wide face from sprawling at display size; it sits just inside
+   the -0.04em floor. */
+.font-hero {
+  font-family: var(--font-hero), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
+  font-stretch: 125%;
+  letter-spacing: -0.035em;
+}
+
+/* Landing hero legibility over live satellite imagery of arbitrary brightness — the globe
+   idles anywhere from open ocean at night to a bright snowfield.
+   There is deliberately NO scrim panel behind the hero: nothing may sit between the type and
+   the globe. So all the darkening happens in the glyphs' own shadow, which hugs the letter
+   shapes instead of painting a rectangle — three layers because one can't do both jobs:
+     · 1px/3px at 0.9 — a hard edge so a letter never dissolves into a same-luminance pixel
+     · 3px/14px at 0.75 — the local pool that carries mid-frequency terrain detail
+     · 6px/44px at 0.5 — a wide, very soft halo, the closest thing to a scrim that has no
+       findable edge; it reads as depth rather than as a box
+   Known limit: text-shadow does not count toward a WCAG contrast ratio. Over worst-case
+   bright daytime terrain the computed ratio for the subline can fall under 4.5:1 even though
+   it stays legible in practice. That is a deliberate, requested trade for an unobstructed
+   globe — reinstating a scrim is the fix if it ever needs to be measurable. */
+.hero-legible {
+  text-shadow:
+    0 1px 3px rgb(var(--surface-deep-rgb) / 0.9),
+    0 3px 14px rgb(var(--surface-deep-rgb) / 0.75),
+    0 6px 44px rgb(var(--surface-deep-rgb) / 0.5);
+}
+
+/* The page's one authored entrance: the hero settles in once on arrival, staggered top to
+   bottom. Resting state is fully visible and the animation only ever plays *back to* it via
+   `backwards` fill, so a reduced-motion visitor (or a dropped stylesheet) gets the finished
+   composition rather than a blank viewport. The globe is the ongoing motion on this page —
+   nothing else here moves. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rise {
+    animation: hero-rise 600ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Two lighter siblings of hero-rise, same easing family, for state changes rather than
+   arrivals: `pop-in` for a control that appears under the cursor (the tier check badge),
+   `value-in` for a figure that has just been recalculated (a tier price re-pricing itself as
+   the dates or budget change). Both are keyed remounts — React reuses the DOM node otherwise
+   and a CSS animation only plays on mount. Same reduced-motion gate as hero-rise: the
+   resting state is the finished one, so suppressing these loses nothing but the movement. */
+@media (prefers-reduced-motion: no-preference) {
+  .pop-in {
+    animation: pop-in 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  .value-in {
+    animation: value-in 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  /* The console's own arrival, distinct from the `value-in` its neighbours use so the form
+     doesn't assemble in eight identical beats. Blur is this system's signature material —
+     every panel and pill is a blurred surface — so resolving the cells out of a blur is the
+     world's own device rather than one more translate. Applied to the four cells and not to
+     their container: a `filter` on the console would rasterize the whole trough, including
+     its hairline dividers, and cost far more than blurring four short runs of text. */
+  .settle-in {
+    animation: settle-in 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+}
+
+@keyframes value-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(5px);
+  }
+}
+
+/* The trip form's four fields sit in one recessed slate trough rather than in four separate
+   boxes, so the UA's own control chrome is redundant: each cell already supplies its own
+   icon, and the date cells open the picker from a click anywhere in the cell via
+   showPicker(). The native glyphs can only be inverted, never restyled to the system's icon
+   stroke, so they'd read as borrowed chrome sitting inside an authored control. Typing and
+   keyboard entry are untouched — this removes painting, not behaviour. */
+.field-console input[type="date"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
+.field-console input[type="number"]::-webkit-inner-spin-button,
+.field-console input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.field-console input[type="number"] {
+  appearance: textfield;
 }
 
 /* The day-tab row still scrolls horizontally (trips run to 30 days), but its scrollbar sat as a
@@ -370,5 +507,25 @@ body {
   40% {
     opacity: 0.8;
     transform: translateY(0);
+  }
+}
+
+/* Everything the loader shows — the ring's whole sweep and the letters' brightness — lives in
+   the two keyframes above, so the blanket `animation-duration: 0.01ms` further up leaves it
+   with nothing: the disc paints flat and empty, and the word drops to its dim 0.4 resting
+   opacity. A progress indicator that reads as *absent* is worse than one that reads as
+   *still*, so pin both to a finished-looking resting state. This respects the preference
+   rather than working around it — no motion is restored here, only the appearance the motion
+   was carrying. Progress itself is communicated by the cycling caption underneath. */
+@media (prefers-reduced-motion: reduce) {
+  .loader {
+    transform: rotate(90deg);
+    box-shadow:
+      0 10px 20px 0 #fffdf8 inset,
+      0 20px 30px 0 var(--accent) inset,
+      0 60px 60px 0 #0b1220 inset;
+  }
+  .loader-letter {
+    opacity: 1;
   }
 }

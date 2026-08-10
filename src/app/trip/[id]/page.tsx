@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import ItineraryCard from "@/components/ItineraryCard";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
+import { headerLinkClass } from "@/components/BrandMark";
 import { DayPlan, Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
@@ -213,12 +214,9 @@ export default function TripPage({
     <main className="dashboard-page min-h-full">
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
-      <div className="pointer-events-auto fixed top-6 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+      <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
         <div className="flex justify-end">
-          <Link
-            href="/trips"
-            className="rounded-full bg-surface-deep/70 px-3 py-1.5 text-sm font-medium text-muted backdrop-blur-sm hover:text-foreground"
-          >
+          <Link href="/trips" className={headerLinkClass}>
             My memories
           </Link>
         </div>
