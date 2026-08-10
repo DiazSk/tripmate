@@ -1,26 +1,54 @@
 @import "tailwindcss";
 
 :root {
-  /* "Roamly" direction: warm cream content pane + dark teal accents, contrasting
-     against the cool-toned 3D map pane. Replaces the "Overcast" steel-blue glass
-     direction — see DESIGN.md for history. */
-  --background: #f2eee6;
-  --foreground: #2b2620;
-  --muted: #7a7266;
-  --accent: #1f3a34;
-  --accent-hover: #16302b;
-  --accent-foreground: #f5f1e8;
-  --card: #faf7f1;
-  --card-border: rgba(43, 38, 32, 0.1);
+  /* Frosted slate glass over live satellite imagery, with a single warm accent.
+     Supersedes the warm cream/teal "Roamly" palette, which was built for solid
+     cream cards in spatially separate panes — the app has since gone back to
+     layered glass over a full-bleed map, and warm cream on cool slate glass is
+     what made the two read as different design systems. Frosted glass wants a
+     neutral base plus ONE vivid accent; warmth is now the accent alone. */
 
-  --tag-neutral-bg: #e4d9c4;
-  --tag-neutral-fg: #2b2620;
-  --tag-positive-bg: #b9c9a8;
-  --tag-positive-fg: #24321f;
-  --tag-highlight-bg: #f8dfd4;
-  --tag-highlight-fg: #7a3a20;
-  --tile: #9d5b38;
-  --tile-foreground: #fff8f2;
+  /* The canvas behind the globe. GlobeBackground reads this at Viewer init for
+     Cesium's own scene.backgroundColor, so the WebGL clear colour and the DOM
+     around it cannot drift apart and show a seam at the canvas edge. */
+  --canvas: #0b0f19;
+
+  /* Slate-900, as channels so alpha can vary. The frosted panels, the map
+     control pills, the itinerary header band and the photo scrims are all this
+     one colour at different alphas — that shared origin is what makes them
+     read as one material instead of four similar greys. */
+  --surface-deep-rgb: 15 23 42;
+  --surface-deep: rgb(var(--surface-deep-rgb));
+
+  --background: var(--canvas);
+  --foreground: #f4f7fa;
+  --muted: #97a3b6;
+
+  /* The one warm accent, interactive use only: buttons, active day pill, budget
+     bar, focus rings, icons. Note it is a *light* colour, so its foreground is
+     dark — do NOT reuse --accent-foreground to mean "text over something dark",
+     that is --on-deep. Conflating the two is what this palette had to untangle. */
+  --accent: #ffb340;
+  --accent-hover: #ffc266;
+  --accent-foreground: #3d2600;
+
+  /* Text over any dark surface: header band, photo overlays, scrims, the map. */
+  --on-deep: #f4f7fa;
+
+  --card-border: rgba(255, 255, 255, 0.12);
+
+  /* Chips read as glass chrome rather than warm paper. Only the AI/highlight
+     chip carries the accent — one accent means the positive chips give up their
+     green, which is the deliberate cost of the surfaces cohering. */
+  --tag-neutral-bg: rgba(255, 255, 255, 0.13);
+  --tag-neutral-fg: #e3e9f1;
+  --tag-positive-bg: rgba(255, 255, 255, 0.13);
+  --tag-positive-fg: #e3e9f1;
+  --tag-highlight-bg: rgba(255, 179, 64, 0.2);
+  --tag-highlight-fg: #ffca7a;
+  /* Neutral so the amber Total tile is the only one that pops. */
+  --tile: rgba(255, 255, 255, 0.1);
+  --tile-foreground: #e3e9f1;
 }
 
 @theme inline {
@@ -30,7 +58,9 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-foreground: var(--accent-foreground);
-  --color-card: var(--card);
+  --color-on-deep: var(--on-deep);
+  --color-canvas: var(--canvas);
+  --color-surface-deep: var(--surface-deep);
   --color-card-border: var(--card-border);
   --color-tag-neutral-bg: var(--tag-neutral-bg);
   --color-tag-neutral-fg: var(--tag-neutral-fg);
@@ -49,19 +79,6 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Used by the Cesium-dashboard preview component (PreferenceStep) layered
-   over the 3D globe/aerial imagery. */
-.glass-panel {
-  /* Do NOT re-add a hand-written `-webkit-backdrop-filter` here: Lightning CSS
-     collapses the pair down to the prefixed property alone, which current Chrome
-     (148, verified) no longer supports — that silently killed the blur entirely.
-     Lightning CSS emits the -webkit- prefix itself when targets need it. */
-  backdrop-filter: blur(16px) saturate(180%);
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-}
-
 /* The home page's form/tier steps are normal-flow cards that reach into the bottom-left corner
    at any width under ~1292px — exactly where the map control stack sits. Those steps are a form
    over a decorative hero globe rather than a map the user is reading, so the chrome steps aside
@@ -77,7 +94,7 @@ body {
    Chrome (148, verified) no longer supports, silently killing the blur. Lightning CSS emits
    the -webkit- prefix itself when targets need it. */
 .glass-control {
-  background: rgba(15, 23, 42, 0.55);
+  background: rgb(var(--surface-deep-rgb) / 0.55);
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.32);
@@ -182,16 +199,6 @@ body {
   --card-border: rgba(255, 255, 255, 0.12);
 }
 
-/* Solid card surface for the content pane — no blur/translucency, since the map
-   and the itinerary content now live in separate panes rather than layered. */
-.card {
-  background: var(--card);
-  border: 1px solid var(--card-border);
-  box-shadow:
-    0 1px 2px rgba(43, 38, 32, 0.05),
-    0 8px 24px -12px rgba(43, 38, 32, 0.18);
-}
-
 /* Dark glassmorphism surface — the app-wide card treatment over the globe
    (itinerary/detail panels, destination form, tier picker, trips list). Overrides
    the --foreground/--muted/--card-border tokens *within this subtree* rather than
@@ -212,7 +219,7 @@ body {
      collapses the pair down to the prefixed property alone, which current Chrome
      (148, verified) no longer supports — that silently killed the blur entirely.
      Lightning CSS emits the -webkit- prefix itself when targets need it. */
-  background: rgba(15, 23, 42, 0.62);
+  background: rgb(var(--surface-deep-rgb) / 0.62);
   backdrop-filter: blur(56px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
@@ -230,9 +237,10 @@ body {
    The ring is an otherwise-empty circle whose *inset* box-shadows paint colour
    blobs at different offsets/blurs; rotating the element sweeps them around, so
    the gradient is a side effect of the shadows rather than a real conic
-   gradient. Palette is the app's own teal + cream — deliberately no cyan.
-   Blur/offset values are tuned for the 200px wrapper below; shrinking the
-   wrapper without scaling these makes the shadows read much heavier. */
+   gradient. Palette is the app's own: deep slate disc, warm accent sweep —
+   deliberately no cyan. Blur/offset values are tuned for the 200px wrapper
+   below; shrinking the wrapper without scaling these makes the shadows read
+   much heavier. */
 .loader-wrapper {
   position: relative;
   display: flex;
@@ -243,20 +251,19 @@ body {
   border-radius: 50%;
   font-size: 1.2rem;
   font-weight: 300;
-  color: #f5f1e8;
+  color: var(--on-deep);
   user-select: none;
   /* Not in the stock version of this loader, which sits on a fixed dark page.
      This one floats over live satellite imagery, which is mid-luminance and
      cool-desaturated (the tileset is tinted toward #9BA6B4). A translucent
      scrim put the loader in that same luminance band and it read as a tinted
-     bubble rather than an object, so this is near-opaque and pushed dark and
-     green — the two axes the map isn't. Cream-on-dark-teal is also the app's
-     own accent pairing (--accent / --accent-foreground), so going darker reads
-     as more on-brand, not less. */
-  background-color: rgba(18, 42, 36, 0.95);
+     bubble rather than an object, so this is near-opaque — dark is the one axis
+     the imagery is not. Same --surface-deep as the panels, so the loader is
+     visibly the same material as the rest of the chrome. */
+  background-color: rgb(var(--surface-deep-rgb) / 0.95);
   /* Defined edge + cast shadow: without these the circle dissolves into the
      imagery at its rim no matter how opaque the centre is. */
-  border: 1px solid rgba(245, 241, 232, 0.2);
+  border: 1px solid rgba(244, 247, 250, 0.2);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
 }
 
@@ -307,31 +314,32 @@ body {
   animation-delay: 0.9s;
 }
 
-/* Sweep runs bright (paper white → light mint) at the top edge down into
-   near-black teal, so the disc reads as a dark object with a travelling
-   highlight. The earlier mid-teal stops were too close in luminance to both
-   the disc and the map to register as motion at all. */
+/* Sweep runs bright (paper white → warm accent) at the top edge down into
+   near-black slate, so the disc reads as a dark object with a travelling warm
+   highlight — the palette's cool-base/warm-accent rule applied to motion.
+   Stops need this much luminance spread to register as movement at all; the
+   earlier mid-tone version sat too close to both the disc and the map. */
 @keyframes loader-rotate {
   0% {
     transform: rotate(90deg);
     box-shadow:
       0 10px 20px 0 #fffdf8 inset,
-      0 20px 30px 0 #a7d3c7 inset,
-      0 60px 60px 0 #0f231f inset;
+      0 20px 30px 0 var(--accent) inset,
+      0 60px 60px 0 #0b1220 inset;
   }
   50% {
     transform: rotate(270deg);
     box-shadow:
       0 10px 20px 0 #fffdf8 inset,
-      0 20px 10px 0 #d5ebe3 inset,
-      0 40px 60px 0 #16302b inset;
+      0 20px 10px 0 var(--accent-hover) inset,
+      0 40px 60px 0 var(--surface-deep) inset;
   }
   100% {
     transform: rotate(450deg);
     box-shadow:
       0 10px 20px 0 #fffdf8 inset,
-      0 20px 30px 0 #a7d3c7 inset,
-      0 60px 60px 0 #0f231f inset;
+      0 20px 30px 0 var(--accent) inset,
+      0 60px 60px 0 #0b1220 inset;
   }
 }
 

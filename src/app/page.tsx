@@ -155,11 +155,11 @@ export default function Home() {
       {/* Dashboard (result) view has no top navbar at all, per request — form/tier
           steps keep it. */}
       {preResult && (
-        <div className="pointer-events-auto flex items-center justify-between rounded-2xl bg-slate-950/70 px-4 py-3 backdrop-blur-sm">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-accent-foreground">
+        <div className="pointer-events-auto flex items-center justify-between rounded-2xl bg-surface-deep/70 px-4 py-3 backdrop-blur-sm">
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-on-deep">
             TripMate
           </h1>
-          <Link href="/trips" className="text-sm font-medium text-accent-foreground hover:underline">
+          <Link href="/trips" className="text-sm font-medium text-on-deep hover:underline">
             My memories
           </Link>
         </div>

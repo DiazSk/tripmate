@@ -23,6 +23,9 @@ const ZOOM_STEP_RATIO = 0.35;
 const MIN_ZOOM_DISTANCE_M = 80;
 const MAX_ZOOM_DISTANCE_M = 25_000_000;
 const READOUT_INTERVAL_MS = 100;
+/** Shorter than the 2D/3D and compass flights: those reframe the whole view, a zoom step only
+ *  dollies, and anything longer makes repeated presses feel like they're queueing. */
+const ZOOM_FLIGHT_SECONDS = 0.45;
 
 /**
  * The point the camera should pivot around: whatever is under the middle of the screen.
@@ -43,16 +46,38 @@ function pickCenter(viewer: Viewer, Cesium: CesiumModule): Cartesian3 {
 }
 
 /**
- * Re-aim the camera at a new pitch and/or heading while keeping the same ground point centred
- * and the same distance to it — the difference between "tilting the view" and "flying somewhere".
+ * Re-aim the camera at a new pitch, heading and/or distance while keeping the same ground point
+ * centred — the difference between "tilting the view" and "flying somewhere". Every camera move
+ * this component makes routes through here, zoom included: `camera.zoomIn`/`zoomOut` are
+ * instantaneous, which is what made the +/- buttons feel abrupt next to the eased 2D/3D snap.
+ *
+ * `range` overrides the current camera distance (that's a zoom); `target` skips the re-pick when
+ * the caller has already picked one, so an accumulated zoom target and the flight that consumes
+ * it are guaranteed to share a pivot point even when the camera is moving between the two.
  */
 function pivot(
   viewer: Viewer,
   Cesium: CesiumModule,
-  { pitchDeg, headingRad, fly }: { pitchDeg?: number; headingRad?: number; fly: boolean }
+  {
+    pitchDeg,
+    headingRad,
+    range,
+    target,
+    fly,
+    duration = 0.6,
+    onSettled,
+  }: {
+    pitchDeg?: number;
+    headingRad?: number;
+    range?: number;
+    target?: Cartesian3;
+    fly: boolean;
+    duration?: number;
+    onSettled?: () => void;
+  }
 ) {
-  const target = pickCenter(viewer, Cesium);
-  const range = Cesium.Cartesian3.distance(viewer.camera.positionWC, target);
+  const pivotPoint = target ?? pickCenter(viewer, Cesium);
+  const offsetRange = range ?? Cesium.Cartesian3.distance(viewer.camera.positionWC, pivotPoint);
   const pitch =
     pitchDeg === undefined
       ? viewer.camera.pitch
@@ -60,17 +85,21 @@ function pivot(
   const offset = new Cesium.HeadingPitchRange(
     headingRad === undefined ? viewer.camera.heading : headingRad,
     pitch,
-    range
+    offsetRange
   );
 
   if (fly) {
-    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, 0), {
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(pivotPoint, 0), {
       offset,
-      duration: 0.6,
+      duration,
+      // Ease in *and* out, so a zoom step settles rather than stopping dead.
+      easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
+      complete: onSettled,
+      cancel: onSettled,
     });
     return;
   }
-  viewer.camera.lookAtTransform(Cesium.Transforms.eastNorthUpToFixedFrame(target), offset);
+  viewer.camera.lookAtTransform(Cesium.Transforms.eastNorthUpToFixedFrame(pivotPoint), offset);
   // Releasing the transform is mandatory — leave it set and every subsequent drag pans in
   // that local frame forever instead of around the globe.
   viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
@@ -87,6 +116,9 @@ export default function MapControls() {
   const needleRef = useRef<HTMLSpanElement>(null);
   const sliderRef = useRef<HTMLInputElement>(null);
   const draggingRef = useRef(false);
+  /** Range the in-flight zoom is heading for, so held/repeated presses compound. Null when idle. */
+  const pendingRangeRef = useRef<number | null>(null);
+  const zoomSeqRef = useRef(0);
 
   // Cesium is dynamically imported everywhere in this app — a static import would pull it into
   // the server bundle. That the import has resolved doubles as the readiness gate.
@@ -142,16 +174,31 @@ export default function MapControls() {
 
   const zoom = (direction: 1 | -1) =>
     withViewer((viewer, cesium) => {
-      const distance = cesium.Cartesian3.distance(
-        viewer.camera.positionWC,
-        pickCenter(viewer, cesium)
-      );
-      const wanted = distance * (direction === 1 ? 1 - ZOOM_STEP_RATIO : 1 + ZOOM_STEP_RATIO);
+      const target = pickCenter(viewer, cesium);
+      const distance = cesium.Cartesian3.distance(viewer.camera.positionWC, target);
+      // Successive presses step from the range the *previous* press was heading for, not from
+      // wherever the camera happens to be mid-flight — each new flight cancels the last, so
+      // measuring live would undershoot and rapid presses would stall instead of accelerating.
+      const base = pendingRangeRef.current ?? distance;
+      const wanted = base * (direction === 1 ? 1 - ZOOM_STEP_RATIO : 1 + ZOOM_STEP_RATIO);
+      // Still clamped here rather than by screenSpaceCameraController: flyToBoundingSphere
+      // bypasses that controller exactly as zoomIn/zoomOut did, so these bounds remain the only
+      // thing keeping repeated presses out of the building mesh.
       const clamped = Math.min(Math.max(wanted, MIN_ZOOM_DISTANCE_M), MAX_ZOOM_DISTANCE_M);
-      const delta = distance - clamped;
-      if (Math.abs(delta) < 1) return;
-      if (delta > 0) viewer.camera.zoomIn(delta);
-      else viewer.camera.zoomOut(-delta);
+      if (Math.abs(distance - clamped) < 1) return;
+      pendingRangeRef.current = clamped;
+      // Only the newest flight may clear the accumulator — a cancelled older flight fires
+      // `cancel` *after* its successor has already claimed it.
+      const seq = ++zoomSeqRef.current;
+      pivot(viewer, cesium, {
+        range: clamped,
+        target,
+        fly: true,
+        duration: ZOOM_FLIGHT_SECONDS,
+        onSettled: () => {
+          if (zoomSeqRef.current === seq) pendingRangeRef.current = null;
+        },
+      });
     });
 
   const toggleFlat = () =>
@@ -165,8 +212,10 @@ export default function MapControls() {
   const tilt = (value: number) =>
     withViewer((viewer, cesium) => pivot(viewer, cesium, { pitchDeg: -value, fly: false }));
 
+  // Transform is transitioned alongside the fill so a press eases in and releases back out,
+  // rather than snapping between two states the way transition-colors alone did.
   const buttonClass =
-    "flex h-11 w-11 items-center justify-center text-white/90 transition-colors hover:bg-white/10 active:bg-white/15";
+    "flex h-11 w-11 items-center justify-center text-white/90 transition-[background-color,transform] duration-200 ease-out hover:bg-white/10 active:scale-[0.92] active:bg-white/15";
 
   return (
     // Hidden below `sm:` — that's the breakpoint where the itinerary panel goes full-bleed and
@@ -236,7 +285,7 @@ export default function MapControls() {
         type="button"
         onClick={resetNorth}
         aria-label="Reset map to face north"
-        className="glass-control pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full text-white/90 transition-colors hover:bg-white/10 active:bg-white/15"
+        className={`glass-control pointer-events-auto rounded-full ${buttonClass}`}
       >
         <span ref={needleRef} className="block will-change-transform">
           <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">

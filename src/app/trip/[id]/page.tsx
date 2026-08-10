@@ -217,7 +217,7 @@ export default function TripPage({
         <div className="flex justify-end">
           <Link
             href="/trips"
-            className="rounded-full bg-slate-950/70 px-3 py-1.5 text-sm font-medium text-muted backdrop-blur-sm hover:text-foreground"
+            className="rounded-full bg-surface-deep/70 px-3 py-1.5 text-sm font-medium text-muted backdrop-blur-sm hover:text-foreground"
           >
             My memories
           </Link>

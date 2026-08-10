@@ -18,8 +18,8 @@ const MapControls = dynamic(() => import("@/components/MapControls"), { ssr: fal
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <MapCameraProvider>
-      <div className="app-shell relative flex h-dvh flex-col overflow-hidden bg-[#0b0f19] md:flex-row">
-        <div className="absolute inset-0 z-0 bg-[#0b0f19]">
+      <div className="app-shell relative flex h-dvh flex-col overflow-hidden bg-canvas md:flex-row">
+        <div className="absolute inset-0 z-0 bg-canvas">
           {/* GlobeBackground must stay mounted across route changes — Next.js already
               keeps AppShell itself stable across navigations since it's rendered from the
               root layout, so this just needs to never be conditionally unmounted here. */}
