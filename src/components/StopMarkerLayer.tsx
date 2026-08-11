@@ -46,7 +46,17 @@ const SCALE_MAX = 1;
  * to on any page whose content overflows.
  */
 export default function StopMarkerLayer() {
-  const { viewerRef, ready, routeStops, routeAltitudeRef, flyToPlace } = useMapCamera();
+  const {
+    viewerRef,
+    ready,
+    routeStops,
+    routeAltitudeRef,
+    flyToPlace,
+    hoveredIndex,
+    setHoveredIndex,
+    activeIndex,
+    setActiveIndex,
+  } = useMapCamera();
   const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
@@ -225,9 +235,21 @@ export default function StopMarkerLayer() {
             // The layer is pointer-events-none so the globe stays draggable through the gaps
             // between cards; each card opts back in. See DESIGN.md's Pointer-Events Opt-In Rule.
             className="glass-marker pointer-events-auto"
+            // Drives the lift/glow via CSS, and is also what the itinerary panel sets remotely
+            // when the pointer is on its matching row — one attribute, both directions.
+            data-hovered={hoveredIndex === i || activeIndex === i ? "true" : undefined}
+            onMouseEnter={() => setHoveredIndex(i)}
+            onMouseLeave={() => setHoveredIndex(null)}
+            // Pointer events rather than mouse events would fire on touch too, where there is
+            // no hover to speak of and a tap would leave the card stuck lit.
+            onFocus={() => setHoveredIndex(i)}
+            onBlur={() => setHoveredIndex(null)}
             // No label passed, so this flies the camera without dropping the red search pin —
             // the card already names the place, and a pin plus a card is one label too many.
-            onClick={() => flyToPlace(stop.lat, stop.lng)}
+            onClick={() => {
+              setActiveIndex(i);
+              flyToPlace(stop.lat, stop.lng);
+            }}
           >
             {stop.name}
           </button>

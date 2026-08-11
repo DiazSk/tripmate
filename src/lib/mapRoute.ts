@@ -152,6 +152,14 @@ export interface RouteGeometry {
   /** Everything added to the entity collection, for the caller to remove wholesale. */
   entities: Entity[];
   /**
+   * Tint one stop and the arcs touching it with the interface accent, or `null` to clear.
+   *
+   * This is the single deliberate exception to DESIGN.md's rule that interface colours stay off
+   * the globe: amber here means "you are pointing at this", never "this is a Tuesday". Keep it
+   * confined to interaction state.
+   */
+  setEmphasis: (index: number | null) => void;
+  /**
    * Move every piece of this route to a new altitude.
    *
    * The reason this is a closure rather than the caller patching entities itself: the route is
@@ -190,7 +198,14 @@ export function buildRouteGeometry(
   // Precomputed once here and re-sampled by `reposition`, since the geodesic itself does not
   // depend on altitude — only the heights along it do.
   const scratchCarto = new Cesium.Cartographic();
-  const segments: { geodesic: import("cesium").EllipsoidGeodesic; lift: number }[] = [];
+  // `from`/`to` are kept so hover emphasis can find the arcs touching a given stop — segments
+  // are not 1:1 with stop indices once degenerate hops are skipped.
+  const segments: {
+    geodesic: import("cesium").EllipsoidGeodesic;
+    lift: number;
+    from: number;
+    to: number;
+  }[] = [];
   for (let i = 1; i < stops.length; i++) {
     // Measured on the drawn positions rather than via the geodesic, because constructing a
     // geodesic is the thing being guarded against.
@@ -204,8 +219,15 @@ export function buildRouteGeometry(
       Math.max(geodesic.surfaceDistance * ARC_LIFT_RATIO, MIN_ARC_LIFT_M),
       MAX_ARC_LIFT_M
     );
-    segments.push({ geodesic, lift });
+    segments.push({ geodesic, lift, from: i - 1, to: i });
   }
+
+  const accent = Cesium.Color.fromCssColorString(cssColor("--accent"));
+  /** Which stop is currently hovered or selected, or null. Read live by the dash shimmer's
+   *  callback, and written by `setEmphasis` below. */
+  let emphasised: number | null = null;
+  const isArcEmphasised = (index: number) =>
+    emphasised !== null && (segments[index].from === emphasised || segments[index].to === emphasised);
 
   // Sine lift, so the arc leaves and meets the ground flat instead of kinking at its endpoints.
   const arcPositionsAt = (index: number, h: number) => {
@@ -255,19 +277,22 @@ export function buildRouteGeometry(
         // re-trace a great circle between each adjacent pair would flatten the lift back out.
         arcType: Cesium.ArcType.NONE,
         material: new Cesium.PolylineDashMaterialProperty({
-          color: reduceMotion
-            ? blue.withAlpha(SHIMMER_ALPHA_STATIC)
-            : // Second argument false = "not constant", so Cesium re-evaluates every frame.
-              // `withAlpha` into the supplied result keeps this allocation-free at ~160fps.
-              new Cesium.CallbackProperty((_time, result) => {
-                const phase =
-                  (performance.now() - startedAt) / SHIMMER_PERIOD_MS - index * SHIMMER_ARC_LAG;
-                const wave = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
-                return blue.withAlpha(
-                  SHIMMER_ALPHA_MIN + SHIMMER_ALPHA_RANGE * wave,
-                  result as import("cesium").Color
-                );
-              }, false),
+          // Always a callback, even under reduced motion, so hover emphasis has one place to
+          // take effect. Second argument false = "not constant", so Cesium re-evaluates every
+          // frame; `withAlpha` into the supplied result keeps that allocation-free at ~160fps.
+          color: new Cesium.CallbackProperty((_time, result) => {
+            const base = isArcEmphasised(index) ? accent : blue;
+            if (reduceMotion) {
+              return base.withAlpha(SHIMMER_ALPHA_STATIC, result as import("cesium").Color);
+            }
+            const phase =
+              (performance.now() - startedAt) / SHIMMER_PERIOD_MS - index * SHIMMER_ARC_LAG;
+            const wave = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+            return base.withAlpha(
+              SHIMMER_ALPHA_MIN + SHIMMER_ALPHA_RANGE * wave,
+              result as import("cesium").Color
+            );
+          }, false),
           gapColor: Cesium.Color.TRANSPARENT,
           dashLength: ARC_DASH_LENGTH,
         }),
@@ -324,8 +349,44 @@ export function buildRouteGeometry(
     )
   );
 
+  // Recolouring closures rather than a loop over entities, so each piece keeps its own alpha —
+  // emphasis must not flatten the pool's soft edge or the glow base's transparency into solid
+  // amber. Colours are reassigned imperatively here rather than driven by CallbackProperties:
+  // hover changes a few times a second, and making 16 ellipse materials non-constant would move
+  // them into Cesium's dynamic batch and rebuild that geometry every frame.
+  const tintPolyline =
+    (entity: Entity, alpha: number) =>
+    (base: import("cesium").Color) => {
+      (entity.polyline!.material as import("cesium").PolylineGlowMaterialProperty).color =
+        new Cesium.ConstantProperty(base.withAlpha(alpha));
+    };
+  const tintEllipse =
+    (entity: Entity, alpha: number) =>
+    (base: import("cesium").Color) => {
+      (entity.ellipse!.material as import("cesium").ColorMaterialProperty).color =
+        new Cesium.ConstantProperty(base.withAlpha(alpha));
+    };
+
+  const stemTints = stems.map((e) => tintPolyline(e, 1));
+  const poolTints = pools.map((pair) => [
+    tintEllipse(pair[0], POOL_ALPHA),
+    tintEllipse(pair[1], POOL_OUTER_ALPHA),
+  ]);
+  const arcGlowTints = arcs.map((a) => tintPolyline(a.glow, ARC_GLOW_ALPHA));
+
   return {
     entities: [...arcs.flatMap((a) => [a.glow, a.dash]), ...stems, ...pools.flat()],
+    setEmphasis: (index: number | null) => {
+      if (index === emphasised) return;
+      emphasised = index;
+      stops.forEach((_, i) => {
+        const base = i === index ? accent : blue;
+        stemTints[i](base);
+        poolTints[i].forEach((tint) => tint(base));
+      });
+      // The dashed line needs no write here — its callback reads `emphasised` directly.
+      arcGlowTints.forEach((tint, k) => tint(isArcEmphasised(k) ? accent : blue));
+    },
     reposition: (h: number) => {
       const corrected = positionsAt(h);
       // Both polylines of an arc share one freshly sampled array — they trace the same curve at

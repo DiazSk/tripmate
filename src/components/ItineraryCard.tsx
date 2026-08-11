@@ -145,11 +145,16 @@ function StopRow({
   index,
   isLast,
   onSelect,
+  isHighlighted,
+  onHover,
 }: {
   stop: Stop;
   index: number;
   isLast: boolean;
   onSelect: (stop: Stop) => void;
+  /** True when this stop's marker on the globe is hovered or selected. */
+  isHighlighted: boolean;
+  onHover: (hovered: boolean) => void;
 }) {
   return (
     <motion.div
@@ -157,7 +162,13 @@ function StopRow({
       whileInView={{ opacity: 1, y: 0, scale: 1 }}
       viewport={{ once: true, margin: "-10% 0px -10% 0px" }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.08 }}
-      className="relative flex gap-3 rounded-xl transition-colors hover:bg-white/5"
+      // The highlight is the same wash the `hover:` variant paints, so a row lit from the globe
+      // and a row lit by the pointer look identical — which is the point.
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      className={`relative flex gap-3 rounded-xl transition-colors hover:bg-white/5 ${
+        isHighlighted ? "bg-white/5" : ""
+      }`}
     >
       {!isLast && (
         /* Spans avatar-bottom to next-avatar-top, so it has to stop short of this row's own
@@ -218,7 +229,7 @@ export default function ItineraryCard({
   const headerPhoto = usePlacePhoto(destination, "full");
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
-  const { showDayRoute } = useMapCamera();
+  const { showDayRoute, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
   const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // Glowing pins + connecting arc for whichever day is active, redrawn on every day-tab switch.
@@ -377,6 +388,8 @@ export default function ItineraryCard({
                   index={i}
                   isLast={i === day.stops.length - 1}
                   onSelect={onSelectStop}
+                  isHighlighted={hoveredIndex === i || activeIndex === i}
+                  onHover={(hovered) => setHoveredIndex(hovered ? i : null)}
                 />
               ))}
             </div>
