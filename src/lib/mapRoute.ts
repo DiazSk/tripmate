@@ -72,11 +72,18 @@ const POOL_OUTER_ALPHA = 0.09;
 /** Points sampled along each arc. Enough that the curve reads as smooth at street level without
  *  turning a 30-day trip into tens of thousands of vertices. */
 const ARC_SAMPLES = 96;
-/** Arc apex as a fraction of the segment's ground length, so a cross-city hop arcs and a
- *  next-door step stays nearly flat, clamped at both ends. */
-const ARC_LIFT_RATIO = 0.18;
-const MIN_ARC_LIFT_M = 20;
-const MAX_ARC_LIFT_M = 400;
+/**
+ * Arc apex above its endpoints, as a fraction of the segment's ground length, so a cross-city hop
+ * bows and a next-door step stays nearly flat, clamped at both ends.
+ *
+ * Shallower than it was when arcs ran ground to ground. They now span card to card at `+150m`, so
+ * the same ratio put the apex a full stem-height above the cards and the route read as arcs
+ * launching over the labels rather than a line drawn between them. The apex should stay inside the
+ * band the cards occupy.
+ */
+const ARC_LIFT_RATIO = 0.08;
+const MIN_ARC_LIFT_M = 12;
+const MAX_ARC_LIFT_M = 180;
 /**
  * Segments shorter than this get no arc at all.
  *
@@ -229,9 +236,14 @@ export function buildRouteGeometry(
   const isArcEmphasised = (index: number) =>
     emphasised !== null && (segments[index].from === emphasised || segments[index].to === emphasised);
 
-  // Sine lift, so the arc leaves and meets the ground flat instead of kinking at its endpoints.
+  // Arcs span card to card, at stem-top height — not ground to ground. The stem already carries
+  // the eye from the ground up to the card; an arc that also started on the ground drew a second,
+  // competing line up the same 150m and left the card looking pinned on top of a shape rather
+  // than being the thing the route runs between. Sine lift on top of that, so each hop leaves and
+  // meets its card level instead of kinking at the endpoints.
   const arcPositionsAt = (index: number, h: number) => {
     const { geodesic, lift } = segments[index];
+    const base = h + STEM_HEIGHT_M;
     const out: import("cesium").Cartesian3[] = new Array(ARC_SAMPLES);
     for (let k = 0; k < ARC_SAMPLES; k++) {
       const t = k / (ARC_SAMPLES - 1);
@@ -239,7 +251,7 @@ export function buildRouteGeometry(
       out[k] = Cesium.Cartesian3.fromRadians(
         point.longitude,
         point.latitude,
-        h + lift * Math.sin(t * Math.PI),
+        base + lift * Math.sin(t * Math.PI),
         ellipsoid
       );
     }
