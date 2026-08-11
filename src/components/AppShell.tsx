@@ -9,6 +9,7 @@ const GlobeBackground = dynamic(() => import("@/components/GlobeBackground"), {
   ssr: false,
 });
 const MapControls = dynamic(() => import("@/components/MapControls"), { ssr: false });
+const StopMarkerLayer = dynamic(() => import("@/components/StopMarkerLayer"), { ssr: false });
 
 /**
  * Every route gets the same full-bleed globe + overlay content layout — the
@@ -32,6 +33,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
             `overflow-y-auto` stays — the home page's pre-result steps are normal-flow children
             and overflow on short viewports, and scroll chaining from those children up to this
             ancestor is unaffected by pointer-events. */}
+        {/* Sits at z-5, under the content overlay below — the markers are part of the world
+            behind the glass, so a panel covers them rather than the other way round. Still a
+            sibling rather than a child of that overlay, and for a sharper reason than the
+            wordmark: the overlay scrolls, and these cards are pinned to world coordinates on the
+            globe, so inside it they would slide off their own stems the moment a page
+            overflowed. */}
+        <StopMarkerLayer />
         <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto">{children}</div>
         {/* Sibling of the content overlay, not a child of it: the wordmark is app chrome like
             the map controls, so it stays put no matter what shape a page's own content column
