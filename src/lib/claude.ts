@@ -1,8 +1,23 @@
 import { spawn } from "child_process";
+import { homedir } from "os";
 import { insertTrace, updateTrace } from "./db";
 
 const MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_TIMEOUT_MS = 90_000;
+
+/**
+ * Where the `claude` binary lives, independent of whoever launched the dev server.
+ *
+ * `spawn` without `shell: true` resolves the command against the child's PATH and nothing else,
+ * so a server started from a GUI-launched editor or any shell that didn't source the user's
+ * profile gets `spawn claude ENOENT` for every call. That is not hypothetical: it silently broke
+ * 26 consecutive generations across two days until the server happened to be restarted from a
+ * different terminal. The native installer puts the binary in ~/.local/bin, and npm-global
+ * installs land somewhere already on PATH, so appending the standard locations covers both.
+ * CLAUDE_CLI_PATH is the escape hatch for anything else.
+ */
+const CLI_BIN = process.env.CLAUDE_CLI_PATH ?? "claude";
+const CLI_SEARCH_PATH = [`${homedir()}/.local/bin`, `${homedir()}/.claude/local`];
 
 const BASE_TIMEOUT_MS = 120_000;
 const PER_DAY_TIMEOUT_MS = 12_000;
@@ -50,12 +65,13 @@ export function runClaude(
   return new Promise((resolve, reject) => {
     const { CLAUDECODE: _drop, ...env } = process.env;
     void _drop;
+    env.PATH = [env.PATH, ...CLI_SEARCH_PATH].filter(Boolean).join(":");
 
     const traceId = insertTrace({ type, prompt, model: MODEL });
     const startedAt = Date.now();
 
     const child = spawn(
-      "claude",
+      CLI_BIN,
       [
         "-p",
         prompt,
@@ -85,12 +101,18 @@ export function runClaude(
 
     child.on("error", (err) => {
       clearTimeout(timer);
+      // ENOENT here means only one thing, and the bare message never said so.
+      const hint =
+        (err as NodeJS.ErrnoException).code === "ENOENT"
+          ? ` — '${CLI_BIN}' is not on the dev server's PATH. Install it, or set CLAUDE_CLI_PATH` +
+            ` to its absolute path (\`which claude\`) and restart the server.`
+          : "";
       updateTrace(traceId, {
         status: "error",
-        errorMessage: err.message,
+        errorMessage: err.message + hint,
         durationMs: Date.now() - startedAt,
       });
-      reject(new Error(`claude CLI failed to start: ${err.message}`));
+      reject(new Error(`claude CLI failed to start: ${err.message}${hint}`));
     });
 
     child.on("exit", (code) => {
