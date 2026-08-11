@@ -409,6 +409,7 @@ A 200px near-opaque slate disc — dark is the one axis the imagery is not — w
 - **Don't** put a kicker, eyebrow, or all-caps label above a headline; don't use a hard offset shadow; don't use glyph or icon-font icons — every icon in the system is inline SVG.
 - **Don't** let map-native colours (route blue, pin red) into the interface. Interface colours stay off the globe too, with the single documented exception of `--accent` marking the hovered or selected stop.
 - **Don't** animate anything on the globe from JS without checking `prefers-reduced-motion` yourself. The blanket rule in `globals.css` reaches CSS only; a WebGL material driven from `performance.now()` pulses straight through the preference.
+- **Don't** mark the selected stop with a ring, halo or pulse on the ground. Selection is the accent on that stop's stem, pool and adjoining arcs, plus the ring on its own card. A pulsing blue circle at the stem's base was built and removed: it drew a second marker for a stop that already had one, and put the emphasis at the bottom of the stem where nothing else is.
 - **Don't** add geometry to a route without routing it through `RouteGeometry.reposition`. The route is drawn before its real altitude is known, and anything that misses the correction detaches from the rest at an oblique angle.
 - **Don't** apply `.font-hero` outside the landing headline.
 
