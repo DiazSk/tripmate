@@ -6,7 +6,7 @@ import { geocodeDestination } from "./weather";
 import { PlaceDetail, Stop } from "./types";
 
 export function useTripCamera(destination: string) {
-  const { flyToDestination, flyToPlace, setActivePin } = useMapCamera();
+  const { flyToDestination, flyToPlace } = useMapCamera();
   const [destinationCoords, setDestinationCoords] = useState<{
     lat: number;
     lon: number;
@@ -50,7 +50,6 @@ export function useTripCamera(destination: string) {
     async (stop: Stop) => {
       setSelectedStop(stop);
       flyToPlace(stop.lat, stop.lng, stop.name);
-      setActivePin({ lat: stop.lat, lng: stop.lng });
       setDetail(null);
       setDetailError(null);
       setDetailLoading(true);
@@ -69,15 +68,14 @@ export function useTripCamera(destination: string) {
         setDetailLoading(false);
       }
     },
-    [flyToPlace, setActivePin, destination]
+    [flyToPlace, destination]
   );
 
   const closeDetail = useCallback(() => {
     setSelectedStop(null);
-    setActivePin(null);
     if (destinationCoords)
       flyToDestination(destinationCoords.lat, destinationCoords.lon, destinationCoords.name);
-  }, [destinationCoords, flyToDestination, setActivePin]);
+  }, [destinationCoords, flyToDestination]);
 
   return {
     flyToDestinationByName,

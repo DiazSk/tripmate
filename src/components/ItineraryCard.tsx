@@ -6,6 +6,7 @@ import { DayPlan, Itinerary, Stop, StopCategory } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
+import { useStopTour } from "@/lib/useStopTour";
 import BudgetBar from "./BudgetBar";
 import {
   ChevronLeftIcon,
@@ -14,7 +15,9 @@ import {
   EntryIcon,
   FoodIcon,
   LodgingIcon,
+  PauseIcon,
   PinIcon,
+  PlayIcon,
   RainIcon,
   SunIcon,
   TransitIcon,
@@ -145,11 +148,16 @@ function StopRow({
   index,
   isLast,
   onSelect,
+  isHighlighted,
+  onHover,
 }: {
   stop: Stop;
   index: number;
   isLast: boolean;
   onSelect: (stop: Stop) => void;
+  /** True when this stop's marker on the globe is hovered or selected. */
+  isHighlighted: boolean;
+  onHover: (hovered: boolean) => void;
 }) {
   return (
     <motion.div
@@ -157,7 +165,13 @@ function StopRow({
       whileInView={{ opacity: 1, y: 0, scale: 1 }}
       viewport={{ once: true, margin: "-10% 0px -10% 0px" }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.08 }}
-      className="relative flex gap-3 rounded-xl transition-colors hover:bg-white/5"
+      // The highlight is the same wash the `hover:` variant paints, so a row lit from the globe
+      // and a row lit by the pointer look identical — which is the point.
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      className={`relative flex gap-3 rounded-xl transition-colors hover:bg-white/5 ${
+        isHighlighted ? "bg-white/5" : ""
+      }`}
     >
       {!isLast && (
         /* Spans avatar-bottom to next-avatar-top, so it has to stop short of this row's own
@@ -218,13 +232,14 @@ export default function ItineraryCard({
   const headerPhoto = usePlacePhoto(destination, "full");
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
-  const { showDayRoute } = useMapCamera();
+  const { showDayRoute, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
+  const { playing: touring, toggle: toggleTour } = useStopTour();
   const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // Glowing pins + connecting arc for whichever day is active, redrawn on every day-tab switch.
   useEffect(() => {
     if (!day) return;
-    showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
+    showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng, name: s.name })));
   }, [day, showDayRoute]);
 
   // Keep the active day tab scrolled into view, including when the arrows below move it.
@@ -338,6 +353,23 @@ export default function ItineraryCard({
 
         {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
 
+        {/* Only worth offering when there is more than one place to move between. */}
+        {day.stops.length > 1 && (
+          <button
+            type="button"
+            onClick={toggleTour}
+            aria-pressed={touring}
+            className="mb-3 flex items-center gap-2 rounded-full bg-tag-neutral-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-tag-neutral-bg/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            {touring ? (
+              <PauseIcon className="h-3.5 w-3.5 text-accent" />
+            ) : (
+              <PlayIcon className="h-3.5 w-3.5 text-accent" />
+            )}
+            {touring ? "Stop tour" : "Play tour"}
+          </button>
+        )}
+
         {day.lodging && (
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-white/10 p-3">
             <LodgingIcon className="h-5 w-5 shrink-0 text-accent" />
@@ -377,6 +409,8 @@ export default function ItineraryCard({
                   index={i}
                   isLast={i === day.stops.length - 1}
                   onSelect={onSelectStop}
+                  isHighlighted={hoveredIndex === i || activeIndex === i}
+                  onHover={(hovered) => setHoveredIndex(hovered ? i : null)}
                 />
               ))}
             </div>

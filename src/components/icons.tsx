@@ -154,3 +154,21 @@ export function ChevronRightIcon({ className }: { className?: string }) {
     </IconBase>
   );
 }
+
+/* Filled rather than stroked, unlike the rest of this set: at 14px a stroked triangle reads as
+   an outline artefact, and transport controls are conventionally solid. */
+export function PlayIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M6.5 4.2v11.6a.7.7 0 0 0 1.07.6l9-5.8a.7.7 0 0 0 0-1.2l-9-5.8a.7.7 0 0 0-1.07.6Z" fill="currentColor" />
+    </IconBase>
+  );
+}
+
+export function PauseIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M6 4h2.6v12H6zM11.4 4H14v12h-2.6z" fill="currentColor" />
+    </IconBase>
+  );
+}
