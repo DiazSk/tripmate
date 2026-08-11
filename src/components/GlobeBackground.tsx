@@ -234,7 +234,12 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       // route geometry is only verifiable by counting what is actually in the collection.
       // Stripped from production builds by the NODE_ENV check.
       if (process.env.NODE_ENV === "development") {
-        (window as Window & { __tripmateViewer?: unknown }).__tripmateViewer = viewer;
+        const w = window as Window & { __tripmateViewer?: unknown; __tripmateCesium?: unknown };
+        w.__tripmateViewer = viewer;
+        // The module too, so a probe can build a BoundingSphere or HeadingPitchRange and check
+        // the framing instantly. Cesium is only ever reached through a dynamic import here, so
+        // there is otherwise no handle on its classes from outside a module scope.
+        w.__tripmateCesium = Cesium;
       }
 
       setViewer(viewer);

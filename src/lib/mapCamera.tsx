@@ -17,6 +17,7 @@ import {
   RouteGeometry,
   RouteStop,
   sampleRouteAltitude,
+  STEM_HEIGHT_M,
 } from "@/lib/mapRoute";
 
 interface MapCameraContextValue {
@@ -88,7 +89,14 @@ const PANEL_BIAS_RATIO = 0.6;
 const PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32"><path d="M12 .8C6 .8 1.2 5.6 1.2 11.6c0 8 10.8 19.6 10.8 19.6s10.8-11.6 10.8-19.6C22.8 5.6 18 .8 12 .8z" fill="#FF3B30" stroke="#C1271F" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="11.6" r="4.2" fill="#fff"/></svg>`;
 const PIN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PIN_SVG)}`;
 
-type Flight = [lat: number, lng: number, height: number, pitchDeg: number, label?: string];
+type Flight = [
+  lat: number,
+  lng: number,
+  height: number,
+  pitchDeg: number,
+  label?: string,
+  centreHeightM?: number,
+];
 
 export function MapCameraProvider({ children }: { children: ReactNode }) {
   const viewerRef = useRef<Viewer | null>(null);
@@ -109,13 +117,22 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   const routeGeometryRef = useRef<RouteGeometry | null>(null);
 
   const flyTo = useCallback(
-    (lat: number, lng: number, height: number, pitchDeg: number, label?: string) => {
+    (
+      lat: number,
+      lng: number,
+      height: number,
+      pitchDeg: number,
+      label?: string,
+      /** Altitude of the point to centre in frame. Zero aims at the ellipsoid surface, which for
+       *  a stop means aiming below the street; a stop flight passes its card's height instead. */
+      centreHeightM = 0
+    ) => {
       const viewer = viewerRef.current;
       if (!viewer || viewer.isDestroyed()) {
         // The viewer registers only once the 3D tileset has loaded, which takes seconds — long
         // after a trip page has fetched its trip and asked to fly. Hold the request and replay
         // it on registration instead of dropping it.
-        pendingRef.current = [lat, lng, height, pitchDeg, label];
+        pendingRef.current = [lat, lng, height, pitchDeg, label, centreHeightM];
         return;
       }
       // Flying toward a specific place means the globe shouldn't keep auto-rotating
@@ -160,7 +177,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         // frustum — you'd fly to Rome and never see Rome. A bounding sphere keeps it centred,
         // with `height` read as distance-to-target instead of altitude.
         viewer.camera.flyToBoundingSphere(
-          new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lng, lat), 0),
+          new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lng, lat, centreHeightM), 0),
           {
             offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(pitchDeg), height),
             duration: 2.5,
@@ -282,8 +299,20 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
     [flyTo]
   );
+  /**
+   * Fly to one stop of the current day, framing its floating card rather than the ground.
+   *
+   * The card is the thing that names the place, so it is what the camera should arrive on. Aiming
+   * at the default ellipsoid surface put the card near the top edge of the frame — or out of it —
+   * and centred a patch of road instead, which is what made both the Play tour and a marker click
+   * look like they were zooming to the bottom of the marker.
+   *
+   * Every stop flight goes through here — the tour, a marker click, and an itinerary row — so
+   * they all arrive the same way.
+   */
   const flyToPlace = useCallback(
-    (lat: number, lng: number, label?: string) => flyTo(lat, lng, PLACE_HEIGHT_M, -35, label),
+    (lat: number, lng: number, label?: string) =>
+      flyTo(lat, lng, PLACE_HEIGHT_M, -35, label, routeAltitudeRef.current + STEM_HEIGHT_M),
     [flyTo]
   );
   const resetToHome = useCallback(() => {
