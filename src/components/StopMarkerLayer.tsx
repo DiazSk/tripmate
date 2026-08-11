@@ -212,10 +212,14 @@ export default function StopMarkerLayer() {
 
   if (routeStops.length === 0) return null;
 
-  // z-[15] sits above the content overlay (z-10) so a card is never buried by a panel, and below
-  // the wordmark and map controls (z-20), which are chrome and always win.
+  // z-[5]: above the globe, *below* the content overlay at z-10. Sitting above it was the obvious
+  // choice and the wrong one — a stop near the right edge then drew its card on top of the
+  // itinerary panel, straddling the panel's edge. These cards belong to the world behind the
+  // glass, so they occlude like the globe does: the panel covers them, and the route framing
+  // already biases east (PANEL_BIAS_RATIO) to keep the day clear of it in the first place.
+  // Clicks still land, because the overlay above is pointer-events-none.
   return (
-    <div className="stop-marker-layer pointer-events-none absolute inset-0 z-[15] overflow-hidden">
+    <div className="stop-marker-layer pointer-events-none absolute inset-0 z-[5] overflow-hidden">
       {routeStops.map((stop, i) => (
         <div
           key={i}
