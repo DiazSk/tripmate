@@ -1,17 +1,9 @@
 import { DayWeather } from "./weather";
-import { Itinerary, ItineraryPreferences } from "./types";
+import { Itinerary } from "./types";
 import { TierId, TIERS } from "./tiers";
 
 const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"note":"short note","time":"9:00 AM","durationLabel":"1 hour","tags":["short tag","short tag"],"category":"food|entry|transit|other"}`;
 const SHAPE_HINT = `{"days":[{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]}`;
-
-function formatPreferences(preferences?: ItineraryPreferences | null): string {
-  if (!preferences || (preferences.tags.length === 0 && !preferences.vibe)) return "";
-  const parts: string[] = [];
-  if (preferences.vibe) parts.push(`leans toward a "${preferences.vibe}" vibe`);
-  if (preferences.tags.length > 0) parts.push(`especially interested in ${preferences.tags.join(", ")}`);
-  return `\nTraveler preferences: ${parts.join("; ")}.\nWeight stop selection toward these interests without ignoring the weather/budget constraints above.\n`;
-}
 
 function formatWeather(weather: DayWeather[]): string {
   if (weather.length === 0) return "No weather data available.";
@@ -43,7 +35,6 @@ export function buildGeneratePrompt(params: {
   budget: number;
   tier: TierId;
   weather: DayWeather[];
-  preferences?: ItineraryPreferences | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -51,7 +42,7 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}
+
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
 Every day except the last should include a "lodging" entry representing that night's stay, priced to the style above.
 ${STOP_FIELD_INSTRUCTION}

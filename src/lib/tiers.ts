@@ -7,7 +7,6 @@ export interface Tier {
   dailyRate: number;
   nightlyLodgingRate: number;
   headline: string;
-  longDescription: string;
   imageSrc: string;
   imageAlt: string;
 }
@@ -20,8 +19,6 @@ export const TIERS: Tier[] = [
     dailyRate: 70,
     nightlyLodgingRate: 40,
     headline: "Needs flexibility built in.",
-    longDescription:
-      "TripMate plans around spontaneity: hostel bunks, street food worth detouring for, and hopping between cities on a whim. Public transit isn't a compromise, it's part of the adventure.",
     imageSrc: "/tiers/budget.svg",
     imageAlt: "Warm sunset over a mountain skyline with a backpacker's tent silhouette",
   },
@@ -32,8 +29,6 @@ export const TIERS: Tier[] = [
     dailyRate: 150,
     nightlyLodgingRate: 150,
     headline: "Comfort, without the compromise.",
-    longDescription:
-      "Boutique stays, good food without the fuss, and a taxi when you'd rather not walk. TripMate finds the balance between doing it all and actually enjoying the trip.",
     imageSrc: "/tiers/midrange.svg",
     imageAlt: "Sunlit row of boutique hotel facades with warm terracotta tones",
   },
@@ -44,8 +39,6 @@ export const TIERS: Tier[] = [
     dailyRate: 350,
     nightlyLodgingRate: 500,
     headline: "Nothing left to chance.",
-    longDescription:
-      "5-star stays, private transport, and reservations that are already handled. TripMate curates the details so every moment feels taken care of.",
     imageSrc: "/tiers/luxury.svg",
     imageAlt: "Private yacht at night on calm water under a moonlit sky",
   },

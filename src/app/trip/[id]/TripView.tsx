@@ -1,13 +1,16 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ItineraryCard from "@/components/ItineraryCard";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import { headerLinkClass } from "@/components/BrandMark";
-import { DayPlan, Itinerary, Trip } from "@/lib/types";
+import ErrorNote from "@/components/ErrorNote";
+import DockedPanel from "@/components/DockedPanel";
+import { Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
-import { findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
+import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
+import { formatMoney } from "@/lib/format";
 
 type ActualCostTarget = "lodging" | number;
 
@@ -15,72 +18,6 @@ type ActualCostTarget = "lodging" | number;
  *  destination flight must be suppressed or it lands second and clobbers that framing. */
 const hasStops = (itinerary?: Itinerary | null) =>
   !!itinerary?.days.some((d) => d.stops.length > 0);
-
-/** Hardcoded trip for visually inspecting this page at /trip/preview without a real generation round-trip. */
-const PREVIEW_TRIP: Trip = {
-  id: "preview",
-  destination: "Paris, France",
-  startDate: "2026-09-01",
-  endDate: "2026-09-03",
-  budget: 1200,
-  itinerary: {
-    tier: "midrange",
-    days: [
-      {
-        date: "2026-09-01",
-        weather: "Pleasant and mild, 13.6-21°C, ideal for sightseeing",
-        lodging: { name: "Hotel Pulitzer Paris", cost: 160, note: "Boutique 4-star hotel in Le Marais district" },
-        stops: [
-          { name: "CDG Airport to Hotel Transfer", lat: 48.8566, lng: 2.3642, cost: 45, note: "Private taxi to Le Marais", time: "9:00 AM", durationLabel: "45 minutes", tags: ["Transportation", "Arrival"], category: "transit" },
-          { name: "Breakfast at Hotel Café", lat: 48.8566, lng: 2.3642, cost: 18, note: "Pastries, croissants, and fresh coffee", time: "9:45 AM", durationLabel: "30 minutes", tags: ["Casual", "Hotel"], category: "food" },
-          { name: "Île de la Cité & Notre-Dame", lat: 48.853, lng: 2.3499, cost: 0, note: "Walk around iconic cathedral and island", time: "10:15 AM", durationLabel: "1 hour", tags: ["Must-See", "Free"], category: "other" },
-          { name: "Lunch at Bistro Paul Bert", lat: 48.853, lng: 2.345, cost: 35, note: "Classic French bistro with traditional cuisine", time: "11:15 AM", durationLabel: "1.5 hours", tags: ["Local", "Michelin-Recommended"], category: "food" },
-          { name: "Musée d'Orsay with Private Guide", lat: 48.8601, lng: 2.3265, cost: 80, note: "Impressionist masterpieces with expert commentary", time: "12:45 PM", durationLabel: "3 hours", tags: ["Museum", "Premium"], category: "entry" },
-          { name: "Afternoon Café Break", lat: 48.8601, lng: 2.33, cost: 12, note: "Coffee and pastry rest stop", time: "3:45 PM", durationLabel: "30 minutes", tags: ["Casual", "Break"], category: "food" },
-          { name: "Le Marais Boutique Shopping", lat: 48.8566, lng: 2.3642, cost: 60, note: "Curated vintage and designer boutiques", time: "4:15 PM", durationLabel: "1.5 hours", tags: ["Shopping", "Local"], category: "other" },
-          { name: "Dinner at Le Petit Pontoise", lat: 48.8566, lng: 2.352, cost: 45, note: "Classic Parisian bistro with charming ambiance", time: "6:00 PM", durationLabel: "1.5 hours", tags: ["Dinner", "Local"], category: "food" },
-        ],
-      },
-      {
-        date: "2026-09-02",
-        weather: "Cooler day, 12.2-18.3°C, perfect for museums and indoor activities",
-        lodging: { name: "Hotel Pulitzer Paris", cost: 160, note: "Second night at same boutique hotel" },
-        stops: [
-          { name: "Breakfast at Local Café", lat: 48.8566, lng: 2.3642, cost: 12, note: "Croissants and café au lait", time: "9:00 AM", durationLabel: "30 minutes", tags: ["Casual", "Local"], category: "food" },
-          { name: "Louvre Museum", lat: 48.8606, lng: 2.3376, cost: 22, note: "World's largest art museum, iconic masterpieces", time: "9:30 AM", durationLabel: "3 hours", tags: ["Museum", "Must-See"], category: "entry" },
-          { name: "Lunch near Louvre", lat: 48.8606, lng: 2.3376, cost: 28, note: "Quick casual bistro lunch", time: "12:30 PM", durationLabel: "1 hour", tags: ["Convenient", "Casual"], category: "food" },
-          { name: "Sainte-Chapelle", lat: 48.8509, lng: 2.3475, cost: 15, note: "Stunning stained glass windows and Gothic architecture", time: "1:30 PM", durationLabel: "1.5 hours", tags: ["Historic", "Must-See"], category: "entry" },
-          { name: "Afternoon Café Break", lat: 48.8509, lng: 2.3475, cost: 12, note: "Rest with coffee and pastry", time: "3:00 PM", durationLabel: "30 minutes", tags: ["Casual", "Break"], category: "food" },
-          { name: "French Cooking Class", lat: 48.8566, lng: 2.352, cost: 95, note: "Market-to-table cooking experience with local ingredients", time: "3:30 PM", durationLabel: "2.5 hours", tags: ["Experience", "Premium"], category: "entry" },
-          { name: "Dinner at Cooking Class Venue", lat: 48.8566, lng: 2.352, cost: 60, note: "Enjoy prepared dishes with wine pairing", time: "6:00 PM", durationLabel: "1.5 hours", tags: ["Dinner", "Included"], category: "food" },
-        ],
-      },
-      {
-        date: "2026-09-03",
-        weather: "Beautiful day, 16.1-25.1°C, excellent for outdoor sightseeing",
-        stops: [
-          { name: "Breakfast at Local Café", lat: 48.8566, lng: 2.3642, cost: 12, note: "Final morning pastry and coffee", time: "9:00 AM", durationLabel: "30 minutes", tags: ["Casual", "Local"], category: "food" },
-          { name: "Eiffel Tower Fast-Track Entry", lat: 48.8584, lng: 2.2945, cost: 35, note: "Skip-the-line access with summit views", time: "9:30 AM", durationLabel: "2.5 hours", tags: ["Must-See", "Premium"], category: "entry" },
-          { name: "Lunch near Eiffel Tower", lat: 48.8584, lng: 2.2945, cost: 30, note: "Casual lunch with tower views", time: "12:00 PM", durationLabel: "1 hour", tags: ["Views", "Casual"], category: "food" },
-          { name: "Seine River Walk & Shopping", lat: 48.8566, lng: 2.2922, cost: 40, note: "Stroll along the Seine, browse riverside boutiques", time: "1:00 PM", durationLabel: "2 hours", tags: ["Romantic", "Shopping"], category: "other" },
-          { name: "Afternoon Café", lat: 48.8699, lng: 2.3073, cost: 15, note: "Rest and refreshments", time: "3:00 PM", durationLabel: "30 minutes", tags: ["Casual", "Break"], category: "food" },
-          { name: "Arc de Triomphe", lat: 48.8738, lng: 2.295, cost: 18, note: "Iconic monument with rooftop city views", time: "3:30 PM", durationLabel: "1.5 hours", tags: ["Must-See", "Views"], category: "entry" },
-          { name: "Champs-Élysées Shopping", lat: 48.8699, lng: 2.3073, cost: 60, note: "Luxury shopping on world's most famous avenue", time: "5:00 PM", durationLabel: "2 hours", tags: ["Shopping", "Luxury"], category: "other" },
-          { name: "Seine Dinner Cruise", lat: 48.8566, lng: 2.2922, cost: 95, note: "3-course gourmet dinner with illuminated city views", time: "7:00 PM", durationLabel: "3 hours", tags: ["Romantic", "Premium"], category: "food" },
-        ],
-      },
-    ],
-  },
-};
-
-function dayPlannedTotal(day: DayPlan) {
-  return (day.lodging?.cost ?? 0) + day.stops.reduce((s, stop) => s + stop.cost, 0);
-}
-
-function dayActualTotal(day: DayPlan) {
-  const lodging = day.lodging ? day.lodging.actualCost ?? day.lodging.cost : 0;
-  return lodging + day.stops.reduce((s, stop) => s + (stop.actualCost ?? stop.cost), 0);
-}
 
 export default function TripView({
   params,
@@ -108,7 +45,7 @@ export default function TripView({
 
   useEffect(() => {
     if (id === "preview") {
-      Promise.resolve().then(() => {
+      import("@/lib/previewTrip").then(({ PREVIEW_TRIP }) => {
         setTrip(PREVIEW_TRIP);
         setItinerary(PREVIEW_TRIP.itinerary);
         flyToDestinationByName(PREVIEW_TRIP.destination, !hasStops(PREVIEW_TRIP.itinerary));
@@ -118,21 +55,27 @@ export default function TripView({
     fetch(`/api/trips/${id}`)
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to load trip");
+        if (!res.ok) throw new Error(data.error);
         setTrip(data);
         setItinerary(data.itinerary);
         await flyToDestinationByName(data.destination, !hasStops(data.itinerary));
       })
-      .catch((e) => setError(e.message));
+      .catch((e) =>
+        setError(e instanceof Error && e.message ? e.message : "We couldn't load this trip.")
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  /** Throws on a failed write. Losing a logged spend silently is the one failure on
+   *  this page that costs data, so every caller has to have somewhere to put it. */
   async function persist(updated: Itinerary) {
-    await fetch(`/api/trips/${id}`, {
+    if (id === "preview") return;
+    const res = await fetch(`/api/trips/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itinerary: updated }),
     });
+    if (!res.ok) throw new Error("That amount didn't save. Check your connection and re-enter it.");
   }
 
   function handleActualCostChange(
@@ -149,7 +92,8 @@ export default function TripView({
       day.stops[target].actualCost = value;
     }
     setItinerary(updated);
-    persist(updated);
+    setError(null);
+    persist(updated).catch((e: Error) => setError(e.message));
     setDismissedDays((prev) => {
       const next = new Set(prev);
       next.delete(dayIndex);
@@ -167,10 +111,11 @@ export default function TripView({
   async function handleRebalance(dayIndex: number) {
     if (!itinerary || !trip) return;
     setRebalancingDay(dayIndex);
+    setError(null);
     try {
       const spentThroughDay = itinerary.days
         .slice(0, dayIndex + 1)
-        .reduce((sum, day) => sum + dayActualTotal(day), 0);
+        .reduce((sum, day) => sum + daySpend(day), 0);
       const remainingBudget = Math.max(trip.budget - spentThroughDay, 0);
       const remainingDays = itinerary.days.slice(dayIndex + 1);
 
@@ -191,7 +136,7 @@ export default function TripView({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to rebalance");
+      if (!res.ok) throw new Error(data.error);
 
       const updated: Itinerary = {
         ...itinerary,
@@ -201,74 +146,104 @@ export default function TripView({
       await persist(updated);
       setDismissedDays((prev) => new Set(prev).add(dayIndex));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to rebalance");
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : "We couldn't rebalance the rest of the trip. Your plan is unchanged."
+      );
     } finally {
       setRebalancingDay(null);
     }
   }
 
   const overspendDayIndex = itinerary
-    ? itinerary.days.findIndex((day, i) => !dismissedDays.has(i) && dayActualTotal(day) > dayPlannedTotal(day))
+    ? itinerary.days.findIndex(
+        (day, i) => !dismissedDays.has(i) && daySpend(day) > dayPlanned(day)
+      )
     : -1;
   const hasOverspend = overspendDayIndex !== -1;
+  const rebalancing = rebalancingDay === overspendDayIndex;
+
+  // The banner is inserted above whatever the user was just looking at, and the
+  // browser's own scroll anchoring then holds that content still — which scrolls the
+  // banner off the top of the panel. An alert nobody sees isn't one, so it asks for
+  // the space it needs. `block: "nearest"` scrolls the panel by the minimum.
+  const overspendRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (hasOverspend) overspendRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [hasOverspend, overspendDayIndex]);
 
   return (
     <main className="dashboard-page min-h-full">
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
-      <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+      <DockedPanel collapsible className="space-y-4">
         <div className="flex justify-end">
           <Link href="/trips" className={headerLinkClass}>
             My memories
           </Link>
         </div>
 
-        {error && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-            {error}
-          </div>
+        {error && <ErrorNote>{error}</ErrorNote>}
+        {!trip && !error && (
+          <p role="status" className="text-sm text-muted">
+            Loading this trip…
+          </p>
         )}
-        {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
 
         {hasOverspend && itinerary && (
-          <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm sm:flex-row sm:items-center">
+          <div
+            ref={overspendRef}
+            role="status"
+            className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm sm:flex-row sm:items-center"
+          >
             <p className="text-red-400">
-              Day {overspendDayIndex + 1} ran $
-              {(
-                dayActualTotal(itinerary.days[overspendDayIndex]) -
-                dayPlannedTotal(itinerary.days[overspendDayIndex])
-              ).toFixed(0)}{" "}
-              over plan — rebalance the rest of the trip?
+              Day {overspendDayIndex + 1} ran{" "}
+              <span className="tabular-nums">
+                {formatMoney(
+                  daySpend(itinerary.days[overspendDayIndex]) -
+                    dayPlanned(itinerary.days[overspendDayIndex])
+                )}
+              </span>{" "}
+              over plan. Rebalance the rest of the trip?
             </p>
             <div className="flex shrink-0 gap-2">
               <button
+                type="button"
                 onClick={() => setDismissedDays((prev) => new Set(prev).add(overspendDayIndex))}
-                className="rounded-full px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/10"
+                // Disabled mid-flight: dismissing used to hide the banner while the
+                // request was still running, and the day got re-dismissed on completion.
+                disabled={rebalancing}
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-red-400 hover:bg-red-500/10 focus-visible:ring-2 focus-visible:ring-red-400/60 focus-visible:outline-none disabled:opacity-50"
               >
                 Dismiss
               </button>
               <button
+                type="button"
                 onClick={() => handleRebalance(overspendDayIndex)}
-                disabled={rebalancingDay === overspendDayIndex}
-                className="rounded-full bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-all duration-150 hover:bg-red-700 active:scale-[0.98] disabled:opacity-50"
+                disabled={rebalancing}
+                className="inline-flex min-h-11 items-center rounded-full bg-red-600 px-3 text-sm font-medium text-white transition-all duration-150 hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-400/60 focus-visible:outline-none active:scale-[0.98] disabled:opacity-50"
               >
-                {rebalancingDay === overspendDayIndex ? "Rebalancing…" : "Rebalance"}
+                {rebalancing ? "Rebalancing…" : "Rebalance"}
               </button>
             </div>
           </div>
         )}
 
-        {trip && itinerary && !selectedStop && (
-          <ItineraryCard
-            itinerary={itinerary}
-            budget={trip.budget}
-            destination={trip.destination}
-            onSelectStop={selectStop}
-            editable
-            onLodgingActualCostChange={(dayIndex, value) =>
-              handleActualCostChange(dayIndex, "lodging", value)
-            }
-          />
+        {/* Hidden rather than unmounted, so the active day, the panel's scroll position
+            and the tour all survive a trip to a place detail and back. */}
+        {trip && itinerary && (
+          <div className={selectedStop ? "hidden" : undefined}>
+            <ItineraryCard
+              itinerary={itinerary}
+              budget={trip.budget}
+              destination={trip.destination}
+              onSelectStop={selectStop}
+              onLodgingActualCostChange={(dayIndex, value) =>
+                handleActualCostChange(dayIndex, "lodging", value)
+              }
+            />
+          </div>
         )}
 
         {trip && itinerary && selectedStop && (
@@ -284,7 +259,7 @@ export default function TripView({
             onSelectUpcoming={selectStop}
           />
         )}
-      </div>
+      </DockedPanel>
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTrip, updateTripItinerary } from "@/lib/db";
+import { normalizeDays } from "@/lib/itinerary";
 
 export async function GET(
   _req: NextRequest,
@@ -8,8 +9,13 @@ export async function GET(
   const { id } = await params;
   const trip = getTrip(id);
   if (!trip) {
-    return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
+
+  // Rows written before the parse boundary existed can carry an unrecognised
+  // category or a string cost. Normalizing on read means an old trip renders the
+  // same as a new one; it self-heals on disk at the next PATCH.
+  const stored = JSON.parse(trip.itinerary_json);
 
   return NextResponse.json({
     id: trip.id,
@@ -17,7 +23,7 @@ export async function GET(
     startDate: trip.start_date,
     endDate: trip.end_date,
     budget: trip.budget,
-    itinerary: JSON.parse(trip.itinerary_json),
+    itinerary: { ...stored, days: normalizeDays(stored.days) },
   });
 }
 
@@ -28,7 +34,7 @@ export async function PATCH(
   const { id } = await params;
   const trip = getTrip(id);
   if (!trip) {
-    return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
   const { itinerary } = await req.json();

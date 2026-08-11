@@ -9,14 +9,22 @@ import FeedbackLoop from "@/components/FeedbackLoop";
 import TierPicker from "@/components/TierPicker";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import GenerationLoader from "@/components/cesium/GenerationLoader";
+import ErrorNote from "@/components/ErrorNote";
+import DockedPanel from "@/components/DockedPanel";
 import { headerLinkClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { Itinerary } from "@/lib/types";
-import { useTripCamera } from "@/lib/useTripCamera";
+import { GeocodeOutcome, useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 
 type Step = "landing" | "plan" | "result";
+
+/** The server's own message when it wrote one for a person, this operation's own
+ *  sentence otherwise — a network throw has a message like "Failed to fetch". */
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
 
 // Local calendar date in ISO shape. `toISOString()` would be UTC and roll the date over a
 // day early for anyone west of Greenwich in the evening; "sv-SE" formats local time as
@@ -24,7 +32,7 @@ type Step = "landing" | "plan" | "result";
 const todayISO = () => new Date().toLocaleDateString("sv-SE");
 
 const ghostButtonClass =
-  "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg";
+  "inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
 // Shared glass-over-globe card treatment — same class the itinerary/detail
 // panels use, reused here for consistency across every step of this page.
 // `pointer-events-auto` opts back in from AppShell's `pointer-events-none` overlay, which
@@ -125,7 +133,7 @@ export default function Home() {
   const [endDate, setEndDate] = useState("");
   const [budget, setBudget] = useState(1000);
   const [tier, setTier] = useState<TierId>("midrange");
-  const [destinationMissed, setDestinationMissed] = useState(false);
+  const [geocode, setGeocode] = useState<GeocodeOutcome>("found");
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -164,6 +172,15 @@ export default function Home() {
   // derived from tripDays' floor-at-1.
   const days = startDate && endDate ? tripDays(startDate, endDate) : null;
 
+  // The cap used to be discoverable only by submitting: the picker happily offered a
+  // five-year range and then the form refused it. `tripDays` counts inclusively, so
+  // the last allowed end date is start + 29.
+  const maxEndDate = startDate
+    ? new Date(new Date(startDate).getTime() + (MAX_TRIP_DAYS - 1) * 86400000)
+        .toISOString()
+        .slice(0, 10)
+    : undefined;
+
   // Auto-pick tracks budget and dates live, right up until the user picks a card themselves —
   // that live coupling is the whole point of merging the form and the tier step. A ref, not
   // state, because flipping the flag must not re-run the effect that reads it.
@@ -188,7 +205,7 @@ export default function Home() {
     const name = destination.trim();
     if (!name || name === lastFlownRef.current) return;
     lastFlownRef.current = name;
-    setDestinationMissed(!(await flyToDestinationByName(name)));
+    setGeocode(await flyToDestinationByName(name));
   }
 
   function backToLanding() {
@@ -203,7 +220,7 @@ export default function Home() {
   function validate(): string | null {
     if (endDate < startDate) return "End date must be on or after the start date.";
     if (isTripTooLong(startDate, endDate)) {
-      return `Trips over ${MAX_TRIP_DAYS} days aren't supported — please choose a shorter date range.`;
+      return `Trips longer than ${MAX_TRIP_DAYS} days aren't supported. Choose a shorter date range.`;
     }
     return null;
   }
@@ -224,11 +241,14 @@ export default function Home() {
         body: JSON.stringify({ destination, startDate, endDate, budget, tier }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate itinerary");
+      // Each of the three operations names itself in its fallback: "Something went
+      // wrong" was the message for generate, refine and save alike, which told you
+      // neither what failed nor what to do next.
+      if (!res.ok) throw new Error(data.error);
       setItinerary(data.itinerary);
       setStep("result");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
     } finally {
       setGenerating(false);
     }
@@ -251,10 +271,10 @@ export default function Home() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to refine itinerary");
+      if (!res.ok) throw new Error(data.error);
       setItinerary(data.itinerary);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
     } finally {
       setRefining(false);
     }
@@ -271,10 +291,10 @@ export default function Home() {
         body: JSON.stringify({ destination, startDate, endDate, budget, itinerary }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save trip");
+      if (!res.ok) throw new Error(data.error);
       router.push(`/trip/${data.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(errorMessage(e, "We couldn't save this trip. Try again."));
       setSaving(false);
     }
   }
@@ -283,7 +303,9 @@ export default function Home() {
     <main
       className={`flex min-h-full flex-col gap-6 bg-transparent p-5 sm:p-6 ${!preResult ? "dashboard-page" : "map-chrome-hidden"}`}
     >
-      <GenerationLoader active={generating} />
+      {/* Refining is the same 30–60s wait as generating and used to show only a changed
+          word on a button, with the stale itinerary still fully interactive underneath. */}
+      <GenerationLoader active={generating || refining} mode={refining ? "refine" : "generate"} />
 
       {/* AppShell owns the wordmark on every route, so a surface only supplies its own action.
           Landing supplies none — "My memories" is already one of the two hero CTAs, and
@@ -320,7 +342,7 @@ export default function Home() {
               // border-transparent, not no border: the ghost CTA beside it carries a 1px
               // border, and without a matching one the two pills differ by 2px in height and
               // sit a pixel apart on the baseline.
-              className="pointer-events-auto rounded-full border border-transparent bg-accent px-8 py-4 text-base font-medium text-accent-foreground shadow-lg shadow-black/30 transition-all duration-150 hover:bg-accent-hover active:scale-[0.98]"
+              className="pointer-events-auto rounded-full border border-transparent bg-accent px-8 py-4 text-base font-medium text-accent-foreground shadow-lg shadow-black/30 transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none active:scale-[0.98]"
             >
               Plan a trip
             </button>
@@ -329,7 +351,7 @@ export default function Home() {
               // No backdrop-blur and no fill — the globe runs clean through this pill, so it is
               // an outline and a label, nothing more. The border sits at /45 rather than /25
               // because without the frost behind it there is nothing else holding the shape.
-              className="hero-legible pointer-events-auto rounded-full border border-white/45 px-7 py-4 text-base font-medium text-on-deep transition-colors hover:border-white/70 hover:bg-white/10"
+              className="hero-legible pointer-events-auto rounded-full border border-white/45 px-7 py-4 text-base font-medium text-on-deep transition-colors hover:border-white/70 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
             >
               My memories
             </Link>
@@ -353,6 +375,13 @@ export default function Home() {
               }}
               className={`hero-rise ${cardClass}`}
             >
+              {/* The step had no heading of any kind — it opened straight onto four
+                  fields, so neither the page nor a screen reader named what you were
+                  doing. Same display step as "Choose your style" below it. */}
+              <h1 className="mb-4 font-display text-xl font-semibold text-foreground">
+                Plan your trip
+              </h1>
+
               {/* One instrument, not four widgets. The trough is `--surface-deep` at a lower
                   alpha than the panel around it, so it reads as recessed into the glass rather
                   than stacked on top of it, and the cells are separated by the divider between
@@ -365,7 +394,7 @@ export default function Home() {
                     value={destination}
                     onChange={(e) => {
                       setDestination(e.target.value);
-                      setDestinationMissed(false);
+                      setGeocode("found");
                     }}
                     onBlur={flyToTypedDestination}
                     placeholder="Kyoto, Japan"
@@ -397,6 +426,7 @@ export default function Home() {
                     required
                     type="date"
                     min={startDate || todayISO()}
+                    max={maxEndDate}
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                     className={`${fieldInputClass} tabular-nums ${endDate ? fieldFilledTone : fieldEmptyTone}`}
@@ -407,7 +437,11 @@ export default function Home() {
                       the product's whole mechanism, so it should read as a figure being
                       entered rather than as a number with a unit noted elsewhere. */}
                   <div className="flex items-baseline gap-1">
-                    <span className="text-base font-medium text-muted">$</span>
+                    {/* aria-hidden, or the field's accessible name comes out as
+                        "Total budget$" — the glyph is inside the label element. */}
+                    <span aria-hidden="true" className="text-base font-medium text-muted">
+                      $
+                    </span>
                     {/* Clearing the field used to snap the value back to a literal "0" under
                         the cursor, because Number("") is 0. 0 renders as empty instead, and
                         min={1} keeps it from ever submitting. */}
@@ -433,20 +467,22 @@ export default function Home() {
                   a region that appears at the same moment as its message is announced
                   unreliably, because the assistive tech never saw it go from empty to full. */}
               <div aria-live="polite">
-                {destinationMissed && (
+                {geocode !== "found" && (
                   <p className="value-in mt-2.5 text-xs text-muted">
-                    Couldn&apos;t find that on the map — we&apos;ll still plan it.
+                    {geocode === "missed"
+                      ? "Couldn't find that on the map. We'll still plan it."
+                      : "Couldn't reach the map service. We'll still plan it."}
                   </p>
                 )}
               </div>
 
               <div className="value-in mt-6" style={{ animationDelay: "320ms" }}>
-                <h2 className="font-display text-xl font-semibold text-foreground">
+                <h2 id="style-heading" className="font-display text-xl font-semibold text-foreground">
                   Choose your style
                 </h2>
                 <p className="mt-1 text-sm text-muted">
                   {days === null
-                    ? "Add your dates and the per-day rates below become trip totals."
+                    ? "These are per-day rates. Add your dates and they become trip totals."
                     : `Rough estimates for ${days} ${days === 1 ? "day" : "days"}${
                         destination ? ` in ${destination}` : ""
                       }. Pick the one closest to the trip you want.`}
@@ -465,7 +501,7 @@ export default function Home() {
                 </button>
                 <button
                   type="submit"
-                  className="group inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none active:scale-[0.98]"
+                  className="group inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none active:scale-[0.98]"
                 >
                   Generate itinerary
                   <ArrowRight
@@ -478,14 +514,7 @@ export default function Home() {
 
             {/* role="alert" — this one *is* an interruption: the user pressed Generate and
                 nothing happened, and focus stays on the button they just pressed. */}
-            {error && (
-              <div
-                role="alert"
-                className="value-in pointer-events-auto rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400"
-              >
-                {error}
-              </div>
-            )}
+            {error && <ErrorNote>{error}</ErrorNote>}
           </div>
         </div>
       )}
@@ -494,18 +523,21 @@ export default function Home() {
         // Docked panel floating over the full-screen globe rather than a normal-flow
         // block — `fixed` escapes AppShell's own scrollable content pane entirely, so
         // this positions relative to the viewport and scrolls independently.
-        <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
-          {!selectedStop && (
-            <>
-              <ItineraryCard
-                itinerary={itinerary}
-                budget={budget}
-                destination={destination}
-                onSelectStop={selectStop}
-              />
-              <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />
-            </>
-          )}
+        <DockedPanel collapsible busy={refining}>
+          {/* Hidden, not unmounted. ItineraryCard owns the active day index, the panel
+              owns its scroll position, and the tour owns its interval — unmounting the
+              card to show a place detail threw all three away, so coming back from a
+              stop on day 5 landed you on day 1 at the top of the panel. */}
+          <div className={selectedStop ? "hidden" : "space-y-6"}>
+            <ItineraryCard
+              itinerary={itinerary}
+              budget={budget}
+              destination={destination}
+              onSelectStop={selectStop}
+            />
+            {error && <ErrorNote>{error}</ErrorNote>}
+            <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />
+          </div>
 
           {selectedStop && (
             <PlaceDetailPanel
@@ -518,7 +550,7 @@ export default function Home() {
               onSelectUpcoming={selectStop}
             />
           )}
-        </div>
+        </DockedPanel>
       )}
     </main>
   );

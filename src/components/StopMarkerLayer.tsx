@@ -219,7 +219,17 @@ export default function StopMarkerLayer() {
   // already biases east (PANEL_BIAS_RATIO) to keep the day clear of it in the first place.
   // Clicks still land, because the overlay above is pointer-events-none.
   return (
-    <div className="stop-marker-layer pointer-events-none absolute inset-0 z-[5] overflow-hidden">
+    // aria-hidden, and every card taken out of the tab order below. These cards name
+    // the same stops the itinerary panel already lists as focusable rows, so leaving
+    // them focusable put up to eight duplicate tab stops between the wordmark and the
+    // panel — each one flying the camera on activation with nothing announced. The
+    // panel's rows are the keyboard path to a stop, and focusing one already lights
+    // its marker here; this layer is the pointer and touch affordance for the same
+    // thing.
+    <div
+      aria-hidden="true"
+      className="stop-marker-layer pointer-events-none absolute inset-0 z-[5] overflow-hidden"
+    >
       {routeStops.map((stop, i) => (
         <div
           key={i}
@@ -236,6 +246,7 @@ export default function StopMarkerLayer() {
         >
           <button
             type="button"
+            tabIndex={-1}
             // The layer is pointer-events-none so the globe stays draggable through the gaps
             // between cards; each card opts back in. See DESIGN.md's Pointer-Events Opt-In Rule.
             className="glass-marker pointer-events-auto"

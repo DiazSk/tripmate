@@ -1,0 +1,80 @@
+"use client";
+
+import { useState } from "react";
+
+/**
+ * The right-docked content column, and the one place its geometry is written. Every
+ * "content over the globe" surface uses it: the home page's result view, /trips, and
+ * /trip/[id].
+ *
+ * `top-16` below `sm`: the panel goes full-bleed there, so it has to start clear of
+ * the wordmark AppShell pins to the viewport's top-left. From `sm` up it is
+ * right-docked and the wordmark is nowhere near it.
+ *
+ * **The collapse is not a nicety.** Below `sm` this panel covers the entire viewport,
+ * which means the globe — the product's one piece of real imagery, and the thing the
+ * route, the stems and the marker cards are all drawn on — is invisible on a phone,
+ * and the map controls have nowhere to sit. `collapsible` shrinks the panel to a
+ * bottom sheet on a phone, and the control stack appears in the revealed area (see
+ * `.app-shell:has(.docked-panel-collapsed)` in globals.css). Above `sm` there is
+ * nothing to collapse and the affordance is not rendered.
+ */
+export default function DockedPanel({
+  collapsible = false,
+  className = "space-y-6",
+  /** True while a request is replacing this panel's content. Stops the stale content
+   *  being clicked while the loader is over it, and says so to assistive tech. */
+  busy = false,
+  children,
+}: {
+  collapsible?: boolean;
+  className?: string;
+  busy?: boolean;
+  children: React.ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const isCollapsed = collapsible && collapsed;
+
+  return (
+    <div
+      aria-busy={busy || undefined}
+      className={`docked-panel fixed right-5 bottom-5 left-5 z-10 m-0 overflow-y-auto sm:top-6 sm:right-6 sm:bottom-6 sm:left-auto sm:h-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px] ${
+        busy ? "pointer-events-none" : "pointer-events-auto"
+      } ${
+        isCollapsed
+          ? "docked-panel-collapsed top-auto h-[var(--mobile-sheet-h)] sm:top-6"
+          : "top-16"
+      } ${className}`}
+    >
+      {collapsible && (
+        // Sticky so it survives the panel's own scrolling, and `sm:hidden` because
+        // above that breakpoint the globe is already beside the panel, not under it.
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          className="glass-control sticky top-0 z-20 -mt-1 mb-1 flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium text-white/90 transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none sm:hidden"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            aria-hidden="true"
+            className={`h-3.5 w-3.5 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              collapsed ? "" : "rotate-180"
+            }`}
+          >
+            <path
+              d="M5 12l5-5 5 5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          {collapsed ? "Show the plan" : "Show the map"}
+        </button>
+      )}
+      {children}
+    </div>
+  );
+}

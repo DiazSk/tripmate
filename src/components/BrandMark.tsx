@@ -1,8 +1,16 @@
 import Link from "next/link";
 
-/** Shared class for a surface's own top-right action ("My memories", "New trip"). */
+/**
+ * Shared class for a surface's own top-right action ("My memories", "New trip").
+ *
+ * Underlined at rest, not only on hover: same size, weight and colour as the type
+ * beside it, over terrain, with no pill and no chevron — hover was the only thing
+ * that ever said "link", which leaves touch and keyboard with nothing. `min-h-11`
+ * and the negative margin give it a 44px target without moving the text off the
+ * optical line the wordmark sits on.
+ */
 export const headerLinkClass =
-  "hero-legible pointer-events-auto text-sm font-medium text-on-deep hover:underline";
+  "hero-legible pointer-events-auto -my-2.5 inline-flex min-h-11 items-center text-sm font-medium text-on-deep underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none";
 
 /**
  * The TripMate wordmark, and the only one in the app. Rendered once by AppShell rather than
@@ -18,7 +26,7 @@ export default function BrandMark() {
   return (
     <Link
       href="/"
-      className="hero-rise hero-legible pointer-events-auto absolute top-5 left-5 z-20 font-display text-xl font-semibold tracking-tight text-on-deep sm:top-6 sm:left-6"
+      className="hero-rise hero-legible pointer-events-auto absolute top-5 left-5 z-20 -m-2 inline-flex min-h-11 items-center p-2 font-display text-xl font-semibold tracking-tight text-on-deep focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none sm:top-6 sm:left-6"
     >
       TripMate
     </Link>
