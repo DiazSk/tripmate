@@ -61,11 +61,6 @@ export interface PlaceDetail {
   duration: string;
 }
 
-export interface ItineraryPreferences {
-  tags: string[];
-  vibe: string | null;
-}
-
 export interface TraceSummary {
   id: string;
   type: string;

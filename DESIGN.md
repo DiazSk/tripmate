@@ -23,6 +23,11 @@ colors:
   map-pin-red: "#FF3B30"
   marker-glass: "rgb(15 23 42 / 0.58)"
   marker-border: "rgba(255, 255, 255, 0.16)"
+  shadow-control: "rgba(0, 0, 0, 0.32)"
+  shadow-panel: "rgba(0, 0, 0, 0.37)"
+  shadow-thumb: "rgba(0, 0, 0, 0.4)"
+  shadow-marker: "rgba(0, 0, 0, 0.45)"
+  shadow-object: "rgba(0, 0, 0, 0.55)"
 typography:
   hero:
     fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
@@ -159,7 +164,7 @@ The home page's first viewport is the sharpest statement of the thesis: it is a 
 A cool near-black slate carrying the entire surface layer, one warm amber for anything the user can act on, and two map-native colours that deliberately sit outside the brand palette.
 
 ### Primary
-- **Signal Amber** (`{colors.accent}`): the only saturated colour in the system. Primary buttons, the active day tab, the budget bar fill, the selected-tier ring and check badge, focus rings, category and weather icons, the Total budget tile. It is a *light* colour, so anything printed on it takes the dark **Espresso** foreground (`{colors.accent-foreground}`), never white.
+- **Signal Amber** (`{colors.accent}`): the only saturated colour in the system. Primary buttons, the active day tab, the budget bar fill, the selected-tier ring and check badge, focus rings, category and weather icons, the day-spend Total row. It is a *light* colour, so anything printed on it takes the dark **Espresso** foreground (`{colors.accent-foreground}`), never white.
 - **Signal Amber Bright** (`{colors.accent-hover}`): hover state for every amber fill, and the second stop in the generation loader's rotating sweep.
 - **Amber Wash** (`{colors.tag-highlight-bg}` / `{colors.tag-highlight-fg}`): the one tinted chip, carried only by AI-attributed tags. Every other chip stays neutral glass.
 
@@ -170,7 +175,9 @@ A cool near-black slate carrying the entire surface layer, one warm amber for an
 - **Steel Muted** (`{colors.muted}`): secondary text on the plain canvas and on Cesium's relocated credit line.
 - **Glass Muted** (`{colors.glass-muted}`): the muted value *inside* a glass panel. Slate-300 rather than slate-400, because a translucent panel over bright terrain pushes slate-400 below the floor.
 - **Hairline** (`{colors.card-border}`): every glass edge, every divider, every internal rule.
-- **Chip Glass** (`{colors.tag-neutral-bg}` / `{colors.tag-neutral-fg}`) and **Tile Glass** (`{colors.tile}` / `{colors.tile-foreground}`): white-wash fills for chips and budget tiles, so the amber Total tile is the only one that pops.
+- **Chip Glass** (`{colors.tag-neutral-bg}` / `{colors.tag-neutral-fg}`) and **Tile Glass** (`{colors.tile}` / `{colors.tile-foreground}`): white-wash fills for chips and tiles, so the amber Total row is the only thing in the band that pops.
+- **Alert Red** (`text-red-400`, `border-red-500/30`, `bg-red-500/10`, and `bg-red-600` on the one solid destructive-adjacent button): not a second accent — it appears only when something failed or a day ran over budget, never as decoration or category. `red-400` and not `red-600` for text: inside `.glass-itinerary` the panel redefines `--foreground` to white, and dark red on dark slate is the wrong red.
+- **Shadow black** (`{colors.shadow-control}` at 0.32, `{colors.shadow-panel}` at 0.37, `{colors.shadow-thumb}` at 0.4, `{colors.shadow-marker}` at 0.45, `{colors.shadow-object}` at 0.55): the five alphas of the shadow vocabulary below, one per surface class. They are shadow, not surface — they never fill anything, and they belong to no tonal ramp.
 
 ### Tertiary (map-native, outside the brand palette)
 - **Route Blue** (`{colors.route-blue}`, with `#0060DF` casing): the day's arcs, the stop stems and their glow pools.
@@ -196,7 +203,9 @@ or the separation between map and interface erodes one reasonable-looking case a
 
 **The Two Foregrounds Rule.** `--accent-foreground` means "text on amber" and is dark. `--on-deep` means "text on something dark" and is light. They are not interchangeable; conflating them is the specific bug this palette was rebuilt to fix.
 
-**The Darken-Never-Lighten Rule.** Anything layered over photography or terrain is tinted toward slate or black, never toward white. Over the itinerary's photo bands the budget tiles are black-tinted glass (`bg-black/25`, Total at `bg-black/40`); white-tinted tiles drop their labels to roughly 2:1 over a bright photo.
+**The Darken-Never-Lighten Rule.** Anything layered over photography or terrain is tinted toward slate or black, never toward white. Over the itinerary's photo bands the budget tiles are black-tinted glass at `bg-black/25`; white-tinted tiles drop their labels to roughly 2:1 over a bright photo. The Total row keeps its amber fill, which is opaque and so unaffected by whatever is behind it.
+
+**The Constant-Ground Rule.** A surface's colour must not depend on whether an image has finished loading. The day-spend band once branded its background, its border, its text colour *and* all five tiles on `headerPhoto` being truthy, so the whole band changed character a second or two after first paint. The band now paints `rgb(var(--surface-deep-rgb) / 0.7)` unconditionally and the blurred photo arrives *behind* it on `.value-in`: a photo adds texture, never a repaint. The same applies to a stop's avatar — the category tile is the base layer and never unmounts, the photo resolves over it.
 
 ## Typography
 
@@ -231,7 +240,11 @@ or the separation between map and interface erodes one reasonable-looking case a
 
 **Rhythm.** Panels pad at `p-5 sm:p-6` (20/24px). Stacked panels within a docked column gap at 24px; rows within a panel at 12–16px; chips and inline metadata at 6px. Section breaks inside a panel are a `border-t border-card-border` with equal padding above and below (20px).
 
-**Breakpoints.** Only two matter: `sm` (640px) flips the docked panel from full-bleed to right-docked and turns the map controls on, and `lg` (1024px) reveals the itinerary's stacked photo column. `md` exists in the shell's flex direction but no longer changes any composition.
+**Breakpoints.** Only two matter: `sm` (640px) flips the docked panel from full-bleed to right-docked and turns the full map control stack on, and `lg` (1024px) reveals the itinerary's stacked photo column — desktop-only by design, because at `sm` the panel is 360px wide and a 112px photo column leaves the stop names nowhere to wrap. `md` exists in the shell's flex direction but no longer changes any composition.
+
+**The docked panel is one component.** `DockedPanel` owns that geometry — `top-16 right-5 bottom-5 left-5` full-bleed below `sm`, `top-6 right-6 bottom-6 w-[40%] min-w-[360px] max-w-[520px]` above it — and all three surfaces that dock content use it. Gutters match the pages' own `p-5 sm:p-6` rhythm; they were hand-written per page at 24px against a 20px page padding.
+
+**The map on a phone.** Below `sm` the full-bleed panel covers the globe completely, so two things were true at once: the day drawn on the globe was invisible on a phone, and the control stack had nowhere to sit that wasn't on top of the panel — which is why it was simply hidden, leaving a phone able to drag the camera into a disoriented pose with nothing to recover it. Both halves move together instead. `DockedPanel collapsible` renders a sticky 44px grabber below `sm` that shrinks the panel to a `--mobile-sheet-h` (45dvh) bottom sheet, and `.app-shell:has(.docked-panel-collapsed) .map-controls` brings the stack back in the corner that just opened up. One token drives the sheet's height and the stack's offset from it, so they cannot drift. `/trips` is deliberately *not* collapsible — no route is drawn there, so there is no map under it worth revealing. The phone set is reduced to the zoom pill and the compass: pinch already covers magnification, nothing but a reset covers a lost heading, and neither a 20px slider thumb nor a camera-angle toggle belongs on a touch surface.
 
 **Map chrome.** `MapControls` is fixed bottom-left (`bottom-10 left-6`), hidden below `sm`, and suppressed entirely when the current surface carries `.map-chrome-hidden` — a page-level opt-out for steps that are a form over a decorative globe rather than a map being read.
 
@@ -385,6 +398,15 @@ A 200px near-opaque slate disc — dark is the one axis the imagery is not — w
 ### Do:
 - **Do** build every new surface from `.glass-itinerary` at 16px radius with `p-5 sm:p-6`, and let its scoped `--foreground` / `--muted` / `--card-border` do the colour work.
 - **Do** add `pointer-events-auto` to every interactive box you place inside the shell's overlay.
+- **Do** put every failed request in an `ErrorNote`. One component, one treatment, `role="alert"`, on every route. Soft failures that block nothing — a geocoder miss — stay as muted 12px text where they happened. And check `res.ok` before reading the body: a 500 whose payload has no data key silently rendered `/trips`' empty state, which told the visitor their saved trips were gone.
+- **Do** give every long model call the `GenerationLoader`, not a changed word on a button, and make the surface underneath `pointer-events-none` + `aria-busy` while it runs. **Every `LOADER` word must be exactly 10 letters** — globals.css hardcodes `.loader-letter:nth-child(1..10)`, and a dev-only assertion beside the constant now says so out loud.
+- **Do** hide a surface with `hidden` rather than unmounting it when its state is worth keeping. `{!selectedStop && <ItineraryCard/>}` threw away the active day index, the panel's scroll position and any running tour every time someone opened a place detail — a stop on day 5 came back as day 1. A `display:none` sibling contributes no box, so nothing else moves. When you do this, stop side effects explicitly: the tour's interval survives the hide, and a camera flying every 6.5s while someone reads about one place is worse than the accidental stop it replaced.
+- **Do** move focus when a panel replaces another. `PlaceDetailPanel` focuses its own `tabIndex={-1}` heading, because selecting a stop unmounts the row that had focus and it otherwise lands on `<body>`.
+- **Do** make custom controls answer to the keyboard: the day tabs are a real `tablist`/`tab`/`tabpanel` with `aria-selected`, a roving `tabIndex` and arrow/Home/End traversal, and the tier cards are a `radiogroup` labelled by their own heading rather than three independent `aria-pressed` toggles. Colour alone never carries selection.
+- **Do** print what a badge knows rather than hiding it in `title`. The weather badge reads the real forecast (`day.weatherDetail`) for its icon, range, rain chance and typical-weather caveat, and falls back to parsing the model's prose only for trips saved before that field existed. The fallback returns **no** label rather than a guess — "Windy and grey" used to come back as a sun captioned "Clear".
+- **Do** scroll the one element that should move. `element.scrollIntoView()` walks *every* scrollable ancestor, so even `block: "nearest"` on a day tab scrolled the docked panel and hid the surface's own top row; set `scrollLeft` on the strip instead. The exception is deliberate: the overspend banner *does* call `scrollIntoView`, because it is inserted above what you were reading and the browser's scroll anchoring would otherwise hold that content still and push the alert off the top.
+- **Do** keep targets at 44px, and reach it with `min-h-11` plus horizontal padding rather than by growing type. Where the layout genuinely cannot give it — the floating stop marker cards are map labels pinned to world coordinates — the affordance has a 44px equivalent elsewhere: those cards are `aria-hidden` with `tabIndex={-1}`, because they duplicate the panel's focusable stop rows and put up to eight redundant tab stops between the wordmark and the content.
+- **Do** keep any field the user types into at 16px. Below that, iOS Safari zooms the whole viewport on focus. This applies to the small "Actual" spend inputs too, which were 12px.
 - **Do** reserve amber for things the user acts on, and put the dark `--accent-foreground` on top of it — never white.
 - **Do** compose new surface tints as `rgb(var(--surface-deep-rgb) / α)` rather than introducing a new grey.
 - **Do** darken toward slate or black over photography and terrain, and use `tabular-nums` on every figure.
@@ -412,6 +434,12 @@ A 200px near-opaque slate disc — dark is the one axis the imagery is not — w
 - **Don't** mark the selected stop with a ring, halo or pulse on the ground. Selection is the accent on that stop's stem, pool and adjoining arcs, plus the ring on its own card. A pulsing blue circle at the stem's base was built and removed: it drew a second marker for a stop that already had one, and put the emphasis at the bottom of the stem where nothing else is.
 - **Don't** add geometry to a route without routing it through `RouteGeometry.reposition`. The route is drawn before its real altitude is known, and anything that misses the correction detaches from the rest at an oblique angle.
 - **Don't** apply `.font-hero` outside the landing headline.
+- **Don't** trust what the model sends. `normalizeDays` in `src/lib/itinerary.ts` runs on every itinerary entering the app — both `parseJsonResponse` calls and the saved-trip `GET` — because `Stop.category: StopCategory` and `cost: number` were contracts the types asserted and nothing enforced. An unrecognised category landed in no budget bucket at all (printing `$NaN`) and turned `CATEGORY_ICON[category]` into `<undefined />`, which throws a white screen. Normalize at the door; keep the render-site `?? PinIcon` as a crash guard, not as a second validation layer.
+- **Don't** sum money anywhere but `src/lib/itinerary.ts`. `dayPlanned` is the plan, `daySpendByCategory` is what was actually spent (`actualCost ?? cost`), `daySpend` is *defined as* that breakdown's total, and `tripSpend` sums those. Three components used to sum the same figures independently and disagreed on both `actualCost` and non-numeric guards, so entering a real spend on `/trip/[id]` moved the overspend banner but not the budget bar — two totals for one number, on screen together. The Total row *is* the budget bar's per-day contribution; that is what makes it unrepeatable.
+- **Don't** print an unformatted date or figure. `formatDate` / `formatDateWithWeekday` / `formatDateRange` / `formatMoney` in `src/lib/format.ts` are the only ways. Three date formats were once on screen at once — an ambiguous un-localized `09-01-26`, a raw ISO string, and the native picker's — and money was localized in exactly one component, so `$1200` and `~$1,200` appeared in the same session.
+- **Don't** show a tile, heading, chip or label for a value that isn't there. The day-spend band drops any category that cost nothing and always shows Total; an empty note, an empty tips array and a day with no stops each render nothing or say so in words. `Food $0 · Entry $0 · Transit $0 · Stay $0 · Total $160` was the shape of getting this wrong.
+- **Don't** signal a state with colour alone. Over budget carries the word "over" and the amount, because the bar clamps at 100% and 300% over looked identical to exactly on budget.
+- **Don't** ship a development tool to a visitor. The LLM trace viewer is mounted only when `NODE_ENV === "development"`; it is a `z-50` FAB on every route that opens raw prompts and raw model responses, drawn in the light stone palette this system replaced.
 
 ## History
 

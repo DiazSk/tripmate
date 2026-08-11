@@ -90,6 +90,12 @@
   --marker-glow-active:
     0 0 0 1px var(--accent), 0 6px 26px rgba(0, 0, 0, 0.5),
     0 0 22px rgb(255 179 64 / 0.35);
+
+  /* How tall the docked panel is when a phone collapses it to a bottom sheet. Read by
+     DockedPanel for its own height and by the mobile map-control rule for where to sit
+     above it, so the two cannot drift apart. Just under half the viewport: enough sheet
+     to keep a day's stops readable, enough map to be worth revealing. */
+  --mobile-sheet-h: 45dvh;
 }
 
 @theme inline {
@@ -150,6 +156,31 @@ body {
    decorative globe, not a map being read, and there is no route drawn there anyway. */
 .app-shell:has(.map-chrome-hidden) .stop-marker-layer {
   display: none;
+}
+
+/* --- The map on a phone -----------------------------------------------------------------
+   Below `sm` the docked panel is full-bleed, so two things are true at once: the globe is
+   invisible, and the control stack has nowhere to sit that isn't on top of the panel. That
+   is why the controls were simply hidden here — which left a phone able to drag the camera
+   into a disoriented pose with nothing to recover it.
+
+   Both halves move together instead. DockedPanel's collapse turns the panel into a bottom
+   sheet, and only then do the controls appear, in the corner that just opened up. The sheet's
+   height is one value read by both, so the two can't drift apart.
+
+   The reduced set is deliberate: the zoom pill and the compass, because pinch already covers
+   magnification and nothing but a reset covers a lost heading. The tilt slider and the 2D/3D
+   toggle stay behind `sm:` in the component — a 15px rotated thumb is not a touch target, and
+   a phone reading a bottom sheet is not the place to be composing camera angles. */
+@media (width < 40rem) {
+  .app-shell:has(.docked-panel-collapsed) .map-controls {
+    display: flex;
+    right: 1.25rem;
+    /* The sheet's own height, plus the 1.25rem the panel is inset from the bottom, plus a
+       0.75rem gap. Dropping the inset term is what put the compass 8px under the sheet. */
+    bottom: calc(var(--mobile-sheet-h) + 1.25rem + 0.75rem);
+    left: auto;
+  }
 }
 
 /* --- Floating stop markers -------------------------------------------------------------
@@ -271,19 +302,23 @@ body {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.3);
 }
+/* 20px, up from 15px. The rotated track is 18px tall inside a 22px pill, so the thumb can't
+   grow to a 44px target without redrawing the whole control — but this is a pointer-only
+   affordance now (`sm:` and up, hidden on touch), and 20px is as large as the pill allows
+   while the thumb still reads as riding on the track rather than swallowing it. */
 .tilt-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 15px;
-  height: 15px;
-  margin-top: -6px;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
   border-radius: 999px;
   background: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 .tilt-slider::-moz-range-thumb {
-  width: 15px;
-  height: 15px;
+  width: 20px;
+  height: 20px;
   border: none;
   border-radius: 999px;
   background: #ffffff;
@@ -426,10 +461,14 @@ body {
   position: static !important;
   padding-right: 0 !important;
 }
+/* 0.75rem, the system's Label step, rather than the 10px this was. Required
+   attribution should not compete with the interface, but 10px muted text over
+   arbitrary terrain is closer to unreadable than to quiet — and 10px is off the
+   type ramp entirely. */
 .cesium-widget-credits,
 .cesium-widget-credits a {
   color: var(--muted) !important;
-  font-size: 10px !important;
+  font-size: 0.75rem !important;
   text-shadow: none !important;
 }
 
@@ -507,7 +546,9 @@ body {
   width: 200px;
   height: 200px;
   border-radius: 50%;
-  font-size: 1.2rem;
+  /* 1.125rem, the Title step — 1.2rem was a one-off, and the difference across a
+     200px disc is under a pixel. */
+  font-size: 1.125rem;
   font-weight: 300;
   color: var(--on-deep);
   user-select: none;

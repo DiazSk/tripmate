@@ -1,6 +1,17 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { PlaceDetail, Stop } from "@/lib/types";
+import { formatMoney } from "@/lib/format";
+
+/** The field labels inside this panel. Uppercase is a field-label device in this
+ *  system, but a styled div is not a heading — these were unreachable by heading
+ *  navigation, which is the main way a long panel gets skimmed. */
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">{children}</h2>
+  );
+}
 
 export default function PlaceDetailPanel({
   stop,
@@ -20,18 +31,31 @@ export default function PlaceDetailPanel({
   onBack: () => void;
   actualCost?: number;
   onActualCostChange?: (value: number | undefined) => void;
-  /** Remaining stops for the same day, in order — powers the "Next Up" quick-nav list. */
+  /** Remaining stops for the same day, in order — powers the "Next up" quick-nav list. */
   upcomingStops?: Stop[];
   onSelectUpcoming?: (stop: Stop) => void;
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Selecting a stop unmounts the row that had focus, so focus lands on <body> and
+  // a keyboard or screen-reader user is left at the top of the document with no
+  // indication the panel opened. Move it to the panel's own heading instead — and
+  // re-run per stop, because "Next up" swaps the content without remounting.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [stop.name]);
+
+  const numberFieldClass =
+    "h-11 w-24 rounded-md border border-card-border bg-white/10 pr-2 pl-6 text-base tabular-nums text-foreground focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
+
   return (
     <div className="glass-itinerary flex flex-col rounded-2xl p-5 sm:p-6">
       <button
         type="button"
         onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 self-start rounded-full px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="mb-4 -ml-3 flex min-h-11 items-center gap-1.5 self-start rounded-full px-3 text-sm font-medium text-muted transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
-        <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
           <path
             d="M12 5l-5 5 5 5"
             stroke="currentColor"
@@ -43,60 +67,81 @@ export default function PlaceDetailPanel({
         Back to itinerary
       </button>
 
-      <h2 className="font-display text-xl font-semibold text-foreground">{stop.name}</h2>
-      <p className="mt-1 text-sm text-muted">{stop.note}</p>
+      {/* tabIndex={-1} makes the heading a focus target without putting it in the tab
+          order — it is where focus goes when this panel replaces the itinerary. */}
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-display text-xl font-semibold text-foreground focus-visible:outline-none"
+      >
+        {stop.name}
+      </h1>
+      {stop.note && <p className="mt-1 text-sm text-muted">{stop.note}</p>}
 
-      <div className="mt-5 space-y-4 text-sm">
+      {/* The guidebook text arrives from a model call per stop and nothing here is
+          instant, so the region announces its own state rather than filling silently. */}
+      <div className="mt-5 space-y-4 text-sm" aria-busy={loading} aria-live="polite">
         {loading && (
-          <div className="animate-pulse space-y-3">
-            <div className="h-3 w-full rounded bg-foreground/10" />
-            <div className="h-3 w-5/6 rounded bg-foreground/10" />
-            <div className="h-3 w-2/3 rounded bg-foreground/10" />
-          </div>
-        )}
-
-        {error && <p className="text-sm text-red-400">{error}</p>}
-
-        {detail && !loading && (
           <>
-            <p className="leading-relaxed text-foreground/90">{detail.history}</p>
-            <div>
-              <div className="text-xs font-semibold tracking-wide text-muted uppercase">
-                Best time to visit
-              </div>
-              <p className="mt-1 text-foreground/90">{detail.bestTime}</p>
-            </div>
-            <div>
-              <div className="text-xs font-semibold tracking-wide text-muted uppercase">
-                Suggested duration
-              </div>
-              <p className="mt-1 text-foreground/90">{detail.duration}</p>
-            </div>
-            <div>
-              <div className="text-xs font-semibold tracking-wide text-muted uppercase">Tips</div>
-              <ul className="mt-1 list-disc space-y-1 pl-4 text-foreground/90">
-                {detail.tips.map((tip, i) => (
-                  <li key={i}>{tip}</li>
-                ))}
-              </ul>
+            <span className="sr-only">Looking up {stop.name}…</span>
+            <div className="animate-pulse space-y-3" aria-hidden="true">
+              <div className="h-3 w-full rounded bg-foreground/10" />
+              <div className="h-3 w-5/6 rounded bg-foreground/10" />
+              <div className="h-3 w-2/3 rounded bg-foreground/10" />
             </div>
           </>
         )}
 
+        {error && !loading && <p className="text-sm text-red-400">{error}</p>}
+
+        {detail && !loading && (
+          <>
+            {detail.history && <p className="leading-relaxed text-foreground/90">{detail.history}</p>}
+            {detail.bestTime && (
+              <div>
+                <FieldLabel>Best time to visit</FieldLabel>
+                <p className="mt-1 text-foreground/90">{detail.bestTime}</p>
+              </div>
+            )}
+            {detail.duration && (
+              <div>
+                <FieldLabel>Suggested duration</FieldLabel>
+                <p className="mt-1 text-foreground/90">{detail.duration}</p>
+              </div>
+            )}
+            {/* Guarded: an empty tips array used to leave the heading standing over an
+                empty list. */}
+            {detail.tips?.length > 0 && (
+              <div>
+                <FieldLabel>Tips</FieldLabel>
+                <ul className="mt-1 list-disc space-y-1 pl-4 text-foreground/90">
+                  {detail.tips.map((tip, i) => (
+                    <li key={i}>{tip}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* A response can succeed and carry nothing — the panel body was then simply
+            blank, with no loading, no error and nothing to read. */}
+        {!loading && !error && !detail && (
+          <p className="text-sm text-muted">
+            No guidebook entry for this place yet. Reopening it will try again.
+          </p>
+        )}
+
         {onSelectUpcoming && upcomingStops && upcomingStops.length > 0 && (
           <div className="border-t border-card-border pt-4">
-            <div className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">
-              Next up
-            </div>
-            <div
-              className="flex gap-2 overflow-x-auto pb-1 [-webkit-mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]"
-            >
+            <FieldLabel>Next up</FieldLabel>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1 [-webkit-mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]">
               {upcomingStops.map((next, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => onSelectUpcoming(next)}
-                  className="shrink-0 rounded-xl border border-card-border bg-white/10 px-3 py-2 text-left transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                  className="min-h-11 shrink-0 rounded-xl border border-card-border bg-white/10 px-3 py-2 text-left transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                 >
                   <div className="text-sm font-medium text-foreground">{next.name}</div>
                   {(next.time || next.durationLabel) && (
@@ -110,22 +155,33 @@ export default function PlaceDetailPanel({
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-card-border pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-card-border pt-4">
           <span className="font-medium tabular-nums text-foreground">
-            Estimated cost: ${stop.cost}
+            Estimated {formatMoney(stop.cost)}
           </span>
           {onActualCostChange && (
             <label className="flex items-center gap-2 text-xs text-muted">
               Actual
-              <input
-                type="number"
-                min={0}
-                defaultValue={actualCost}
-                onBlur={(e) =>
-                  onActualCostChange(e.target.value === "" ? undefined : Number(e.target.value))
-                }
-                className="w-20 rounded-md border border-card-border bg-white/10 px-2 py-1 text-xs tabular-nums text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25"
-              />
+              <span className="relative flex items-center">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-2.5 text-base text-muted"
+                >
+                  $
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="decimal"
+                  defaultValue={actualCost}
+                  onBlur={(e) =>
+                    onActualCostChange(e.target.value === "" ? undefined : Number(e.target.value))
+                  }
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                  className={numberFieldClass}
+                />
+              </span>
             </label>
           )}
         </div>

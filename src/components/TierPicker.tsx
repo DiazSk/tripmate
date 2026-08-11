@@ -2,6 +2,7 @@
 
 import { Check } from "lucide-react";
 import { TIERS, TierId, estimateTierTotal } from "@/lib/tiers";
+import { formatMoney } from "@/lib/format";
 
 // Above this multiple of the entered budget, a tier's real price is treated
 // as an aspirational stretch rather than a genuine option worth the same
@@ -24,7 +25,13 @@ export default function TierPicker({
   onSelect: (tier: TierId) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    // A radiogroup, not three toggle buttons. `aria-pressed` on each card announced
+    // three independent on/off controls where there is one choice between three.
+    <div
+      role="radiogroup"
+      aria-labelledby="style-heading"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+    >
       {TIERS.map((tier, i) => {
         const isSelected = selected === tier.id;
         const total = days === null ? null : estimateTierTotal(tier, days);
@@ -33,13 +40,18 @@ export default function TierPicker({
         // dates land and `total` becomes a real number.
         const overBudget = ratio > OVER_BUDGET_MULTIPLIER;
         const priceLabel =
-          total === null ? `$${tier.dailyRate}/day` : `~$${total.toLocaleString()}`;
+          total === null ? `${formatMoney(tier.dailyRate)}/day` : `~${formatMoney(total)}`;
         return (
           <button
             key={tier.id}
             type="button"
             onClick={() => onSelect(tier.id)}
-            aria-pressed={isSelected}
+            role="radio"
+            aria-checked={isSelected}
+            // The name is built here rather than left to concatenate: the tier's own
+            // name led with the illustration's alt text ("Private yacht at night on
+            // calm water…") because a decorative background image sits inside the button.
+            aria-label={`${tier.name} — ${priceLabel}${overBudget ? `, about ${ratio.toFixed(1)} times your budget` : ""}. ${tier.description}.`}
             // Fans in after the console's cells and the section heading, continuing the same
             // stagger rather than starting a second one.
             style={{ animationDelay: `${360 + i * 70}ms` }}
@@ -50,7 +62,7 @@ export default function TierPicker({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={tier.imageSrc}
-              alt={tier.imageAlt}
+              alt=""
               className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105 ${
                 isSelected ? "scale-105" : ""
               }`}
@@ -88,13 +100,17 @@ export default function TierPicker({
                 <Check className="h-4 w-4" strokeWidth={2.5} />
               </div>
             )}
-            <div className="relative z-10 p-3">
+            {/* aria-hidden on the whole visible block: the button carries its own
+                composed label above, and the tier's name — which lives only in
+                `tier.name` — now appears on the card rather than only in the prompt. */}
+            <div aria-hidden="true" className="relative z-10 p-3">
               <div className="font-display text-base font-semibold text-white">{tier.headline}</div>
-              {/* `description`, not `longDescription` — the short line was written for exactly
-                  this size, and the card is 200px tall now that it sits under the form rather
-                  than owning its own step. */}
+              {/* The tier's name joins its description rather than sitting above the
+                  headline as a kicker, which the system bans outright. Same shape the
+                  itinerary card's header uses, so the style is named identically in both
+                  places — until now `tier.name` existed only inside the prompt. */}
               <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/80">
-                {tier.description}
+                <span className="font-semibold text-white">{tier.name}</span> · {tier.description}
               </div>
             </div>
           </button>
