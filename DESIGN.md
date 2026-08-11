@@ -21,6 +21,8 @@ colors:
   tile-foreground: "#e3e9f1"
   route-blue: "#0A84FF"
   map-pin-red: "#FF3B30"
+  marker-glass: "rgb(15 23 42 / 0.58)"
+  marker-border: "rgba(255, 255, 255, 0.16)"
 typography:
   hero:
     fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
@@ -138,7 +140,7 @@ components:
 
 **Creative North Star: "The Lit Cockpit Over a Turning Earth"**
 
-The whole application is one scene: a full-bleed, slowly auto-rotating CesiumJS globe rendered from Google Photorealistic 3D Tiles, with every piece of interface floating above it as dark frosted glass. There is no page background, no content pane, no second world. `AppShell` renders exactly three layers on every route — the globe at z-0, a viewport-spanning content overlay at z-10, and app chrome (wordmark, map controls) at z-20 — and that structure never varies by route or by step. What changes between screens is which glass boxes are on stage, not what is behind them.
+The whole application is one scene: a full-bleed, slowly auto-rotating CesiumJS globe rendered from Google Photorealistic 3D Tiles, with every piece of interface floating above it as dark frosted glass. There is no page background, no content pane, no second world. `AppShell` renders exactly four layers on every route — the globe at z-0, a viewport-spanning content overlay at z-10, the floating stop markers at z-15, and app chrome (wordmark, map controls) at z-20 — and that structure never varies by route or by step. What changes between screens is which glass boxes are on stage, not what is behind them.
 
 The material is deliberately singular. One slate, `rgb(15 23 42)`, is the substance of every panel, control pill, badge, photo scrim and loader disc; only its alpha and its blur radius change. That shared origin is what keeps a 56px-blurred itinerary panel, a 20px-blurred zoom pill and a near-opaque loader reading as one system instead of four similar greys. Against that cool, neutral field sits exactly one warm colour — amber `#ffb340` — and it is reserved for interaction: primary buttons, the active day tab, the budget bar fill, focus rings, category icons, the Total tile. Nothing decorative is amber.
 
@@ -171,10 +173,20 @@ A cool near-black slate carrying the entire surface layer, one warm amber for an
 - **Chip Glass** (`{colors.tag-neutral-bg}` / `{colors.tag-neutral-fg}`) and **Tile Glass** (`{colors.tile}` / `{colors.tile-foreground}`): white-wash fills for chips and budget tiles, so the amber Total tile is the only one that pops.
 
 ### Tertiary (map-native, outside the brand palette)
-- **Route Blue** (`{colors.route-blue}`, with `#0060DF` casing): the day-route polyline and stop markers on the globe.
+- **Route Blue** (`{colors.route-blue}`, with `#0060DF` casing): the day's arcs, the stop stems and their glow pools.
 - **Pin Red** (`{colors.map-pin-red}`, with `#C1271F` stroke): the destination teardrop pin and the compass needle.
 
 These two are map affordances that must read against arbitrary satellite imagery at any brightness. They are not part of the interface palette and must never appear in a panel, chip or button.
+
+**The one exception, in the other direction.** `{colors.accent}` is allowed onto the globe, and only
+to mark the stop the user is *touching*: the hovered or selected stem, its glow pool, and the arcs
+either side of it. Amber on the globe means "you are pointing at this" — never "this is a Tuesday".
+
+Per-day accent colours were considered for the arcs and rejected. Only the active day is ever
+drawn, so a per-day ramp has nothing to distinguish itself from; it would have meant a new
+five-colour palette earning its keep on a single day's route, and `Stop` carries no day identity
+anyway (the day is just the index in `Itinerary.days[]`). Keep this exception to interaction state,
+or the separation between map and interface erodes one reasonable-looking case at a time.
 
 ### Named Rules
 
@@ -213,7 +225,7 @@ These two are map affordances that must read against arbitrary satellite imagery
 
 ## Layout
 
-**The shell.** `AppShell` is a `h-dvh`, `overflow-hidden` flex container with three stacked layers: the globe absolutely positioned at z-0, a `pointer-events-none absolute inset-0 z-10 overflow-y-auto` overlay holding the route's children, and `BrandMark` + `MapControls` as z-20 siblings of that overlay. Pages never own the background and never own the wordmark.
+**The shell.** `AppShell` is a `h-dvh`, `overflow-hidden` flex container with four stacked layers: the globe absolutely positioned at z-0, a `pointer-events-none absolute inset-0 z-10 overflow-y-auto` overlay holding the route's children, `StopMarkerLayer` at z-15, and `BrandMark` + `MapControls` as z-20 siblings of that overlay. The marker layer sits between them for a reason: above the content overlay so a stop's card is never buried by a panel, below the chrome, which always wins. Pages never own the background and never own the wordmark.
 
 **Two content shapes.** A surface is either a *centred column* (landing hero, plan card at `max-w-5xl`) laid out in normal flow inside `<main class="p-5 sm:p-6">`, or a *right-docked panel*: `fixed top-16 right-6 bottom-6 left-6 z-10 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]`. The docked panel is the pattern for the result view, `/trips`, and `/trip/[id]`. `top-16` below `sm` is not arbitrary — the panel goes full-bleed there and has to start clear of the wordmark AppShell pins to the viewport's top-left.
 
@@ -326,6 +338,39 @@ SSE 4 was tested and rejected — it buys *no* further detail (2.01 m is Google'
 costing 21 fps and 1.1 GB of texture. The residual difference between regions is mesh density
 inside tiles of equal declared error, which is Google's data and not a setting.
 
+### The Day on the Globe (signature)
+The map has to be readable on its own — you should be able to take the day off it without the
+panel. Four pieces, all built in `mapRoute.ts` and all floating at one sampled altitude:
+
+- **A glass name card per stop**, and it is an HTML overlay rather than a Cesium billboard. A
+  billboard is a texture, so it cannot carry a backdrop blur, and every surface in this system is
+  blurred glass. `StopMarkerLayer` reprojects each card every `postRender` frame with
+  `SceneTransforms.worldToWindowCoordinates` — the CSS-pixel variant, because `resolutionScale` is
+  customised here and the drawing-buffer variant is a different space. It scales by distance
+  (`clamp(900000 / (d + 260000), 0.55, 1)`) and hides on a dot-product horizon check against the
+  geodetic surface normal, so a stop on the far side of the globe does not smear across the limb.
+- **A lit stem out of a soft glow pool** at each stop, replacing the flat blue dot that had
+  nowhere to put a name. The stem is 150m of world space, so it grows and shrinks with everything
+  else; the pool is two concentric discs at falling alpha, because a Cesium ellipse takes a flat
+  fill and a soft edge has to be stacked.
+- **Raised dashed arcs** between consecutive stops: a great circle at 96 samples, lifted on a sine
+  so it leaves and meets the ground flat. Two polylines each — a wide low-alpha glow base and the
+  dashes on top. The base is not decoration; dashes alone disappear against a mid-grey rooftop.
+- **A travelling shimmer** on the dashes, each arc lagging the last by a fraction of a cycle so
+  the pulse reads as moving along the day rather than every arc breathing at once.
+
+Two things the layer must keep doing. It is a **sibling** of the content overlay in `AppShell`,
+never a child — that overlay scrolls, and a card inside it slides off its own stem. And the cards'
+`visibility` belongs to the render loop alone: React re-applies inline styles on every re-render,
+so a React-managed `visibility` blanks every card for a frame each time the provider updates.
+
+**Names declutter, stops do not.** Cards are suppressed when they would overlap (two axes, since a
+card is wide and short, scaled by the card's own scale). Losing that contest costs a stop its name,
+not its presence — the stem and pool are always drawn, so a dense day still shows every stop and
+reveals more names as the camera comes in. This is not optional polish: one place legitimately has
+one coordinate, and the preview trip's day 1 has eight stops on six coordinates with three of them
+identical, because three things happen at the same hotel.
+
 ### Map Controls
 Apple-Maps-grade chrome, and the only place `.glass-control` is used: a vertical stack of 44px targets — a two-button zoom pill, a 2D/3D toggle labelled with the mode you'll *get*, a rotated native `range` tilt slider in a round pill, and a compass whose needle is written directly to the DOM on `postRender` so steady-state re-renders stay at zero. The tilt slider is a native input rotated -90°, not a library and not `writing-mode: vertical-lr`; its track and thumb need explicit rules because `appearance: none` strips the platform rendering.
 
@@ -362,7 +407,9 @@ A 200px near-opaque slate disc — dark is the one axis the imagery is not — w
 - **Don't** introduce a solid, opaque card surface. If a panel needs to be more legible, raise its alpha within the one slate; do not leave the material.
 - **Don't** use a second accent hue for status, category or sentiment. Positive/neutral chips are both neutral glass by design.
 - **Don't** put a kicker, eyebrow, or all-caps label above a headline; don't use a hard offset shadow; don't use glyph or icon-font icons — every icon in the system is inline SVG.
-- **Don't** let map-native colours (route blue, pin red) into the interface, or interface colours onto the globe.
+- **Don't** let map-native colours (route blue, pin red) into the interface. Interface colours stay off the globe too, with the single documented exception of `--accent` marking the hovered or selected stop.
+- **Don't** animate anything on the globe from JS without checking `prefers-reduced-motion` yourself. The blanket rule in `globals.css` reaches CSS only; a WebGL material driven from `performance.now()` pulses straight through the preference.
+- **Don't** add geometry to a route without routing it through `RouteGeometry.reposition`. The route is drawn before its real altitude is known, and anything that misses the correction detaches from the rest at an oblique angle.
 - **Don't** apply `.font-hero` outside the landing headline.
 
 ## History
