@@ -13,7 +13,6 @@ import {
 import type { Entity, Viewer } from "cesium";
 import {
   buildRouteGeometry,
-  cssColor,
   RouteGeometry,
   RouteStop,
   sampleRouteAltitude,
@@ -58,9 +57,6 @@ interface MapCameraContextValue {
   /** Index of the selected stop — clicked, or stepped onto by the tour. Outlives hover. */
   activeIndex: number | null;
   setActiveIndex: (index: number | null) => void;
-  /** Pulsing highlight ring on whichever stop is currently selected; `null` clears it.
-   *  Coordinates only — callers reach it from a `Stop`, which has no route identity. */
-  setActivePin: (stop: Pick<RouteStop, "lat" | "lng"> | null) => void;
 }
 
 const MapCameraContext = createContext<MapCameraContextValue | null>(null);
@@ -74,7 +70,6 @@ const LABEL_OUTLINE = "#0f172a";
 /** The landing-page pose, mirrored from GlobeBackground's initial `setView`. Kept in sync by
  *  hand — these are true altitudes, unlike `flyTo`'s `height` which is a HeadingPitchRange range. */
 const HERO_VIEW = { lng: 8, lat: 22, height: 2_500_000, headingDeg: 5, pitchDeg: -45 };
-const PULSE_PERIOD_MS = 1400;
 /** Framing floor for a day's stops, in metres — a lone stop gives a zero-radius sphere, and a
  *  tight cluster gives one small enough that the camera dives into the building mesh. */
 const MIN_ROUTE_RADIUS_M = 400;
@@ -104,8 +99,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   const pendingRef = useRef<Flight | null>(null);
   const pendingRouteRef = useRef<RouteStop[] | null>(null);
   const routeEntitiesRef = useRef<Entity[]>([]);
-  const activePinRef = useRef<Entity | null>(null);
-  /** Altitude the current route was drawn at, so the selection halo lands on the line. */
+  /** Altitude the current route was drawn at, so new geometry lands on the arcs. */
   const routeAltitudeRef = useRef(0);
   /** Bumped per showDayRoute call so a slow height sample from an older day can't win. */
   const routeGenerationRef = useRef(0);
@@ -277,7 +271,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       if (!viewer) {
         markerRef.current = null;
         routeEntitiesRef.current = [];
-        activePinRef.current = null;
         setReady(false);
         return;
       }
@@ -333,8 +326,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     routeGeometryRef.current = null;
     if (markerRef.current) viewer.entities.remove(markerRef.current);
     markerRef.current = null;
-    if (activePinRef.current) viewer.entities.remove(activePinRef.current);
-    activePinRef.current = null;
     // Otherwise a request queued while the tileset was loading replays onto the empty globe.
     pendingRef.current = null;
     pendingRouteRef.current = null;
@@ -357,39 +348,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const setActivePin = useCallback((stop: Pick<RouteStop, "lat" | "lng"> | null) => {
-    const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed()) return;
-    import("cesium").then((Cesium) => {
-      if (viewer.isDestroyed()) return;
-      if (activePinRef.current) {
-        viewer.entities.remove(activePinRef.current);
-        activePinRef.current = null;
-      }
-      if (!stop) return;
-
-      const startedAt = performance.now();
-      const blue = Cesium.Color.fromCssColorString(cssColor("--route-blue"));
-      activePinRef.current = viewer.entities.add({
-        // Same altitude the route was drawn at, so the halo sits on its stop dot rather than
-        // clamping to the hidden globe at height 0.
-        position: Cesium.Cartesian3.fromDegrees(stop.lng, stop.lat, routeAltitudeRef.current),
-        point: {
-          // Pulsing halo: size oscillates continuously while this stop is active. Narrow
-          // amplitude on purpose — a 10→22px swing read as a throb; 14→20 reads as a breath.
-          pixelSize: new Cesium.CallbackProperty(() => {
-            const phase = ((performance.now() - startedAt) % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
-            return 17 + Math.sin(phase * Math.PI * 2) * 3;
-          }, false),
-          color: blue.withAlpha(0.22),
-          outlineColor: blue,
-          outlineWidth: 2,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-      });
-    });
-  }, []);
-
   return (
     <MapCameraContext.Provider
       value={{
@@ -406,7 +364,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         setHoveredIndex,
         activeIndex,
         setActiveIndex,
-        setActivePin,
       }}
     >
       {children}
