@@ -4,13 +4,20 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   ReactNode,
   RefObject,
 } from "react";
 import type { Entity, Viewer } from "cesium";
-import { buildRouteGeometry, cssColor, RouteStop, sampleRouteAltitude } from "@/lib/mapRoute";
+import {
+  buildRouteGeometry,
+  cssColor,
+  RouteGeometry,
+  RouteStop,
+  sampleRouteAltitude,
+} from "@/lib/mapRoute";
 
 interface MapCameraContextValue {
   setViewer: (viewer: Viewer | null) => void;
@@ -36,6 +43,20 @@ interface MapCameraContextValue {
   /** Altitude the current route is drawn at. A ref, not state: the marker layer reads it once
    *  per frame to place cards on top of the stems, and that must not re-render anything. */
   routeAltitudeRef: RefObject<number>;
+  /**
+   * Index of the stop being pointed at, from either side — a marker card or an itinerary row.
+   * Both surfaces read the same value, which is what makes the highlight bidirectional without
+   * either needing to know anything about the other.
+   *
+   * Plain state rather than a subscription: hover changes at human speed, a few times a second,
+   * so a context re-render is cheap. It is the *positioning* loop that must never re-render, and
+   * that reads refs only.
+   */
+  hoveredIndex: number | null;
+  setHoveredIndex: (index: number | null) => void;
+  /** Index of the selected stop — clicked, or stepped onto by the tour. Outlives hover. */
+  activeIndex: number | null;
+  setActiveIndex: (index: number | null) => void;
   /** Pulsing highlight ring on whichever stop is currently selected; `null` clears it.
    *  Coordinates only — callers reach it from a `Stop`, which has no route identity. */
   setActivePin: (stop: Pick<RouteStop, "lat" | "lng"> | null) => void;
@@ -82,6 +103,10 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   const routeGenerationRef = useRef(0);
   const [ready, setReady] = useState(false);
   const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  /** The live geometry, so hover emphasis can reach it without rebuilding the route. */
+  const routeGeometryRef = useRef<RouteGeometry | null>(null);
 
   const flyTo = useCallback(
     (lat: number, lng: number, height: number, pitchDeg: number, label?: string) => {
@@ -150,6 +175,11 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     // Published before the viewer check: the cards are plain DOM and cost nothing to mount
     // early, and they stay hidden until the per-frame loop has a viewer to project them with.
     setRouteStops(stops);
+    // A new day means no stop is hovered or selected, and stale indices would be wrong rather
+    // than merely unhelpful — day 1 of the preview trip has 8 stops and day 2 has 7, so index 7
+    // would emphasise nothing while still reading as a selection in the panel.
+    setHoveredIndex(null);
+    setActiveIndex(null);
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) {
       // Same race as flyTo: the itinerary renders in a few hundred ms, the tileset takes
@@ -206,6 +236,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       const altitudeAtDraw = routeAltitudeRef.current;
       const geometry = buildRouteGeometry(viewer, Cesium, stops, altitudeAtDraw);
       routeEntitiesRef.current = geometry.entities;
+      routeGeometryRef.current = geometry;
 
       const altitude = await sampleRouteAltitude(viewer, Cesium, groundPositions);
       // A fast day-tab switch can land a newer route mid-sample; the newest request wins, and a
@@ -216,6 +247,12 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       geometry.reposition(altitude);
     });
   }, []);
+
+  // Hover wins over selection: while the pointer is on something, that is what the globe should
+  // be pointing at. Falls back to the selected stop when the pointer leaves.
+  useEffect(() => {
+    routeGeometryRef.current?.setEmphasis(hoveredIndex ?? activeIndex);
+  }, [hoveredIndex, activeIndex, routeStops]);
 
   const setViewer = useCallback(
     (viewer: Viewer | null) => {
@@ -262,6 +299,9 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     // Otherwise the day's marker cards survive a navigation back to the landing page — the
     // globe never unmounts, so nothing else clears them.
     setRouteStops([]);
+    setHoveredIndex(null);
+    setActiveIndex(null);
+    routeGeometryRef.current = null;
     if (markerRef.current) viewer.entities.remove(markerRef.current);
     markerRef.current = null;
     if (activePinRef.current) viewer.entities.remove(activePinRef.current);
@@ -333,6 +373,10 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         showDayRoute,
         routeStops,
         routeAltitudeRef,
+        hoveredIndex,
+        setHoveredIndex,
+        activeIndex,
+        setActiveIndex,
         setActivePin,
       }}
     >
