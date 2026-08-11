@@ -6,6 +6,7 @@ import { DayPlan, Itinerary, Stop, StopCategory } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
+import { useStopTour } from "@/lib/useStopTour";
 import BudgetBar from "./BudgetBar";
 import {
   ChevronLeftIcon,
@@ -14,7 +15,9 @@ import {
   EntryIcon,
   FoodIcon,
   LodgingIcon,
+  PauseIcon,
   PinIcon,
+  PlayIcon,
   RainIcon,
   SunIcon,
   TransitIcon,
@@ -230,6 +233,7 @@ export default function ItineraryCard({
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
   const { showDayRoute, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
+  const { playing: touring, toggle: toggleTour } = useStopTour();
   const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // Glowing pins + connecting arc for whichever day is active, redrawn on every day-tab switch.
@@ -348,6 +352,23 @@ export default function ItineraryCard({
         </div>
 
         {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
+
+        {/* Only worth offering when there is more than one place to move between. */}
+        {day.stops.length > 1 && (
+          <button
+            type="button"
+            onClick={toggleTour}
+            aria-pressed={touring}
+            className="mb-3 flex items-center gap-2 rounded-full bg-tag-neutral-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-tag-neutral-bg/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            {touring ? (
+              <PauseIcon className="h-3.5 w-3.5 text-accent" />
+            ) : (
+              <PlayIcon className="h-3.5 w-3.5 text-accent" />
+            )}
+            {touring ? "Stop tour" : "Play tour"}
+          </button>
+        )}
 
         {day.lodging && (
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-white/10 p-3">
