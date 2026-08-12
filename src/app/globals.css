@@ -929,3 +929,39 @@ body {
     opacity: 1;
   }
 }
+
+/* My Memories' postcards are the one other scoped material exception in the app besides
+   Blue Hour, and for the same kind of reason: a physical paper object cannot be frosted
+   slate glass, so this trades the One Slate Rule for an opaque cream paper surface —
+   confined to this one class, never bleeding into `.glass-itinerary` or any shared
+   component. `--postcard-ink`/`--postcard-ink-muted` exist because the base system's
+   `--foreground`/`--muted` are tuned for light text on dark glass; paper needs the
+   opposite pairing, so this is a second, narrower retint scope rather than a text-color
+   override scattered across each card. */
+.memory-postcards {
+  --postcard-paper: #f4f1ea;
+  --postcard-ink: #2b2620;
+  --postcard-ink-muted: #6b6355;
+}
+
+.memory-postcard {
+  background: var(--postcard-paper);
+  color: var(--postcard-ink);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  transition:
+    transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Straightening is shared, but the shadow-deepen is hover-only: Tailwind's focus-visible
+   ring utility also composes onto `box-shadow`, so a shared rule setting box-shadow here
+   would silently overwrite the ring and leave keyboard focus invisible on the one card
+   type in the app that isn't itself a `ring-accent` glass edge. */
+.memory-postcard:hover,
+.memory-postcard:focus-visible {
+  transform: rotate(0deg) scale(1.02);
+}
+
+.memory-postcard:hover {
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55);
+}

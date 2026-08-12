@@ -2,10 +2,65 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Stamp } from "lucide-react";
 import { TripSummary } from "@/lib/types";
 import ErrorNote from "@/components/ErrorNote";
 import DockedPanel from "@/components/DockedPanel";
 import { formatDateRange, formatMoney } from "@/lib/format";
+import { usePlacePhoto } from "@/lib/usePlacePhoto";
+
+/** A small, stable tilt per trip so the stack doesn't re-shuffle on every render — derived
+ *  from the id itself rather than `Math.random()`, which would pick a new angle on every
+ *  re-render (a fresh save, a refetch) and make the "physical object" read as jittery. */
+function tiltFor(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return (Math.abs(hash) % 41) / 10 - 2;
+}
+
+function MemoryPostcard({ trip }: { trip: TripSummary }) {
+  const photo = usePlacePhoto(trip.destination, "full");
+  return (
+    <Link
+      href={`/trip/${trip.id}`}
+      style={{ transform: `rotate(${tiltFor(trip.id)}deg)` }}
+      // `.memory-postcard`'s own box-shadow is plain unlayered CSS, which the cascade
+      // layers spec puts above any `@layer`-emitted rule regardless of specificity —
+      // including Tailwind's `ring-*` utilities, which compose onto `box-shadow` and
+      // would render as invisible here. `outline` is a separate property, so the two
+      // don't fight.
+      className="memory-postcard pointer-events-auto block rounded-2xl p-2.5 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+    >
+      {/* Base tile paints first and never unmounts — the Constant-Ground Rule, same as
+          ItineraryCard's header: a photo miss or a slow Wikipedia lookup must not leave a
+          blank postcard, and a resolved photo must not repaint the card's own material. */}
+      <div
+        className="relative h-36 overflow-hidden rounded-xl bg-cover bg-center"
+        style={photo ? { backgroundImage: `url(${photo})` } : { backgroundColor: "var(--postcard-ink-muted)" }}
+      >
+        <div
+          aria-hidden="true"
+          className="absolute top-3 right-3 flex h-9 w-8 flex-col items-center justify-center gap-0.5 rounded-[3px] border border-dashed"
+          style={{
+            borderColor: "rgba(0,0,0,0.35)",
+            backgroundColor: "rgba(255,255,255,0.35)",
+            color: "rgba(0,0,0,0.45)",
+          }}
+        >
+          <Stamp className="h-3.5 w-3.5" strokeWidth={2} />
+        </div>
+      </div>
+      <div className="flex items-baseline justify-between gap-2 px-1.5 pt-2.5 pb-1">
+        <h2 className="font-display text-base font-semibold" style={{ color: "var(--postcard-ink)" }}>
+          {trip.destination}
+        </h2>
+      </div>
+      <div className="px-1.5 pb-1 text-xs tabular-nums" style={{ color: "var(--postcard-ink-muted)" }}>
+        {formatDateRange(trip.startDate, trip.endDate)} · {formatMoney(trip.budget)} budget
+      </div>
+    </Link>
+  );
+}
 
 export default function TripsPage() {
   const [trips, setTrips] = useState<TripSummary[]>([]);
@@ -62,22 +117,10 @@ export default function TripsPage() {
         )}
 
         {trips.length > 0 && (
-          <ul className="space-y-3">
+          <ul className="memory-postcards space-y-5">
             {trips.map((trip) => (
               <li key={trip.id}>
-                <Link
-                  href={`/trip/${trip.id}`}
-                  className="glass-itinerary block rounded-2xl p-5 transition-colors hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-                >
-                  {/* h2, not a styled div: the list had no structure to navigate by. */}
-                  <h2 className="font-display text-base font-semibold text-foreground">
-                    {trip.destination}
-                  </h2>
-                  <div className="mt-1 text-sm text-muted tabular-nums">
-                    {formatDateRange(trip.startDate, trip.endDate)} ·{" "}
-                    {formatMoney(trip.budget)} budget
-                  </div>
-                </Link>
+                <MemoryPostcard trip={trip} />
               </li>
             ))}
           </ul>
