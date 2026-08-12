@@ -231,18 +231,42 @@ body {
   font-weight: 600;
   font-size: 0.875rem;
   line-height: 1.2;
-  color: rgb(244 247 250 / 0.82);
+  color: rgb(244 247 250 / 0.88);
   white-space: nowrap;
+  /* Real Google Photorealistic 3D Tiles are arbitrary and uncontrolled — unlike a curated hero
+     photo, a stop can land on a bright rooftop, a pale plaza, anywhere. .hero-legible's
+     bottom-offset-only shadow was built for one art-directed photo and DESIGN.md already
+     documents its known contrast risk as an accepted, deliberate tradeoff for that one surface;
+     here, over arbitrary imagery, an offset-only shadow leaves the left/right edges of thin
+     italic strokes under-defined exactly where the map happens to be light. The first two
+     layers below are zero-offset (an omnidirectional halo hugging every edge, not just the
+     underside) at high alpha; the third keeps the soft ambient depth cue. */
   text-shadow:
-    0 1px 3px rgb(0 0 0 / 0.9),
-    0 3px 14px rgb(0 0 0 / 0.75),
-    0 6px 44px rgb(0 0 0 / 0.5);
+    0 0 2px rgb(0 0 0 / 1),
+    0 0 6px rgb(0 0 0 / 0.9),
+    0 3px 16px rgb(0 0 0 / 0.55);
   opacity: calc(0.5 + var(--marker-depth, 1) * 0.5);
   filter: blur(calc((1 - var(--marker-depth, 1)) * 1.5px));
   transition:
     color var(--marker-transition),
     opacity var(--marker-transition),
     filter var(--marker-transition);
+}
+
+/* A soft, edgeless vignette behind the name — not a card: no fill boundary, no border, nothing
+   a viewer could point at and call "a box". It exists purely so contrast never depends on
+   what happens to be under a stop; the shadow above handles the common case, this is the
+   guarantee for the worst one (a bright, busy rooftop directly behind the text). Negative
+   z-index needs no extra work to land behind the text: `filter` on the parent always creates a
+   stacking context (even at blur(0px)), so this is scoped to sit under this card's own text and
+   nothing else. */
+.marker-title-card::before {
+  content: "";
+  position: absolute;
+  inset: -0.5em -0.65em;
+  background: radial-gradient(ellipse 62% 85% at 50% 42%, rgb(0 0 0 / 0.4), transparent 72%);
+  z-index: -1;
+  pointer-events: none;
 }
 
 /* The one accent mark: a 1px amber rule draws in left-to-right under the name via its own
