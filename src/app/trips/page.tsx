@@ -33,11 +33,25 @@ function MemoryPostcard({ trip }: { trip: TripSummary }) {
     >
       {/* Base tile paints first and never unmounts — the Constant-Ground Rule, same as
           ItineraryCard's header: a photo miss or a slow Wikipedia lookup must not leave a
-          blank postcard, and a resolved photo must not repaint the card's own material. */}
+          blank postcard, and a resolved photo must not repaint the card's own material. The
+          photo itself lives on its own layer over that base, keyed on its URL, and fades in
+          with .value-in rather than overwriting the tile's own paint — mirroring
+          BlurredPhotoLayer (ItineraryCard.tsx) instead of a hard pop the moment it resolves. */}
       <div
-        className="relative h-36 overflow-hidden rounded-xl bg-cover bg-center"
-        style={photo ? { backgroundImage: `url(${photo})` } : { backgroundColor: "var(--postcard-ink-muted)" }}
+        className="memory-postcard-photo relative h-36 overflow-hidden rounded-xl"
+        style={{ backgroundColor: "var(--postcard-ink-muted)" }}
       >
+        {photo && (
+          <div
+            key={photo}
+            aria-hidden="true"
+            className="value-in absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${photo})` }}
+          />
+        )}
+        {/* A lucide icon rather than the comp's literal "TRIP/MATE" wordmark: repeating the
+            brand mark at a size this small read as barely-legible clutter, and a stamp glyph
+            carries the same postal motif without it. */}
         <div
           aria-hidden="true"
           className="absolute top-3 right-3 flex h-9 w-8 flex-col items-center justify-center gap-0.5 rounded-[3px] border border-dashed"
@@ -55,6 +69,10 @@ function MemoryPostcard({ trip }: { trip: TripSummary }) {
           {trip.destination}
         </h2>
       </div>
+      {/* Stacked rather than the comp's single baseline row: the comp only carried a date
+          range, but keeping the budget figure (per an explicit ask, so the postcard's own
+          caption doesn't lose data the old list showed) makes one row too long to stay
+          legible at the docked panel's ~360-520px width. */}
       <div className="px-1.5 pb-1 text-xs tabular-nums" style={{ color: "var(--postcard-ink-muted)" }}>
         {formatDateRange(trip.startDate, trip.endDate)} · {formatMoney(trip.budget)} budget
       </div>

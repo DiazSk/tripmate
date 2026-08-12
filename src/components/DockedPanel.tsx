@@ -54,7 +54,12 @@ export default function DockedPanel({
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           aria-expanded={!collapsed}
-          className="glass-control sticky top-0 z-20 -mt-1 mb-1 flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium text-white/90 transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none sm:hidden"
+          // `.glass-control`'s own box-shadow is plain unlayered CSS, which cascade layers
+          // rank above any `@layer`-emitted rule regardless of specificity — including
+          // Tailwind's `ring-*` utility, which composes onto `box-shadow`. Combined with
+          // `outline-none` here, keyboard focus on this button was completely invisible.
+          // `outline` is a separate property, so it doesn't fight the control's own shadow.
+          className="glass-control sticky top-0 z-20 -mt-1 mb-1 flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium text-white/90 transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 sm:hidden"
         >
           <svg
             viewBox="0 0 20 20"
