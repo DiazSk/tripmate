@@ -187,9 +187,10 @@ body {
   .app-shell:has(.docked-panel-collapsed) .map-controls {
     display: flex;
     right: 1.25rem;
-    /* The sheet's own height, plus the 1.25rem the panel is inset from the bottom, plus a
-       0.75rem gap. Dropping the inset term is what put the compass 8px under the sheet. */
-    bottom: calc(var(--mobile-sheet-h) + 1.25rem + 0.75rem);
+    /* The sheet's own height, plus a 0.75rem gap. The panel itself is inset-0 below `sm`
+       now (no bottom margin of its own), so there is no second inset term to add here —
+       adding one back is what put the compass under the sheet before. */
+    bottom: calc(var(--mobile-sheet-h) + 0.75rem);
     left: auto;
   }
 }

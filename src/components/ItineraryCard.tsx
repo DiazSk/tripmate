@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { DayPlan, Itinerary, Stop, StopCategory } from "@/lib/types";
 import { DayWeather } from "@/lib/weather";
@@ -254,8 +255,12 @@ function StopRow({
            h-10 avatar) and the next avatar begins at 100% + 1rem (the parent's space-y-4), so
            the height is 100% + 1rem - 2.75rem. The old +0.5rem overshot by 2.25rem and drew
            straight through the following stop's avatar and name. Update this if the avatar
-           size or the list gap changes. */
-        <div className="absolute top-11 left-5 h-[calc(100%-1.75rem)] w-px bg-card-border" />
+           size or the list gap changes.
+
+           left-6, not left-5: the avatar isn't flush with the row's edge, it sits inside the
+           button's own p-1 (0.25rem), so its true center is 0.25rem + 1.25rem (half the h-10
+           avatar) = 1.5rem. left-5 (1.25rem) drew the line a hair left of every node. */
+        <div className="absolute top-11 left-6 h-[calc(100%-1.75rem)] w-px bg-card-border" />
       )}
       <button
         type="button"
@@ -339,7 +344,7 @@ export default function ItineraryCard({
 
   if (!day) {
     return (
-      <div className="glass-itinerary rounded-2xl p-5 sm:p-6">
+      <div className="glass-itinerary rounded-none p-5 sm:rounded-2xl sm:p-6">
         <p className="text-sm text-muted">
           This plan came back with no days in it. Try generating it again.
         </p>
@@ -378,25 +383,45 @@ export default function ItineraryCard({
     "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-30";
 
   return (
-    <div className="glass-itinerary overflow-hidden rounded-2xl">
+    <div className="glass-itinerary overflow-hidden rounded-none sm:rounded-2xl">
       <div
-        className="relative flex min-h-[9rem] flex-col justify-end overflow-hidden p-5 text-on-deep sm:min-h-[11rem] sm:p-6"
+        className="relative flex min-h-[14rem] flex-col justify-end overflow-hidden p-5 text-on-deep sm:min-h-[18rem] sm:p-6"
         style={{ backgroundColor: "var(--surface-deep)" }}
       >
         {headerPhoto && (
-          /* Both stops come from --surface-deep so the tint matches the flat
-             no-photo fallback above and the panel around it. A scrim's job is to
-             darken, which is why this can't ride on --accent any more — the
-             accent is a light colour now. */
-          <BlurredPhotoLayer
-            photo={headerPhoto}
-            tint="linear-gradient(rgb(var(--surface-deep-rgb) / 0.35), rgb(var(--surface-deep-rgb) / 0.88))"
+          // A real photographic moment now, not a blurred backdrop — next/image
+          // (fill), not a CSS background-image, per the Optimized-Photo Rule:
+          // this box is overflow-hidden and would otherwise risk a GPU-layer
+          // softened blur independent of the source photo's own resolution.
+          <Image
+            key={headerPhoto}
+            src={headerPhoto}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 100vw, 520px"
+            className="value-in object-cover contrast-105 saturate-110"
           />
         )}
+        {/* Same bottom-up scrim recipe as the Memories hero tiles: 0.95 where the
+            heading sits, 0.5 at 38%, transparent by 70% — the Darken-Never-Lighten
+            Rule over a photo whose brightness is unknown ahead of time. */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to top, rgb(var(--surface-deep-rgb) / 0.95), rgb(var(--surface-deep-rgb) / 0.5) 38%, transparent 70%)",
+          }}
+        />
         <div className="relative z-10 flex flex-col gap-1">
+          {/* The active day, not the trip's day count — this is a "where am I right
+              now" stamp, so it has to move with dayIndex rather than stay fixed. */}
+          <span className="mb-1 inline-block w-fit -rotate-2 rounded bg-accent px-2 py-1 text-xs font-bold tracking-wide text-accent-foreground uppercase">
+            Day {dayIndex + 1} of {dayCount}
+          </span>
           {/* h1: this card is the top of its surface on both the result step and
               /trip/[id], neither of which had a level-1 heading at all. */}
-          <h1 className="font-display text-2xl font-semibold">
+          <h1 className="font-display text-2xl font-semibold italic">
             {cityName(destination)}: {dayCount} day{dayCount > 1 ? "s" : ""}
           </h1>
           {/* The tier's own name, which until now existed only inside the prompt —
