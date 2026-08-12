@@ -19,7 +19,14 @@ function HeroTile({ trip, className = "" }: { trip: TripSummary; className?: str
         <div
           key={photo}
           aria-hidden="true"
-          className="value-in absolute inset-0 bg-cover bg-center"
+          // contrast/saturate, not a new dependency or a color-grading pass: these tiles are
+          // real, uncurated photos of whatever the destination happens to be — no art
+          // direction, no shared exposure — unlike the landing page's hand-picked, edited
+          // scenes. The globe has the same problem with Google's photorealistic tiles and
+          // solves it the same way (DESIGN.md's Globe section: a deliberate, small
+          // colorBlendAmount "to return the separation" a bare mid-grey tile lost) rather
+          // than pretending every source photo already matches.
+          className="value-in absolute inset-0 bg-cover bg-center contrast-105 saturate-110"
           style={{ backgroundImage: `url(${photo})` }}
         />
       )}
@@ -155,15 +162,22 @@ function MemoryPostcard({ trip }: { trip: TripSummary }) {
           photo itself lives on its own layer over that base, keyed on its URL, and fades in
           with .value-in rather than overwriting the tile's own paint — mirroring
           BlurredPhotoLayer (ItineraryCard.tsx) instead of a hard pop the moment it resolves. */}
+      {/* 200px, not the h-36 (144px) this started at — at this card's own width that was
+          roughly a 3:1 letterbox, and a landscape photo whose subject is a single tall
+          landmark (a tower, a bridge) center-crops straight through the part of the photo
+          that made it recognizable. 200px matches the Tier Cards' own established photo
+          height (DESIGN.md: "a three-up grid of 200px-tall image buttons") rather than
+          inventing a second photo aspect ratio for the same kind of card. */}
       <div
-        className="memory-postcard-photo relative h-36 overflow-hidden rounded-xl"
+        className="memory-postcard-photo relative h-[200px] overflow-hidden rounded-xl"
         style={{ backgroundColor: "var(--postcard-ink-muted)" }}
       >
         {photo && (
           <div
             key={photo}
             aria-hidden="true"
-            className="value-in absolute inset-0 bg-cover bg-center"
+            // See HeroTile's own comment: same real-photo inconsistency, same fix.
+            className="value-in absolute inset-0 bg-cover bg-center contrast-105 saturate-110"
             style={{ backgroundImage: `url(${photo})` }}
           />
         )}
