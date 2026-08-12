@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Stamp } from "lucide-react";
 import { TripSummary } from "@/lib/types";
@@ -10,24 +11,35 @@ import { usePlacePhoto } from "@/lib/usePlacePhoto";
 
 /** One tile of the hero collage. A photo miss or slow lookup must not open a hole in the
  *  hero back to the live globe behind it — the tile's own solid slate base (matching
- *  MemoryPostcard's photo tile) is the permanent layer, the photo fades in over it. */
+ *  MemoryPostcard's photo tile) is the permanent layer, the photo fades in over it.
+ *
+ *  next/image, not a CSS background-image: a background-image on a box that also has
+ *  overflow-hidden + a hover transform (this one, via the bento grid's own hover — and
+ *  MemoryPostcard's) is a common trigger for the browser to promote it to its own
+ *  GPU-composited layer, which can rasterize/scale the photo at a visibly softer filter
+ *  quality than a plain <img> gets on the normal paint path. next/image also resizes and
+ *  re-encodes server-side instead of shipping the raw ~3840px source and asking the
+ *  browser to downscale it live — the same pipeline ImageRow already uses for the landing
+ *  page's own photos, ported here rather than reinvented. */
 function HeroTile({ trip, className = "" }: { trip: TripSummary; className?: string }) {
   const photo = usePlacePhoto(trip.destination, "full");
   return (
     <div className={`relative overflow-hidden bg-[rgb(var(--surface-deep-rgb))] ${className}`}>
       {photo && (
-        <div
+        <Image
           key={photo}
-          aria-hidden="true"
-          // contrast/saturate, not a new dependency or a color-grading pass: these tiles are
-          // real, uncurated photos of whatever the destination happens to be — no art
-          // direction, no shared exposure — unlike the landing page's hand-picked, edited
-          // scenes. The globe has the same problem with Google's photorealistic tiles and
-          // solves it the same way (DESIGN.md's Globe section: a deliberate, small
-          // colorBlendAmount "to return the separation" a bare mid-grey tile lost) rather
-          // than pretending every source photo already matches.
-          className="value-in absolute inset-0 bg-cover bg-center contrast-105 saturate-110"
-          style={{ backgroundImage: `url(${photo})` }}
+          src={photo}
+          alt=""
+          fill
+          sizes="(max-width: 640px) 50vw, 33vw"
+          // contrast/saturate, not a color-grading pass: these tiles are real, uncurated
+          // photos of whatever the destination happens to be — no art direction, no shared
+          // exposure — unlike the landing page's hand-picked, edited scenes. The globe has
+          // the same problem with Google's photorealistic tiles and solves it the same way
+          // (DESIGN.md's Globe section: a deliberate, small colorBlendAmount "to return the
+          // separation" a bare mid-grey tile lost) rather than pretending every source
+          // photo already matches.
+          className="value-in object-cover contrast-105 saturate-110"
         />
       )}
     </div>
@@ -172,13 +184,19 @@ function MemoryPostcard({ trip }: { trip: TripSummary }) {
         className="memory-postcard-photo relative h-[200px] overflow-hidden rounded-xl"
         style={{ backgroundColor: "var(--postcard-ink-muted)" }}
       >
+        {/* next/image, not a CSS background-image — see HeroTile's own comment for why a
+            background-image on an overflow-hidden + hover-transform box like this one
+            rasterizes softer than a plain <img>, independent of the source file's own
+            resolution. */}
         {photo && (
-          <div
+          <Image
             key={photo}
-            aria-hidden="true"
+            src={photo}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 100vw, 50vw"
             // See HeroTile's own comment: same real-photo inconsistency, same fix.
-            className="value-in absolute inset-0 bg-cover bg-center contrast-105 saturate-110"
-            style={{ backgroundImage: `url(${photo})` }}
+            className="value-in object-cover contrast-105 saturate-110"
           />
         )}
         {/* A lucide icon rather than the comp's literal "TRIP/MATE" wordmark: repeating the
