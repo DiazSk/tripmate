@@ -21,12 +21,9 @@ colors:
   tile-foreground: "#e3e9f1"
   route-blue: "#0A84FF"
   map-pin-red: "#FF3B30"
-  marker-glass: "rgb(15 23 42 / 0.58)"
-  marker-border: "rgba(255, 255, 255, 0.16)"
   shadow-control: "rgba(0, 0, 0, 0.32)"
   shadow-panel: "rgba(0, 0, 0, 0.37)"
   shadow-thumb: "rgba(0, 0, 0, 0.4)"
-  shadow-marker: "rgba(0, 0, 0, 0.45)"
   shadow-object: "rgba(0, 0, 0, 0.55)"
 typography:
   hero:
@@ -178,7 +175,7 @@ A cool near-black slate carrying the entire surface layer, one warm amber for an
 - **Hairline** (`{colors.card-border}`): every glass edge, every divider, every internal rule.
 - **Chip Glass** (`{colors.tag-neutral-bg}` / `{colors.tag-neutral-fg}`) and **Tile Glass** (`{colors.tile}` / `{colors.tile-foreground}`): white-wash fills for chips and tiles, so the amber Total row is the only thing in the band that pops.
 - **Alert Red** (`text-red-400`, `border-red-500/30`, `bg-red-500/10`, and `bg-red-600` on the one solid destructive-adjacent button): not a second accent — it appears only when something failed or a day ran over budget, never as decoration or category. `red-400` and not `red-600` for text: inside `.glass-itinerary` the panel redefines `--foreground` to white, and dark red on dark slate is the wrong red.
-- **Shadow black** (`{colors.shadow-control}` at 0.32, `{colors.shadow-panel}` at 0.37, `{colors.shadow-thumb}` at 0.4, `{colors.shadow-marker}` at 0.45, `{colors.shadow-object}` at 0.55): the five alphas of the shadow vocabulary below, one per surface class. They are shadow, not surface — they never fill anything, and they belong to no tonal ramp.
+- **Shadow black** (`{colors.shadow-control}` at 0.32, `{colors.shadow-panel}` at 0.37, `{colors.shadow-thumb}` at 0.4, `{colors.shadow-object}` at 0.55): the four alphas of the shadow vocabulary below, one per surface class. They are shadow, not surface — they never fill anything, and they belong to no tonal ramp. The stop marker no longer carries a box-shadow at all (nor any fill or border) — see The Day on the Globe, above.
 
 ### Tertiary (map-native, outside the brand palette)
 - **Route Blue** (`{colors.route-blue}`, with `#0060DF` casing): the day's arcs, the stop stems and their glow pools.
@@ -374,13 +371,28 @@ inside tiles of equal declared error, which is Google's data and not a setting.
 The map has to be readable on its own — you should be able to take the day off it without the
 panel. Four pieces, all built in `mapRoute.ts` and all floating at one sampled altitude:
 
-- **A glass name card per stop**, and it is an HTML overlay rather than a Cesium billboard. A
-  billboard is a texture, so it cannot carry a backdrop blur, and every surface in this system is
-  blurred glass. `StopMarkerLayer` reprojects each card every `postRender` frame with
-  `SceneTransforms.worldToWindowCoordinates` — the CSS-pixel variant, because `resolutionScale` is
-  customised here and the drawing-buffer variant is a different space. It scales by distance
-  (`clamp(900000 / (d + 260000), 0.55, 1)`) and hides on a dot-product horizon check against the
-  geodetic surface normal, so a stop on the far side of the globe does not smear across the limb.
+- **A title card per stop** (`.marker-title-card`), not a glass card — deliberately the one HTML
+  overlay in the system with no fill, no border and no blur. An earlier version *was* a small glass
+  chip (`.glass-marker`), matching every other surface's material; several bolder replacements
+  leaning into a sci-fi HUD/targeting-reticle register were mocked and rejected as reading like
+  generic "AI dashboard" styling rather than this app's own cinematic voice. The name now sits
+  directly on the globe in italic `.font-display`, legible via a text-shadow hugging the glyphs —
+  the same technique `.hero-legible` uses on the landing hero — rather than a scrim box. It is
+  still an HTML overlay rather than a Cesium billboard (a billboard is a texture and cannot carry
+  the app's other cinematic CSS effects), and `StopMarkerLayer` still reprojects each card every
+  `postRender` frame with `SceneTransforms.worldToWindowCoordinates` — the CSS-pixel variant,
+  because `resolutionScale` is customised here and the drawing-buffer variant is a different
+  space. It scales by distance (`clamp(900000 / (d + 260000), 0.55, 1)`) and hides on a
+  dot-product horizon check against the geodetic surface normal, so a stop on the far side of the
+  globe does not smear across the limb. A thin `--accent` rule draws in under the name on
+  hover/selection (`transform: scaleX(0) → scaleX(1)`, `transform-origin: left`) — the entire
+  activation, no lift, no glow ring. **Depth focus:** the same per-frame `scale` is also written
+  to `--marker-depth` on the anchor (one line alongside the existing `transform`/`visibility`
+  write, not new math), which the title card maps to opacity and a touch of blur — `var(--marker-
+  depth, 1)`, the fallback read *at the point of use* rather than redeclared on the card itself,
+  since a card-level default would win over the anchor's inherited value and silently disable the
+  effect. A distant name recedes like a shallow depth of field instead of only shrinking; the
+  focused/selected one reads sharp against it, like a rack focus.
 - **A lit stem out of a soft glow pool** at each stop, replacing the flat blue dot that had
   nowhere to put a name. The stem is 150m of world space, so it grows and shrinks with everything
   else; the pool is two concentric discs at falling alpha, because a Cesium ellipse takes a flat
@@ -505,7 +517,7 @@ It is also the one place per-route utility links live now: the wordmark (`href="
 - **Don't** put a kicker, eyebrow, or all-caps label above a headline; don't use a hard offset shadow; don't use glyph or icon-font icons — every icon in the system is inline SVG.
 - **Don't** let map-native colours (route blue, pin red) into the interface. Interface colours stay off the globe too, with the single documented exception of `--accent` marking the hovered or selected stop.
 - **Don't** animate anything on the globe from JS without checking `prefers-reduced-motion` yourself. The blanket rule in `globals.css` reaches CSS only; a WebGL material driven from `performance.now()` pulses straight through the preference.
-- **Don't** mark the selected stop with a ring, halo or pulse on the ground. Selection is the accent on that stop's stem, pool and adjoining arcs, plus the ring on its own card. A pulsing blue circle at the stem's base was built and removed: it drew a second marker for a stop that already had one, and put the emphasis at the bottom of the stem where nothing else is.
+- **Don't** mark the selected stop with a ring, halo or pulse on the ground. Selection is the accent on that stop's stem, pool and adjoining arcs, plus the thin rule under its own name card. A pulsing blue circle at the stem's base was built and removed: it drew a second marker for a stop that already had one, and put the emphasis at the bottom of the stem where nothing else is.
 - **Don't** add geometry to a route without routing it through `RouteGeometry.reposition`. The route is drawn before its real altitude is known, and anything that misses the correction detaches from the rest at an oblique angle.
 - **Don't** apply `.font-hero` outside the landing headline.
 - **Don't** trust what the model sends. `normalizeDays` in `src/lib/itinerary.ts` runs on every itinerary entering the app — both `parseJsonResponse` calls and the saved-trip `GET` — because `Stop.category: StopCategory` and `cost: number` were contracts the types asserted and nothing enforced. An unrecognised category landed in no budget bucket at all (printing `$NaN`) and turned `CATEGORY_ICON[category]` into `<undefined />`, which throws a white screen. Normalize at the door; keep the render-site `?? PinIcon` as a crash guard, not as a second validation layer.
@@ -517,6 +529,7 @@ It is also the one place per-route utility links live now: the wordmark (`href="
 
 ## History
 
+- **Stop marker: "Location Title Card"** (component-level, additive): replaced the glass-chip stop-name card (`.glass-marker`) with a card-less treatment — italic display serif directly on the globe, legible via a text-shadow rather than a scrim, a thin `--accent` rule that draws in on hover/selection, and a depth-of-field effect (`--marker-depth`, reusing the existing distance-scale value) that softens distant names. Chosen after several sci-fi HUD/targeting-reticle directions were mocked and explicitly rejected as reading like generic "AI dashboard" styling rather than this app's own restrained cinematic register (the same register Blue Hour already established). Scoped to `.marker-title-card`/`.marker-anchor` only — the stem, glow pool and arcs in `mapRoute.ts`, and the `postRender` reprojection/decluttering/scale math in `StopMarkerLayer.tsx`, are unchanged. See **The Day on the Globe**, above.
 - **"The Blue Hour Expedition"** (additive, not superseding): a scoped alternate identity (`.blue-hour-scene`) layered over the pre-generation flow only — the landing scroll story and the merged trip-form/tier-picker step. Replaces what used to be a single static poster viewport with a four-beat scroll sequence (curated photo hero → image row → mechanism copy → the "Plan a trip" reveal, withheld until the very end) and consolidates four scattered per-page "My memories"/"New trip" links into one persistent, route-aware `Navbar`. Unlike every other entry in this History section, this did not replace the base "Lit Cockpit" system — the result view, `/trips`, and `/trip/[id]` are unchanged and provably so (their `--accent`, `--surface-deep-rgb` etc. never repaint). See **The Blue Hour Expedition** above for the full system.
 - **"Overcast"** (superseded): full-bleed 3D globe with steel-blue translucent glass cards floating on top. Replaced because the steel-blue register never resolved and legibility over a moving map was inconsistent.
 - **"Roamly"** (superseded): a true split layout — warm cream/teal solid `.card` surfaces in their own pane beside a boxed-in globe pane, with an `AppShell` hero/split mode switched on `usePathname()`, and an explicit "no layered/glassmorphic panels" rule. It was retired wholesale: warm cream on cool slate read as two different design systems, the split pane surrendered the globe as the thing that carries the product, and the route-driven shell switch was fragile around the Cesium viewer's lifetime. The current world is the return to layered glass, done properly — one slate, one accent, one persistent globe, no pane switch.

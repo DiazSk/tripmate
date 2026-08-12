@@ -189,9 +189,13 @@ export default function StopMarkerLayer() {
           placed[placedCount * 2 + 1] = projected.y;
           placedCount++;
 
-          // Only `transform` and `visibility` — both composited, so no layout is triggered.
-          // `translate(-50%, -100%)` puts the card's bottom edge on the stem tip; the anchor's
-          // `transform-origin: bottom center` keeps it there through the scale.
+          // `transform`, `visibility` and this custom property — all three composited/inherited,
+          // so no layout is triggered. `translate(-50%, -100%)` puts the card's bottom edge on
+          // the stem tip; the anchor's `transform-origin: bottom center` keeps it there through
+          // the scale. `--marker-depth` is the same already-computed `scale` (0.55-1), handed to
+          // the title card below via CSS inheritance so it can drive opacity/blur for the
+          // rack-focus effect — not a second distance calculation.
+          node.style.setProperty("--marker-depth", scale.toFixed(3));
           node.style.transform = `translate3d(${projected.x.toFixed(1)}px, ${projected.y.toFixed(
             1
           )}px, 0) translate(-50%, -100%) scale(${scale.toFixed(3)})`;
@@ -249,7 +253,7 @@ export default function StopMarkerLayer() {
             tabIndex={-1}
             // The layer is pointer-events-none so the globe stays draggable through the gaps
             // between cards; each card opts back in. See DESIGN.md's Pointer-Events Opt-In Rule.
-            className="glass-marker pointer-events-auto"
+            className="marker-title-card pointer-events-auto"
             // Drives the lift/glow via CSS, and is also what the itinerary panel sets remotely
             // when the pointer is on its matching row — one attribute, both directions.
             data-hovered={hoveredIndex === i || activeIndex === i ? "true" : undefined}
