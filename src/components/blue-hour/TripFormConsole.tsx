@@ -6,6 +6,7 @@ import TierPicker from "@/components/TierPicker";
 import ErrorNote from "@/components/ErrorNote";
 import { TierId } from "@/lib/tiers";
 import { GeocodeOutcome } from "@/lib/useTripCamera";
+import { formatMoney } from "@/lib/format";
 
 // `text-base`, not the 14px body step: 16px is what stops iOS Safari zooming the viewport on
 // focus, and it's already a step the system uses (the hero subline).
@@ -54,6 +55,7 @@ function Field({
   delay,
   onActivate,
   grow = "flex-1",
+  badge,
   children,
 }: {
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -64,6 +66,11 @@ function Field({
   onActivate?: (cell: HTMLLabelElement, target: EventTarget | null) => void;
   /** Destination takes more of the row than the three fixed-width figures beside it. */
   grow?: string;
+  /** The End cell's live day-count readout — a real-time answer to the question this cell
+   *  is asking, the moment there's an answer, rather than only further down in the tier
+   *  copy. Keyed by its own text so completing the range replays `.pop-in` instead of
+   *  React reusing a stale node with no acknowledgement. */
+  badge?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -77,6 +84,7 @@ function Field({
       <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.025em] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
         {label}
+        {badge}
       </span>
       <div className="mt-1.5">{children}</div>
       <span
@@ -153,7 +161,7 @@ export default function TripFormConsole({
             e.preventDefault();
             onSubmit();
           }}
-          className={`hero-rise ${cardClass}`}
+          className={`hero-rise console-sheen relative overflow-hidden ${cardClass}`}
         >
           {/* The step had no heading of any kind — it opened straight onto four
               fields, so neither the page nor a screen reader named what you were
@@ -188,7 +196,19 @@ export default function TripFormConsole({
                 className={`${fieldInputClass} tabular-nums ${startDate ? fieldFilledTone : fieldEmptyTone}`}
               />
             </Field>
-            <Field icon={CalendarCheck} label="End" delay={200} onActivate={openNativePicker}>
+            <Field
+              icon={CalendarCheck}
+              label="End"
+              delay={200}
+              onActivate={openNativePicker}
+              badge={
+                days !== null && (
+                  <span key={days} className="pop-in rounded-full bg-tag-highlight-bg px-2 py-0.5 text-xs font-bold normal-case tracking-normal text-tag-highlight-fg tabular-nums">
+                    {days} {days === 1 ? "day" : "days"}
+                  </span>
+                )
+              }
+            >
               <input
                 required
                 type="date"
@@ -221,6 +241,14 @@ export default function TripFormConsole({
                   className={`${fieldInputClass} tabular-nums ${budget === 0 ? fieldEmptyTone : fieldFilledTone}`}
                 />
               </div>
+              {/* Live answer to what the figure above actually buys, the moment there's
+                  a real trip length to divide it by — otherwise the budget stays an
+                  abstract total until the tier cards reprice further down. */}
+              {days !== null && budget > 0 && (
+                <div key={`${budget}-${days}`} className="value-in mt-0.5 text-xs tabular-nums text-muted">
+                  {formatMoney(Math.round(budget / days))}/day for {days} {days === 1 ? "day" : "days"}
+                </div>
+              )}
             </Field>
           </div>
 
