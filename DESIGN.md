@@ -376,8 +376,15 @@ panel. Four pieces, all built in `mapRoute.ts` and all floating at one sampled a
   chip (`.glass-marker`), matching every other surface's material; several bolder replacements
   leaning into a sci-fi HUD/targeting-reticle register were mocked and rejected as reading like
   generic "AI dashboard" styling rather than this app's own cinematic voice. The name now sits
-  directly on the globe in italic `.font-display`, legible via a text-shadow hugging the glyphs —
-  the same technique `.hero-legible` uses on the landing hero — rather than a scrim box. It is
+  directly on the globe in italic `.font-display`. Legibility took two passes: the first shipped
+  with only `.hero-legible`'s bottom-offset-only text-shadow, which real testing against actual
+  Google Photorealistic 3D Tiles showed blending into bright, busy rooftops — `.hero-legible` was
+  built for one curated, art-directed photo (DESIGN.md already accepted a known contrast risk
+  there as a deliberate tradeoff for *that* surface only), not arbitrary, uncontrolled imagery a
+  stop can land on anywhere. The card now also carries a zero-offset omnidirectional shadow pair
+  (hugging every edge of a thin italic stroke, not only its underside) and a soft, edgeless
+  radial-gradient vignette behind the text (`::before`, `z-index: -1`, no fill boundary, no
+  border — not a scrim box, a guarantee for the worst case a photo-only shadow can't cover). It is
   still an HTML overlay rather than a Cesium billboard (a billboard is a texture and cannot carry
   the app's other cinematic CSS effects), and `StopMarkerLayer` still reprojects each card every
   `postRender` frame with `SceneTransforms.worldToWindowCoordinates` — the CSS-pixel variant,
