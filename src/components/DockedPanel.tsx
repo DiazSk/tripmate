@@ -7,9 +7,10 @@ import { useState } from "react";
  * "content over the globe" surface uses it: the home page's result view, /trips, and
  * /trip/[id].
  *
- * `top-16` below `sm`: the panel goes full-bleed there, so it has to start clear of
- * the wordmark AppShell pins to the viewport's top-left. From `sm` up it is
- * right-docked and the wordmark is nowhere near it.
+ * Top offset reads `--nav-h` (the fixed glass navbar's height, set in globals.css) plus
+ * the page's own gutter, at both breakpoints — a full-width fixed nav sits above a
+ * right-docked panel too, not just a full-bleed one, unlike the small top-left wordmark
+ * this replaced.
  *
  * **The collapse is not a nicety.** Below `sm` this panel covers the entire viewport,
  * which means the globe — the product's one piece of real imagery, and the thing the
@@ -38,12 +39,12 @@ export default function DockedPanel({
   return (
     <div
       aria-busy={busy || undefined}
-      className={`docked-panel fixed right-5 bottom-5 left-5 z-10 m-0 overflow-y-auto sm:top-6 sm:right-6 sm:bottom-6 sm:left-auto sm:h-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px] ${
+      className={`docked-panel fixed right-5 bottom-5 left-5 z-10 m-0 overflow-y-auto sm:right-6 sm:bottom-6 sm:left-auto sm:h-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px] ${
         busy ? "pointer-events-none" : "pointer-events-auto"
       } ${
         isCollapsed
-          ? "docked-panel-collapsed top-auto h-[var(--mobile-sheet-h)] sm:top-6"
-          : "top-16"
+          ? "docked-panel-collapsed top-auto h-[var(--mobile-sheet-h)] sm:top-[calc(var(--nav-h)+1.5rem)]"
+          : "top-[calc(var(--nav-h)+1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)]"
       } ${className}`}
     >
       {collapsible && (
