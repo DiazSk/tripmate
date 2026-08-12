@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo, Source_Serif_4 } from "next/font/google";
+import { Archivo, Source_Serif_4, Playfair_Display, Manrope } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
 import "./globals.css";
@@ -28,6 +28,26 @@ const archivo = Archivo({
   axes: ["wdth"],
 });
 
+// Blue Hour Expedition scene fonts — additive, scoped to `.blue-hour-scene` via
+// globals.css's `.font-scene-*` classes. Loading is global (a `.variable` class only
+// defines a CSS custom property on <html>) but usage stays scoped, so Source Serif 4
+// and Archivo remain untouched everywhere outside the redesigned landing/plan flow.
+const playfairDisplay = Playfair_Display({
+  variable: "--font-scene-display",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  style: ["italic", "normal"],
+});
+
+// Bricolage Grotesque was the poster face and is gone: the poster needed both weight and
+// width pushed to their limits, and Bricolage's width axis stops at 100%. Archivo (loaded
+// above) reaches 900 weight and 125% width, so `.font-scene-hero` uses `--font-hero`.
+const manrope = Manrope({
+  variable: "--font-scene-body",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
 export const metadata: Metadata = {
   title: "TripMate — Plan your trip",
   description: "AI-planned itineraries with real weather, budget tracking, and maps.",
@@ -35,7 +55,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sourceSerif.variable} ${archivo.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${sourceSerif.variable} ${archivo.variable} ${playfairDisplay.variable} ${manrope.variable} h-full antialiased`}
+    >
       <body className="min-h-full">
         {SHOW_LLM_TRACES ? (
           <LlmTraceFabProvider>

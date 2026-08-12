@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TripSummary } from "@/lib/types";
-import { headerLinkClass } from "@/components/BrandMark";
 import ErrorNote from "@/components/ErrorNote";
 import DockedPanel from "@/components/DockedPanel";
 import { formatDateRange, formatMoney } from "@/lib/format";
@@ -34,16 +33,11 @@ export default function TripsPage() {
       {/* Not collapsible: there is no route drawn on this surface, so there is no map
           under the panel worth revealing. */}
       <DockedPanel>
-        {/* Page title and its action. The TripMate wordmark is not here — AppShell pins it to
-            the top-left of the viewport, outside this docked column. */}
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="hero-legible font-display text-2xl font-semibold tracking-tight text-foreground">
-            My memories
-          </h1>
-          <Link href="/" className={headerLinkClass}>
-            New trip
-          </Link>
-        </div>
+        {/* The page's own title. Its "New trip" action used to sit beside it here —
+            moved into the global nav (Navbar.tsx), which now carries it on this route. */}
+        <h1 className="hero-legible font-display text-2xl font-semibold tracking-tight text-foreground">
+          My memories
+        </h1>
 
         {loading && (
           <p role="status" className="text-sm text-muted">

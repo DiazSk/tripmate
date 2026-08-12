@@ -1,10 +1,8 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import ItineraryCard from "@/components/ItineraryCard";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import { headerLinkClass } from "@/components/BrandMark";
 import ErrorNote from "@/components/ErrorNote";
 import DockedPanel from "@/components/DockedPanel";
 import { Itinerary, Trip } from "@/lib/types";
@@ -178,12 +176,8 @@ export default function TripView({
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
       <DockedPanel collapsible className="space-y-4">
-        <div className="flex justify-end">
-          <Link href="/trips" className={headerLinkClass}>
-            My memories
-          </Link>
-        </div>
-
+        {/* "My memories" used to sit here — moved into the global nav (Navbar.tsx),
+            which now carries it on this route. */}
         {error && <ErrorNote>{error}</ErrorNote>}
         {!trip && !error && (
           <p role="status" className="text-sm text-muted">

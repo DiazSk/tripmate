@@ -1,17 +1,16 @@
 "use client";
 
 import { ComponentType, ReactNode, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import FeedbackLoop from "@/components/FeedbackLoop";
 import TierPicker from "@/components/TierPicker";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
+import ScrollStory from "@/components/blue-hour/ScrollStory";
 import GenerationLoader from "@/components/cesium/GenerationLoader";
 import ErrorNote from "@/components/ErrorNote";
 import DockedPanel from "@/components/DockedPanel";
-import { headerLinkClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { Itinerary } from "@/lib/types";
 import { GeocodeOutcome, useTripCamera } from "@/lib/useTripCamera";
@@ -300,64 +299,24 @@ export default function Home() {
   }
 
   return (
+    // pt-[calc(var(--nav-h)+1.25rem)]: clearance for the fixed glass navbar (AppShell
+    // renders it above this content). Only the top padding changes — ScrollStory's own
+    // cancelling wrapper mirrors this exact value so its full-bleed sections still
+    // reach the very top, behind the (transparent) nav, unaffected by this gap.
     <main
-      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 sm:p-6 ${!preResult ? "dashboard-page" : "map-chrome-hidden"}`}
+      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : "map-chrome-hidden blue-hour-scene font-scene-body"}`}
     >
       {/* Refining is the same 30–60s wait as generating and used to show only a changed
           word on a button, with the stale itinerary still fully interactive underneath. */}
       <GenerationLoader active={generating || refining} mode={refining ? "refine" : "generate"} />
 
-      {/* AppShell owns the wordmark on every route, so a surface only supplies its own action.
-          Landing supplies none — "My memories" is already one of the two hero CTAs, and
-          repeating it here would be the same action twice in one viewport. */}
-      {step === "plan" && (
-        <div className="flex justify-end">
-          <Link href="/trips" className={headerLinkClass}>
-            My memories
-          </Link>
-        </div>
-      )}
+      {/* The plan step's own "My memories" link used to render here — moved into the
+          global nav (Navbar.tsx), which now carries it on every step of this route. */}
 
-      {/* `flex-1` inside <main>'s existing min-h-full flex column rather than h-dvh: <main>
-          carries its own p-5/p-6, so a viewport-height child would overflow by exactly that
-          padding and put a scrollbar on a page that should not scroll. */}
-      {step === "landing" && (
-        <section className="flex flex-1 flex-col items-center justify-center text-center">
-          <h1 className="hero-rise hero-legible font-hero text-[clamp(2.5rem,8vw,6rem)] leading-[0.88] text-on-deep">
-            <span className="block">Every day</span>
-            <span className="block">planned.</span>
-            <span className="block">Every dollar</span>
-            <span className="block">spent.</span>
-          </h1>
-          {/* Not text-sm: 96px to 14px is a jump, not a scale step, and this line carries the
-              mechanism the rest of the page only implies. */}
-          <p className="hero-rise hero-legible mt-7 max-w-xl text-balance text-base leading-relaxed text-on-deep [animation-delay:90ms] sm:text-lg">
-            Tell us where, when, and how much. Get a day-by-day plan that actually costs what
-            you said — with the weather already factored in.
-          </p>
-          <div className="hero-rise mt-9 flex flex-wrap items-center justify-center gap-3 [animation-delay:180ms]">
-            <button
-              type="button"
-              onClick={() => setStep("plan")}
-              // border-transparent, not no border: the ghost CTA beside it carries a 1px
-              // border, and without a matching one the two pills differ by 2px in height and
-              // sit a pixel apart on the baseline.
-              className="pointer-events-auto rounded-full border border-transparent bg-accent px-8 py-4 text-base font-medium text-accent-foreground shadow-lg shadow-black/30 transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none active:scale-[0.98]"
-            >
-              Plan a trip
-            </button>
-            <Link
-              href="/trips"
-              // No backdrop-blur and no fill — the globe runs clean through this pill, so it is
-              // an outline and a label, nothing more. The border sits at /45 rather than /25
-              // because without the frost behind it there is nothing else holding the shape.
-              className="hero-legible pointer-events-auto rounded-full border border-white/45 px-7 py-4 text-base font-medium text-on-deep transition-colors hover:border-white/70 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
-            >
-              My memories
-            </Link>
-          </div>
-        </section>
-      )}
+      {/* The scroll story owns its own full-bleed beats (each min-h-[140dvh]) rather than
+          living inside <main>'s flex-1 centering column — it needs real scroll height, not
+          a single centered viewport. */}
+      {step === "landing" && <ScrollStory onPlan={() => setStep("plan")} />}
 
       {/* Form and tier picker merged into one card: the dates and budget are what price the
           tiers, so splitting them across two steps meant choosing a style blind. One <form>
@@ -378,7 +337,7 @@ export default function Home() {
               {/* The step had no heading of any kind — it opened straight onto four
                   fields, so neither the page nor a screen reader named what you were
                   doing. Same display step as "Choose your style" below it. */}
-              <h1 className="mb-4 font-display text-xl font-semibold text-foreground">
+              <h1 className="mb-4 font-scene-display text-xl font-semibold text-foreground">
                 Plan your trip
               </h1>
 
@@ -477,7 +436,7 @@ export default function Home() {
               </div>
 
               <div className="value-in mt-6" style={{ animationDelay: "320ms" }}>
-                <h2 id="style-heading" className="font-display text-xl font-semibold text-foreground">
+                <h2 id="style-heading" className="font-scene-display text-xl font-semibold text-foreground">
                   Choose your style
                 </h2>
                 <p className="mt-1 text-sm text-muted">
