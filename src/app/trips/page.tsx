@@ -137,7 +137,11 @@ function MemoryPostcard({ trip }: { trip: TripSummary }) {
   return (
     <Link
       href={`/trip/${trip.id}`}
-      style={{ transform: `rotate(${tiltFor(trip.id)}deg)` }}
+      // The resting tilt is a CSS custom property, not a `transform` written here directly —
+      // an inline `transform` would permanently outrank the stylesheet's own
+      // `:hover`/`:focus-visible` rule that straightens the card, no matter how that rule's
+      // specificity compares, so the straighten-on-hover motion would never play.
+      style={{ "--tilt": `${tiltFor(trip.id)}deg` } as React.CSSProperties}
       // `.memory-postcard`'s own box-shadow is plain unlayered CSS, which the cascade
       // layers spec puts above any `@layer`-emitted rule regardless of specificity —
       // including Tailwind's `ring-*` utilities, which compose onto `box-shadow` and
