@@ -202,6 +202,13 @@ export default function TripsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // `map-chrome-hidden` on all three returns below is a deliberate behaviour change, not
+  // a copy of the plan step's own class list: this route used to leave the zoom/compass
+  // stack visible, but the hero now occludes the globe entirely on arrival, and nothing on
+  // this page — no route, no stop markers — is a map being *read*. Controls for a globe
+  // you can't see, that point at nothing once you scroll past the hero, are noise. Removing
+  // them was confirmed rather than assumed, since it takes away working controls.
+  //
   // Loading and error are both simple, centered states that don't yet know how many trips
   // there are (or whether the fetch will ever succeed) — the hero needs that count to
   // decide which of its two variants to show, so neither state renders it at all rather
