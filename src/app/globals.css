@@ -944,10 +944,15 @@ body {
   --postcard-ink-muted: #6b6355;
 }
 
+/* The resting tilt is read from a --tilt custom property (set inline per card, since it's
+   derived from the trip id) rather than written as an inline `transform` directly — an
+   inline style always wins over any stylesheet rule, hover or not, so the :hover/
+   :focus-visible rule below could never have straightened a card whose tilt was inline. */
 .memory-postcard {
   background: var(--postcard-paper);
   color: var(--postcard-ink);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  transform: rotate(var(--tilt, 0deg));
   transition:
     transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1);
