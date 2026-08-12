@@ -33,11 +33,24 @@ function HeroTile({ trip, className = "" }: { trip: TripSummary; className?: str
  * over it. Two variants rather than one component with a loading branch: there's nothing
  * true to collage until there's at least one saved trip, so "no photos yet" and "no trips
  * yet" are the same state, not two.
+ *
+ * Both variants' outermost `<section>` carries `pointer-events-auto`, not just their
+ * individual buttons/links — this page's content sits inside AppShell's own
+ * `pointer-events-none` scroll container (that's what keeps the Cesium globe underneath
+ * draggable), so a wheel event over any patch of the hero with no `pointer-events-auto`
+ * anywhere in its hit-test chain passes straight through to the globe canvas instead of
+ * scrolling the page, and Cesium consumes it as a zoom rather than letting it bubble. Most
+ * of a full-bleed hero's own area is prose and decoration, not a button, so leaving
+ * `pointer-events-auto` off the section and only on its one CTA link was reachable but
+ * left almost the entire viewport unscrollable — confirmed by trying to scroll past it.
+ * `Hero.tsx` and `.scene-band` already opt the whole section in for the same reason; this
+ * follows that precedent instead of the narrower "just the leaf controls" reading of the
+ * Pointer-Events Opt-In Rule.
  */
 function MemoriesHero({ trips }: { trips: TripSummary[] }) {
   if (trips.length === 0) {
     return (
-      <section className="relative flex min-h-dvh items-center justify-center overflow-hidden p-5 text-center sm:p-6">
+      <section className="pointer-events-auto relative flex min-h-dvh items-center justify-center overflow-hidden p-5 text-center sm:p-6">
         {/* No photo to collage, so the base system's own material carries the beat instead
             of reaching for stock imagery — a low-alpha accent wash over slate, matching the
             wider app's "one warm accent on a cool neutral field" rather than inventing a
@@ -81,7 +94,7 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
   const first = tiles[0]?.destination.split(",")[0];
   const last = tiles[tiles.length - 1]?.destination.split(",")[0];
   return (
-    <section className="relative flex min-h-dvh items-end overflow-hidden p-5 sm:p-6">
+    <section className="pointer-events-auto relative flex min-h-dvh items-end overflow-hidden p-5 sm:p-6">
       <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-0.5 bg-[rgb(var(--surface-deep-rgb))] sm:grid-cols-[1.3fr_1fr_1fr]">
         {tiles.map((trip, i) => (
           <HeroTile key={trip.id} trip={trip} className={i === 0 ? "row-span-2" : ""} />
@@ -255,7 +268,7 @@ export default function TripsPage() {
       </div>
 
       {trips.length > 0 && (
-        <div className="mx-auto max-w-5xl pt-10 sm:pt-12">
+        <div className="pointer-events-auto mx-auto max-w-5xl pt-10 sm:pt-12">
           <ul className="memory-postcards grid grid-cols-1 gap-5 sm:grid-cols-2">
             {trips.map((trip) => (
               <li key={trip.id}>
