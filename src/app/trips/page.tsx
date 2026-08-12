@@ -8,6 +8,7 @@ import { TripSummary } from "@/lib/types";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
+import { useMapCamera } from "@/lib/mapCamera";
 
 /** One tile of the hero collage. A photo miss or slow lookup must not open a hole in the
  *  hero back to the live globe behind it — the tile's own solid slate base (matching
@@ -234,6 +235,19 @@ export default function TripsPage() {
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { resetToHome } = useMapCamera();
+
+  // Mount-only, mirroring page.tsx's own reset effect: the globe lives above the route
+  // boundary and never unmounts, so arriving here from /trip/[id] (which flies to that
+  // trip's destination and stops) would otherwise leave the camera, its marker pin, and
+  // its drawn route exactly where that page last left them — visible through this page's
+  // own grid gaps once the hero scrolls past. `page.tsx` only ever needed to handle the
+  // opposite direction (/trips → /), back when this page never touched the camera at all;
+  // now that its hero/grid keep the globe on screen, this side needs the same reset too.
+  useEffect(() => {
+    resetToHome();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // Three things this has to get right, and it used to get none of them: check the
