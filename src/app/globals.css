@@ -73,23 +73,17 @@
   --route-casing: #0060df;
 
   /* --- Floating stop markers -----------------------------------------------
-     The marker cards are HTML overlays positioned per frame over the globe,
-     so they are glass like every other surface: same --surface-deep origin as
-     the panels and control pills, one step lighter in blur because a marker is
-     a ~150px card and a 56px blur on something that small just samples flat
-     colour. */
-  --marker-glass: rgb(var(--surface-deep-rgb) / 0.58);
-  --marker-blur: 16px;
-  --marker-border: rgba(255, 255, 255, 0.16);
-  /* How far a hovered card rises. Small — the scale-by-distance transform is
-     already doing most of the depth work, and a big lift fights it. */
-  --marker-lift: -4px;
-  --marker-transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
-  --marker-glow: 0 4px 18px rgba(0, 0, 0, 0.45);
-  /* Hover/active: the amber ring is the globe's only interface-coloured mark. */
-  --marker-glow-active:
-    0 0 0 1px var(--accent), 0 6px 26px rgba(0, 0, 0, 0.5),
-    0 0 22px rgb(255 179 64 / 0.35);
+     "Location Title Card": no fill, no border, no blur — the opposite of every
+     other glass surface in the app, deliberately. A stop's name sits directly
+     over the globe in italic display serif, legible via a text-shadow hugging
+     the glyphs (the same technique .hero-legible uses on the landing hero),
+     never a scrim box. A thin amber rule draws in under the name on
+     hover/selection — the entire activation, no box, no lift, no glow ring.
+     --marker-depth (written per-frame by StopMarkerLayer alongside its
+     transform/visibility — the same already-computed 0.55-1 distance scale,
+     not new math) drives opacity and a touch of blur, so a distant name
+     recedes like a shallow depth of field instead of only shrinking. */
+  --marker-transition: 400ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* How tall the docked panel is when a phone collapses it to a bottom sheet. Read by
      DockedPanel for its own height and by the mobile map-control rule for where to sit
@@ -198,11 +192,12 @@ body {
 /* --- Floating stop markers -------------------------------------------------------------
    Two nested elements, and the split is load-bearing rather than tidiness: the anchor's
    `transform` is rewritten from JS on every `postRender` frame (screen position + distance
-   scale), so anything else that wants a transform — the hover lift — has to live on a
-   different element or the inline style overwrites it 160 times a second.
+   scale), so anything else that wants a transform has to live on a different element or the
+   inline style overwrites it 160 times a second. The title card below only ever animates
+   `opacity`/`filter`/`color` and its own `::after` rule's `transform` — never the anchor's.
 
    `transform-origin: bottom center` plus the `translate(-50%, -100%)` the JS applies keeps
-   the card's bottom edge pinned to the stem tip as it scales, so the card grows upward out
+   the card's bottom edge pinned to the stem tip as it scales, so the name grows upward out
    of its stem instead of drifting off it. */
 .marker-anchor {
   position: absolute;
@@ -219,49 +214,69 @@ body {
   will-change: transform;
 }
 
-/* The card itself. Glass like every other surface in the app — same --surface-deep origin
-   as the panels and control pills — but a smaller blur, because this is a ~150px card and
-   a 56px blur on something that small just samples flat colour.
-   Do NOT hand-write `-webkit-backdrop-filter` here: Lightning CSS collapses the pair down
-   to the prefixed property alone, which current Chrome (148, verified) no longer supports,
-   silently killing the blur. Lightning CSS emits the prefix itself when targets need it. */
-.glass-marker {
-  display: block;
-  max-width: 13rem;
-  /* Spacing xs/sm and the md radius, per DESIGN.md's scales. */
-  padding: 0.25rem 0.5rem;
-  border-radius: 12px;
-  background: var(--marker-glass);
-  backdrop-filter: blur(var(--marker-blur)) saturate(180%);
-  border: 1px solid var(--marker-border);
-  box-shadow: var(--marker-glow);
-  color: var(--on-deep);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.25;
-  text-align: left;
+/* The Location Title Card. No fill, no border, no blur — see the --marker-* comment above
+   for why. `--marker-depth` is read via `var(--marker-depth, 1)` in each property below
+   rather than declared as a property on this rule: a default set here would win over the
+   value StopMarkerLayer writes on the parent `.marker-anchor` regardless of the cascade,
+   since an element's own declaration always beats an inherited one — which silently
+   disabled the whole depth-of-field effect the first time this was built with the default
+   declared here instead. Before the render loop's first frame lands, every card reads the
+   var()'s own fallback of 1 (full focus) rather than a stuck-soft default. */
+.marker-title-card {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.375rem;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  color: rgb(244 247 250 / 0.82);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-shadow:
+    0 1px 3px rgb(0 0 0 / 0.9),
+    0 3px 14px rgb(0 0 0 / 0.75),
+    0 6px 44px rgb(0 0 0 / 0.5);
+  opacity: calc(0.5 + var(--marker-depth, 1) * 0.5);
+  filter: blur(calc((1 - var(--marker-depth, 1)) * 1.5px));
   transition:
-    transform var(--marker-transition),
-    box-shadow var(--marker-transition),
-    background var(--marker-transition);
+    color var(--marker-transition),
+    opacity var(--marker-transition),
+    filter var(--marker-transition);
 }
 
-/* One rule for both entry points: `:hover` covers the pointer landing on the card itself,
-   and `[data-hovered]` is set from the itinerary panel's own hover so the highlight is
-   bidirectional without the panel needing to know where the card ended up on screen. */
-.glass-marker:hover,
-.glass-marker[data-hovered="true"] {
-  transform: translateY(var(--marker-lift));
-  background: rgb(var(--surface-deep-rgb) / 0.72);
-  box-shadow: var(--marker-glow-active);
+/* The one accent mark: a 1px amber rule draws in left-to-right under the name via its own
+   `::after`, kept off the anchor/card's own transform for the same reason the hover lift used
+   to be — it would fight the per-frame inline write. `:hover` covers the pointer landing
+   directly on the name; `[data-hovered]` is set from the itinerary panel's own hover so the
+   highlight is bidirectional without the panel knowing where the card ended up on screen. */
+.marker-title-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 1px;
+  width: 100%;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--marker-transition);
 }
 
-.glass-marker:focus-visible {
+.marker-title-card:hover,
+.marker-title-card:focus-visible,
+.marker-title-card[data-hovered="true"] {
+  color: var(--on-deep);
+}
+
+.marker-title-card:hover::after,
+.marker-title-card:focus-visible::after,
+.marker-title-card[data-hovered="true"]::after {
+  transform: scaleX(1);
+}
+
+.marker-title-card:focus-visible {
   outline: none;
-  box-shadow: var(--marker-glow-active);
 }
 
 /* Glass chrome for the map control stack (zoom / 2D-3D / tilt / compass). Same character as
