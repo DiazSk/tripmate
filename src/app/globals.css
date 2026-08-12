@@ -482,6 +482,34 @@ body {
   }
 }
 
+/* A single, slow light sweep across the trip-form card only — Blue Hour's own more cinematic
+   register (Hero's ambient drift, the fog layers) already permits one authored ambient loop
+   per scene, and this is the plan step's: not "no other ambient motion" (that rule guards the
+   base Lit Cockpit system), but still exactly one, and confined to this one panel so it never
+   becomes a second identity exercise on `.glass-itinerary` everywhere else. Same
+   reduced-motion gate as the rest of the file's keyframe classes. */
+@media (prefers-reduced-motion: no-preference) {
+  .console-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(100deg, transparent 40%, rgb(255 255 255 / 0.05) 50%, transparent 60%);
+    background-size: 250% 100%;
+    animation: console-sheen-sweep 7s ease-in-out infinite;
+  }
+}
+
+@keyframes console-sheen-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  45%,
+  100% {
+    background-position: -50% 0;
+  }
+}
+
 /* The trip form's four fields sit in one recessed slate trough rather than in four separate
    boxes, so the UA's own control chrome is redundant: each cell already supplies its own
    icon, and the date cells open the picker from a click anywhere in the cell via
