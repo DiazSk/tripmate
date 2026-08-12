@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import ErrorNote from "@/components/ErrorNote";
@@ -186,20 +187,36 @@ export default function TripView({
         )}
 
         {hasOverspend && itinerary && (
+          // Real glass, not a 10%-red tint: this banner floats over a live, arbitrary map —
+          // not the decorative, soft-focus globe the trip-form's own bg-red-500/10 error
+          // block sits over on the pre-generation steps. The same low-opacity tint that
+          // reads fine there disappears here, so this takes .glass-itinerary's actual
+          // slate backing (the One Slate Rule: a new surface takes a new alpha of the one
+          // material, never a new hue) and keeps red for text/icon/border only.
           <div
             ref={overspendRef}
             role="status"
-            className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm sm:flex-row sm:items-center"
+            // Still red-500/30 — DESIGN.md's own documented "Alert Red" value — as an inline
+            // style rather than the border-red-500/30 utility: .glass-itinerary sets the full
+            // `border` shorthand in plain, unlayered CSS, which always beats a Tailwind utility
+            // (emitted inside @layer utilities) on the same property — the exact
+            // Unlayered-Shadow Rule failure mode, for border-color instead of box-shadow.
+            style={{ borderColor: "rgba(239, 68, 68, 0.3)" }}
+            className="glass-itinerary flex flex-col items-start gap-3 rounded-2xl p-4 text-sm sm:flex-row sm:items-center"
           >
-            <p className="text-red-400">
-              Day {overspendDayIndex + 1} ran{" "}
-              <span className="tabular-nums">
-                {formatMoney(
-                  daySpend(itinerary.days[overspendDayIndex]) -
-                    dayPlanned(itinerary.days[overspendDayIndex])
-                )}
-              </span>{" "}
-              over plan. Rebalance the rest of the trip?
+            <TriangleAlert className="h-5 w-5 shrink-0 text-red-400" aria-hidden="true" />
+            <p className="flex-1">
+              <span className="block font-semibold text-red-400">
+                Day {overspendDayIndex + 1} ran{" "}
+                <span className="tabular-nums">
+                  {formatMoney(
+                    daySpend(itinerary.days[overspendDayIndex]) -
+                      dayPlanned(itinerary.days[overspendDayIndex])
+                  )}
+                </span>{" "}
+                over plan
+              </span>
+              <span className="text-muted">Rebalance the rest of the trip?</span>
             </p>
             <div className="flex shrink-0 gap-2">
               <button
