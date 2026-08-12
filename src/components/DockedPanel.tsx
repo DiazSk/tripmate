@@ -39,7 +39,7 @@ export default function DockedPanel({
   return (
     <div
       aria-busy={busy || undefined}
-      className={`docked-panel fixed right-5 bottom-5 left-5 z-10 m-0 overflow-y-auto sm:right-6 sm:bottom-6 sm:left-auto sm:h-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px] ${
+      className={`docked-panel fixed inset-x-0 bottom-0 z-10 m-0 overflow-y-auto sm:right-6 sm:bottom-6 sm:left-auto sm:h-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px] ${
         busy ? "pointer-events-none" : "pointer-events-auto"
       } ${
         isCollapsed

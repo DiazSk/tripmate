@@ -49,7 +49,7 @@ export default function PlaceDetailPanel({
     "h-11 w-24 rounded-md border border-card-border bg-white/10 pr-2 pl-6 text-base tabular-nums text-foreground focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
 
   return (
-    <div className="glass-itinerary flex flex-col rounded-2xl p-5 sm:p-6">
+    <div className="glass-itinerary flex flex-col rounded-none p-5 sm:rounded-2xl sm:p-6">
       <button
         type="button"
         onClick={onBack}
