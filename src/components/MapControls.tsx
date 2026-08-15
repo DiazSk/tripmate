@@ -226,8 +226,11 @@ export default function MapControls() {
     "flex h-11 w-11 items-center justify-center text-white/90 transition-[background-color,transform] duration-200 ease-out hover:bg-white/10 active:scale-[0.92] active:bg-white/15";
 
   return (
-    // Hidden below `sm:` — that's the breakpoint where the itinerary panel goes full-bleed and
-    // these would sit on top of it. Raised clear of the Cesium attribution at bottom-left.
+    // Hidden below `sm:` by default — that's the breakpoint where the itinerary panel goes
+    // full-bleed and these would sit on top of it. A phone gets them back, in a reduced set
+    // and a different corner, once DockedPanel's collapse frees the space; the rule that does
+    // it is `.app-shell:has(.docked-panel-collapsed) .map-controls` in globals.css.
+    // Raised clear of the Cesium attribution at bottom-left.
     <div className="map-controls pointer-events-none fixed bottom-10 left-6 z-20 hidden flex-col items-center gap-3 sm:flex">
       <div className="glass-control pointer-events-auto flex flex-col overflow-hidden rounded-xl">
         <button type="button" onClick={() => zoom(1)} aria-label="Zoom in" className={buttonClass}>
@@ -259,13 +262,15 @@ export default function MapControls() {
         type="button"
         onClick={toggleFlat}
         aria-label={flat ? "Switch to 3D view" : "Switch to 2D view"}
-        className={`glass-control pointer-events-auto rounded-xl text-[13px] font-semibold tracking-wide ${buttonClass}`}
+        // text-xs, on the ramp: 13px was a one-off step, and at 44px square with a
+        // two-character label the difference is a pixel nobody reads.
+        className={`glass-control pointer-events-auto hidden rounded-xl text-xs font-semibold tracking-wide sm:flex ${buttonClass}`}
       >
         {flat ? "3D" : "2D"}
       </button>
 
       {/* px-2.5 lands the pill at 44px wide, matching the h-11 w-11 buttons above and below. */}
-      <div className="glass-control pointer-events-auto flex justify-center rounded-full px-2.5 py-2.5">
+      <div className="glass-control pointer-events-auto hidden justify-center rounded-full px-2.5 py-2.5 sm:flex">
         <span className="tilt-slider-wrap">
           <input
             ref={sliderRef}

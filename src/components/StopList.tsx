@@ -39,6 +39,8 @@ function StopRow({
   isLast,
   onSelect,
   revealAnimation,
+  isHighlighted,
+  onHover,
 }: {
   stop: Stop;
   index: number;
@@ -48,6 +50,10 @@ function StopRow({
    *  scroll-triggered entrance for a plain slide-down-into-place + typewriter on the name,
    *  since this row's mount timing (not scroll position) is already the reveal cue. */
   revealAnimation?: boolean;
+  /** True while this stop's marker card on the globe is hovered or selected. Driven from the
+   *  map camera context, so pointing at either surface lights up both. */
+  isHighlighted?: boolean;
+  onHover?: (hovered: boolean) => void;
 }) {
   const motionProps = revealAnimation
     ? {
@@ -75,7 +81,11 @@ function StopRow({
   return (
     <motion.div
       {...motionProps}
-      className="relative flex gap-3 rounded-xl transition-colors hover:bg-white/5"
+      onPointerEnter={() => onHover?.(true)}
+      onPointerLeave={() => onHover?.(false)}
+      className={`relative flex gap-3 rounded-xl transition-colors ${
+        isHighlighted ? "bg-white/10" : "hover:bg-white/5"
+      }`}
     >
       {connector}
       <button
@@ -111,11 +121,16 @@ export default function StopList({
   revealedCount,
   onSelect,
   revealAnimation,
+  highlightedIndex,
+  onHoverStop,
 }: {
   stops: Stop[];
   revealedCount: number;
   onSelect: (stop: Stop) => void;
   revealAnimation?: boolean;
+  /** Index of the stop currently hovered or selected on the globe, or null. */
+  highlightedIndex?: number | null;
+  onHoverStop?: (index: number | null) => void;
 }) {
   return (
     <div className="space-y-4" {...devLabel("ItineraryCard.StopList")}>
@@ -127,6 +142,8 @@ export default function StopList({
           isLast={i === visible.length - 1}
           onSelect={onSelect}
           revealAnimation={revealAnimation}
+          isHighlighted={highlightedIndex === i}
+          onHover={(hovered) => onHoverStop?.(hovered ? i : null)}
         />
       ))}
     </div>

@@ -20,7 +20,7 @@ TripMate turns a destination + dates + budget into an AI-generated day-by-day it
 
 ## Positioning
 
-Most trip planners either hand back generic top-10 lists or ignore the budget entirely. TripMate anchors generation to a chosen spending tier (Budget/Mid-range/Luxury) with real lodging costs included, explicitly instructs the model to spend close to the stated budget rather than lowballing it, and folds live weather into stop selection (indoor vs. outdoor by day). The screen is a real split view — a photorealistic 3D globe in one pane that physically flies to your destination and to each place you tap, and a day-by-day itinerary card in the other with real times, durations, tag pills, and per-day category budget breakdowns, closely modeled on a specific travel-app reference rather than generic dashboard styling. Tapping a stop swaps in a real guidebook-style entry instead of a one-line description. It is also the only one of its kind to route generation through the user's own Claude Code CLI session instead of a paid LLM API.
+Most trip planners either hand back generic top-10 lists or ignore the budget entirely. TripMate anchors generation to a chosen spending tier (Budget/Mid-range/Luxury) with real lodging costs included, explicitly instructs the model to spend close to the stated budget rather than lowballing it, and folds live weather into stop selection (indoor vs. outdoor by day). The screen is one persistent scene rather than a dashboard: a full-bleed, always-live 3D globe that physically flies to your destination and to each place you tap, with the itinerary — real times, durations, tag pills, per-day category budget breakdowns — floating above it as dark frosted glass, never a separate opaque pane. Tapping a stop swaps in a real guidebook-style entry instead of a one-line description. It is also the only one of its kind to route generation through the user's own Claude Code CLI session instead of a paid LLM API.
 
 ## Operating Context
 
@@ -31,14 +31,15 @@ Two distinct moments of use: (1) planning — fill in trip details, pick a spend
 - No user accounts — trips are stored in a single shared local SQLite file, addressable by a generated id/URL, not scoped per-user.
 - Itinerary, place-detail, and place-photo lookups all depend on external services being reachable (`claude` CLI for the first two; Wikipedia's public API for photos) — there is no fallback LLM provider, and a photo miss falls back to a category icon rather than failing.
 - Weather is a real forecast within ~16 days of the trip start, otherwise a "typical weather" estimate from the same calendar dates a year prior.
-- Trip length is capped at 30 days, enforced client-side before generation — no LLM call is attempted for a longer range.
-- Screen layout is a true split: the 3D map (Cesium + Google Photorealistic 3D Tiles) occupies its own pane (left on desktop, top on mobile), the itinerary/detail content occupies the other — they no longer layer on top of each other. Google's tiles are regional/city-scale data, so the whole-earth idle view has little to render and isn't meant to look like a polished "Blue Marble" globe.
+- Trip length is capped at 30 days, enforced both client-side (before generation is attempted) and server-side (the generation endpoint itself rejects a longer range) — no LLM call is ever attempted for a longer trip.
+- Screen layout is a persistent full-bleed 3D globe (Cesium + Google Photorealistic 3D Tiles) with every other surface — itinerary, place detail, forms, saved-trip list — floating above it as a translucent glass panel, not a separate opaque pane; the panel and the globe occupy the same screen space rather than splitting it. Google's tiles are regional/city-scale data, so the whole-earth idle view has little to render and isn't meant to look like a polished "Blue Marble" globe.
+- On phones, the glass panel can collapse to a bottom sheet, revealing a reduced map control set (zoom, compass/reset-north) in the space it frees; the full control set (zoom, 2D/3D, tilt, compass) is desktop/tablet-only.
 - Real per-stop/lodging "actual spend" tracking and automatic remaining-day rebalancing on overspend are shipped, working end-to-end.
 - Per-place detail content (history, best time to visit, tips, duration) and per-stop photos are both generated/fetched on-demand only when a stop is clicked/rendered, not persisted — reopening the same stop regenerates the detail text (photos are cached in-memory per browser session).
 
 ## Brand Commitments
 
-Product name is "TripMate." No existing logo, palette, or typographic identity — the current implementation uses default Tailwind grays and an orange accent with no deliberate visual direction, and is being replaced with a considered one (this is a redesign, not an extension of that look).
+Product name is "TripMate." No logo. The visual identity is shipped and documented in DESIGN.md as "The Lit Cockpit Over a Turning Earth": dark frosted slate glass floating over the persistent globe, with one warm amber accent reserved for interaction, Source Serif 4 for headings and a wide Archivo poster face reserved for the landing headline. This superseded two earlier looks (a steel-blue glass treatment, then a warm cream/teal split-pane system) — treat DESIGN.md, not this section, as the source of truth for anything visual; this section exists only to record that the identity is settled, not in progress.
 
 ## Evidence on Hand
 

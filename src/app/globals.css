@@ -55,6 +55,47 @@
   /* Neutral so the amber Total tile is the only one that pops. */
   --tile: rgba(255, 255, 255, 0.1);
   --tile-foreground: #e3e9f1;
+
+  /* --- Map-native (tertiary) ------------------------------------------------
+     Apple Maps' systemBlue and its casing. These are NOT part of the interface
+     palette and must never appear in a panel, chip or button — the globe gets
+     its own colours because it is photography, not a surface. They live here
+     rather than as string literals in mapRoute.ts so there is one place to
+     change them; JS reads them back through getComputedStyle, the same way
+     GlobeBackground already reads --canvas for scene.backgroundColor.
+
+     The converse of that rule has one deliberate exception: --accent reaches
+     the globe to mark the marker the user is *touching* (hover/selection) and
+     its adjacent arcs. Amber on the globe means "you are pointing at this",
+     never "this is a Tuesday" — per-day accent colours were considered and
+     rejected, since only one day is ever drawn. Keep this exception narrow. */
+  --route-blue: #0a84ff;
+  --route-casing: #0060df;
+
+  /* --- Floating stop markers -----------------------------------------------
+     "Location Title Card": no fill, no border, no blur — the opposite of every
+     other glass surface in the app, deliberately. A stop's name sits directly
+     over the globe in italic display serif, legible via a text-shadow hugging
+     the glyphs (the same technique .hero-legible uses on the landing hero),
+     never a scrim box. A thin amber rule draws in under the name on
+     hover/selection — the entire activation, no box, no lift, no glow ring.
+     --marker-depth (written per-frame by StopMarkerLayer alongside its
+     transform/visibility — the same already-computed 0.55-1 distance scale,
+     not new math) drives opacity and a touch of blur, so a distant name
+     recedes like a shallow depth of field instead of only shrinking. */
+  --marker-transition: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* How tall the docked panel is when a phone collapses it to a bottom sheet. Read by
+     DockedPanel for its own height and by the mobile map-control rule for where to sit
+     above it, so the two cannot drift apart. Just under half the viewport: enough sheet
+     to keep a day's stops readable, enough map to be worth revealing. */
+  --mobile-sheet-h: 45dvh;
+
+  /* Height of the fixed top navbar. Read by Navbar for its own height and by every
+     surface that needs to clear it (page.tsx's <main>, ScrollStory's cancelling
+     margins, DockedPanel's top offset) — one token so they cannot drift apart, same
+     pattern as --mobile-sheet-h above. */
+  --nav-h: 4rem;
 }
 
 @theme inline {
@@ -77,6 +118,11 @@
   --color-tile: var(--tile);
   --color-tile-foreground: var(--tile-foreground);
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Blue Hour Expedition scene hues — only ever set inside .blue-hour-scene below,
+     registered here so Tailwind utilities (bg-scene-teal, etc.) can reference them. */
+  --color-scene-teal: rgb(var(--scene-teal-rgb, 45 125 130));
+  --color-scene-cobalt: rgb(var(--scene-cobalt-rgb, 30 60 110));
 }
 
 body {
@@ -111,6 +157,152 @@ body {
   display: none;
 }
 
+/* Same reasoning for the stop markers: the landing page's form steps are a form over a
+   decorative globe, not a map being read, and there is no route drawn there anyway. */
+.app-shell:has(.map-chrome-hidden) .stop-marker-layer {
+  display: none;
+}
+
+/* --- The map on a phone -----------------------------------------------------------------
+   Below `sm` the docked panel is full-bleed, so two things are true at once: the globe is
+   invisible, and the control stack has nowhere to sit that isn't on top of the panel. That
+   is why the controls were simply hidden here — which left a phone able to drag the camera
+   into a disoriented pose with nothing to recover it.
+
+   Both halves move together instead. DockedPanel's collapse turns the panel into a bottom
+   sheet, and only then do the controls appear, in the corner that just opened up. The sheet's
+   height is one value read by both, so the two can't drift apart.
+
+   The reduced set is deliberate: the zoom pill and the compass, because pinch already covers
+   magnification and nothing but a reset covers a lost heading. The tilt slider and the 2D/3D
+   toggle stay behind `sm:` in the component — a 15px rotated thumb is not a touch target, and
+   a phone reading a bottom sheet is not the place to be composing camera angles. */
+@media (width < 40rem) {
+  .app-shell:has(.docked-panel-collapsed) .map-controls {
+    display: flex;
+    right: 1.25rem;
+    /* The sheet's own height, plus a 0.75rem gap. The panel itself is inset-0 below `sm`
+       now (no bottom margin of its own), so there is no second inset term to add here —
+       adding one back is what put the compass under the sheet before. */
+    bottom: calc(var(--mobile-sheet-h) + 0.75rem);
+    left: auto;
+  }
+}
+
+/* --- Floating stop markers -------------------------------------------------------------
+   Two nested elements, and the split is load-bearing rather than tidiness: the anchor's
+   `transform` is rewritten from JS on every `postRender` frame (screen position + distance
+   scale), so anything else that wants a transform has to live on a different element or the
+   inline style overwrites it 160 times a second. The title card below only ever animates
+   `opacity`/`filter`/`color` and its own `::after` rule's `transform` — never the anchor's.
+
+   `transform-origin: bottom center` plus the `translate(-50%, -100%)` the JS applies keeps
+   the card's bottom edge pinned to the stem tip as it scales, so the name grows upward out
+   of its stem instead of drifting off it. */
+.marker-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: bottom center;
+  /* Starts hidden here rather than as a React inline style: the render loop owns `visibility`
+     from the first frame onward, and React re-applying an inline `hidden` on every re-render
+     blanked every placed card for a frame. A card also must not flash at 0,0 before it has
+     been projected, which is why the resting state is hidden rather than visible. */
+  visibility: hidden;
+  /* Hoists the card to its own compositor layer: this element's transform changes every
+     frame, and without it the browser repaints the layer underneath each time. */
+  will-change: transform;
+}
+
+/* The Location Title Card. No fill, no border, no blur — see the --marker-* comment above
+   for why. `--marker-depth` is read via `var(--marker-depth, 1)` in each property below
+   rather than declared as a property on this rule: a default set here would win over the
+   value StopMarkerLayer writes on the parent `.marker-anchor` regardless of the cascade,
+   since an element's own declaration always beats an inherited one — which silently
+   disabled the whole depth-of-field effect the first time this was built with the default
+   declared here instead. Before the render loop's first frame lands, every card reads the
+   var()'s own fallback of 1 (full focus) rather than a stuck-soft default. */
+.marker-title-card {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.375rem;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  color: rgb(244 247 250 / 0.88);
+  white-space: nowrap;
+  /* Real Google Photorealistic 3D Tiles are arbitrary and uncontrolled — unlike a curated hero
+     photo, a stop can land on a bright rooftop, a pale plaza, anywhere. .hero-legible's
+     bottom-offset-only shadow was built for one art-directed photo and DESIGN.md already
+     documents its known contrast risk as an accepted, deliberate tradeoff for that one surface;
+     here, over arbitrary imagery, an offset-only shadow leaves the left/right edges of thin
+     italic strokes under-defined exactly where the map happens to be light. The first two
+     layers below are zero-offset (an omnidirectional halo hugging every edge, not just the
+     underside) at high alpha; the third keeps the soft ambient depth cue. */
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 1),
+    0 0 6px rgb(0 0 0 / 0.9),
+    0 3px 16px rgb(0 0 0 / 0.55);
+  opacity: calc(0.5 + var(--marker-depth, 1) * 0.5);
+  filter: blur(calc((1 - var(--marker-depth, 1)) * 1.5px));
+  transition:
+    color var(--marker-transition),
+    opacity var(--marker-transition),
+    filter var(--marker-transition);
+}
+
+/* A soft, edgeless vignette behind the name — not a card: no fill boundary, no border, nothing
+   a viewer could point at and call "a box". It exists purely so contrast never depends on
+   what happens to be under a stop; the shadow above handles the common case, this is the
+   guarantee for the worst one (a bright, busy rooftop directly behind the text). Negative
+   z-index needs no extra work to land behind the text: `filter` on the parent always creates a
+   stacking context (even at blur(0px)), so this is scoped to sit under this card's own text and
+   nothing else. */
+.marker-title-card::before {
+  content: "";
+  position: absolute;
+  inset: -0.5em -0.65em;
+  background: radial-gradient(ellipse 62% 85% at 50% 42%, rgb(0 0 0 / 0.4), transparent 72%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* The one accent mark: a 1px amber rule draws in left-to-right under the name via its own
+   `::after`, kept off the anchor/card's own transform for the same reason the hover lift used
+   to be — it would fight the per-frame inline write. `:hover` covers the pointer landing
+   directly on the name; `[data-hovered]` is set from the itinerary panel's own hover so the
+   highlight is bidirectional without the panel knowing where the card ended up on screen. */
+.marker-title-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 1px;
+  width: 100%;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--marker-transition);
+}
+
+.marker-title-card:hover,
+.marker-title-card:focus-visible,
+.marker-title-card[data-hovered="true"] {
+  color: var(--on-deep);
+}
+
+.marker-title-card:hover::after,
+.marker-title-card:focus-visible::after,
+.marker-title-card[data-hovered="true"]::after {
+  transform: scaleX(1);
+}
+
+.marker-title-card:focus-visible {
+  outline: none;
+}
+
 /* Glass chrome for the map control stack (zoom / 2D-3D / tilt / compass). Same character as
    .glass-itinerary but a smaller blur — these are 44px pills, and a 56px blur on a surface
    that small just samples flat colour. Do NOT re-add a hand-written `-webkit-backdrop-filter`
@@ -122,6 +314,26 @@ body {
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.32);
+}
+
+/* The fixed top navbar. Blur alone (no tint) is Vita Travels' own reference value, but
+   their nav sits over one curated, controlled photo — this one sits over an arbitrary
+   live 3D globe that idles anywhere from open ocean to a snowfield. A whisper of the one
+   slate on top of the blur is the same Darken-Never-Lighten reasoning every other surface
+   in this system already applies over unpredictable imagery; it's the minimum needed for
+   reliable contrast, not a redesign of the reference. */
+.glass-nav {
+  background: rgb(var(--surface-deep-rgb) / 0.15);
+  backdrop-filter: blur(12px);
+}
+
+/* The mobile menu panel, not the bar itself: a real tappable surface with rows on it
+   wants more of the one slate than the whisper-thin bar tint above, the same
+   more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` already take
+   over `.glass-nav`. */
+.glass-nav-menu {
+  background: rgb(var(--surface-deep-rgb) / 0.85);
+  backdrop-filter: blur(20px);
 }
 
 /* Native range input for the tilt slider — no library. It's laid out horizontally and rotated
@@ -161,19 +373,23 @@ body {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.3);
 }
+/* 20px, up from 15px. The rotated track is 18px tall inside a 22px pill, so the thumb can't
+   grow to a 44px target without redrawing the whole control — but this is a pointer-only
+   affordance now (`sm:` and up, hidden on touch), and 20px is as large as the pill allows
+   while the thumb still reads as riding on the track rather than swallowing it. */
 .tilt-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 15px;
-  height: 15px;
-  margin-top: -6px;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
   border-radius: 999px;
   background: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 .tilt-slider::-moz-range-thumb {
-  width: 15px;
-  height: 15px;
+  width: 20px;
+  height: 20px;
   border: none;
   border-radius: 999px;
   background: #ffffff;
@@ -193,6 +409,33 @@ body {
   font-weight: 800;
   font-stretch: 125%;
   letter-spacing: -0.035em;
+}
+
+/* Blue Hour Expedition scene typefaces. Deliberately separate from .font-display/.font-hero
+   rather than an indirection through those tokens' values — the One Poster Rule already
+   states .font-hero means one specific typeface, and making that context-dependent would
+   trap the next person to touch this file. Used only inside .blue-hour-scene (page.tsx's
+   pre-generation flow); every other route keeps Source Serif 4 / Archivo unchanged. */
+.font-scene-display {
+  font-family: var(--font-scene-display), ui-serif, Georgia, serif;
+  font-style: italic;
+}
+
+/* The closing poster's voice: hyperbold and spread out. Archivo rather than Bricolage
+   Grotesque, because the request needs both axes pushed and Bricolage's width axis stops
+   at 100% — Archivo carries weight to 900 and width to 125%, so the face itself widens
+   instead of the letters merely being pushed apart. Positive tracking on top, which is
+   the opposite of `.font-hero`'s -0.035em: that one is packing a wide face tight, this
+   one is deliberately airy. */
+.font-scene-hero {
+  font-family: var(--font-hero), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 900;
+  font-stretch: 125%;
+  letter-spacing: 0.035em;
+}
+
+.font-scene-body {
+  font-family: var(--font-scene-body), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Landing hero legibility over live satellite imagery of arbitrary brightness — the globe
@@ -279,6 +522,34 @@ body {
   }
 }
 
+/* A single, slow light sweep across the trip-form card only — Blue Hour's own more cinematic
+   register (Hero's ambient drift, the fog layers) already permits one authored ambient loop
+   per scene, and this is the plan step's: not "no other ambient motion" (that rule guards the
+   base Lit Cockpit system), but still exactly one, and confined to this one panel so it never
+   becomes a second identity exercise on `.glass-itinerary` everywhere else. Same
+   reduced-motion gate as the rest of the file's keyframe classes. */
+@media (prefers-reduced-motion: no-preference) {
+  .console-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(100deg, transparent 40%, rgb(255 255 255 / 0.05) 50%, transparent 60%);
+    background-size: 250% 100%;
+    animation: console-sheen-sweep 7s ease-in-out infinite;
+  }
+}
+
+@keyframes console-sheen-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  45%,
+  100% {
+    background-position: -50% 0;
+  }
+}
+
 /* The trip form's four fields sit in one recessed slate trough rather than in four separate
    boxes, so the UA's own control chrome is redundant: each cell already supplies its own
    icon, and the date cells open the picker from a click anywhere in the cell via
@@ -316,10 +587,14 @@ body {
   position: static !important;
   padding-right: 0 !important;
 }
+/* 0.75rem, the system's Label step, rather than the 10px this was. Required
+   attribution should not compete with the interface, but 10px muted text over
+   arbitrary terrain is closer to unreadable than to quiet — and 10px is off the
+   type ramp entirely. */
 .cesium-widget-credits,
 .cesium-widget-credits a {
   color: var(--muted) !important;
-  font-size: 10px !important;
+  font-size: 0.75rem !important;
   text-shadow: none !important;
 }
 
@@ -345,6 +620,159 @@ body {
   --foreground: #ffffff;
   --muted: #94a3b8;
   --card-border: rgba(255, 255, 255, 0.12);
+}
+
+/* Blue Hour Expedition — scoped to the pre-generation flow only (the landing scroll
+   story and the trip-form/tier-picker step in page.tsx). Overrides the same token names
+   the rest of the app already reads through (--accent, --surface-deep-rgb, ...), so every
+   existing component that consumes those tokens (TierPicker, Field, .glass-itinerary, the
+   CTA buttons, .hero-legible's shadow) retints automatically inside this subtree with zero
+   changes to those components. Do NOT move any of these into :root — that would repaint
+   /trips, /trip/[id], and the result step, which must stay on the amber system for now.
+   Also deliberately not overriding --canvas: GlobeBackground reads that via
+   getComputedStyle(document.documentElement) once at Viewer construction, so a scoped
+   override here would be silently inert. */
+.blue-hour-scene {
+  --surface-deep-rgb: 8 33 48; /* deep cobalt-teal, replaces slate-900's 15 23 42 */
+  --accent: #c9905a; /* brass/copper, replaces amber #ffb340 */
+  --accent-hover: #d9a877;
+  --accent-foreground: #2b1608;
+  --tag-highlight-bg: rgba(201, 144, 90, 0.2);
+  --tag-highlight-fg: #e8b98a;
+
+  /* Net-new hues for a richer register than the rest of the app's one-slate/one-accent
+     rule — consumed only by src/components/blue-hour/* scene components. */
+  --scene-teal-rgb: 45 125 130;
+  --scene-cobalt-rgb: 30 60 110;
+
+  /* The one hover clock for the image cards. Every animated property references this so
+     they cannot drift apart into a sequence; see .scene-frost for why that matters. */
+  --scene-hover: 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Glass sheen for a scene beat's contained photo card — a diagonal highlight plus the
+   card's own hairline border, reading as a pane of glass laid over the photo. Real
+   backdrop-filter blur needs something behind the element to blur, which an opaque
+   photo isn't, so this reuses the app's frosted-card *frame* language (hairline +
+   radius + soft highlight) instead of a literal blur. Replaces the old full-bleed
+   .scene-photo-scrim now that beats use a contained card, not a full-bleed background. */
+/* Fog banks over the hero's lower edge — drawn, not photographed, so each layer can
+   drift on its own period (see Hero.tsx). Sits low and fades out upward so the dark
+   treeline still reads through; the densest bank is bottom-left, where the source photo
+   has a blown-out yellow bokeh blob that this is covering. */
+.hero-fog {
+  position: absolute;
+  /* Wider than the frame so the horizontal drift never pulls an edge into view. */
+  inset-inline: -15%;
+  bottom: -8%;
+  /* Deliberately shallow. Taller banks covered the photo's bokeh blob more completely
+     but washed the dark treeline out with it, and the treeline is the point. */
+  height: 38%;
+  pointer-events: none;
+}
+
+.hero-fog-layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.hero-fog-layer:nth-child(1) {
+  background:
+    radial-gradient(58% 130% at 16% 100%, rgb(255 255 255 / 0.62), transparent 74%),
+    radial-gradient(45% 105% at 62% 100%, rgb(255 255 255 / 0.38), transparent 74%);
+  filter: blur(26px);
+}
+
+.hero-fog-layer:nth-child(2) {
+  background:
+    radial-gradient(50% 95% at 38% 100%, rgb(255 255 255 / 0.42), transparent 72%),
+    radial-gradient(60% 110% at 88% 100%, rgb(255 255 255 / 0.34), transparent 74%);
+  filter: blur(34px);
+  opacity: 0.85;
+}
+
+.hero-fog-layer:nth-child(3) {
+  background: linear-gradient(to top, rgb(255 255 255 / 0.4), transparent 58%);
+  filter: blur(18px);
+}
+
+/* The cobalt-teal band behind the scroll story's content sections. The gradient is
+   layered *over* the deep slate rather than used raw: both scene hues at full strength
+   are far too light to carry body copy, and this keeps the band unmistakably cobalt-teal
+   while text stays readable. The two alphas are the knob if it should read more vivid.
+   It is also what stops the live globe showing through these sections. */
+.scene-band {
+  background:
+    linear-gradient(160deg, rgb(var(--scene-cobalt-rgb) / 0.55), rgb(var(--scene-teal-rgb) / 0.4)),
+    rgb(var(--surface-deep-rgb));
+  /* Slate-300 rather than the root's slate-400, for the same reason .glass-itinerary
+     makes the same substitution: a muted tuned for the plain canvas drops below the
+     contrast floor once it sits on a tinted surface. */
+  --muted: #cbd5e1;
+}
+
+/* The image cards' resting state: a full sheet of frost over the photo. On hover the
+   sheet clears and the frost retreats to the card's inside edges, so the photo resolves
+   out of the glass rather than the glass simply switching off. Two stacked layers rather
+   than one animated mask, because gradient colour-stops are not interpolatable — you
+   cannot transition a mask's shape, but you can cross-fade two of them.
+
+   Every hover property on this card — sheet, edge, zoom, shadow, caption — runs on one
+   clock, `--scene-hover`, with no delays. An earlier pass staggered them to answer "too
+   snappy", which was the wrong fix: offsetting the starts made the zoom visibly finish
+   before the edges frosted, so it read as two animations rather than one object
+   responding. Duration is what makes motion feel unhurried; delay only makes it feel
+   sequential. Change the timing in one place. */
+.scene-frost {
+  /* "Slight": the photo has to stay readable at rest, so this is a veil, not a shutter.
+     7px blur hid the subject entirely and made the row look like it had failed to load. */
+  backdrop-filter: blur(3px) saturate(110%);
+  background: rgb(var(--surface-deep-rgb) / 0.16);
+  opacity: 1;
+  transition: var(--scene-hover);
+  transition-property: opacity, backdrop-filter;
+}
+
+.group:hover .scene-frost {
+  opacity: 0;
+  backdrop-filter: blur(0px) saturate(100%);
+}
+
+/* The edge frost the sheet retreats into. Inset shadow rather than a border so it reads
+   as frost creeping in from the rim, with no hard line where it stops. */
+.scene-frost-edge {
+  opacity: 0;
+  box-shadow:
+    inset 0 0 22px 6px rgb(255 255 255 / 0.3),
+    inset 0 0 60px 18px rgb(var(--surface-deep-rgb) / 0.35);
+  transition: var(--scene-hover);
+  transition-property: opacity;
+}
+
+.group:hover .scene-frost-edge {
+  opacity: 1;
+}
+
+/* The description, pinned inside the card and revealed on hover. Carries its own
+   bottom-up scrim tinted toward --surface-deep-rgb (the Darken-Never-Lighten rule the
+   rest of this system follows) because it lands on unpredictable photo content, and the
+   scrim fades in with the text so the photo is clean at rest. */
+.scene-card-detail {
+  opacity: 0;
+  transform: translateY(8px);
+  background: linear-gradient(to top, rgb(var(--surface-deep-rgb) / 0.92), transparent);
+  transition: var(--scene-hover);
+  transition-property: opacity, transform;
+}
+
+.group:hover .scene-card-detail {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.scene-photo-sheen {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.14), transparent 60%);
 }
 
 /* Dark glassmorphism surface — the app-wide card treatment over the globe
@@ -475,7 +903,9 @@ body {
   width: 200px;
   height: 200px;
   border-radius: 50%;
-  font-size: 1.2rem;
+  /* 1.125rem, the Title step — 1.2rem was a one-off, and the difference across a
+     200px disc is under a pixel. */
+  font-size: 1.125rem;
   font-weight: 300;
   color: var(--on-deep);
   user-select: none;
@@ -588,15 +1018,25 @@ body {
   }
 }
 
-/* Everything the loader shows — the ring's whole sweep and the letters' brightness — lives in
-   the two keyframes above, so the blanket `animation-duration: 0.01ms` further up leaves it
-   with nothing: the disc paints flat and empty, and the word drops to its dim 0.4 resting
-   opacity. A progress indicator that reads as *absent* is worse than one that reads as
-   *still*, so pin both to a finished-looking resting state. This respects the preference
-   rather than working around it — no motion is restored here, only the appearance the motion
-   was carrying. Progress itself is communicated by the cycling caption underneath. */
+/* The blanket `animation-duration: 0.01ms` further up would otherwise leave this element with
+   nothing to show: the ring's entire sweep lives in its keyframes, so the disc painted flat and
+   empty and the word sat at its dim 0.4 resting opacity.
+
+   A loading indicator is the standard exception to reduce-motion. The setting exists to stop
+   motion that provokes vestibular symptoms — parallax, large translations, zoom, bounce — not
+   to remove essential status feedback; platform spinners (iOS's activity indicator among them)
+   keep turning under it for exactly this reason. So the ring is exempted and keeps rotating,
+   while the parts that are decoration rather than status are NOT reinstated: the letters stay
+   pinned at full strength with no pulse and, crucially, no 1.15 scale bounce. The static
+   box-shadow stays as the fallback for anyone who has stopped animations outright.
+
+   `.loader` (0,1,0) outranks the blanket rule's `*` (0,0,0), so this wins between two
+   !importants. Narrow this exemption, don't widen it — nothing else in the app should
+   opt out. */
 @media (prefers-reduced-motion: reduce) {
   .loader {
+    animation-duration: 2s !important;
+    animation-iteration-count: infinite !important;
     transform: rotate(90deg);
     box-shadow:
       0 10px 20px 0 #fffdf8 inset,
@@ -606,4 +1046,53 @@ body {
   .loader-letter {
     opacity: 1;
   }
+}
+
+/* My Memories' postcards are the one other scoped material exception in the app besides
+   Blue Hour, and for the same kind of reason: a physical paper object cannot be frosted
+   slate glass, so this trades the One Slate Rule for an opaque cream paper surface —
+   confined to this one class, never bleeding into `.glass-itinerary` or any shared
+   component. `--postcard-ink`/`--postcard-ink-muted` exist because the base system's
+   `--foreground`/`--muted` are tuned for light text on dark glass; paper needs the
+   opposite pairing, so this is a second, narrower retint scope rather than a text-color
+   override scattered across each card. */
+.memory-postcards {
+  --postcard-paper: #f4f1ea;
+  --postcard-ink: #2b2620;
+  --postcard-ink-muted: #6b6355;
+}
+
+/* The resting tilt is read from a --tilt custom property (set inline per card, since it's
+   derived from the trip id) rather than written as an inline `transform` directly — an
+   inline style always wins over any stylesheet rule, hover or not, so the :hover/
+   :focus-visible rule below could never have straightened a card whose tilt was inline. */
+.memory-postcard {
+  background: var(--postcard-paper);
+  color: var(--postcard-ink);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  transform: rotate(var(--tilt, 0deg));
+  transition:
+    transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Keeps a bright photo's own edge from bleeding straight into the cream paper border —
+   the card's radius (rounded-2xl/xl, the app's documented 16px/12px steps rather than the
+   approved comp's own unvetted 10px/6px) means the photo tile shares the paper's rounded
+   corner, so this has to be an inset shadow on the tile itself, not a border on the card. */
+.memory-postcard-photo {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+/* Straightening is shared, but the shadow-deepen is hover-only: Tailwind's focus-visible
+   ring utility also composes onto `box-shadow`, so a shared rule setting box-shadow here
+   would silently overwrite the ring and leave keyboard focus invisible on the one card
+   type in the app that isn't itself a `ring-accent` glass edge. */
+.memory-postcard:hover,
+.memory-postcard:focus-visible {
+  transform: rotate(0deg) scale(1.02);
+}
+
+.memory-postcard:hover {
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55);
 }
