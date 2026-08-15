@@ -23,7 +23,7 @@ export default function TripsPage() {
       {/* top-16 below sm: the panel goes full-bleed there, so it has to start clear of the
           wordmark AppShell pins to the viewport's top-left. From sm up it's right-docked and
           the wordmark is nowhere near it. */}
-      <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+      <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto pb-10 sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
         {/* Page title and its action. The TripMate wordmark is not here — AppShell pins it to
             the top-left of the viewport, outside this docked column. */}
         <div className="flex items-center justify-between gap-4">

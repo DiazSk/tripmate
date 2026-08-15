@@ -2,6 +2,7 @@
 
 import { Check } from "lucide-react";
 import { TIERS, TierId, estimateTierTotal } from "@/lib/tiers";
+import { devLabel } from "@/lib/devInspector";
 
 // Above this multiple of the entered budget, a tier's real price is treated
 // as an aspirational stretch rather than a genuine option worth the same
@@ -24,7 +25,7 @@ export default function TierPicker({
   onSelect: (tier: TierId) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" {...devLabel("TierPicker")}>
       {TIERS.map((tier, i) => {
         const isSelected = selected === tier.id;
         const total = days === null ? null : estimateTierTotal(tier, days);

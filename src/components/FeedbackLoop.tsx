@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { devLabel } from "@/lib/devInspector";
 
 const primaryButtonClass =
   "rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
@@ -22,7 +23,7 @@ export default function FeedbackLoop({
   const [showFeedback, setShowFeedback] = useState(false);
 
   return (
-    <div className="glass-itinerary rounded-2xl p-5 sm:p-6">
+    <div className="glass-itinerary rounded-2xl p-5 sm:p-6" {...devLabel("FeedbackLoop")}>
       {!showFeedback ? (
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <p className="text-sm font-medium text-foreground">Happy with this itinerary?</p>

@@ -4,6 +4,10 @@ import Link from "next/link";
 export const headerLinkClass =
   "hero-legible pointer-events-auto text-sm font-medium text-on-deep hover:underline";
 
+/** Shared class for a docked panel's own top-left "back to the globe" pill. */
+export const backPillClass =
+  "pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.08] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/[0.14]";
+
 /**
  * The TripMate wordmark, and the only one in the app. Rendered once by AppShell rather than
  * by each page, because the pages that carry content in the right-docked panel were embedding

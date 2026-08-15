@@ -1,5 +1,7 @@
 import { DayWeather } from "./weather";
 import { TierId } from "./tiers";
+import { Holiday } from "./holidays";
+import { CandidatePoi } from "./pois";
 
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
@@ -8,10 +10,17 @@ export interface Stop {
   lat: number;
   lng: number;
   cost: number;
+  /** Line 2 of the stop's two lines: the practical detail (walkable from the last stop, best
+   *  time to arrive, what to order). */
   note: string;
+  /** Line 1: why this stop suits *this* traveler. Optional because itineraries saved before
+   *  this field existed won't carry it. */
+  why?: string;
   time: string;
   durationLabel: string;
-  tags: string[];
+  /** @deprecated Replaced by the `why` + `note` pair — no longer requested from the model or
+   *  rendered. Kept optional so previously saved itineraries still parse. */
+  tags?: string[];
   category: StopCategory;
   actualCost?: number;
 }
@@ -33,6 +42,9 @@ export interface DayPlan {
   /** Short model-written narrative for the day's theme/flow. Absent on
    *  itineraries saved before this field existed. */
   summary?: string;
+  /** User-authored day title (e.g. "Arrival Day"), set via the day header's
+   *  edit control — never written by the model. */
+  title?: string;
   lodging?: Lodging;
   stops: Stop[];
 }
@@ -52,6 +64,9 @@ export interface TripSummary {
 
 export interface Trip extends TripSummary {
   itinerary: Itinerary;
+  /** The Step 2b answers captured when the trip was saved. Null for trips saved before this was
+   *  stored — the edit loop degrades to asking rather than assuming. */
+  userAnswers?: UserAnswers | null;
 }
 
 export interface PlaceDetail {
@@ -64,6 +79,195 @@ export interface PlaceDetail {
 export interface ItineraryPreferences {
   tags: string[];
   vibe: string | null;
+}
+
+export interface DestinationContext {
+  festivals: { name: string; dates: string; note: string }[];
+  safety: { note: string; severity: "low" | "medium" | "high" }[];
+  shopping: { name: string; area: string; note: string }[];
+  trends: { note: string }[];
+}
+
+// --- Step 2a: raw_fetch bundle -------------------------------------------------------------
+
+export interface DateContext {
+  tripDays: number;
+  leadTimeDays: number;
+  /** Null when the destination hasn't resolved to a real lat/lon — season needs a hemisphere. */
+  season: "winter" | "spring" | "summer" | "fall" | null;
+  days: { date: string; dayOfWeek: string }[];
+}
+
+export interface DestinationBasics {
+  resolved: boolean;
+  lat: number | null;
+  lon: number | null;
+  timezone: string | null;
+  /** e.g. "Kyoto Prefecture, Japan" — admin1 + country, joined where both are known. */
+  region: string | null;
+  countryCode: string | null;
+}
+
+/** Everything Step 2a fetches, handed to Step 3 as one bundle. Every source carries its own
+ *  `available` flag so one source being down never invalidates the rest of the bundle. */
+export interface RawFetch {
+  dateContext: DateContext;
+  destination: DestinationBasics;
+  weather: { available: boolean; historical: boolean; days: DayWeather[] };
+  holidays: { available: boolean; events: Holiday[] };
+  /** No reliable free data source exists for this yet — always `available: false` today.
+   *  See the itinerary-planner Step 2a audit; kept as an explicit gap rather than fabricated
+   *  data or an LLM call (2a is plain fetching, not generation). */
+  transportModes: { available: boolean; modes: string[] };
+  candidatePois: { available: boolean; pois: CandidatePoi[] };
+}
+
+// --- Step 2b: user_answers -------------------------------------------------------------------
+
+export type ExplorerStyle = "packed" | "relaxed" | "offbeat" | "mixed";
+export type GroupType = "solo" | "couple" | "family_with_kids";
+export type Pace = "slow" | "moderate" | "fast";
+
+/** Who the traveler is, rather than where they've already decided to go. These drive stop
+ *  selection: the model reasons from the profile outward to places, instead of being handed a
+ *  list of names. Age is deliberately not collected — `energy` is the planning-relevant signal
+ *  ("will happily walk all day" vs "wants a bench every hour") and it's answerable directly. */
+export type EnergyLevel = "high" | "moderate" | "low";
+export type CrowdPreference = "love" | "mixed" | "avoid";
+
+/** Normalized, enum-like flags the itinerary-planner skill branches on — never free text where
+ *  a fixed choice is expected. Pace and the other resolved flags are derived in code from these
+ *  (see `deriveFlags`), never asked — the traveler answers who they are, not how fast to go. */
+export interface UserAnswers {
+  purpose: string;
+  explorerStyle: ExplorerStyle;
+  group: GroupType;
+  energy: EnergyLevel;
+  crowds: CrowdPreference;
+  budget: number;
+  /** Every tag the traveler selected. */
+  priorities: string[];
+  /** The (up to) 3 they starred, in the order starred — the primary weighting signal.
+   *  Everything in `priorities` but not here is a tie-breaker only. */
+  topPriorities: string[];
+  /** Optional anchors only. Empty is normal and expected — the model selects stops from the
+   *  traveler profile above; these just pin anything already decided on. */
+  selectedPois: CandidatePoi[];
+  customPois: string[];
+}
+
+// --- Step 2b → 3: derived flags ---------------------------------------------------------------
+
+export interface MobilityProfile {
+  walkLegCap: "tight" | "normal";
+  minimizeStairs: boolean;
+  restBreaks: boolean;
+  preferTransitOverLongWalks: boolean;
+}
+
+export interface CrowdBias {
+  preferOffpeakTiming: boolean;
+  boostOffbeatPois: boolean;
+  scheduleIconsAtOffpeak: boolean;
+  marketsAndLivelyOk: boolean;
+  peakTimingOk: boolean;
+}
+
+export interface FamilyRules {
+  kidFriendlyBias: boolean;
+  noLateNight: boolean;
+  shortTravelLegs: boolean;
+}
+
+/** Computed from `UserAnswers` in code (never asked, never model-generated) and written into
+ *  trip-context as the flags the skill branches on. Pace is the headline: `explorer_style` only
+ *  sets a ceiling, and reality steps it down from there. */
+export interface ResolvedFlags {
+  /** Spots-per-day target after every step-down, floored. */
+  paceSpotsPerDay: number;
+  paceResolved: Pace;
+  mobilityProfile: MobilityProfile;
+  crowdBias: CrowdBias;
+  /** Starred tags first (primary drivers), then the rest as tie-breakers. */
+  prioritiesRanked: { primary: string[]; tiebreakers: string[] };
+  /** Only present for group === "family_with_kids". */
+  familyRules: FamilyRules | null;
+}
+
+// --- Step 3: join / barrier ------------------------------------------------------------------
+
+export type TransportMode = "walk" | "transit" | "drive";
+
+/** Why a field is the value it is: fetched for real, degraded to a flagged default, or absent
+ *  entirely. Downstream steps read this instead of guessing from empty arrays. */
+export type FieldStatus = "ok" | "estimated" | "unavailable";
+
+export interface ReconcileNote {
+  field: string;
+  status: FieldStatus;
+  detail: string;
+}
+
+/** Output of the Step 3 barrier: both tracks' bundles plus per-field provenance. Only a truly
+ *  unusable state (no POIs from either source) sets `usable: false`; everything else degrades
+ *  to a flagged default and keeps the pipeline moving. */
+export interface ReconciledTrip {
+  usable: boolean;
+  /** Set only when `usable` is false — a user-facing message, matching the app's `{ error }`
+   *  route convention. */
+  error: string | null;
+  rawFetch: RawFetch;
+  userAnswers: UserAnswers;
+  /** Derived from `userAnswers` at reconcile time — the normalized flags trip-context writes
+   *  and the skill branches on. Kept alongside the raw answers, not instead of them. */
+  resolvedFlags: ResolvedFlags;
+  transportModes: TransportMode[];
+  /** Union of the user's picks from the candidate list and their own custom entries — the
+   *  authoritative POI set for Step 4 onward. Custom entries have no coordinates yet. */
+  selectedPois: { name: string; lat: number | null; lon: number | null; kinds: string | null }[];
+  notes: ReconcileNote[];
+}
+
+// --- Step 4: POI detail fetch ----------------------------------------------------------------
+
+export interface PoiOsmTags {
+  openingHours: string | null;
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface TravelLeg {
+  from: string;
+  to: string;
+  mode: TransportMode;
+  distanceKm: number;
+  minutes: number;
+  /** Always true today: legs are haversine + a speed constant, not road-network routing. */
+  estimated: boolean;
+}
+
+export interface EnrichedPoi {
+  name: string;
+  lat: number | null;
+  lon: number | null;
+  openingHours: string | null;
+  /** Null when hours are absent or use syntax too complex to parse confidently. */
+  closedDays: string[] | null;
+  visitMinutes: number;
+  visitMinutesEstimated: boolean;
+  /** True when nothing could be resolved for this POI — it still ships, with unknown fields. */
+  partial: boolean;
+}
+
+export interface PoiDetails {
+  pois: EnrichedPoi[];
+  travelLegs: TravelLeg[];
+  notes: ReconcileNote[];
+}
+
+export interface CritiqueResult {
+  issues: string[];
+  revisedDays: DayPlan[] | null;
 }
 
 export interface TraceSummary {
@@ -79,4 +283,58 @@ export interface TraceDetail extends TraceSummary {
   prompt: string;
   rawResponse: string | null;
   errorMessage: string | null;
+}
+
+/** "success": every step ok. "partial_failure": the primary step (generate/
+ *  refine/rebalance) succeeded but a secondary step (context/critique/
+ *  place-detail) errored or timed out. "failed": the primary step itself
+ *  failed. Computed on read from the run's steps, never stored. */
+export type RunStatus = "success" | "partial_failure" | "failed" | "pending";
+
+export interface RunStepUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: number | null;
+}
+
+export interface RunStep extends TraceDetail {
+  usage: RunStepUsage;
+}
+
+export interface RunSummary {
+  id: string;
+  kind: string;
+  destination: string;
+  tripId: string | null;
+  status: RunStatus;
+  totalDurationMs: number;
+  stepCount: number;
+  stepTypes: string[];
+  createdAt: string;
+}
+
+export interface RunDetail extends RunSummary {
+  steps: RunStep[];
+}
+
+/** One matched "role" across two runs — context↔context, the generate/refine
+ *  step (whichever kind each run used)↔"generation", critique↔critique.
+ *  Place-detail steps have no stable identity across runs, so they're only
+ *  counted/summed, never paired here. */
+export interface RunComparisonRole {
+  role: "context" | "generation" | "critique";
+  stepA: RunStep | null;
+  stepB: RunStep | null;
+  durationDeltaMs: number | null;
+  inputTokenDelta: number | null;
+  outputTokenDelta: number | null;
+}
+
+export interface RunComparison {
+  runA: RunSummary;
+  runB: RunSummary;
+  roles: RunComparisonRole[];
+  placeDetailCountA: number;
+  placeDetailCountB: number;
+  totalDurationDeltaMs: number;
 }

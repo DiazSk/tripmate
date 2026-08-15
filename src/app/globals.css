@@ -438,13 +438,15 @@ body {
   --card-border: rgba(255, 255, 255, 0.12);
 }
 
-/* Destination-field typeahead dropdown — floats beneath the input, independent of
-   .form-card-black's own translucency so it stays legible over whatever it lands on. */
+/* Geocoder typeahead dropdown — used under DestinationSearch, embedded both above the
+   plan-step trip-input console and above ItineraryCard's day-tab row. Floats independent
+   of whatever glass panel it sits over, so it stays legible regardless. */
 .geo-suggest-dropdown {
   background: rgba(10, 14, 23, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
   border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
   z-index: 50;
 }
 

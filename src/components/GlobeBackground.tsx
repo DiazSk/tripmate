@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { useMapCamera } from "@/lib/mapCamera";
+import { isGlobeHiddenRoute } from "@/lib/globeVisibility";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 /**
@@ -57,6 +59,20 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
   const containerRef = useRef<HTMLDivElement>(null);
   const creditRef = useRef<HTMLDivElement>(null);
   const { setViewer } = useMapCamera();
+  const pathname = usePathname();
+  const viewerInstanceRef = useRef<import("cesium").Viewer | null>(null);
+
+  // Separate from the mount effect below (which runs once): this reacts to route changes on the
+  // one already-constructed viewer, rather than tearing down and rebuilding the whole globe.
+  useEffect(() => {
+    const viewer = viewerInstanceRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+    const hidden = isGlobeHiddenRoute(pathname);
+    // Stops the render loop entirely rather than just hiding the canvas — with it running,
+    // Cesium keeps re-rendering the (Google photorealistic, tile-streaming) scene and ticking
+    // the auto-rotate spin every frame regardless of whether anything is drawn on top of it.
+    viewer.useDefaultRenderLoop = !hidden;
+  }, [pathname]);
 
   useEffect(() => {
     let viewer: import("cesium").Viewer | undefined;
@@ -67,6 +83,15 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
 
     (async () => {
       if (!containerRef.current) return;
+      // Skip booting Cesium at all when landing directly on a globe-hidden route (today, only
+      // `/backend`, reached and left exclusively via typed URLs / hard loads — it has no inbound
+      // or outbound links to the rest of the app, so there's no soft-navigation path where this
+      // would ever need to construct late). Pausing the render loop (the effect above) still
+      // matters for a page that arrives here from a soft nav with the globe already live, but a
+      // cold load pays for the dynamic `cesium` import, the WebGL context, and Google's
+      // photorealistic tileset fetch *before* that pause ever takes effect — this skips all of
+      // it up front instead.
+      if (isGlobeHiddenRoute(pathname)) return;
       (window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = "/cesium/";
       const Cesium = await import("cesium");
       if (cancelled || !containerRef.current) return;
@@ -228,11 +253,16 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
           lastTime = Date.now();
         };
 
+      viewerInstanceRef.current = viewer;
+      // Always true here: reaching this line already means the early `isGlobeHiddenRoute` return
+      // above didn't fire, i.e. the current route wants the globe running.
+      viewer.useDefaultRenderLoop = true;
       setViewer(viewer);
     })();
 
     return () => {
       cancelled = true;
+      viewerInstanceRef.current = null;
       setViewer(null);
       if (viewer) {
         if (spinListener) viewer.scene.postRender.removeEventListener(spinListener);

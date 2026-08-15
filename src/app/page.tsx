@@ -3,20 +3,35 @@
 import { ComponentType, ReactNode, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
+import { DayEditUpdates } from "@/components/DayHeader";
 import FeedbackLoop from "@/components/FeedbackLoop";
 import TierPicker from "@/components/TierPicker";
+import InterestPicker from "@/components/InterestPicker";
+import ExplorerStylePicker from "@/components/ExplorerStylePicker";
+import GroupTypePicker from "@/components/GroupTypePicker";
+import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
+import PoiCandidatePicker from "@/components/PoiCandidatePicker";
+import FocusEditMode from "@/components/FocusEditMode";
+import { useFocusEdit } from "@/lib/useFocusEdit";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import GenerationLoader from "@/components/cesium/GenerationLoader";
-import { headerLinkClass } from "@/components/BrandMark";
+import DestinationSearch from "@/components/DestinationSearch";
+import { backPillClass, headerLinkClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
-import { Itinerary } from "@/lib/types";
+import { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, Itinerary, RawFetch } from "@/lib/types";
+import { CandidatePoi } from "@/lib/pois";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
+import { devLabel } from "@/lib/devInspector";
 
 type Step = "landing" | "plan" | "result";
+/** Screens 2-6 need nothing from the backend, which is what gives the Step 2a fetch time to
+ *  land before `pois` — the one fetch-dependent screen — is ever reached. Keep `pois` last. */
+type PlanStep = "basics" | "purpose" | "group" | "profile" | "crowds" | "priorities" | "pois";
+const PLAN_ORDER: PlanStep[] = ["basics", "purpose", "group", "profile", "crowds", "priorities", "pois"];
 
 // Local calendar date in ISO shape. `toISOString()` would be UTC and roll the date over a
 // day early for anyone west of Greenwich in the evening; "sv-SE" formats local time as
@@ -73,7 +88,8 @@ function Field({
   /** Supplied by the date cells, which open the native picker from a click anywhere in the
    *  cell rather than only on the UA's own (removed) calendar glyph. */
   onActivate?: (cell: HTMLLabelElement, target: EventTarget | null) => void;
-  /** Destination takes more of the row than the three fixed-width figures beside it. */
+  /** Destination spans its own full-width row; the three fixed-width figures below it
+   *  split their row evenly. */
   grow?: string;
   children: ReactNode;
 }) {
@@ -84,6 +100,7 @@ function Field({
       className={`settle-in group relative px-4 py-3 transition-colors duration-300 focus-within:bg-white/[0.05] ${grow} ${
         onActivate ? "cursor-pointer" : "cursor-text"
       }`}
+      {...devLabel(`Field.${label}`)}
     >
       <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.025em] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -117,24 +134,79 @@ function openNativePicker(cell: HTMLLabelElement, target: EventTarget | null) {
   }
 }
 
+/** One Q&A screen: heading, optional subline, body. Every screen after `basics` has the same
+ *  shape, so they share this instead of repeating the heading markup six times. */
+function Screen({
+  name,
+  title,
+  subtitle,
+  children,
+}: {
+  name: string;
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="value-in" style={{ animationDelay: "80ms" }} {...devLabel(`PlanStep.${name}`)}>
+      <h2 className="font-display text-xl font-semibold text-foreground">{title}</h2>
+      {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+      <div className="mt-4">{children}</div>
+    </div>
+  );
+}
+
 export default function Home() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("landing");
+  const [planStep, setPlanStep] = useState<PlanStep>("basics");
   const [destination, setDestination] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [budget, setBudget] = useState(1000);
   const [tier, setTier] = useState<TierId>("midrange");
+  const [interests, setInterests] = useState<string[]>([]);
+  const [starredInterests, setStarredInterests] = useState<string[]>([]);
   const [destinationMissed, setDestinationMissed] = useState(false);
 
+  // Step 2b — collected alongside the existing basics/interests/style answers, sent to
+  // Step 3 as `userAnswers` once generation runs (see `generate()` below).
+  const [purpose, setPurpose] = useState("");
+  const [explorerStyle, setExplorerStyle] = useState<ExplorerStyle>("mixed");
+  const [group, setGroup] = useState<GroupType>("solo");
+  const [energy, setEnergy] = useState<EnergyLevel>("moderate");
+  const [crowds, setCrowds] = useState<CrowdPreference>("mixed");
+  const [selectedPois, setSelectedPois] = useState<CandidatePoi[]>([]);
+  const [customPois, setCustomPois] = useState<string[]>([]);
+
+  // Step 2a — fired fire-and-forget right alongside the existing destination-context
+  // warmer, the moment basics are submitted. Never blocks the wizard from advancing;
+  // `rawFetchLoading` only gates the POI picker's own loading state.
+  const [rawFetch, setRawFetch] = useState<RawFetch | null>(null);
+  const [rawFetchLoading, setRawFetchLoading] = useState(false);
+
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
+  // Id of the LLM pipeline run that produced the current `itinerary` — tracks
+  // the most recent generate/refine call so save() can attach it to the
+  // trip, letting later place-detail calls append to that same run.
+  const [lastRunId, setLastRunId] = useState<string | null>(null);
+  // Plays the staggered card reveal + typewriter effect once, right after a fresh
+  // generation — cleared the moment a stop is opened so backing out of the detail view
+  // doesn't replay the whole entrance again.
+  const [revealAnimation, setRevealAnimation] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
+  // state there would reset the view to Day 1 on the way back.
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
+  // Step 7 edit session. `chatScope` null = closed; { dayIndex: null } = whole trip.
+  const focus = useFocusEdit(itinerary);
   const [error, setError] = useState<string | null>(null);
 
   const {
     flyToDestinationByName,
+    flyToDestinationByCoords,
     selectStop,
     closeDetail,
     selectedStop,
@@ -178,6 +250,39 @@ export default function Home() {
     setTier(next);
   }
 
+  function toggleInterest(tag: string) {
+    setInterests((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+    setStarredInterests((prev) => prev.filter((t) => t !== tag || !interests.includes(tag)));
+  }
+
+  /** Unselecting a tag must also drop its star, or a starred-but-unselected tag would keep
+   *  occupying one of the three slots invisibly. */
+  function toggleInterestStar(tag: string) {
+    setStarredInterests((prev) =>
+      prev.includes(tag)
+        ? prev.filter((t) => t !== tag)
+        : prev.length >= 3
+          ? prev
+          : [...prev, tag]
+    );
+  }
+
+  function togglePoi(poi: CandidatePoi) {
+    setSelectedPois((prev) =>
+      prev.some((p) => p.name === poi.name) ? prev.filter((p) => p.name !== poi.name) : [...prev, poi]
+    );
+  }
+
+  function addCustomPoi(name: string) {
+    setCustomPois((prev) => (prev.includes(name) ? prev : [...prev, name]));
+  }
+
+  function removeCustomPoi(name: string) {
+    setCustomPois((prev) => prev.filter((p) => p !== name));
+  }
+
   // One geocode per completed edit of the destination field, fired on blur. Not on a
   // keystroke debounce: mapCamera's flyTo calls stopAutoRotate(), which is a permanent lock
   // only resetToHome() ever clears, so the first keystroke-triggered flight would kill the
@@ -193,6 +298,7 @@ export default function Home() {
 
   function backToLanding() {
     setStep("landing");
+    setPlanStep("basics");
     setError(null);
     // Required, not cosmetic: a blur-triggered flight left the spin locked and a pin dropped.
     // resetToHome is the only thing that clears the pin and calls startAutoRotate() again.
@@ -208,6 +314,23 @@ export default function Home() {
     return null;
   }
 
+  /** The Step 2b answers, in one place — generation, save and the edit loop must all see the
+   *  identical profile or the edit loop starts re-asking what planning already knew. */
+  function currentAnswers() {
+    return {
+      purpose,
+      explorerStyle,
+      group,
+      energy,
+      crowds,
+      budget,
+      priorities: interests,
+      topPriorities: starredInterests,
+      selectedPois,
+      customPois,
+    };
+  }
+
   async function generate() {
     const invalid = validate();
     if (invalid) {
@@ -221,11 +344,23 @@ export default function Home() {
       const res = await fetch("/api/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, startDate, endDate, budget, tier }),
+        body: JSON.stringify({
+          destination,
+          startDate,
+          endDate,
+          budget,
+          tier,
+          preferences: { tags: interests, vibe: null },
+          // Step 2b's output — /api/itinerary doesn't read this yet (that's Step 3's job),
+          // but this is the existing mechanism by which 2b hands answers to generation.
+          userAnswers: currentAnswers(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate itinerary");
       setItinerary(data.itinerary);
+      setLastRunId(data.runId ?? null);
+      setRevealAnimation(true);
       setStep("result");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -253,12 +388,24 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to refine itinerary");
       setItinerary(data.itinerary);
+      setLastRunId(data.runId ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setRefining(false);
     }
   }
+
+  // Pre-save editing is local-state only — there's no trip row to persist to
+  // until save() runs, so these just mutate the in-progress itinerary.
+  function handleEditDay(dayIndex: number, updates: DayEditUpdates) {
+    if (!itinerary) return;
+    const updated: Itinerary = structuredClone(itinerary);
+    Object.assign(updated.days[dayIndex], updates);
+    setItinerary(updated);
+  }
+
+
 
   async function save() {
     if (!itinerary) return;
@@ -268,7 +415,15 @@ export default function Home() {
       const res = await fetch("/api/trips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, startDate, endDate, budget, itinerary }),
+        body: JSON.stringify({
+          destination,
+          startDate,
+          endDate,
+          budget,
+          itinerary,
+          runId: lastRunId,
+          userAnswers: currentAnswers(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save trip");
@@ -349,125 +504,287 @@ export default function Home() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (planStep === "basics") {
+                  const invalid = validate();
+                  if (invalid) {
+                    setError(invalid);
+                    return;
+                  }
+                  setError(null);
+                  // Fire-and-forget: warms the destination_context cache (festivals/safety/
+                  // shopping/trends) while the user answers the next two steps, so the
+                  // generate call later doesn't pay for that LLM round trip on top of its own.
+                  fetch("/api/destination-context", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ destination, startDate, endDate }),
+                  }).catch(() => {});
+                  // Step 2a, run the same way: fired now so the bundle (weather, holidays,
+                  // candidate POIs, ...) is ready well before the profile step's POI picker
+                  // needs it. Never awaited here — it must not block advancing the wizard.
+                  setRawFetchLoading(true);
+                  fetch("/api/trip-fetch", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ destination, startDate, endDate }),
+                  })
+                    .then((r) => r.json())
+                    .then((data) => setRawFetch(data.rawFetch ?? null))
+                    .catch(() => {})
+                    .finally(() => setRawFetchLoading(false));
+                  setPlanStep("purpose");
+                  return;
+                }
+                const at = PLAN_ORDER.indexOf(planStep);
+                if (at < PLAN_ORDER.length - 1) {
+                  setPlanStep(PLAN_ORDER[at + 1]);
+                  return;
+                }
                 generate();
               }}
               className={`hero-rise ${cardClass}`}
             >
-              {/* One instrument, not four widgets. The trough is `--surface-deep` at a lower
-                  alpha than the panel around it, so it reads as recessed into the glass rather
-                  than stacked on top of it, and the cells are separated by the divider between
-                  them. Stacks vertically below `md`, where four cells in a row would each be
-                  narrower than the date they have to hold. */}
-              <div className="field-console flex flex-col divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-surface-deep/50 md:flex-row md:divide-x md:divide-y-0">
-                <Field icon={MapPin} label="Destination" delay={80} grow="md:flex-[1.5] flex-1">
-                  <input
-                    required
-                    value={destination}
-                    onChange={(e) => {
-                      setDestination(e.target.value);
-                      setDestinationMissed(false);
-                    }}
-                    onBlur={flyToTypedDestination}
-                    placeholder="Kyoto, Japan"
-                    className={`${fieldInputClass} ${fieldFilledTone}`}
-                  />
-                </Field>
-                <Field
-                  icon={CalendarDays}
-                  label="Start"
-                  delay={140}
-                  onActivate={openNativePicker}
-                >
-                  <input
-                    required
-                    type="date"
-                    min={todayISO()}
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className={`${fieldInputClass} tabular-nums ${startDate ? fieldFilledTone : fieldEmptyTone}`}
-                  />
-                </Field>
-                <Field
-                  icon={CalendarCheck}
-                  label="End"
-                  delay={200}
-                  onActivate={openNativePicker}
-                >
-                  <input
-                    required
-                    type="date"
-                    min={startDate || todayISO()}
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className={`${fieldInputClass} tabular-nums ${endDate ? fieldFilledTone : fieldEmptyTone}`}
-                  />
-                </Field>
-                <Field icon={Wallet} label="Total budget" delay={260}>
-                  {/* The `$` belongs in the field, not parenthesised in the label — budget is
-                      the product's whole mechanism, so it should read as a figure being
-                      entered rather than as a number with a unit noted elsewhere. */}
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-base font-medium text-muted">$</span>
-                    {/* Clearing the field used to snap the value back to a literal "0" under
-                        the cursor, because Number("") is 0. 0 renders as empty instead, and
-                        min={1} keeps it from ever submitting. */}
-                    <input
-                      required
-                      type="number"
-                      min={1}
-                      value={budget === 0 ? "" : budget}
-                      onChange={(e) => setBudget(Number(e.target.value))}
-                      className={`${fieldInputClass} tabular-nums ${budget === 0 ? fieldEmptyTone : fieldFilledTone}`}
-                    />
+              {planStep === "basics" && (
+                <>
+                  {/* One instrument, not four widgets. The trough is `--surface-deep` at a lower
+                      alpha than the panel around it, so it reads as recessed into the glass rather
+                      than stacked on top of it, and the cells are separated by the divider between
+                      them.
+                      NOT `overflow-hidden`: the Destination cell's autocomplete dropdown floats
+                      below this whole row, and this console is short enough (one row of fields)
+                      that the dropdown would get clipped at its bottom edge otherwise. The rounded
+                      corners don't need the clip — nothing in here has a background/transform that
+                      would poke past them (contrast the hero-photo bands elsewhere, which do).
+                      Destination gets its own full-width row rather than sharing one with the three
+                      fixed-width figures — it's the field the geocoder dropdown hangs off of, and
+                      splitting it out is what lets that dropdown span the whole console instead of
+                      a cramped `flex-[1.5]` slice of it. */}
+                  <div
+                    className="field-console flex flex-col divide-y divide-white/10 overflow-visible rounded-2xl border border-white/10 bg-surface-deep/50"
+                    {...devLabel("PlanStep.Basics")}
+                  >
+                    <Field icon={MapPin} label="Destination" delay={80} grow="w-full">
+                      <DestinationSearch
+                        variant="bare"
+                        value={destination}
+                        onQueryChange={(v) => {
+                          setDestination(v);
+                          setDestinationMissed(false);
+                        }}
+                        onBlur={flyToTypedDestination}
+                        onPick={(s) => {
+                          lastFlownRef.current = s.name;
+                          flyToDestinationByCoords(s.lat, s.lon, s.name);
+                        }}
+                        placeholder="Kyoto, Japan"
+                      />
+                    </Field>
+                    {/* Stacks vertically below `md`, where three cells in a row would each be
+                        narrower than the date they have to hold. */}
+                    <div className="flex flex-col divide-y divide-white/10 md:flex-row md:divide-x md:divide-y-0">
+                      <Field
+                        icon={CalendarDays}
+                        label="Start"
+                        delay={140}
+                        onActivate={openNativePicker}
+                      >
+                        <input
+                          required
+                          type="date"
+                          min={todayISO()}
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className={`${fieldInputClass} tabular-nums ${startDate ? fieldFilledTone : fieldEmptyTone}`}
+                        />
+                      </Field>
+                      <Field
+                        icon={CalendarCheck}
+                        label="End"
+                        delay={200}
+                        onActivate={openNativePicker}
+                      >
+                        <input
+                          required
+                          type="date"
+                          min={startDate || todayISO()}
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className={`${fieldInputClass} tabular-nums ${endDate ? fieldFilledTone : fieldEmptyTone}`}
+                        />
+                      </Field>
+                      <Field icon={Wallet} label="Total budget" delay={260}>
+                        {/* The `$` belongs in the field, not parenthesised in the label — budget is
+                            the product's whole mechanism, so it should read as a figure being
+                            entered rather than as a number with a unit noted elsewhere. */}
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-base font-medium text-muted">$</span>
+                          {/* Clearing the field used to snap the value back to a literal "0" under
+                              the cursor, because Number("") is 0. 0 renders as empty instead, and
+                              min={1} keeps it from ever submitting. */}
+                          <input
+                            required
+                            type="number"
+                            min={1}
+                            value={budget === 0 ? "" : budget}
+                            onChange={(e) => setBudget(Number(e.target.value))}
+                            className={`${fieldInputClass} tabular-nums ${budget === 0 ? fieldEmptyTone : fieldFilledTone}`}
+                          />
+                        </div>
+                      </Field>
+                    </div>
                   </div>
-                </Field>
-              </div>
 
-              {/* Deliberately not the red error block: an Open-Meteo miss only costs the map
-                  flight and the weather lookup. The itinerary still generates, so blocking on
-                  a third-party geocoder would turn their outage into "the app is broken". */}
-              {/* aria-live rather than role="alert": this resolves asynchronously after a
-                  geocode the user didn't ask for and doesn't block anything, so it should
-                  wait its turn rather than interrupt. */}
-              {/* The live region is always mounted and collapses to nothing when empty —
-                  a region that appears at the same moment as its message is announced
-                  unreliably, because the assistive tech never saw it go from empty to full. */}
-              <div aria-live="polite">
-                {destinationMissed && (
-                  <p className="value-in mt-2.5 text-xs text-muted">
-                    Couldn&apos;t find that on the map — we&apos;ll still plan it.
-                  </p>
-                )}
-              </div>
+                  {/* Deliberately not the red error block: an Open-Meteo miss only costs the map
+                      flight and the weather lookup. The itinerary still generates, so blocking on
+                      a third-party geocoder would turn their outage into "the app is broken". */}
+                  {/* aria-live rather than role="alert": this resolves asynchronously after a
+                      geocode the user didn't ask for and doesn't block anything, so it should
+                      wait its turn rather than interrupt. */}
+                  {/* The live region is always mounted and collapses to nothing when empty —
+                      a region that appears at the same moment as its message is announced
+                      unreliably, because the assistive tech never saw it go from empty to full. */}
+                  <div aria-live="polite">
+                    {destinationMissed && (
+                      <p className="value-in mt-2.5 text-xs text-muted">
+                        Couldn&apos;t find that on the map — we&apos;ll still plan it.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
 
-              <div className="value-in mt-6" style={{ animationDelay: "320ms" }}>
-                <h2 className="font-display text-xl font-semibold text-foreground">
-                  Choose your style
-                </h2>
-                <p className="mt-1 text-sm text-muted">
-                  {days === null
-                    ? "Add your dates and the per-day rates below become trip totals."
-                    : `Rough estimates for ${days} ${days === 1 ? "day" : "days"}${
-                        destination ? ` in ${destination}` : ""
-                      }. Pick the one closest to the trip you want.`}
-                </p>
-                <div className="mt-4">
-                  <TierPicker days={days} budget={budget} selected={tier} onSelect={pickTier} />
-                </div>
-              </div>
+              {planStep === "purpose" && (
+                <Screen
+                  name="Purpose"
+                  title="What's the occasion?"
+                  subtitle="Optional — a birthday, a first visit or a workation all change what fits."
+                >
+                  <input
+                    type="text"
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                    placeholder="e.g. anniversary trip, first time in Japan, work + play"
+                    className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                  />
+                </Screen>
+              )}
+
+              {planStep === "group" && (
+                <Screen
+                  name="Group"
+                  title="Who's going, and how do you explore?"
+                  subtitle="This sets the ceiling on how much we fit into a day."
+                >
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Who&apos;s going</label>
+                      <GroupTypePicker selected={group} onSelect={setGroup} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Explorer style</label>
+                      <ExplorerStylePicker selected={explorerStyle} onSelect={setExplorerStyle} />
+                    </div>
+                  </div>
+                </Screen>
+              )}
+
+              {planStep === "profile" && (
+                <Screen
+                  name="Profile"
+                  title="How much walking suits you?"
+                  subtitle="We pick the stops from this — how you travel matters more than a list of landmarks."
+                >
+                  <ChoicePicker name="energy" options={[...ENERGY_LEVELS]} selected={energy} onSelect={setEnergy} />
+                </Screen>
+              )}
+
+              {planStep === "crowds" && (
+                <Screen
+                  name="Crowds"
+                  title="Crowds, and what you'll spend"
+                  subtitle={
+                    days === null
+                      ? "Add your dates and the per-day rates below become trip totals."
+                      : `Rough estimates for ${days} ${days === 1 ? "day" : "days"}${
+                          destination ? ` in ${destination}` : ""
+                        }.`
+                  }
+                >
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Crowds</label>
+                      <ChoicePicker
+                        name="crowds"
+                        options={[...CROWD_PREFERENCES]}
+                        selected={crowds}
+                        onSelect={setCrowds}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Style and budget</label>
+                      <TierPicker days={days} budget={budget} selected={tier} onSelect={pickTier} />
+                    </div>
+                  </div>
+                </Screen>
+              )}
+
+              {planStep === "priorities" && (
+                <Screen
+                  name="Priorities"
+                  title="What matters most?"
+                  subtitle="Pick what interests you, then star up to three — the starred ones drive the plan."
+                >
+                  <InterestPicker
+                    selected={interests}
+                    starred={starredInterests}
+                    onToggle={toggleInterest}
+                    onToggleStar={toggleInterestStar}
+                  />
+                </Screen>
+              )}
+
+              {/* Last on purpose: the only screen that needs Step 2a's fetch, by which point the
+                  five preceding screens have given it time to land. Leaving it empty is normal —
+                  the profile above is what selects stops. */}
+              {planStep === "pois" && (
+                <Screen
+                  name="Pois"
+                  title="Anywhere you already know you want to go?"
+                  subtitle="Optional — skip this and we'll choose every stop for you."
+                >
+                  <PoiCandidatePicker
+                    pois={rawFetch?.candidatePois.pois ?? []}
+                    loading={rawFetchLoading}
+                    available={rawFetch?.candidatePois.available ?? false}
+                    selected={selectedPois}
+                    onToggle={togglePoi}
+                    customPois={customPois}
+                    onAddCustom={addCustomPoi}
+                    onRemoveCustom={removeCustomPoi}
+                  />
+                </Screen>
+              )}
 
               <div
                 className="value-in mt-6 flex items-center justify-between border-t border-card-border pt-5"
                 style={{ animationDelay: "440ms" }}
               >
-                <button type="button" onClick={backToLanding} className={ghostButtonClass}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const at = PLAN_ORDER.indexOf(planStep);
+                    if (at === 0) backToLanding();
+                    else setPlanStep(PLAN_ORDER[at - 1]);
+                  }}
+                  className={ghostButtonClass}
+                >
                   Back
                 </button>
                 <button
                   type="submit"
                   className="group inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none active:scale-[0.98]"
                 >
-                  Generate itinerary
+                  {planStep === PLAN_ORDER[PLAN_ORDER.length - 1] ? "Generate itinerary" : "Next"}
                   <ArrowRight
                     className="h-4 w-4 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5"
                     strokeWidth={2.25}
@@ -494,18 +811,74 @@ export default function Home() {
         // Docked panel floating over the full-screen globe rather than a normal-flow
         // block — `fixed` escapes AppShell's own scrollable content pane entirely, so
         // this positions relative to the viewport and scrolls independently.
-        <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
+        <div
+          className={`pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto pb-10 sm:top-6 sm:left-auto sm:min-w-[360px] ${
+          // Focus Mode needs room for two real panes; the summary view is a single column and
+          // reads better narrow, so the width is tied to the mode rather than fixed for both.
+          focus.target ? "sm:w-[62%] sm:max-w-[880px]" : "sm:w-[40%] sm:max-w-[520px]"
+        }`}
+          {...devLabel("ResultPanel")}
+        >
           {!selectedStop && (
             <>
+              <button type="button" onClick={backToLanding} className={backPillClass}>
+                <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
+                Back
+              </button>
+              {/* Focus Mode takes over the card while editing a day. */}
+              {focus.target && focus.draft && (
+                <FocusEditMode
+                  trip={{ id: "", destination, startDate, endDate, budget }}
+                  userAnswers={currentAnswers()}
+                  draft={focus.draft}
+                  dayIndex={focus.target.dayIndex}
+                  scope={focus.target.scope}
+                  dirty={focus.dirty}
+                  onDraftChange={focus.applyDraft}
+                  onCancel={focus.cancel}
+                  onSave={() => {
+                    const committed = focus.save();
+                    if (committed) setItinerary(committed);
+                  }}
+                />
+              )}
+
+              {!focus.target && (
               <ItineraryCard
                 itinerary={itinerary}
                 budget={budget}
                 destination={destination}
-                onSelectStop={selectStop}
+                onSelectStop={(stop) => {
+                  setRevealAnimation(false);
+                  selectStop(stop);
+                }}
+                editable
+                activeDayIndex={activeDayIndex}
+            onActiveDayChange={setActiveDayIndex}
+            onEditDay={handleEditDay}
+                onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
+                animateReveal={revealAnimation}
               />
-              <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />
+              )}
+
+              {/* Mode B's shown delta — the updated itinerary is already persisted into state
+                  above; this is only the human-readable part of that change. */}
+
+              {!focus.target && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => focus.open(0, "trip")}
+                    className={ghostButtonClass}
+                  >
+                    Refine with AI
+                  </button>
+                </div>
+              )}
+              {!focus.target && <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />}
             </>
           )}
+
 
           {selectedStop && (
             <PlaceDetailPanel

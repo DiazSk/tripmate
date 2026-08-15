@@ -5,8 +5,8 @@ import { useMapCamera } from "./mapCamera";
 import { geocodeDestination } from "./weather";
 import { PlaceDetail, Stop } from "./types";
 
-export function useTripCamera(destination: string) {
-  const { flyToDestination, flyToPlace, setActivePin } = useMapCamera();
+export function useTripCamera(destination: string, tripId?: string) {
+  const { flyToDestination, flyToPlace, setActivePin, showHighways } = useMapCamera();
   const [destinationCoords, setDestinationCoords] = useState<{
     lat: number;
     lon: number;
@@ -39,11 +39,15 @@ export function useTripCamera(destination: string) {
       }
       if (geo) {
         setDestinationCoords(geo);
+        // Independent of `fly`: highways are ambient map context for wherever the trip's
+        // destination turns out to be, not tied to whether the camera itself flies there (a
+        // saved trip with stops already frames its own day route and skips the flight).
+        showHighways(geo.lat, geo.lon);
         if (fly) flyToDestination(geo.lat, geo.lon, geo.name);
       }
       return geo;
     },
-    [flyToDestination]
+    [flyToDestination, showHighways]
   );
 
   /** Same as flyToDestinationByName, but for callers (e.g. an autocomplete suggestion) that
@@ -51,9 +55,10 @@ export function useTripCamera(destination: string) {
   const flyToDestinationByCoords = useCallback(
     (lat: number, lon: number, name: string) => {
       setDestinationCoords({ lat, lon, name });
+      showHighways(lat, lon);
       flyToDestination(lat, lon, name);
     },
-    [flyToDestination]
+    [flyToDestination, showHighways]
   );
 
   const selectStop = useCallback(
@@ -68,7 +73,13 @@ export function useTripCamera(destination: string) {
         const res = await fetch("/api/place-detail", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: stop.name, destination, lat: stop.lat, lng: stop.lng }),
+          body: JSON.stringify({
+            name: stop.name,
+            destination,
+            lat: stop.lat,
+            lng: stop.lng,
+            tripId,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load details");
@@ -79,7 +90,7 @@ export function useTripCamera(destination: string) {
         setDetailLoading(false);
       }
     },
-    [flyToPlace, setActivePin, destination]
+    [flyToPlace, setActivePin, destination, tripId]
   );
 
   const closeDetail = useCallback(() => {

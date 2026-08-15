@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { ReactNode } from "react";
 import { MapCameraProvider } from "@/lib/mapCamera";
 import BrandMark from "@/components/BrandMark";
+import DevInspectorOverlay from "@/components/dev/DevInspectorOverlay";
 
 const GlobeBackground = dynamic(() => import("@/components/GlobeBackground"), {
   ssr: false,
@@ -37,6 +38,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             the map controls, so it stays put no matter what shape a page's own content column
             takes. Above z-10 so the right-docked panels can't cover it. */}
         <BrandMark />
+        <DevInspectorOverlay />
         <MapControls />
       </div>
     </MapCameraProvider>
