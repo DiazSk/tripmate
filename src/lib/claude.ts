@@ -1,8 +1,10 @@
 import { spawn } from "child_process";
+import { homedir } from "os";
+import { join } from "path";
 import { insertTrace, updateTrace } from "./db";
 
-const MODEL = "claude-haiku-4-5-20251001";
-const DEFAULT_TIMEOUT_MS = 90_000;
+export const MODEL = "claude-haiku-4-5-20251001";
+export const DEFAULT_TIMEOUT_MS = 90_000;
 
 const BASE_TIMEOUT_MS = 120_000;
 const PER_DAY_TIMEOUT_MS = 12_000;
@@ -25,7 +27,13 @@ export interface ClaudeResult {
   traceId: string;
 }
 
-export type ClaudeCallType = "generate" | "refine" | "rebalance" | "place-detail";
+export type ClaudeCallType =
+  | "generate"
+  | "refine"
+  | "rebalance"
+  | "place-detail"
+  | "context"
+  | "critique";
 
 /**
  * Runs a one-shot prompt through the `claude` CLI (Haiku, no tools) instead
@@ -35,23 +43,36 @@ export type ClaudeCallType = "generate" | "refine" | "rebalance" | "place-detail
  * - Must use `spawn`, not `execFile`: execFile reliably hangs forever on this
  *   binary (reproduced consistently), spawn does not. Root cause not chased
  *   further since spawn just works.
+ * - The CLI installer places the binary in `~/.local/bin`, which shell
+ *   profiles (e.g. .zshrc) add to PATH — but non-login/non-interactive
+ *   process launchers (dev server started from an IDE, a task runner, etc.)
+ *   often don't source that profile, so PATH lookup for "claude" fails with
+ *   ENOENT even though the binary is installed. Force it onto PATH here
+ *   instead of trusting the inherited environment.
  *
  * Every call is logged to the llm_traces table (prompt + raw response, on
  * every outcome including errors/timeouts) so it can be inspected via the
  * LLM trace FAB (src/components/LlmTraceFab.tsx) — this is the single choke
  * point all itinerary generation goes through, so it's the natural place to
- * log from.
+ * log from. `meta.runId`, when passed, groups this call with sibling calls
+ * (context/generate/critique/place-detail) from the same pipeline execution
+ * — see llm_runs in src/lib/db.ts.
  */
 export function runClaude(
   prompt: string,
   type: ClaudeCallType,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  meta?: { runId?: string; effort?: "low" | "medium" | "high" }
 ): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
     const { CLAUDECODE: _drop, ...env } = process.env;
     void _drop;
+    const localBin = join(homedir(), ".local", "bin");
+    if (!(env.PATH ?? "").split(":").includes(localBin)) {
+      env.PATH = `${env.PATH ?? ""}:${localBin}`;
+    }
 
-    const traceId = insertTrace({ type, prompt, model: MODEL });
+    const traceId = insertTrace({ type, prompt, model: MODEL, runId: meta?.runId });
     const startedAt = Date.now();
 
     const child = spawn(
@@ -68,6 +89,12 @@ export function runClaude(
         "--no-session-persistence",
         "--setting-sources",
         "",
+        // Measured on real edit calls: ~96% of generated tokens are internal reasoning that never
+        // reaches the caller (12.4k output tokens for a 450-token JSON patch), and time-to-first-
+        // token is ~95% of the wall clock. "low" is the floor the CLI exposes — there is no way to
+        // turn thinking off — and it cut a representative edit from 105s to 84s with identical,
+        // valid output. Only passed where the task is a narrow, well-specified patch.
+        ...(meta?.effort ? ["--effort", meta.effort] : []),
       ],
       { env, stdio: ["ignore", "pipe", "pipe"] }
     );

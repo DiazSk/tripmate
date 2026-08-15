@@ -18,6 +18,7 @@ export async function GET(
     endDate: trip.end_date,
     budget: trip.budget,
     itinerary: JSON.parse(trip.itinerary_json),
+    userAnswers: trip.user_answers_json ? JSON.parse(trip.user_answers_json) : null,
   });
 }
 

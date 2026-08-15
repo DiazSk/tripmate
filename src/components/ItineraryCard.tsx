@@ -1,31 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { Sparkles } from "lucide-react";
 import { DayPlan, Itinerary, Stop, StopCategory } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
 import BudgetBar from "./BudgetBar";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CloudIcon,
-  EntryIcon,
-  FoodIcon,
-  LodgingIcon,
-  PinIcon,
-  RainIcon,
-  SunIcon,
-  TransitIcon,
-} from "./icons";
+import DayHeader, { DayEditUpdates } from "./DayHeader";
+import StopList from "./StopList";
+import Typewriter from "./Typewriter";
+import { devLabel } from "@/lib/devInspector";
 
-const CATEGORY_ICON: Record<StopCategory, typeof FoodIcon> = {
-  food: FoodIcon,
-  entry: EntryIcon,
-  transit: TransitIcon,
-  other: PinIcon,
-};
+/** Ms between each stop's reveal during the post-generation stagger. */
+const REVEAL_STEP_MS = 400;
+import { ChevronLeftIcon, ChevronRightIcon, EntryIcon, FoodIcon, LodgingIcon, TransitIcon } from "./icons";
 
 function cityName(destination: string): string {
   return destination.split(",")[0].trim();
@@ -44,56 +33,6 @@ function BlurredPhotoLayer({ photo, tint }: { photo: string; tint: string }) {
   );
 }
 
-/** "2026-09-10" -> "09-10-26". Returns the input unchanged if it isn't an ISO date. */
-function shortDate(iso: string): string {
-  const parts = (iso ?? "").split("-");
-  if (parts.length !== 3) return iso ?? "";
-  const [y, m, d] = parts;
-  return `${m}-${d}-${y.slice(2)}`;
-}
-
-const TEMP_WORDS = ["hot", "warm", "mild", "cool", "cold"] as const;
-
-/**
- * The model returns free-text weather ("Warm (24-32°C) with high rain chance (63%) - indoor
- * activities favored"). Condense it to an icon, a temperature, and a one-word condition; the
- * full sentence stays available as a tooltip.
- */
-function weatherSummary(weather: string) {
-  const lower = (weather ?? "").toLowerCase();
-  const range = weather?.match(/(-?\d+)\s*[-–—]\s*(-?\d+)\s*°?\s*C/i);
-  const single = weather?.match(/(-?\d+)\s*°\s*C/i);
-  const temp = range ? `${range[1]}–${range[2]}°C` : single ? `${single[1]}°C` : null;
-
-  if (/rain|shower|storm|wet/.test(lower)) return { Icon: RainIcon, temp, label: "Rain likely" };
-  if (/snow|sleet/.test(lower)) return { Icon: CloudIcon, temp, label: "Snow" };
-  if (/cloud|overcast/.test(lower)) return { Icon: CloudIcon, temp, label: "Cloudy" };
-  const word = TEMP_WORDS.find((w) => lower.includes(w));
-  return { Icon: SunIcon, temp, label: word ? word[0].toUpperCase() + word.slice(1) : "Clear" };
-}
-
-function WeatherBadge({ weather }: { weather: string }) {
-  const { Icon, temp, label } = weatherSummary(weather);
-  return (
-    <span
-      title={weather}
-      className="flex shrink-0 items-center gap-1.5 rounded-full bg-tag-neutral-bg/60 px-2.5 py-1 text-xs"
-    >
-      <Icon className="h-4 w-4 shrink-0 text-accent" />
-      {temp && <span className="font-medium tabular-nums text-tag-neutral-fg">{temp}</span>}
-      <span className="text-tag-neutral-fg/70">{label}</span>
-    </span>
-  );
-}
-
-function tagStyle(tag: string): string {
-  const lower = tag.toLowerCase();
-  if (/\bai\b/.test(lower)) return "bg-tag-highlight-bg text-tag-highlight-fg";
-  if (lower.includes("local") || lower.includes("free") || lower.includes("recommend") || lower.includes("must"))
-    return "bg-tag-positive-bg text-tag-positive-fg";
-  return "bg-tag-neutral-bg text-tag-neutral-fg";
-}
-
 function dayBreakdown(day: DayPlan) {
   const sums: Record<StopCategory, number> = { food: 0, entry: 0, transit: 0, other: 0 };
   for (const stop of day.stops) sums[stop.category ?? "other"] += stop.cost;
@@ -108,97 +47,6 @@ function dayBreakdown(day: DayPlan) {
   ];
 }
 
-function CategoryTile({ category }: { category: StopCategory }) {
-  const Icon = CATEGORY_ICON[category ?? "other"];
-  return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-tag-neutral-bg text-accent">
-      <Icon className="h-4 w-4" />
-    </div>
-  );
-}
-
-function StopAvatar({ name, category }: { name: string; category: StopCategory }) {
-  const photo = usePlacePhoto(name);
-  if (photo) {
-    // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
-    return <img src={photo} alt="" className="h-10 w-10 rounded-full object-cover" />;
-  }
-  return <CategoryTile category={category} />;
-}
-
-function StackedPhoto({ name, category }: { name: string; category: StopCategory }) {
-  const photo = usePlacePhoto(name);
-  if (photo) {
-    // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
-    return <img src={photo} alt="" className="h-24 w-full rounded-xl object-cover shadow-sm" />;
-  }
-  const Icon = CATEGORY_ICON[category ?? "other"];
-  return (
-    <div className="flex h-24 w-full items-center justify-center rounded-xl bg-tag-neutral-bg text-accent">
-      <Icon className="h-6 w-6" />
-    </div>
-  );
-}
-
-function StopRow({
-  stop,
-  index,
-  isLast,
-  onSelect,
-}: {
-  stop: Stop;
-  index: number;
-  isLast: boolean;
-  onSelect: (stop: Stop) => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 24, scale: 0.98 }}
-      whileInView={{ opacity: 1, y: 0, scale: 1 }}
-      viewport={{ once: true, margin: "-10% 0px -10% 0px" }}
-      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.08 }}
-      className="relative flex gap-3 rounded-xl transition-colors hover:bg-white/5"
-    >
-      {!isLast && (
-        /* Spans avatar-bottom to next-avatar-top, so it has to stop short of this row's own
-           height rather than exceed it: it starts at 2.75rem (top-11, a hair under the 2.5rem
-           h-10 avatar) and the next avatar begins at 100% + 1rem (the parent's space-y-4), so
-           the height is 100% + 1rem - 2.75rem. The old +0.5rem overshot by 2.25rem and drew
-           straight through the following stop's avatar and name. Update this if the avatar
-           size or the list gap changes. */
-        <div className="absolute top-11 left-5 h-[calc(100%-1.75rem)] w-px bg-card-border" />
-      )}
-      <button
-        type="button"
-        onClick={() => onSelect(stop)}
-        className="relative z-10 flex flex-1 gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-      >
-        <span className="shrink-0">
-          <StopAvatar name={stop.name} category={stop.category} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <div className="font-medium text-foreground">{stop.name}</div>
-          {(stop.time || stop.durationLabel) && (
-            <div className="text-sm text-muted">
-              {[stop.time, stop.durationLabel].filter(Boolean).join(" · ")}
-            </div>
-          )}
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {(stop.tags ?? []).map((tag, ti) => (
-              <span
-                key={ti}
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${tagStyle(tag)}`}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        </span>
-      </button>
-    </motion.div>
-  );
-}
-
 export default function ItineraryCard({
   itinerary,
   budget,
@@ -206,6 +54,11 @@ export default function ItineraryCard({
   onSelectStop,
   editable,
   onLodgingActualCostChange,
+  onEditDay,
+  onChatDay,
+  activeDayIndex: controlledDayIndex,
+  onActiveDayChange,
+  animateReveal,
 }: {
   itinerary: Itinerary;
   budget: number;
@@ -213,19 +66,77 @@ export default function ItineraryCard({
   onSelectStop: (stop: Stop) => void;
   editable?: boolean;
   onLodgingActualCostChange?: (dayIndex: number, value: number | undefined) => void;
+  onEditDay?: (dayIndex: number, updates: DayEditUpdates) => void;
+  /** Mode A — open the chat scoped to this day. */
+  onChatDay?: (dayIndex: number) => void;
+  /** Optional controlled day selection. The host owns it when this page unmounts the card to
+   *  show something else (a stop's detail panel) — otherwise the day would reset to 1 on the
+   *  way back, since remounting reinitialises local state. Uncontrolled when omitted. */
+  activeDayIndex?: number;
+  onActiveDayChange?: (dayIndex: number) => void;
+  /** Plays the staggered "AI is building this" reveal once, right after a fresh generation:
+   *  day 1's header appears first, then each stop card + its map pin light up together every
+   *  REVEAL_STEP_MS. Only ever applies to the initial day (index 0) shown on mount — switching
+   *  day tabs (even mid-stagger) always shows the target day in full immediately. */
+  animateReveal?: boolean;
 }) {
-  const [activeDayIndex, setActiveDayIndex] = useState(0);
+  const [uncontrolledDayIndex, setUncontrolledDayIndex] = useState(0);
+  const activeDayIndex = controlledDayIndex ?? uncontrolledDayIndex;
+  const setActiveDayIndex = (next: number | ((i: number) => number)) => {
+    const value = typeof next === "function" ? next(activeDayIndex) : next;
+    if (onActiveDayChange) onActiveDayChange(value);
+    else setUncontrolledDayIndex(value);
+  };
   const headerPhoto = usePlacePhoto(destination, "full");
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
   const { showDayRoute } = useMapCamera();
   const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [revealedCount, setRevealedCount] = useState(animateReveal ? 0 : Infinity);
+  const activeDayRef = useRef(dayIndex);
+  const staggerStartedRef = useRef(false);
+  // The very first "day changed" effect pass fires on mount too — when animating, that pass
+  // must defer to the stagger effect below instead of instantly revealing everything.
+  const skipNextInstantRevealRef = useRef(!!animateReveal);
 
-  // Glowing pins + connecting arc for whichever day is active, redrawn on every day-tab switch.
+  useEffect(() => {
+    activeDayRef.current = dayIndex;
+  }, [dayIndex]);
+
+  // Glowing pins + connecting arc for whichever day is active, redrawn on every day-tab
+  // switch — including switching away from day 1 mid-stagger, which is how leaving the
+  // animation early works: the new day just shows in full immediately.
   useEffect(() => {
     if (!day) return;
+    if (skipNextInstantRevealRef.current) {
+      skipNextInstantRevealRef.current = false;
+      return;
+    }
+    setRevealedCount(day.stops.length);
     showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
   }, [day, showDayRoute]);
+
+  // Staggered reveal, played once on mount when animateReveal is true: every REVEAL_STEP_MS,
+  // one more stop card mounts (with its own slide-down + typewriter, see StopRow) and its map
+  // pin joins the route together.
+  useEffect(() => {
+    if (!animateReveal || staggerStartedRef.current) return;
+    staggerStartedRef.current = true;
+    const stops = itinerary.days[0]?.stops ?? [];
+    let i = 0;
+    const id = setInterval(() => {
+      if (activeDayRef.current !== 0) {
+        clearInterval(id);
+        return;
+      }
+      i += 1;
+      setRevealedCount(i);
+      showDayRoute(stops.slice(0, i).map((s) => ({ lat: s.lat, lng: s.lng })));
+      if (i >= stops.length) clearInterval(id);
+    }, REVEAL_STEP_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately one-shot on mount
+  }, [animateReveal]);
 
   // Keep the active day tab centered in its scroll row, including when the arrows below move it.
   useEffect(() => {
@@ -237,15 +148,17 @@ export default function ItineraryCard({
   }, [dayIndex]);
 
   if (!day) return null;
+  // Scoped to day 1 only — see the `animateReveal` prop doc above.
+  const revealingStops = !!animateReveal && dayIndex === 0;
   const breakdown = dayBreakdown(day);
-  const photoStops = day.stops.slice(0, 3);
   const tierDescription = TIERS.find((t) => t.id === itinerary.tier)?.description ?? "";
 
   return (
-    <div className="itinerary-glass overflow-hidden">
+    <div className="itinerary-glass overflow-hidden" {...devLabel("ItineraryCard")}>
       <div
         className="relative flex min-h-[9rem] flex-col justify-end overflow-hidden p-5 text-on-deep sm:min-h-[11rem] sm:p-6"
         style={{ backgroundColor: "var(--surface-deep)" }}
+        {...devLabel("ItineraryCard.Header")}
       >
         {headerPhoto && (
           /* Both stops come from --surface-deep so the tint matches the flat
@@ -271,7 +184,7 @@ export default function ItineraryCard({
         <BudgetBar days={itinerary.days} budget={budget} />
       </div>
 
-      <div className="flex items-center gap-2 px-5 pb-3 sm:px-6">
+      <div className="flex items-center gap-2 px-5 pt-4 pb-3 sm:px-6" {...devLabel("ItineraryCard.DayTabs")}>
         <button
           type="button"
           onClick={() => setActiveDayIndex((i) => Math.max(0, i - 1))}
@@ -327,14 +240,30 @@ export default function ItineraryCard({
       </div>
 
       <div className="px-5 pb-5 sm:px-6 sm:pb-6">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-display text-lg font-semibold text-foreground">
-            Day {dayIndex + 1} · {shortDate(day.date)}
-          </h3>
-          {day.weather && <WeatherBadge weather={day.weather} />}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <DayHeader
+              day={day}
+              dayIndex={dayIndex}
+              animateReveal={animateReveal}
+              editable={editable}
+              onEditDay={onEditDay}
+            />
+          </div>
+          {/* Mode A, day-scoped. Sits beside the day header because that is the day's own
+              edit affordance — the whole-trip equivalent lives with the save/refine actions. */}
+          {onChatDay && (
+            <button
+              type="button"
+              onClick={() => onChatDay(dayIndex)}
+              aria-label={`Refine day ${dayIndex + 1} with AI`}
+              title="Refine this day with AI"
+              className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-white/10 hover:text-foreground"
+            >
+              <Sparkles className="h-4 w-4" />
+            </button>
+          )}
         </div>
-
-        {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
 
         {day.lodging && (
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-white/10 p-3">
@@ -363,35 +292,19 @@ export default function ItineraryCard({
           </div>
         )}
 
-        {/* Photo column sits beside the stop list only, so it starts level with the first stop
-            rather than alongside the lodging row above it. */}
-        <div className="flex gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="space-y-4">
-              {day.stops.map((stop, i) => (
-                <StopRow
-                  key={i}
-                  stop={stop}
-                  index={i}
-                  isLast={i === day.stops.length - 1}
-                  onSelect={onSelectStop}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="hidden w-28 shrink-0 flex-col gap-2 lg:flex">
-            {photoStops.map((stop, i) => (
-              <StackedPhoto key={i} name={stop.name} category={stop.category} />
-            ))}
-          </div>
-        </div>
+        <StopList
+          stops={day.stops}
+          revealedCount={revealedCount}
+          onSelect={onSelectStop}
+          revealAnimation={revealingStops}
+        />
       </div>
 
       <div
         className={`relative overflow-hidden border-t border-card-border p-5 sm:p-6 ${
           headerPhoto ? "" : "bg-tag-neutral-bg/30"
         }`}
+        {...devLabel("ItineraryCard.BudgetBreakdown")}
       >
         {headerPhoto && (
           <BlurredPhotoLayer
@@ -428,7 +341,13 @@ export default function ItineraryCard({
                 >
                   {tile.Icon && <tile.Icon className="h-4 w-4" />}
                   <div className="mt-1 text-xs opacity-90">{tile.label}</div>
-                  <div className="font-semibold tabular-nums">${tile.amount}</div>
+                  <div className="font-semibold tabular-nums">
+                    {animateReveal ? (
+                      <Typewriter key={`${dayIndex}-${tile.label}`} text={`$${tile.amount}`} />
+                    ) : (
+                      `$${tile.amount}`
+                    )}
+                  </div>
                 </div>
               );
             })}

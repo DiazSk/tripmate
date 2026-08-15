@@ -5,13 +5,22 @@ export interface DayWeather {
   precipitationProbability: number | null;
   humidity: number | null;
   weatherCode: number | null;
+  /** Local ISO datetime (e.g. "2026-08-14T05:16"), astronomical so available on both the
+   *  forecast and historical-archive endpoints regardless of forecast horizon. */
+  sunrise: string | null;
+  sunset: string | null;
   historical: boolean;
 }
 
-interface GeoResult {
+export interface GeoResult {
   lat: number;
   lon: number;
   name: string;
+  admin1: string | null;
+  country: string | null;
+  /** ISO 3166-1 alpha-2, e.g. "FR" — same field `GeoSuggestion` already carries, added here too
+   *  since Step 2a's holidays lookup needs a country code to query by. */
+  countryCode: string | null;
 }
 
 export interface GeoSuggestion {
@@ -20,6 +29,8 @@ export interface GeoSuggestion {
   name: string;
   admin1: string | null;
   country: string | null;
+  /** ISO 3166-1 alpha-2, e.g. "FR" — for the country-code badge on a suggestion row. */
+  countryCode: string | null;
 }
 
 const FORECAST_HORIZON_DAYS = 16;
@@ -34,7 +45,14 @@ export async function geocodeDestination(name: string): Promise<GeoResult | null
   const data = await res.json();
   const first = data?.results?.[0];
   if (!first) return null;
-  return { lat: first.latitude, lon: first.longitude, name: first.name };
+  return {
+    lat: first.latitude,
+    lon: first.longitude,
+    name: first.name,
+    admin1: first.admin1 ?? null,
+    country: first.country ?? null,
+    countryCode: first.country_code ?? null,
+  };
 }
 
 /** Typeahead suggestions for the destination field — same free Open-Meteo geocoder as
@@ -55,7 +73,14 @@ export async function suggestDestinations(query: string, count = 6): Promise<Geo
     name: r.name,
     admin1: r.admin1 ?? null,
     country: r.country ?? null,
+    countryCode: r.country_code ?? null,
   }));
+}
+
+/** "Kyoto, Japan" — the disambiguated form worth both showing the user and sending on as the
+ *  actual destination value, since a bare city name (e.g. "Springfield") is often ambiguous. */
+export function suggestionLabel(s: GeoSuggestion): string {
+  return s.country ? `${s.name}, ${s.country}` : s.name;
 }
 
 export async function getWeatherForDates(
@@ -64,6 +89,29 @@ export async function getWeatherForDates(
   startDate: string,
   endDate: string
 ): Promise<DayWeather[]> {
+  const { days } = await fetchWeatherBundle(lat, lon, startDate, endDate);
+  return days;
+}
+
+/** Same lookup as `getWeatherForDates`, plus the metadata (resolved IANA timezone, whether the
+ *  historical-fallback branch was used) that Step 2a's raw-fetch bundle needs but the itinerary
+ *  prompt never has — kept as a separate export so existing callers of `getWeatherForDates`
+ *  don't have to change shape. */
+export async function getWeatherWithMeta(
+  lat: number,
+  lon: number,
+  startDate: string,
+  endDate: string
+): Promise<{ days: DayWeather[]; timezone: string | null; historical: boolean }> {
+  return fetchWeatherBundle(lat, lon, startDate, endDate);
+}
+
+async function fetchWeatherBundle(
+  lat: number,
+  lon: number,
+  startDate: string,
+  endDate: string
+): Promise<{ days: DayWeather[]; timezone: string | null; historical: boolean }> {
   const daysUntilStart =
     (new Date(startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
 
@@ -101,7 +149,7 @@ async function fetchDaily(
   startDate: string,
   endDate: string,
   historical: boolean
-): Promise<DayWeather[]> {
+): Promise<{ days: DayWeather[]; timezone: string | null; historical: boolean }> {
   const url = new URL(base);
   url.searchParams.set("latitude", String(lat));
   url.searchParams.set("longitude", String(lon));
@@ -110,16 +158,17 @@ async function fetchDaily(
   url.searchParams.set(
     "daily",
     historical
-      ? "temperature_2m_max,temperature_2m_min,precipitation_sum"
-      : "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode"
+      ? "temperature_2m_max,temperature_2m_min,precipitation_sum,sunrise,sunset"
+      : "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,sunrise,sunset"
   );
   url.searchParams.set("timezone", "auto");
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`weather API returned ${res.status}`);
   const data = await res.json();
+  const timezone: string | null = data.timezone ?? null;
   const daily = data.daily;
-  if (!daily?.time) return [];
+  if (!daily?.time) return { days: [], timezone, historical };
 
   // Best-effort only: relative humidity isn't a supported "daily" aggregate on
   // Open-Meteo, so it's fetched separately (hourly, averaged per day) and
@@ -128,10 +177,12 @@ async function fetchDaily(
     ? {}
     : await fetchHourlyHumidity(base, lat, lon, startDate, endDate);
 
-  return daily.time.map((date: string, i: number) => ({
+  const days: DayWeather[] = daily.time.map((date: string, i: number) => ({
     date,
     tempMaxC: daily.temperature_2m_max[i],
     tempMinC: daily.temperature_2m_min[i],
+    sunrise: daily.sunrise?.[i] ?? null,
+    sunset: daily.sunset?.[i] ?? null,
     precipitationProbability: historical
       ? null
       : daily.precipitation_probability_max?.[i] ?? null,
@@ -139,6 +190,7 @@ async function fetchDaily(
     humidity: humidityByDate[date] ?? null,
     historical,
   }));
+  return { days, timezone, historical };
 }
 
 async function fetchHourlyHumidity(

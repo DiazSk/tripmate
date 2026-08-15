@@ -2,22 +2,25 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Terminal, X } from "lucide-react";
+import { ArrowLeft, GitCompare, Terminal, X } from "lucide-react";
 import TraceStatusBadge from "@/components/TraceStatusBadge";
-import { TraceDetail, TraceSummary } from "@/lib/types";
+import RunCompareModal from "@/components/RunCompareModal";
+import RunPipelineDiagram from "@/components/RunPipelineDiagram";
+import { RunDetail, RunStep, RunSummary, TraceSummary } from "@/lib/types";
+import { KIND_LABELS, STEP_LABELS, formatMs } from "@/lib/runLabels";
 
-type View = "list" | "detail";
+type View = "list" | "run" | "legacy";
 
 interface LlmTraceWidgetApi {
   openList: () => void;
-  openItem: (id: string) => void;
+  openRun: (runId: string) => void;
   close: () => void;
 }
 
 const LlmTraceWidgetContext = createContext<LlmTraceWidgetApi | null>(null);
 
-/** Lets any "View LLM trace for this call →" link open the FAB panel
- *  pre-focused on that trace, instead of navigating to a page that no longer
+/** Lets any "View LLM pipeline for this call →" link open the FAB panel
+ *  pre-focused on that run, instead of navigating to a page that no longer
  *  exists — see .claude/skills/dev-analytics-fab/SKILL.md. */
 export function useLlmTraceWidget(): LlmTraceWidgetApi {
   const ctx = useContext(LlmTraceWidgetContext);
@@ -25,88 +28,305 @@ export function useLlmTraceWidget(): LlmTraceWidgetApi {
   return ctx;
 }
 
+const RUN_STATUS_STYLES: Record<string, string> = {
+  success: "bg-green-50 text-green-700 border-green-200",
+  partial_failure: "bg-amber-50 text-amber-700 border-amber-200",
+  failed: "bg-red-50 text-red-700 border-red-200",
+  pending: "bg-stone-100 text-stone-600 border-stone-200",
+};
+
+const RUN_STATUS_LABELS: Record<string, string> = {
+  success: "Success",
+  partial_failure: "Partial Failure",
+  failed: "Failed",
+  pending: "Pending",
+};
+
+function RunStatusBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+        RUN_STATUS_STYLES[status] ?? RUN_STATUS_STYLES.pending
+      }`}
+    >
+      {RUN_STATUS_LABELS[status] ?? status}
+    </span>
+  );
+}
+
 export function LlmTraceFabProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<View>("list");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [compareRunId, setCompareRunId] = useState<string | null>(null);
 
   const openList = useCallback(() => {
     setView("list");
-    setSelectedId(null);
+    setSelectedRunId(null);
+    setSelectedTraceId(null);
     setIsOpen(true);
   }, []);
 
-  const openItem = useCallback((id: string) => {
-    setView("detail");
-    setSelectedId(id);
+  const openRun = useCallback((runId: string) => {
+    setView("run");
+    setSelectedRunId(runId);
     setIsOpen(true);
   }, []);
 
   const close = useCallback(() => setIsOpen(false), []);
 
   return (
-    <LlmTraceWidgetContext.Provider value={{ openList, openItem, close }}>
+    <LlmTraceWidgetContext.Provider value={{ openList, openRun, close }}>
       {children}
       <LlmTraceFab
         isOpen={isOpen}
         view={view}
-        selectedId={selectedId}
+        selectedRunId={selectedRunId}
+        selectedTraceId={selectedTraceId}
         onOpen={openList}
         onClose={close}
-        onSelect={(id) => {
-          setView("detail");
-          setSelectedId(id);
+        onSelectRun={(id) => {
+          setView("run");
+          setSelectedRunId(id);
+        }}
+        onSelectLegacy={(id) => {
+          setView("legacy");
+          setSelectedTraceId(id);
         }}
         onBackToList={() => {
           setView("list");
-          setSelectedId(null);
+          setSelectedRunId(null);
+          setSelectedTraceId(null);
         }}
+        onCompare={setCompareRunId}
       />
+      {compareRunId && (
+        <RunCompareModal runId={compareRunId} onClose={() => setCompareRunId(null)} />
+      )}
     </LlmTraceWidgetContext.Provider>
   );
 }
 
-function TraceList({ onSelect }: { onSelect: (id: string) => void }) {
-  const [traces, setTraces] = useState<TraceSummary[]>([]);
+function RunList({
+  onSelectRun,
+  onSelectLegacy,
+}: {
+  onSelectRun: (id: string) => void;
+  onSelectLegacy: (id: string) => void;
+}) {
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [ungroupedTraces, setUngroupedTraces] = useState<TraceSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/llm-traces")
+    fetch("/api/llm-traces/runs")
       .then((res) => res.json())
-      .then((data) => setTraces(data.traces))
+      .then((data) => {
+        setRuns(data.runs ?? []);
+        setUngroupedTraces(data.ungroupedTraces ?? []);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p className="p-4 text-sm text-stone-500">Loading…</p>;
-  if (traces.length === 0) return <p className="p-4 text-sm text-stone-500">No calls logged yet.</p>;
+  if (runs.length === 0 && ungroupedTraces.length === 0)
+    return <p className="p-4 text-sm text-stone-500">No calls logged yet.</p>;
 
   return (
     <div className="space-y-2 overflow-y-auto p-3">
-      {traces.map((trace) => (
+      {runs.map((run) => (
         <button
-          key={trace.id}
-          onClick={() => onSelect(trace.id)}
-          className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50"
+          key={run.id}
+          onClick={() => onSelectRun(run.id)}
+          className="flex w-full flex-col gap-1.5 rounded-xl border border-stone-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50"
         >
-          <div className="min-w-0">
-            <div className="font-medium capitalize text-stone-900">{trace.type}</div>
-            <div className="truncate text-xs text-stone-500">
-              {new Date(trace.createdAt).toLocaleString()}
-              {trace.durationMs != null && ` · ${trace.durationMs}ms`}
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate font-medium text-stone-900">{run.destination}</div>
+              <div className="text-xs text-stone-500">{KIND_LABELS[run.kind] ?? run.kind}</div>
             </div>
+            <RunStatusBadge status={run.status} />
           </div>
-          <TraceStatusBadge status={trace.status} />
+          <div className="truncate text-xs text-stone-500">
+            {run.stepTypes.map((t) => STEP_LABELS[t] ?? t).join(" ➔ ")}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-stone-400">
+            <span>{new Date(run.createdAt).toLocaleString()}</span>
+            <span>·</span>
+            <span>{formatMs(run.totalDurationMs)} total</span>
+            <span>·</span>
+            <span>
+              {run.stepCount} step{run.stepCount === 1 ? "" : "s"}
+            </span>
+          </div>
         </button>
       ))}
+
+      {ungroupedTraces.length > 0 && (
+        <>
+          <div className="pt-2 text-xs font-medium uppercase tracking-wide text-stone-400">
+            Ungrouped (legacy)
+          </div>
+          {ungroupedTraces.map((trace) => (
+            <button
+              key={trace.id}
+              onClick={() => onSelectLegacy(trace.id)}
+              className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50"
+            >
+              <div className="min-w-0">
+                <div className="font-medium capitalize text-stone-900">{trace.type}</div>
+                <div className="truncate text-xs text-stone-500">
+                  {new Date(trace.createdAt).toLocaleString()}
+                  {trace.durationMs != null && ` · ${trace.durationMs}ms`}
+                </div>
+              </div>
+              <TraceStatusBadge status={trace.status} />
+            </button>
+          ))}
+        </>
+      )}
     </div>
   );
 }
 
-// Keyed by `id` at the call site (below) so switching traces remounts this
-// fresh — simpler and lint-clean than resetting trace/error state by hand
-// inside the effect every time `id` changes.
-function TraceDetailView({ id, onBack }: { id: string; onBack: () => void }) {
-  const [trace, setTrace] = useState<TraceDetail | null>(null);
+function StepDetail({ step, onBack }: { step: RunStep; onBack: () => void }) {
+  return (
+    <div className="flex h-full flex-col overflow-y-auto p-3">
+      <button
+        onClick={onBack}
+        className="mb-2 flex items-center gap-1.5 self-start text-sm font-medium text-stone-600 hover:text-stone-900"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> Back to pipeline
+      </button>
+
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
+          <span className="font-medium text-stone-900">{STEP_LABELS[step.type] ?? step.type}</span>
+          <span>·</span>
+          <span>{step.model}</span>
+          <span>·</span>
+          <span>{new Date(step.createdAt).toLocaleString()}</span>
+          <span>·</span>
+          <span>{formatMs(step.durationMs)}</span>
+          <TraceStatusBadge status={step.status} />
+        </div>
+
+        <div className="flex flex-wrap gap-3 text-xs text-stone-600">
+          <span>In: {step.usage.inputTokens ?? "—"} tok</span>
+          <span>Out: {step.usage.outputTokens ?? "—"} tok</span>
+          <span>Cost: {step.usage.costUsd != null ? `$${step.usage.costUsd.toFixed(4)}` : "—"}</span>
+        </div>
+
+        {step.errorMessage && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {step.errorMessage}
+          </div>
+        )}
+
+        <div>
+          <h3 className="mb-1.5 text-xs font-semibold text-stone-700">Prompt sent to Claude</h3>
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800">
+            {step.prompt}
+          </pre>
+        </div>
+        <div>
+          <h3 className="mb-1.5 text-xs font-semibold text-stone-700">Raw response</h3>
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800">
+            {step.rawResponse ?? "(no response captured)"}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Keyed by `runId` at the call site so switching runs remounts this fresh —
+// simpler and lint-clean than resetting fetch/selection state by hand inside
+// an effect every time `runId` changes.
+function RunView({
+  runId,
+  onBack,
+  onCompare,
+}: {
+  runId: string;
+  onBack: () => void;
+  onCompare: (runId: string) => void;
+}) {
+  const [run, setRun] = useState<RunDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedStep, setSelectedStep] = useState<RunStep | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/llm-traces/runs/${runId}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to load run");
+        setRun(data);
+      })
+      .catch((e) => setError(e.message));
+  }, [runId]);
+
+  if (selectedStep) {
+    return <StepDetail step={selectedStep} onBack={() => setSelectedStep(null)} />;
+  }
+
+  return (
+    <div className="flex h-full flex-col overflow-y-auto p-3">
+      <button
+        onClick={onBack}
+        className="mb-2 flex items-center gap-1.5 self-start text-sm font-medium text-stone-600 hover:text-stone-900"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> Back to list
+      </button>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+      )}
+      {!run && !error && <p className="text-sm text-stone-500">Loading…</p>}
+
+      {run && (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-medium text-stone-900">{run.destination}</div>
+              <RunStatusBadge status={run.status} />
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+              <span>{KIND_LABELS[run.kind] ?? run.kind}</span>
+              <span>·</span>
+              <span>{new Date(run.createdAt).toLocaleString()}</span>
+              <span>·</span>
+              <span>{formatMs(run.totalDurationMs)} total</span>
+            </div>
+            <button
+              onClick={() => onCompare(run.id)}
+              className="mt-2 flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 transition-colors hover:border-orange-300 hover:bg-orange-50"
+            >
+              <GitCompare className="h-3 w-3" /> Compare with previous run
+            </button>
+          </div>
+
+          <RunPipelineDiagram kind={run.kind} steps={run.steps} onSelectStep={setSelectedStep} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Same fetch-by-id detail view the flat trace list used before pipeline
+// grouping existed — kept only for rows with no `run_id` (pre-migration).
+function LegacyDetail({ id, onBack }: { id: string; onBack: () => void }) {
+  const [trace, setTrace] = useState<{
+    type: string;
+    status: string;
+    model: string;
+    durationMs: number | null;
+    createdAt: string;
+    prompt: string;
+    rawResponse: string | null;
+    errorMessage: string | null;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -177,19 +397,25 @@ function TraceDetailView({ id, onBack }: { id: string; onBack: () => void }) {
 function LlmTraceFab({
   isOpen,
   view,
-  selectedId,
+  selectedRunId,
+  selectedTraceId,
   onOpen,
   onClose,
-  onSelect,
+  onSelectRun,
+  onSelectLegacy,
   onBackToList,
+  onCompare,
 }: {
   isOpen: boolean;
   view: View;
-  selectedId: string | null;
+  selectedRunId: string | null;
+  selectedTraceId: string | null;
   onOpen: () => void;
   onClose: () => void;
-  onSelect: (id: string) => void;
+  onSelectRun: (id: string) => void;
+  onSelectLegacy: (id: string) => void;
   onBackToList: () => void;
+  onCompare: (runId: string) => void;
 }) {
   return (
     <>
@@ -224,7 +450,7 @@ function LlmTraceFab({
             <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
                 <Terminal className="h-4 w-4 text-stone-500" />
-                LLM trace
+                LLM pipelines
               </div>
               <button
                 onClick={onClose}
@@ -237,11 +463,15 @@ function LlmTraceFab({
             </div>
 
             <div className="flex-1 overflow-hidden">
-              {view === "list" ? (
-                <TraceList onSelect={onSelect} />
-              ) : selectedId ? (
-                <TraceDetailView key={selectedId} id={selectedId} onBack={onBackToList} />
-              ) : null}
+              {view === "list" && (
+                <RunList onSelectRun={onSelectRun} onSelectLegacy={onSelectLegacy} />
+              )}
+              {view === "run" && selectedRunId && (
+                <RunView key={selectedRunId} runId={selectedRunId} onBack={onBackToList} onCompare={onCompare} />
+              )}
+              {view === "legacy" && selectedTraceId && (
+                <LegacyDetail key={selectedTraceId} id={selectedTraceId} onBack={onBackToList} />
+              )}
             </div>
           </motion.div>
         )}

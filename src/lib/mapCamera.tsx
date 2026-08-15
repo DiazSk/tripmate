@@ -34,6 +34,10 @@ interface MapCameraContextValue {
   /** Apple-blue stop nodes + a cased blue route line connecting them in order, and a camera
    *  flight framing all of them — call again on every day-tab change. */
   showDayRoute: (stops: RouteStop[]) => void;
+  /** Draws real motorway/trunk-road geometry around a city, fetched from OSM Overpass. Fire-and-
+   *  forget: failures (rate limit, network) just leave the map without highways rather than
+   *  surfacing an error, since this is ambient context, not something the trip depends on. */
+  showHighways: (lat: number, lng: number) => void;
   /** Pulsing highlight ring on whichever stop is currently selected; `null` clears it. */
   setActivePin: (stop: RouteStop | null) => void;
 }
@@ -67,6 +71,17 @@ const ROUTE_CLEARANCE_M = 2;
 /** Opacity for route segments that fail the depth test, i.e. the parts running behind or through
  *  buildings. Dimmed rather than hidden so the whole day stays traceable at a low camera angle. */
 const ROUTE_OCCLUDED_ALPHA = 0.3;
+// Warm gold rather than the UI's amber accent or the route's Apple blue — highways are ambient
+// city context, not the thing the app is asking you to look at, so they need their own hue that
+// doesn't compete with either.
+const HIGHWAY_COLOR = "#F5C242";
+const HIGHWAY_CASING = "#8A5A00";
+/** Fixed float height for highway lines, in metres. Unlike the day route's per-stop sampling
+ *  (sampleRouteAltitude), a highway query can return hundreds of vertices — sampling each would
+ *  be slow and isn't worth it for roads that are only ever viewed from a city-wide camera height.
+ *  Same "unclamped and floating" reasoning as the day route: CLAMP_TO_GROUND climbs Google 3D
+ *  Tiles rooftops, and TERRAIN classification draws nothing with globe.show = false. */
+const HIGHWAY_HEIGHT_M = 25;
 
 // Cesium's PinBuilder only draws its own squat rounded-square marker, so the classic teardrop
 // comes from an inline SVG instead. `encodeURIComponent` rather than `btoa` — this module is
@@ -126,7 +141,12 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   const markerRef = useRef<Entity | null>(null);
   const pendingRef = useRef<Flight | null>(null);
   const pendingRouteRef = useRef<RouteStop[] | null>(null);
+  const pendingHighwaysRef = useRef<[lat: number, lng: number] | null>(null);
   const routeEntitiesRef = useRef<Entity[]>([]);
+  const highwayEntitiesRef = useRef<Entity[]>([]);
+  /** Bumped per showHighways call so a slow, superseded fetch (e.g. re-picking a destination
+   *  before the previous city's highways landed) can't draw over the newer city's roads. */
+  const highwayGenerationRef = useRef(0);
   const activePinRef = useRef<Entity | null>(null);
   /** Altitude the current route was drawn at, so the selection halo lands on the line. */
   const routeAltitudeRef = useRef(0);
@@ -320,12 +340,67 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const showHighways = useCallback((lat: number, lng: number) => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed()) {
+      // Same cold-load race as flyTo/showDayRoute: the destination flight can be requested
+      // before the tileset (and thus the viewer) registers. Replayed from setViewer below.
+      pendingHighwaysRef.current = [lat, lng];
+      return;
+    }
+
+    const generation = ++highwayGenerationRef.current;
+    (async () => {
+      let segments: { points: { lat: number; lng: number }[] }[];
+      try {
+        const res = await fetch(`/api/roads?lat=${lat}&lng=${lng}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to load highways");
+        segments = data.segments;
+      } catch {
+        return; // Ambient context, not core to the trip — a miss here just leaves them off.
+      }
+      if (generation !== highwayGenerationRef.current || viewer.isDestroyed()) return;
+
+      const Cesium = await import("cesium");
+      if (generation !== highwayGenerationRef.current || viewer.isDestroyed()) return;
+      for (const e of highwayEntitiesRef.current) viewer.entities.remove(e);
+      highwayEntitiesRef.current = segments.map((segment) =>
+        viewer.entities.add({
+          polyline: {
+            positions: segment.points.map((p) =>
+              Cesium.Cartesian3.fromDegrees(p.lng, p.lat, HIGHWAY_HEIGHT_M)
+            ),
+            width: 3,
+            arcType: Cesium.ArcType.GEODESIC,
+            material: new Cesium.PolylineOutlineMaterialProperty({
+              color: Cesium.Color.fromCssColorString(HIGHWAY_COLOR),
+              outlineColor: Cesium.Color.fromCssColorString(HIGHWAY_CASING),
+              outlineWidth: 1,
+            }),
+            // HIGHWAY_HEIGHT_M is a fixed height above the *ellipsoid*, not local terrain — the
+            // real ground surface is routinely tens of metres higher (see sampleRouteAltitude's
+            // own comment on this), so the line sits *below* the visible 3D-tile surface almost
+            // everywhere and would otherwise fail the depth test and never be seen. Sampling
+            // real terrain height per vertex isn't worth it for a query that can return hundreds
+            // of points, so instead — same fallback the day route uses for occluded segments —
+            // draw the full-strength colour on depth-fail too, making it effectively always-on.
+            depthFailMaterial: new Cesium.ColorMaterialProperty(
+              Cesium.Color.fromCssColorString(HIGHWAY_COLOR)
+            ),
+          },
+        })
+      );
+    })();
+  }, []);
+
   const setViewer = useCallback(
     (viewer: Viewer | null) => {
       viewerRef.current = viewer;
       if (!viewer) {
         markerRef.current = null;
         routeEntitiesRef.current = [];
+        highwayEntitiesRef.current = [];
         activePinRef.current = null;
         setReady(false);
         return;
@@ -339,13 +414,15 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       const pendingRoute = pendingRouteRef.current;
       pendingRouteRef.current = null;
       if (pendingRoute) showDayRoute(pendingRoute);
+      const pendingHighways = pendingHighwaysRef.current;
+      pendingHighwaysRef.current = null;
+      if (pendingHighways) showHighways(...pendingHighways);
     },
-    [flyTo, showDayRoute]
+    [flyTo, showDayRoute, showHighways]
   );
 
   const flyToDestination = useCallback(
-    (lat: number, lng: number, label?: string) =>
-      flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
+    (lat: number, lng: number, label?: string) => flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
     [flyTo]
   );
   const flyToPlace = useCallback(
@@ -362,6 +439,9 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     routeGenerationRef.current++;
     for (const e of routeEntitiesRef.current) viewer.entities.remove(e);
     routeEntitiesRef.current = [];
+    highwayGenerationRef.current++;
+    for (const e of highwayEntitiesRef.current) viewer.entities.remove(e);
+    highwayEntitiesRef.current = [];
     if (markerRef.current) viewer.entities.remove(markerRef.current);
     markerRef.current = null;
     if (activePinRef.current) viewer.entities.remove(activePinRef.current);
@@ -369,6 +449,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     // Otherwise a request queued while the tileset was loading replays onto the empty globe.
     pendingRef.current = null;
     pendingRouteRef.current = null;
+    pendingHighwaysRef.current = null;
 
     import("cesium").then((Cesium) => {
       if (viewer.isDestroyed()) return;
@@ -430,6 +511,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         flyToPlace,
         resetToHome,
         showDayRoute,
+        showHighways,
         setActivePin,
       }}
     >

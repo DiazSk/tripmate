@@ -2,12 +2,17 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
+import FocusEditMode from "@/components/FocusEditMode";
+import { useFocusEdit } from "@/lib/useFocusEdit";
+import { DayEditUpdates } from "@/components/DayHeader";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import { headerLinkClass } from "@/components/BrandMark";
+import { backPillClass, headerLinkClass } from "@/components/BrandMark";
 import { DayPlan, Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
+import { devLabel } from "@/lib/devInspector";
 
 type ActualCostTarget = "lodging" | number;
 
@@ -93,6 +98,12 @@ export default function TripPage({
   const [error, setError] = useState<string | null>(null);
   const [dismissedDays, setDismissedDays] = useState<Set<number>>(new Set());
   const [rebalancingDay, setRebalancingDay] = useState<number | null>(null);
+  // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
+  // state there would reset the view to Day 1 on the way back.
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
+  // Step 7 edit session. Unlike the pre-save view, every accepted edit here is persisted.
+  const focus = useFocusEdit(itinerary);
+  const [savingFocus, setSavingFocus] = useState(false);
 
   const {
     flyToDestinationByName,
@@ -102,7 +113,7 @@ export default function TripPage({
     detail,
     detailLoading,
     detailError,
-  } = useTripCamera(trip?.destination ?? "");
+  } = useTripCamera(trip?.destination ?? "", trip?.id);
 
   useEffect(() => {
     if (id === "preview") {
@@ -133,6 +144,7 @@ export default function TripPage({
     });
   }
 
+
   function handleActualCostChange(
     dayIndex: number,
     target: ActualCostTarget,
@@ -154,6 +166,15 @@ export default function TripPage({
       return next;
     });
   }
+
+  function handleEditDay(dayIndex: number, updates: DayEditUpdates) {
+    if (!itinerary) return;
+    const updated: Itinerary = structuredClone(itinerary);
+    Object.assign(updated.days[dayIndex], updates);
+    setItinerary(updated);
+    persist(updated);
+  }
+
 
   function handleStopActualCostChange(value: number | undefined) {
     if (!itinerary || !selectedStop) return;
@@ -186,6 +207,7 @@ export default function TripPage({
           tier: itinerary.tier,
           remainingDays,
           remainingBudget,
+          tripId: trip.id,
         }),
       });
       const data = await res.json();
@@ -214,13 +236,25 @@ export default function TripPage({
     <main className="dashboard-page min-h-full">
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
-      <div className="pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto sm:top-6 sm:left-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px]">
-        <div className="flex justify-end">
+      <div
+        className={`pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto pb-10 sm:top-6 sm:left-auto sm:min-w-[360px] ${
+          // Focus Mode needs room for two real panes; the summary view is a single column and
+          // reads better narrow, so the width is tied to the mode rather than fixed for both.
+          focus.target ? "sm:w-[62%] sm:max-w-[880px]" : "sm:w-[40%] sm:max-w-[520px]"
+        }`}
+        {...devLabel("ResultPanel")}
+      >
+        <div className="flex items-center justify-between">
+          {/* No plan step to return to from a saved trip — "back to Earth" here means the
+              home route, which resets the globe camera itself on mount. */}
+          <Link href="/" className={backPillClass}>
+            <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
+            Back
+          </Link>
           <Link href="/trips" className={headerLinkClass}>
             My memories
           </Link>
         </div>
-
 
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
@@ -257,7 +291,35 @@ export default function TripPage({
           </div>
         )}
 
-        {trip && itinerary && !selectedStop && (
+        {/* Focus Mode replaces the result card entirely — the standard view's budget bar, day
+            tabs and cost footers simply aren't rendered while editing. */}
+        {trip && focus.target && focus.draft && (
+          <FocusEditMode
+            trip={trip}
+            userAnswers={trip.userAnswers ?? null}
+            draft={focus.draft}
+            dayIndex={focus.target.dayIndex}
+            scope={focus.target.scope}
+            tripId={trip.id}
+            dirty={focus.dirty}
+            saving={savingFocus}
+            onDraftChange={focus.applyDraft}
+            onCancel={focus.cancel}
+            onSave={async () => {
+              const committed = focus.save();
+              if (!committed) return;
+              setSavingFocus(true);
+              setItinerary(committed);
+              try {
+                await persist(committed);
+              } finally {
+                setSavingFocus(false);
+              }
+            }}
+          />
+        )}
+
+        {trip && itinerary && !selectedStop && !focus.target && (
           <ItineraryCard
             itinerary={itinerary}
             budget={trip.budget}
@@ -267,8 +329,27 @@ export default function TripPage({
             onLodgingActualCostChange={(dayIndex, value) =>
               handleActualCostChange(dayIndex, "lodging", value)
             }
+            activeDayIndex={activeDayIndex}
+            onActiveDayChange={setActiveDayIndex}
+            onEditDay={handleEditDay}
+            onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
           />
         )}
+
+        {/* Mode B's shown delta. The persisted plan already carries the change. */}
+
+        {trip && itinerary && !selectedStop && !focus.target && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => focus.open(0, "trip")}
+              className="pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/10"
+            >
+              Refine with AI
+            </button>
+          </div>
+        )}
+
 
         {trip && itinerary && selectedStop && (
           <PlaceDetailPanel

@@ -1,4 +1,5 @@
 import { DayPlan } from "@/lib/types";
+import { devLabel } from "@/lib/devInspector";
 
 export default function BudgetBar({
   days,
@@ -18,7 +19,7 @@ export default function BudgetBar({
   const over = spent > budget;
 
   return (
-    <div>
+    <div {...devLabel("BudgetBar")}>
       <div className="mb-2 flex items-center justify-between text-sm">
         <span className="font-medium text-foreground">Budget</span>
         <span

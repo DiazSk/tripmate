@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import type { Cartesian3, Viewer } from "cesium";
 import { useMapCamera } from "@/lib/mapCamera";
+import { isGlobeHiddenRoute } from "@/lib/globeVisibility";
 
 type CesiumModule = typeof import("cesium");
 
@@ -111,6 +113,7 @@ function pivot(
  */
 export default function MapControls() {
   const { viewerRef, ready } = useMapCamera();
+  const pathname = usePathname();
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
   const [flat, setFlat] = useState(false);
   const needleRef = useRef<HTMLSpanElement>(null);
@@ -121,8 +124,13 @@ export default function MapControls() {
   const zoomSeqRef = useRef(0);
 
   // Cesium is dynamically imported everywhere in this app — a static import would pull it into
-  // the server bundle. That the import has resolved doubles as the readiness gate.
+  // the server bundle. That the import has resolved doubles as the readiness gate. Skipped
+  // entirely on globe-hidden routes (e.g. /backend): this used to run unconditionally on every
+  // route, pulling in the multi-MB Cesium bundle even where `GlobeBackground` itself had already
+  // skipped it — there is nothing here for these controls to ever attach to on that route anyway
+  // (`ready` never becomes true, since no viewer gets created).
   useEffect(() => {
+    if (isGlobeHiddenRoute(pathname)) return;
     let cancelled = false;
     import("cesium").then((mod) => {
       if (!cancelled) setCesium(mod);
@@ -130,7 +138,7 @@ export default function MapControls() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [pathname]);
 
   // Live readout of the camera. Compass angle and slider position are DOM properties, so they
   // get written directly rather than through state — that keeps the steady-state re-render

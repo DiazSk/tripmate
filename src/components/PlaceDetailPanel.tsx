@@ -1,6 +1,7 @@
 "use client";
 
 import { PlaceDetail, Stop } from "@/lib/types";
+import { devLabel } from "@/lib/devInspector";
 
 export default function PlaceDetailPanel({
   stop,
@@ -25,7 +26,10 @@ export default function PlaceDetailPanel({
   onSelectUpcoming?: (stop: Stop) => void;
 }) {
   return (
-    <div className="glass-itinerary flex flex-col rounded-2xl p-5 sm:p-6">
+    <div
+      className="glass-itinerary flex flex-col rounded-2xl p-5 sm:p-6"
+      {...devLabel("PlaceDetailPanel")}
+    >
       <button
         type="button"
         onClick={onBack}
