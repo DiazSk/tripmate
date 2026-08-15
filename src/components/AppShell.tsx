@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { ReactNode, useRef } from "react";
 import { MotionConfig } from "framer-motion";
 import { MapCameraProvider } from "@/lib/mapCamera";
-import BrandMark from "@/components/BrandMark";
+import Navbar from "@/components/Navbar";
 import DevInspectorOverlay from "@/components/dev/DevInspectorOverlay";
 import { ScrollContainerContext } from "@/lib/scrollContainer";
 
@@ -62,10 +62,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
               {children}
             </ScrollContainerContext.Provider>
           </div>
-          {/* Sibling of the content overlay, not a child of it: the wordmark is app chrome like
+          {/* Sibling of the content overlay, not a child of it: the nav is app chrome like
               the map controls, so it stays put no matter what shape a page's own content column
               takes. Above z-10 so the right-docked panels can't cover it. */}
-          <BrandMark />
+          <Navbar />
           <DevInspectorOverlay />
           <MapControls />
         </div>

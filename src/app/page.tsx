@@ -1,7 +1,6 @@
 "use client";
 
 import { ComponentType, ReactNode, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
@@ -19,7 +18,7 @@ import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import GenerationLoader from "@/components/cesium/GenerationLoader";
 import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
-import { backPillClass, headerLinkClass } from "@/components/BrandMark";
+import { backPillClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, Itinerary, RawFetch } from "@/lib/types";
 import { CandidatePoi } from "@/lib/pois";
@@ -440,53 +439,25 @@ export default function Home() {
 
   return (
     <main
-      // The Blue Hour scene tokens and display face are scoped to the landing step alone, not
-      // to every pre-result step the way the standalone Blue Hour build had it: the plan step
-      // here is this app's own card form, which carries its own type and palette and reads
-      // wrong under the scene hues. The extra top padding is what ScrollStory's negative top
-      // margin cancels — see the note on that component's wrapper.
-      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 sm:p-6 ${!preResult ? "dashboard-page" : "map-chrome-hidden"} ${
-        step === "landing"
-          ? "blue-hour-scene font-scene-body pt-[calc(var(--nav-h)+1.25rem)] sm:pt-[calc(var(--nav-h)+1.5rem)]"
-          : ""
+      // pt-[calc(var(--nav-h)+1.25rem)]: clearance for the fixed glass navbar (AppShell
+      // renders Navbar on every route). The Blue Hour scene tokens and display face are
+      // scoped to the landing step alone, not to every pre-result step the way the
+      // standalone Blue Hour build had it: the plan step here is this app's own card
+      // form, which carries its own type and palette and reads wrong under the scene
+      // hues. The extra top padding is what ScrollStory's negative top margin cancels —
+      // see the note on that component's wrapper.
+      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : "map-chrome-hidden"} ${
+        step === "landing" ? "blue-hour-scene font-scene-body" : ""
       }`}
     >
       <GenerationLoader active={generating} />
-
-      {/* AppShell owns the wordmark on every route, so a surface only supplies its own action.
-          Landing supplies none — "My memories" is already one of the two hero CTAs, and
-          repeating it here would be the same action twice in one viewport. */}
-      {step === "plan" && (
-        <div className="flex justify-end">
-          <Link href="/trips" className={headerLinkClass}>
-            My memories
-          </Link>
-        </div>
-      )}
 
       {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
           explainer, and "Plan a trip" uncovered only at the end. It owns full-bleed sections
           with real scroll height, so it replaces the single centered hero this step used to
           be — but it hands off to the same setStep("plan"), which is this app's own multi-step
           form rather than the standalone build's one-card console. */}
-      {step === "landing" && (
-        <>
-          <ScrollStory onPlan={() => setStep("plan")} />
-          {/* The scroll story carries only the "Plan a trip" CTA — the build it comes from put
-              "My memories" in a global Navbar, which this app doesn't render (BrandMark is the
-              header). Without this the memories route would be unreachable from the landing.
-              Fixed rather than in normal flow: ScrollStory is full-bleed and cancels <main>'s
-              padding with negative margins, so an in-flow sibling would break that and take a
-              gap-6 seam with it. Mirrors BrandMark's own top-5/top-6 optical line, on the
-              opposite corner so the two never collide. */}
-          <Link
-            href="/trips"
-            className={`${headerLinkClass} fixed top-5 right-5 z-20 sm:top-6 sm:right-6`}
-          >
-            My memories
-          </Link>
-        </>
-      )}
+      {step === "landing" && <ScrollStory onPlan={() => setStep("plan")} />}
 
       {/* Form and tier picker merged into one card: the dates and budget are what price the
           tiers, so splitting them across two steps meant choosing a style blind. One <form>
@@ -808,7 +779,7 @@ export default function Home() {
         // block — `fixed` escapes AppShell's own scrollable content pane entirely, so
         // this positions relative to the viewport and scrolls independently.
         <div
-          className={`pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto pb-10 sm:top-6 sm:left-auto sm:min-w-[360px] ${
+          className={`pointer-events-auto fixed top-[calc(var(--nav-h)+1.25rem)] right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto pb-10 sm:top-[calc(var(--nav-h)+1.5rem)] sm:left-auto sm:min-w-[360px] ${
           // Focus Mode needs room for two real panes; the summary view is a single column and
           // reads better narrow, so the width is tied to the mode rather than fixed for both.
           focus.target ? "sm:w-[62%] sm:max-w-[880px]" : "sm:w-[40%] sm:max-w-[520px]"
