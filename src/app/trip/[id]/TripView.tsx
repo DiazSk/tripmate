@@ -1,14 +1,11 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import FocusEditMode from "@/components/FocusEditMode";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { DayEditUpdates } from "@/components/DayHeader";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import { backPillClass, headerLinkClass } from "@/components/BrandMark";
 import { DayPlan, Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
@@ -237,25 +234,13 @@ export default function TripView({
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
       <div
-        className={`pointer-events-auto fixed top-16 right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto pb-10 sm:top-6 sm:left-auto sm:min-w-[360px] ${
+        className={`pointer-events-auto fixed top-[calc(var(--nav-h)+1.25rem)] right-6 bottom-6 left-6 z-10 m-0 space-y-4 overflow-y-auto pb-10 sm:top-[calc(var(--nav-h)+1.5rem)] sm:left-auto sm:min-w-[360px] ${
           // Focus Mode needs room for two real panes; the summary view is a single column and
           // reads better narrow, so the width is tied to the mode rather than fixed for both.
           focus.target ? "sm:w-[62%] sm:max-w-[880px]" : "sm:w-[40%] sm:max-w-[520px]"
         }`}
         {...devLabel("ResultPanel")}
       >
-        <div className="flex items-center justify-between">
-          {/* No plan step to return to from a saved trip — "back to Earth" here means the
-              home route, which resets the globe camera itself on mount. */}
-          <Link href="/" className={backPillClass}>
-            <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
-            Back
-          </Link>
-          <Link href="/trips" className={headerLinkClass}>
-            My memories
-          </Link>
-        </div>
-
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
             {error}
