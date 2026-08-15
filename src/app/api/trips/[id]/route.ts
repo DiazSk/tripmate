@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTrip, updateTripItinerary } from "@/lib/db";
+import { normalizeDays } from "@/lib/itinerary";
 
 export async function GET(
   _req: NextRequest,
@@ -8,8 +9,16 @@ export async function GET(
   const { id } = await params;
   const trip = getTrip(id);
   if (!trip) {
-    return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
+
+  // The only route that reads `trips.itinerary_json`, so it's the one place a
+  // parse boundary pays for every writer at once — the original generate, a
+  // refine, a rebalance, and anything trip-edit patches back through PATCH.
+  // Rows written before this boundary existed can carry an unrecognised
+  // category or a string cost; normalizing on read means an old trip renders
+  // the same as a new one, and it self-heals on disk at the next PATCH.
+  const stored = JSON.parse(trip.itinerary_json);
 
   return NextResponse.json({
     id: trip.id,
@@ -17,7 +26,7 @@ export async function GET(
     startDate: trip.start_date,
     endDate: trip.end_date,
     budget: trip.budget,
-    itinerary: JSON.parse(trip.itinerary_json),
+    itinerary: { ...stored, days: normalizeDays(stored.days) },
     userAnswers: trip.user_answers_json ? JSON.parse(trip.user_answers_json) : null,
   });
 }
@@ -29,7 +38,7 @@ export async function PATCH(
   const { id } = await params;
   const trip = getTrip(id);
   if (!trip) {
-    return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
   const { itinerary } = await req.json();
