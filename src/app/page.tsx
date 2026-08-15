@@ -18,6 +18,7 @@ import { useFocusEdit } from "@/lib/useFocusEdit";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import GenerationLoader from "@/components/cesium/GenerationLoader";
 import DestinationSearch from "@/components/DestinationSearch";
+import ScrollStory from "@/components/blue-hour/ScrollStory";
 import { backPillClass, headerLinkClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, Itinerary, RawFetch } from "@/lib/types";
@@ -439,7 +440,16 @@ export default function Home() {
 
   return (
     <main
-      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 sm:p-6 ${!preResult ? "dashboard-page" : "map-chrome-hidden"}`}
+      // The Blue Hour scene tokens and display face are scoped to the landing step alone, not
+      // to every pre-result step the way the standalone Blue Hour build had it: the plan step
+      // here is this app's own card form, which carries its own type and palette and reads
+      // wrong under the scene hues. The extra top padding is what ScrollStory's negative top
+      // margin cancels — see the note on that component's wrapper.
+      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 sm:p-6 ${!preResult ? "dashboard-page" : "map-chrome-hidden"} ${
+        step === "landing"
+          ? "blue-hour-scene font-scene-body pt-[calc(var(--nav-h)+1.25rem)] sm:pt-[calc(var(--nav-h)+1.5rem)]"
+          : ""
+      }`}
     >
       <GenerationLoader active={generating} />
 
@@ -454,45 +464,28 @@ export default function Home() {
         </div>
       )}
 
-      {/* `flex-1` inside <main>'s existing min-h-full flex column rather than h-dvh: <main>
-          carries its own p-5/p-6, so a viewport-height child would overflow by exactly that
-          padding and put a scrollbar on a page that should not scroll. */}
+      {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
+          explainer, and "Plan a trip" uncovered only at the end. It owns full-bleed sections
+          with real scroll height, so it replaces the single centered hero this step used to
+          be — but it hands off to the same setStep("plan"), which is this app's own multi-step
+          form rather than the standalone build's one-card console. */}
       {step === "landing" && (
-        <section className="flex flex-1 flex-col items-center justify-center text-center">
-          <h1 className="hero-rise hero-legible font-hero text-[clamp(2.5rem,8vw,6rem)] leading-[0.88] text-on-deep">
-            <span className="block">Every day</span>
-            <span className="block">planned.</span>
-            <span className="block">Every dollar</span>
-            <span className="block">spent.</span>
-          </h1>
-          {/* Not text-sm: 96px to 14px is a jump, not a scale step, and this line carries the
-              mechanism the rest of the page only implies. */}
-          <p className="hero-rise hero-legible mt-7 max-w-xl text-balance text-base leading-relaxed text-on-deep [animation-delay:90ms] sm:text-lg">
-            Tell us where, when, and how much. Get a day-by-day plan that actually costs what
-            you said — with the weather already factored in.
-          </p>
-          <div className="hero-rise mt-9 flex flex-wrap items-center justify-center gap-3 [animation-delay:180ms]">
-            <button
-              type="button"
-              onClick={() => setStep("plan")}
-              // border-transparent, not no border: the ghost CTA beside it carries a 1px
-              // border, and without a matching one the two pills differ by 2px in height and
-              // sit a pixel apart on the baseline.
-              className="pointer-events-auto rounded-full border border-transparent bg-accent px-8 py-4 text-base font-medium text-accent-foreground shadow-lg shadow-black/30 transition-all duration-150 hover:bg-accent-hover active:scale-[0.98]"
-            >
-              Plan a trip
-            </button>
-            <Link
-              href="/trips"
-              // No backdrop-blur and no fill — the globe runs clean through this pill, so it is
-              // an outline and a label, nothing more. The border sits at /45 rather than /25
-              // because without the frost behind it there is nothing else holding the shape.
-              className="hero-legible pointer-events-auto rounded-full border border-white/45 px-7 py-4 text-base font-medium text-on-deep transition-colors hover:border-white/70 hover:bg-white/10"
-            >
-              My memories
-            </Link>
-          </div>
-        </section>
+        <>
+          <ScrollStory onPlan={() => setStep("plan")} />
+          {/* The scroll story carries only the "Plan a trip" CTA — the build it comes from put
+              "My memories" in a global Navbar, which this app doesn't render (BrandMark is the
+              header). Without this the memories route would be unreachable from the landing.
+              Fixed rather than in normal flow: ScrollStory is full-bleed and cancels <main>'s
+              padding with negative margins, so an in-flow sibling would break that and take a
+              gap-6 seam with it. Mirrors BrandMark's own top-5/top-6 optical line, on the
+              opposite corner so the two never collide. */}
+          <Link
+            href="/trips"
+            className={`${headerLinkClass} fixed top-5 right-5 z-20 sm:top-6 sm:right-6`}
+          >
+            My memories
+          </Link>
+        </>
       )}
 
       {/* Form and tier picker merged into one card: the dates and budget are what price the
