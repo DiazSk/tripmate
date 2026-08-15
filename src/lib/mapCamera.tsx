@@ -4,17 +4,20 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   ReactNode,
   RefObject,
 } from "react";
 import type { Entity, Viewer } from "cesium";
-
-interface RouteStop {
-  lat: number;
-  lng: number;
-}
+import {
+  buildRouteGeometry,
+  RouteGeometry,
+  RouteStop,
+  sampleRouteAltitude,
+  STEM_HEIGHT_M,
+} from "@/lib/mapRoute";
 
 interface MapCameraContextValue {
   setViewer: (viewer: Viewer | null) => void;
@@ -31,15 +34,33 @@ interface MapCameraContextValue {
    *  lives above the route boundary and never unmounts, so without this a trip's route and
    *  markers survive a navigation back to the landing page. No-ops before the viewer exists. */
   resetToHome: () => void;
-  /** Apple-blue stop nodes + a cased blue route line connecting them in order, and a camera
-   *  flight framing all of them — call again on every day-tab change. */
+  /** Lit stems out of glow pools at each stop, a route line connecting them in order, and a
+   *  camera flight framing all of them — call again on every day-tab change. */
   showDayRoute: (stops: RouteStop[]) => void;
   /** Draws real motorway/trunk-road geometry around a city, fetched from OSM Overpass. Fire-and-
    *  forget: failures (rate limit, network) just leave the map without highways rather than
    *  surfacing an error, since this is ambient context, not something the trip depends on. */
   showHighways: (lat: number, lng: number) => void;
-  /** Pulsing highlight ring on whichever stop is currently selected; `null` clears it. */
-  setActivePin: (stop: RouteStop | null) => void;
+  /** The stops currently drawn, for StopMarkerLayer to render an HTML card per stop. State
+   *  rather than a ref because the card list is real DOM that has to change when the day does. */
+  routeStops: RouteStop[];
+  /** Altitude the current route is drawn at. A ref, not state: the marker layer reads it once
+   *  per frame to place cards on top of the stems, and that must not re-render anything. */
+  routeAltitudeRef: RefObject<number>;
+  /**
+   * Index of the stop being pointed at, from either side — a marker card or an itinerary row.
+   * Both surfaces read the same value, which is what makes the highlight bidirectional without
+   * either needing to know anything about the other.
+   *
+   * Plain state rather than a subscription: hover changes at human speed, a few times a second,
+   * so a context re-render is cheap. It is the *positioning* loop that must never re-render, and
+   * that reads refs only.
+   */
+  hoveredIndex: number | null;
+  setHoveredIndex: (index: number | null) => void;
+  /** Index of the selected stop — clicked, or stepped onto by the tour. Outlives hover. */
+  activeIndex: number | null;
+  setActiveIndex: (index: number | null) => void;
 }
 
 const MapCameraContext = createContext<MapCameraContextValue | null>(null);
@@ -53,24 +74,13 @@ const LABEL_OUTLINE = "#0f172a";
 /** The landing-page pose, mirrored from GlobeBackground's initial `setView`. Kept in sync by
  *  hand — these are true altitudes, unlike `flyTo`'s `height` which is a HeadingPitchRange range. */
 const HERO_VIEW = { lng: 8, lat: 22, height: 2_500_000, headingDeg: 5, pitchDeg: -45 };
-// Apple Maps' systemBlue, matching the reference: one blue for everything routed. The previous
-// neon cyan + violet-glow pairing was most of what read as "too vibrant" — Apple's route is a
-// flat stroke with a darker casing and no bloom at all.
-const ROUTE_BLUE = "#0A84FF";
-const ROUTE_CASING = "#0060DF";
-const PULSE_PERIOD_MS = 1400;
 /** Framing floor for a day's stops, in metres — a lone stop gives a zero-radius sphere, and a
  *  tight cluster gives one small enough that the camera dives into the building mesh. */
 const MIN_ROUTE_RADIUS_M = 400;
 /** Fraction of the route radius to shove the aim point east by, so the route lands left of the
  *  right-docked itinerary panel. Applied only at the panel's own `sm:` breakpoint. */
 const PANEL_BIAS_RATIO = 0.6;
-/** Metres above the sampled surface to float the route. Small on purpose: enough to clear the
- *  road mesh without the line reading as detached when the camera drops to street level. */
-const ROUTE_CLEARANCE_M = 2;
-/** Opacity for route segments that fail the depth test, i.e. the parts running behind or through
- *  buildings. Dimmed rather than hidden so the whole day stays traceable at a low camera angle. */
-const ROUTE_OCCLUDED_ALPHA = 0.3;
+
 // Warm gold rather than the UI's amber accent or the route's Apple blue — highways are ambient
 // city context, not the thing the app is asking you to look at, so they need their own hue that
 // doesn't compete with either.
@@ -90,78 +100,54 @@ const HIGHWAY_HEIGHT_M = 25;
 const PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32"><path d="M12 .8C6 .8 1.2 5.6 1.2 11.6c0 8 10.8 19.6 10.8 19.6s10.8-11.6 10.8-19.6C22.8 5.6 18 .8 12 .8z" fill="#FF3B30" stroke="#C1271F" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="11.6" r="4.2" fill="#fff"/></svg>`;
 const PIN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PIN_SVG)}`;
 
-type Flight = [lat: number, lng: number, height: number, pitchDeg: number, label?: string];
-
-/**
- * One altitude for the whole day's route, just above street level.
- *
- * `clampToHeightMostDetailed` samples the *tile surface*, and stops sit on buildings — Paris
- * came back 81-139m against ~35m of actual street. Probing the midpoints between consecutive
- * stops as well, then taking the minimum, biases the answer toward the ground: the gaps between
- * venues are usually road or open space. It's an approximation, not a true street elevation, but
- * a flat ribbon a few metres off is invisible at any framing the app actually uses.
- */
-async function sampleRouteAltitude(
-  viewer: Viewer,
-  Cesium: typeof import("cesium"),
-  groundPositions: import("cesium").Cartesian3[]
-): Promise<number> {
-  // Throws rather than returning undefined when the context lacks depth-texture support.
-  if (!viewer.scene.clampToHeightSupported) return 0;
-
-  const probes = [...groundPositions];
-  for (let i = 1; i < groundPositions.length; i++) {
-    probes.push(
-      Cesium.Cartesian3.midpoint(
-        groundPositions[i - 1],
-        groundPositions[i],
-        new Cesium.Cartesian3()
-      )
-    );
-  }
-
-  try {
-    // Clones because clampToHeightMostDetailed mutates the array it is handed.
-    const clamped = await viewer.scene.clampToHeightMostDetailed(probes.map((p) => p.clone()));
-    if (viewer.isDestroyed()) return 0;
-    const heights = clamped
-      .filter((c): c is import("cesium").Cartesian3 => Cesium.defined(c))
-      .map((c) => Cesium.Cartographic.fromCartesian(c).height)
-      .filter((h) => Number.isFinite(h));
-    if (heights.length === 0) return ROUTE_CLEARANCE_M;
-    return Math.min(...heights) + ROUTE_CLEARANCE_M;
-  } catch {
-    // A sampling failure should cost the route its float, not its existence.
-    return ROUTE_CLEARANCE_M;
-  }
-}
+type Flight = [
+  lat: number,
+  lng: number,
+  height: number,
+  pitchDeg: number,
+  label?: string,
+  centreHeightM?: number,
+];
 
 export function MapCameraProvider({ children }: { children: ReactNode }) {
   const viewerRef = useRef<Viewer | null>(null);
   const markerRef = useRef<Entity | null>(null);
   const pendingRef = useRef<Flight | null>(null);
   const pendingRouteRef = useRef<RouteStop[] | null>(null);
-  const pendingHighwaysRef = useRef<[lat: number, lng: number] | null>(null);
   const routeEntitiesRef = useRef<Entity[]>([]);
+  /** Altitude the current route was drawn at, so new geometry lands on the arcs. */
+  const routeAltitudeRef = useRef(0);
+  /** Bumped per showDayRoute call so a slow height sample from an older day can't win. */
+  const routeGenerationRef = useRef(0);
+  const pendingHighwaysRef = useRef<[lat: number, lng: number] | null>(null);
   const highwayEntitiesRef = useRef<Entity[]>([]);
   /** Bumped per showHighways call so a slow, superseded fetch (e.g. re-picking a destination
    *  before the previous city's highways landed) can't draw over the newer city's roads. */
   const highwayGenerationRef = useRef(0);
-  const activePinRef = useRef<Entity | null>(null);
-  /** Altitude the current route was drawn at, so the selection halo lands on the line. */
-  const routeAltitudeRef = useRef(0);
-  /** Bumped per showDayRoute call so a slow height sample from an older day can't win. */
-  const routeGenerationRef = useRef(0);
   const [ready, setReady] = useState(false);
+  const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  /** The live geometry, so hover emphasis can reach it without rebuilding the route. */
+  const routeGeometryRef = useRef<RouteGeometry | null>(null);
 
   const flyTo = useCallback(
-    (lat: number, lng: number, height: number, pitchDeg: number, label?: string) => {
+    (
+      lat: number,
+      lng: number,
+      height: number,
+      pitchDeg: number,
+      label?: string,
+      /** Altitude of the point to centre in frame. Zero aims at the ellipsoid surface, which for
+       *  a stop means aiming below the street; a stop flight passes its card's height instead. */
+      centreHeightM = 0
+    ) => {
       const viewer = viewerRef.current;
       if (!viewer || viewer.isDestroyed()) {
         // The viewer registers only once the 3D tileset has loaded, which takes seconds — long
         // after a trip page has fetched its trip and asked to fly. Hold the request and replay
         // it on registration instead of dropping it.
-        pendingRef.current = [lat, lng, height, pitchDeg, label];
+        pendingRef.current = [lat, lng, height, pitchDeg, label, centreHeightM];
         return;
       }
       // Flying toward a specific place means the globe shouldn't keep auto-rotating
@@ -206,7 +192,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         // frustum — you'd fly to Rome and never see Rome. A bounding sphere keeps it centred,
         // with `height` read as distance-to-target instead of altitude.
         viewer.camera.flyToBoundingSphere(
-          new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lng, lat), 0),
+          new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lng, lat, centreHeightM), 0),
           {
             offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(pitchDeg), height),
             duration: 2.5,
@@ -218,6 +204,14 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   );
 
   const showDayRoute = useCallback((stops: RouteStop[]) => {
+    // Published before the viewer check: the cards are plain DOM and cost nothing to mount
+    // early, and they stay hidden until the per-frame loop has a viewer to project them with.
+    setRouteStops(stops);
+    // A new day means no stop is hovered or selected, and stale indices would be wrong rather
+    // than merely unhelpful — day 1 of the preview trip has 8 stops and day 2 has 7, so index 7
+    // would emphasise nothing while still reading as a selection in the panel.
+    setHoveredIndex(null);
+    setActiveIndex(null);
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) {
       // Same race as flyTo: the itinerary renders in a few hundred ms, the tileset takes
@@ -266,64 +260,15 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         duration: 2.0,
       });
 
-      // The line used to use `clampToGround`, which is not "drape on the ground" — it builds a
-      // classification primitive that projects onto the Google 3D tile geometry, rooftops
-      // included, so a straight hop across a block climbed every building in its path. Switching
-      // classificationType can't help: CESIUM_3D_TILE is that same behaviour, and TERRAIN draws
-      // nothing at all here because the classification shader reads back the globe depth texture
-      // and this app runs with `globe.show = false`. So the line is unclamped and floats just
-      // above the surface instead.
-      //
       // Drawn immediately at the last route's altitude and corrected once the real sample lands,
       // rather than awaiting first. Height sampling takes ~1.3s alone but several seconds when
       // day-tab clicks stack the requests up, which left the map visibly empty. Consecutive days
       // of one trip share a city, so the previous altitude is a near-perfect stand-in; the very
       // first route falls back to 0 and visibly settles once.
       const altitudeAtDraw = routeAltitudeRef.current;
-      const positionsAt = (h: number) =>
-        stops.map((s) => Cesium.Cartesian3.fromDegrees(s.lng, s.lat, h));
-      const positions = positionsAt(altitudeAtDraw);
-
-      // Apple's route styling: a solid stroke with a darker casing, no glow. The casing is
-      // what keeps it legible over both pale pavement and dark water.
-      routeEntitiesRef.current.push(
-        viewer.entities.add({
-          polyline: {
-            positions,
-            width: 6,
-            arcType: Cesium.ArcType.GEODESIC,
-            material: new Cesium.PolylineOutlineMaterialProperty({
-              color: Cesium.Color.fromCssColorString(ROUTE_BLUE),
-              outlineColor: Cesium.Color.fromCssColorString(ROUTE_CASING),
-              outlineWidth: 2,
-            }),
-            // Segments running behind or through buildings draw dimmed rather than disappearing,
-            // so the whole day stays traceable from a low angle. Only available unclamped — the
-            // ground path returns its geometry before the depth-fail attribute is ever attached.
-            depthFailMaterial: new Cesium.ColorMaterialProperty(
-              Cesium.Color.fromCssColorString(ROUTE_BLUE).withAlpha(ROUTE_OCCLUDED_ALPHA)
-            ),
-          },
-        })
-      );
-
-      // Blue disc with a white ring at each stop, matching the reference's route pins. Placed at
-      // the same altitude as the line — CLAMP_TO_GROUND would resolve against the hidden globe
-      // (height 0) and visibly detach the dots from the line at an oblique angle.
-      const dotEntities = positions.map((position) =>
-        viewer.entities.add({
-          position,
-          point: {
-            pixelSize: 11,
-            color: Cesium.Color.fromCssColorString(ROUTE_BLUE),
-            outlineColor: Cesium.Color.WHITE,
-            outlineWidth: 2,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          },
-        })
-      );
-      routeEntitiesRef.current.push(...dotEntities);
-      const lineEntity = routeEntitiesRef.current[0];
+      const geometry = buildRouteGeometry(viewer, Cesium, stops, altitudeAtDraw);
+      routeEntitiesRef.current = geometry.entities;
+      routeGeometryRef.current = geometry;
 
       const altitude = await sampleRouteAltitude(viewer, Cesium, groundPositions);
       // A fast day-tab switch can land a newer route mid-sample; the newest request wins, and a
@@ -331,14 +276,15 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       if (generation !== routeGenerationRef.current || viewer.isDestroyed()) return;
       routeAltitudeRef.current = altitude;
       if (Math.abs(altitude - altitudeAtDraw) < 0.5) return;
-
-      const corrected = positionsAt(altitude);
-      lineEntity.polyline!.positions = new Cesium.ConstantProperty(corrected);
-      dotEntities.forEach((e, i) => {
-        e.position = new Cesium.ConstantPositionProperty(corrected[i]);
-      });
+      geometry.reposition(altitude);
     });
   }, []);
+
+  // Hover wins over selection: while the pointer is on something, that is what the globe should
+  // be pointing at. Falls back to the selected stop when the pointer leaves.
+  useEffect(() => {
+    routeGeometryRef.current?.setEmphasis(hoveredIndex ?? activeIndex);
+  }, [hoveredIndex, activeIndex, routeStops]);
 
   const showHighways = useCallback((lat: number, lng: number) => {
     const viewer = viewerRef.current;
@@ -401,7 +347,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         markerRef.current = null;
         routeEntitiesRef.current = [];
         highwayEntitiesRef.current = [];
-        activePinRef.current = null;
         setReady(false);
         return;
       }
@@ -422,11 +367,24 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   );
 
   const flyToDestination = useCallback(
-    (lat: number, lng: number, label?: string) => flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
+    (lat: number, lng: number, label?: string) =>
+      flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
     [flyTo]
   );
+  /**
+   * Fly to one stop of the current day, framing its floating card rather than the ground.
+   *
+   * The card is the thing that names the place, so it is what the camera should arrive on. Aiming
+   * at the default ellipsoid surface put the card near the top edge of the frame — or out of it —
+   * and centred a patch of road instead, which is what made both the Play tour and a marker click
+   * look like they were zooming to the bottom of the marker.
+   *
+   * Every stop flight goes through here — the tour, a marker click, and an itinerary row — so
+   * they all arrive the same way.
+   */
   const flyToPlace = useCallback(
-    (lat: number, lng: number, label?: string) => flyTo(lat, lng, PLACE_HEIGHT_M, -35, label),
+    (lat: number, lng: number, label?: string) =>
+      flyTo(lat, lng, PLACE_HEIGHT_M, -35, label, routeAltitudeRef.current + STEM_HEIGHT_M),
     [flyTo]
   );
   const resetToHome = useCallback(() => {
@@ -439,13 +397,19 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     routeGenerationRef.current++;
     for (const e of routeEntitiesRef.current) viewer.entities.remove(e);
     routeEntitiesRef.current = [];
+    // Same reasoning as the route entities: the globe never unmounts, so the previous city's
+    // highways would otherwise still be drawn under the landing-page hero pose.
     highwayGenerationRef.current++;
     for (const e of highwayEntitiesRef.current) viewer.entities.remove(e);
     highwayEntitiesRef.current = [];
+    // Otherwise the day's marker cards survive a navigation back to the landing page — the
+    // globe never unmounts, so nothing else clears them.
+    setRouteStops([]);
+    setHoveredIndex(null);
+    setActiveIndex(null);
+    routeGeometryRef.current = null;
     if (markerRef.current) viewer.entities.remove(markerRef.current);
     markerRef.current = null;
-    if (activePinRef.current) viewer.entities.remove(activePinRef.current);
-    activePinRef.current = null;
     // Otherwise a request queued while the tileset was loading replays onto the empty globe.
     pendingRef.current = null;
     pendingRouteRef.current = null;
@@ -469,38 +433,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const setActivePin = useCallback((stop: RouteStop | null) => {
-    const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed()) return;
-    import("cesium").then((Cesium) => {
-      if (viewer.isDestroyed()) return;
-      if (activePinRef.current) {
-        viewer.entities.remove(activePinRef.current);
-        activePinRef.current = null;
-      }
-      if (!stop) return;
-
-      const startedAt = performance.now();
-      activePinRef.current = viewer.entities.add({
-        // Same altitude the route was drawn at, so the halo sits on its stop dot rather than
-        // clamping to the hidden globe at height 0.
-        position: Cesium.Cartesian3.fromDegrees(stop.lng, stop.lat, routeAltitudeRef.current),
-        point: {
-          // Pulsing halo: size oscillates continuously while this stop is active. Narrow
-          // amplitude on purpose — a 10→22px swing read as a throb; 14→20 reads as a breath.
-          pixelSize: new Cesium.CallbackProperty(() => {
-            const phase = ((performance.now() - startedAt) % PULSE_PERIOD_MS) / PULSE_PERIOD_MS;
-            return 17 + Math.sin(phase * Math.PI * 2) * 3;
-          }, false),
-          color: Cesium.Color.fromCssColorString(ROUTE_BLUE).withAlpha(0.22),
-          outlineColor: Cesium.Color.fromCssColorString(ROUTE_BLUE),
-          outlineWidth: 2,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-      });
-    });
-  }, []);
-
   return (
     <MapCameraContext.Provider
       value={{
@@ -512,7 +444,12 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         resetToHome,
         showDayRoute,
         showHighways,
-        setActivePin,
+        routeStops,
+        routeAltitudeRef,
+        hoveredIndex,
+        setHoveredIndex,
+        activeIndex,
+        setActiveIndex,
       }}
     >
       {children}

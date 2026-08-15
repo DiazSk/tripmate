@@ -6,6 +6,7 @@ import { DayPlan, Itinerary, Stop, StopCategory } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
+import { useStopTour } from "@/lib/useStopTour";
 import BudgetBar from "./BudgetBar";
 import DayHeader, { DayEditUpdates } from "./DayHeader";
 import StopList from "./StopList";
@@ -14,7 +15,7 @@ import { devLabel } from "@/lib/devInspector";
 
 /** Ms between each stop's reveal during the post-generation stagger. */
 const REVEAL_STEP_MS = 400;
-import { ChevronLeftIcon, ChevronRightIcon, EntryIcon, FoodIcon, LodgingIcon, TransitIcon } from "./icons";
+import { ChevronLeftIcon, ChevronRightIcon, EntryIcon, FoodIcon, LodgingIcon, PauseIcon, PlayIcon, TransitIcon } from "./icons";
 
 function cityName(destination: string): string {
   return destination.split(",")[0].trim();
@@ -90,7 +91,8 @@ export default function ItineraryCard({
   const headerPhoto = usePlacePhoto(destination, "full");
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
-  const { showDayRoute } = useMapCamera();
+  const { showDayRoute, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
+  const { playing: touring, toggle: toggleTour, stop: stopTour } = useStopTour();
   const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [revealedCount, setRevealedCount] = useState(animateReveal ? 0 : Infinity);
   const activeDayRef = useRef(dayIndex);
@@ -113,7 +115,7 @@ export default function ItineraryCard({
       return;
     }
     setRevealedCount(day.stops.length);
-    showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
+    showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng, name: s.name })));
   }, [day, showDayRoute]);
 
   // Staggered reveal, played once on mount when animateReveal is true: every REVEAL_STEP_MS,
@@ -131,7 +133,7 @@ export default function ItineraryCard({
       }
       i += 1;
       setRevealedCount(i);
-      showDayRoute(stops.slice(0, i).map((s) => ({ lat: s.lat, lng: s.lng })));
+      showDayRoute(stops.slice(0, i).map((s) => ({ lat: s.lat, lng: s.lng, name: s.name })));
       if (i >= stops.length) clearInterval(id);
     }, REVEAL_STEP_MS);
     return () => clearInterval(id);
@@ -152,6 +154,14 @@ export default function ItineraryCard({
   const revealingStops = !!animateReveal && dayIndex === 0;
   const breakdown = dayBreakdown(day);
   const tierDescription = TIERS.find((t) => t.id === itinerary.tier)?.description ?? "";
+
+  const selectStop = (stop: Stop) => {
+    // The card stays mounted behind the place detail, so the tour's interval survives with it —
+    // and a camera that keeps flying every few seconds while someone reads about one place is
+    // worse than the old accidental stop.
+    stopTour();
+    onSelectStop(stop);
+  };
 
   return (
     <div className="itinerary-glass overflow-hidden" {...devLabel("ItineraryCard")}>
@@ -265,6 +275,22 @@ export default function ItineraryCard({
           )}
         </div>
 
+        {/* Only worth offering when there is more than one place to move between. */}
+        {day.stops.length > 1 && (
+          <button
+            type="button"
+            onClick={toggleTour}
+            className="mb-3 flex min-h-11 items-center gap-2 rounded-full bg-tag-neutral-bg px-4 text-xs font-medium text-foreground transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            {touring ? (
+              <PauseIcon className="h-3.5 w-3.5 text-accent" />
+            ) : (
+              <PlayIcon className="h-3.5 w-3.5 text-accent" />
+            )}
+            {touring ? "Stop tour" : "Play tour"}
+          </button>
+        )}
+
         {day.lodging && (
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-white/10 p-3">
             <LodgingIcon className="h-5 w-5 shrink-0 text-accent" />
@@ -295,7 +321,12 @@ export default function ItineraryCard({
         <StopList
           stops={day.stops}
           revealedCount={revealedCount}
-          onSelect={onSelectStop}
+          onSelect={selectStop}
+          // Bidirectional highlight: a row lights up when its marker card on the globe is
+          // hovered or stepped onto by the tour, and hovering a row lights its marker. Both
+          // surfaces read and write the same context index, so neither knows the other exists.
+          highlightedIndex={hoveredIndex ?? activeIndex}
+          onHoverStop={(index) => setHoveredIndex(index)}
           revealAnimation={revealingStops}
         />
       </div>

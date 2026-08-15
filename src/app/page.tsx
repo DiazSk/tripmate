@@ -293,7 +293,10 @@ export default function Home() {
     const name = destination.trim();
     if (!name || name === lastFlownRef.current) return;
     lastFlownRef.current = name;
-    setDestinationMissed(!(await flyToDestinationByName(name)));
+    // Only a genuine geocoding miss earns the "couldn't find that" line. `"unreachable"` means
+    // the lookup never completed (Open-Meteo down, connection dropped), which is not a claim we
+    // can make about what the user typed — that stays silent and the trip plans regardless.
+    setDestinationMissed((await flyToDestinationByName(name)) === "missed");
   }
 
   function backToLanding() {

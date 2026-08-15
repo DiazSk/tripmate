@@ -54,3 +54,5 @@ next-env.d.ts
 
 # Impeccable
 .impeccable/
+# superpowers brainstorming companion
+.superpowers/
