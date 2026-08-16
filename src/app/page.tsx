@@ -28,6 +28,7 @@ import { useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
+import type { TravelerProfile } from "@/lib/travelerProfile";
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -185,6 +186,31 @@ export default function Home() {
   const [crowds, setCrowds] = useState<CrowdPreference>("mixed");
   const [selectedPois, setSelectedPois] = useState<CandidatePoi[]>([]);
   const [customPois, setCustomPois] = useState<string[]>([]);
+
+  // The profile supplies defaults; the wizard always wins. Nothing here is locked —
+  // a solo traveler who usually goes with kids just changes it on the screen, and
+  // that trip's answers are what generation sees. Any failure leaves the hardcoded
+  // defaults above in place, which is the same experience as a first visit.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/profile")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const profile: TravelerProfile | null = data?.profile ?? null;
+        if (cancelled || !profile) return;
+        setGroup(profile.group);
+        setExplorerStyle(profile.explorerStyle);
+        setEnergy(profile.energy);
+        setCrowds(profile.crowds);
+        setTier(profile.tier);
+        setInterests(profile.priorities);
+        setStarredInterests(profile.topPriorities);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Step 2a — fired fire-and-forget right alongside the existing destination-context
   // warmer, the moment basics are submitted. Never blocks the wizard from advancing;
@@ -385,6 +411,26 @@ export default function Home() {
       setLastRunId(data.runId ?? null);
       setRevealAnimation(true);
       setStep("result");
+
+      // After success only, never on each screen advance: a wizard the traveler
+      // abandoned halfway is not a statement about how they travel. Failures are
+      // swallowed — this must never surface an error on a trip they just waited
+      // two minutes for.
+      fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile: {
+            group,
+            explorerStyle,
+            energy,
+            crowds,
+            tier,
+            priorities: interests,
+            topPriorities: starredInterests,
+          },
+        }),
+      }).catch(() => {});
     } catch (e) {
       setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
     } finally {
