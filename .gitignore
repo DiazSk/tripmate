@@ -49,8 +49,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Claude
-.claude/
+# Claude — worktree scratch, local settings, and dev-server config stay untracked; the
+# skills/ subdirectory is tracked (it's not machine-local — it's real planning content
+# consumed at runtime by loadSkill(), and losing it silently breaks production features)
+.claude/*
+!.claude/skills/
 
 # Impeccable
 .impeccable/
