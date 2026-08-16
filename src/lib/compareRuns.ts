@@ -1,4 +1,5 @@
 import { RunComparison, RunComparisonRole, RunDetail, RunStep } from "./types";
+import { REFINE_KIND_TYPES } from "./runLabels";
 
 /** The raw CLI envelope is mostly noise for a diff (session_id, timestamps,
  *  usage stats all change every call) — pull out just the model's actual
@@ -13,7 +14,7 @@ export function extractResultText(rawResponse: string | null): string {
   }
 }
 
-const GENERATION_TYPES = new Set(["generate", "refine"]);
+const GENERATION_TYPES = new Set(["generate", ...REFINE_KIND_TYPES]);
 
 function findStep(steps: RunStep[], predicate: (step: RunStep) => boolean): RunStep | null {
   return steps.find(predicate) ?? null;
