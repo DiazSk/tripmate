@@ -3,7 +3,7 @@ import { DestinationContext, Itinerary, ItineraryPreferences } from "./types";
 import { TierId, TIERS } from "./tiers";
 
 const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one line: why this stop suits this traveler","note":"one line: practical detail","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}`;
-const SHAPE_HINT = `{"days":[{"date":"YYYY-MM-DD","weather":"short weather summary","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]}`;
+const SHAPE_HINT = `{"days":[{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]}`;
 
 // Concrete stop-selection guidance per interest tag — generic "weight toward
 // this interest" phrasing wasn't specific enough to reliably avoid the
@@ -139,6 +139,7 @@ ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
 ${BUDGET_INSTRUCTION}
 Include real, well-known places (or real, well-known areas, per the food-stop rule) for the destination with their real approximate latitude/longitude.
+For each day, also write a short, elegant 1-2 sentence "summary" capturing that day's theme and flow, with 1-2 tasteful emojis, e.g. "A relaxing mix of historic sightseeing in Asakusa followed by local dining along the river. 🏯🍜"
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 ${SHAPE_HINT}`;
@@ -167,6 +168,7 @@ ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
 ${LODGING_INSTRUCTION}
 ${BUDGET_INSTRUCTION}
+For each day, also write (or rewrite, if the feedback changes its theme) a short, elegant 1-2 sentence "summary" with 1-2 tasteful emojis capturing that day's theme and flow.
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 ${SHAPE_HINT}`;
