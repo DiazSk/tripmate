@@ -2,6 +2,7 @@
 
 import { Terminal } from "lucide-react";
 import PipelineConsole from "@/components/backend/PipelineConsole";
+import PerfDashboard from "@/components/backend/PerfDashboard";
 import CompareRuns from "@/components/backend/CompareRuns";
 import { devLabel } from "@/lib/devInspector";
 
@@ -28,6 +29,8 @@ export default function BackendDashboardPage() {
         </header>
 
         <PipelineConsole />
+
+        <PerfDashboard />
 
         <CompareRuns />
       </div>
