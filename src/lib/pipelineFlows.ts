@@ -90,6 +90,15 @@ export const FLOWS: FlowSpec[] = [
         input: "the generated itinerary + budget + context + interest tags",
         output: '{ issues: string[], revisedDays: DayPlan[] | null } — revisedDays swapped in when present',
       },
+      {
+        id: "placing",
+        label: "Coordinate Correction",
+        variant: "external",
+        description:
+          "Corrects each stop's lat/lng against OSM/Overpass — the model's own coordinates are often badly wrong (measured: Fushimi Inari 11km off). Names it resolves get real positions; anything unmatched keeps the model's guess. Skipped entirely if the initial geocode failed, since there's no reference point to correct against.",
+        input: "generated stop names + destination coordinates",
+        output: "corrected lat/lng per matched stop",
+      },
     ],
   },
   {
