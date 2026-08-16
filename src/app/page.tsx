@@ -202,6 +202,11 @@ export default function Home() {
         setExplorerStyle(profile.explorerStyle);
         setEnergy(profile.energy);
         setCrowds(profile.crowds);
+        // pickTier, not setTier: marks tierTouched so the live budget/days auto-recommend
+        // below never overwrites a saved preference — but that also means it's permanent
+        // for the rest of this session, even if the traveler then enters a wildly
+        // different budget. Deliberate (a saved tier is a stated one), not a bug to
+        // "simplify" back to setTier.
         pickTier(profile.tier);
         setInterests(profile.priorities);
         setStarredInterests(profile.topPriorities);
