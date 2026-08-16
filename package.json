@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test 'src/**/*.test.mjs'"
+    "test": "node --test 'src/**/*.test.mjs'",
+    "perf-bench": "node scripts/perf-bench.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.2",
