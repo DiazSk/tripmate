@@ -4,7 +4,7 @@ import { ComponentType } from "react";
 import { ArrowDown, CloudSun, MapPin, Scale, Search, ShieldCheck, Sparkles } from "lucide-react";
 import TraceStatusBadge from "@/components/TraceStatusBadge";
 import { RunStep } from "@/lib/types";
-import { STEP_LABELS, formatMs } from "@/lib/runLabels";
+import { REFINE_KIND_TYPES, STEP_LABELS, formatMs } from "@/lib/runLabels";
 
 const STEP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   context: Search,
@@ -82,7 +82,11 @@ export default function RunPipelineDiagram({
   const byType = (type: string) => steps.find((s) => s.type === type);
   const contextStep = byType("context");
   const primaryStep =
-    kind === "refine" ? byType("refine") : kind === "rebalance" ? byType("rebalance") : byType("generate");
+    kind === "refine"
+      ? REFINE_KIND_TYPES.map(byType).find((s) => s != null)
+      : kind === "rebalance"
+        ? byType("rebalance")
+        : byType("generate");
   const critiqueStep = byType("critique");
   const placeDetailSteps = steps.filter((s) => s.type === "place-detail");
 
