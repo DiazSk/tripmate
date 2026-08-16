@@ -150,7 +150,7 @@ export default function Hero() {
           the type and the photo — hero-legible's own shadow carries legibility. */}
       <div ref={driftRef} className="absolute inset-0 -z-10 will-change-transform">
         <div ref={photoRef} className="absolute inset-0 will-change-transform">
-          <Image src="/scenes/hero-dawn.jpg" alt="" fill priority className="object-cover" />
+          <Image src="/scenes/hero-dawn.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
         </div>
       </div>
 

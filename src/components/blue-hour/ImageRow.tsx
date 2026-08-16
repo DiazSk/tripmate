@@ -92,6 +92,7 @@ export default function ImageRow() {
                 src={beat.photo.src}
                 alt={beat.photo.alt}
                 fill
+                sizes="(min-width: 768px) 25vw, 50vw"
                 className="object-cover [transition:var(--scene-hover)] [transition-property:transform] group-hover:scale-[1.08]"
               />
             ) : (
