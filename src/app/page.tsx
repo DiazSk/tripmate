@@ -202,7 +202,7 @@ export default function Home() {
         setExplorerStyle(profile.explorerStyle);
         setEnergy(profile.energy);
         setCrowds(profile.crowds);
-        setTier(profile.tier);
+        pickTier(profile.tier);
         setInterests(profile.priorities);
         setStarredInterests(profile.topPriorities);
       })
