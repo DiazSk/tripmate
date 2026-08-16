@@ -1,5 +1,4 @@
-import { MODEL } from "./claude.ts";
-import type { FeaturePerfStats, MetricStats } from "./types.ts";
+import type { FeaturePerfStats, MetricStats } from "./types";
 
 export interface CliMetrics {
   inputTokens: number | null;
@@ -28,7 +27,13 @@ export function parseCliMetrics(rawResponse: string | null): CliMetrics {
   if (!rawResponse) return EMPTY_METRICS;
   try {
     const envelope = JSON.parse(rawResponse);
-    const modelUsage = envelope.modelUsage?.[MODEL];
+    // Keyed by whichever model actually produced this trace, not a hardcoded
+    // constant — a model swap (the exact kind of change this dashboard exists
+    // to measure) would otherwise silently blank token stats for every trace
+    // recorded under the old model string.
+    const modelUsage = Object.values(envelope.modelUsage ?? {})[0] as
+      | { inputTokens?: number; outputTokens?: number }
+      | undefined;
     return {
       inputTokens: typeof modelUsage?.inputTokens === "number" ? modelUsage.inputTokens : null,
       outputTokens: typeof modelUsage?.outputTokens === "number" ? modelUsage.outputTokens : null,

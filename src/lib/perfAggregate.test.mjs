@@ -75,3 +75,13 @@ test("aggregatePerfStats excludes null values from a metric's own stats rather t
 test("aggregatePerfStats returns an empty array for no input", () => {
   assert.deepEqual(aggregatePerfStats([]), []);
 });
+
+test("parseCliMetrics reads tokens regardless of which model key is present", () => {
+  const raw = JSON.stringify({
+    total_cost_usd: 0.02,
+    modelUsage: { "some-other-model-entirely": { inputTokens: 100, outputTokens: 50 } },
+  });
+  const metrics = parseCliMetrics(raw);
+  assert.equal(metrics.inputTokens, 100);
+  assert.equal(metrics.outputTokens, 50);
+});
