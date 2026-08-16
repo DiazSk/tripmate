@@ -48,9 +48,12 @@ export function derivePaceSpotsPerDay(
   group: GroupType,
   energy: EnergyLevel
 ): number {
-  const ceiling = PACE_CEILING_BY_STYLE[explorerStyle];
-  const stepped =
-    ceiling + PACE_STEP_BY_ENERGY[energy] + (group === "family_with_kids" ? PACE_STEP_FAMILY : 0);
+  // `??` fallback: an out-of-enum value (e.g. a raw POST with a bad `explorerStyle`/`energy`)
+  // makes the lookup undefined, and undefined + number is NaN — which throws nowhere, so it
+  // would otherwise ride silently all the way into the generated prompt.
+  const ceiling = PACE_CEILING_BY_STYLE[explorerStyle] ?? PACE_CEILING_BY_STYLE.mixed;
+  const energyStep = PACE_STEP_BY_ENERGY[energy] ?? 0;
+  const stepped = ceiling + energyStep + (group === "family_with_kids" ? PACE_STEP_FAMILY : 0);
   return Math.max(stepped, PACE_FLOOR);
 }
 
