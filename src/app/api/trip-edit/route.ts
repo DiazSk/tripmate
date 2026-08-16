@@ -104,7 +104,12 @@ export async function POST(req: NextRequest) {
     // the flat default is plenty, and a tight bound there keeps a stuck call from hanging the UI.
     const timeoutMs =
       mode === "chat" ? itineraryTimeoutMs(itinerary.days.length) : DEFAULT_TIMEOUT_MS;
-    const { result: raw } = await runClaude(prompt, "refine", timeoutMs, { runId, effort: "low" });
+    const { result: raw } = await runClaude(
+      prompt,
+      mode === "chat" ? "chat" : "element-edit",
+      timeoutMs,
+      { runId, effort: "low" }
+    );
     const parsed = parseJsonResponse<EditResponse>(raw);
 
     const { itinerary: updated, rejected } = applyPatch(itinerary, parsed.ops ?? [], scope);

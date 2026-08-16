@@ -12,6 +12,8 @@ export const STEP_LABELS: Record<string, string> = {
   critique: "Critique/Validation",
   rebalance: "Rebalance",
   "place-detail": "Place Detail Enrichment",
+  chat: "Chat Edit",
+  "element-edit": "Element Edit",
 };
 
 export function formatMs(ms: number | null): string {
