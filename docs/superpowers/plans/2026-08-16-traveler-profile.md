@@ -1145,7 +1145,7 @@ this plan depends on. Nothing further is needed there.
 
 - [ ] `npm test` passes with 28 tests.
 - [ ] `npx tsc --noEmit -p tsconfig.json` is clean.
-- [ ] `npm run lint` is clean.
+- [ ] `npm run lint` introduces no new errors (2 pre-existing errors in `Navbar.tsx`/`layout.tsx` predate this plan).
 - [ ] A generate with `userAnswers` puts a `Traveler profile:` block in the prompt, confirmed by reading the trace in the FAB — not inferred from the code.
 - [ ] A generate without `userAnswers` produces a prompt with no such block.
 - [ ] The wizard opens on previously chosen answers after a reload, and a changed answer overwrites them.
