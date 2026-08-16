@@ -15,7 +15,9 @@ npx tsc --noEmit -p tsconfig.json   # typecheck — not wired to a script
 
 **Node ≥ 22 is mandatory.** `better-sqlite3`'s native binding silently kills the dev server on Node 20 the moment any DB-touching route is hit. `.nvmrc` pins 22 — run `nvm use` if the shell drifts.
 
-**There is no test suite** (no runner, no test files). Verification here means: `tsc --noEmit`, `eslint`, and exercising routes against a running dev server with `curl`. Don't claim a change is verified on typecheck alone.
+**The test suite is deliberately minimal.** `npm test` runs `node --test 'src/**/*.test.mjs'` — no framework, no build step (Node strips the TypeScript, so the `.mjs` tests import `.ts` directly). It covers only pure, deterministic logic that has already broken once: `src/lib/itinerary.test.mjs` and `src/lib/perfAggregate.test.mjs`. Nothing renders, no route is booted, no DB is opened.
+
+So passing tests prove far less here than in a normally-covered repo. Verification still means: `npm test`, `tsc --noEmit`, `eslint`, **and** exercising routes against a running dev server with `curl`. Don't claim a change is verified on typecheck alone.
 
 ## Architecture
 
