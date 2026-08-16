@@ -26,20 +26,25 @@ export default function DockedPanel({
   /** True while a request is replacing this panel's content. Stops the stale content
    *  being clicked while the loader is over it, and says so to assistive tech. */
   busy = false,
+  /** Widens the panel to fit two real panes (e.g. Focus Mode's chat + preview split)
+   *  instead of the single-column summary width. */
+  wide = false,
   children,
 }: {
   collapsible?: boolean;
   className?: string;
   busy?: boolean;
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const isCollapsed = collapsible && collapsed;
+  const widthClass = wide ? "sm:w-[62%] sm:max-w-[880px]" : "sm:w-[40%] sm:max-w-[520px]";
 
   return (
     <div
       aria-busy={busy || undefined}
-      className={`docked-panel fixed inset-x-0 bottom-0 z-10 m-0 overflow-y-auto sm:right-6 sm:bottom-6 sm:left-auto sm:h-auto sm:w-[40%] sm:min-w-[360px] sm:max-w-[520px] ${
+      className={`docked-panel fixed inset-x-0 bottom-0 z-10 m-0 overflow-y-auto sm:right-6 sm:bottom-6 sm:left-auto sm:h-auto sm:min-w-[360px] ${widthClass} ${
         busy ? "pointer-events-none" : "pointer-events-auto"
       } ${
         isCollapsed

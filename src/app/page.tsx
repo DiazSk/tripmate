@@ -18,6 +18,8 @@ import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import GenerationLoader from "@/components/cesium/GenerationLoader";
 import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
+import DockedPanel from "@/components/DockedPanel";
+import ErrorNote from "@/components/ErrorNote";
 import { backPillClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, Itinerary, RawFetch } from "@/lib/types";
@@ -26,6 +28,11 @@ import { useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
+
+/** Fallback shown only when the thrown error carries no message of its own. */
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
 
 type Step = "landing" | "plan" | "result";
 /** Screens 2-6 need nothing from the backend, which is what gives the Step 2a fetch time to
@@ -236,6 +243,19 @@ export default function Home() {
   // derived from tripDays' floor-at-1.
   const days = startDate && endDate ? tripDays(startDate, endDate) : null;
 
+  // The cap used to be discoverable only by submitting: the picker happily offered a
+  // five-year range and then the form refused it. `tripDays` counts inclusively, so the
+  // last allowed end date is start + (MAX_TRIP_DAYS - 1) days. Computed via local calendar
+  // components rather than `new Date(startDate).getTime() + …` — that round-trips through
+  // UTC-midnight parsing and can drift the result a day either way once re-formatted in a
+  // non-UTC zone. Same reasoning as todayISO above.
+  const maxEndDate = startDate
+    ? (() => {
+        const [y, m, d] = startDate.split("-").map(Number);
+        return new Date(y, m - 1, d + (MAX_TRIP_DAYS - 1)).toLocaleDateString("sv-SE");
+      })()
+    : undefined;
+
   // Auto-pick tracks budget and dates live, right up until the user picks a card themselves —
   // that live coupling is the whole point of merging the form and the tier step. A ref, not
   // state, because flipping the flag must not re-run the effect that reads it.
@@ -366,7 +386,7 @@ export default function Home() {
       setRevealAnimation(true);
       setStep("result");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
     } finally {
       setGenerating(false);
     }
@@ -393,7 +413,7 @@ export default function Home() {
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
     } finally {
       setRefining(false);
     }
@@ -432,7 +452,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || "Failed to save trip");
       router.push(`/trip/${data.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(errorMessage(e, "We couldn't save this trip. Try again."));
       setSaving(false);
     }
   }
@@ -450,7 +470,7 @@ export default function Home() {
         step === "landing" ? "blue-hour-scene font-scene-body" : ""
       }`}
     >
-      <GenerationLoader active={generating} />
+      <GenerationLoader active={generating || refining} mode={refining ? "refine" : "generate"} />
 
       {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
           explainer, and "Plan a trip" uncovered only at the end. It owns full-bleed sections
@@ -574,6 +594,7 @@ export default function Home() {
                           required
                           type="date"
                           min={startDate || todayISO()}
+                          max={maxEndDate}
                           value={endDate}
                           onChange={(e) => setEndDate(e.target.value)}
                           className={`${fieldInputClass} tabular-nums ${endDate ? fieldFilledTone : fieldEmptyTone}`}
@@ -760,34 +781,24 @@ export default function Home() {
               </div>
             </form>
 
-            {/* role="alert" — this one *is* an interruption: the user pressed Generate and
-                nothing happened, and focus stays on the button they just pressed. */}
-            {error && (
-              <div
-                role="alert"
-                className="value-in pointer-events-auto rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400"
-              >
-                {error}
-              </div>
-            )}
+            {/* This one *is* an interruption — the user pressed Generate and nothing
+                happened, and focus stays on the button they just pressed. */}
+            {error && <ErrorNote>{error}</ErrorNote>}
           </div>
         </div>
       )}
 
       {step === "result" && itinerary && (
-        // Docked panel floating over the full-screen globe rather than a normal-flow
-        // block — `fixed` escapes AppShell's own scrollable content pane entirely, so
-        // this positions relative to the viewport and scrolls independently.
-        <div
-          className={`pointer-events-auto fixed top-[calc(var(--nav-h)+1.25rem)] right-6 bottom-6 left-6 z-10 m-0 space-y-6 overflow-y-auto pb-10 sm:top-[calc(var(--nav-h)+1.5rem)] sm:left-auto sm:min-w-[360px] ${
-          // Focus Mode needs room for two real panes; the summary view is a single column and
-          // reads better narrow, so the width is tied to the mode rather than fixed for both.
-          focus.target ? "sm:w-[62%] sm:max-w-[880px]" : "sm:w-[40%] sm:max-w-[520px]"
-        }`}
-          {...devLabel("ResultPanel")}
-        >
-          {!selectedStop && (
-            <>
+        <DockedPanel collapsible busy={refining} wide={!!focus.target}>
+          <div className="space-y-6" {...devLabel("ResultPanel")}>
+            {/* refine()/save() can fail after the card is already showing — this is the
+                only place either error would otherwise have nowhere to render. */}
+            {error && <ErrorNote>{error}</ErrorNote>}
+
+            {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the
+                active day, this panel's scroll position and the stop tour's interval all
+                survive the round trip instead of resetting when ItineraryCard remounts. */}
+            <div className={selectedStop ? "hidden" : "space-y-6"}>
               <button type="button" onClick={backToLanding} className={backPillClass}>
                 <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
                 Back
@@ -811,26 +822,25 @@ export default function Home() {
               )}
 
               {!focus.target && (
-              <ItineraryCard
-                itinerary={itinerary}
-                budget={budget}
-                destination={destination}
-                onSelectStop={(stop) => {
-                  setRevealAnimation(false);
-                  selectStop(stop);
-                }}
-                editable
-                activeDayIndex={activeDayIndex}
-            onActiveDayChange={setActiveDayIndex}
-            onEditDay={handleEditDay}
-                onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
-                animateReveal={revealAnimation}
-              />
+                <ItineraryCard
+                  itinerary={itinerary}
+                  budget={budget}
+                  destination={destination}
+                  onSelectStop={(stop) => {
+                    setRevealAnimation(false);
+                    selectStop(stop);
+                  }}
+                  editable
+                  activeDayIndex={activeDayIndex}
+                  onActiveDayChange={setActiveDayIndex}
+                  onEditDay={handleEditDay}
+                  onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
+                  animateReveal={revealAnimation}
+                />
               )}
 
               {/* Mode B's shown delta — the updated itinerary is already persisted into state
                   above; this is only the human-readable part of that change. */}
-
               {!focus.target && (
                 <div className="flex justify-end">
                   <button
@@ -843,22 +853,21 @@ export default function Home() {
                 </div>
               )}
               {!focus.target && <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />}
-            </>
-          )}
+            </div>
 
-
-          {selectedStop && (
-            <PlaceDetailPanel
-              stop={selectedStop}
-              detail={detail}
-              loading={detailLoading}
-              error={detailError}
-              onBack={closeDetail}
-              upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
-              onSelectUpcoming={selectStop}
-            />
-          )}
-        </div>
+            {selectedStop && (
+              <PlaceDetailPanel
+                stop={selectedStop}
+                detail={detail}
+                loading={detailLoading}
+                error={detailError}
+                onBack={closeDetail}
+                upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
+                onSelectUpcoming={selectStop}
+              />
+            )}
+          </div>
+        </DockedPanel>
       )}
     </main>
   );
