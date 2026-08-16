@@ -73,6 +73,10 @@ addColumnIfMissing("trips", "run_id", "TEXT");
 // The Step 2b answers (priorities, energy, crowds, group, purpose). Stored so the edit loop can
 // read the traveler's profile back instead of asking them things they already told us.
 addColumnIfMissing("trips", "user_answers_json", "TEXT");
+// Set only by scripts/perf-bench.mjs, tagging every run created during one
+// benchmark invocation so the Perf Dashboard can diff two labeled batches.
+// Organic/manual usage keeps this null and shows up under "All time".
+addColumnIfMissing("llm_runs", "batch_tag", "TEXT");
 
 export interface TripRow {
   id: string;
@@ -314,4 +318,54 @@ export function upsertDestinationContext(
     contextJson,
     createdAt: new Date().toISOString(),
   });
+}
+
+export interface TraceWithBatchTag extends TraceRow {
+  batch_tag: string | null;
+}
+
+/** Every successful trace with its run's batch tag attached, for the Perf Dashboard's
+ *  aggregation. Only `status = 'ok'` rows count — a timed-out or errored call's duration
+ *  and (often absent) envelope fields would skew "how long does this normally take". Only
+ *  traces with a run (inner join) are included, same restriction `listGroupedTraces` already
+ *  applies — a trace can't belong to a batch without a run to hang the tag off of. */
+export function listTracesForPerf(batchTag?: string): TraceWithBatchTag[] {
+  if (batchTag) {
+    return db
+      .prepare(
+        `SELECT t.*, r.batch_tag as batch_tag
+         FROM llm_traces t JOIN llm_runs r ON t.run_id = r.id
+         WHERE t.status = 'ok' AND r.batch_tag = ?`
+      )
+      .all(batchTag) as TraceWithBatchTag[];
+  }
+  return db
+    .prepare(
+      `SELECT t.*, r.batch_tag as batch_tag
+       FROM llm_traces t JOIN llm_runs r ON t.run_id = r.id
+       WHERE t.status = 'ok'`
+    )
+    .all() as TraceWithBatchTag[];
+}
+
+export function listBatchTags(): string[] {
+  return (
+    db
+      .prepare(`SELECT DISTINCT batch_tag FROM llm_runs WHERE batch_tag IS NOT NULL ORDER BY batch_tag`)
+      .all() as { batch_tag: string }[]
+  ).map((r) => r.batch_tag);
+}
+
+/** Tags every untagged run created in [fromIso, toIso] with `label` — how
+ *  scripts/perf-bench.mjs marks the batch of runs it just generated without
+ *  having to thread a tag through the production API routes. Returns the
+ *  number of runs tagged. */
+export function tagRunsCreatedBetween(label: string, fromIso: string, toIso: string): number {
+  const result = db
+    .prepare(
+      `UPDATE llm_runs SET batch_tag = @label
+       WHERE created_at BETWEEN @fromIso AND @toIso AND batch_tag IS NULL`
+    )
+    .run({ label, fromIso, toIso });
+  return result.changes;
 }
