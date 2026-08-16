@@ -1,5 +1,6 @@
 import { MODEL } from "./claude";
 import { listGroupedTraces, listRuns, RunRow, TraceRow } from "./db";
+import { REFINE_KIND_TYPES } from "./runLabels";
 import { RunDetail, RunStatus, RunStep, RunStepUsage, RunSummary } from "./types";
 
 /** Token counts/cost are never stored in their own columns — the Claude CLI's
@@ -41,7 +42,8 @@ export function toRunStep(trace: TraceRow): RunStep {
  *  (generate/refine/rebalance/place-detail) — every other step (context,
  *  critique, extra place-detail appends) is secondary. */
 function computeStatus(kind: string, steps: TraceRow[]): RunStatus {
-  const primary = steps.find((s) => s.type === kind);
+  const primaryTypes = kind === "refine" ? REFINE_KIND_TYPES : [kind];
+  const primary = steps.find((s) => primaryTypes.includes(s.type));
   if (!primary || primary.status === "pending") return "pending";
   if (primary.status !== "ok") return "failed";
   const secondaryFailed = steps.some((s) => s !== primary && s.status !== "ok");
