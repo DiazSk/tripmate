@@ -29,6 +29,9 @@ import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
 import type { TravelerProfile } from "@/lib/travelerProfile";
+import { readEventStream } from "@/lib/eventStream";
+import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
+import type { StageProgress } from "@/components/cesium/GenerationLoader";
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -234,6 +237,9 @@ export default function Home() {
   const [revealAnimation, setRevealAnimation] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
+  const [stages, setStages] = useState<StageProgress[]>(
+    STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const }))
+  );
   const [saving, setSaving] = useState(false);
   // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
   // state there would reset the view to Day 1 on the way back.
@@ -385,6 +391,61 @@ export default function Home() {
     };
   }
 
+  /**
+   * Posts to /api/itinerary with `?stream=1` and updates `stages` as real progress frames
+   * arrive via readEventStream. Falls back to the plain (non-streaming) POST if the stream
+   * never opens at all — a network error or non-200 status before any bytes arrive. Once
+   * streaming has genuinely started, a mid-generation failure is never retried: it would
+   * spend another two minutes and a second pair of model calls with no visibility to the
+   * traveler that it's happening again.
+   */
+  async function runStreamed<T>(body: Record<string, unknown>): Promise<T> {
+    const plainFallback = async (): Promise<T> => {
+      const res = await fetch("/api/itinerary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate itinerary");
+      return data as T;
+    };
+
+    let res: Response;
+    try {
+      res = await fetch("/api/itinerary?stream=1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      return plainFallback();
+    }
+
+    if (!res.ok || !res.body) {
+      return plainFallback();
+    }
+
+    let result: T | null = null;
+    let failure: string | null = null;
+    await readEventStream(res.body, (event, data) => {
+      if (event === "stage") {
+        const parsed = JSON.parse(data) as StageEvent;
+        setStages((prev) =>
+          prev.map((s) => (s.stage === parsed.stage ? { ...s, status: parsed.status } : s))
+        );
+      } else if (event === "done") {
+        result = JSON.parse(data) as T;
+      } else if (event === "error") {
+        failure = (JSON.parse(data) as { error: string }).error;
+      }
+    });
+
+    if (failure) throw new Error(failure);
+    if (!result) throw new Error("The planner didn't finish. Try generating again.");
+    return result;
+  }
+
   async function generate() {
     const invalid = validate();
     if (invalid) {
@@ -394,24 +455,17 @@ export default function Home() {
 
     setGenerating(true);
     setError(null);
+    setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     try {
-      const res = await fetch("/api/itinerary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          destination,
-          startDate,
-          endDate,
-          budget,
-          tier,
-          preferences: { tags: interests, vibe: null },
-          // Step 2b's output — /api/itinerary doesn't read this yet (that's Step 3's job),
-          // but this is the existing mechanism by which 2b hands answers to generation.
-          userAnswers: currentAnswers(),
-        }),
+      const data = await runStreamed<{ itinerary: Itinerary; runId?: string | null }>({
+        destination,
+        startDate,
+        endDate,
+        budget,
+        tier,
+        preferences: { tags: interests, vibe: null },
+        userAnswers: currentAnswers(),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate itinerary");
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
       setRevealAnimation(true);
@@ -446,22 +500,17 @@ export default function Home() {
   async function refine(feedback: string) {
     setRefining(true);
     setError(null);
+    setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     try {
-      const res = await fetch("/api/itinerary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          destination,
-          startDate,
-          endDate,
-          budget,
-          previousItinerary: itinerary,
-          feedback,
-          userAnswers: currentAnswers(),
-        }),
+      const data = await runStreamed<{ itinerary: Itinerary; runId?: string | null }>({
+        destination,
+        startDate,
+        endDate,
+        budget,
+        previousItinerary: itinerary,
+        feedback,
+        userAnswers: currentAnswers(),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to refine itinerary");
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
     } catch (e) {
@@ -522,7 +571,7 @@ export default function Home() {
         step === "landing" ? "blue-hour-scene font-scene-body" : ""
       }`}
     >
-      <GenerationLoader active={generating || refining} mode={refining ? "refine" : "generate"} />
+      <GenerationLoader active={generating || refining} mode={refining ? "refine" : "generate"} stages={stages} />
 
       {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
           explainer, and "Plan a trip" uncovered only at the end. It owns full-bleed sections
