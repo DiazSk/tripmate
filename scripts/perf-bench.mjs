@@ -99,28 +99,30 @@ async function main() {
   const { label, iterations } = parseArgs(process.argv.slice(2));
   const startedAt = new Date().toISOString();
 
-  let lastItinerary = null;
-  for (let i = 0; i < iterations; i++) {
-    console.log(`[perf-bench] iteration ${i + 1}/${iterations}`);
-    for (const scenario of SCENARIOS) {
-      const itinerary = await runScenario(scenario);
-      if (scenario === SCENARIOS[0]) lastItinerary = itinerary;
+  try {
+    let lastItinerary = null;
+    for (let i = 0; i < iterations; i++) {
+      console.log(`[perf-bench] iteration ${i + 1}/${iterations}`);
+      for (const scenario of SCENARIOS) {
+        const itinerary = await runScenario(scenario);
+        if (scenario === SCENARIOS[0]) lastItinerary = itinerary;
+      }
     }
+
+    // One rebalance call per script run (rarer user action than the others —
+    // keeps the extra CLI-call cost down).
+    console.log("[perf-bench] rebalance");
+    await postJson("/api/itinerary", {
+      ...SCENARIOS[0],
+      rebalance: true,
+      remainingDays: lastItinerary.days.slice(1),
+      remainingBudget: 200,
+    });
+  } finally {
+    const endedAt = new Date().toISOString();
+    const tagged = tagRunsCreatedBetween(label, startedAt, endedAt);
+    console.log(`[perf-bench] tagged ${tagged} run(s) as "${label}"`);
   }
-
-  // One rebalance call per script run (rarer user action than the others —
-  // keeps the extra CLI-call cost down).
-  console.log("[perf-bench] rebalance");
-  await postJson("/api/itinerary", {
-    ...SCENARIOS[0],
-    rebalance: true,
-    remainingDays: lastItinerary.days.slice(1),
-    remainingBudget: 200,
-  });
-
-  const endedAt = new Date().toISOString();
-  const tagged = tagRunsCreatedBetween(label, startedAt, endedAt);
-  console.log(`[perf-bench] tagged ${tagged} run(s) as "${label}"`);
 }
 
 main().catch((err) => {
