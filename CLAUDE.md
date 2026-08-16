@@ -19,6 +19,10 @@ npx tsc --noEmit -p tsconfig.json   # typecheck — not wired to a script
 
 So passing tests prove far less here than in a normally-covered repo. Verification still means: `npm test`, `tsc --noEmit`, `eslint`, **and** exercising routes against a running dev server with `curl`. Don't claim a change is verified on typecheck alone.
 
+**A `.test.mjs` can only import a `.ts` module whose own imports are all `import type`.** Node erases those, so nothing is resolved at runtime — which is why `itinerary.ts` and `perfAggregate.ts` are testable. A module importing a *value* (`import { TIERS } from "./tiers"`), or importing a type without the `type` keyword, fails with `ERR_MODULE_NOT_FOUND`: Node's ESM loader needs the file extension that the rest of the codebase correctly omits for the bundler. `itineraryPrompt.ts` is in that state today. Put logic you want covered in a module with type-only imports rather than adding extensions piecemeal.
+
+The glob in the `test` script needs **double** quotes. Single quotes reach Node literally on Windows and it matches nothing — the suite reported success while running zero tests.
+
 ## Architecture
 
 Next.js 16 App Router + React 19 + Tailwind v4. A CesiumJS globe renders behind most of the UI (assets copied into `public/` by the `postinstall` script).
