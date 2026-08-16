@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { homedir } from "os";
-import { insertTrace, updateTrace } from "./db";
+import { insertTrace, updateTrace } from "./db.ts";
 
 export const MODEL = "claude-haiku-4-5-20251001";
 export const DEFAULT_TIMEOUT_MS = 90_000;

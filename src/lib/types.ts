@@ -338,3 +338,21 @@ export interface RunComparison {
   placeDetailCountB: number;
   totalDurationDeltaMs: number;
 }
+
+export interface MetricStats {
+  avg: number | null;
+  median: number | null;
+  p95: number | null;
+}
+
+export interface FeaturePerfStats {
+  type: string;
+  count: number;
+  durationMs: MetricStats;
+  timeToRequestMs: MetricStats;
+  ttftMs: MetricStats;
+  apiDurationMs: MetricStats;
+  inputTokens: MetricStats;
+  outputTokens: MetricStats;
+  costUsd: MetricStats;
+}
