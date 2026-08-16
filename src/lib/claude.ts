@@ -46,7 +46,9 @@ export type ClaudeCallType =
   | "rebalance"
   | "place-detail"
   | "context"
-  | "critique";
+  | "critique"
+  | "chat"
+  | "element-edit";
 
 /**
  * Runs a one-shot prompt through the `claude` CLI (Haiku, no tools) instead
