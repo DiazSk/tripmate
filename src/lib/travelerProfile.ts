@@ -29,9 +29,13 @@ const TIER_IDS: TierId[] = ["budget", "midrange", "luxury"];
 
 /**
  * The trust boundary. Rejects anything that isn't a known enum value and returns
- * only known fields, so a bad value can never reach storage — from there it would
- * propagate silently into every future trip's prompt, which is far harder to
- * notice than a 400 at the point of writing it.
+ * only known fields, so a bad enum value can never reach storage — from there it
+ * would propagate silently into every future trip's prompt, which is far harder
+ * to notice than a 400 at the point of writing it. That guarantee is specific to
+ * the five enum fields: `priorities`/`topPriorities` are only checked for being
+ * string arrays, not for content or length, so an unbounded or malicious string
+ * there still reaches storage and the prompt — the same pre-existing gap as
+ * `preferences.tags` elsewhere in this codebase, not closed here.
  */
 export function parseProfile(value: unknown): TravelerProfile | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
