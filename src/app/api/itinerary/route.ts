@@ -13,7 +13,8 @@ import {
 } from "@/lib/itineraryPrompt";
 import { normalizeDays } from "@/lib/itinerary";
 import { MAX_TRIP_DAYS, tripDays } from "@/lib/tiers";
-import { CritiqueResult, DayPlan, Itinerary } from "@/lib/types";
+import { CritiqueResult, DayPlan, Itinerary, ResolvedFlags, UserAnswers } from "@/lib/types";
+import { deriveFlags } from "@/lib/userAnswers";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
     remainingDays,
     remainingBudget,
     tripId,
+    userAnswers,
   } = body;
 
   // These are contract failures, not things a traveller can act on, so they read as one
@@ -89,6 +91,19 @@ export async function POST(req: NextRequest) {
     let geoPoint: { lat: number; lon: number } | null = null;
     const isRefine = Boolean(previousItinerary && feedback);
 
+    // The wizard has always sent these; the route simply never read them, so six
+    // screens of answers were collected and discarded. Malformed input is treated
+    // as absent rather than fatal — a bad shape must not fail a generation that is
+    // otherwise fine, and the prompt is unchanged when this is null.
+    let resolvedFlags: ResolvedFlags | null = null;
+    if (userAnswers) {
+      try {
+        resolvedFlags = deriveFlags(userAnswers as UserAnswers);
+      } catch (err) {
+        console.error("[itinerary] ignoring malformed userAnswers", err);
+      }
+    }
+
     const runId = randomUUID();
     insertRun({
       id: runId,
@@ -119,6 +134,7 @@ export async function POST(req: NextRequest) {
         previousItinerary,
         feedback,
         contextInsight,
+        resolvedFlags,
       });
     } else {
       if (!tier) {
@@ -144,6 +160,7 @@ export async function POST(req: NextRequest) {
         weather,
         preferences,
         contextInsight,
+        resolvedFlags,
       });
     }
 
@@ -166,6 +183,7 @@ export async function POST(req: NextRequest) {
         budget,
         contextInsight,
         interestTags: preferences?.tags,
+        resolvedFlags,
       });
       const { result: critiqueRaw } = await runClaude(critiquePrompt, "critique", DEFAULT_TIMEOUT_MS, {
         runId,
