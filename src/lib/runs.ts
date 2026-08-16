@@ -1,4 +1,3 @@
-import { MODEL } from "./claude";
 import { listGroupedTraces, listRuns, RunRow, TraceRow } from "./db";
 import { REFINE_KIND_TYPES } from "./runLabels";
 import { RunDetail, RunStatus, RunStep, RunStepUsage, RunSummary } from "./types";
@@ -12,7 +11,9 @@ function parseUsage(rawResponse: string | null): RunStepUsage {
   if (!rawResponse) return { inputTokens: null, outputTokens: null, costUsd: null };
   try {
     const envelope = JSON.parse(rawResponse);
-    const modelUsage = envelope.modelUsage?.[MODEL];
+    const modelUsage = Object.values(envelope.modelUsage ?? {})[0] as
+      | { inputTokens?: number; outputTokens?: number }
+      | undefined;
     return {
       inputTokens: typeof modelUsage?.inputTokens === "number" ? modelUsage.inputTokens : null,
       outputTokens: typeof modelUsage?.outputTokens === "number" ? modelUsage.outputTokens : null,
