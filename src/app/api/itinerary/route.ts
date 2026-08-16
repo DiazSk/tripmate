@@ -1,20 +1,26 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { DEFAULT_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "@/lib/claude";
-import { geocodeDestination, getWeatherForDates, DayWeather } from "@/lib/weather";
-import { resolveNamedPlaceCoords } from "@/lib/poiDetails";
-import { getDestinationContextInsight } from "@/lib/destinationContext";
+import { itineraryTimeoutMs, parseJsonResponse, runClaude } from "@/lib/claude";
 import { insertRun } from "@/lib/db";
-import {
-  buildCritiquePrompt,
-  buildGeneratePrompt,
-  buildRebalancePrompt,
-  buildRefinePrompt,
-} from "@/lib/itineraryPrompt";
+import { buildRebalancePrompt } from "@/lib/itineraryPrompt";
 import { normalizeDays } from "@/lib/itinerary";
 import { MAX_TRIP_DAYS, tripDays } from "@/lib/tiers";
-import { CritiqueResult, DayPlan, Itinerary, ResolvedFlags, UserAnswers } from "@/lib/types";
-import { deriveFlags } from "@/lib/userAnswers";
+import { DayPlan } from "@/lib/types";
+import { GenerationParams, runGeneration } from "@/lib/generationRunner";
+import { StageEvent } from "@/lib/generationStages";
+
+const GENERATION_ERROR = "The planner didn't finish. Try generating again.";
+
+/** WebKit buffers a streamed response until 1024 bytes have arrived, so a few small SSE
+ *  frames alone would sit invisible and then flush all at once — exactly the failure this
+ *  feature exists to remove. This comment frame (ignored by the client parser, which skips
+ *  any line starting with ":") exists purely to push past that threshold before the first
+ *  real stage event is sent. */
+const PADDING_FRAME = new TextEncoder().encode(`:${" ".repeat(2048)}\n\n`);
+
+function sseFrame(event: string, data: unknown): Uint8Array {
+  return new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -41,8 +47,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No destination was sent with the request." }, { status: 400 });
   }
 
-  try {
-    if (rebalance) {
+  if (rebalance) {
+    try {
       if (!Array.isArray(remainingDays) || typeof remainingBudget !== "number" || !tier) {
         return NextResponse.json(
           { error: "The request was missing the days or budget to rebalance." },
@@ -66,176 +72,99 @@ export async function POST(req: NextRequest) {
       );
       const days = normalizeDays(parseJsonResponse<DayPlan[]>(raw));
       return NextResponse.json({ days, runId });
+    } catch (err) {
+      console.error("[itinerary]", err);
+      return NextResponse.json({ error: GENERATION_ERROR }, { status: 500 });
     }
+  }
 
-    if (!startDate || !endDate || typeof budget !== "number") {
-      return NextResponse.json(
-        { error: "The request was missing a destination, dates, or a budget." },
-        { status: 400 }
-      );
-    }
-
-    // The client enforces this too, but the cap exists because the prompt grows with the
-    // day count — so it belongs on the side that builds the prompt.
-    if (tripDays(startDate, endDate) > MAX_TRIP_DAYS) {
-      return NextResponse.json(
-        { error: `Trips longer than ${MAX_TRIP_DAYS} days aren't supported yet.` },
-        { status: 400 }
-      );
-    }
-
-    let prompt: string;
-    let effectiveTier = tier;
-    let dayCount: number;
-    let weather: DayWeather[] = [];
-    let geoPoint: { lat: number; lon: number } | null = null;
-    const isRefine = Boolean(previousItinerary && feedback);
-
-    // The wizard has always sent these; the route simply never read them, so six
-    // screens of answers were collected and discarded. Malformed input is treated
-    // as absent rather than fatal — a bad shape must not fail a generation that is
-    // otherwise fine, and the prompt is unchanged when this is null.
-    let resolvedFlags: ResolvedFlags | null = null;
-    if (userAnswers) {
-      try {
-        resolvedFlags = deriveFlags(userAnswers as UserAnswers);
-      } catch (err) {
-        console.error("[itinerary] ignoring malformed userAnswers", err);
-      }
-    }
-
-    const runId = randomUUID();
-    insertRun({
-      id: runId,
-      kind: isRefine ? "refine" : "generate",
-      destination,
-      tripId: tripId ?? null,
-    });
-
-    // Kicked off before the geocode/weather work below so it runs concurrently
-    // with it rather than adding its latency on top.
-    const contextInsightPromise = getDestinationContextInsight(
-      destination,
-      startDate,
-      endDate,
-      runId
-    );
-    let contextInsight: string;
-
-    if (isRefine) {
-      effectiveTier = previousItinerary.tier;
-      dayCount = previousItinerary.days.length;
-      contextInsight = await contextInsightPromise;
-      prompt = buildRefinePrompt({
-        destination,
-        startDate,
-        endDate,
-        budget,
-        previousItinerary,
-        feedback,
-        contextInsight,
-        resolvedFlags,
-      });
-    } else {
-      if (!tier) {
-        return NextResponse.json({ error: "No spending style was selected." }, { status: 400 });
-      }
-      dayCount = tripDays(startDate, endDate);
-      try {
-        const geo = await geocodeDestination(destination);
-        if (geo) {
-          geoPoint = { lat: geo.lat, lon: geo.lon };
-          weather = await getWeatherForDates(geo.lat, geo.lon, startDate, endDate);
-        }
-      } catch {
-        weather = [];
-      }
-      contextInsight = await contextInsightPromise;
-      prompt = buildGeneratePrompt({
-        destination,
-        startDate,
-        endDate,
-        budget,
-        tier,
-        weather,
-        preferences,
-        contextInsight,
-        resolvedFlags,
-      });
-    }
-
-    const { result: raw, traceId } = await runClaude(
-      prompt,
-      isRefine ? "refine" : "generate",
-      itineraryTimeoutMs(dayCount),
-      { runId }
-    );
-    // The model returns just { days: [...] } — tier is known server-side, not part of its output.
-    const { days } = parseJsonResponse<{ days: Itinerary["days"] }>(raw);
-    const itinerary: Itinerary = { tier: effectiveTier, days: normalizeDays(days) };
-
-    // Best-effort QA pass: checks budget/timing/context usage and swaps in a
-    // corrected day set if it finds issues. Never fails the request — a
-    // broken critique call just leaves the original itinerary in place.
-    try {
-      const critiquePrompt = buildCritiquePrompt({
-        itinerary,
-        budget,
-        contextInsight,
-        interestTags: preferences?.tags,
-        resolvedFlags,
-      });
-      const { result: critiqueRaw } = await runClaude(critiquePrompt, "critique", DEFAULT_TIMEOUT_MS, {
-        runId,
-      });
-      const critique = parseJsonResponse<CritiqueResult>(critiqueRaw);
-      if (critique.revisedDays) {
-        itinerary.days = critique.revisedDays;
-      }
-    } catch {
-      // Keep the uncritiqued itinerary.
-    }
-
-    // Attach the real forecast (not the model's free-text guess) to each day
-    // by date, so the UI can render structured icon/temp/humidity data.
-    const weatherByDate = new Map(weather.map((w) => [w.date, w]));
-    for (const day of itinerary.days) {
-      const detail = weatherByDate.get(day.date);
-      if (detail) day.weatherDetail = detail;
-    }
-
-    // Correct the model's coordinates against OSM. It writes lat/lng from memory and is often
-    // badly wrong (measured: Fushimi Inari 11km off, Nishiki Market 3km), which lands map pins in
-    // the wrong part of the city. Names it resolves get real positions; anything unmatched keeps
-    // the model's guess, and the whole step is skipped if Overpass is unreachable.
-    if (geoPoint) {
-      try {
-        const allStops = itinerary.days.flatMap((d) => d.stops);
-        const resolved = await resolveNamedPlaceCoords(
-          allStops.map((s) => s.name),
-          geoPoint
-        );
-        for (const stop of allStops) {
-          const fixed = resolved[stop.name.trim()];
-          if (fixed) {
-            stop.lat = fixed.lat;
-            stop.lng = fixed.lon;
-          }
-        }
-      } catch {
-        // Keep the model's coordinates.
-      }
-    }
-
-    return NextResponse.json({ itinerary, traceId, runId });
-  } catch (err) {
-    // `runClaude` throws CLI timeouts and JSON parse failures. Those messages are written
-    // for a developer reading a trace, not for someone waiting on a plan, so the real one
-    // goes to the server log and the client gets a recovery step.
-    console.error("[itinerary]", err);
+  if (!startDate || !endDate || typeof budget !== "number") {
     return NextResponse.json(
-      { error: "The planner didn't finish. Try generating again." },
-      { status: 500 }
+      { error: "The request was missing a destination, dates, or a budget." },
+      { status: 400 }
     );
   }
+
+  // The client enforces this too, but the cap exists because the prompt grows with the
+  // day count — so it belongs on the side that builds the prompt.
+  if (tripDays(startDate, endDate) > MAX_TRIP_DAYS) {
+    return NextResponse.json(
+      { error: `Trips longer than ${MAX_TRIP_DAYS} days aren't supported yet.` },
+      { status: 400 }
+    );
+  }
+
+  const isRefine = Boolean(previousItinerary && feedback);
+  if (!isRefine && !tier) {
+    return NextResponse.json({ error: "No spending style was selected." }, { status: 400 });
+  }
+
+  const params: GenerationParams = {
+    destination,
+    startDate,
+    endDate,
+    budget,
+    tier,
+    previousItinerary,
+    feedback,
+    preferences,
+    tripId,
+    userAnswers,
+  };
+
+  const isStreaming = req.nextUrl.searchParams.get("stream") === "1";
+
+  if (!isStreaming) {
+    try {
+      const result = await runGeneration(params, () => {});
+      return NextResponse.json(result);
+    } catch (err) {
+      // `runGeneration` throws CLI timeouts and JSON parse failures. Those messages are
+      // written for a developer reading a trace, not for someone waiting on a plan, so the
+      // real one goes to the server log and the client gets a recovery step.
+      console.error("[itinerary]", err);
+      return NextResponse.json({ error: GENERATION_ERROR }, { status: 500 });
+    }
+  }
+
+  // Do not add `export const runtime = "edge"` — the Edge runtime is deprecated in Next 16;
+  // the Node default is the only non-deprecated choice and it supports streaming.
+  const stream = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(PADDING_FRAME);
+      const onStage = (event: StageEvent) => {
+        // A stage callback throwing (e.g. the client already disconnected, so `enqueue`
+        // rejects) must not abort generation — the model call keeps running either way,
+        // so the failure is swallowed and logged rather than propagated.
+        try {
+          controller.enqueue(sseFrame("stage", event));
+        } catch (err) {
+          console.error("[itinerary] stage emit failed", err);
+        }
+      };
+      try {
+        const result = await runGeneration(params, onStage);
+        controller.enqueue(sseFrame("done", result));
+      } catch (err) {
+        console.error("[itinerary]", err);
+        controller.enqueue(sseFrame("error", { error: GENERATION_ERROR }));
+      } finally {
+        controller.close();
+      }
+    },
+    cancel() {
+      // The client navigated away or aborted the fetch; Next/undici already tears this
+      // stream down for us. runGeneration has no cancellation token, so an in-flight Claude
+      // call simply finishes and its result is discarded — nothing further to clean up here.
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
