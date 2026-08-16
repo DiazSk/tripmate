@@ -140,6 +140,18 @@ export default function ItineraryCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately one-shot on mount
   }, [animateReveal]);
 
+  // The host cancels animateReveal when a stop is opened (the card stays mounted behind the
+  // detail panel rather than unmounting), which would otherwise leave the stagger frozen
+  // wherever it had gotten to — the "day changed" effect above only catches a day *switch*,
+  // not this same-day cancellation. Catch day 1 up to fully revealed instead.
+  const wasAnimatingRef = useRef(!!animateReveal);
+  useEffect(() => {
+    if (wasAnimatingRef.current && !animateReveal && day) {
+      setRevealedCount(day.stops.length);
+    }
+    wasAnimatingRef.current = !!animateReveal;
+  }, [animateReveal, day]);
+
   // Keep the active day tab centered in its scroll row, including when the arrows below move it.
   useEffect(() => {
     dayTabRefs.current[dayIndex]?.scrollIntoView({
