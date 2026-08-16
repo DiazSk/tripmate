@@ -406,6 +406,7 @@ export default function Home() {
           budget,
           previousItinerary: itinerary,
           feedback,
+          userAnswers: currentAnswers(),
         }),
       });
       const data = await res.json();
