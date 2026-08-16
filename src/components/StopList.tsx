@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 
 import { Stop, StopCategory } from "@/lib/types";
@@ -15,22 +16,30 @@ const CATEGORY_ICON: Record<StopCategory, typeof FoodIcon> = {
   other: PinIcon,
 };
 
-function CategoryTile({ category }: { category: StopCategory }) {
-  const Icon = CATEGORY_ICON[category ?? "other"];
-  return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-tag-neutral-bg text-accent">
-      <Icon className="h-4 w-4" />
-    </div>
-  );
-}
-
+/** The category tile is the base layer and never unmounts; the photo resolves over it on
+ *  `.value-in`. Swapping one for the other made every avatar in the list jump at whatever
+ *  moment its Wikipedia lookup happened to land. */
 function StopAvatar({ name, category }: { name: string; category: StopCategory }) {
   const photo = usePlacePhoto(name);
-  if (photo) {
-    // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
-    return <img src={photo} alt="" className="h-10 w-10 rounded-full object-cover" />;
-  }
-  return <CategoryTile category={category} />;
+  const [failed, setFailed] = useState(false);
+  const Icon = CATEGORY_ICON[category ?? "other"];
+
+  return (
+    <span className="relative block h-10 w-10 shrink-0">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-tag-neutral-bg text-accent">
+        <Icon className="h-4 w-4" />
+      </span>
+      {photo && !failed && (
+        // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
+        <img
+          src={photo}
+          alt=""
+          onError={() => setFailed(true)}
+          className="value-in absolute inset-0 h-10 w-10 rounded-full object-cover"
+        />
+      )}
+    </span>
+  );
 }
 
 function StopRow({
@@ -91,11 +100,14 @@ function StopRow({
       <button
         type="button"
         onClick={() => onSelect(stop)}
+        // The globe's marker cards light their paired row on focus as well as on hover
+        // (StopMarkerLayer), so the row has to light its marker from focus too or the
+        // coupling only works for people using a mouse.
+        onFocus={() => onHover?.(true)}
+        onBlur={() => onHover?.(false)}
         className="relative z-10 flex flex-1 gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
-        <span className="shrink-0">
-          <StopAvatar name={stop.name} category={stop.category} />
-        </span>
+        <StopAvatar name={stop.name} category={stop.category} />
         <span className="min-w-0 flex-1">
           <div className="font-medium text-foreground">
             {revealAnimation ? <Typewriter text={stop.name} /> : stop.name}
