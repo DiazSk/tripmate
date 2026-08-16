@@ -48,6 +48,12 @@ test("familyRules is null for anyone not travelling with kids", () => {
   assert.ok(deriveFlags(answers({ group: "family_with_kids" })).familyRules);
 });
 
+test("an unrecognized explorer style falls back instead of producing NaN", () => {
+  // @ts-expect-error — deliberately passing a value outside the enum to prove the fallback
+  const result = derivePaceSpotsPerDay("bogus", "solo", "high");
+  assert.ok(Number.isFinite(result), `expected a finite number, got ${result}`);
+});
+
 test("starred priorities become primary, the rest tiebreakers", () => {
   const flags = deriveFlags(
     answers({ priorities: ["Food", "Nightlife", "Shopping"], topPriorities: ["Food"] })
