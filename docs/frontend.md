@@ -48,6 +48,7 @@ tables are maintained.
 | Pin decluttering on the globe via Cesium `EntityCluster` | Active | 2026-08-05 | Aryan | POIs moved from `viewer.entities` into a dedicated `CustomDataSource` with `.clustering.enabled = true` — clustering only applies to entities that belong to a DataSource, not the default collection |
 | Adaptive header contrast (`PageHeader` `variant="adaptive"`) | Active | 2026-08-05 | Aryan | Home page only. Samples the globe canvas under the "TripMate" title; dark backdrop → white text + shadow, light backdrop (terrain) → dark text in a `backdrop-blur-md` capsule badge |
 | Floating top capsule ("← New search" + live budget) in `TripDashboard` | Active | 2026-08-05 | Aryan | Centered, elevated above both the map and list halves; text goes red when over budget, matching `BudgetBar`'s color language |
+| Wizard seeds from the saved traveler profile | Active | 2026-08-16 | Zaid | Durable answers pre-fill on mount and are written back after a successful generate. Defaults only — the wizard always wins, and any failure falls back to the hardcoded defaults |
 
 ## Enhancements
 

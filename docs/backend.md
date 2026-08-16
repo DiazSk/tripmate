@@ -22,6 +22,7 @@ Covers `src/app/api/**`, `src/lib/db.ts`, `src/lib/weather.ts`. See
 | `weatherDetail` merged onto each itinerary day | Active | 2026-08-05 | Aryan | `/api/itinerary` attaches the real fetched forecast (by matching date), not the model's free-text guess — powers the frontend's weather icon/popover |
 | `GET /api/geocode` | Active | 2026-08-05 | Claude | Thin wrapper around the existing `geocodeDestination()` (`weather.ts`); lets the home page resolve destination → lat/lng fast so the Cesium camera flight can start without waiting on the full `/api/itinerary` (LLM) call |
 | `GET /api/container-theme` | Active | 2026-08-05 | Aryan | Fetched concurrently with `/api/geocode` on search submit; validates the LLM's JSON shape and falls back to `DEFAULT_CONTAINER_THEME` on empty destination, malformed response, or any error — never blocks or fails the search flow itself |
+| `traveler_profile` table + `GET/PUT /api/profile` | Active | 2026-08-16 | Zaid | Durable answers only (group, style, energy, crowds, tier, priorities). `owner_id` carried from the first row so auth can be added without a data migration — see `FUTURE-INTEGRATION.md`. `PUT` refuses unknown enum values rather than storing them |
 
 ## Enhancements
 
