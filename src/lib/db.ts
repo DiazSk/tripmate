@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import { randomUUID } from "crypto";
+import { LOCAL_OWNER, parseProfile, type TravelerProfile } from "./travelerProfile";
 
 const db = new Database(path.join(process.cwd(), "tripmate.db"));
 
@@ -56,6 +57,20 @@ db.exec(`
     trip_context_md TEXT NOT NULL,
     itinerary_md TEXT NOT NULL,
     created_at TEXT NOT NULL
+  )
+`);
+
+// `owner_id` is deliberate insurance, not speculation. Swapping an LLM vendor
+// later is one file's internals; retrofitting ownership onto rows that already
+// exist is a data migration plus every query that reads them. It is written from
+// the LOCAL_OWNER constant rather than a column DEFAULT, since a primary key that
+// is always supplied explicitly would never fire the default — the column is the
+// insurance, not the default. See FUTURE-INTEGRATION.md.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS traveler_profile (
+    owner_id TEXT PRIMARY KEY,
+    profile_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
   )
 `);
 
@@ -318,6 +333,50 @@ export function upsertDestinationContext(
     contextJson,
     createdAt: new Date().toISOString(),
   });
+}
+
+export interface TravelerProfileRow {
+  owner_id: string;
+  profile_json: string;
+  updated_at: string;
+}
+
+export function getTravelerProfile(ownerId: string): TravelerProfileRow | undefined {
+  return db.prepare(`SELECT * FROM traveler_profile WHERE owner_id = ?`).get(ownerId) as
+    | TravelerProfileRow
+    | undefined;
+}
+
+export function upsertTravelerProfile(ownerId: string, profileJson: string): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO traveler_profile (owner_id, profile_json, updated_at)
+     VALUES (@owner_id, @profile_json, @updated_at)`
+  ).run({
+    owner_id: ownerId,
+    profile_json: profileJson,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+/**
+ * Returns null for "no row" and for "row failed to parse" alike. The house rule
+ * elsewhere is that null and empty must stay distinguishable, but here the
+ * caller's response is identical either way — fall back to the wizard's built-in
+ * defaults — so the distinction would carry no consequence. Deliberate departure
+ * from the convention, not an oversight.
+ */
+export function readProfile(ownerId: string = LOCAL_OWNER): TravelerProfile | null {
+  const row = getTravelerProfile(ownerId);
+  if (!row) return null;
+  try {
+    return parseProfile(JSON.parse(row.profile_json));
+  } catch {
+    return null;
+  }
+}
+
+export function writeProfile(profile: TravelerProfile, ownerId: string = LOCAL_OWNER): void {
+  upsertTravelerProfile(ownerId, JSON.stringify(profile));
 }
 
 export interface TraceWithBatchTag extends TraceRow {
