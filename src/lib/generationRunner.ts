@@ -10,6 +10,7 @@ import { tripDays, TierId } from "./tiers";
 import { deriveFlags } from "./userAnswers";
 import { CritiqueResult, Itinerary, ItineraryPreferences, ResolvedFlags, UserAnswers } from "./types";
 import { StageEvent } from "./generationStages";
+import type { DietaryNeeds } from "./travelerProfile";
 
 export interface GenerationParams {
   destination: string;
@@ -22,6 +23,7 @@ export interface GenerationParams {
   preferences?: ItineraryPreferences | null;
   tripId?: string | null;
   userAnswers?: unknown;
+  dietary?: DietaryNeeds | null;
 }
 
 /**
@@ -47,6 +49,7 @@ export async function runGeneration(
     preferences,
     tripId,
     userAnswers,
+    dietary,
   } = params;
 
   let prompt: string;
@@ -105,6 +108,7 @@ export async function runGeneration(
       feedback,
       contextInsight,
       resolvedFlags,
+      dietary,
     });
   } else {
     if (!tier) {
@@ -143,6 +147,7 @@ export async function runGeneration(
       preferences,
       contextInsight,
       resolvedFlags,
+      dietary,
     });
   }
 
@@ -169,6 +174,7 @@ export async function runGeneration(
       contextInsight,
       interestTags: preferences?.tags,
       resolvedFlags,
+      dietary,
     });
     const { result: critiqueRaw } = await runClaude(critiquePrompt, "critique", DEFAULT_TIMEOUT_MS, {
       runId,
