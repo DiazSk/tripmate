@@ -6,6 +6,19 @@ export const MODEL = "claude-haiku-4-5-20251001";
 export const DEFAULT_TIMEOUT_MS = 90_000;
 
 /**
+ * The critique pass reasons over a whole generated itinerary, so it is far closer to a
+ * generate call than to the small lookups DEFAULT_TIMEOUT_MS was sized for.
+ *
+ * On the shared 90s default it was failing **35% of the time** (7 of 20 calls in
+ * `llm_traces`, every one of them dying at exactly 90s). Those failures were invisible:
+ * the runner catches critique errors by design, so a third of trips shipped without the
+ * budget/timing review and nothing said so. The successful calls run p50 58s / p90 75s, and
+ * the seven that were killed were still working — so the real tail extends past 90s and the
+ * old ceiling was cutting into it, not bounding it.
+ */
+export const CRITIQUE_TIMEOUT_MS = 150_000;
+
+/**
  * Where the `claude` binary lives, independent of whoever launched the dev server.
  *
  * `spawn` without `shell: true` resolves the command against the child's PATH and nothing else,
@@ -19,17 +32,37 @@ export const DEFAULT_TIMEOUT_MS = 90_000;
 const CLI_BIN = process.env.CLAUDE_CLI_PATH ?? "claude";
 const CLI_SEARCH_PATH = [`${homedir()}/.local/bin`, `${homedir()}/.claude/local`];
 
-const BASE_TIMEOUT_MS = 120_000;
-const PER_DAY_TIMEOUT_MS = 12_000;
+const BASE_TIMEOUT_MS = 210_000;
+const PER_DAY_TIMEOUT_MS = 2_000;
 const MAX_TIMEOUT_MS = 480_000;
 
 /**
- * Itinerary generation time scales with trip length (more days = more JSON to
- * produce), so a flat timeout either times out long trips or waits too long
- * on short ones. Measured: a 3-day trip took ~95s and a 10-day trip took
- * ~85-105s — most latency is fixed overhead (CLI cold start, geocode/weather
- * calls), not output size — so the base needs its own margin, with a smaller
- * per-day term on top for longer trips (up to 30 days, see MAX_TRIP_DAYS).
+ * How long a generate/refine call may run before it is killed.
+ *
+ * Recalibrated against 36 successful generate calls in `llm_traces` rather than the handful
+ * of samples the previous value came from. The measured distribution:
+ *
+ *     p50 117s   p75 123s   p90 145s   max 165s
+ *
+ * The old budget was `120s + 12s/day`, which gave a one-day trip 132s — *below* the p90. The
+ * comment justifying it cited "~85-105s", but 105s turns out to be roughly the 25th
+ * percentile, so the margin was measured against the fast end of the range and the slowest
+ * tenth of runs could not finish by construction. Five consecutive failures each died exactly
+ * at their cap (156s, 156s, 156s, 168s, 192s) with the model still working.
+ *
+ * 210s clears the observed maximum with real margin. The cost is that a genuinely wedged call
+ * now hangs ~3.5 minutes before erroring, which is the right trade: a slow success is worth
+ * far more than a fast failure when the alternative is regenerating from scratch.
+ *
+ * The per-day term is nearly gone (12s → 2s) because trip length is not what drives duration.
+ * Correlation between prompt size and duration across a 6x range of prompt sizes is r = 0.132
+ * — essentially none; the variance is fixed overhead (CLI start, time to first token), not
+ * output size. The old term gave the most headroom to long trips while leaving short ones the
+ * tightest budget, which is backwards. It is kept small and non-zero only because a 30-day
+ * itinerary genuinely does emit several times more JSON.
+ *
+ * Re-derive this from the table rather than nudging it by feel:
+ *   SELECT duration_ms FROM llm_traces WHERE type='generate' AND status='ok' ORDER BY 1;
  */
 export function itineraryTimeoutMs(days: number): number {
   return Math.min(BASE_TIMEOUT_MS + days * PER_DAY_TIMEOUT_MS, MAX_TIMEOUT_MS);
@@ -116,7 +149,16 @@ export function runClaude(
     child.stdout.on("data", (d) => (stdout += d));
     child.stderr.on("data", (d) => (stderr += d));
 
+    // Killing the child makes it exit, which fires the `exit` handler below — and that
+    // handler used to overwrite the row this one just wrote, turning every timeout into a
+    // generic `error` / "exited null". The result was that `llm_traces` had never recorded a
+    // single `timeout` in its life while generate calls were timing out repeatedly, so the
+    // one failure mode worth spotting was the one the trace viewer could not show. This flag
+    // is what makes the timeout the terminal outcome for the call.
+    let settled = false;
+
     const timer = setTimeout(() => {
+      settled = true;
       child.kill();
       updateTrace(traceId, { status: "timeout", durationMs: Date.now() - startedAt });
       reject(new Error(`claude CLI timed out after ${timeoutMs}ms`));
@@ -124,6 +166,10 @@ export function runClaude(
 
     child.on("error", (err) => {
       clearTimeout(timer);
+      // Same reason as the timeout flag: a spawn failure can be followed by an exit, and the
+      // generic "exited null" would replace the ENOENT hint below — which is the one message
+      // that actually tells you what to do about it.
+      settled = true;
       // ENOENT here means only one thing, and the bare message never said so.
       const hint =
         (err as NodeJS.ErrnoException).code === "ENOENT"
@@ -140,6 +186,9 @@ export function runClaude(
 
     child.on("exit", (code) => {
       clearTimeout(timer);
+      // The timeout above already wrote the terminal status and rejected. This exit is the
+      // kill it issued, not a real outcome, so there is nothing left to report.
+      if (settled) return;
       const durationMs = Date.now() - startedAt;
       if (code !== 0) {
         updateTrace(traceId, {
