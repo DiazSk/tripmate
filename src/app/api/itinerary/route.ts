@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     remainingBudget,
     tripId,
     userAnswers,
+    dietary,
   } = body;
 
   // These are contract failures, not things a traveller can act on, so they read as one
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
     preferences,
     tripId,
     userAnswers,
+    dietary,
   };
 
   const isStreaming = req.nextUrl.searchParams.get("stream") === "1";

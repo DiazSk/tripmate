@@ -2,6 +2,8 @@ import { DayWeather } from "./weather";
 import { DestinationContext, Itinerary, ItineraryPreferences, ResolvedFlags } from "./types";
 import { TierId, TIERS } from "./tiers";
 import { formatTravelerProfile } from "./travelerProfilePrompt";
+import { formatDietary } from "./dietaryPrompt";
+import type { DietaryNeeds } from "./travelerProfile";
 
 const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one line: why this stop suits this traveler","note":"one line: practical detail","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}`;
 const SHAPE_HINT = `{"days":[{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]}`;
@@ -125,6 +127,7 @@ export function buildGeneratePrompt(params: {
   preferences?: ItineraryPreferences | null;
   contextInsight?: string;
   resolvedFlags?: ResolvedFlags | null;
+  dietary?: DietaryNeeds | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -132,7 +135,7 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatContextBlock(params.contextInsight)}
+${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
 Every day except the last should include a "lodging" entry representing that night's stay, priced to the style above. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${LODGING_INSTRUCTION}
@@ -156,6 +159,7 @@ export function buildRefinePrompt(params: {
   feedback: string;
   contextInsight?: string;
   resolvedFlags?: ResolvedFlags | null;
+  dietary?: DietaryNeeds | null;
 }): string {
   return `Here is a trip itinerary for ${params.destination} (${params.startDate} to ${params.endDate}, budget $${params.budget}):
 
@@ -164,7 +168,7 @@ ${JSON.stringify(params.previousItinerary)}
 Style: ${tierStyle(params.previousItinerary.tier)}
 
 The user's feedback on this itinerary: "${params.feedback}"
-${formatTravelerProfile(params.resolvedFlags ?? null)}${formatContextBlock(params.contextInsight)}
+${formatTravelerProfile(params.resolvedFlags ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
 Revise the itinerary to address this feedback. Keep real, well-known places with real approximate latitude/longitude, keep the lodging entries, and keep per-stop costs realistic.
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
@@ -230,6 +234,7 @@ export function buildCritiquePrompt(params: {
   contextInsight?: string;
   interestTags?: string[];
   resolvedFlags?: ResolvedFlags | null;
+  dietary?: DietaryNeeds | null;
 }): string {
   const interestLine =
     params.interestTags && params.interestTags.length > 0
@@ -238,8 +243,8 @@ export function buildCritiquePrompt(params: {
   return `Here is a generated trip itinerary with a total budget of $${params.budget}:
 
 ${JSON.stringify(params.itinerary)}
-${formatContextBlock(params.contextInsight)}${interestLine}${formatTravelerProfile(params.resolvedFlags ?? null)}
-Review it for: (1) total cost (lodging + stops) landing within 85-100% of the budget, (2) stop times being sequential, non-overlapping, and realistically spaced (no implausibly tight back-to-back stops), (3) reasonable use of the destination context above, if any was given, (4) whether the itinerary genuinely reflects the traveler's stated interests above, if any were given — not just generic sightseeing, (5) whether each day respects the traveler profile above, if one was given — the stops-per-day target and any mobility or family constraints.
+${formatContextBlock(params.contextInsight)}${interestLine}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatDietary(params.dietary ?? null)}
+Review it for: (1) total cost (lodging + stops) landing within 85-100% of the budget, (2) stop times being sequential, non-overlapping, and realistically spaced (no implausibly tight back-to-back stops), (3) reasonable use of the destination context above, if any was given, (4) whether the itinerary genuinely reflects the traveler's stated interests above, if any were given — not just generic sightseeing, (5) whether each day respects the traveler profile above, if one was given — the stops-per-day target and any mobility or family constraints, (6) whether every food stop actually fits the traveler's dietary needs above, if any were given — a stop they could not eat at is a defect even if the rest of the day is good.
 
 If it already looks good, respond with exactly: {"issues":[],"revisedDays":null}
 Otherwise, respond with the specific issues found and a corrected "days" array in the same shape as the input, fixing those issues.

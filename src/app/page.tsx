@@ -28,7 +28,7 @@ import { useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
-import type { TravelerProfile } from "@/lib/travelerProfile";
+import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
 import type { StageProgress } from "@/components/cesium/GenerationLoader";
@@ -190,6 +190,10 @@ export default function Home() {
   const [selectedPois, setSelectedPois] = useState<CandidatePoi[]>([]);
   const [customPois, setCustomPois] = useState<string[]>([]);
 
+  // Durable, and unlike the others it has no wizard screen — /profile is where it's set.
+  // Held here only so generate()/refine() can send it.
+  const [dietary, setDietary] = useState<DietaryNeeds>({ tags: [], note: "" });
+
   // The profile supplies defaults; the wizard always wins. Nothing here is locked —
   // a solo traveler who usually goes with kids just changes it on the screen, and
   // that trip's answers are what generation sees. Any failure leaves the hardcoded
@@ -213,6 +217,7 @@ export default function Home() {
         pickTier(profile.tier);
         setInterests(profile.priorities);
         setStarredInterests(profile.topPriorities);
+        setDietary(profile.dietary);
       })
       .catch(() => {});
     return () => {
@@ -465,6 +470,7 @@ export default function Home() {
         tier,
         preferences: { tags: interests, vibe: null },
         userAnswers: currentAnswers(),
+        dietary,
       });
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
@@ -510,6 +516,7 @@ export default function Home() {
         previousItinerary: itinerary,
         feedback,
         userAnswers: currentAnswers(),
+        dietary,
       });
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
