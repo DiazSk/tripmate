@@ -13,9 +13,11 @@ import type { DietaryNeeds } from "./travelerProfile";
 export function formatDietary(dietary: DietaryNeeds | null): string {
   if (!dietary) return "";
 
-  const note = dietary.note.trim();
+  const note = typeof dietary.note === "string" ? dietary.note.trim() : "";
+  const tags = Array.isArray(dietary.tags) ? dietary.tags : [];
+
   const parts: string[] = [];
-  if (dietary.tags.length > 0) parts.push(dietary.tags.join(", "));
+  if (tags.length > 0) parts.push(tags.join(", "));
   if (note) parts.push(note);
   if (parts.length === 0) return "";
 

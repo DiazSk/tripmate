@@ -40,3 +40,7 @@ test("trims surrounding whitespace from the note", () => {
   const out = formatDietary({ tags: [], note: "  no shellfish  " });
   assert.doesNotMatch(out, / {2}no shellfish/);
 });
+
+test("tolerates a malformed body shape without throwing", () => {
+  assert.equal(formatDietary({ tags: "not-an-array", note: 42 }), "");
+});
