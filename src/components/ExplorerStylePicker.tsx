@@ -3,7 +3,7 @@
 import { devLabel } from "@/lib/devInspector";
 import { ExplorerStyle } from "@/lib/types";
 
-export const EXPLORER_STYLES: { id: ExplorerStyle; label: string; hint: string }[] = [
+const EXPLORER_STYLES: { id: ExplorerStyle; label: string; hint: string }[] = [
   { id: "packed", label: "Packed", hint: "4–5 stops a day, tight schedule" },
   { id: "relaxed", label: "Relaxed", hint: "2–3 stops a day, room to breathe" },
   { id: "offbeat", label: "Offbeat", hint: "Local spots over headline attractions" },
