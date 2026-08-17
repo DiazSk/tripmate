@@ -271,6 +271,21 @@ export default function TripView({
               round trip instead of resetting when ItineraryCard remounts. */}
           {!focus.target && (
             <div className={selectedStop ? "hidden" : "space-y-4"}>
+              {/* Above the card, not below it: at the foot of the panel this sat under the
+                  floating trace/terminal button in the same bottom-right corner, and a
+                  30-day trip buried it behind a full scroll of the itinerary. */}
+              {trip && itinerary && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => focus.open(0, "trip")}
+                    className="pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/10"
+                  >
+                    Refine with AI
+                  </button>
+                </div>
+              )}
+
               {trip && itinerary && (
                 <ItineraryCard
                   itinerary={itinerary}
@@ -288,18 +303,6 @@ export default function TripView({
                 />
               )}
 
-              {/* Mode B's shown delta. The persisted plan already carries the change. */}
-              {trip && itinerary && (
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => focus.open(0, "trip")}
-                    className="pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/10"
-                  >
-                    Refine with AI
-                  </button>
-                </div>
-              )}
             </div>
           )}
 

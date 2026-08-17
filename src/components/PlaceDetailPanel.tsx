@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { PlaceDetail, Stop } from "@/lib/types";
+import BackButton from "@/components/BackButton";
 import { devLabel } from "@/lib/devInspector";
 import { formatMoney } from "@/lib/format";
 
@@ -54,22 +55,9 @@ export default function PlaceDetailPanel({
       className="glass-itinerary flex flex-col rounded-none p-5 sm:rounded-2xl sm:p-6"
       {...devLabel("PlaceDetailPanel")}
     >
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-4 -ml-3 flex min-h-11 items-center gap-1.5 self-start rounded-full px-3 text-sm font-medium text-muted transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-      >
-        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
-          <path
-            d="M12 5l-5 5 5 5"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+      <BackButton onClick={onBack} className="mb-4">
         Back to itinerary
-      </button>
+      </BackButton>
 
       {/* tabIndex={-1} makes the heading a focus target without putting it in the tab
           order — it is where focus goes when this panel replaces the itinerary. */}
