@@ -930,7 +930,7 @@ export default function Home() {
                 />
               )}
 
-              {hasProfile === false && !onboardingDismissed && (
+              {!focus.target && hasProfile === false && !onboardingDismissed && (
                 <OnboardingCard
                   answers={{
                     group,
