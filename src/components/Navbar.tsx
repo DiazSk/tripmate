@@ -98,7 +98,7 @@ export default function Navbar() {
       </Link>
       <div className="flex items-center gap-4 sm:gap-6">
         {/* Section anchors + My memories, desktop: inline in the bar itself. On
-            mobile all three move into the dropdown below instead of one staying
+            mobile all four move into the dropdown below instead of one staying
             pinned in the bar beside the hamburger — a bar carrying "TripMate",
             a link, and an icon toggle for two more links was busier than the
             96-item menu it was collapsing warranted. */}
