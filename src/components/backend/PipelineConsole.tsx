@@ -78,10 +78,12 @@ function todayISO(offsetDays = 0): string {
  * The LLM agent architecture, drawn as a clean system-design flow diagram (boxes + arrows, one
  * per real step) rather than prose — and it's also the console that invokes it. Idle, every node
  * just states its input/output shape. Hit Run and every node for that flow lights up "running"
- * together (the four routes here are single synchronous requests server-side, so there's no
- * signal for genuine sub-step progress without adding SSE — see the comment on `run()` below);
- * once the response lands, each node settles to its own real status and — click it — its real
- * prompt and response for that exact invocation.
+ * together — this console still posts once and fetches the run afterward rather than consuming
+ * the itinerary route's own SSE stream (page.tsx does that now; see generationStages.ts), so
+ * there's no live signal here for genuine sub-step progress on generate/refine, and rebalance/
+ * place-detail were never streamed in the first place; once the response lands, each node
+ * settles to its own real status and — click it — its real prompt and response for that exact
+ * invocation.
  */
 export default function PipelineConsole() {
   const [kind, setKind] = useState<Kind>("generate");
@@ -191,9 +193,11 @@ export default function PipelineConsole() {
       // A second round-trip, not part of the invocation itself: the itinerary/place-detail
       // routes only ever return `runId`, not the per-step trace rows they just wrote — fetching
       // the run is what turns that id into the real per-node status/prompt/response this diagram
-      // shows. Real per-*sub-step* progress while the first request is still in flight would need
-      // the route itself to stream (SSE) rather than respond once at the end; that's a bigger
-      // change than this console makes, hence the "everything lights up together" running state.
+      // shows. The itinerary route's generate/refine calls now stream real per-stage progress
+      // over SSE (?stream=1 — see src/lib/generationRunner.ts, consumed by page.tsx, not by this
+      // console), but this stays a developer tool that wants the final trace rows rather than a
+      // live progress bar, so it keeps posting once and fetching the run afterward — hence the
+      // "everything lights up together" running state.
       if (data.runId) {
         const runRes = await fetch(`/api/llm-traces/runs/${data.runId}`);
         const runData = await runRes.json();
