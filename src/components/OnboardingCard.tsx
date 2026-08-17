@@ -19,7 +19,7 @@ export default function OnboardingCard({
   onDismiss,
 }: {
   answers: Omit<TravelerProfile, "dietary">;
-  onSaved: () => void;
+  onSaved: (dietary: DietaryNeeds) => void;
   onDismiss: () => void;
 }) {
   const [dietary, setDietary] = useState<DietaryNeeds>({ tags: [], note: "" });
@@ -34,7 +34,7 @@ export default function OnboardingCard({
         body: JSON.stringify({ profile: { ...answers, dietary } }),
       });
       if (!res.ok) throw new Error("save failed");
-      onSaved();
+      onSaved(dietary);
     } catch {
       // Swallowed on purpose. This fires seconds after a two-minute generation the traveler
       // is already happy with; turning that into an error banner over an optional
