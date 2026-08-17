@@ -132,7 +132,10 @@ export default function Navbar() {
             My memories
           </Link>
         )}
-        {isTripDetail && (
+        {/* Both user-facing routes that aren't `/` or `/profile` itself. Listed
+            explicitly rather than as a `!isHome` catch-all so the internal /backend
+            dashboards — which render this same nav — don't pick it up too. */}
+        {(pathname === "/trips" || isTripDetail) && (
           <Link href="/profile" className={navLinkClass}>
             Profile
           </Link>
