@@ -132,24 +132,34 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       controller.enqueue(PADDING_FRAME);
-      const onStage = (event: StageEvent) => {
-        // A stage callback throwing (e.g. the client already disconnected, so `enqueue`
-        // rejects) must not abort generation — the model call keeps running either way,
-        // so the failure is swallowed and logged rather than propagated.
+      let clientGone = false;
+      const safeEnqueue = (event: string, data: unknown) => {
+        // Once the client is gone the controller rejects every write. Nothing here is
+        // recoverable and nothing is waiting on it, so each terminal write is best-effort.
+        // Logged once, not on every subsequent call — an abandoned generation still fires
+        // up to four more stage events, and none of them are new information after the first.
+        if (clientGone) return;
         try {
-          controller.enqueue(sseFrame("stage", event));
+          controller.enqueue(sseFrame(event, data));
         } catch (err) {
-          console.error("[itinerary] stage emit failed", err);
+          clientGone = true;
+          console.error(`[itinerary] ${event} emit failed`, err);
         }
       };
+      const onStage = (event: StageEvent) => safeEnqueue("stage", event);
       try {
         const result = await runGeneration(params, onStage);
-        controller.enqueue(sseFrame("done", result));
+        safeEnqueue("done", result);
       } catch (err) {
         console.error("[itinerary]", err);
-        controller.enqueue(sseFrame("error", { error: GENERATION_ERROR }));
+        safeEnqueue("error", { error: GENERATION_ERROR });
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already closed or the controller is unusable post-disconnect — either way
+          // there is nothing left to do.
+        }
       }
     },
     cancel() {
