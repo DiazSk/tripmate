@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bookmark, Compass, Sparkles } from "lucide-react";
+import { Bookmark, Compass, Sparkles, UserRound } from "lucide-react";
 import { prefersReducedMotion } from "@/lib/gsap";
 
 // Same ease every other motion in this app already uses for a "smooth, not
@@ -16,6 +16,7 @@ const MENU_ITEMS = [
   { id: "journey", label: "The Journey", icon: Compass, kind: "anchor" as const },
   { id: "how-it-works", label: "How It Works", icon: Sparkles, kind: "anchor" as const },
   { id: "trips", label: "My memories", icon: Bookmark, kind: "link" as const, href: "/trips" },
+  { id: "profile", label: "Profile", icon: UserRound, kind: "link" as const, href: "/profile" },
 ];
 
 const menuItemClass =
@@ -116,6 +117,9 @@ export default function Navbar() {
             <Link href="/trips" className={navLinkClass}>
               My memories
             </Link>
+            <Link href="/profile" className={navLinkClass}>
+              Profile
+            </Link>
           </div>
         )}
         {pathname === "/trips" && (
@@ -126,6 +130,11 @@ export default function Navbar() {
         {isTripDetail && (
           <Link href="/trips" className={navLinkClass}>
             My memories
+          </Link>
+        )}
+        {isTripDetail && (
+          <Link href="/profile" className={navLinkClass}>
+            Profile
           </Link>
         )}
         {/* Section anchors, mobile: behind a hamburger instead of hidden outright.
