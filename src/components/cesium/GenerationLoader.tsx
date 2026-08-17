@@ -57,9 +57,14 @@ export default function GenerationLoader({
 
   // Resets to the top of the new stage's caption list whenever the active stage changes,
   // so switching stages never shows a caption mid-rotation that belonged to the last one.
-  useEffect(() => {
+  // Adjusted during render rather than in an effect: an effect would fire a second render
+  // pass after paint, briefly showing the previous stage's caption under the new stage.
+  // This is React's documented pattern for resetting state when a value changes.
+  const [captionStage, setCaptionStage] = useState(activeId);
+  if (captionStage !== activeId) {
+    setCaptionStage(activeId);
     setIndex(0);
-  }, [activeId]);
+  }
 
   useEffect(() => {
     if (!active) return;
