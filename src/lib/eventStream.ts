@@ -14,18 +14,26 @@ export async function readEventStream(
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    let separatorIndex = buffer.indexOf("\n\n");
-    while (separatorIndex !== -1) {
-      const rawFrame = buffer.slice(0, separatorIndex);
-      buffer = buffer.slice(separatorIndex + 2);
-      dispatchFrame(rawFrame, onEvent);
-      separatorIndex = buffer.indexOf("\n\n");
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex !== -1) {
+        const rawFrame = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        dispatchFrame(rawFrame, onEvent);
+        separatorIndex = buffer.indexOf("\n\n");
+      }
     }
+  } finally {
+    // `onEvent` (a caller-supplied callback, e.g. a JSON.parse in page.tsx) can throw mid-loop.
+    // The exception must still propagate — that's what surfaces the failure to the caller
+    // instead of hanging — but the reader lock has to come off either way, or the underlying
+    // connection stays open until GC.
+    reader.releaseLock();
   }
   // Any text left in `buffer` here is an unterminated trailing frame — the stream ended
   // before its closing "\n\n" arrived. Dropped deliberately: a partial frame has no
