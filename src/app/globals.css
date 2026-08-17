@@ -1082,19 +1082,12 @@ body {
     transition-duration: 220ms !important;
   }
 
-  /* The facts swap presentation entirely. The blanket `animation-duration: 0.01ms` would
-     snap every orbiting card to its final keyframe — off-screen at zero opacity — so relying
-     on it would silently delete the content for the people who opted out of the motion, not
-     just the motion. The same facts render as a still list instead. */
-  .fact-orbit-layer {
-    display: none;
-  }
-  .fact-static {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.375rem;
-  }
+  /* Nothing needed for the facts any more. They used to require a whole alternate
+     presentation here, because the blanket rule above would have snapped every orbiting card
+     to its final keyframe — off-screen at zero opacity — and silently deleted the content for
+     the people who opted out of the motion rather than just the motion. The still list that
+     was the fallback is now what everyone gets, so there is no second path to keep in sync,
+     and the blanket rule simply removes its cross-fade, which is exactly what it should do. */
 }
 
 /* The confirm dialog's backdrop. A real `::backdrop` rather than a sibling overlay div —
@@ -1280,218 +1273,59 @@ body {
   transform: rotate(45deg);
 }
 
-.gen-strip-labels {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 6px;
-  /* 0.75rem, the system Label step — the row this replaced used an off-ramp 10px. */
-  font-size: 0.75rem;
-  line-height: 1;
-  font-weight: 500;
-  color: rgb(244 247 250 / 0.45);
-}
-.gen-strip-label {
-  transition: color 300ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.gen-strip-label.is-active {
-  color: var(--on-deep);
-}
+/* --- Destination facts ---------------------------------------------------------------------
+   Still, upright, centred, and re-readable for the whole wait.
 
-/* --- Destination facts: two wheels, centres off-screen ------------------------------------
-   Cards ride the rim of a large circle whose centre sits outside the viewport, so only the
-   inner half of each wheel is ever visible: a card arcs in near the top, bulges toward centre,
-   and arcs back out the same side. `--fact-r` is a max() so the centre is guaranteed to stay
-   off-screen even on a short, wide window — at 55vh alone a 1400x700 viewport would pull the
-   centre back onto the page and the arc would read as a small circle instead of a sweep.
+   This replaced two large off-screen wheels that carried the same sentences on orbiting,
+   tilted cards. Three things killed that version and they are worth keeping written down,
+   because the orbit was the more impressive build and the temptation to reinstate it is real:
 
-   Nested rotate/translate rather than `offset-path`: `path()` only takes fixed pixels, so a
-   responsive arc would need JS to rebuild the path on every resize. This version is pure
-   calc/vh, stays on the compositor, and needs no measurement. */
-.fact-orbit-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 29;
-  overflow: hidden;
-  --fact-r: max(55vh, 42vw);
-  --fact-cycle: 13s;
-}
+   1. Text a person is meant to READ must not move. The orbit was tuned down from ~75px/s to
+      ~28px/s through its readable window, which was the wrong axis to optimise — the correct
+      speed is zero. A card also stayed rotated up to 9 degrees for most of the time it was
+      legible, which disables subpixel antialiasing on top of everything else.
+   2. WCAG 2.2.2 (Pause, Stop, Hide, Level A): motion that runs over five seconds alongside
+      other content needs a mechanism to stop it. There wasn't one, and aria-hidden does not
+      exempt visual motion — it only removed the alternative route to the content.
+   3. It broke this file's own rules. DESIGN.md's Overview says nothing else competes with
+      the globe's motion, and the One Ambient Loop Rule forbids stacked loops on
+      .glass-itinerary — the orbit ran three stacked loops per card, on four cards, outside
+      the .blue-hour-scene where that rule is loosened.
 
-.fact-orbit {
-  position: absolute;
-  top: 50%;
-  height: 0;
-  width: 0;
-  animation: fact-orbit-left var(--fact-cycle) linear infinite;
-}
-.fact-orbit-left {
-  left: calc(32vw - var(--fact-r));
-}
-.fact-orbit-right {
-  left: calc(68vw + var(--fact-r));
-  animation-name: fact-orbit-right;
-}
-
-/* The card hangs off the rim point toward its own screen edge, so at the apex it reaches
-   inward without ever crossing the disc, and at the extremes it is fully off-screen. */
-.fact-card {
-  position: absolute;
-  top: 0;
-  width: min(34vw, 22rem);
-  padding: 0.625rem 0.875rem;
-  border-radius: 16px;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  text-wrap: balance;
-  opacity: 0;
-  animation:
-    fact-card-left var(--fact-cycle) linear infinite,
-    fact-fade var(--fact-cycle) linear infinite;
-}
-.fact-orbit-left .fact-card {
-  right: 0;
-}
-.fact-orbit-right .fact-card {
-  left: 0;
-  animation-name: fact-card-right, fact-fade;
-}
-
-/* Time maps onto angle non-linearly on purpose: a fifth of the cycle covers the first 73
-   degrees, the middle 60% covers just 24 degrees around the apex, then the last fifth covers
-   the final 73. That crawl through the apex is the readable window — measured, not guessed:
-   at an even angular rate the card crosses its readable stretch at ~75px/s, which is too fast
-   to finish a sentence; this brings it to ~28px/s.
-
-   A cubic-bezier cannot express this. An ease-in-out is slow at the ends and fast through the
-   middle, which is precisely backwards — the ends are where the card is off-screen and the
-   middle is where it has to be read. */
-@keyframes fact-orbit-left {
-  0% {
-    transform: rotate(-85deg) translateX(var(--fact-r));
-  }
-  20% {
-    transform: rotate(-12deg) translateX(var(--fact-r));
-  }
-  50% {
-    transform: rotate(0deg) translateX(var(--fact-r));
-  }
-  80% {
-    transform: rotate(12deg) translateX(var(--fact-r));
-  }
-  100% {
-    transform: rotate(85deg) translateX(var(--fact-r));
-  }
-}
-
-@keyframes fact-orbit-right {
-  0% {
-    transform: rotate(85deg) translateX(calc(-1 * var(--fact-r)));
-  }
-  20% {
-    transform: rotate(12deg) translateX(calc(-1 * var(--fact-r)));
-  }
-  50% {
-    transform: rotate(0deg) translateX(calc(-1 * var(--fact-r)));
-  }
-  80% {
-    transform: rotate(-12deg) translateX(calc(-1 * var(--fact-r)));
-  }
-  100% {
-    transform: rotate(-85deg) translateX(calc(-1 * var(--fact-r)));
-  }
-}
-
-/* Counter-rotates three quarters of the wheel's angle, not all of it. Full counter-rotation
-   pins the card rigidly upright and the wheel stops reading as a wheel; none at all leaves it
-   near-vertical at the extremes. At 0.75 the card is upright exactly at the apex, where it is
-   meant to be read, and visibly slanted on the way in and out. */
-@keyframes fact-card-left {
-  0% {
-    transform: translateY(-50%) rotate(63.75deg);
-  }
-  20% {
-    transform: translateY(-50%) rotate(9deg);
-  }
-  50% {
-    transform: translateY(-50%) rotate(0deg);
-  }
-  80% {
-    transform: translateY(-50%) rotate(-9deg);
-  }
-  100% {
-    transform: translateY(-50%) rotate(-63.75deg);
-  }
-}
-
-@keyframes fact-card-right {
-  0% {
-    transform: translateY(-50%) rotate(-63.75deg);
-  }
-  20% {
-    transform: translateY(-50%) rotate(-9deg);
-  }
-  50% {
-    transform: translateY(-50%) rotate(0deg);
-  }
-  80% {
-    transform: translateY(-50%) rotate(9deg);
-  }
-  100% {
-    transform: translateY(-50%) rotate(63.75deg);
-  }
-}
-
-@keyframes fact-fade {
-  0%,
-  4% {
-    opacity: 0;
-  }
-  20%,
-  80% {
-    opacity: 1;
-  }
-  96%,
-  100% {
-    opacity: 0;
-  }
-}
-
-/* Below `sm` the right wheel is dropped and the left one is repositioned. Two flanking arcs
-   plus the 200px disc on a 375px screen squeeze a card to about 85px, which is not a
-   sentence — but dropping one wheel alone does not fix it, because a readable ~290px card and
-   a 200px centred disc still cannot share a horizontal band on that width. Measured: with the
-   desktop geometry the card sat at -173..120px, so most of it hung off the left edge.
-
-   So on a phone the apex clears the disc *vertically* rather than beside it. The wheel sits
-   high and swings almost the full width, which gives the card its full reading width in a
-   band the disc does not occupy. On the way out it descends past the disc, half-faded, and
-   passes behind it — the layer is below the disc's z, so that reads as depth rather than a
-   collision. */
-@media (width < 40rem) {
-  .fact-orbit-right {
-    display: none;
-  }
-  .fact-orbit-left {
-    top: 24%;
-    left: calc(92vw - var(--fact-r));
-  }
-  .fact-card {
-    width: min(88vw, 22rem);
-  }
-}
-
-/* The static list is the reduced-motion half of the pair and is hidden by default. */
+   The reduced-motion fallback the orbit shipped with was simply the better design, so it is
+   now what everyone gets and the special case is gone. */
 .fact-static {
-  display: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
 }
+
 .fact-static-line {
-  max-width: min(90vw, 28rem);
+  max-width: min(90vw, 30rem);
   border-radius: 16px;
   padding: 0.5rem 0.875rem;
   font-size: 0.875rem;
-  line-height: 1.5;
+  /* 1.625, the documented Body leading. The orbit's cards used 1.5, which was off-ramp. */
+  line-height: 1.625;
   text-align: center;
   text-wrap: balance;
   color: var(--on-deep);
+}
+
+/* Opacity only, and on the group rather than per line: the set is replaced as a unit every
+   few seconds, so one fade reads as a page turn instead of three lines flickering out of
+   step. No transform — that is the whole point of the rewrite. */
+@media (prefers-reduced-motion: no-preference) {
+  .fact-static-group {
+    animation: fact-set-in 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+
+@keyframes fact-set-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* My Memories' postcards are the one other scoped material exception in the app besides
