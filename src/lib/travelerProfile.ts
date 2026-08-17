@@ -5,6 +5,14 @@ import type { TierId } from "./tiers";
  *  authentication lands — see FUTURE-INTEGRATION.md. */
 export const LOCAL_OWNER = "local";
 
+/** Dietary restrictions that hold across every trip. `tags` are the fixed chips the
+ *  traveler picked; `note` is whatever the chips don't cover. Both empty is normal and
+ *  means "no restrictions" — it is not a missing value. */
+export interface DietaryNeeds {
+  tags: string[];
+  note: string;
+}
+
 /**
  * What stays true between trips. Purpose, dates, budget amount and POIs are
  * deliberately absent: a business trip and an anniversary are the same person,
@@ -19,6 +27,7 @@ export interface TravelerProfile {
   tier: TierId;
   priorities: string[];
   topPriorities: string[];
+  dietary: DietaryNeeds;
 }
 
 const GROUPS: GroupType[] = ["solo", "couple", "family_with_kids"];
@@ -26,6 +35,28 @@ const STYLES: ExplorerStyle[] = ["packed", "relaxed", "offbeat", "mixed"];
 const ENERGIES: EnergyLevel[] = ["high", "moderate", "low"];
 const CROWDS: CrowdPreference[] = ["love", "mixed", "avoid"];
 const TIER_IDS: TierId[] = ["budget", "midrange", "luxury"];
+
+/**
+ * Returns the default for an absent `dietary` rather than rejecting the profile: rows
+ * written before this field existed are valid profiles, and failing them would silently
+ * wipe a traveler's saved preferences the first time they loaded the page. A *malformed*
+ * dietary is still rejected — that's a contract failure, not an old row.
+ */
+function parseDietary(value: unknown): DietaryNeeds | null {
+  if (value === undefined || value === null) return { tags: [], note: "" };
+  if (typeof value !== "object" || Array.isArray(value)) return null;
+  const d = value as Record<string, unknown>;
+
+  const tags =
+    d.tags === undefined
+      ? []
+      : Array.isArray(d.tags) && d.tags.every((t) => typeof t === "string")
+        ? (d.tags as string[])
+        : null;
+  const note = d.note === undefined ? "" : typeof d.note === "string" ? d.note : null;
+  if (tags === null || note === null) return null;
+  return { tags, note };
+}
 
 /**
  * The trust boundary. Rejects anything that isn't a known enum value and returns
@@ -44,9 +75,11 @@ export function parseProfile(value: unknown): TravelerProfile | null {
   const stringList = (x: unknown): string[] | null =>
     Array.isArray(x) && x.every((s) => typeof s === "string") ? (x as string[]) : null;
 
+  const dietary = parseDietary(v.dietary);
   const priorities = stringList(v.priorities);
   const topPriorities = stringList(v.topPriorities);
   if (
+    dietary === null ||
     !GROUPS.includes(v.group as GroupType) ||
     !STYLES.includes(v.explorerStyle as ExplorerStyle) ||
     !ENERGIES.includes(v.energy as EnergyLevel) ||
@@ -66,5 +99,6 @@ export function parseProfile(value: unknown): TravelerProfile | null {
     tier: v.tier as TierId,
     priorities,
     topPriorities,
+    dietary,
   };
 }

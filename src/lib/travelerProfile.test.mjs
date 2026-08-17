@@ -15,6 +15,7 @@ const valid = {
   tier: "budget",
   priorities: ["Food", "Shopping"],
   topPriorities: ["Food"],
+  dietary: { tags: ["Vegetarian"], note: "no shellfish" },
 };
 
 test("accepts a fully valid profile", () => {
@@ -44,4 +45,29 @@ test("rejects priorities that are not arrays of strings", () => {
 test("drops unknown fields rather than storing them", () => {
   const parsed = parseProfile({ ...valid, homeCity: "Boston", ssn: "oops" });
   assert.deepEqual(Object.keys(parsed).sort(), Object.keys(valid).sort());
+});
+
+test("a profile saved before dietary existed still parses, defaulting to empty", () => {
+  const { dietary, ...withoutDietary } = valid;
+  void dietary;
+  const parsed = parseProfile(withoutDietary);
+  assert.ok(parsed, "a pre-dietary profile must still parse, not be rejected");
+  assert.deepEqual(parsed.dietary, { tags: [], note: "" });
+});
+
+test("dietary round-trips both tags and note", () => {
+  const parsed = parseProfile(valid);
+  assert.deepEqual(parsed.dietary, { tags: ["Vegetarian"], note: "no shellfish" });
+});
+
+test("a dietary with a missing note defaults the note, not the whole profile", () => {
+  const parsed = parseProfile({ ...valid, dietary: { tags: ["Vegan"] } });
+  assert.deepEqual(parsed.dietary, { tags: ["Vegan"], note: "" });
+});
+
+test("rejects a malformed dietary rather than silently dropping it", () => {
+  assert.equal(parseProfile({ ...valid, dietary: { tags: "Vegetarian", note: "" } }), null);
+  assert.equal(parseProfile({ ...valid, dietary: { tags: [1, 2], note: "" } }), null);
+  assert.equal(parseProfile({ ...valid, dietary: [] }), null);
+  assert.equal(parseProfile({ ...valid, dietary: { tags: [], note: 42 } }), null);
 });
