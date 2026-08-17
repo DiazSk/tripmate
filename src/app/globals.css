@@ -827,6 +827,30 @@ body {
   --card-border: rgba(255, 255, 255, 0.12);
 }
 
+/* The traveler-profile form's own frosted glass — a cobalt/teal variant of .glass-itinerary
+   so the settings panel reads as a distinct surface floating over the globe, per request.
+   Reuses the same --scene-cobalt-rgb/--scene-teal-rgb tokens Blue Hour's .scene-band already
+   established for this hue pair, layered over --surface-deep-rgb the same way, just at
+   .glass-itinerary's panel-level alpha (0.62) rather than .scene-band's lighter band alpha.
+   Deliberately does NOT retint --accent the way .blue-hour-scene does — this is a background
+   treatment for a settings form, not a scene, so every picker's amber selected-state and the
+   Save button stay the app's one accent instead of switching to brass/copper mid-app. */
+.profile-glass {
+  background:
+    linear-gradient(
+      160deg,
+      rgb(var(--scene-cobalt-rgb, 30 60 110) / 0.5),
+      rgb(var(--scene-teal-rgb, 45 125 130) / 0.38)
+    ),
+    rgb(var(--surface-deep-rgb) / 0.62);
+  backdrop-filter: blur(56px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --foreground: #ffffff;
+  --muted: #cbd5e1;
+  --card-border: rgba(255, 255, 255, 0.12);
+}
+
 /* Neon/cyberpunk primary CTA — used for the "Choose your style" button. */
 .btn-neon {
   background: linear-gradient(135deg, #00f2fe 0%, #7c3aed 100%);

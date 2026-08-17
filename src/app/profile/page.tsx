@@ -27,7 +27,7 @@ const MAX_STARRED = 3;
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-2">
+    <section className="space-y-2 py-5 first:pt-0 last:pb-0">
       <h2 className="font-display text-base font-semibold text-foreground">{title}</h2>
       {hint && <p className="text-sm text-muted">{hint}</p>}
       <div className="pt-1">{children}</div>
@@ -111,95 +111,108 @@ export default function ProfilePage() {
     }
   }
 
+  // `map-chrome-hidden` drops the globe's zoom/2D-3D/tilt/compass stack: this is a settings
+  // form, not a map being read, and there's no route or stop drawn here for those controls
+  // to act on — same reasoning trips/page.tsx already applies to its own dead-end globe view.
   if (loading) {
-    return <p className="text-sm text-muted">Loading your profile…</p>;
+    return (
+      <main className="dashboard-page map-chrome-hidden flex min-h-full items-center justify-center">
+        <p className="text-sm text-muted">Loading your profile…</p>
+      </main>
+    );
   }
 
   return (
-    // `pointer-events-auto`: this page's content sits inside AppShell's own
-    // `pointer-events-none` scroll container (what keeps the Cesium globe underneath
-    // draggable) — without opting back in here, every click passes through to the
-    // globe canvas instead of reaching any picker or the Save button. Same pattern
-    // trips/page.tsx and TripView.tsx already use on their own outermost box.
-    <div className="pointer-events-auto mx-auto w-full max-w-2xl space-y-8 pb-16">
-      <header className="space-y-1">
-        <h1 className="font-display text-2xl font-semibold text-foreground">Your travel profile</h1>
-        <p className="text-sm text-muted">
-          The things that stay true between trips. We apply these to every plan so the wizard
-          only has to ask what actually changes.
-        </p>
-      </header>
+    <main className="map-chrome-hidden min-h-full p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)]">
+      {/* `pointer-events-auto`: this page's content sits inside AppShell's own
+          `pointer-events-none` scroll container (what keeps the Cesium globe underneath
+          draggable) — without opting back in here, every click passes through to the
+          globe canvas instead of reaching any picker or the Save button. Same pattern
+          trips/page.tsx and TripView.tsx already use on their own outermost box.
+          `profile-glass rounded-2xl`: the cobalt/teal frosted-glass panel so every section
+          and button sits on a distinct, legible surface instead of directly on the globe. */}
+      <div className="profile-glass pointer-events-auto mx-auto w-full max-w-2xl divide-y divide-card-border rounded-2xl p-5 sm:p-6">
+        <header className="space-y-1 pb-5">
+          <h1 className="font-display text-2xl font-semibold text-foreground">Your travel profile</h1>
+          <p className="text-sm text-muted">
+            The things that stay true between trips. We apply these to every plan so the wizard
+            only has to ask what actually changes.
+          </p>
+        </header>
 
-      <Section
-        title="Who you usually travel with"
-        hint="A default only — the planner still asks who's coming on each trip, since that changes."
-      >
-        <GroupTypePicker selected={profile.group} onSelect={(v: GroupType) => set("group", v)} />
-      </Section>
-
-      <Section title="Explorer style">
-        <ExplorerStylePicker
-          selected={profile.explorerStyle}
-          onSelect={(v: ExplorerStyle) => set("explorerStyle", v)}
-        />
-      </Section>
-
-      <Section title="How much walking suits you">
-        <ChoicePicker
-          name="energy"
-          options={[...ENERGY_LEVELS]}
-          selected={profile.energy}
-          onSelect={(v: EnergyLevel) => set("energy", v)}
-        />
-      </Section>
-
-      <Section title="Crowds">
-        <ChoicePicker
-          name="crowds"
-          options={[...CROWD_PREFERENCES]}
-          selected={profile.crowds}
-          onSelect={(v: CrowdPreference) => set("crowds", v)}
-        />
-      </Section>
-
-      <Section title="Spending style">
-        <TierPicker
-          days={null}
-          budget={0}
-          selected={profile.tier}
-          onSelect={(v: TierId) => set("tier", v)}
-        />
-      </Section>
-
-      <Section title="What matters most" hint="Star up to three — the starred ones drive the plan.">
-        <InterestPicker
-          selected={profile.priorities}
-          starred={profile.topPriorities}
-          onToggle={toggleInterest}
-          onToggleStar={toggleStar}
-        />
-      </Section>
-
-      <Section
-        title="Dietary needs"
-        hint="Applied to every food stop on every trip. Leave empty if nothing applies."
-      >
-        <DietaryPicker value={profile.dietary} onChange={(v) => set("dietary", v)} />
-      </Section>
-
-      {error && <ErrorNote>{error}</ErrorNote>}
-
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving}
-          className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-60"
+        <Section
+          title="Who you usually travel with"
+          hint="A default only — the planner still asks who's coming on each trip, since that changes."
         >
-          {saving ? "Saving…" : "Save profile"}
-        </button>
-        {saved && <span className="text-sm text-muted">Saved.</span>}
+          <GroupTypePicker selected={profile.group} onSelect={(v: GroupType) => set("group", v)} />
+        </Section>
+
+        <Section title="Explorer style">
+          <ExplorerStylePicker
+            selected={profile.explorerStyle}
+            onSelect={(v: ExplorerStyle) => set("explorerStyle", v)}
+          />
+        </Section>
+
+        <Section title="How much walking suits you">
+          <ChoicePicker
+            name="energy"
+            options={[...ENERGY_LEVELS]}
+            selected={profile.energy}
+            onSelect={(v: EnergyLevel) => set("energy", v)}
+          />
+        </Section>
+
+        <Section title="Crowds">
+          <ChoicePicker
+            name="crowds"
+            options={[...CROWD_PREFERENCES]}
+            selected={profile.crowds}
+            onSelect={(v: CrowdPreference) => set("crowds", v)}
+          />
+        </Section>
+
+        <Section title="Spending style">
+          <TierPicker
+            days={null}
+            budget={0}
+            selected={profile.tier}
+            onSelect={(v: TierId) => set("tier", v)}
+          />
+        </Section>
+
+        <Section title="What matters most" hint="Star up to three — the starred ones drive the plan.">
+          <InterestPicker
+            selected={profile.priorities}
+            starred={profile.topPriorities}
+            onToggle={toggleInterest}
+            onToggleStar={toggleStar}
+          />
+        </Section>
+
+        <Section
+          title="Dietary needs"
+          hint="Applied to every food stop on every trip. Leave empty if nothing applies."
+        >
+          <DietaryPicker value={profile.dietary} onChange={(v) => set("dietary", v)} />
+        </Section>
+
+        <div className="space-y-3 pt-5">
+          {error && <ErrorNote>{error}</ErrorNote>}
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Save profile"}
+            </button>
+            {saved && <span className="text-sm text-muted">Saved.</span>}
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
