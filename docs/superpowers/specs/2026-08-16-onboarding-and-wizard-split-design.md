@@ -279,10 +279,48 @@ whole write-back removal exists to provide.
   then.
 - `AGENTS.md` is rewritten by `next dev`; commit it with the work.
 
-## Open risk
+## The expander must not be able to make things worse
 
-Four screens assumes the expander stays closed for most travelers. If people
-routinely open it — because their trips vary more than this design assumes — the
-wizard has not actually gotten shorter, it has gotten shorter *and* added a click.
-Worth watching once it is in use; the remedy would be promoting whichever field
-gets adjusted most back into a per-trip screen, not adding more expanders.
+An earlier draft of this spec left an open risk: if travelers routinely open the
+expander because their trips vary more than the durable/per-trip guess assumes,
+the wizard has not gotten shorter — it has gotten shorter *and* added a click.
+"Watch it and promote whichever field gets adjusted most" is not a remedy; it
+defers the problem and leaves the design resting on a guess about other people's
+travel habits.
+
+The risk is dissolved instead, by counting the actual interaction cost:
+
+| | Advance clicks | Field decisions |
+|---|---|---|
+| Today | 6 | all of them |
+| Expander closed | 3 | only the per-trip ones |
+| Expander open | 3 + 1 to expand | all of them |
+
+The worst case is four clicks against today's six. There is no case where this is
+worse than what it replaces, so there is nothing to watch and nothing to promote
+later.
+
+That guarantee holds **only if the expander is one block revealing every durable
+field at once.** If it were a nested mini-wizard, or one expander per field, the
+worst case would climb back above six and the risk would return. This is a
+structural requirement, not a styling preference:
+
+- **One expander, not five.** It reveals explorer style, energy, crowds, tier and
+  priorities together, in one scrollable block.
+- **No pagination inside it.** No steps, no Next, no sub-navigation.
+- **It is the only expander in the wizard.** Any future durable field goes inside
+  this same block.
+
+The second half of the problem is discoverability. A traveler who cannot see the
+expander has no way to know the app is applying remembered preferences, and a
+hidden control reads as the app having forgotten them. So the collapsed state is
+not a bare "Adjust for this trip" link — it is a **one-line summary of the values
+actually in effect**, with the toggle inline:
+
+```
+Relaxed pace · Low energy · Avoids crowds · Mid-range · Food, Culture & History     Adjust
+```
+
+That line costs one row when unused, states plainly what is being applied without
+requiring a click, and turns the expander from a hidden control into the
+explanation of a visible one.
