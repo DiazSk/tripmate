@@ -124,7 +124,13 @@ export async function runGeneration(
     } catch {
       weather = [];
     }
-    onStage({ stage: "geocode", status: "done" });
+    // A failed (or null-result) geocode leaves `geoPoint` unset, and `placing` below already
+    // reports `skipped` in that case — reporting `done` here would sit a green "Locating" dot
+    // next to a skipped "Placing" one, implying the two are unrelated when the second is
+    // skipped *because* the first failed. `skipped` is reused rather than adding a fourth
+    // status: three already cover everything the loader renders, and a new one would touch
+    // the shared vocabulary, both consumers, and the dot rendering for no visible difference.
+    onStage({ stage: "geocode", status: geoPoint ? "done" : "skipped" });
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
     prompt = buildGeneratePrompt({
