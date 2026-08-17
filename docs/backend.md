@@ -32,6 +32,22 @@ Covers `src/app/api/**`, `src/lib/db.ts`, `src/lib/weather.ts`. See
 | `/api/itinerary` response now includes `traceId` | 2026-08-05 | Aryan | So the frontend can deep-link to the trace of the call that produced the itinerary |
 | `DayWeather` (`weather.ts`) gained `weatherCode` and `humidity` | 2026-08-05 | Aryan | `weatherCode` (WMO code) added to the existing forecast `daily` request; `humidity` is a separate best-effort hourly fetch, averaged per day, merged in — see Bugs/constraints below |
 
+## Deployment prerequisites
+
+- **SSE idle-timeout gap (`POST /api/itinerary?stream=1`):** the stream goes quiet for
+  60–150s between `generate: start`/`done` and again for 10–30s during critique.
+  `X-Accel-Buffering: no` stops proxy buffering but does nothing for idle-connection
+  timeouts — nginx `proxy_read_timeout` (60s default), an AWS ALB (60s idle timeout), and
+  Cloudflare (~100s) would all kill the connection mid-wait, and the client would report
+  "The planner didn't finish" after a full wait despite the server having succeeded.
+  Not built now: the app only runs against a local `claude` subprocess and a local SQLite
+  file, so there is no proxy or CDN in front of it yet, and a keepalive for a deployment
+  that doesn't exist is exactly the speculative work this feature's spec ruled out. If a
+  non-localhost deployment happens, add a `setInterval` in the stream's `start()` that
+  enqueues a `:\n\n` comment frame every ~20s, cleared in `finally` and `cancel()` — the
+  client parser (`eventStream.ts`) already skips lines starting with `:`, so no client
+  change is needed.
+
 ## Bugs
 
 | Bug | Found | Fixed | Developer | Notes |
