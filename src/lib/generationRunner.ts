@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { DEFAULT_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "./claude";
+import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "./claude";
 import { geocodeDestination, getWeatherForDates, DayWeather } from "./weather";
 import { resolveNamedPlaceCoords } from "./poiDetails";
 import { getDestinationContextInsight } from "./destinationContext";
@@ -167,6 +167,7 @@ export async function runGeneration(
   // corrected day set if it finds issues. Never fails the request — a
   // broken critique call just leaves the original itinerary in place.
   onStage({ stage: "critique", status: "start" });
+  let critiqued = false;
   try {
     const critiquePrompt = buildCritiquePrompt({
       itinerary,
@@ -176,17 +177,23 @@ export async function runGeneration(
       resolvedFlags,
       dietary,
     });
-    const { result: critiqueRaw } = await runClaude(critiquePrompt, "critique", DEFAULT_TIMEOUT_MS, {
+    const { result: critiqueRaw } = await runClaude(critiquePrompt, "critique", CRITIQUE_TIMEOUT_MS, {
       runId,
     });
     const critique = parseJsonResponse<CritiqueResult>(critiqueRaw);
     if (critique.revisedDays) {
       itinerary.days = critique.revisedDays;
     }
+    critiqued = true;
   } catch {
     // Keep the uncritiqued itinerary.
   }
-  onStage({ stage: "critique", status: "done" });
+  // `skipped`, not `done`, when the pass didn't actually run. Reporting `done` either way was
+  // the reason a 35% critique failure rate went unnoticed: the trip still arrived, just
+  // without the budget/timing review, and the loader said the review had happened. `skipped`
+  // is already in the stage vocabulary (refine uses it for geocode/placing) and the strip
+  // already renders it distinctly, so honesty here needs no new UI.
+  onStage({ stage: "critique", status: critiqued ? "done" : "skipped" });
 
   // Attach the real forecast (not the model's free-text guess) to each day
   // by date, so the UI can render structured icon/temp/humidity data.
