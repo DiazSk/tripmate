@@ -1072,6 +1072,80 @@ body {
   }
 }
 
+/* The confirm dialog's backdrop. A real `::backdrop` rather than a sibling overlay div —
+   it comes with the top layer, so it can't be covered by anything and needs no z-index in
+   a shell that already stacks four of them. Darken-Never-Lighten over whatever the globe
+   happens to be showing, plus a light blur so the page reads as suspended rather than
+   merely dimmed. Do NOT hand-write -webkit-backdrop-filter beside this (The Never-Prefix
+   Rule) — Lightning CSS emits the prefix itself. */
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(4px);
+}
+
+/* Tailwind's preflight sets `margin: 0` on every element, which silently defeats the
+   `margin: auto` the UA stylesheet uses to centre a modal `<dialog>` in the viewport —
+   the panel renders hard against the top-left corner instead. Restoring it here is the
+   fix; `inset: 0` is what gives `auto` margins something to centre within. Preflight also
+   zeroes the UA border, so the glass hairline comes from .glass-itinerary alone. */
+.confirm-dialog {
+  inset: 0;
+  margin: auto;
+  /* Top-layer promotion (showModal()) only changes paint order — the dialog is still a DOM
+     descendant of AppShell's `pointer-events-none` content overlay, and pointer-events is
+     inherited, so without this override every button inside is unclickable by a real
+     pointer. A programmatic .click() bypasses hit-testing and doesn't reveal this, which is
+     exactly how it shipped unnoticed. */
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .confirm-dialog[open] {
+    animation: confirm-dialog-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .confirm-dialog[open]::backdrop {
+    animation: confirm-backdrop-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+@keyframes confirm-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The postcard's delete affordance. Hidden at rest so a wall of postcards isn't a wall of
+   trash icons, revealed when the card is hovered or anything inside it takes focus.
+   `:focus-within` on the wrapper is what keeps it keyboard-reachable — tabbing to the
+   button reveals the button. */
+.memory-postcard-delete {
+  opacity: 0;
+  transition:
+    opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.memory-postcard-slot:hover .memory-postcard-delete,
+.memory-postcard-slot:focus-within .memory-postcard-delete {
+  opacity: 1;
+}
+
+/* A hover-only control is unreachable on a touch screen — there is no hover state to
+   enter, and the card itself is a link, so long-press does nothing useful either. On any
+   device whose primary pointer can't hover, the button is simply always visible. */
+@media (hover: none) {
+  .memory-postcard-delete {
+    opacity: 1;
+  }
+}
+
 /* My Memories' postcards are the one other scoped material exception in the app besides
    Blue Hour, and for the same kind of reason: a physical paper object cannot be frosted
    slate glass, so this trades the One Slate Rule for an opaque cream paper surface —

@@ -140,6 +140,18 @@ export function updateTripItinerary(id: string, itineraryJson: string): void {
   db.prepare(`UPDATE trips SET itinerary_json = ? WHERE id = ?`).run(itineraryJson, id);
 }
 
+/**
+ * Deletes the trip row only. `llm_runs.trip_id` and the `trip_artifacts` keyed by
+ * `trips.run_id` are deliberately left behind: `trip_id` is written but never read or
+ * joined anywhere, and those rows are an audit log that a generation *happened* — not
+ * trip content. Deleting a saved trip shouldn't erase the record of the LLM calls that
+ * produced it, and the trace viewer keeps working either way since it reads `destination`
+ * and `kind` off the run rather than resolving the trip.
+ */
+export function deleteTrip(id: string): void {
+  db.prepare(`DELETE FROM trips WHERE id = ?`).run(id);
+}
+
 /** The two frozen Step 5/6 artifacts, keyed by the run that produced them. Kept out of `trips`
  *  because they exist before a trip is ever saved — and Step 7's edit loop needs the context to
  *  stay byte-identical across edits, so it's stored once and never regenerated. */
