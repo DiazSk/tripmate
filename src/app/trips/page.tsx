@@ -22,7 +22,19 @@ import { useMapCamera } from "@/lib/mapCamera";
  *  re-encodes server-side instead of shipping the raw ~3840px source and asking the
  *  browser to downscale it live — the same pipeline ImageRow already uses for the landing
  *  page's own photos, ported here rather than reinvented. */
-function HeroTile({ trip, className = "" }: { trip: TripSummary; className?: string }) {
+function HeroTile({
+  trip,
+  sizes,
+  className = "",
+}: {
+  trip: TripSummary;
+  /** Comes from the active HERO_LAYOUTS entry, because how wide a tile actually renders is
+   *  a property of the layout, not of the tile. Hardcoding one value here meant a one-trip
+   *  hero — where the tile is the full viewport — still requested a 33vw candidate and
+   *  rendered visibly soft, which is the failure the Optimized-Photo Rule exists to stop. */
+  sizes: string;
+  className?: string;
+}) {
   const photo = usePlacePhoto(trip.destination, "full");
   return (
     <div className={`relative overflow-hidden bg-[rgb(var(--surface-deep-rgb))] ${className}`}>
@@ -32,7 +44,7 @@ function HeroTile({ trip, className = "" }: { trip: TripSummary; className?: str
           src={photo}
           alt=""
           fill
-          sizes="(max-width: 640px) 50vw, 33vw"
+          sizes={sizes}
           // contrast/saturate, not a color-grading pass: these tiles are real, uncurated
           // photos of whatever the destination happens to be — no art direction, no shared
           // exposure — unlike the landing page's hand-picked, edited scenes. The globe has
@@ -46,6 +58,55 @@ function HeroTile({ trip, className = "" }: { trip: TripSummary; className?: str
     </div>
   );
 }
+
+/**
+ * How the collage composes itself for each possible tile count, 1 through 5.
+ *
+ * This used to be one fixed template — three columns by two rows above `sm`, with the first
+ * tile always spanning both — regardless of how many trips existed. That only ever filled
+ * cleanly at exactly five: at one trip four of its cells had no tile in them and rendered as
+ * the container's own bare slate, so the hero read as a single photo beside a large empty
+ * block rather than as a collage.
+ *
+ * `spans` lists the row-span class for tiles by index; anything past its end gets none. The
+ * asymmetric 1.3fr hero column only appears from three tiles up, where there is something
+ * for it to be asymmetric *against* — at two tiles a 1.3fr/1fr split just reads as a
+ * mistake, so that count uses even columns instead.
+ *
+ * Every class here is written as a complete literal string. Tailwind scans source text and
+ * cannot see a class built by interpolation, so `grid-cols-${n}` would compile to nothing.
+ */
+const HERO_LAYOUTS: Record<number, { grid: string; spans: string[]; sizes: string }> = {
+  // One trip: the tile is the whole hero, so the photo is requested at full viewport width.
+  1: { grid: "grid-cols-1 grid-rows-1", spans: [], sizes: "100vw" },
+  // Two: stacked on a phone (a landscape photo cut to a half-width sliver loses its
+  // subject), side by side above `sm`.
+  2: {
+    grid: "grid-cols-1 grid-rows-2 sm:grid-cols-2 sm:grid-rows-1",
+    spans: [],
+    sizes: "(max-width: 640px) 100vw, 50vw",
+  },
+  // Three: the hero column arrives, with two stacked beside it at both sizes.
+  3: {
+    grid: "grid-cols-2 grid-rows-2 sm:grid-cols-[1.3fr_1fr]",
+    spans: ["row-span-2"],
+    sizes: "(max-width: 640px) 50vw, 45vw",
+  },
+  // Four: tile 2 takes a row-span of its own above `sm`. Without it the fourth tile wraps
+  // and leaves the bottom-right cell empty — the same hole this table exists to close.
+  // Below `sm` the four sit as even quadrants, so neither tile spans there.
+  4: {
+    grid: "grid-cols-2 grid-rows-2 sm:grid-cols-[1.3fr_1fr_1fr]",
+    spans: ["sm:row-span-2", "sm:row-span-2"],
+    sizes: "(max-width: 640px) 50vw, 33vw",
+  },
+  // Five: the original composition, which already filled every cell.
+  5: {
+    grid: "grid-cols-2 grid-rows-2 sm:grid-cols-[1.3fr_1fr_1fr]",
+    spans: ["row-span-2"],
+    sizes: "(max-width: 640px) 50vw, 33vw",
+  },
+};
 
 /**
  * The page's own opening beat, full-bleed like the landing page's Hero — occludes the
@@ -106,18 +167,20 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
     );
   }
 
-  // Up to five tiles in a bento grid (one tall + four square) on a wide viewport; the same
-  // five DOM tiles on a narrow one collapse to a 2x2 template and the hero's own
-  // `overflow-hidden` quietly clips the two that don't fit rather than needing a second,
-  // conditionally-rendered layout.
+  // Up to five tiles in a bento grid whose shape follows the count (see HERO_LAYOUTS), so
+  // every cell holds a photo at any number of saved trips. At five on a narrow viewport the
+  // last two still fall outside the 2x2 template and the hero's own `overflow-hidden`
+  // quietly clips them — that clipping is deliberate and unchanged; what the table fixes is
+  // empty cells, not overflow.
   const tiles = trips.slice(0, 5);
+  const layout = HERO_LAYOUTS[tiles.length];
   const first = tiles[0]?.destination.split(",")[0];
   const last = tiles[tiles.length - 1]?.destination.split(",")[0];
   return (
     <section className="pointer-events-auto relative flex min-h-dvh items-end overflow-hidden p-5 sm:p-6">
-      <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-0.5 bg-[rgb(var(--surface-deep-rgb))] sm:grid-cols-[1.3fr_1fr_1fr]">
+      <div className={`absolute inset-0 grid gap-0.5 bg-[rgb(var(--surface-deep-rgb))] ${layout.grid}`}>
         {tiles.map((trip, i) => (
-          <HeroTile key={trip.id} trip={trip} className={i === 0 ? "row-span-2" : ""} />
+          <HeroTile key={trip.id} trip={trip} sizes={layout.sizes} className={layout.spans[i] ?? ""} />
         ))}
       </div>
       {/* Same scrim shape ItineraryCard's own photo header uses (a slate wash from the
