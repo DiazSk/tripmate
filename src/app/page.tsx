@@ -21,6 +21,7 @@ import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
 import DockedPanel from "@/components/DockedPanel";
 import ErrorNote from "@/components/ErrorNote";
+import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
 import { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, Itinerary, RawFetch } from "@/lib/types";
@@ -203,6 +204,11 @@ export default function Home() {
   // Held here only so generate()/refine() can send it.
   const [dietary, setDietary] = useState<DietaryNeeds>({ tags: [], note: "" });
 
+  // Shown once, after the first generation, only when there is no profile yet. `hasProfile`
+  // starts null (unknown) so the card cannot flash before the profile fetch resolves.
+  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
   // The profile supplies defaults; the wizard always wins. Nothing here is locked —
   // a solo traveler who usually goes with kids just changes it on the screen, and
   // that trip's answers are what generation sees. Any failure leaves the hardcoded
@@ -213,7 +219,9 @@ export default function Home() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         const profile: TravelerProfile | null = data?.profile ?? null;
-        if (cancelled || !profile) return;
+        if (cancelled) return;
+        setHasProfile(Boolean(profile));
+        if (!profile) return;
         setGroup(profile.group);
         setExplorerStyle(profile.explorerStyle);
         setEnergy(profile.energy);
@@ -228,7 +236,9 @@ export default function Home() {
         setStarredInterests(profile.topPriorities);
         setDietary(profile.dietary);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setHasProfile(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -917,6 +927,25 @@ export default function Home() {
                     const committed = focus.save();
                     if (committed) setItinerary(committed);
                   }}
+                />
+              )}
+
+              {hasProfile === false && !onboardingDismissed && (
+                <OnboardingCard
+                  answers={{
+                    group,
+                    explorerStyle,
+                    energy,
+                    crowds,
+                    tier,
+                    priorities: interests,
+                    topPriorities: starredInterests,
+                  }}
+                  onSaved={() => {
+                    setHasProfile(true);
+                    setOnboardingDismissed(true);
+                  }}
+                  onDismiss={() => setOnboardingDismissed(true)}
                 />
               )}
 
