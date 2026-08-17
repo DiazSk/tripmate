@@ -2,6 +2,12 @@
 
 **Date:** 2026-08-16
 **Status:** Approved, not yet implemented
+
+> **Partly superseded by [`2026-08-16-onboarding-and-wizard-split-design.md`](./2026-08-16-onboarding-and-wizard-split-design.md).**
+> The durable values are now owned by `/profile`, not by the wizard, and the automatic
+> post-generate write-back was removed. The durable/per-trip boundary this spec drew is
+> unchanged and still governs.
+
 **Scope:** One of three deliverables. The others are `FUTURE-INTEGRATION.md` (done)
 and the SSE progress loader (separate spec).
 

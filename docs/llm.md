@@ -18,6 +18,7 @@ viewer's relationship to the model call. See
 | Daily narrative `summary` field in the itinerary JSON contract | Active | 2026-08-05 | Aryan | Model writes a 1-2 sentence, emoji-touched summary of each day's theme/flow; requested via `SHAPE_HINT` in both `buildGeneratePrompt` and `buildRefinePrompt` |
 | `buildContainerThemePrompt()` — picks a destination-themed "unboxing container" | Active | 2026-08-05 | Aryan | Classifies into `containerType`/`themeTitle`/`primaryColor`/`stampOrIcon`/`lidType`; a separate, tiny, independent call — not folded into the itinerary prompt since it's decorative and shouldn't block/slow generation |
 | `formatTravelerProfile()` | Active | 2026-08-16 | Zaid | Feeds pace, mobility, crowd bias, family rules and starred priorities into generate/refine/critique. `deriveFlags` computed all of this already; the route never read `userAnswers`, so it was discarded. Own module because `itineraryPrompt.ts` imports `TIERS` as a value and so can't be loaded from a `.test.mjs` |
+| `formatDietary()` | Active | 2026-08-16 | Zaid | Feeds dietary restrictions into generate/refine/critique beside the existing food-stop instruction; critique gained a sixth criterion for food stops the traveler could not eat at. Own module so it stays testable |
 
 ## Enhancements
 

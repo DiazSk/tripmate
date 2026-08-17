@@ -50,6 +50,9 @@ tables are maintained.
 | Floating top capsule ("← New search" + live budget) in `TripDashboard` | Active | 2026-08-05 | Aryan | Centered, elevated above both the map and list halves; text goes red when over budget, matching `BudgetBar`'s color language |
 | Wizard seeds from the saved traveler profile | Active | 2026-08-16 | Zaid | Durable answers pre-fill on mount and are written back after a successful generate. Defaults only — the wizard always wins, and any failure falls back to the hardcoded defaults |
 | `GenerationLoader` streams real per-stage progress | Active | 2026-08-16 | Zaid | Five real stages (geocode/context/generate/critique/placing) replace the old fixed 5-caption loop; captions rotate per-stage from `generationStages.ts`, sr-only text announces stage transitions |
+| Four-screen plan wizard + "Adjust for this trip" | Active | 2026-08-16 | Zaid | Basics/purpose/group/pois only; explorer style, energy, crowds, tier and priorities sit behind one expander on basics fronted by a summary of the values in effect. One expander, never one per field — that is what keeps the worst case below the seven screens it replaced |
+| `/profile` page | Active | 2026-08-16 | Zaid | Owns the durable traits, reusing the wizard's own pickers. Surfaces save failures, unlike the onboarding card |
+| Onboarding card on the result screen | Active | 2026-08-16 | Zaid | Offered once after the first trip, pre-filled with the answers just given plus dietary needs. Dismissing costs nothing |
 
 ## Enhancements
 
