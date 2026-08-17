@@ -841,7 +841,7 @@ export default function Home() {
               )}
 
               {/* Last on purpose: the only screen that needs Step 2a's fetch, by which point the
-                  five preceding screens have given it time to land. Leaving it empty is normal —
+                  three preceding screens have given it time to land. Leaving it empty is normal —
                   the profile above is what selects stops. */}
               {planStep === "pois" && (
                 <Screen
@@ -941,9 +941,10 @@ export default function Home() {
                     priorities: interests,
                     topPriorities: starredInterests,
                   }}
-                  onSaved={() => {
+                  onSaved={(dietary) => {
                     setHasProfile(true);
                     setOnboardingDismissed(true);
+                    setDietary(dietary);
                   }}
                   onDismiss={() => setOnboardingDismissed(true)}
                 />
