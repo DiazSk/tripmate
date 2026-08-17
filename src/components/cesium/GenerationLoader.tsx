@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { STAGE_ORDER, stageMeta, StageId, StageStatus } from "@/lib/generationStages";
 
 /** Each word is split into individual <span>s so every letter can carry its own
@@ -124,20 +124,22 @@ export default function GenerationLoader({
       {/* Caption pill carries the same frosted treatment as the itinerary card
           and every other panel over the map — see .glass-itinerary in
           globals.css, which also sets --foreground, so text-foreground
-          resolves to white here. */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          aria-hidden="true"
-          key={caption}
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.2 }}
-          className="glass-itinerary rounded-full px-3 py-1 text-xs font-medium text-foreground"
-        >
-          {caption}
-        </motion.div>
-      </AnimatePresence>
+          resolves to white here. No AnimatePresence/exit animation: this used to wait
+          ("mode=\"wait\"") for the outgoing pill's exit to finish before mounting the next
+          one, and if that exit never resolves the caption freezes forever on whatever was
+          first on screen. A plain motion.div keyed on `caption` lets React's own
+          reconciliation swap the DOM node immediately on every change; only the entrance
+          fade is animated, which cannot get stuck the same way. */}
+      <motion.div
+        aria-hidden="true"
+        key={caption}
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className="glass-itinerary rounded-full px-3 py-1 text-xs font-medium text-foreground"
+      >
+        {caption}
+      </motion.div>
     </div>
   );
 }
