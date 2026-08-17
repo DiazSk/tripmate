@@ -11,7 +11,7 @@ export interface StageEvent {
  *  the developer-facing pipeline diagram and this traveler-facing loader name the same
  *  steps — but the text below is written for someone waiting on a holiday, not a developer
  *  reading a trace, so it is not shared with FLOWS' own descriptions. */
-export const STAGE_ORDER: StageId[] = ["geocode", "context", "generate", "critique", "placing"];
+export const STAGE_ORDER: readonly StageId[] = ["geocode", "context", "generate", "critique", "placing"];
 
 export interface StageMeta {
   /** Short label for the stage's row in the loader — not the rotating caption. */
