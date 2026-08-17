@@ -2,6 +2,7 @@
 
 import { ComponentType, ReactNode, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft, ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import { DayEditUpdates } from "@/components/DayHeader";
@@ -32,6 +33,7 @@ import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
 import type { StageProgress } from "@/components/cesium/GenerationLoader";
+import { summarizeDurable } from "@/lib/profileSummary";
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -39,10 +41,12 @@ function errorMessage(e: unknown, fallback: string): string {
 }
 
 type Step = "landing" | "plan" | "result";
-/** Screens 2-6 need nothing from the backend, which is what gives the Step 2a fetch time to
- *  land before `pois` — the one fetch-dependent screen — is ever reached. Keep `pois` last. */
-type PlanStep = "basics" | "purpose" | "group" | "profile" | "crowds" | "priorities" | "pois";
-const PLAN_ORDER: PlanStep[] = ["basics", "purpose", "group", "profile", "crowds", "priorities", "pois"];
+/** Only what changes per trip. Explorer style, energy, crowds, tier and priorities live on
+ *  /profile and are overridable for one trip via the expander on `basics`. The two screens
+ *  between `basics` and `pois` still give the Step 2a fetch time to land before `pois` —
+ *  the one fetch-dependent screen — is reached. Keep `pois` last. */
+type PlanStep = "basics" | "purpose" | "group" | "pois";
+const PLAN_ORDER: PlanStep[] = ["basics", "purpose", "group", "pois"];
 
 // Local calendar date in ISO shape. `toISOString()` would be UTC and roll the date over a
 // day early for anyone west of Greenwich in the evening; "sv-SE" formats local time as
@@ -179,6 +183,11 @@ export default function Home() {
   const [interests, setInterests] = useState<string[]>([]);
   const [starredInterests, setStarredInterests] = useState<string[]>([]);
   const [destinationMissed, setDestinationMissed] = useState(false);
+
+  // The single "Adjust for this trip" block. One expander, never one per field: the whole
+  // point is that the worst case (open it every trip) is still fewer interactions than the
+  // seven screens this replaced, and per-field expanders would climb back past that.
+  const [adjustOpen, setAdjustOpen] = useState(false);
 
   // Step 2b — collected alongside the existing basics/interests/style answers, sent to
   // Step 3 as `userAnswers` once generation runs (see `generate()` below).
@@ -715,6 +724,67 @@ export default function Home() {
                     </div>
                   </div>
 
+                  {/* The collapsed state names the remembered values rather than hiding behind
+                      a bare "Adjust" link — a traveler who cannot see these has no way to know
+                      the app applied them, and a hidden control reads as the app having
+                      forgotten. Everything durable lives in this one block: no pagination, no
+                      second expander. */}
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-surface-deep/50 px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-muted">
+                        {summarizeDurable({
+                          explorerStyle,
+                          energy,
+                          crowds,
+                          tier,
+                          topPriorities: starredInterests,
+                        })}
+                      </p>
+                      <button
+                        type="button"
+                        aria-expanded={adjustOpen}
+                        onClick={() => setAdjustOpen((v) => !v)}
+                        className="shrink-0 text-xs font-medium text-accent underline-offset-4 hover:underline"
+                      >
+                        {adjustOpen ? "Done" : "Adjust for this trip"}
+                      </button>
+                    </div>
+
+                    {adjustOpen && (
+                      <div className="mt-4 space-y-5 border-t border-white/10 pt-4">
+                        <p className="text-xs text-muted">
+                          Changes here apply to this trip only. Your saved profile is untouched —
+                          edit it on the <Link href="/profile" className="text-accent underline-offset-4 hover:underline">profile page</Link>.
+                        </p>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted">Explorer style</label>
+                          <ExplorerStylePicker selected={explorerStyle} onSelect={setExplorerStyle} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted">How much walking suits you</label>
+                          <ChoicePicker name="energy" options={[...ENERGY_LEVELS]} selected={energy} onSelect={setEnergy} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted">Crowds</label>
+                          <ChoicePicker name="crowds" options={[...CROWD_PREFERENCES]} selected={crowds} onSelect={setCrowds} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted">Style and budget</label>
+                          <TierPicker days={days} budget={budget} selected={tier} onSelect={pickTier} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted">What matters most</label>
+                          <InterestPicker
+                            selected={interests}
+                            starred={starredInterests}
+                            onToggle={toggleInterest}
+                            onToggleStar={toggleInterestStar}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Deliberately not the red error block: an Open-Meteo miss only costs the map
                       flight and the weather lookup. The itinerary still generates, so blocking on
                       a third-party geocoder would turn their outage into "the app is broken". */}
@@ -753,74 +823,10 @@ export default function Home() {
               {planStep === "group" && (
                 <Screen
                   name="Group"
-                  title="Who's going, and how do you explore?"
-                  subtitle="This sets the ceiling on how much we fit into a day."
+                  title="Who's going?"
+                  subtitle="This changes trip to trip, so we ask every time."
                 >
-                  <div className="space-y-5">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted">Who&apos;s going</label>
-                      <GroupTypePicker selected={group} onSelect={setGroup} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted">Explorer style</label>
-                      <ExplorerStylePicker selected={explorerStyle} onSelect={setExplorerStyle} />
-                    </div>
-                  </div>
-                </Screen>
-              )}
-
-              {planStep === "profile" && (
-                <Screen
-                  name="Profile"
-                  title="How much walking suits you?"
-                  subtitle="We pick the stops from this — how you travel matters more than a list of landmarks."
-                >
-                  <ChoicePicker name="energy" options={[...ENERGY_LEVELS]} selected={energy} onSelect={setEnergy} />
-                </Screen>
-              )}
-
-              {planStep === "crowds" && (
-                <Screen
-                  name="Crowds"
-                  title="Crowds, and what you'll spend"
-                  subtitle={
-                    days === null
-                      ? "Add your dates and the per-day rates below become trip totals."
-                      : `Rough estimates for ${days} ${days === 1 ? "day" : "days"}${
-                          destination ? ` in ${destination}` : ""
-                        }.`
-                  }
-                >
-                  <div className="space-y-5">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted">Crowds</label>
-                      <ChoicePicker
-                        name="crowds"
-                        options={[...CROWD_PREFERENCES]}
-                        selected={crowds}
-                        onSelect={setCrowds}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted">Style and budget</label>
-                      <TierPicker days={days} budget={budget} selected={tier} onSelect={pickTier} />
-                    </div>
-                  </div>
-                </Screen>
-              )}
-
-              {planStep === "priorities" && (
-                <Screen
-                  name="Priorities"
-                  title="What matters most?"
-                  subtitle="Pick what interests you, then star up to three — the starred ones drive the plan."
-                >
-                  <InterestPicker
-                    selected={interests}
-                    starred={starredInterests}
-                    onToggle={toggleInterest}
-                    onToggleStar={toggleInterestStar}
-                  />
+                  <GroupTypePicker selected={group} onSelect={setGroup} />
                 </Screen>
               )}
 
