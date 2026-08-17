@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Stamp } from "lucide-react";
+import { ArrowRight, Stamp, Trash2 } from "lucide-react";
 import { TripSummary } from "@/lib/types";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
@@ -215,9 +216,16 @@ function tiltFor(id: string): number {
   return (Math.abs(hash) % 41) / 10 - 2;
 }
 
-function MemoryPostcard({ trip }: { trip: TripSummary }) {
+function MemoryPostcard({ trip, onDelete }: { trip: TripSummary; onDelete: () => void }) {
   const photo = usePlacePhoto(trip.destination, "full");
   return (
+    // The delete button is a *sibling* of the card, never a child: the whole postcard is
+    // one <a>, and HTML forbids interactive content inside an anchor — nesting a <button>
+    // there is invalid, and browsers resolve the overlap unpredictably. This wrapper is
+    // what gives the button a positioning context and what `.memory-postcard-slot:hover /
+    // :focus-within` keys the reveal off, so hovering the card (or tabbing into it) is
+    // what surfaces the control.
+    <div className="memory-postcard-slot relative">
     <Link
       href={`/trip/${trip.id}`}
       // The resting tilt is a CSS custom property, not a `transform` written here directly —
@@ -291,6 +299,19 @@ function MemoryPostcard({ trip }: { trip: TripSummary }) {
         {formatDateRange(trip.startDate, trip.endDate)} · {formatMoney(trip.budget)} budget
       </div>
     </Link>
+      {/* 22px inset mirrors the stamp opposite it — the card's own 10px padding plus the
+          stamp's top-3 within the photo tile — rather than a new spacing value. Dark glass
+          on the one slate, not a light chip: this sits on an arbitrary destination photo,
+          so it darkens (the Darken-Never-Lighten Rule) and only turns red on intent. */}
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label={`Delete your ${trip.destination} trip`}
+        className="memory-postcard-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm hover:bg-red-600 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
+      >
+        <Trash2 className="h-4 w-4" strokeWidth={2.25} />
+      </button>
+    </div>
   );
 }
 
@@ -298,7 +319,45 @@ export default function TripsPage() {
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The trip the dialog is currently asking about — holding the whole summary rather than
+  // an id lets the prompt name the destination without a second lookup, and doubles as the
+  // dialog's own open/closed state.
+  const [pendingDelete, setPendingDelete] = useState<TripSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  // Deliberately not the `error` above. That one is fatal — it early-returns a page with
+  // nothing but the message, which is right when the trips never loaded. A delete that
+  // failed leaves a perfectly good grid on screen, so reusing `error` would blank the very
+  // list the message is about.
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { resetToHome } = useMapCamera();
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/trips/${pendingDelete.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error);
+      }
+      // Splice locally rather than refetch: the list is already in hand and the server has
+      // no other change to report. Deleting the last trip drops `trips.length` to 0, which
+      // is what flips the hero to its empty variant and drops <main>'s padding — both are
+      // already keyed on that count, so neither needs its own branch here.
+      setTrips((prev) => prev.filter((t) => t.id !== pendingDelete.id));
+      setPendingDelete(null);
+    } catch (e) {
+      // The dialog closes on failure so the error underneath isn't hidden behind it; the
+      // card stays put, which is the honest reflection of a delete that didn't happen.
+      setPendingDelete(null);
+      setDeleteError(
+        e instanceof Error && e.message ? e.message : "We couldn't delete that trip. Try again."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Mount-only, mirroring page.tsx's own reset effect: the globe lives above the route
   // boundary and never unmounts, so arriving here from /trip/[id] (which flies to that
@@ -382,15 +441,37 @@ export default function TripsPage() {
 
       {trips.length > 0 && (
         <div className="pointer-events-auto mx-auto max-w-5xl pt-10 sm:pt-12">
+          {/* A delete that failed reports here rather than inside the dialog, which has
+              already closed — the grid it refers to is what's on screen. */}
+          {deleteError && (
+            <div className="mb-5">
+              <ErrorNote>{deleteError}</ErrorNote>
+            </div>
+          )}
           <ul className="memory-postcards grid grid-cols-1 gap-5 sm:grid-cols-2">
             {trips.map((trip) => (
               <li key={trip.id}>
-                <MemoryPostcard trip={trip} />
+                <MemoryPostcard trip={trip} onDelete={() => setPendingDelete(trip)} />
               </li>
             ))}
           </ul>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete this trip?"
+        body={
+          <>
+            Your {pendingDelete?.destination} itinerary will be permanently deleted. This
+            can&apos;t be undone.
+          </>
+        }
+        confirmLabel="Delete trip"
+        pending={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </main>
   );
 }

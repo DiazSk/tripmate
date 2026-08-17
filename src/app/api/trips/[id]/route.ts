@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTrip, updateTripItinerary } from "@/lib/db";
+import { deleteTrip, getTrip, updateTripItinerary } from "@/lib/db";
 import { normalizeDays } from "@/lib/itinerary";
 
 export async function GET(
@@ -47,5 +47,22 @@ export async function PATCH(
   }
 
   updateTripItinerary(id, JSON.stringify(itinerary));
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  // Same existence guard and copy as GET/PATCH above. Checking first rather than
+  // letting the DELETE no-op means "already gone" is reported as a 404 instead of
+  // a success the caller would use to remove a card that was never there.
+  const trip = getTrip(id);
+  if (!trip) {
+    return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
+  }
+
+  deleteTrip(id);
   return NextResponse.json({ ok: true });
 }

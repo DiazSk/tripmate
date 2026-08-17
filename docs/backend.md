@@ -13,6 +13,7 @@ Covers `src/app/api/**`, `src/lib/db.ts`, `src/lib/weather.ts`. See
 | `POST /api/itinerary` (refine) | Active | 2026-08-04 | Aryan | Same endpoint; branches on `previousItinerary` + `feedback` being present |
 | `GET/POST /api/trips` | Active | 2026-08-04 | Aryan | List saved trips / save a generated itinerary |
 | `GET /api/trips/[id]` | Active | 2026-08-04 | Aryan | Fetch one saved trip |
+| `DELETE /api/trips/[id]` | Active | 2026-08-17 | Claude | Completes CRUD — the app could create/read/update an itinerary but never remove one. Same 404 guard and copy as the route's GET/PATCH, checked before deleting so "already gone" is a 404 rather than a success. Deletes the `trips` row only: `llm_runs.trip_id` and `trip_artifacts` are left behind deliberately (see the `deleteTrip` note in `db.ts`) — `trip_id` is written but never read or joined, and those rows record that a generation happened rather than holding trip content |
 | SQLite `trips` table (`db.ts`) | Active | 2026-08-04 | Aryan | Via `better-sqlite3`, file at `tripmate.db` in project root |
 | Weather lookup (`weather.ts`) | Active | 2026-08-04 | Aryan | Geocode + forecast, folded into the generate prompt |
 | `preferences` field on `/api/itinerary` | Active | 2026-08-05 | Aryan | Passed through from client, only used on generate (not refine) |
