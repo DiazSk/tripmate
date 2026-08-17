@@ -477,25 +477,10 @@ export default function Home() {
       setRevealAnimation(true);
       setStep("result");
 
-      // After success only, never on each screen advance: a wizard the traveler
-      // abandoned halfway is not a statement about how they travel. Failures are
-      // swallowed — this must never surface an error on a trip they just waited
-      // two minutes for.
-      fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profile: {
-            group,
-            explorerStyle,
-            energy,
-            crowds,
-            tier,
-            priorities: interests,
-            topPriorities: starredInterests,
-          },
-        }),
-      }).catch(() => {});
+      // Deliberately no profile write here. The wizard's "Adjust for this trip" values are a
+      // per-trip override, and writing them back would silently make one unusual trip the
+      // traveler's permanent default — the bug this codebase already hit twice with `tier`.
+      // /profile and the onboarding card are the only writers.
     } catch (e) {
       setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
     } finally {
