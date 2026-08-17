@@ -35,28 +35,9 @@ const CAPTION_INTERVAL_MS = 2500;
 /** How often the progress value is recomputed and written to the CSS custom property. */
 const PROGRESS_TICK_MS = 100;
 
-/**
- * One orbiting fact card. `side` picks the wheel; `delay` is a *negative* animation-delay,
- * which starts the animation partway through its cycle instead of waiting — that is what
- * phases the four cards apart without a JS scheduler.
- *
- * The left pair sit half a cycle apart so that wheel always has a card in flight; the right
- * pair are shifted a further quarter cycle so the two sides never reach their readable apex
- * at the same moment. Ordered left/right/left/right so that trimming the list for a short
- * fact pool still leaves both wheels occupied.
- */
-const ORBIT_SLOTS = [
-  { side: "left" as const, phase: 0 },
-  { side: "right" as const, phase: 0.25 },
-  { side: "left" as const, phase: 0.5 },
-  { side: "right" as const, phase: 0.75 },
-];
-
-/** Seconds for one full sweep, matched to `--fact-cycle` in globals.css. */
-const ORBIT_CYCLE_S = 13;
-
-/** Below this the wheels don't run at all — see the comment at the render site. */
-const MIN_FACTS = 3;
+/** How many facts are on screen together, and how long a set is held before the next one. */
+const FACTS_VISIBLE = 3;
+const FACT_SET_MS = 9000;
 
 /** Left edge of each stage's segment as a percentage, from the same weights the progress
  *  math uses, so the ticks and the fill can't disagree about where a stage begins. */
@@ -93,6 +74,7 @@ export default function GenerationLoader({
   mode = "generate",
   stages,
   facts = [],
+  subject,
 }: {
   active: boolean;
   mode?: keyof typeof WORD;
@@ -100,6 +82,9 @@ export default function GenerationLoader({
   /** True, trip-specific lines from `buildDestinationFacts`. Purely presentational here —
    *  this component never fetches and knows nothing about where they came from. */
   facts?: string[];
+  /** What is being generated, e.g. "Kyoto · Sep 19–22 · Mid-range". The form unmounts during
+   *  generation, so without this the screen never once names the trip it is working on. */
+  subject?: string;
 }) {
   const { word, baseLabel } = WORD[mode];
   const activeId = activeStageId(stages);
@@ -139,30 +124,27 @@ export default function GenerationLoader({
   }, [active, stages, activeId]);
 
   // --- Facts ----------------------------------------------------------------------------
-  // Each orbiting card owns an index into the pool and advances it when its own animation
-  // completes a lap — at which point the card is off-screen at zero opacity, so the text
-  // swap is invisible. No polling and nothing to keep in sync with the CSS clock.
-  const slots = ORBIT_SLOTS.slice(0, Math.min(ORBIT_SLOTS.length, facts.length));
-  const [slotFact, setSlotFact] = useState<number[]>(() => ORBIT_SLOTS.map((_, i) => i));
-  const nextFactRef = useRef(ORBIT_SLOTS.length);
-  const advanceSlot = (slot: number) =>
-    setSlotFact((prev) => {
-      const pool = facts.length;
-      if (pool === 0) return prev;
-      // Skip any index that another card is showing right now. A bare counter is not enough:
-      // indices wrap with `% facts.length`, and the cards do not recycle in step — a slot
-      // starting three-quarters through its cycle laps after a quarter of one — so a fresh
-      // counter value routinely lands on the same fact a neighbour is already displaying.
-      // Two wheels showing the same sentence at once is the one thing this feed must not do.
-      const taken = new Set(prev.filter((_, i) => i !== slot).map((v) => v % pool));
-      let candidate = nextFactRef.current++;
-      for (let tried = 0; tried < pool && taken.has(candidate % pool); tried++) {
-        candidate = nextFactRef.current++;
-      }
-      const next = [...prev];
-      next[slot] = candidate;
-      return next;
-    });
+  // One index, advanced on a timer, naming the start of the visible window. This replaced a
+  // per-card recycler that tracked four independent indices and skipped any already on
+  // screen — machinery that existed only because the cards recycled at different times, and
+  // which carried two bugs neither review caught by reading it: with a pool of three or four
+  // it settled into every slot showing the same fact forever, and on mobile the hidden
+  // wheel's slots never advanced yet stayed in the exclusion set, so two facts could never
+  // appear at all. Both vanish with a single cursor over a stable window.
+  const [factSet, setFactSet] = useState(0);
+  useEffect(() => {
+    if (!active || facts.length <= FACTS_VISIBLE) return;
+    const id = setInterval(() => setFactSet((n) => n + 1), FACT_SET_MS);
+    return () => clearInterval(id);
+  }, [active, facts.length]);
+
+  const visibleFacts =
+    facts.length <= FACTS_VISIBLE
+      ? facts
+      : Array.from(
+          { length: FACTS_VISIBLE },
+          (_, i) => facts[(factSet * FACTS_VISIBLE + i) % facts.length]
+        );
 
   // Resets to the top of the new stage's caption list whenever the active stage changes,
   // so switching stages never shows a caption mid-rotation that belonged to the last one.
@@ -190,49 +172,26 @@ export default function GenerationLoader({
 
   const live = stages.filter((s) => s.status !== "skipped");
   const percents = waypointPercents(stages);
-  // The wheels are all-or-nothing: two or three facts cycling for a minute and a half read
-  // as a stutter rather than a feed, and the caption pill is still there to carry the wait.
-  const showFacts = facts.length >= MIN_FACTS;
 
   return (
-    <>
-      {/* The orbit layer is a viewport-sized sibling of the centred column below, not a child
-          of it: the column is centred with a -50%/-50% translate, which would make it a
-          useless coordinate origin for wheels whose centres sit off-screen. Lower z than the
-          column so a card can never cover the disc, and it inherits the shell's
-          pointer-events-none so the globe underneath stays draggable. */}
-      {showFacts && (
-        <div className="fact-orbit-layer" aria-hidden="true">
-          {slots.map(({ side, phase }, i) => (
-            <div
-              key={i}
-              className={`fact-orbit fact-orbit-${side}`}
-              style={{ animationDelay: `${-phase * ORBIT_CYCLE_S}s` }}
-              onAnimationIteration={() => advanceSlot(i)}
-            >
-              <div
-                className="fact-card glass-itinerary"
-                style={{ animationDelay: `${-phase * ORBIT_CYCLE_S}s` }}
-              >
-                {facts[slotFact[i] % facts.length]}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* The live region is the outer box; its announced content is one real string that now
-          changes on a genuine stage transition (five of them, each meaningful — a stage change
-          is exactly the answer to "is this stuck") rather than only once at mount. The rotating
-          captions below stay aria-hidden, same reasoning as before: several cycle past within
-          one stage saying nothing the stage label doesn't. The facts are hidden from it too,
-          and for a sharper reason: announcing trivia every few seconds over someone waiting on
-          a result is noise, not help. */}
-      <div
-        role="status"
-        className="pointer-events-none fixed left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3"
-      >
+    <div className="pointer-events-none fixed inset-0 z-30 flex flex-col items-center justify-center gap-3">
+      {/* The live region covers the disc and the strip only. Its announced content is one real
+          string that changes on a genuine stage transition — five of them, each meaningful, and
+          a stage change is exactly the answer to "is this stuck". The rotating captions stay
+          aria-hidden: several cycle past within one stage saying nothing the stage label
+          doesn't. The facts sit OUTSIDE this region rather than inside it aria-hidden, so a
+          screen reader can reach them on demand without them being announced every few seconds
+          over someone waiting on a result. */}
+      <div role="status" className="flex flex-col items-center gap-3">
         <span className="sr-only">{activeLabel ? `${baseLabel} — ${activeLabel}` : baseLabel}</span>
+        {subject && (
+          // The one line that says what is actually being made. It never moves, is readable at
+          // 400% zoom, and answers the question a waiting traveler is really asking — "did it
+          // take what I typed?" — which nothing else on this screen was doing.
+          <p className="max-w-[min(90vw,26rem)] text-center text-xs font-medium tracking-[0.025em] text-foreground/70 tabular-nums">
+            {subject}
+          </p>
+        )}
         <div className="loader-wrapper" aria-hidden="true">
           {word.split("").map((letter, i) => (
             <span key={i} className="loader-letter">
@@ -267,17 +226,19 @@ export default function GenerationLoader({
             </div>
             <span className="gen-strip-pin" />
           </div>
-          <div className="gen-strip-labels">
-            {live.map(({ stage, status }) => (
-              <span
-                key={stage}
-                className={`gen-strip-label ${status === "start" ? "is-active" : ""}`}
-              >
-                {stageMeta(mode, stage).label}
-              </span>
-            ))}
-          </div>
         </div>
+        {/* The stage name lives here, once, instead of in a five-label row under the rail.
+            That row was a lie: labels were evenly spaced with `space-between` while the ticks
+            sit at duration-weighted positions, so with three stages under three seconds the
+            ticks bunch into the first 2% of the rail and the marker spent most of the wait
+            sitting under the word "Reviewing" while `generate` was actually running. One
+            name that matches the running stage beats five that don't. */}
+        <p
+          aria-hidden="true"
+          className="text-xs font-semibold tracking-[0.025em] text-foreground uppercase"
+        >
+          {activeMeta.label}
+        </p>
 
       {/* Caption pill carries the same frosted treatment as the itinerary card
           and every other panel over the map — see .glass-itinerary in
@@ -298,24 +259,24 @@ export default function GenerationLoader({
         >
           {caption}
         </motion.div>
+      </div>
 
-        {/* Reduced-motion fallback for the orbiting cards, and it has to be its own element
-            rather than a tweak to the wheels. The blanket reduce rule in globals.css sets
-            `animation-duration: 0.01ms`, which would snap every card straight to its final
-            keyframe — off-screen at zero opacity — so leaning on it would silently delete the
-            facts for exactly the people who can't get them any other way. Both halves are
-            always rendered and CSS picks one, which keeps this out of JS and away from any
-            hydration mismatch. */}
-        {showFacts && (
-          <div className="fact-static" aria-hidden="true">
-            {facts.slice(0, MIN_FACTS).map((fact) => (
+      {/* Facts, still and upright. Outside the role="status" region above so a screen reader
+          can reach them without them being announced; the whole set is keyed so it cross-fades
+          as one page turn rather than three lines flickering out of step. Nothing here moves
+          in space — that is the entire point of the rewrite, and the reason the previous
+          orbiting version is gone. */}
+      {facts.length > 0 && (
+        <div className="fact-static">
+          <div key={factSet} className="fact-static-group flex flex-col items-center gap-1.5">
+            {visibleFacts.map((fact) => (
               <p key={fact} className="fact-static-line glass-itinerary">
                 {fact}
               </p>
             ))}
           </div>
-        )}
-      </div>
-    </>
+        </div>
+      )}
+    </div>
   );
 }

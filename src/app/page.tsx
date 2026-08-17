@@ -23,7 +23,7 @@ import DockedPanel from "@/components/DockedPanel";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
-import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
+import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId, TIERS } from "@/lib/tiers";
 import {
   CrowdPreference,
   DestinationContext,
@@ -43,6 +43,7 @@ import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
 import type { StageProgress } from "@/lib/generationStages";
 import { buildDestinationFacts } from "@/lib/destinationFacts";
+import { formatDateRange } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { summarizeDurable } from "@/lib/profileSummary";
 
@@ -587,6 +588,17 @@ export default function Home() {
   // page already holds. Deliberately no model call: `runClaude` spends almost all of its wall
   // clock waiting for a first token, so trivia fetched that way would arrive after the plan it
   // was meant to fill the time for.
+  // What the loader names while it works. The plan form unmounts during generation, so
+  // without this the screen shows a spinner over a globe and never once states which trip it
+  // is building — the single thing a waiting traveler most wants confirmed.
+  const loaderSubject = [
+    destination.split(",")[0]?.trim() || destination.trim(),
+    startDate && endDate ? formatDateRange(startDate, endDate) : null,
+    TIERS.find((t) => t.id === tier)?.name ?? null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const wikiExtract = usePlacePhoto(destination, "extract");
   const destinationFacts = useMemo(
     () =>
@@ -618,6 +630,7 @@ export default function Home() {
         mode={refining ? "refine" : "generate"}
         stages={stages}
         facts={destinationFacts}
+        subject={loaderSubject}
       />
 
       {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
