@@ -72,6 +72,7 @@ tables are maintained.
 | "Plan My Trip" CTA upgraded to a gradient button (`from-orange-500 to-amber-600`) with hover scale/brightness and a glowing orange shadow | 2026-08-05 | Aryan | Previously a flat `bg-orange-600` button |
 | `useCesiumViewer` gained `sampleAverageColor()`, and the viewer now sets `contextOptions: { webgl: { preserveDrawingBuffer: true } }` | 2026-08-05 | Aryan | Draws the WebGL canvas onto an offscreen 2D canvas and averages a small box via `getImageData` — needed for adaptive header contrast. `preserveDrawingBuffer` is required or the buffer is cleared before any readback sees it |
 | `PageHeader` gained `variant`/`isDark` props | 2026-08-05 | Aryan | Defaults to the existing `"light"` behavior everywhere except the home page, which opts into `"adaptive"` — zero risk to `/trips`, `/trip/[id]`, `/llm-trace` |
+| `BackButton` shared component; `/profile` gains a back control; "Refine with AI" moved to the top of both result panels | 2026-08-16 | Claude | The chevron + ghost-pill markup lived inline in `PlaceDetailPanel`; extracted once `/profile` needed the third copy. `/profile` pops history (`router.back()`, falling back to `/`) rather than linking a fixed destination, since it's reachable from both `/` and `/trip/[id]`. Refine moved off the panel foot, where it sat under the `LlmTraceFab` and behind a full scroll of a long trip — it now shares the home result view's existing Back row, and sits above the card on `/trip/[id]`, which has no such row |
 
 ## Bugs
 

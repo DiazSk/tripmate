@@ -908,10 +908,24 @@ export default function Home() {
                 active day, this panel's scroll position and the stop tour's interval all
                 survive the round trip instead of resetting when ItineraryCard remounts. */}
             <div className={selectedStop ? "hidden" : "space-y-6"}>
-              <button type="button" onClick={backToLanding} className={backPillClass}>
-                <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
-                Back
-              </button>
+              {/* Refine rides the row the Back pill already owns rather than sitting alone at
+                  the foot of the panel, where it landed under the floating trace button and
+                  behind a full scroll of a long trip. */}
+              <div className="flex items-center justify-between gap-3">
+                <button type="button" onClick={backToLanding} className={backPillClass}>
+                  <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
+                  Back
+                </button>
+                {!focus.target && (
+                  <button
+                    type="button"
+                    onClick={() => focus.open(0, "trip")}
+                    className={ghostButtonClass}
+                  >
+                    Refine with AI
+                  </button>
+                )}
+              </div>
               {/* Focus Mode takes over the card while editing a day. */}
               {focus.target && focus.draft && (
                 <FocusEditMode
@@ -968,19 +982,6 @@ export default function Home() {
                 />
               )}
 
-              {/* Mode B's shown delta — the updated itinerary is already persisted into state
-                  above; this is only the human-readable part of that change. */}
-              {!focus.target && (
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => focus.open(0, "trip")}
-                    className={ghostButtonClass}
-                  >
-                    Refine with AI
-                  </button>
-                </div>
-              )}
               {!focus.target && <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />}
             </div>
 

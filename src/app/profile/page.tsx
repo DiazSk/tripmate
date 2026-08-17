@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import BackButton from "@/components/BackButton";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
@@ -41,6 +43,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
  * and dietary needs would be set once and never changeable.
  */
 export default function ProfilePage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<TravelerProfile>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -133,6 +136,16 @@ export default function ProfilePage() {
           and button sits on a distinct, legible surface instead of directly on the globe. */}
       <div className="profile-glass pointer-events-auto mx-auto w-full max-w-2xl divide-y divide-card-border rounded-2xl p-5 sm:p-6">
         <header className="space-y-1 pb-5">
+          {/* `/profile` is reachable from both the home page and a trip detail, so a fixed
+              destination would be wrong from one of them — this pops history instead. The
+              fallback covers a direct link or a refresh, where there is no entry to pop and
+              `back()` would silently do nothing. */}
+          <BackButton
+            onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
+            className="mb-2"
+          >
+            Back
+          </BackButton>
           <h1 className="font-display text-2xl font-semibold text-foreground">Your travel profile</h1>
           <p className="text-sm text-muted">
             The things that stay true between trips. We apply these to every plan so the wizard
