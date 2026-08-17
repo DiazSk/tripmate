@@ -31,12 +31,18 @@ export interface StageProgress {
   status: "pending" | StageStatus;
 }
 
-function activeStageId(stages: StageProgress[]): StageId {
+function activeStageId(stages: readonly StageProgress[]): StageId {
   const inProgress = stages.find((s) => s.status === "start");
   if (inProgress) return inProgress.stage;
-  // Nothing has started yet (the stream just opened) or every stage already finished —
-  // fall back to the first stage so there is always a caption to show.
-  return stages[0]?.stage ?? STAGE_ORDER[0];
+  // Nothing in progress means either the stream just opened (all pending) or every stage
+  // has settled. Falling back to stages[0] would caption both states with the FIRST stage —
+  // wrong for refine, which never runs geocode, and wrong at the end of a run, where all
+  // five dots are green next to a "finding your destination" pill. Prefer the furthest
+  // stage actually reached, and never caption a stage that was skipped.
+  const lastDone = [...stages].reverse().find((s) => s.status === "done");
+  if (lastDone) return lastDone.stage;
+  const firstUnskipped = stages.find((s) => s.status !== "skipped");
+  return firstUnskipped?.stage ?? stages[0]?.stage ?? STAGE_ORDER[0];
 }
 
 /** The wait indicator for any long model call — shows only while `active`, rendering the
