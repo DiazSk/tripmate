@@ -153,7 +153,7 @@ export default function TierPicker({
               {/* aria-hidden on the whole visible block: the button carries its own
                   composed label above, and the tier's name — which lives only in
                   `tier.name` — now appears on the card rather than only in the prompt. */}
-              <div aria-hidden="true" className="relative z-10 p-3">
+              <div aria-hidden="true" className="absolute inset-x-0 bottom-0 z-10 p-3">
                 <div className="font-display text-base font-semibold text-white">{tier.headline}</div>
                 {/* The tier's name joins its description rather than sitting above the
                     headline as a kicker, which the system bans outright. Same shape the

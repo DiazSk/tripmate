@@ -59,7 +59,9 @@ export default function InterestPicker({
                 type="button"
                 onClick={() => onToggle(tag)}
                 aria-pressed={isActive}
-                className="rounded-full py-1.5 pl-3.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none"
+                className={`rounded-full py-1.5 pl-3.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none ${
+                  isActive ? "" : "pr-3.5"
+                }`}
               >
                 {tag}
               </button>
