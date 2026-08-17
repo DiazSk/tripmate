@@ -1,6 +1,6 @@
 "use client";
 
-import { ComponentType, ReactNode, useEffect, useRef, useState } from "react";
+import { ComponentType, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
@@ -24,7 +24,15 @@ import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
-import { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, Itinerary, RawFetch } from "@/lib/types";
+import {
+  CrowdPreference,
+  DestinationContext,
+  EnergyLevel,
+  ExplorerStyle,
+  GroupType,
+  Itinerary,
+  RawFetch,
+} from "@/lib/types";
 import { CandidatePoi } from "@/lib/pois";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
@@ -33,7 +41,9 @@ import { devLabel } from "@/lib/devInspector";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
-import type { StageProgress } from "@/components/cesium/GenerationLoader";
+import type { StageProgress } from "@/lib/generationStages";
+import { buildDestinationFacts } from "@/lib/destinationFacts";
+import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { summarizeDurable } from "@/lib/profileSummary";
 
 /** Fallback shown only when the thrown error carries no message of its own. */
@@ -249,6 +259,10 @@ export default function Home() {
   // `rawFetchLoading` only gates the POI picker's own loading state.
   const [rawFetch, setRawFetch] = useState<RawFetch | null>(null);
   const [rawFetchLoading, setRawFetchLoading] = useState(false);
+  // Parsed festivals/shopping from the same fire-and-forget warmer below. Kept because the
+  // model call has already been paid for — the alternative, fetching destination facts when
+  // the loader appears, would mean a second model call for data already sitting in cache.
+  const [destContext, setDestContext] = useState<DestinationContext | null>(null);
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   // Id of the LLM pipeline run that produced the current `itinerary` — tracks
@@ -569,6 +583,23 @@ export default function Home() {
     }
   }
 
+  // Everything the loader shows while an itinerary is being written, assembled from data this
+  // page already holds. Deliberately no model call: `runClaude` spends almost all of its wall
+  // clock waiting for a first token, so trivia fetched that way would arrive after the plan it
+  // was meant to fill the time for.
+  const wikiExtract = usePlacePhoto(destination, "extract");
+  const destinationFacts = useMemo(
+    () =>
+      buildDestinationFacts({
+        destination,
+        rawFetch,
+        context: destContext,
+        wikiExtract,
+        viewerUtcOffsetMinutes: -new Date().getTimezoneOffset(),
+      }),
+    [destination, rawFetch, destContext, wikiExtract]
+  );
+
   return (
     <main
       // pt-[calc(var(--nav-h)+1.25rem)]: clearance for the fixed glass navbar (AppShell
@@ -582,7 +613,12 @@ export default function Home() {
         step === "landing" ? "blue-hour-scene font-scene-body" : ""
       }`}
     >
-      <GenerationLoader active={generating || refining} mode={refining ? "refine" : "generate"} stages={stages} />
+      <GenerationLoader
+        active={generating || refining}
+        mode={refining ? "refine" : "generate"}
+        stages={stages}
+        facts={destinationFacts}
+      />
 
       {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
           explainer, and "Plan a trip" uncovered only at the end. It owns full-bleed sections
@@ -617,7 +653,13 @@ export default function Home() {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ destination, startDate, endDate }),
-                  }).catch(() => {});
+                  })
+                    // Reading the body is new; firing it is not. The route already made this
+                    // call to warm the cache, so keeping its result costs nothing and gives
+                    // the generation loader real festival/shopping facts to show.
+                    .then((r) => r.json())
+                    .then((d) => setDestContext(d.context ?? null))
+                    .catch(() => {});
                   // Step 2a, run the same way: fired now so the bundle (weather, holidays,
                   // candidate POIs, ...) is ready well before the profile step's POI picker
                   // needs it. Never awaited here — it must not block advancing the wizard.
