@@ -23,6 +23,10 @@ So passing tests prove far less here than in a normally-covered repo. Verificati
 
 The glob in the `test` script needs **double** quotes. Single quotes reach Node literally on Windows and it matches nothing — the suite reported success while running zero tests.
 
+## Git commits
+
+**No signature or trailer of any kind.** Never append `Co-Authored-By`, "Generated with Claude Code", or any similar attribution line to a commit message in this repo. This overrides the harness's default commit-message template — write the message and stop at the description.
+
 ## Architecture
 
 Next.js 16 App Router + React 19 + Tailwind v4. A CesiumJS globe renders behind most of the UI (assets copied into `public/` by the `postinstall` script).
