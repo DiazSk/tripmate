@@ -1,7 +1,7 @@
-import { DayWeather } from "./weather";
-import { TierId } from "./tiers";
-import { Holiday } from "./holidays";
-import { CandidatePoi } from "./pois";
+import type { DayWeather } from "./weather";
+import type { TierId } from "./tiers";
+import type { Holiday } from "./holidays";
+import type { CandidatePoi } from "./pois";
 
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
@@ -292,9 +292,14 @@ export interface TraceDetail extends TraceSummary {
 export type RunStatus = "success" | "partial_failure" | "failed" | "pending";
 
 export interface RunStepUsage {
+  /** The UNCACHED prompt remainder only — not the prompt size. See `cache*` below. */
   inputTokens: number | null;
   outputTokens: number | null;
   costUsd: number | null;
+  /** Prompt tokens served from cache. Billed at ~0.1x input. */
+  cacheReadInputTokens?: number | null;
+  /** Prompt tokens written to cache this call. Billed at ~1.25x input. */
+  cacheCreationInputTokens?: number | null;
 }
 
 export interface RunStep extends TraceDetail {

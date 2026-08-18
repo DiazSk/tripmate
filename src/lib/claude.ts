@@ -38,6 +38,11 @@ export function itineraryTimeoutMs(days: number): number {
 export interface ClaudeResult {
   result: string;
   traceId: string;
+  /** Which model actually served the call — `MODEL` unless the caller overrode it. Returned so a
+   *  caller comparing models doesn't have to re-read the trace row to know what it got. */
+  model: string;
+  /** Wall-clock time of the child process, the same number written to the trace row. */
+  durationMs: number;
 }
 
 export type ClaudeCallType =
@@ -48,7 +53,9 @@ export type ClaudeCallType =
   | "context"
   | "critique"
   | "chat"
-  | "element-edit";
+  | "element-edit"
+  /** Dev-only: the blinded quality judge in the model benchmark harness (src/lib/bench). */
+  | "judge";
 
 /**
  * Runs a one-shot prompt through the `claude` CLI (Haiku, no tools) instead
@@ -72,19 +79,24 @@ export type ClaudeCallType =
  * log from. `meta.runId`, when passed, groups this call with sibling calls
  * (context/generate/critique/place-detail) from the same pipeline execution
  * — see llm_runs in src/lib/db.ts.
+ *
+ * `meta.model` overrides which model serves the call. It exists for the dev-only benchmark
+ * harness (src/lib/bench), which holds prompt/skill/context constant and varies only this —
+ * every production caller omits it and gets `MODEL` exactly as before.
  */
 export function runClaude(
   prompt: string,
   type: ClaudeCallType,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
-  meta?: { runId?: string; effort?: "low" | "medium" | "high" }
+  meta?: { runId?: string; effort?: "low" | "medium" | "high"; model?: string }
 ): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
     const { CLAUDECODE: _drop, ...env } = process.env;
     void _drop;
     env.PATH = [env.PATH, ...CLI_SEARCH_PATH].filter(Boolean).join(":");
 
-    const traceId = insertTrace({ type, prompt, model: MODEL, runId: meta?.runId });
+    const model = meta?.model ?? MODEL;
+    const traceId = insertTrace({ type, prompt, model, runId: meta?.runId });
     const startedAt = Date.now();
 
     const child = spawn(
@@ -93,7 +105,7 @@ export function runClaude(
         "-p",
         prompt,
         "--model",
-        MODEL,
+        model,
         "--output-format",
         "json",
         "--tools",
@@ -159,7 +171,7 @@ export function runClaude(
           return;
         }
         updateTrace(traceId, { status: "ok", rawResponse: stdout, durationMs });
-        resolve({ result: envelope.result as string, traceId });
+        resolve({ result: envelope.result as string, traceId, model, durationMs });
       } catch {
         updateTrace(traceId, {
           status: "error",

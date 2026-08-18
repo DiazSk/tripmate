@@ -74,6 +74,36 @@ db.exec(`
   )
 `);
 
+// Dev-only: one row per (fixture x model) benchmark cell. Kept here with every other table so it
+// follows the same create-at-import convention, but nothing in the production app reads it — see
+// src/lib/bench and the /bench route, both gated to NODE_ENV === "development".
+db.exec(`
+  CREATE TABLE IF NOT EXISTS bench_results (
+    id TEXT PRIMARY KEY,
+    fixture_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    run_id TEXT,
+    trace_id TEXT,
+    itinerary_md TEXT NOT NULL,
+    scores_json TEXT NOT NULL,
+    composite REAL,
+    created_at TEXT NOT NULL
+  )
+`);
+
+// Dev-only: trips typed into the benchmark form. The whole bundle (reconciled + poiDetails) is
+// stored as one frozen blob at creation — see src/lib/bench/customTrip.ts on why re-fetching per
+// model would invalidate the comparison.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS bench_fixtures (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    covers TEXT NOT NULL,
+    fixture_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`);
+
 // `run_id`/`trips.run_id` were added after these tables already existed in
 // deployed dbs — ALTER TABLE ADD COLUMN errors if the column is already
 // there, so this only runs once per fresh column, guarded by PRAGMA lookup.
@@ -308,6 +338,96 @@ export function listUngroupedTraces(): TraceRow[] {
   return db
     .prepare(`SELECT * FROM llm_traces WHERE run_id IS NULL ORDER BY rowid DESC LIMIT 100`)
     .all() as TraceRow[];
+}
+
+/** Dev-only benchmark storage. A real generation costs ~90s, so results are persisted and the
+ *  page reads them back rather than re-running everything on a refresh. Latest row per
+ *  (fixture, model) wins — re-running a cell supersedes the old one without deleting the history. */
+export interface BenchResultRow {
+  id: string;
+  fixture_id: string;
+  model: string;
+  run_id: string | null;
+  trace_id: string | null;
+  itinerary_md: string;
+  scores_json: string;
+  composite: number | null;
+  created_at: string;
+}
+
+export function insertBenchResult(row: Omit<BenchResultRow, "id" | "created_at">): BenchResultRow {
+  const id = randomUUID();
+  const created_at = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO bench_results
+       (id, fixture_id, model, run_id, trace_id, itinerary_md, scores_json, composite, created_at)
+     VALUES (@id, @fixture_id, @model, @run_id, @trace_id, @itinerary_md, @scores_json, @composite, @created_at)`
+  ).run({ ...row, id, created_at });
+  return { ...row, id, created_at };
+}
+
+/** Most recent row per (fixture, model) pair. */
+export function listLatestBenchResults(): BenchResultRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM bench_results
+       WHERE rowid IN (
+         SELECT MAX(rowid) FROM bench_results GROUP BY fixture_id, model
+       )
+       ORDER BY fixture_id, model`
+    )
+    .all() as BenchResultRow[];
+}
+
+export function clearBenchResults(): void {
+  db.exec(`DELETE FROM bench_results`);
+}
+
+export function updateBenchResultScores(id: string, scoresJson: string, composite: number | null): void {
+  db.prepare(`UPDATE bench_results SET scores_json = ?, composite = ? WHERE id = ?`).run(
+    scoresJson,
+    composite,
+    id
+  );
+}
+
+export function getBenchResultsForFixture(fixtureId: string): BenchResultRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM bench_results
+       WHERE fixture_id = ? AND rowid IN (
+         SELECT MAX(rowid) FROM bench_results GROUP BY fixture_id, model
+       )
+       ORDER BY model`
+    )
+    .all(fixtureId) as BenchResultRow[];
+}
+
+/** Dev-only. A benchmark fixture the developer built from the form, frozen at creation. */
+export interface BenchFixtureRow {
+  id: string;
+  title: string;
+  covers: string;
+  fixture_json: string;
+  created_at: string;
+}
+
+export function insertBenchFixture(row: Omit<BenchFixtureRow, "created_at">): BenchFixtureRow {
+  const created_at = new Date().toISOString();
+  db.prepare(
+    `INSERT OR REPLACE INTO bench_fixtures (id, title, covers, fixture_json, created_at)
+     VALUES (@id, @title, @covers, @fixture_json, @created_at)`
+  ).run({ ...row, created_at });
+  return { ...row, created_at };
+}
+
+export function listBenchFixtures(): BenchFixtureRow[] {
+  return db.prepare(`SELECT * FROM bench_fixtures ORDER BY created_at ASC`).all() as BenchFixtureRow[];
+}
+
+export function deleteBenchFixture(id: string): void {
+  db.prepare(`DELETE FROM bench_fixtures WHERE id = ?`).run(id);
+  db.prepare(`DELETE FROM bench_results WHERE fixture_id = ?`).run(id);
 }
 
 export interface DestinationContextRow {

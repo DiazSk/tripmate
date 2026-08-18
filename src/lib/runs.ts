@@ -1,23 +1,41 @@
-import { listGroupedTraces, listRuns, RunRow, TraceRow } from "./db";
+import { MODEL } from "./claude";
+import { listGroupedTraces, listRuns } from "./db";
 import { REFINE_KIND_TYPES } from "./runLabels";
-import { RunDetail, RunStatus, RunStep, RunStepUsage, RunSummary } from "./types";
+import type { RunRow, TraceRow } from "./db";
+import type { RunDetail, RunStatus, RunStep, RunStepUsage, RunSummary } from "./types";
 
 /** Token counts/cost are never stored in their own columns — the Claude CLI's
  *  JSON envelope (already saved verbatim as `raw_response`) carries them, so
  *  this just picks them back out on read. `modelUsage.<model>` is the
  *  cumulative per-model count; the top-level `usage.input_tokens` field only
- *  reflects the last turn and reads misleadingly small. */
-function parseUsage(rawResponse: string | null): RunStepUsage {
+ *  reflects the last turn and reads misleadingly small.
+ *
+ *  The envelope keys usage by the model that served the call, so the lookup key is the trace's
+ *  own `model` column rather than the `MODEL` constant — identical for every production trace
+ *  (they all run on `MODEL`), and the only thing that makes the benchmark harness's non-default
+ *  models report tokens instead of nulls. Some CLI versions key it by a resolved id rather than
+ *  the alias passed in, so a single-entry `modelUsage` falls back to that entry. */
+export function parseUsage(rawResponse: string | null, model: string = MODEL): RunStepUsage {
   if (!rawResponse) return { inputTokens: null, outputTokens: null, costUsd: null };
   try {
     const envelope = JSON.parse(rawResponse);
-    const modelUsage = Object.values(envelope.modelUsage ?? {})[0] as
-      | { inputTokens?: number; outputTokens?: number }
-      | undefined;
+    const byModel = envelope.modelUsage ?? {};
+    const keys = Object.keys(byModel);
+    const modelUsage =
+      byModel[model] ??
+      byModel[keys.find((k) => k.startsWith(model) || model.startsWith(k)) ?? ""] ??
+      (keys.length === 1 ? byModel[keys[0]] : undefined);
+    const num = (v: unknown) => (typeof v === "number" ? v : null);
     return {
-      inputTokens: typeof modelUsage?.inputTokens === "number" ? modelUsage.inputTokens : null,
-      outputTokens: typeof modelUsage?.outputTokens === "number" ? modelUsage.outputTokens : null,
-      costUsd: typeof envelope.total_cost_usd === "number" ? envelope.total_cost_usd : null,
+      inputTokens: num(modelUsage?.inputTokens),
+      outputTokens: num(modelUsage?.outputTokens),
+      // Per-model `costUSD` in preference to the envelope's `total_cost_usd`: the CLI makes its own
+      // small housekeeping call on Haiku alongside the requested model, so the total attributes
+      // spend to a model that never saw the prompt. Identical to the total on a single-model
+      // envelope, which is every production trace.
+      costUsd: num(modelUsage?.costUSD) ?? num(envelope.total_cost_usd),
+      cacheReadInputTokens: num(modelUsage?.cacheReadInputTokens),
+      cacheCreationInputTokens: num(modelUsage?.cacheCreationInputTokens),
     };
   } catch {
     return { inputTokens: null, outputTokens: null, costUsd: null };
@@ -35,7 +53,7 @@ export function toRunStep(trace: TraceRow): RunStep {
     prompt: trace.prompt,
     rawResponse: trace.raw_response,
     errorMessage: trace.error_message,
-    usage: parseUsage(trace.raw_response),
+    usage: parseUsage(trace.raw_response, trace.model),
   };
 }
 
