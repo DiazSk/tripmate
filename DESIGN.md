@@ -371,10 +371,16 @@ default. Three settings carry it, all in `GlobeBackground`:
   from one another. Half the amount keeps the cool register and returns the separation. It must
   stay on the tileset and never become a CSS canvas filter — a filter would also desaturate the
   route overlay, and pure blue cannot survive one (`#0A84FF` returns as `rgb(36,135,234)`).
-- **Native pixel density.** `useBrowserRecommendedResolution` is `false` with `resolutionScale`
-  capped at 2×. Cesium's default renders at CSS pixels and ignores `devicePixelRatio`, so on any
-  scaled display the canvas is upscaled and building edges go soft no matter how good the mesh
-  is. The cap exists because fill cost grows with the square of the ratio.
+- **Above-CSS pixel density.** `useBrowserRecommendedResolution` is `false` with `resolutionScale`
+  capped at **1.5×**. Cesium's default renders at CSS pixels and ignores `devicePixelRatio`, so on
+  any scaled display the canvas is upscaled and building edges go soft no matter how good the mesh
+  is. The cap exists because fill cost grows with the square of the ratio — and it was lowered
+  from 2× on measurement, not taste: on a 2× / 160Hz display the old cap produced a 3204×2654
+  canvas (8.5 megapixels, larger than 4K) and a moving camera sustained **33.7 painted fps**
+  against a 60 target, i.e. fill-rate bound. 1.5× cuts that to ~4.8 megapixels. Sharpness is
+  unchanged at or below 1.5× density; above it, this trades a little edge definition for the
+  frame rate. Note the same knob scales every `backdrop-filter` panel, since the glass samples
+  the canvas in device pixels.
 
 Measured floor: at the close tier both cities reach **2.01 m** minimum geometric error at ~57 fps.
 SSE 4 was tested and rejected — it buys *no* further detail (2.01 m is Google's tree floor) while
