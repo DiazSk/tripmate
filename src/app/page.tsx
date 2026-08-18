@@ -52,6 +52,11 @@ function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
 
+/** A cancelled fetch, which is a user decision rather than a failure to report back to them. */
+function isAbort(e: unknown): boolean {
+  return e instanceof DOMException && e.name === "AbortError";
+}
+
 type Step = "landing" | "plan" | "result";
 /** Only what changes per trip. Explorer style, energy, crowds, tier and priorities live on
  *  /profile and are overridable for one trip via the expander on `basics`. The two screens
@@ -264,6 +269,21 @@ export default function Home() {
   // model call has already been paid for — the alternative, fetching destination facts when
   // the loader appears, would mean a second model call for data already sitting in cache.
   const [destContext, setDestContext] = useState<DestinationContext | null>(null);
+  // Aborts the in-flight generate/refine. A ref, not state: cancelling must not re-render the
+  // loader, and nothing renders off this value.
+  const abortRef = useRef<AbortController | null>(null);
+
+  /** Stops the run and returns to the form with every answer intact. */
+  function cancelGeneration() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setGenerating(false);
+    setRefining(false);
+    setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
+    // Silent on purpose. The user asked for this; an error block telling them the planner
+    // didn't finish would be the app reporting their own decision back to them as a fault.
+    setError(null);
+  }
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   // Id of the LLM pipeline run that produced the current `itinerary` — tracks
@@ -439,11 +459,17 @@ export default function Home() {
    * traveler that it's happening again.
    */
   async function runStreamed<T>(body: Record<string, unknown>): Promise<T> {
+    // One controller per run, so Cancel aborts the in-flight request rather than leaving it
+    // running invisibly while the UI pretends it stopped. Replaced (not reused) on every run.
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const plainFallback = async (): Promise<T> => {
       const res = await fetch("/api/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate itinerary");
@@ -456,8 +482,12 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
-    } catch {
+    } catch (e) {
+      // An abort must not fall through to the non-streaming retry — that would silently start
+      // the whole two-minute call again immediately after the user asked it to stop.
+      if (controller.signal.aborted) throw e;
       return plainFallback();
     }
 
@@ -516,7 +546,11 @@ export default function Home() {
       // traveler's permanent default — the bug this codebase already hit twice with `tier`.
       // /profile and the onboarding card are the only writers.
     } catch (e) {
-      setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
+      // A cancel arrives here as an AbortError. It is not a failure and must not be reported
+      // as one — cancelGeneration has already reset the UI.
+      if (!isAbort(e)) {
+        setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
+      }
     } finally {
       setGenerating(false);
     }
@@ -540,7 +574,9 @@ export default function Home() {
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
     } catch (e) {
-      setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
+      if (!isAbort(e)) {
+        setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
+      }
     } finally {
       setRefining(false);
     }
@@ -631,6 +667,7 @@ export default function Home() {
         stages={stages}
         facts={destinationFacts}
         subject={loaderSubject}
+        onCancel={cancelGeneration}
       />
 
       {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
