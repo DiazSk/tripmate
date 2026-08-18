@@ -1,0 +1,137 @@
+// Cross-engine compatibility + boot check. Run against a running server:
+//
+//   npm run build && npm start          # or: npm run dev
+//   node scripts/browser-matrix.mjs
+//
+// Not a dependency — driven by `npx playwright`, because this is a diagnostic nobody
+// runs in CI here and a 200MB engine download does not belong in package.json.
+//   npx playwright install chromium firefox webkit
+//
+// WHAT THIS CAN AND CANNOT TELL YOU
+//
+// It answers *compatibility*: does the page boot, does WebGL2 come up, did the glass
+// actually get a backdrop-filter, did `:has()` apply, did anything throw.
+//
+// It does NOT answer *GPU performance*. Playwright's WebKit on Windows is a port with a
+// software/ANGLE GL path — it is not Safari on Apple silicon, and its frame timings say
+// nothing about a real iPhone. This app's whole cost is GPU (a WebGL globe plus large
+// backdrop-filter surfaces sampling it), which is exactly the thing that does not
+// transfer between engine ports. Frame rate has to come from real devices; use
+// scripts/frame-probe.js there.
+// TWO KNOWN FALSE ALARMS, so nobody re-investigates them:
+//
+// 1. WebKit reports `ReferenceError: Can't find variable: OffscreenCanvas` and fails to
+//    construct the Cesium widget. Playwright's WebKit build genuinely lacks OffscreenCanvas
+//    (verified: `typeof OffscreenCanvas === "undefined"`), but real Safari has shipped it since
+//    16.4 — and this project's browserslist floor is far above that. It is a limitation of the
+//    port, not a Safari bug. The corollary is the uncomfortable one: this script cannot confirm
+//    Safari works either. Only a real Apple device can.
+//
+// 2. Chromium logs `net:` lines for `?_rsc=` URLs. Those are Next's RSC prefetches being
+//    aborted when the page closes; requested directly they return 200.
+
+import { chromium, firefox, webkit } from "playwright";
+
+const BASE = process.env.MATRIX_BASE_URL ?? "http://localhost:3000";
+const ROUTES = ["/", "/trips", "/profile", "/trip/latest"];
+const ENGINES = [
+  ["chromium", chromium],
+  ["firefox", firefox],
+  ["webkit", webkit],
+];
+
+/** Runs in the page. Reports what actually took effect, not what the source asked for. */
+function probe() {
+  const err = (window.__matrixErrors ??= []);
+  const glass = [...document.querySelectorAll("*")].find((e) => {
+    const v = getComputedStyle(e).backdropFilter;
+    return v && v !== "none";
+  });
+  // `:has()` here drives whether the map control stack is hidden. An engine without it
+  // leaves working-but-pointless controls on screen — cosmetic, not fatal, but visible.
+  let hasSupport = false;
+  try {
+    hasSupport = CSS.supports("selector(:has(*))");
+  } catch {}
+  const canvas = document.querySelector("canvas");
+  let gl = null;
+  if (canvas) {
+    try {
+      gl = canvas.getContext("webgl2") ? "webgl2" : canvas.getContext("webgl") ? "webgl1" : null;
+    } catch {}
+  }
+  const paint = performance.getEntriesByType("paint");
+  return {
+    title: document.title,
+    glassApplied: glass ? getComputedStyle(glass).backdropFilter.slice(0, 34) : null,
+    hasSelector: hasSupport,
+    dvhSupported: CSS.supports("height", "100dvh"),
+    abortTimeout: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function",
+    structuredClone: typeof structuredClone === "function",
+    dialogModal: typeof HTMLDialogElement !== "undefined" &&
+      typeof HTMLDialogElement.prototype.showModal === "function",
+    webgl: gl,
+    // NOT `window.__tripmateViewer` — that handle is deliberately dev-only and stripped from
+    // production builds, so it reports false on exactly the bundle this script exists to check.
+    // Cesium's own widget root is the signal that survives minification.
+    cesiumBooted: !!document.querySelector(".cesium-widget canvas"),
+    fcpMs: Math.round(paint.find((p) => p.name === "first-contentful-paint")?.startTime ?? -1),
+    errors: err.slice(0, 6),
+  };
+}
+
+const rows = [];
+for (const [name, engine] of ENGINES) {
+  let browser;
+  try {
+    browser = await engine.launch();
+  } catch (e) {
+    rows.push({ engine: name, route: "—", note: `engine unavailable: ${String(e).split("\n")[0]}` });
+    continue;
+  }
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  for (const route of ROUTES) {
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));
+    page.on("requestfailed", (r) => errors.push(`net: ${r.url().slice(0, 60)}`));
+    try {
+      await page.goto(BASE + route, { waitUntil: "load", timeout: 45_000 });
+      // The globe boots behind a dynamic import and a tileset fetch; give it room.
+      await page.waitForTimeout(6_000);
+      await page.evaluate((e) => (window.__matrixErrors = e), errors);
+      rows.push({ engine: name, route, ...(await page.evaluate(probe)) });
+    } catch (e) {
+      rows.push({ engine: name, route, note: `FAILED: ${String(e).split("\n")[0].slice(0, 90)}` });
+    }
+    await page.close();
+  }
+  await browser.close();
+}
+
+const yn = (v) => (v === true ? "yes" : v === false ? "NO" : v ?? "—");
+console.log("\nengine    route         title/note                    glass  :has  webgl   cesium  FCP");
+console.log("-".repeat(104));
+for (const r of rows) {
+  if (r.note) {
+    console.log(`${r.engine.padEnd(9)} ${String(r.route).padEnd(13)} ${r.note}`);
+    continue;
+  }
+  console.log(
+    `${r.engine.padEnd(9)} ${r.route.padEnd(13)} ${String(r.title).slice(0, 28).padEnd(28)} ` +
+      `${(r.glassApplied ? "yes" : "NO").padEnd(6)} ${yn(r.hasSelector).padEnd(5)} ` +
+      `${yn(r.webgl).padEnd(7)} ${yn(r.cesiumBooted).padEnd(7)} ${r.fcpMs}ms`
+  );
+  if (r.errors?.length) r.errors.forEach((e) => console.log(`${" ".repeat(10)}  ! ${e.slice(0, 88)}`));
+}
+
+console.log("\nJS API support (a missing one is a hard crash, not a degrade):");
+for (const r of rows.filter((r) => !r.note && r.route === "/")) {
+  console.log(
+    `  ${r.engine.padEnd(9)} AbortSignal.timeout=${yn(r.abortTimeout)}  structuredClone=${yn(
+      r.structuredClone
+    )}  dialog.showModal=${yn(r.dialogModal)}  dvh=${yn(r.dvhSupported)}`
+  );
+}
+console.log("\nFrame rate is deliberately absent — see the header comment. Use frame-probe.js on real hardware.\n");
