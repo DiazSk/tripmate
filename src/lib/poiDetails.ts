@@ -1,4 +1,4 @@
-import { PoiOsmTags } from "./types";
+import type { PoiOsmTags } from "./types";
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 /** POIs are matched by name near their own known coordinates, so this only has to absorb the

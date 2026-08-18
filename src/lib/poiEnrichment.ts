@@ -1,7 +1,7 @@
 import { closedDaysFromOpeningHours, fetchPoiOsmTags } from "./poiDetails";
 import { buildTravelLegs } from "./travelTime";
 import { estimateVisitMinutes } from "./visitDuration";
-import { EnrichedPoi, PoiDetails, ReconcileNote, ReconciledTrip } from "./types";
+import type { EnrichedPoi, PoiDetails, ReconcileNote, ReconciledTrip } from "./types";
 
 /**
  * Step 4 — detail fetch for the traveler's SELECTED POIs only (never the whole candidate list).

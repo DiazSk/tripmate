@@ -1,4 +1,4 @@
-import { TransportMode, TravelLeg } from "./types";
+import type { TransportMode, TravelLeg } from "./types";
 
 const EARTH_RADIUS_KM = 6371;
 

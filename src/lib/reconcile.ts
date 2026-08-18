@@ -1,5 +1,5 @@
 import { deriveFlags } from "./userAnswers";
-import {
+import type {
   RawFetch,
   ReconciledTrip,
   ReconcileNote,

@@ -1,4 +1,4 @@
-import { EnrichedPoi, PoiDetails, ReconciledTrip, ReconcileNote, TravelLeg } from "./types";
+import type { EnrichedPoi, PoiDetails, ReconciledTrip, ReconcileNote, TravelLeg } from "./types";
 
 /** Above this many legs, listing every pair stops being readable (and cheap) — n POIs produce
  *  n(n-1)/2 legs — so the digest switches to each POI's nearest neighbours, which is what
