@@ -1,6 +1,6 @@
 "use client";
 
-import { ComponentType, ReactNode, useEffect, useRef, useState } from "react";
+import { ComponentType, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
@@ -23,8 +23,16 @@ import DockedPanel from "@/components/DockedPanel";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
-import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId } from "@/lib/tiers";
-import { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, Itinerary, RawFetch } from "@/lib/types";
+import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId, TIERS } from "@/lib/tiers";
+import {
+  CrowdPreference,
+  DestinationContext,
+  EnergyLevel,
+  ExplorerStyle,
+  GroupType,
+  Itinerary,
+  RawFetch,
+} from "@/lib/types";
 import { CandidatePoi } from "@/lib/pois";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
@@ -33,13 +41,27 @@ import { devLabel } from "@/lib/devInspector";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
-import type { StageProgress } from "@/components/cesium/GenerationLoader";
+import type { StageProgress } from "@/lib/generationStages";
+import { buildDestinationFacts } from "@/lib/destinationFacts";
+import { formatDateRange } from "@/lib/format";
+import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { summarizeDurable } from "@/lib/profileSummary";
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
+
+/** A cancelled fetch, which is a user decision rather than a failure to report back to them. */
+function isAbort(e: unknown): boolean {
+  return e instanceof DOMException && e.name === "AbortError";
+}
+
+/** How long the loader holds after the run settles, so the marker reaches the pin and the pin
+ *  fills before the itinerary takes the screen. Long enough to read as an arrival, short
+ *  enough that nobody waiting two minutes notices it as a delay. */
+const ARRIVAL_HOLD_MS = 650;
+const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Step = "landing" | "plan" | "result";
 /** Only what changes per trip. Explorer style, energy, crowds, tier and priorities live on
@@ -249,6 +271,25 @@ export default function Home() {
   // `rawFetchLoading` only gates the POI picker's own loading state.
   const [rawFetch, setRawFetch] = useState<RawFetch | null>(null);
   const [rawFetchLoading, setRawFetchLoading] = useState(false);
+  // Parsed festivals/shopping from the same fire-and-forget warmer below. Kept because the
+  // model call has already been paid for — the alternative, fetching destination facts when
+  // the loader appears, would mean a second model call for data already sitting in cache.
+  const [destContext, setDestContext] = useState<DestinationContext | null>(null);
+  // Aborts the in-flight generate/refine. A ref, not state: cancelling must not re-render the
+  // loader, and nothing renders off this value.
+  const abortRef = useRef<AbortController | null>(null);
+
+  /** Stops the run and returns to the form with every answer intact. */
+  function cancelGeneration() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setGenerating(false);
+    setRefining(false);
+    setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
+    // Silent on purpose. The user asked for this; an error block telling them the planner
+    // didn't finish would be the app reporting their own decision back to them as a fault.
+    setError(null);
+  }
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   // Id of the LLM pipeline run that produced the current `itinerary` — tracks
@@ -424,11 +465,17 @@ export default function Home() {
    * traveler that it's happening again.
    */
   async function runStreamed<T>(body: Record<string, unknown>): Promise<T> {
+    // One controller per run, so Cancel aborts the in-flight request rather than leaving it
+    // running invisibly while the UI pretends it stopped. Replaced (not reused) on every run.
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const plainFallback = async (): Promise<T> => {
       const res = await fetch("/api/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate itinerary");
@@ -441,8 +488,12 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
-    } catch {
+    } catch (e) {
+      // An abort must not fall through to the non-streaming retry — that would silently start
+      // the whole two-minute call again immediately after the user asked it to stop.
+      if (controller.signal.aborted) throw e;
       return plainFallback();
     }
 
@@ -491,6 +542,12 @@ export default function Home() {
         userAnswers: currentAnswers(),
         dietary,
       });
+      // Let the arrival land before swapping surfaces. Without this the loader unmounts the
+      // instant the itinerary resolves, so the marker never reaches the pin and the whole
+      // two-minute wait ends on a hard cut. Peak-end weights these few hundred milliseconds
+      // far more heavily than the middle minute, and they used to be spent on nothing.
+      // ItineraryCard's own staggered reveal takes over from here.
+      await settle(ARRIVAL_HOLD_MS);
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
       setRevealAnimation(true);
@@ -501,7 +558,11 @@ export default function Home() {
       // traveler's permanent default — the bug this codebase already hit twice with `tier`.
       // /profile and the onboarding card are the only writers.
     } catch (e) {
-      setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
+      // A cancel arrives here as an AbortError. It is not a failure and must not be reported
+      // as one — cancelGeneration has already reset the UI.
+      if (!isAbort(e)) {
+        setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
+      }
     } finally {
       setGenerating(false);
     }
@@ -525,7 +586,9 @@ export default function Home() {
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
     } catch (e) {
-      setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
+      if (!isAbort(e)) {
+        setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
+      }
     } finally {
       setRefining(false);
     }
@@ -569,6 +632,34 @@ export default function Home() {
     }
   }
 
+  // Everything the loader shows while an itinerary is being written, assembled from data this
+  // page already holds. Deliberately no model call: `runClaude` spends almost all of its wall
+  // clock waiting for a first token, so trivia fetched that way would arrive after the plan it
+  // was meant to fill the time for.
+  // What the loader names while it works. The plan form unmounts during generation, so
+  // without this the screen shows a spinner over a globe and never once states which trip it
+  // is building — the single thing a waiting traveler most wants confirmed.
+  const loaderSubject = [
+    destination.split(",")[0]?.trim() || destination.trim(),
+    startDate && endDate ? formatDateRange(startDate, endDate) : null,
+    TIERS.find((t) => t.id === tier)?.name ?? null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const wikiExtract = usePlacePhoto(destination, "extract");
+  const destinationFacts = useMemo(
+    () =>
+      buildDestinationFacts({
+        destination,
+        rawFetch,
+        context: destContext,
+        wikiExtract,
+        viewerUtcOffsetMinutes: -new Date().getTimezoneOffset(),
+      }),
+    [destination, rawFetch, destContext, wikiExtract]
+  );
+
   return (
     <main
       // pt-[calc(var(--nav-h)+1.25rem)]: clearance for the fixed glass navbar (AppShell
@@ -582,7 +673,14 @@ export default function Home() {
         step === "landing" ? "blue-hour-scene font-scene-body" : ""
       }`}
     >
-      <GenerationLoader active={generating || refining} mode={refining ? "refine" : "generate"} stages={stages} />
+      <GenerationLoader
+        active={generating || refining}
+        mode={refining ? "refine" : "generate"}
+        stages={stages}
+        facts={destinationFacts}
+        subject={loaderSubject}
+        onCancel={cancelGeneration}
+      />
 
       {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
           explainer, and "Plan a trip" uncovered only at the end. It owns full-bleed sections
@@ -617,7 +715,13 @@ export default function Home() {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ destination, startDate, endDate }),
-                  }).catch(() => {});
+                  })
+                    // Reading the body is new; firing it is not. The route already made this
+                    // call to warm the cache, so keeping its result costs nothing and gives
+                    // the generation loader real festival/shopping facts to show.
+                    .then((r) => r.json())
+                    .then((d) => setDestContext(d.context ?? null))
+                    .catch(() => {});
                   // Step 2a, run the same way: fired now so the bundle (weather, holidays,
                   // candidate POIs, ...) is ready well before the profile step's POI picker
                   // needs it. Never awaited here — it must not block advancing the wizard.

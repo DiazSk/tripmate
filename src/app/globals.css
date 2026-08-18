@@ -1070,6 +1070,24 @@ body {
   .loader-letter {
     opacity: 1;
   }
+
+  /* Restoring a duration rather than granting an animation. The blanket rule above does not
+     stop the progress bar — JS keeps writing --gen-progress ten times a second regardless —
+     it only removes the interpolation between those writes, so the bar advances in ten
+     visible jerks per second. Here the setting makes the motion choppier, not calmer, which
+     is the opposite of what it is for. Same specificity mechanism as the `.loader` exemption
+     above; same instruction to narrow this rather than widen it. */
+  .gen-strip-fill,
+  .gen-strip-cursor {
+    transition-duration: 220ms !important;
+  }
+
+  /* Nothing needed for the facts any more. They used to require a whole alternate
+     presentation here, because the blanket rule above would have snapped every orbiting card
+     to its final keyframe — off-screen at zero opacity — and silently deleted the content for
+     the people who opted out of the motion rather than just the motion. The still list that
+     was the fallback is now what everyone gets, so there is no second path to keep in sync,
+     and the blanket rule simply removes its cross-fade, which is exactly what it should do. */
 }
 
 /* The confirm dialog's backdrop. A real `::backdrop` rather than a sibling overlay div —
@@ -1144,6 +1162,220 @@ body {
   .memory-postcard-delete {
     opacity: 1;
   }
+}
+
+/* --- Generation progress: the flight-path strip -------------------------------------------
+   Segment widths come from STAGE_SECONDS, not from an even split, because the five stages are
+   nowhere near equal — `generate` alone is ~95 of the ~150 nominal seconds. Split evenly the
+   marker would reach a fifth of the rail and then not move for a minute and a half, which
+   reads as a hang. `--gen-progress` (0..1) is written from JS ten times a second. */
+/* The strip is a glass instrument panel, not marks floating on the map.
+   It shipped unbacked and was effectively invisible over bright terrain: measured against
+   sampled globe pixels, the idle stage labels ran 1.02–4.20:1 and failed the 4.5:1 body floor
+   on *every* backdrop tested including the darkest ocean. The rail, ticks and pin are all
+   low-alpha white, which is the Darken-Never-Lighten Rule being broken outright — over
+   photography this system tints toward slate, never toward white. The caption pill and the
+   fact lines were readable in the same screenshot for exactly one reason: they carry glass. */
+.gen-strip {
+  width: min(92vw, 380px);
+  --gen-progress: 0;
+  padding: 0.625rem 0.875rem 0.5rem;
+  border-radius: 16px;
+  background: rgb(var(--surface-deep-rgb) / 0.62);
+  backdrop-filter: blur(56px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.gen-strip-track {
+  position: relative;
+  height: 12px;
+}
+
+/* Sits inside the panel with the rail, so the running stage and the marker that indicates it
+   are one object rather than two things that have to be visually associated. */
+.gen-strip-stage {
+  margin-top: 7px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  color: var(--on-deep);
+}
+
+/* Remaining route: a dashed hairline, so "not yet travelled" reads as a plan rather than as
+   an empty container. */
+.gen-strip-rail {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 0;
+  /* Raised from 0.28: these now sit on the panel's own slate rather than on bare
+     terrain, so the alpha is measured against a known ground instead of guessing. */
+  border-top: 1px dashed rgb(255 255 255 / 0.45);
+}
+
+/* Travelled route. scaleX, not width: this is retargeted 10x a second and must stay on the
+   compositor — BudgetBar can afford `width` because it changes once per edit, this cannot.
+   Linear rather than the app's usual ease-out: on a value replaced every 100ms an ease curve
+   restarts constantly and reads as a pulse instead of steady travel. */
+.gen-strip-fill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 999px;
+  background: var(--accent);
+  transform: scaleX(var(--gen-progress));
+  transform-origin: left;
+  transition: transform 220ms linear;
+}
+
+.gen-strip-origin,
+.gen-strip-pin {
+  position: absolute;
+  top: 50%;
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+.gen-strip-origin {
+  left: 0;
+  height: 7px;
+  width: 7px;
+  background: var(--accent);
+}
+/* The destination end stays neutral until the run completes — an amber pin from the start
+   would claim an arrival that hasn't happened. */
+.gen-strip-pin {
+  right: 0;
+  height: 9px;
+  width: 9px;
+  border: 1.5px solid rgb(255 255 255 / 0.6);
+  transition:
+    background-color 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Arrival. This was described in DESIGN.md long before it existed, so for a while the pin was
+   a promise the code never kept — every run hard-cut from a neutral pin straight to the
+   itinerary and nobody ever saw the plane land. The loader now holds briefly on completion so
+   the marker reaches the pin and the pin fills, then hands off to ItineraryCard's own
+   staggered reveal. Peak-end: the last half second of a two-minute wait is worth more to the
+   remembered experience than the middle minute, and it used to be spent on nothing. */
+.gen-strip-pin.is-done {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.gen-strip-tick {
+  position: absolute;
+  top: 50%;
+  height: 5px;
+  width: 1px;
+  margin-top: -2.5px;
+  background: rgb(255 255 255 / 0.4);
+  transition: background-color 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.gen-strip-tick.is-done {
+  background: var(--accent);
+}
+.gen-strip-tick.is-active {
+  background: var(--accent-hover);
+}
+
+/* Full-width, so translateX in percent moves it by a fraction of the *track* — a percentage
+   translate resolves against the element's own width, which is the whole trick here. Lets the
+   marker ride the same custom property as the fill with no layout and no measured pixels. */
+.gen-strip-cursor {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 0;
+  transform: translateX(calc(var(--gen-progress) * 100%));
+  transition: transform 220ms linear;
+}
+
+.gen-strip-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 9px;
+  width: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  /* No radius: a sharp 45-degree square is the waypoint diamond this wants to be, and any
+     rounding worth seeing on a 9px box would round it straight into the origin dot's circle. */
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgb(var(--surface-deep-rgb) / 0.85);
+  transform: rotate(45deg);
+}
+
+/* --- Destination facts: the stagger stack --------------------------------------------------
+   One card square-on and readable, its neighbours fanned out behind it, dimmed and tilted.
+   It auto-advances and can be steered with the arrows or by clicking a card forward.
+
+   This replaced two off-screen wheels that carried the same sentences on orbiting cards, and
+   the distinction that matters is not how it looks but when it moves: **the front card is
+   completely still while it is being read.** Motion happens only on a discrete advance. The
+   orbit animated continuously, which is why its text was chased rather than read, and why it
+   failed WCAG 2.2.2 (Pause, Stop, Hide) — there was no way to stop it. Here the reader takes
+   control of the rotation by using it, and nothing animates between advances.
+
+   Adapted from a stagger-testimonial pattern, with its neobrutalist skin left behind: the
+   original's notched clip-path corners and hard `0 8px 0 4px` block shadows belong to a world
+   this app is not, and the craft floor bans that shadow outside one. The geometry is the part
+   worth having; the material is this system's own glass. */
+.fact-stack {
+  position: relative;
+  width: min(92vw, 30rem);
+  /* Fixed so an advance to a one-line fact cannot make the column below it jump. */
+  height: 132px;
+}
+
+.fact-stack-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(78vw, 20rem);
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  border-radius: 16px;
+  font-size: 0.875rem;
+  /* 1.625, the documented Body leading. */
+  line-height: 1.625;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--on-deep);
+  cursor: pointer;
+  transition:
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The front card is the one being read, so it is the one that is not interactive: clicking it
+   would do nothing, and a pointer cursor on it would promise otherwise. */
+.fact-stack-card.is-front {
+  cursor: default;
+}
+
+/* The single amber mark, and it is doing status work rather than decoration — it says which
+   card is the live one, the same job the accent does on the active day tab. */
+.fact-stack-card.is-front::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0.625rem;
+  height: 2px;
+  width: 1.75rem;
+  margin-left: -0.875rem;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 /* My Memories' postcards are the one other scoped material exception in the app besides
