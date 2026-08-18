@@ -1,48 +1,64 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { getTrip } from "@/lib/db";
+import { toTripDetail } from "@/lib/tripPayload";
 import TripView from "./TripView";
 
 /**
- * Server wrapper that exists only to carry this route's metadata.
+ * Server half of `/trip/[id]`: reads the trip and renders the view with it already in hand.
  *
- * The App Router has no `head()` convention — that was the Pages Router, and `next/head` still
- * lives under `docs/02-pages/`. Metadata comes from a `metadata` export or `generateMetadata`,
- * and both are Server Component only, while the trip view is `"use client"` from top to bottom
- * (it owns fetches, camera state and the itinerary panel). So the segment splits in two: this
- * file for the head tags, TripView.tsx for everything that renders.
+ * This file used to exist only to carry metadata, because the App Router has no `head()`
+ * convention — that was the Pages Router, and `next/head` still lives under `docs/02-pages/`.
+ * Metadata comes from a `metadata` export or `generateMetadata`, both Server Component only,
+ * while the trip view is `"use client"` from top to bottom (it owns camera state, the itinerary
+ * panel, and every edit). The split stays; what changed is that the server half now also does
+ * the read, so the client half no longer fetches a row this component already had.
+ *
+ * `/trip/preview` is the one id with no database row — a hardcoded fixture, loaded client-side
+ * by TripView so real trips never carry it in their bundle. It therefore skips the read here
+ * rather than 404ing.
  */
+export const dynamic = "force-dynamic";
+
+const PREVIEW_ID = "preview";
+
+const DESCRIPTION =
+  "A day-by-day itinerary on a living globe — glowing stop markers, arcs between them, real weather and budget tracking.";
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  // The trip itself is fetched client-side from SQLite via /api/trips/[id], so the destination
-  // is not known here without duplicating that read on the server. Rather than fetch twice, the
-  // title stays generic but route-specific — enough to distinguish a shared trip link from the
-  // planner in a tab strip or a chat unfurl.
-  const title =
-    id === "preview" ? "Preview trip · TripMate" : "Your trip itinerary · TripMate";
-  const description =
-    "A day-by-day itinerary on a living globe — glowing stop markers, arcs between them, real weather and budget tracking.";
+  // The title used to stay generic on the grounds that naming the destination would mean reading
+  // the row twice. It no longer would — the page component below reads it either way — so a
+  // shared link can finally say where it goes.
+  const destination = id === PREVIEW_ID ? null : getTrip(id)?.destination;
+  const title = destination
+    ? `${destination} · TripMate`
+    : id === PREVIEW_ID
+      ? "Preview trip · TripMate"
+      : "Your trip itinerary · TripMate";
 
   return {
     title,
-    description,
-    openGraph: {
-      title,
-      description,
-      type: "website",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-    },
+    description: DESCRIPTION,
+    openGraph: { title, description: DESCRIPTION, type: "website" },
+    twitter: { card: "summary_large_image", title, description: DESCRIPTION },
   };
 }
 
-export default function TripPage({ params }: { params: Promise<{ id: string }> }) {
-  // Passed through unresolved — TripView unwraps it with React's `use`, so awaiting here would
-  // only delay rendering the shell for nothing.
-  return <TripView params={params} />;
+export default async function TripPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  if (id === PREVIEW_ID) return <TripView id={id} initialTrip={null} />;
+
+  const row = getTrip(id);
+  // `notFound()` rather than a rendered message: an unknown id is a genuinely missing resource,
+  // and routing it through not-found.tsx also gets the 404 status the old client-side error
+  // state could never set.
+  if (!row) notFound();
+
+  return <TripView id={id} initialTrip={toTripDetail(row)} />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import FocusEditMode from "@/components/FocusEditMode";
@@ -29,13 +29,16 @@ const hasStops = (itinerary?: Itinerary | null) =>
 
 
 export default function TripView({
-  params,
+  id,
+  initialTrip,
 }: {
-  params: Promise<{ id: string }>;
+  id: string;
+  /** Read server-side by this route's page component. Null only for `/trip/preview`, whose
+   *  fixture is not in the database and is loaded below instead. */
+  initialTrip: Trip | null;
 }) {
-  const { id } = use(params);
-  const [trip, setTrip] = useState<Trip | null>(null);
-  const [itinerary, setItinerary] = useState<Itinerary | null>(null);
+  const [trip, setTrip] = useState<Trip | null>(initialTrip);
+  const [itinerary, setItinerary] = useState<Itinerary | null>(initialTrip?.itinerary ?? null);
   const [error, setError] = useState<string | null>(null);
   const [dismissedDays, setDismissedDays] = useState<Set<number>>(new Set());
   const [rebalancingDay, setRebalancingDay] = useState<number | null>(null);
@@ -56,10 +59,14 @@ export default function TripView({
     detailError,
   } = useTripCamera(trip?.destination ?? "", trip?.id);
 
+  // The trip itself already arrived as a prop; this effect only has to move the camera. The
+  // `/api/trips/[id]` fetch that used to live here was a second read of a row the server had
+  // just read to render this very component.
   useEffect(() => {
     if (id === "preview") {
       // Kept out of this route's client bundle: the fixture lives in its own module,
-      // loaded with a dynamic import so real trips don't pay for it.
+      // loaded with a dynamic import so real trips don't pay for it. It is also the one
+      // trip with no database row, which is why it cannot arrive as a prop.
       import("@/lib/previewTrip").then(({ PREVIEW_TRIP }) => {
         setError(null);
         setTrip(PREVIEW_TRIP);
@@ -68,16 +75,9 @@ export default function TripView({
       });
       return;
     }
-    fetch(`/api/trips/${id}`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to load trip");
-        setError(null);
-        setTrip(data);
-        setItinerary(data.itinerary);
-        await flyToDestinationByName(data.destination, !hasStops(data.itinerary));
-      })
-      .catch((e) => setError(errorMessage(e, "We couldn't load this trip.")));
+    if (initialTrip) {
+      flyToDestinationByName(initialTrip.destination, !hasStops(initialTrip.itinerary));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
