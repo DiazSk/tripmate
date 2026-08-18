@@ -214,7 +214,7 @@ export default function GenerationLoader({
           // The one line that says what is actually being made. It never moves, is readable at
           // 400% zoom, and answers the question a waiting traveler is really asking — "did it
           // take what I typed?" — which nothing else on this screen was doing.
-          <p className="max-w-[min(90vw,26rem)] text-center text-xs font-medium tracking-[0.025em] text-foreground/70 tabular-nums">
+          <p className="glass-itinerary max-w-[min(90vw,26rem)] rounded-full px-3.5 py-1 text-center text-xs font-medium tracking-[0.025em] text-foreground tabular-nums">
             {subject}
           </p>
         )}
@@ -252,19 +252,14 @@ export default function GenerationLoader({
             </div>
             <span className={`gen-strip-pin ${complete ? "is-done" : ""}`} />
           </div>
+          {/* The stage name sits inside the panel, once, instead of in a five-label row under
+              the rail. That row was a lie: labels were evenly spaced with `space-between`
+              while the ticks sit at duration-weighted positions, so with three stages under
+              three seconds the ticks bunch into the first 2% of the rail and the marker spent
+              most of the wait under the word "Reviewing" while `generate` was running. One
+              name that matches the running stage beats five that don't. */}
+          <p className="gen-strip-stage">{activeMeta.label}</p>
         </div>
-        {/* The stage name lives here, once, instead of in a five-label row under the rail.
-            That row was a lie: labels were evenly spaced with `space-between` while the ticks
-            sit at duration-weighted positions, so with three stages under three seconds the
-            ticks bunch into the first 2% of the rail and the marker spent most of the wait
-            sitting under the word "Reviewing" while `generate` was actually running. One
-            name that matches the running stage beats five that don't. */}
-        <p
-          aria-hidden="true"
-          className="text-xs font-semibold tracking-[0.025em] text-foreground uppercase"
-        >
-          {activeMeta.label}
-        </p>
 
       {/* Caption pill carries the same frosted treatment as the itinerary card
           and every other panel over the map — see .glass-itinerary in
@@ -295,7 +290,7 @@ export default function GenerationLoader({
           <button
             type="button"
             onClick={onCancel}
-            className="value-in pointer-events-auto rounded-full px-4 py-2 text-xs font-medium text-foreground/70 transition-colors hover:bg-white/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+            className="value-in glass-itinerary pointer-events-auto rounded-full px-4 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
           >
             Cancel
           </button>
