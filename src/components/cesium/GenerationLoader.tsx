@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import FactStack from "./FactStack";
 import {
   STAGE_ORDER,
   STAGE_SECONDS,
@@ -35,9 +36,6 @@ const CAPTION_INTERVAL_MS = 2500;
 /** How often the progress value is recomputed and written to the CSS custom property. */
 const PROGRESS_TICK_MS = 100;
 
-/** How many facts are on screen together, and how long a set is held before the next one. */
-const FACTS_VISIBLE = 3;
-const FACT_SET_MS = 9000;
 /** How long before Cancel is offered. */
 const CANCEL_AFTER_MS = 10000;
 
@@ -97,10 +95,9 @@ export default function GenerationLoader({
 
   // --- Progress -------------------------------------------------------------------------
   // The value is written straight to a CSS custom property through a ref rather than held in
-  // state: it changes ten times a second, and re-rendering the whole loader (including the
-  // orbiting cards, whose CSS animations would be untouched but whose React elements would
-  // be reconciled) that often to move a bar a fraction of a pixel is waste. Same technique
-  // StopMarkerLayer uses for `--marker-depth`.
+  // state: it changes ten times a second, and re-rendering the whole loader that often to
+  // move a bar a fraction of a pixel is waste — it would reconcile the fact stack on every
+  // tick for nothing. Same technique StopMarkerLayer uses for `--marker-depth`.
   const stripRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef(0);
   const stageStartRef = useRef<{ stage: StageId | null; at: number }>({ stage: null, at: 0 });
@@ -128,14 +125,6 @@ export default function GenerationLoader({
     return () => clearInterval(id);
   }, [active, stages, activeId]);
 
-  // --- Facts ----------------------------------------------------------------------------
-  // One index, advanced on a timer, naming the start of the visible window. This replaced a
-  // per-card recycler that tracked four independent indices and skipped any already on
-  // screen — machinery that existed only because the cards recycled at different times, and
-  // which carried two bugs neither review caught by reading it: with a pool of three or four
-  // it settled into every slot showing the same fact forever, and on mobile the hidden
-  // wheel's slots never advanced yet stayed in the exclusion set, so two facts could never
-  // appear at all. Both vanish with a single cursor over a stable window.
   // Cancel appears after a beat rather than immediately: most refines and every cached path
   // finish well inside this, and a control that flashes up and vanishes reads as a glitch.
   const [cancelReady, setCancelReady] = useState(false);
@@ -153,21 +142,6 @@ export default function GenerationLoader({
     const id = setTimeout(() => setCancelReady(true), CANCEL_AFTER_MS);
     return () => clearTimeout(id);
   }, [active]);
-
-  const [factSet, setFactSet] = useState(0);
-  useEffect(() => {
-    if (!active || facts.length <= FACTS_VISIBLE) return;
-    const id = setInterval(() => setFactSet((n) => n + 1), FACT_SET_MS);
-    return () => clearInterval(id);
-  }, [active, facts.length]);
-
-  const visibleFacts =
-    facts.length <= FACTS_VISIBLE
-      ? facts
-      : Array.from(
-          { length: FACTS_VISIBLE },
-          (_, i) => facts[(factSet * FACTS_VISIBLE + i) % facts.length]
-        );
 
   // Resets to the top of the new stage's caption list whenever the active stage changes,
   // so switching stages never shows a caption mid-rotation that belonged to the last one.
@@ -297,22 +271,9 @@ export default function GenerationLoader({
         )}
       </div>
 
-      {/* Facts, still and upright. Outside the role="status" region above so a screen reader
-          can reach them without them being announced; the whole set is keyed so it cross-fades
-          as one page turn rather than three lines flickering out of step. Nothing here moves
-          in space — that is the entire point of the rewrite, and the reason the previous
-          orbiting version is gone. */}
-      {facts.length > 0 && (
-        <div className="fact-static">
-          <div key={factSet} className="fact-static-group flex flex-col items-center gap-1.5">
-            {visibleFacts.map((fact) => (
-              <p key={fact} className="fact-static-line glass-itinerary">
-                {fact}
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Outside the role="status" region above so a screen reader can reach the facts without
+          them being announced every few seconds over someone waiting on a result. */}
+      <FactStack facts={facts} />
     </div>
   );
 }
