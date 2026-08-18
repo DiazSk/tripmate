@@ -39,6 +39,10 @@ const LOD_TIERS = [
 const SPIN_IDLE_AFTER_MS = 4_000;
 const SPIN_EASE_OUT_MS = 2_500;
 
+/** Ceiling on the device-pixel ratio the scene renders at — see the `resolutionScale` comment
+ *  below for the measurement behind 1.5. */
+const MAX_RENDER_PIXEL_RATIO = 1.5;
+
 /**
  * Applies the tier for the camera's current height, once per change.
  *
@@ -168,15 +172,22 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       viewer.scene.screenSpaceCameraController.minimumZoomDistance = 50;
       viewer.scene.screenSpaceCameraController.maximumZoomDistance = 25_000_000;
 
-      // Render at the display's real pixel density instead of CSS pixels. Cesium's default
-      // (`useBrowserRecommendedResolution: true`) ignores devicePixelRatio, so on any scaled
-      // display the canvas is upscaled and building edges go soft no matter how good the mesh
-      // underneath is. Capped at 2x because fill cost grows with the square of the ratio and a
-      // 3x phone would otherwise render 9x the pixels for detail nobody can resolve. This is a
-      // no-op at devicePixelRatio 1.
+      // Render above CSS pixel density, but not all the way to the display's. Cesium's default
+      // (`useBrowserRecommendedResolution: true`) ignores devicePixelRatio entirely, so on a
+      // scaled display the canvas is upscaled and building edges go soft no matter how good the
+      // mesh underneath is. Fill cost grows with the square of the ratio, hence a cap.
+      //
+      // The cap is 1.5, lowered from 2 against a measurement rather than a guess. On a 2x /
+      // 160Hz Windows display the 2x cap produced a 3204x2654 canvas — 8.5 megapixels, larger
+      // than a 4K framebuffer — and a moving camera sustained only 33.7 painted fps against a
+      // 60 target, i.e. squarely fill-rate bound. 1.5 cuts that to ~4.8 megapixels (-44%), which
+      // predicts ~60 fps, and it costs sharpness only on displays above 1.5x while still
+      // rendering well above the CSS-pixel default this exists to beat. Every backdrop-filter
+      // panel over the canvas samples the same device pixels, so this is also the one knob that
+      // scales the glass blurs. No-op at devicePixelRatio 1.
       const dpr = window.devicePixelRatio || 1;
       viewer.useBrowserRecommendedResolution = false;
-      viewer.resolutionScale = Math.min(dpr, 2) / dpr;
+      viewer.resolutionScale = Math.min(dpr, MAX_RENDER_PIXEL_RATIO) / dpr;
 
       let usingPhotorealistic = false;
       if (token) {
