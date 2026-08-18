@@ -57,6 +57,12 @@ function isAbort(e: unknown): boolean {
   return e instanceof DOMException && e.name === "AbortError";
 }
 
+/** How long the loader holds after the run settles, so the marker reaches the pin and the pin
+ *  fills before the itinerary takes the screen. Long enough to read as an arrival, short
+ *  enough that nobody waiting two minutes notices it as a delay. */
+const ARRIVAL_HOLD_MS = 650;
+const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 type Step = "landing" | "plan" | "result";
 /** Only what changes per trip. Explorer style, energy, crowds, tier and priorities live on
  *  /profile and are overridable for one trip via the expander on `basics`. The two screens
@@ -536,6 +542,12 @@ export default function Home() {
         userAnswers: currentAnswers(),
         dietary,
       });
+      // Let the arrival land before swapping surfaces. Without this the loader unmounts the
+      // instant the itinerary resolves, so the marker never reaches the pin and the whole
+      // two-minute wait ends on a hard cut. Peak-end weights these few hundred milliseconds
+      // far more heavily than the middle minute, and they used to be spent on nothing.
+      // ItineraryCard's own staggered reveal takes over from here.
+      await settle(ARRIVAL_HOLD_MS);
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
       setRevealAnimation(true);

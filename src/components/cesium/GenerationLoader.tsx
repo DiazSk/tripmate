@@ -195,6 +195,9 @@ export default function GenerationLoader({
 
   const live = stages.filter((s) => s.status !== "skipped");
   const percents = waypointPercents(stages);
+  // Every stage settled: the marker has reached the pin and the run is over. page.tsx holds
+  // the loader open for a beat on this state before handing off, so the arrival is seen.
+  const complete = live.length > 0 && live.every((s) => s.status === "done");
 
   return (
     <div className="pointer-events-none fixed inset-0 z-30 flex flex-col items-center justify-center gap-3">
@@ -247,7 +250,7 @@ export default function GenerationLoader({
             <div className="gen-strip-cursor">
               <span className="gen-strip-marker" />
             </div>
-            <span className="gen-strip-pin" />
+            <span className={`gen-strip-pin ${complete ? "is-done" : ""}`} />
           </div>
         </div>
         {/* The stage name lives here, once, instead of in a five-label row under the rail.

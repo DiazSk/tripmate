@@ -1228,6 +1228,20 @@ body {
   height: 9px;
   width: 9px;
   border: 1.5px solid rgb(255 255 255 / 0.45);
+  transition:
+    background-color 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Arrival. This was described in DESIGN.md long before it existed, so for a while the pin was
+   a promise the code never kept — every run hard-cut from a neutral pin straight to the
+   itinerary and nobody ever saw the plane land. The loader now holds briefly on completion so
+   the marker reaches the pin and the pin fills, then hands off to ItineraryCard's own
+   staggered reveal. Peak-end: the last half second of a two-minute wait is worth more to the
+   remembered experience than the middle minute, and it used to be spent on nothing. */
+.gen-strip-pin.is-done {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .gen-strip-tick {
