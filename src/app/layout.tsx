@@ -67,10 +67,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         ) : (
           <AppShell>{children}</AppShell>
         )}
-      {/* impeccable-live-start */}
-<script src="http://localhost:8400/live.js?token=f341fc43-efb4-4e49-9d34-7b25f203cc5d"></script>
-{/* impeccable-live-end */}
-</body>
+      </body>
     </html>
   );
 }

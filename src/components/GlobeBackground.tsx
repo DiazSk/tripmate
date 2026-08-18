@@ -31,6 +31,14 @@ const LOD_TIERS = [
   [Infinity, 16, true],
 ] as const;
 
+/** How long the globe sits untouched before the idle drift starts easing out, and how long that
+ *  ease takes. Together they bound how long the scene keeps repainting after the last
+ *  interaction — past that the canvas goes quiet and every glass panel over it stops re-blurring.
+ *  Long enough that the drift still reads as "alive" on arrival; short enough that a page left
+ *  open costs nothing. */
+const SPIN_IDLE_AFTER_MS = 4_000;
+const SPIN_EASE_OUT_MS = 2_500;
+
 /**
  * Applies the tier for the camera's current height, once per change.
  *
@@ -72,6 +80,10 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
     // Cesium keeps re-rendering the (Google photorealistic, tile-streaming) scene and ticking
     // the auto-rotate spin every frame regardless of whether anything is drawn on top of it.
     viewer.useDefaultRenderLoop = !hidden;
+    // Under requestRenderMode, restarting the loop is not by itself enough to draw anything —
+    // it renders on demand, and arriving back from a hidden route is a demand nothing else
+    // signals. One frame is all it needs; the idle logic takes it from there.
+    if (!hidden) viewer.scene.requestRender();
   }, [pathname]);
 
   useEffect(() => {
@@ -80,14 +92,16 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
     let spinListener: (() => void) | undefined;
     let pauseSpin: (() => void) | undefined;
     let resumeSpin: (() => void) | undefined;
+    let wakeSpin: (() => void) | undefined;
 
     (async () => {
       if (!containerRef.current) return;
-      // Skip booting Cesium at all when landing directly on a globe-hidden route (today, only
-      // `/backend`, reached and left exclusively via typed URLs / hard loads — it has no inbound
-      // or outbound links to the rest of the app, so there's no soft-navigation path where this
-      // would ever need to construct late). Pausing the render loop (the effect above) still
-      // matters for a page that arrives here from a soft nav with the globe already live, but a
+      // Skip booting Cesium at all when landing directly on a globe-hidden route (`/backend` and
+      // `/bench`, both dev-only dashboards on opaque backgrounds, reached and left exclusively
+      // via typed URLs / hard loads — neither has inbound or outbound links to the rest of the
+      // app, so there's no soft-navigation path where this would ever need to construct late).
+      // Pausing the render loop (the effect above) still matters for a page that arrives here
+      // from a soft nav with the globe already live, but a
       // cold load pays for the dynamic `cesium` import, the WebGL context, and Google's
       // photorealistic tileset fetch *before* that pause ever takes effect — this skips all of
       // it up front instead.
@@ -115,7 +129,28 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
         infoBox: false,
         selectionIndicator: false,
         baseLayer: false,
+        // Render on demand instead of on every rAF tick. Cesium's default is a continuous loop
+        // that re-renders the whole photorealistic tileset at display refresh (measured ~160fps
+        // here) whether or not anything changed — and because every glass panel in this app is a
+        // `backdrop-filter` sibling sitting directly over this canvas, a canvas that repaints
+        // every frame forces each of those panels to re-sample and re-blur its backdrop every
+        // frame too. That coupling, not the globe alone, is what made the whole UI feel stuck.
+        //
+        // Cesium re-renders by itself on camera movement, tile loads and property changes, so
+        // interaction and flights are unaffected. What stops is the idle case.
+        requestRenderMode: true,
+        // Never re-render merely because the simulation clock advanced: nothing in this scene is
+        // driven by Cesium time (no sun/lighting animation). The route dash shimmer reads
+        // `performance.now()` from a CallbackProperty, which is evaluated only on frames that
+        // actually render — so it animates whenever the scene is awake and settles with the rest
+        // of it when the scene is not, which is the intended behaviour rather than a casualty.
+        maximumRenderTimeChange: Infinity,
       });
+
+      // Ceiling for the frames that *do* render. On a high-refresh display the uncapped loop was
+      // spending 160fps of full tileset draw on a scene whose fastest motion is a slow drift;
+      // 60 is the smoothness bar for dragging and costs under half as much.
+      viewer.targetFrameRate = 60;
 
       // Solid dark space behind/beyond the globe — not the default transparent canvas,
       // which would otherwise let the page background show through any gap. Read from
@@ -207,6 +242,21 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       let locked = false;
       let draggingFromCanvas = false;
       let lastTime = Date.now();
+      let lastInteraction = Date.now();
+
+      /**
+       * Wakes the scene.
+       *
+       * Load-bearing under `requestRenderMode`: `postRender` only fires on frames that actually
+       * rendered, so once the drift has eased out and stopped asking for frames, `spinListener`
+       * can no longer restart itself. Every path back into motion has to go through here.
+       */
+      const wake = () => {
+        lastInteraction = Date.now();
+        lastTime = lastInteraction;
+        if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender();
+      };
+
       spinListener = () => {
         if (!rotating) {
           lastTime = Date.now();
@@ -215,7 +265,19 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
         const now = Date.now();
         const delta = (now - lastTime) / 1000;
         lastTime = now;
-        viewer!.scene.camera.rotate(Cesium.Cartesian3.UNIT_Z, -0.05 * delta);
+        // Ease the drift to a standstill once the user has been idle, rather than cutting it:
+        // an abrupt stop reads as a stall. Squared so the last few degrees are the gentlest.
+        // When `remaining` reaches 0 this returns *without* requesting another frame, and the
+        // canvas — along with every backdrop-filter panel sampling it — stops repainting.
+        const idleFor = now - lastInteraction;
+        const remaining =
+          1 - Math.min(1, Math.max(0, idleFor - SPIN_IDLE_AFTER_MS) / SPIN_EASE_OUT_MS);
+        if (remaining <= 0) return;
+        viewer!.scene.camera.rotate(
+          Cesium.Cartesian3.UNIT_Z,
+          -0.05 * delta * remaining * remaining
+        );
+        viewer!.scene.requestRender();
       };
       pauseSpin = () => {
         draggingFromCanvas = true;
@@ -224,12 +286,16 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       resumeSpin = () => {
         if (draggingFromCanvas && !locked) {
           rotating = true;
-          lastTime = Date.now();
+          wake();
         }
         draggingFromCanvas = false;
       };
       viewer.scene.postRender.addEventListener(spinListener);
       viewer.scene.canvas.addEventListener("pointerdown", pauseSpin);
+      // Zoom is the one globe interaction that never goes through pointerdown/pointerup, so it
+      // would otherwise leave the drift eased-out while the user is plainly still using the map.
+      viewer.scene.canvas.addEventListener("wheel", wake, { passive: true });
+      wakeSpin = wake;
       window.addEventListener("pointerup", resumeSpin);
 
       // Exposed on the viewer so code elsewhere holding the same viewer instance
@@ -249,8 +315,10 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
           locked = false;
           rotating = true;
           // Load-bearing: spinListener integrates (now - lastTime), so resuming without this
-          // snaps the globe through however long the spin was paused.
-          lastTime = Date.now();
+          // snaps the globe through however long the spin was paused. `wake` also resets the
+          // idle clock and asks for the frame that restarts the loop — without that second half
+          // this resumes a spin that, under requestRenderMode, would never be stepped.
+          wake();
         };
 
       viewerInstanceRef.current = viewer;
@@ -282,6 +350,7 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       if (viewer) {
         if (spinListener) viewer.scene.postRender.removeEventListener(spinListener);
         if (pauseSpin) viewer.scene.canvas.removeEventListener("pointerdown", pauseSpin);
+        if (wakeSpin) viewer.scene.canvas.removeEventListener("wheel", wakeSpin);
       }
       if (resumeSpin) window.removeEventListener("pointerup", resumeSpin);
       viewer?.destroy();
