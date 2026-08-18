@@ -151,13 +151,23 @@ export function insertTrip(
   return { ...trip, run_id, user_answers_json, created_at };
 }
 
-export function listTrips(): TripRow[] {
+/** Exactly the columns `listTrips` selects — deliberately narrower than `TripRow`, which
+ *  describes the whole table. The old signature claimed `TripRow` while the query returned
+ *  neither `run_id` nor `user_answers_json`, so the type was quietly lying about three fields. */
+export type TripListRow = Pick<
+  TripRow,
+  "id" | "destination" | "start_date" | "end_date" | "budget" | "created_at"
+>;
+
+export function listTrips(): TripListRow[] {
   return db
     .prepare(
-      `SELECT id, destination, start_date, end_date, budget, itinerary_json, created_at
+      // No `itinerary_json`: it was being selected and then dropped by every caller, which meant
+      // reading every stored itinerary off disk to render a list of destinations and dates.
+      `SELECT id, destination, start_date, end_date, budget, created_at
        FROM trips ORDER BY created_at DESC`
     )
-    .all() as TripRow[];
+    .all() as TripListRow[];
 }
 
 export function getTrip(id: string): TripRow | undefined {
