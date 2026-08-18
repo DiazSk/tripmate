@@ -1,19 +1,22 @@
 # Future Integration
 
-Ideas that were considered, researched, and **deliberately deferred** — with enough
-detail to pick them up later without redoing the research. Nothing here is
-committed to a roadmap.
+Ideas that were considered and researched, each with an honest verdict — with enough
+detail to pick them up later without redoing the research. Most entries here are
+**deliberately deferred**: a deferral is not a rejection, it's a note that the current
+architecture doesn't support the idea cheaply and that no user problem yet justifies the
+change.
 
-Each entry states what it would take, what it would cost, and an honest verdict.
-A deferral is not a rejection: it's a note that the current architecture doesn't
-support it cheaply and that no user problem yet justifies the change.
+One entry — the voice tour-guide agent — has since been **taken off the shelf and scoped
+into an MVP**. Its research is kept here rather than moved, because the constraint that
+justified deferring it is real and the design works around it rather than pretending it
+went away. Everything else on this page remains uncommitted to a roadmap.
 
-Researched 2026-08-16. **Voice pricing moved twice during 2026 — re-check every
-figure below before budgeting against it.**
+Researched 2026-08-16, extended 2026-08-17. **Voice pricing moved twice during 2026 —
+re-check every figure below before budgeting against it.**
 
 | Idea | Verdict | Blocked on |
 |---|---|---|
-| [Voice tour-guide agent](#voice-tour-guide-agent) | Defer — separate product | A streaming LLM client; a real user problem |
+| [Voice tour-guide agent](#voice-tour-guide-agent) | **Building — MVP scoped** | Nothing; design below |
 | [Multi-agent personas](#multi-agent-personas) | Don't build | Evidence a single call can't hold the constraints |
 | [Authentication](#authentication) | Defer — insurance paid | A second user, or deployment |
 
@@ -24,87 +27,256 @@ figure below before budgeting against it.**
 A voice agent that talks the traveler through their itinerary while they walk it,
 with the generated plan as context.
 
+**Status: building**, on `feat/voice-tour-guide-mvp`. Deferred 2026-08-16 as "a separate
+integration, not an increment"; reopened 2026-08-17 after competitor research reframed
+what the thing actually costs and what it has to be.
+
+### What the market actually ships
+
+Researched 2026-08-17. The headline: **no shipped competitor is doing realtime
+conversation.** Every product in the category ships pre-generated narration triggered by
+GPS, and the "ask it something" surface, where it exists at all, is secondary.
+
+| Product | Shape | Notable |
+|---|---|---|
+| **iWander** | AI builds a custom tour in ~30s from a prompt; narration **pre-generated**, actor-voiced; 4 guide personalities; 9 languages; full offline | $10/mo unlimited curated + 100 AI-minutes; separate on-demand AI guide via camera/voice/text |
+| **Votura** | AI generates route + stops + narration from start point, time budget, transport mode, theme; 500+ cities, 12 languages, offline | Closest structural match to TripMate's output. Audio architecture not disclosed — could not verify pre-gen vs. live |
+| **VoiceMap** | Human-authored, podcast-style, GPS-triggered; 600+ destinations, 2,026th tour published early 2026 | Explicitly *labels* where a publisher used an AI tool — human authorship is the position |
+| **TalkieWalkie** | GPS-triggered playback at landmarks | Pure trigger-and-play |
+| **Rick Steves Audio Europe** | Human, free, personality-driven | Category incumbent; stale catalogue, but the voice carries it |
+| **SmartGuide / STQRY** | B2B for museums and venues; STQRY narrates via ElevenLabs | The paying market here is venues, not travelers |
+
+Two structural reads:
+
+**The moat everyone defends is authored narration, not conversation.** VoiceMap's whole
+differentiation is that a human local wrote it. iWander pairs actor-voiced curated tours
+*with* AI generation and charges for the curated tier. Nobody sells "you can interrupt the
+guide and argue with it."
+
+**Google is eating the generic version.** "Ask Maps" (Gemini, rolling out in the US and
+India on both platforms since March 2026) plus landmark-aware Immersive Navigation means
+"tell me about that building" is becoming a free Maps feature. What *isn't* commoditized is
+the asset none of these products have: **the traveler's own generated itinerary** — their
+budget, their pacing, their stops, in order. That is the only defensible thing to build a
+voice agent on top of, and it is the thing TripMate already produces.
+
 ### The load-bearing fact: Anthropic has no realtime voice API
 
-Claude's consumer voice mode is a product, not an API surface, and it isn't
-speech-native — the July 2026 update added model choice but kept the pipeline
-turn-based (listen, think, speak), leaning on an external TTS vendor. Claude
-Code's voice mode is dictation into the prompt box, nothing more.
+Re-verified 2026-08-17; still true. Claude's consumer voice mode is a product, not an API
+surface, and it isn't speech-native — the July 2026 update added model choice but kept the
+pipeline turn-based (listen, think, speak), leaning on an external TTS vendor. Claude
+Code's voice mode is push-to-talk dictation into the prompt box (`/voice`, ~5% rollout as
+of March 2026), nothing more.
 
-So a voice guide means pairing Claude with **someone else's audio layer**, or
-dropping Claude from that path. There is no configuration of the current setup
-that gets there.
+So a voice guide means pairing Claude with **someone else's audio layer**. There is no
+configuration of the current setup that gets there. The design question is not whether to
+add a vendor — it's *how little of the conversation that vendor is allowed to own.*
+
+### Decisions taken (2026-08-17)
+
+| Decision | Chosen | Rejected alternative |
+|---|---|---|
+| Where the conversation runs | **Managed STT+TTS, Claude stays the brain** | Speech-to-speech (OpenAI Realtime / Gemini Live) with Claude behind tool calls — lower latency, but a second vendor becomes the conversational intelligence |
+| MVP surface | **Desk demo, laptop browser** | Real walk on a phone — the actual product, but adds the whole mobile-web minefield (iOS autoplay gates, background audio suspension, mic permission in PWAs) |
+| Mutation scope | **Read-only Q&A + spoken edit queue** | Full live editing — an ~84s edit inside a live call is dead air or a confusing partial state |
+
+The first row is the consequential one. Keeping Claude as the brain costs latency and work
+versus speech-to-speech, and buys two things: the product's intelligence stays on the model
+this codebase is built around, and **every token still passes through a TripMate-owned
+choke point that writes a trace row** — the one architectural rule this repo actually
+enforces.
+
+### Why the current LLM path cannot do voice, and what changes
+
+Conversation needs first audio in **500–800ms**. The fastest call in the codebase today
+takes **84,000ms**. Streaming alone does not close that, and the reason is already measured
+in [`src/lib/claude.ts`](src/lib/claude.ts):
+
+- *"time-to-first-token is ~95% of the wall clock"*
+- *"~96% of generated tokens are internal reasoning that never reaches the caller"* —
+  12.4k output tokens for a 450-token JSON patch
+- `--effort low` is the CLI's floor. **There is no way to turn thinking off.**
+
+Streaming a response whose first token arrives at 80s buys nothing. So the fix is not the
+transport — it's **leaving the CLI for the HTTP Messages API**, which *can* set
+`thinking: {type: "disabled"}` on Haiku 4.5 and delete that 96%. Published Haiku 4.5 TTFT
+over HTTP is **~597ms** on short prompts, 610ms median / 843ms p95 on long ones, and
+Anthropic measures as the most consistent provider for P50↔P99 spread.
+
+That one substitution is what makes "Claude as the brain" viable. `runClaude()` is
+**unchanged** — it keeps serving generation and editing. The voice client is a sibling.
+
+**The second constraint, and the one that makes the whole thing affordable:** the itinerary
+already exists before the walk starts. "What's next?", "why this restaurant?", "how far?"
+are *context reads, not inference* — the answer is sitting in the prompt prefix. Only
+mutations need a planning call, and those keep the existing 84s CLI path, off the
+conversational thread.
+
+### Architecture
+
+```
+Browser (mic in, audio out)
+   │
+   ▼
+Deepgram Voice Agent ── owns VAD, barge-in, turn-taking, jitter, STT, TTS
+   │  POST, OpenAI Chat Completions shape, SSE
+   ▼
+/api/voice/llm ── our shim: OpenAI wire format ⇄ Anthropic Messages
+   │
+   ▼
+Claude Haiku 4.5 (HTTP, streaming, thinking disabled, cached itinerary prefix)
+```
+
+Deepgram is ears and mouth. Claude is the brain. Deepgram's Voice Agent API accepts **any
+endpoint conforming to the OpenAI Chat Completions format**, and ships an official
+reference proxy for exactly this shape
+([deepgram-voice-agent-client-llm-proxy](https://github.com/deepgram-devs/deepgram-voice-agent-client-llm-proxy)).
+
+**Why the custom endpoint and not Deepgram's managed `anthropic` provider.** Deepgram
+manages Claude for you, which is less code — and it would hold the conversation, taking
+prompt-cache control, `thinking` configuration, and `llm_traces` visibility with it. A
+model call that doesn't write a trace row breaks the invariant in
+[`src/lib/claude.ts`](src/lib/claude.ts). Not worth it to save a translation layer.
+
+**Why Deepgram and not ElevenLabs.** $4.50/hr flat with BYO-LLM rate reductions and
+sub-300ms end-to-end, against ElevenLabs billing on **wall-clock including silence** —
+precisely the wrong shape for a walking tour with long quiet stretches.
+
+**Use WebRTC, not a raw WebSocket, for the browser leg.** WebRTC brings jitter buffering,
+echo cancellation, packet-loss concealment, and Opus for free; a raw WebSocket means
+building all of it. `getUserMedia({ audio: true })` needs a secure context (HTTPS, or
+`localhost`, which the dev server already satisfies) and a user gesture, so the component
+must be `"use client"` with no SSR. A route handler mints a short-lived **ephemeral token**
+server-side; the real key never reaches the browser.
+
+### Latency budget
+
+| Stage | Expected |
+|---|---|
+| Speech end → final transcript (Deepgram) | 100–300ms |
+| Claude TTFT (Haiku 4.5, thinking off, warm cache) | 600–850ms |
+| First TTS chunk | 100–200ms |
+| **First audio** | **~0.9–1.3s** |
+
+Honest read: that lands *above* the 500–800ms ideal, below the annoyance threshold, and
+roughly 65× better than the current path. Two levers if it feels slow in practice —
+pre-warm the cache with a `max_tokens: 0` request when the session opens, and let Deepgram
+speak a filler acknowledgement while the first tokens land.
+
+### Cost
+
+Deepgram $0.075/min ≈ **$4.50/hr**. Claude adds pennies: a cached prefix reads at ~0.1× and
+answers are one to three sentences at Haiku's $1/$5 per MTok. So about **$4.60 for a
+one-hour tour** — which confirms the original research's $5–7 estimate *for this
+architecture*.
+
+This is the expensive path, chosen deliberately. The cost control that matters is closing
+the Deepgram socket on idle and reopening on wake, since billing is connection time.
 
 ### Provider landscape
 
+Researched 2026-08-16, re-verified 2026-08-17. **← marks the chosen path.**
+
 | Option | Architecture | Rough cost | Latency / transport |
 |---|---|---|---|
+| **Deepgram Voice Agent ←** | STT+TTS on one stream, bring your own LLM | $4.50/hr = $0.075/min, BYO-LLM reductions | Sub-300ms end-to-end |
 | OpenAI Realtime (`gpt-realtime-2.1`) | True speech-to-speech | ~$0.06–0.11/min (mini: ~$0.02–0.05) | Sub-second; WebRTC in browser |
 | Gemini Live (native audio) | True speech-to-speech | ~$0.005/min in, ~$0.018/min out | Cheapest headline; WebSocket native, WebRTC via partners |
-| ElevenLabs Agents | Managed STT→LLM→TTS | $0.08–0.12/min, **LLM billed separately**, charged on wall-clock including silence | Managed; best voice quality |
-| Deepgram Voice Agent | STT+TTS on one stream, bring your own LLM | $4.50/hr = $0.075/min | Sub-300ms end-to-end |
+| ElevenLabs Agents | Managed STT→LLM→TTS | Bundled minutes per plan (75–12,375), then $0.08/min, **LLM billed separately**, charged on wall-clock including silence | Managed; best voice quality |
 | Cartesia Sonic 3/3.5 | TTS only — not an agent | ~$5–37 per 1M chars | Claims 40–90ms; independently measured 166–190ms |
 | LiveKit Agents / Pipecat | Frameworks, not models | Free (OSS) + provider bills | LiveKit is WebRTC-native and built for scale; Pipecat has the larger plugin catalog and suits prototyping |
 
-The per-minute figures for OpenAI and Gemini are third-party conversions from
-token pricing, not vendor-published rates. They swing 3–5× with prompt caching
-and with the ratio of talking to listening. Treat them as order-of-magnitude.
+The per-minute figures for OpenAI and Gemini are third-party conversions from token
+pricing, not vendor-published rates. They swing 3–5× with prompt caching and with the ratio
+of talking to listening. Treat them as order-of-magnitude.
 
-### What the browser side would need
+### What gets built
 
-Use **WebRTC, not WebSocket**. WebRTC brings jitter buffering, echo
-cancellation, packet-loss concealment, and Opus for free; a raw WebSocket means
-building all of it.
+**Phase 0 — the shim, standalone.** `/api/voice/llm` speaking OpenAI Chat Completions over
+SSE, backed by streaming Claude. Testable with `curl` alone, no Deepgram account. The whole
+risk of the design, isolated and provable first.
 
-1. A route handler mints a short-lived **ephemeral token** server-side. The real
-   API key never reaches the browser.
-2. A client component calls `getUserMedia({ audio: true })` — needs a secure
-   context (HTTPS, or `localhost`, which the dev server already satisfies) and a
-   user gesture. Must be `"use client"`, no SSR.
-3. `RTCPeerConnection` does SDP offer/answer against the provider; the returned
-   track attaches to an `<audio>` element.
+**Phase 1 — context and caching.** Build the cached system prefix from a real itinerary;
+verify `cache_read_input_tokens` is non-zero across turns; measure real TTFT.
 
-The deployment payoff: media flows browser↔provider directly, so the server only
-mints tokens and a serverless function covers it. A WebSocket design instead
-needs a long-lived connection the host has to hold open, which is the harder
-thing to deploy.
+**Phase 2 — the session.** Ephemeral-token route, browser component, Deepgram wired to the
+shim. First actual conversation.
 
-### The cheap fallback, and why it isn't the product
+**Phase 3 — the edit queue.** Voice tool call → existing `POST /api/trip-edit` → spoken
+acknowledgement now, spoken confirmation when it lands seconds later.
 
-`SpeechSynthesis` (output) is broadly supported and free. `SpeechRecognition`
-(input) is the weak half:
+**Phase 4 — tracing.** Voice rows in the trace FAB with TTFT and token columns.
 
-- Chrome/Edge/Opera support it. Safari 14.1+/iOS 14.5+ support it behind
-  `webkitSpeechRecognition`. **Firefox has it behind a disabled-by-default flag**
-  — effectively unavailable.
-- Chrome ships the audio to Google's servers. Worth stating plainly to users.
-- Safari **WebView** errors immediately without prompting for the mic, so this
-  breaks inside PWAs and native wrappers.
-- No barge-in, no VAD tuning, no diarization; synthesis quality is a per-OS lottery.
+### Files and schema
 
-It demonstrates the idea. It is push-to-talk, not conversation.
+New:
 
-### Why this breaks the current architecture
+| Path | Role |
+|---|---|
+| `src/lib/voiceTranslate.ts` | Pure OpenAI ⇄ Anthropic message and chunk mapping. **Type-only imports**, so `voiceTranslate.test.mjs` can cover it — the repo's stated rule for testable modules |
+| `src/lib/voiceClient.ts` | Anthropic HTTP streaming client. Thinking disabled, small `max_tokens`, cache breakpoint on the itinerary prefix |
+| `src/lib/voiceContext.ts` | Builds the cached prefix. Reuses `buildEditContext()` from [`src/lib/editContext.ts`](src/lib/editContext.ts) rather than re-deriving trip facts |
+| `src/lib/voicePosition.ts` | Position source interface plus a desk-demo implementation (step through stops). Keeps real geolocation a later swap, not a rewrite |
+| `src/app/api/voice/llm/route.ts` | The shim endpoint |
+| `src/app/api/voice/token/route.ts` | Mints the short-lived Deepgram key server-side |
+| `src/components/VoiceGuideFab.tsx` | `"use client"`, no SSR. Follows the existing floating-widget pattern — see [`src/components/LlmTraceFab.tsx`](src/components/LlmTraceFab.tsx) |
 
-For speech-to-speech, Claude leaves the loop entirely — the audio is never text
-you can pipe into a process.
+Modified:
 
-For a pipeline (STT → Claude → TTS), technically nothing stops it, but
-`runClaude()` in [`src/lib/claude.ts`](src/lib/claude.ts) spawns the CLI, waits
-for a *complete* non-streaming response, and exits. Process startup plus
-full-completion latency puts first audio seconds away; conversational voice needs
-roughly 500–800ms. Closing that gap means token streaming with sentence-chunked
-TTS — an HTTP streaming client, not a one-shot subprocess. That also means the
-`llm_traces`/`llm_runs` instrumentation needs a second write path for streamed
-calls, since it currently records one row per completed process.
+- [`src/lib/claude.ts`](src/lib/claude.ts) — add `"voice"` and `"voice-tool"` to
+  `ClaudeCallType`. `runClaude()` itself is untouched.
+- [`src/lib/db.ts`](src/lib/db.ts) — extend `llm_traces` through the existing
+  `addColumnIfMissing()` guard (house pattern, no migration files): `ttft_ms`,
+  `input_tokens`, `output_tokens`, `cache_read_tokens`. Add an `aborted` status for
+  barge-in, a real outcome the current `ok`/`error`/`timeout` enum cannot express.
+- `src/components/LlmTraceFab.tsx` — surface the new columns.
+- `.env.local` — `DEEPGRAM_API_KEY` and `ANTHROPIC_API_KEY`. Both absent must degrade to
+  "voice unavailable", matching the `OPENTRIPMAP_API_KEY` fail-soft convention.
+
+### Gotchas
+
+- **Haiku 4.5's minimum cacheable prefix is 4096 tokens.** Below it, caching silently
+  no-ops — no error, just `cache_creation_input_tokens: 0`. A short itinerary may not cache
+  at all; verify rather than assume.
+- **`max_tokens: 0` pre-warming is rejected with `stream: true`.** The warm-up call must be
+  non-streaming.
+- **`ANTHROPIC_API_KEY` is new to this repo.** Every model call to date went through the
+  CLI's own auth; this is the first raw key on the LLM path.
+- **Deepgram bills connection time.** Idle sessions cost money.
+- **The trace path needs a second write shape.** `llm_traces` records one row per completed
+  process; a streamed call has a TTFT and a token count and can be aborted mid-flight.
+
+### The cheaper shape we are deliberately not building
+
+Worth writing down, because it is what the entire market actually ships and it costs ~5×
+less.
+
+Generation already produces the text. Add a per-POI narration field, TTS it **once** at
+generation time, cache by POI, play back on geolocation. ElevenLabs TTS is $0.05/1k chars
+(Flash) or $0.10/1k (Multilingual); a 12-stop tour at ~250 words per stop is ~18,000 chars
+→ **$0.90–1.80 for the whole tour**, falling toward zero as popular stops hit cache, since
+narration for a landmark is reusable across every traveler who visits it. Browser
+`SpeechSynthesis` is free and, for pre-written narration, sufficient — the
+`SpeechRecognition` support problems (Firefox behind a disabled flag, Safari WebView
+erroring without prompting) are all *input*-side and don't apply.
+
+It needs no streaming client, no second trace path, and no vendor. It is also not a
+conversation: it cannot answer "why did you pick this place?" or "I'm tired, what can we
+skip?" That's the trade being made, with eyes open.
 
 ### Verdict
 
-**Defer.** This is a separate integration, not an increment. The cheapest
-credible version is Deepgram or ElevenLabs for managed audio with Claude over
-streaming HTTP, at roughly $0.08–0.12/min — about **$5–7 for a one-hour walking
-tour**, before the LLM bill. That needs a real product reason before it justifies
-a second LLM client and a parallel tracing path.
+**Build it, MVP-scoped.** The original deferral was right about the architecture and wrong
+about the ceiling: it assumed a conversational Claude meant fighting the 84s path, when the
+actual fix is that Claude never needs to be fast for the read-mostly 90% and never needs to
+be in the loop for the slow 10%. Deepgram for audio at $4.50/hr, Claude Haiku over
+streaming HTTP with thinking off for the brain, ~1s to first audio, read-only plus a queued
+edit path, desk demo first.
+
+The honest risk is not technical. It is that no competitor validates conversation as the
+thing travelers want, and Google is commoditizing the generic half. The bet is that a guide
+which knows *your* itinerary is a different product from one that knows the city — and the
+MVP exists to find out cheaply.
 
 ---
 
@@ -246,4 +418,17 @@ when a second person needs their own trips. Neither is true today.
 - [OpenAI — Realtime API with WebRTC](https://developers.openai.com/api/docs/guides/realtime-webrtc)
 - [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing)
 - [ElevenLabs — Conversational AI pricing](https://elevenlabs.io/blog/we-cut-our-pricing-for-conversational-ai)
+- [ElevenLabs — API pricing](https://elevenlabs.io/pricing/api)
 - [MDN — SpeechRecognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition)
+
+Added 2026-08-17 for the voice MVP:
+
+- [Deepgram — Voice Agent LLM models (custom / OpenAI-compatible endpoints)](https://developers.deepgram.com/docs/voice-agent-llm-models)
+- [Deepgram — Voice Agent API](https://deepgram.com/product/voice-agent-api)
+- [deepgram-voice-agent-client-llm-proxy](https://github.com/deepgram-devs/deepgram-voice-agent-client-llm-proxy)
+- [Anthropic — Reducing latency](https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-latency)
+- [Artificial Analysis — Claude Haiku 4.5 provider benchmarks](https://artificialanalysis.ai/models/claude-4-5-haiku/providers)
+- [LLM API latency benchmarks 2026](https://www.kunalganglani.com/blog/llm-api-latency-benchmarks-2026)
+- [Claude Code — voice dictation](https://code.claude.com/docs/en/voice-dictation)
+- [Google — Ask Maps and Immersive Navigation](https://blog.google/products-and-platforms/products/maps/ask-maps-immersive-navigation/)
+- [iWander](https://iwander.io/) · [Votura](https://votura.app/) · [VoiceMap](https://voicemap.me/) · [SmartGuide](https://www.smartguide.app/) · [STQRY — AI-powered tours](https://www.stqry.com/blog/how-to-create-an-ai-powered-tour-in-2026/)
