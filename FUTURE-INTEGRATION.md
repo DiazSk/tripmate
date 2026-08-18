@@ -11,13 +11,14 @@ into an MVP**. Its research is kept here rather than moved, because the constrai
 justified deferring it is real and the design works around it rather than pretending it
 went away. Everything else on this page remains uncommitted to a roadmap.
 
-Researched 2026-08-16, extended 2026-08-17. **Voice pricing moved twice during 2026 —
+Researched 2026-08-16, extended 2026-08-17, multi-agent revisited 2026-08-18. **Voice pricing
+moved twice during 2026 —
 re-check every figure below before budgeting against it.**
 
 | Idea | Verdict | Blocked on |
 |---|---|---|
 | [Voice tour-guide agent](#voice-tour-guide-agent) | **Building — MVP scoped** | Nothing; design below |
-| [Multi-agent personas](#multi-agent-personas) | Don't build | Evidence a single call can't hold the constraints |
+| [Multi-agent personas](#multi-agent-personas) | Don't build — re-confirmed 2026-08-18 | A **measured** single-agent baseline showing one call can't hold the constraints |
 | [Authentication](#authentication) | Defer — insurance paid | A second user, or deployment |
 
 ---
@@ -285,6 +286,11 @@ MVP exists to find out cheaply.
 Several agents with distinct roles (a food specialist, a budget keeper, a local
 guide) collaborating on one itinerary.
 
+Researched 2026-08-16, **revisited 2026-08-18** after a literature and competitor sweep. The
+verdict is unchanged. Two of the premises behind it have moved, though, and the sweep turned up
+a finding that has nothing to do with agents at all — all three are recorded below the original
+research.
+
 ### Anthropic's own numbers
 
 From [Anthropic's multi-agent research writeup](https://www.anthropic.com/engineering/multi-agent-research-system):
@@ -334,24 +340,193 @@ child has **no Agent tool and cannot delegate**. Any multi-agent design would be
 TripMate's own code spawning N subprocesses, paying N× process startup on top of
 N× tokens.
 
+### What the 2026 literature adds
+
+Revisited 2026-08-18.
+
+| Source | Finding |
+|---|---|
+| [Nature Machine Intelligence — *Capable language models can outgrow the benefits of collaboration*](https://www.nature.com/articles/s42256-026-01268-y) | 260 configurations over 6 benchmarks, 5 architectures, 3 model families, holding prompts, tools and compute constant and varying **only** coordination structure. **Single-agent baseline performance is the most robust predictor of whether coordination helps or hurts**, via an empirical *capability-saturation threshold* past which more agents stop paying. It predicts the sign of the effect in **94%** of validation configs on SWE-bench Verified and Terminal-Bench |
+| [beam.ai — production orchestration patterns](https://beam.ai/agentic-insights/multi-agent-orchestration-patterns-production) | A 3-agent sequential pipeline burns **29,000 tokens against 10,000** for the single-agent equivalent. A 4-agent pipeline accumulates **~950ms of coordination overhead against ~500ms of actual work**. Fan-out conflicts scale **N(N−1)/2**. Orchestrator context overflow is the canonical cost blowup |
+
+The Nature result is the one that changes anything here. It converts "multi-agent is usually
+worse" from a rule of thumb into **a predictor you can check before building**: measure the
+single-agent baseline first, because past saturation coordination actively degrades the output.
+That reframes the original "revisit only if evals show a single call can't hold multiple
+objectives" from a hedge into the actual precondition.
+
+### What the travel-planning research does — and it isn't personas
+
+[TravelPlanner](https://osu-nlp-group.github.io/TravelPlanner/) is the field's baseline, and it is
+brutal: GPT-4-Turbo with ReAct passes **0.6%** of tasks end-to-end, every other model **0%**. The
+failure is not prose quality or taste. It is **hard constraint satisfaction** — and the paper notes
+the best agent still loses to plain greedy search on hard constraints.
+
+[TriFlow](https://arxiv.org/html/2512.11271) is the closest published analogue to this codebase and
+the most useful reference on the page. Three stages, each narrowing the feasible space:
+
+1. **Retrieval** — decompose the query into structured requirements, then *"parallel modules"*
+   fetch flights, distances, restaurants, attractions and accommodation, *"followed by validation
+   and deduplication."*
+2. **Planning** — city order and time allocation first, details after, through **agent–validator
+   loops** of *"suggestion, validation, and normalisation."*
+3. **Governance** — each iteration opens with a system report on budget usage, timing consistency
+   and preference satisfaction, then constraint checking, then *targeted adjustments* ("replacing
+   costly items, resolving timing conflicts, or improving alignment with user preferences").
+   **Capped at 8 iterations**, terminating early on convergence.
+
+Its **monotonic feasibility** rule, quoted: *"Once a constraint is satisfied, subsequent steps are
+not allowed to violate it. For instance, once the city's order and daily arrangement windows are
+fixed, later steps (e.g., selecting restaurants or attractions) must operate within these bounds
+rather than revising earlier structural decisions."*
+
+Results: **91.1% final pass** on TravelPlanner (**96.1%** on hard constraints), in **22.6s against
+245.7s** for the prior SOTA — a **10.9× speedup**. On TripTailor, **97.7% against 63.3%** for a
+workflow baseline.
+
+Read the speedup carefully, because it is the whole lesson. TriFlow is *faster* than the systems it
+beats. Adding agents does not make a system faster; **replacing LLM tool-calling loops with
+structured retrieval and validation does**. Caveats from reading it properly: the paper does not
+disclose whether its validators are rule-based or LLM-driven, runs **no ablations** isolating stage
+contributions, and publishes **no token or call-count data**. So the runtime is the reliable number
+and the causal attribution is inference.
+
+Three supporting points:
+
+- [OPENPATH](https://arxiv.org/pdf/2606.07486) splits its specialists by **data domain** — transit,
+  ADA accessibility, bike-share, routing — each owning a distinct dataset and tool surface. This is
+  consistent across every serious system found: decomposition follows *data and tools*, never
+  *opinions about the same data*.
+- [Is Your LLM-Based Multi-Agent a Reliable Real-World Planner?](https://arxiv.org/pdf/2505.16557)
+  finds multi-agent travel planners vulnerable to fraudulent booking sites and prompt injection.
+  Worth naming because TripMate's fetches all go to fixed, known endpoints — an under-appreciated
+  security property that a tool-using worker fleet would hand away.
+- [TravelBench](https://arxiv.org/pdf/2512.22673) evaluates multi-turn tool-using travel tasks
+  across GPT-5.1, Gemini 3, DeepSeek R1, Qwen 3 and Kimi K2. Its dominant failures are inconsistent
+  tool selection and **requirements lost across turns** — the context-fragmentation mode named
+  above, measured.
+
+### What competitors actually ship
+
+**Expedia is the loudest data point, and it cuts both ways.** They deprioritized **Romie**, their
+all-in-one AI concierge, having concluded the end-to-end concierge concept wasn't practical, and
+pivoted to a **"multi-agentic" architecture of specialized agents** — then acquired
+[Layla](https://skift.com/2026/07/31/expedia-acquired-ai-trip-planner-layla-exclusive/) in July 2026
+(~25 people, ~€5M raised) for the conversational planning tech and the team. Their framing is
+**"point agents"**: small specialists that assist at *specific stages of the journey* — inspire,
+plan, book, support — with differentiation staked on trust, first-party traveler data, real
+bookable inventory and hallucination safeguards. They are also shipping an **MCP server** giving
+partner agents direct inventory access.
+
+Note where they cut. **Along the trip lifecycle, not inside one itinerary generation.** Nobody is
+fanning personas out onto a single document.
+
+**Everyone else discloses nothing about topology, and their news is about inventory.** Mindtrip
+(11M+ POIs) led 2026 with agentic *flight booking* built on a
+[Sabre and PayPal partnership](https://investors.sabre.com/news-releases/news-release-details/mindtrip-launches-travels-first-all-one-agentic-ai-flight);
+its public technical description stops at "LLMs, NLP, and a proprietary knowledge base." Layla
+pulls live Skyscanner and Booking.com pricing. Wonderplan is free, no signup, no booking. Kayak AI
+is a chat-based agentic testbed. Booking Holdings has announced frameworks without dates.
+
+The read for TripMate: **agent topology is not a differentiator anyone is selling.** The market's
+axis is bookable inventory and payments — which this app deliberately doesn't have. That is the
+same conclusion the voice research reached from the other direction.
+
+### Two premises that have moved
+
+**Parallel fan-out is not N× latency here.** The original objection — N× process startup on top of
+N× tokens — holds for *sequential* chains and not for parallel ones.
+[`src/lib/claude.ts`](src/lib/claude.ts) records a correlation between prompt size and duration of
+**r = 0.132** across a 6× range of prompt sizes: *"essentially none; the variance is fixed overhead
+(CLI start, time to first token), not output size."* If duration is dominated by fixed overhead, N
+subprocesses spawned concurrently should land near the wall clock of one. Token cost is still N×,
+and this is expectation rather than measurement — API-side rate limits could re-serialize it.
+
+**The voice MVP deletes the objection outright.** `src/lib/voiceClient.ts` introduces an Anthropic
+Messages API client with `thinking` disabled and ~600ms TTFT. Once it exists, a worker call costs
+about a second instead of about two minutes, and "N× CLI cold start" stops being an argument
+against anything. This is the largest change to the premises since the original verdict, and it
+arrives as a side effect of unrelated work.
+
+Three things in the codebase would break under concurrent LLM calls, all small and all worth
+knowing before anyone tries:
+
+- No concurrency limiter exists anywhere — no `p-limit`, no semaphore, nothing bounding spawned
+  subprocesses.
+- `runs.ts` computes a run's duration as the **sum** of its step durations, which stops meaning
+  anything once steps overlap.
+- [`src/lib/db.ts`](src/lib/db.ts) orders run steps by **`rowid`**, on the stated assumption that
+  synchronous single-connection inserts preserve true order. Concurrent workers would make that
+  reflect insert time, not completion order.
+
+### The finding that isn't about agents
+
+TriFlow's governance stage — the thing its 96.1% hard-constraint pass rate comes from — **already
+exists in this repo**. It is the bench's deterministic scorers in `src/lib/bench/scorers/`:
+
+- opening hours and closed days (`domain.ts`, OSM-syntax parser, returning null for *unchecked*
+  rather than a false pass)
+- daylight against real sunrise/sunset, pace, walk-leg caps, rest breaks (`domain.ts`)
+- window overlaps and a 14h waking budget (`scoreFeasibility`)
+- route quality against an **exact shortest open Hamiltonian path** — Held-Karp — plus meal
+  proximity and downtime slack (`route.ts`)
+- weather alignment for outdoor stops on adverse days (`context.ts`)
+
+Production uses none of it. [`src/app/api/itinerary`](src/app/api/itinerary/route.ts) guards
+generation with an **LLM critique** that costs p50 58s / p90 75s and, on the old 90s ceiling, was
+**failing 35% of the time** — 7 of 20 calls, every one dying at exactly the cap. The staged
+markdown path has no critique at all. So the validator isn't missing; it is **offline, dev-only,
+and pointed at the wrong path.** It grades models rather than guarding trips.
+
+Two caveats keep this honest before anyone picks it up:
+
+- **Budget compliance is not deterministically measured anywhere.** The 85–100% band is prompt text
+  only, enforced by that same critique. The bench's `scoreBudget` prices stops from an assumed
+  table, excludes lodging and flights, and **has no lower bound** — it returns 1.0 whenever the
+  estimate is at or under budget, so a plan spending 20% of it scores perfectly. It is deliberately
+  excluded from the composite. Root cause: the staged path carries no prices at all.
+- **Travel-time feasibility partly trusts the model.** `scoreFeasibility` uses the model's *own
+  stated* travel minutes, so a model that understates travel is rewarded. Everything else is
+  haversine × 1.3 at fixed modal speeds. There is no routing ground truth.
+
+### Could we even measure the baseline the Nature result demands?
+
+Mostly, yes. `src/lib/bench/` already isolates exactly one `runClaude()` call with skill, context
+digest and prompt held constant, across **6 frozen fixtures** that deliberately span the
+degraded-input paths, persisting per-violation detail strings. That is a real single-agent baseline
+harness. Four gaps stand between it and a number you could compare anything against:
+
+1. **No repetition, therefore no variance.** One cell per (fixture, model), and
+   `listLatestBenchResults()` aggregates `MAX(rowid)` only, so re-runs overwrite rather than
+   accumulate. Any multi-agent delta would be indistinguishable from run-to-run noise. Biggest gap,
+   smallest fix.
+2. **Only the model varies.** No prompt, effort or thinking-budget axis exists, so "baseline at
+   effort X" isn't expressible.
+3. **No results are durable.** Nothing is checked in; `tripmate.db` is gitignored, so a baseline
+   lives in one developer's local SQLite.
+4. **No golden itineraries.** Every scorer is a property check against the fixture's own facts, so
+   nothing catches a plan that is systematically wrong but internally consistent.
+
 ### Verdict
 
-**Don't build it.** Itinerary generation is a textbook case of the pattern
-Anthropic says not to use multi-agent for. A day plan is one coherent artifact
-under shared constraints — budget, geography, opening hours, travel time. A
-foodie agent and a budget agent writing independently produce conflicts that a
-synthesizer then has to reconcile, at ~15× tokens, for output a single
-well-prompted call already produces.
+**Still don't build it** — and the 2026 evidence strengthens rather than softens the original call.
+Itinerary generation remains the textbook case Anthropic says not to use multi-agent for, the
+travel-planning literature decomposes by *data domain* and never by persona, and no competitor
+sells its orchestration graph. The Nature capability-saturation result adds the precondition that
+was previously only implied: **measure the single-agent baseline before adding coordination**,
+because past the threshold coordination makes things worse, and that prediction holds 94% of the
+time.
 
-The genuinely parallel, breadth-first part of the app — POI research and
-enrichment — is **already handled deterministically** by plain HTTP fetches in
-`trip-fetch`, which is cheaper and more reliable than agents doing it.
+What changed is narrower and worth carrying forward. The cost model was wrong in one direction —
+*parallel* fan-out is roughly latency-neutral here because fixed overhead dominates — and it is
+about to stop mattering anyway once the voice MVP's HTTP client lands. So if this ever comes back,
+the shape is orchestrator-workers over **days or research**, never over writing, and the three
+concurrency assumptions above need fixing first.
 
-Keep personas as **prompt sections, not agents**: one call, one voice, rules in
-[`.claude/skills/itinerary-planner/SKILL.md`](.claude/skills/itinerary-planner/SKILL.md).
-Revisit only if evals show a single call can't hold multiple objectives at once —
-and if it comes back, the shape is orchestrator-workers over *research*, not over
-*writing*.
+The more useful thing this sweep found has nothing to do with agents: the deterministic constraint
+checking that published SOTA relies on is already written here, sitting in the bench where no trip
+ever benefits from it, while production leans on a critique with a known silent failure rate. That
+is a lead worth its own investigation, not a multi-agent design.
 
 ---
 
@@ -432,3 +607,15 @@ Added 2026-08-17 for the voice MVP:
 - [Claude Code — voice dictation](https://code.claude.com/docs/en/voice-dictation)
 - [Google — Ask Maps and Immersive Navigation](https://blog.google/products-and-platforms/products/maps/ask-maps-immersive-navigation/)
 - [iWander](https://iwander.io/) · [Votura](https://votura.app/) · [VoiceMap](https://voicemap.me/) · [SmartGuide](https://www.smartguide.app/) · [STQRY — AI-powered tours](https://www.stqry.com/blog/how-to-create-an-ai-powered-tour-in-2026/)
+
+Added 2026-08-18 for the multi-agent revisit:
+
+- [Nature Machine Intelligence — Capable language models can outgrow the benefits of collaboration](https://www.nature.com/articles/s42256-026-01268-y) ([MIT Media Lab listing](https://www.media.mit.edu/publications/capable-language-models-can-outgrow-the-benefits-of-collaboration/))
+- [beam.ai — Multi-agent orchestration patterns for production](https://beam.ai/agentic-insights/multi-agent-orchestration-patterns-production)
+- [TravelPlanner benchmark](https://osu-nlp-group.github.io/TravelPlanner/) · [arXiv 2402.01622](https://arxiv.org/pdf/2402.01622)
+- [TriFlow — progressive multi-agent framework for trip planning (arXiv 2512.11271)](https://arxiv.org/html/2512.11271)
+- [OPENPATH — supervisor/specialist urban trip planning (arXiv 2606.07486)](https://arxiv.org/pdf/2606.07486)
+- [Is Your LLM-Based Multi-Agent a Reliable Real-World Planner? (arXiv 2505.16557)](https://arxiv.org/pdf/2505.16557)
+- [TravelBench — beyond itinerary planning (arXiv 2512.22673)](https://arxiv.org/pdf/2512.22673)
+- [Skift — Expedia acquired Layla](https://skift.com/2026/07/31/expedia-acquired-ai-trip-planner-layla-exclusive/) · [Forbes — Expedia's agentic design](https://www.forbes.com/sites/peterhigh/2026/05/29/how-expedia-is-reinventing-travel-through-ai-and-agentic-design/) · [hospitality.today — from all-in-one chatbots to specialized agents](https://www.hospitality.today/article/expedia-shifts-from-all-in-one-ai-chatbots-to-specialized-travel-agents)
+- [Sabre — Mindtrip agentic flight booking](https://investors.sabre.com/news-releases/news-release-details/mindtrip-launches-travels-first-all-one-agentic-ai-flight) · [Mindtrip](https://mindtrip.ai/team)
