@@ -1313,59 +1313,69 @@ body {
   transform: rotate(45deg);
 }
 
-/* --- Destination facts ---------------------------------------------------------------------
-   Still, upright, centred, and re-readable for the whole wait.
+/* --- Destination facts: the stagger stack --------------------------------------------------
+   One card square-on and readable, its neighbours fanned out behind it, dimmed and tilted.
+   It auto-advances and can be steered with the arrows or by clicking a card forward.
 
-   This replaced two large off-screen wheels that carried the same sentences on orbiting,
-   tilted cards. Three things killed that version and they are worth keeping written down,
-   because the orbit was the more impressive build and the temptation to reinstate it is real:
+   This replaced two off-screen wheels that carried the same sentences on orbiting cards, and
+   the distinction that matters is not how it looks but when it moves: **the front card is
+   completely still while it is being read.** Motion happens only on a discrete advance. The
+   orbit animated continuously, which is why its text was chased rather than read, and why it
+   failed WCAG 2.2.2 (Pause, Stop, Hide) — there was no way to stop it. Here the reader takes
+   control of the rotation by using it, and nothing animates between advances.
 
-   1. Text a person is meant to READ must not move. The orbit was tuned down from ~75px/s to
-      ~28px/s through its readable window, which was the wrong axis to optimise — the correct
-      speed is zero. A card also stayed rotated up to 9 degrees for most of the time it was
-      legible, which disables subpixel antialiasing on top of everything else.
-   2. WCAG 2.2.2 (Pause, Stop, Hide, Level A): motion that runs over five seconds alongside
-      other content needs a mechanism to stop it. There wasn't one, and aria-hidden does not
-      exempt visual motion — it only removed the alternative route to the content.
-   3. It broke this file's own rules. DESIGN.md's Overview says nothing else competes with
-      the globe's motion, and the One Ambient Loop Rule forbids stacked loops on
-      .glass-itinerary — the orbit ran three stacked loops per card, on four cards, outside
-      the .blue-hour-scene where that rule is loosened.
-
-   The reduced-motion fallback the orbit shipped with was simply the better design, so it is
-   now what everyone gets and the special case is gone. */
-.fact-static {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.375rem;
+   Adapted from a stagger-testimonial pattern, with its neobrutalist skin left behind: the
+   original's notched clip-path corners and hard `0 8px 0 4px` block shadows belong to a world
+   this app is not, and the craft floor bans that shadow outside one. The geometry is the part
+   worth having; the material is this system's own glass. */
+.fact-stack {
+  position: relative;
+  width: min(92vw, 30rem);
+  /* Fixed so an advance to a one-line fact cannot make the column below it jump. */
+  height: 132px;
 }
 
-.fact-static-line {
-  max-width: min(90vw, 30rem);
+.fact-stack-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(78vw, 20rem);
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
   border-radius: 16px;
-  padding: 0.5rem 0.875rem;
   font-size: 0.875rem;
-  /* 1.625, the documented Body leading. The orbit's cards used 1.5, which was off-ramp. */
+  /* 1.625, the documented Body leading. */
   line-height: 1.625;
   text-align: center;
   text-wrap: balance;
   color: var(--on-deep);
+  cursor: pointer;
+  transition:
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Opacity only, and on the group rather than per line: the set is replaced as a unit every
-   few seconds, so one fade reads as a page turn instead of three lines flickering out of
-   step. No transform — that is the whole point of the rewrite. */
-@media (prefers-reduced-motion: no-preference) {
-  .fact-static-group {
-    animation: fact-set-in 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
-  }
+/* The front card is the one being read, so it is the one that is not interactive: clicking it
+   would do nothing, and a pointer cursor on it would promise otherwise. */
+.fact-stack-card.is-front {
+  cursor: default;
 }
 
-@keyframes fact-set-in {
-  from {
-    opacity: 0;
-  }
+/* The single amber mark, and it is doing status work rather than decoration — it says which
+   card is the live one, the same job the accent does on the active day tab. */
+.fact-stack-card.is-front::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0.625rem;
+  height: 2px;
+  width: 1.75rem;
+  margin-left: -0.875rem;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 /* My Memories' postcards are the one other scoped material exception in the app besides
