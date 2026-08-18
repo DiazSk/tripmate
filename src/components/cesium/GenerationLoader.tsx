@@ -38,6 +38,8 @@ const PROGRESS_TICK_MS = 100;
 /** How many facts are on screen together, and how long a set is held before the next one. */
 const FACTS_VISIBLE = 3;
 const FACT_SET_MS = 9000;
+/** How long before Cancel is offered. */
+const CANCEL_AFTER_MS = 10000;
 
 /** Left edge of each stage's segment as a percentage, from the same weights the progress
  *  math uses, so the ticks and the fill can't disagree about where a stage begins. */
@@ -75,6 +77,7 @@ export default function GenerationLoader({
   stages,
   facts = [],
   subject,
+  onCancel,
 }: {
   active: boolean;
   mode?: keyof typeof WORD;
@@ -85,6 +88,8 @@ export default function GenerationLoader({
   /** What is being generated, e.g. "Kyoto · Sep 19–22 · Mid-range". The form unmounts during
    *  generation, so without this the screen never once names the trip it is working on. */
   subject?: string;
+  /** Aborts the run and returns to the form. Omit it and no cancel is offered. */
+  onCancel?: () => void;
 }) {
   const { word, baseLabel } = WORD[mode];
   const activeId = activeStageId(stages);
@@ -131,6 +136,24 @@ export default function GenerationLoader({
   // it settled into every slot showing the same fact forever, and on mobile the hidden
   // wheel's slots never advanced yet stayed in the exclusion set, so two facts could never
   // appear at all. Both vanish with a single cursor over a stable window.
+  // Cancel appears after a beat rather than immediately: most refines and every cached path
+  // finish well inside this, and a control that flashes up and vanishes reads as a glitch.
+  const [cancelReady, setCancelReady] = useState(false);
+  // Reset during render rather than in the effect, the same in-render adjustment the caption
+  // index below already uses. The component stays mounted between runs, so without a reset a
+  // second generation would offer Cancel from its first frame — and doing it in the effect is
+  // a synchronous setState that cascades an extra render pass after paint.
+  const [wasActive, setWasActive] = useState(active);
+  if (wasActive !== active) {
+    setWasActive(active);
+    setCancelReady(false);
+  }
+  useEffect(() => {
+    if (!active) return;
+    const id = setTimeout(() => setCancelReady(true), CANCEL_AFTER_MS);
+    return () => clearTimeout(id);
+  }, [active]);
+
   const [factSet, setFactSet] = useState(0);
   useEffect(() => {
     if (!active || facts.length <= FACTS_VISIBLE) return;
@@ -259,6 +282,21 @@ export default function GenerationLoader({
         >
           {caption}
         </motion.div>
+
+        {/* The only control on the screen, and the only thing here that opts back into pointer
+            events — the rest of the loader is inert so the globe underneath stays draggable.
+            Before this existed a traveler who spotted a wrong date at t=40s had no exit but a
+            reload, which destroys the run; the anxious user was the one most likely to kill a
+            call that was nearly finished. */}
+        {onCancel && cancelReady && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="value-in pointer-events-auto rounded-full px-4 py-2 text-xs font-medium text-foreground/70 transition-colors hover:bg-white/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+          >
+            Cancel
+          </button>
+        )}
       </div>
 
       {/* Facts, still and upright. Outside the role="status" region above so a screen reader
