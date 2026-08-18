@@ -65,16 +65,19 @@ export default function StopMarkerLayer() {
 
     let cancelled = false;
     let listener: (() => void) | null = null;
+    let resizeObserver: ResizeObserver | null = null;
 
     import("cesium").then((Cesium) => {
       if (cancelled || viewer.isDestroyed()) return;
       const scene = viewer.scene;
       const ellipsoid = scene.globe.ellipsoid;
 
-      // Everything below is preallocated and reused. This runs on `postRender`, which in this app
-      // ticks at ~160fps, and MapControls' readout established the house rule: per-frame work
-      // writes straight to the DOM and allocates nothing. A `new Cartesian3()` per stop per frame
-      // is ~1,300 short-lived objects a second for one day of eight stops.
+      // Everything below is preallocated and reused. This runs on `postRender`, and MapControls'
+      // readout established the house rule: per-frame work writes straight to the DOM and
+      // allocates nothing. A `new Cartesian3()` per stop per frame is ~500 short-lived objects a
+      // second for one day of eight stops. The scene now renders on demand and caps at 60fps
+      // (see GlobeBackground), so this fires only on frames where the camera actually moved —
+      // but it still has to be allocation-free, because those are exactly the frames under load.
       const windowPos = new Cesium.Cartesian2();
       const surfaceNormal = new Cesium.Cartesian3();
       const toCamera = new Cesium.Cartesian3();
@@ -87,6 +90,19 @@ export default function StopMarkerLayer() {
       // height in CSS. Recomputed only when the route's altitude changes — which happens once,
       // when the height sample lands — rather than every frame.
       let anchoredAt = Number.NaN;
+
+      // CSS pixels, to match worldToWindowCoordinates. Cached and refreshed on resize rather
+      // than read inside the loop: `clientWidth` is a layout read, and the previous frame wrote
+      // `transform` and `--marker-depth` to these same nodes, so reading it at the top of the
+      // next frame forced a synchronous style-recalc/layout flush — once per frame, on a tree
+      // carrying several large backdrop-filter surfaces. These numbers only change on resize.
+      let viewWidth = scene.canvas.clientWidth;
+      let viewHeight = scene.canvas.clientHeight;
+      resizeObserver = new ResizeObserver(() => {
+        viewWidth = scene.canvas.clientWidth;
+        viewHeight = scene.canvas.clientHeight;
+      });
+      resizeObserver.observe(scene.canvas);
 
       listener = () => {
         const altitude = routeAltitudeRef.current;
@@ -104,11 +120,6 @@ export default function StopMarkerLayer() {
         }
 
         const cameraPosition = scene.camera.positionWC;
-        // CSS pixels, to match worldToWindowCoordinates. Read once per frame rather than per
-        // stop — these are layout reads, and the whole point is to touch layout as little as
-        // possible from inside a render callback.
-        const viewWidth = scene.canvas.clientWidth;
-        const viewHeight = scene.canvas.clientHeight;
         let placedCount = 0;
 
         for (let i = 0; i < routeStops.length; i++) {
@@ -189,8 +200,13 @@ export default function StopMarkerLayer() {
           placed[placedCount * 2 + 1] = projected.y;
           placedCount++;
 
-          // `transform`, `visibility` and this custom property — all three composited/inherited,
-          // so no layout is triggered. `translate(-50%, -100%)` puts the card's bottom edge on
+          // `transform`, `visibility` and this custom property. The first two are composited, but
+          // `--marker-depth` is *not* free: it feeds `opacity` and `filter: blur()` on the title
+          // card, so each write invalidates style for that subtree and recomputes a blur. That is
+          // affordable now only because `.marker-title-card` no longer *transitions* those two
+          // properties — when it did, every frame restarted a 400ms blur on every card at once.
+          // See the transition comment in globals.css before changing either side.
+          // `translate(-50%, -100%)` puts the card's bottom edge on
           // the stem tip; the anchor's `transform-origin: bottom center` keeps it there through
           // the scale. `--marker-depth` is the same already-computed `scale` (0.55-1), handed to
           // the title card below via CSS inheritance so it can drive opacity/blur for the
@@ -208,6 +224,7 @@ export default function StopMarkerLayer() {
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
       if (listener && !viewer.isDestroyed()) {
         viewer.scene.postRender.removeEventListener(listener);
       }

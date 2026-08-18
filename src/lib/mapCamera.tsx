@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   ReactNode,
@@ -433,28 +434,46 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  return (
-    <MapCameraContext.Provider
-      value={{
-        setViewer,
-        viewerRef,
-        ready,
-        flyToDestination,
-        flyToPlace,
-        resetToHome,
-        showDayRoute,
-        showHighways,
-        routeStops,
-        routeAltitudeRef,
-        hoveredIndex,
-        setHoveredIndex,
-        activeIndex,
-        setActiveIndex,
-      }}
-    >
-      {children}
-    </MapCameraContext.Provider>
+  // Memoised because this provider is rendered from the root layout, so *any* re-render of
+  // AppShell — a route change, for one — otherwise handed every `useMapCamera()` consumer a
+  // brand-new object and re-rendered all of them, including page.tsx and ItineraryCard.
+  //
+  // Note what this does not fix: `hoveredIndex`/`activeIndex` live in this same context, so
+  // hovering a marker or an itinerary row still re-renders every consumer, because the value
+  // genuinely changed. Splitting the volatile hover state into its own context would fix that,
+  // but it changes the shape of `useMapCamera()` for every caller — a separate piece of work.
+  const value = useMemo(
+    () => ({
+      setViewer,
+      viewerRef,
+      ready,
+      flyToDestination,
+      flyToPlace,
+      resetToHome,
+      showDayRoute,
+      showHighways,
+      routeStops,
+      routeAltitudeRef,
+      hoveredIndex,
+      setHoveredIndex,
+      activeIndex,
+      setActiveIndex,
+    }),
+    [
+      setViewer,
+      ready,
+      flyToDestination,
+      flyToPlace,
+      resetToHome,
+      showDayRoute,
+      showHighways,
+      routeStops,
+      hoveredIndex,
+      activeIndex,
+    ]
   );
+
+  return <MapCameraContext.Provider value={value}>{children}</MapCameraContext.Provider>;
 }
 
 export function useMapCamera() {

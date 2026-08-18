@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const HEADERS = { "User-Agent": "TripMate/1.0 (personal project)" };
 
+/** Wall-clock cap on each outbound call. Without a signal, undici lets a hung upstream sit for
+ *  ~5 minutes and the request that triggered it hangs with it — the literal "the page is stuck"
+ *  failure. An abort throws, which is the same shape as any other network failure here, so it
+ *  lands on the fail-soft path that already exists rather than adding a new error surface. */
+const FETCH_TIMEOUT_MS = 8_000;
+
 // Strip diacritics so romanization variants match (e.g. "Tenryū-ji" vs. "Tenryu-ji").
 function foldDiacritics(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -11,7 +17,7 @@ async function searchTitle(query: string): Promise<string | null> {
   const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
     query
   )}&format=json&srlimit=1`;
-  const res = await fetch(url, { headers: HEADERS });
+  const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   // Upstream failure (commonly a rate limit) — throw rather than returning null, so the caller
   // can tell "lookup failed, retry later" apart from "this place genuinely has no photo".
   if (!res.ok) throw new Error(`wikipedia search ${res.status}`);
@@ -66,7 +72,7 @@ export async function GET(req: NextRequest) {
 
     const summaryRes = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-      { headers: HEADERS }
+      { headers: HEADERS, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
     );
     if (!summaryRes.ok) {
       throw new Error(`wikipedia summary ${summaryRes.status}`);

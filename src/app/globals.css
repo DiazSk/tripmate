@@ -247,10 +247,13 @@ body {
     0 3px 16px rgb(0 0 0 / 0.55);
   opacity: calc(0.5 + var(--marker-depth, 1) * 0.5);
   filter: blur(calc((1 - var(--marker-depth, 1)) * 1.5px));
-  transition:
-    color var(--marker-transition),
-    opacity var(--marker-transition),
-    filter var(--marker-transition);
+  /* `color` only. `opacity` and `filter` are driven off `--marker-depth`, which the render loop
+     rewrites on the anchor every frame — so transitioning them meant every frame *restarted* a
+     400ms blur-and-fade toward a target that had already moved, on every card at once. That is
+     a full GPU blur pass per card per frame that can never be cached, and it was one of the
+     larger single costs in the app. The per-frame write is itself the animation; depth already
+     changes smoothly because the camera does. Do not add them back. */
+  transition: color var(--marker-transition);
 }
 
 /* A soft, edgeless vignette behind the name — not a card: no fill boundary, no border, nothing
@@ -731,7 +734,11 @@ body {
   background: rgb(var(--surface-deep-rgb) / 0.16);
   opacity: 1;
   transition: var(--scene-hover);
-  transition-property: opacity, backdrop-filter;
+  /* `opacity` only. Transitioning `backdrop-filter` re-samples and re-blurs the backdrop on every
+     frame of the 700ms hover, on each of the four cards — for a 3px veil whose fade is carried
+     almost entirely by the opacity half anyway. The hover rule below still lands the filter at
+     its resting value; it just gets there without animating a per-frame blur. */
+  transition-property: opacity;
 }
 
 .group:hover .scene-frost {
