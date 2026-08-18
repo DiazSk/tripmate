@@ -5,11 +5,12 @@
   "scripts": {
     "postinstall": "node scripts/copy-cesium-assets.mjs",
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/verify-build.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "node --import ./scripts/ts-resolve.mjs --test \"src/**/*.test.mjs\"",
-    "perf-bench": "node scripts/perf-bench.mjs"
+    "perf-bench": "node scripts/perf-bench.mjs",
+    "browser-matrix": "node scripts/browser-matrix.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.2",
@@ -30,6 +31,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
