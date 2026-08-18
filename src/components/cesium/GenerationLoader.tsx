@@ -1,8 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { STAGE_ORDER, stageMeta, StageId, StageStatus } from "@/lib/generationStages";
+import FactStack from "./FactStack";
+import {
+  STAGE_ORDER,
+  STAGE_SECONDS,
+  generationProgress,
+  stageMeta,
+  type StageId,
+  type StageProgress,
+} from "@/lib/generationStages";
 
 /** Each word is split into individual <span>s so every letter can carry its own
  *  staggered animation-delay — see the `.loader-letter:nth-child(n)` rules in
@@ -25,10 +33,23 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 const CAPTION_INTERVAL_MS = 2500;
+/** How often the progress value is recomputed and written to the CSS custom property. */
+const PROGRESS_TICK_MS = 100;
 
-export interface StageProgress {
-  stage: StageId;
-  status: "pending" | StageStatus;
+/** How long before Cancel is offered. */
+const CANCEL_AFTER_MS = 10000;
+
+/** Left edge of each stage's segment as a percentage, from the same weights the progress
+ *  math uses, so the ticks and the fill can't disagree about where a stage begins. */
+function waypointPercents(stages: readonly StageProgress[]): number[] {
+  const live = stages.filter((s) => s.status !== "skipped");
+  const total = live.reduce((sum, s) => sum + STAGE_SECONDS[s.stage], 0) || 1;
+  let acc = 0;
+  return live.map((s) => {
+    const at = (acc / total) * 100;
+    acc += STAGE_SECONDS[s.stage];
+    return at;
+  });
 }
 
 function activeStageId(stages: readonly StageProgress[]): StageId {
@@ -52,14 +73,75 @@ export default function GenerationLoader({
   active,
   mode = "generate",
   stages,
+  facts = [],
+  subject,
+  onCancel,
 }: {
   active: boolean;
   mode?: keyof typeof WORD;
   stages: StageProgress[];
+  /** True, trip-specific lines from `buildDestinationFacts`. Purely presentational here —
+   *  this component never fetches and knows nothing about where they came from. */
+  facts?: string[];
+  /** What is being generated, e.g. "Kyoto · Sep 19–22 · Mid-range". The form unmounts during
+   *  generation, so without this the screen never once names the trip it is working on. */
+  subject?: string;
+  /** Aborts the run and returns to the form. Omit it and no cancel is offered. */
+  onCancel?: () => void;
 }) {
   const { word, baseLabel } = WORD[mode];
   const activeId = activeStageId(stages);
   const [index, setIndex] = useState(0);
+
+  // --- Progress -------------------------------------------------------------------------
+  // The value is written straight to a CSS custom property through a ref rather than held in
+  // state: it changes ten times a second, and re-rendering the whole loader that often to
+  // move a bar a fraction of a pixel is waste — it would reconcile the fact stack on every
+  // tick for nothing. Same technique StopMarkerLayer uses for `--marker-depth`.
+  const stripRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef(0);
+  const stageStartRef = useRef<{ stage: StageId | null; at: number }>({ stage: null, at: 0 });
+
+  useEffect(() => {
+    if (!active) return;
+    // The stage clock is reset here rather than during render, where the caption index's own
+    // reset lives: `Date.now()` is impure and a render-phase read of it is genuinely wrong,
+    // not merely lint-flagged — a re-render for any unrelated reason would move the clock.
+    // The effect already re-runs on every SSE frame, so the reset lands one paint after the
+    // transition, which is nothing against a stage measured in tens of seconds.
+    if (stageStartRef.current.stage !== activeId) {
+      stageStartRef.current = { stage: activeId, at: Date.now() };
+    }
+    const write = () => {
+      progressRef.current = generationProgress(
+        stages,
+        Date.now() - stageStartRef.current.at,
+        progressRef.current
+      );
+      stripRef.current?.style.setProperty("--gen-progress", progressRef.current.toFixed(4));
+    };
+    write();
+    const id = setInterval(write, PROGRESS_TICK_MS);
+    return () => clearInterval(id);
+  }, [active, stages, activeId]);
+
+  // Cancel appears after a beat rather than immediately: most refines and every cached path
+  // finish well inside this, and a control that flashes up and vanishes reads as a glitch.
+  const [cancelReady, setCancelReady] = useState(false);
+  // Reset during render rather than in the effect, the same in-render adjustment the caption
+  // index below already uses. The component stays mounted between runs, so without a reset a
+  // second generation would offer Cancel from its first frame — and doing it in the effect is
+  // a synchronous setState that cascades an extra render pass after paint.
+  const [wasActive, setWasActive] = useState(active);
+  if (wasActive !== active) {
+    setWasActive(active);
+    setCancelReady(false);
+  }
+  useEffect(() => {
+    if (!active) return;
+    const id = setTimeout(() => setCancelReady(true), CANCEL_AFTER_MS);
+    return () => clearTimeout(id);
+  }, [active]);
 
   // Resets to the top of the new stage's caption list whenever the active stage changes,
   // so switching stages never shows a caption mid-rotation that belonged to the last one.
@@ -85,47 +167,73 @@ export default function GenerationLoader({
   const activeEntry = stages.find((s) => s.stage === activeId);
   const activeLabel = activeEntry?.status === "start" ? activeMeta.label : null;
 
-  return (
-    // The live region is the outer box; its announced content is one real string that now
-    // changes on a genuine stage transition (five of them, each meaningful — a stage change
-    // is exactly the answer to "is this stuck") rather than only once at mount. The rotating
-    // captions below stay aria-hidden, same reasoning as before: several cycle past within
-    // one stage saying nothing the stage label doesn't.
-    <div
-      role="status"
-      className="pointer-events-none fixed left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3"
-    >
-      <span className="sr-only">{activeLabel ? `${baseLabel} — ${activeLabel}` : baseLabel}</span>
-      <div className="loader-wrapper" aria-hidden="true">
-        {word.split("").map((letter, i) => (
-          <span key={i} className="loader-letter">
-            {letter}
-          </span>
-        ))}
-        <div className="loader" />
-      </div>
+  const live = stages.filter((s) => s.status !== "skipped");
+  const percents = waypointPercents(stages);
+  // Every stage settled: the marker has reached the pin and the run is over. page.tsx holds
+  // the loader open for a beat on this state before handing off, so the arrival is seen.
+  const complete = live.length > 0 && live.every((s) => s.status === "done");
 
-      <div className="flex items-center gap-3" aria-hidden="true">
-        {stages.map(({ stage, status }) => {
-          const meta = stageMeta(mode, stage);
-          return (
-            <div key={stage} className="flex flex-col items-center gap-1">
+  return (
+    <div className="pointer-events-none fixed inset-0 z-30 flex flex-col items-center justify-center gap-3">
+      {/* The live region covers the disc and the strip only. Its announced content is one real
+          string that changes on a genuine stage transition — five of them, each meaningful, and
+          a stage change is exactly the answer to "is this stuck". The rotating captions stay
+          aria-hidden: several cycle past within one stage saying nothing the stage label
+          doesn't. The facts sit OUTSIDE this region rather than inside it aria-hidden, so a
+          screen reader can reach them on demand without them being announced every few seconds
+          over someone waiting on a result. */}
+      <div role="status" className="flex flex-col items-center gap-3">
+        <span className="sr-only">{activeLabel ? `${baseLabel} — ${activeLabel}` : baseLabel}</span>
+        {subject && (
+          // The one line that says what is actually being made. It never moves, is readable at
+          // 400% zoom, and answers the question a waiting traveler is really asking — "did it
+          // take what I typed?" — which nothing else on this screen was doing.
+          <p className="glass-itinerary max-w-[min(90vw,26rem)] rounded-full px-3.5 py-1 text-center text-xs font-medium tracking-[0.025em] text-foreground tabular-nums">
+            {subject}
+          </p>
+        )}
+        <div className="loader-wrapper" aria-hidden="true">
+          {word.split("").map((letter, i) => (
+            <span key={i} className="loader-letter">
+              {letter}
+            </span>
+          ))}
+          <div className="loader" />
+        </div>
+
+        {/* Flight path: origin dot, travelled arc, marker, remaining dashes, destination pin.
+            This replaces the five separate stage dots rather than joining them — the
+            waypoints carry the same per-stage state in the same place, and the segments
+            between them are what the old row could never show: how much of the wait each
+            stage actually accounts for. Widths come from STAGE_SECONDS, so `generate`'s ~95
+            seconds gets ~63% of the rail instead of a fifth of it. */}
+        <div ref={stripRef} className="gen-strip" aria-hidden="true">
+          <div className="gen-strip-track">
+            <span className="gen-strip-origin" />
+            <div className="gen-strip-rail" />
+            <div className="gen-strip-fill" />
+            {percents.map((left, i) => (
               <span
-                className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${
-                  status === "done"
-                    ? "bg-accent"
-                    : status === "start"
-                      ? "animate-pulse bg-accent/60"
-                      : status === "skipped"
-                        ? "bg-white/20"
-                        : "bg-white/10"
+                key={live[i].stage}
+                className={`gen-strip-tick ${live[i].status === "done" ? "is-done" : ""} ${
+                  live[i].status === "start" ? "is-active" : ""
                 }`}
+                style={{ left: `${left}%` }}
               />
-              <span className="text-[10px] font-medium text-foreground/70">{meta.label}</span>
+            ))}
+            <div className="gen-strip-cursor">
+              <span className="gen-strip-marker" />
             </div>
-          );
-        })}
-      </div>
+            <span className={`gen-strip-pin ${complete ? "is-done" : ""}`} />
+          </div>
+          {/* The stage name sits inside the panel, once, instead of in a five-label row under
+              the rail. That row was a lie: labels were evenly spaced with `space-between`
+              while the ticks sit at duration-weighted positions, so with three stages under
+              three seconds the ticks bunch into the first 2% of the rail and the marker spent
+              most of the wait under the word "Reviewing" while `generate` was running. One
+              name that matches the running stage beats five that don't. */}
+          <p className="gen-strip-stage">{activeMeta.label}</p>
+        </div>
 
       {/* Caption pill carries the same frosted treatment as the itinerary card
           and every other panel over the map — see .glass-itinerary in
@@ -136,16 +244,36 @@ export default function GenerationLoader({
           first on screen. A plain motion.div keyed on `caption` lets React's own
           reconciliation swap the DOM node immediately on every change; only the entrance
           fade is animated, which cannot get stuck the same way. */}
-      <motion.div
-        aria-hidden="true"
-        key={caption}
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="glass-itinerary rounded-full px-3 py-1 text-xs font-medium text-foreground"
-      >
-        {caption}
-      </motion.div>
+        <motion.div
+          aria-hidden="true"
+          key={caption}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+          className="glass-itinerary rounded-full px-3 py-1 text-xs font-medium text-foreground"
+        >
+          {caption}
+        </motion.div>
+
+        {/* The only control on the screen, and the only thing here that opts back into pointer
+            events — the rest of the loader is inert so the globe underneath stays draggable.
+            Before this existed a traveler who spotted a wrong date at t=40s had no exit but a
+            reload, which destroys the run; the anxious user was the one most likely to kill a
+            call that was nearly finished. */}
+        {onCancel && cancelReady && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="value-in glass-itinerary pointer-events-auto rounded-full px-4 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+
+      {/* Outside the role="status" region above so a screen reader can reach the facts without
+          them being announced every few seconds over someone waiting on a result. */}
+      <FactStack facts={facts} />
     </div>
   );
 }

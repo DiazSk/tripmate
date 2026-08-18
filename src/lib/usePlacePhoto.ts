@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type Photo = { thumbnailUrl: string | null; imageUrl: string | null };
+type Photo = { thumbnailUrl: string | null; imageUrl: string | null; extract: string | null };
 
 const resolved = new Map<string, Photo>();
 // Same name is requested concurrently by several components (a stop's avatar and its stacked
@@ -36,8 +36,16 @@ function fetchPhoto(name: string): Promise<Photo | null> {
   return request;
 }
 
-/** `variant: "full"` asks for the larger `imageUrl` (header backgrounds); default is the small thumbnail. */
-export function usePlacePhoto(name: string, variant: "thumb" | "full" = "thumb"): string | null | undefined {
+/**
+ * `variant: "full"` asks for the larger `imageUrl` (header backgrounds), `"extract"` for the
+ * Wikipedia one-paragraph description that arrives in the same response; default is the small
+ * thumbnail. All three variants share one request and one cache entry per name, so asking for
+ * the extract alongside a photo costs nothing extra.
+ */
+export function usePlacePhoto(
+  name: string,
+  variant: "thumb" | "full" | "extract" = "thumb"
+): string | null | undefined {
   const [state, setState] = useState(() => ({ name, photo: resolved.get(name) }));
 
   // Render-phase state adjustment (not an effect) when `name` changes between renders —
@@ -47,7 +55,11 @@ export function usePlacePhoto(name: string, variant: "thumb" | "full" = "thumb")
   }
 
   useEffect(() => {
-    if (resolved.has(name)) return;
+    // The empty-name guard is not just an optimization: callers that pass a field the user
+    // hasn't filled in yet (the loader asks for the destination on every render of the plan
+    // step) would otherwise fire a lookup for "" on each mount, which can only ever 400 or
+    // miss, and burns a Wikipedia request every time.
+    if (!name || resolved.has(name)) return;
     let cancelled = false;
     fetchPhoto(name).then((photo) => {
       if (!cancelled) setState({ name, photo: photo ?? undefined });
@@ -61,5 +73,6 @@ export function usePlacePhoto(name: string, variant: "thumb" | "full" = "thumb")
   // undefined = not resolved yet (or the lookup failed and will be retried); a resolved place
   // with no photo comes back as an object whose urls are null.
   if (!photo) return undefined;
+  if (variant === "extract") return photo.extract;
   return variant === "full" ? photo.imageUrl : photo.thumbnailUrl;
 }
