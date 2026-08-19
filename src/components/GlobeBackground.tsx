@@ -209,6 +209,56 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
           tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#9BA6B4')" });
           tileset.colorBlendMode = Cesium.Cesium3DTileColorBlendMode.MIX;
           tileset.colorBlendAmount = 0.1;
+
+          // Two different stalls live here, and they want opposite things — which is why this
+          // is conditional rather than one global number.
+          //
+          // Cesium finalizes *every* tile that became ready during a frame, in that frame, with
+          // no per-frame budget and no public API to add one. Finalize is main-thread work
+          // (glTF finish + GPU upload) at very roughly 1.8ms a tile, so frame time is set by how
+          // many tiles land *together*, and that burst is bounded by how many requests are in
+          // flight to the single server Google serves from — 18 once its tileset helper has run,
+          // against Cesium's own default of 6.
+          //
+          // How big those bursts get scales with how many pixels are being filled, so the fix
+          // does too. Measured with a scripted lateral pan at 400m over cities the session had
+          // never visited:
+          //
+          //   3.58MP canvas (laptop, 2520x1422): bursts reach 14 tiles/frame at 18. Capping to
+          //   6 takes the worst frame from 257/330ms to 39-78ms across six cities, sustained fps
+          //   unchanged. This is a large, obvious win.
+          //
+          //   1.5MP canvas (1000x720 desktop window): bursts reach only 4-7 either way, and the
+          //   cap is a no-op — worst frame 66/46ms at 18 against 69/50ms at 6, inside noise.
+          //
+          //   0.65MP canvas (iPhone 16 Pro, 603x1071): bursts never exceed 8 at *either* limit,
+          //   because a small viewport simply never asks for that many tiles at once. There is
+          //   nothing for the cap to clip, so all it does is starve the pipeline — worst frame
+          //   goes the wrong way, 37/46ms at 18 against 51/73/109ms at 6.
+          //
+          // So the threshold sits above the size where the cap stops paying (and starts costing)
+          // and below the size where it pays enormously; 2MP is between the 1.5 and 3.58 that
+          // were actually measured, not a round number picked for looks. Evaluated once at
+          // construction: a window resize or an orientation change will not re-pick, which is
+          // the accepted cost of not re-tuning a global scheduler mid-drag.
+          const renderMegapixels =
+            (viewer.scene.drawingBufferWidth * viewer.scene.drawingBufferHeight) / 1e6;
+          if (renderMegapixels > 2) {
+            Cesium.RequestScheduler.maximumRequestsPerServer = 6;
+          }
+
+          // The phone's actual problem, and a different one: Google's helper leaves the tile
+          // cache at 1.5GB, and this scene fills it — ~1.39GB of resident textures over a few
+          // cities. On a real iPhone that is enough for iOS to discard the tab outright; it was
+          // caught mid-measurement, with `performance.getEntriesByType("navigation")[0].type`
+          // coming back `back_forward` on a page nobody had navigated. 512MB holds ~447MB of
+          // textures instead, costs nothing measurable on either device (laptop fps 39.4 -> 40.9
+          // at the same settings), and on the phone is the difference between a 311-417ms worst
+          // frame and 37-109ms. It is not a stall fix on desktop — it moved the laptop's worst
+          // frame by 3ms — it is a memory-headroom fix that happens to matter enormously where
+          // memory is scarce.
+          tileset.cacheBytes = 512 * 1024 * 1024;
+
           viewer.scene.primitives.add(tileset);
           viewer.scene.globe.show = false;
           usingPhotorealistic = true;
