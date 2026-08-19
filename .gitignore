@@ -49,6 +49,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# safari web inspector timeline exports — hundreds of MB each
+*-recording.json
+
 # Claude — worktree scratch, local settings, and dev-server config stay untracked; the
 # skills/ subdirectory is tracked (it's not machine-local — it's real planning content
 # consumed at runtime by loadSkill(), and losing it silently breaks production features)

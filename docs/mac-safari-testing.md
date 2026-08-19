@@ -53,44 +53,112 @@ Open Safari's console: **Settings → Advanced → "Show features for web develo
 
 ### 1. Does it work at all
 
-Load `/`, `/trips`, `/profile`, and a real `/trip/[id]`. For each: does the globe appear, does it
-drag, do the frosted panels look right, and is the console clean? A `ReferenceError` mentioning
-`OffscreenCanvas` would mean the Safari version is below 16.4 and Cesium cannot start — check
-**Safari → About Safari**.
+Load `/`, `/trips`, `/profile`, and a real `/trip/[id]`. For each: does the globe appear, do the
+frosted panels look right, and is the console clean? Dragging is only expected to work on `/` —
+`/trip/[id]` sets `enableInputs = false` so the camera stays owned by the itinerary. A
+`ReferenceError` mentioning `OffscreenCanvas` would mean the Safari version is below 16.4 and
+Cesium cannot start — check **Safari → About Safari**.
 
-### 2. Idle frame cost — the headline number
+### 2. Paint cost — scripted, on a production build
 
-This is the one that proves the render-on-demand work. Paste into the console, then **do not
-touch the page or move the mouse** for ~10 seconds:
+**Do not count `requestAnimationFrame`.** It ticks at a full 60/s on a page that paints nothing —
+measured on `/`: 601 rAF ticks and **0** actual paints in the same 10 seconds. Counting rAF would
+have called that "60fps idle" and been exactly wrong.
+
+The honest signal is WebGL draw calls: a rAF tick during which the draw counter moved is a frame
+that really painted. That works against `next start`, where `scripts/frame-probe.js` cannot —
+it needs the `__tripmateViewer` handle, which is stripped from production builds.
+
+Enable **Develop → Developer Settings → "Allow JavaScript from Apple Events"** once. Then paste
+this in the console, or keep it in a file and inject it (below):
 
 ```js
 (() => {
-  const v = document.querySelector(".cesium-widget canvas");
-  if (!v) return console.warn("no globe on this route");
-  let n = 0; const t0 = performance.now();
-  const tick = () => { n++; if (performance.now() - t0 < 1000) requestAnimationFrame(tick);
-    else console.log(`rAF ticks in 1s: ${n} (this is NOT paints — see step 3)`); };
-  console.log("settling 8s, hands off…");
-  setTimeout(() => requestAnimationFrame(tick), 8000);
+  const S = (window.__tm = window.__tm || { draws: 0 });
+  if (!S.patched) {
+    for (const P of [WebGLRenderingContext, WebGL2RenderingContext])
+      for (const m of ["drawElements", "drawArrays", "drawElementsInstanced", "drawArraysInstanced"]) {
+        const o = P.prototype[m];
+        P.prototype[m] = function (...a) { S.draws++; return o.apply(this, a); };
+      }
+    S.patched = true;
+  }
+  const loop = (ms, onTick, onEnd) => {
+    S.result = null;
+    let ticks = 0, painted = 0, last = S.draws, i = 0;
+    const times = [], t0 = performance.now();
+    const tick = (now) => {
+      ticks++;
+      if (S.draws > last) { painted++; times.push(now); last = S.draws; }
+      onTick(++i);
+      if (performance.now() - t0 < ms) requestAnimationFrame(tick);
+      else {
+        onEnd();
+        const sec = (performance.now() - t0) / 1000;
+        const g = times.slice(1).map((x, k) => x - times[k]).sort((a, b) => a - b);
+        S.result = { seconds: +sec.toFixed(2), rafTicks: ticks, paintedFrames: painted,
+          paintedFps: +(painted / sec).toFixed(1),
+          medianGapMs: g.length ? +g[g.length >> 1].toFixed(1) : null,
+          worstGapMs: g.length ? +g[g.length - 1].toFixed(1) : null };
+      }
+    };
+    requestAnimationFrame(tick);
+    return "started";
+  };
+  S.measure = (ms) => loop(ms, () => {}, () => {});
+  S.drag = (ms) => {
+    const c = document.querySelector(".cesium-widget canvas");
+    if (!c) return "no globe on this route";
+    const r = c.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const ev = (t, x, y) => c.dispatchEvent(new PointerEvent(t, { bubbles: true, composed: true,
+      pointerId: 1, pointerType: "mouse", isPrimary: true, button: 0,
+      buttons: t === "pointerup" ? 0 : 1, clientX: x, clientY: y }));
+    ev("pointerdown", cx, cy);
+    return loop(ms, (i) => ev("pointermove", cx + Math.round(160 * Math.sin(i / 14)),
+      cy + Math.round(70 * Math.cos(i / 21))), () => ev("pointerup", cx, cy));
+  };
+  S.backdrop = (on) => {
+    const id = "__tmKill"; let e = document.getElementById(id);
+    if (on) { if (e) e.remove(); return "backdrop:on"; }
+    e = document.createElement("style"); e.id = id;
+    e.textContent = "*{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}";
+    document.head.appendChild(e); return "backdrop:off";
+  };
+  S.env = () => { const c = document.querySelector(".cesium-widget canvas");
+    return JSON.stringify({ path: location.pathname, hidden: document.hidden, dpr: devicePixelRatio,
+      canvasDevicePx: c ? c.width + "x" + c.height : null, draws: S.draws }); };
+  S.get = () => (S.result ? JSON.stringify(S.result) : "");
+  return "probe:ready";
 })();
 ```
 
-For real painted frames rather than rAF ticks, use the dev build (`npm run dev`), where the
-`__tripmateViewer` handle exists, and run `scripts/frame-probe.js`. In a production build that
-handle is deliberately stripped, so the honest idle measurement in production is Safari's own
-**Develop → Show Web Inspector → Timelines → Rendering Frames**: record 10 seconds untouched.
-Expected: essentially no frames. Before this work it was pinned at the display refresh rate.
+`__tm.measure(10000)` for idle, `__tm.drag(5000)` for a synthetic rotate-drag, `__tm.get()` to
+read the result once it has settled, `__tm.backdrop(false)` to strip every `backdrop-filter` for
+an A/B, `__tm.env()` for the canvas size and visibility. Each returns immediately; poll `get()`.
 
-### 3. Interaction cost — where Safari differs most
+Driving it from the shell (a run is one `sleep` longer than the sample):
 
-In **Timelines**, hit record, then drag the globe steadily for ~5 seconds and stop.
+```bash
+osascript -e 'set js to read POSIX file "/tmp/probe.js"' -e 'tell application "Safari" to do JavaScript js in front document'
+osascript -e 'tell application "Safari" to do JavaScript "__tm.measure(10000)" in front document'
+sleep 12
+osascript -e 'tell application "Safari" to do JavaScript "__tm.get()" in front document'
+```
 
-Read off: the average frame rate while dragging, and whether "Painting" or "Compositing"
-dominates. On Windows/Chromium this was fill-rate bound at 33.7fps before `resolutionScale` was
-capped to 1.5×. Safari's `backdrop-filter` implementation differs enough that this number is
-genuinely unknown — it is the main thing worth learning.
+**Three traps that silently void every number:**
 
-### 4. iPhone
+- **Safari must be frontmost and unoccluded.** A covered window — even one merely sitting behind
+  another Safari window of the same size — reports `document.hidden = true`, and Safari throttles
+  rAF to roughly one tick per three seconds. Check `document.hidden` before *and* after every run;
+  a run that ends hidden is garbage. This is the single easiest way to record a fake number.
+- **Leave the Screenshots and Script instruments off** in Timelines. A 157-second recording with
+  them on carried 155,238 `microtask-dispatched` records and reported 4.4fps — that is the
+  instrumentation, not the app.
+- **A Timelines export cannot answer "Painting or Compositing".** Exported `rendering-frame`
+  records hold only `startTime` and `endTime`; the breakdown exists only in the live UI. To get at
+  it without the UI, sweep the window size instead — see the fill-rate table below.
+
+### 3. iPhone
 
 Same URL over Wi-Fi. To see its console: connect by cable, enable **Settings → Safari →
 Advanced → Web Inspector** on the phone, then on the Mac **Develop → [your iPhone] → the page**.
@@ -99,15 +167,56 @@ throttles when warm.
 
 ---
 
-## What to send back
+## Baseline — 2026-08-18
 
-Short is fine. These five lines are the whole point:
+Production build, Safari 26.5 / macOS 26.5.1, MacBook Air M4 (`Mac16,12`), 16 GB. Re-run the probe
+and compare against these; report the delta, not a fresh essay.
 
-1. Safari version (**About Safari**) and Mac model / chip.
-2. Does the globe render and drag on every route — and is the console clean?
-3. Idle: frames recorded in 10 seconds of not touching it.
-4. Dragging: average fps, and whether Painting or Compositing dominates.
-5. Anything that looks visually wrong versus Chrome — especially the frosted panels, which is
-   where Safari most plausibly diverges.
+**Idle: zero paints, on both globe routes.** This is the number the render-on-demand work exists
+for. Anything above 0 is a regression.
+
+| Route | Sample | rAF ticks | Painted frames |
+|---|---|---|---|
+| `/` | 10.0s | 601 | **0** |
+| `/trip/[id]` | 10.0s | 596 | **0** |
+
+**`backdrop-filter` costs nothing measurable.** Same drag at 2565×1531, panels forced to
+`backdrop-filter: none`:
+
+| | Painted fps | Median frame |
+|---|---|---|
+| Panels on | 36.1 | 26 ms |
+| Panels off | 36.6 | 27 ms |
+
+The frosted panels were the thing most expected to diverge on Safari. They don't — so a slow drag
+is not the glass, and stripping blur is not the fix.
+
+**Drag is mostly not fill-rate.** Warm, window resized between runs:
+
+| Canvas device px | MP | Painted fps | Median frame |
+|---|---|---|---|
+| 900×522 | 0.47 | 58.7 | 17 ms |
+| 1500×972 | 1.46 | 54.4 | 17 ms |
+| 2520×1422 | 3.58 | 44.3 | 21 ms |
+
+fps does scale with pixels, so fill rate is real — but 7.6× fewer pixels bought only ~1.3× faster
+frames, and the two smaller sizes sit on the 16.7ms vsync ceiling. A large fixed per-frame cost
+survives any canvas shrink: Cesium scene traversal and 3D-tile selection, on the CPU. So
+`MAX_RENDER_PIXEL_RATIO` (1.5, in `GlobeBackground.tsx`) buys less than it looks like — order 3ms
+a frame at full size. Worth revisiting if crispness matters more than ~5fps.
+
+**Cold 36–37fps vs warm 44–45fps.** The gap is Google 3D tile streaming. Measure warm, or say which
+you measured — this is what made the first hand-driven recording look catastrophic.
+
+**Routes.** `/`, `/trips`, `/profile`, `/trip/[id]` all clean: no JS errors, no failed
+subresources, globe canvas 1920×1122 on each. The globe is deliberately non-interactive on
+`/trip/[id]` (`enableInputs = false` — the camera is driven by the itinerary), so "does it drag"
+only applies on `/`.
+
+**Versus Chrome.** All four frosted-panel recipes resolve to identical computed values in both
+engines — `blur(12px)`, `blur(20px) saturate(1.8)`, `blur(56px) saturate(1.8)`, matching
+backgrounds and borders; only `oklab` float precision differs in serialization. That is a
+CSS-level match, not a pixel-level one — a real pixel diff still needs eyes, or Screen Recording
+permission for `screencapture`.
 
 If something is broken, the console text and the route it happened on is enough to work from.
