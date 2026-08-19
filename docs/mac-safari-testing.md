@@ -461,4 +461,44 @@ near 1.0 throughout — so the app is painting nearly every frame iOS offers; iO
 fewer. Two minutes of rest restored 58.2 fps in full. Measure thermals *after* stating how long
 the device has been under load, or the number means nothing.
 
+## Pending: the pixel comparison
+
+The CSS-level match above is not a pixel-level one, and the remaining question is whether Safari
+and Chrome actually *rasterize* the glass the same way — same blur falloff, same edge, same
+saturation — not merely whether they agree on the declared values.
+
+Run both browsers on the same Mac. `scripts/pixel-compare.sh` does that:
+
+```bash
+brew install imagemagick        # once
+npx next start -H 0.0.0.0 -p 3100
+./scripts/pixel-compare.sh http://localhost:3100 /trips
+```
+
+It needs Screen Recording permission for Terminal (System Settings -> Privacy & Security), because
+Safari has no CLI page-capture and the only route to its pixels is a screen grab of a
+deterministically positioned window.
+
+**This script has never been run — it was written on Windows and cannot be tested there.** The
+likely failure points, in order: Screen Recording permission not granted (captures come out black),
+`System Events` needing Accessibility permission to move a window, and Safari refusing
+`open location` if "Allow JavaScript from Apple Events" was never enabled. All three fail loudly.
+
+**Read the diff image, not the pixel count.** Safari and Chrome have never rasterized glyphs
+identically, so text alone will light up thousands of pixels. What matters is shape:
+
+| In the diff | Means |
+|---|---|
+| Speckle along text | Glyph antialiasing. Expected. Ignore. |
+| Solid block over a glass panel | A real `backdrop-filter` difference. Report it. |
+| Shifted or offset geometry | A layout difference. Report it. |
+| The globe area differing | Expected — the tileset is not frame-identical between two loads. |
+
+Compare counts only against previous runs of this same script, never against an absolute number.
+
+Worth stating what is already known before spending time here: the drag A/B found
+`backdrop-filter` costs **nothing measurable** on Safari (36.1 vs 36.6 fps with it stripped), and
+all four recipes resolve to identical computed values. So this is a check for a *visual* divergence,
+not a performance one. If the diff comes back clean, the glass question is closed on both axes.
+
 If something is broken, the console text and the route it happened on is enough to work from.
