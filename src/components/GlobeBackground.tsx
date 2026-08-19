@@ -210,6 +210,42 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
           tileset.colorBlendMode = Cesium.Cesium3DTileColorBlendMode.MIX;
           tileset.colorBlendAmount = 0.1;
 
+          // Draw the coarse ancestor immediately instead of waiting for the whole chain down to
+          // the target detail. `createGooglePhotorealistic3DTileset` leaves this false.
+          //
+          // The reason is what the *first two seconds* look like, which is when a visitor forms
+          // their opinion. Measured over a scripted arrival at 400m on Prague, with the `true` case
+          // handicapped by running first on a cold HTTP cache while `false` got the warm one:
+          //
+          //   t=2s   skipLOD true: 84,971 triangles — a legible city, roofs and streets
+          //          skipLOD false: 8,494 triangles — an empty grey void
+          //   t=12s  visually indistinguishable; 0.84% mean pixel difference across the frame
+          //
+          // It also loads far less: re-measured in this file's *shipped* configuration (the request
+          // cap above, 512MB cache) over pans across four cities nobody had visited, tile loads per
+          // pan fell from 38/137 to 16/21, and the largest burst in a single frame from 4-5 tiles to
+          // 1-2. Burst size is the thing that sets frame time here (see the request-cap note), so
+          // this compounds with that cap rather than duplicating it.
+          //
+          // It is **not** a throughput win any more, and that is worth knowing before anyone cites
+          // the old number: painted fps is 36.4/36.5 against 37.5/35.8, i.e. identical. An earlier
+          // +22% (39.4 -> 48.1) predates the request cap, and capping concurrency has since taken
+          // that headroom.
+          //
+          // Settled detail does not suffer. Same city, same pose, fully settled: 0.65% mean pixel
+          // difference between on and off — an indistinguishable frame, which is the evidence that
+          // actually matters. Triangle counts agree (649k from 890 tiles against 431k from 839) but
+          // are the weaker signal: DESIGN.md's "judge globe detail by minimum geometric error, not
+          // triangle count" applies, and ignoring it is how a four-city sample first appeared to
+          // show detail *dropping* — mesh density per declared error is Google's data and varies by
+          // region, so cross-city counts compare regions rather than settings.
+          //
+          // The documented risk is popping between levels, and it is real but transient: a coarse
+          // wedge survived to 12s on a cold run (12.9% of that corner's pixels differing from the
+          // settled reference) and was gone warm (1.4%). Since the alternative at that moment is a
+          // blank viewport, approximate geometry that sharpens is the better failure.
+          tileset.skipLevelOfDetail = true;
+
           // Two different stalls live here, and they want opposite things — which is why this
           // is conditional rather than one global number.
           //
