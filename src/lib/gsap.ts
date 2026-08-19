@@ -9,8 +9,7 @@ import { SplitText } from "gsap/SplitText";
 // `import { gsap, ScrollTrigger } from "@/lib/gsap"` instead of re-registering everywhere.
 gsap.registerPlugin(ScrollTrigger, SplitText);
 
-export const prefersReducedMotion = () =>
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Re-exported, not defined here — see the note in `reducedMotion.ts` for why it moved out.
+export { prefersReducedMotion } from "./reducedMotion";
 
 export { gsap, ScrollTrigger, SplitText };

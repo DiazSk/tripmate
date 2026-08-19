@@ -166,7 +166,26 @@ export function getTrip(id: string): TripRow | undefined {
     | undefined;
 }
 
-export function updateTripItinerary(id: string, itineraryJson: string): void {
+/**
+ * Writes the itinerary, and the trip's end date with it when the edit changed the trip's length.
+ *
+ * The two have to move together: `trips.end_date` is what the trip list and every date range in the
+ * UI read, so an itinerary that grew a day while the row still claimed the old end date would show
+ * a 4-day plan filed under a 3-day trip. One statement, so they can't diverge halfway.
+ */
+export function updateTripItinerary(
+  id: string,
+  itineraryJson: string,
+  endDate?: string
+): void {
+  if (endDate) {
+    db.prepare(`UPDATE trips SET itinerary_json = ?, end_date = ? WHERE id = ?`).run(
+      itineraryJson,
+      endDate,
+      id
+    );
+    return;
+  }
   db.prepare(`UPDATE trips SET itinerary_json = ? WHERE id = ?`).run(itineraryJson, id);
 }
 

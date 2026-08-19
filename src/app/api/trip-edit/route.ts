@@ -12,9 +12,25 @@ interface EditResponse {
   reply?: string;
   options?: string[];
   changes?: string[];
+  /** Guardrail alerts (skill §12) — travel time, hours clashes, an over-long day, a budget
+   *  overshoot. Model-authored, one line each, rendered with a warning affordance by the UI. */
+  warnings?: string[];
   why?: string;
   knockOn?: string | null;
   ops?: PatchOp[];
+}
+
+/**
+ * Which days the traveler's plan actually changed on, as 1-based day numbers.
+ *
+ * Derived from the ops the applier accepted rather than asked of the model: "confirm which days
+ * you touched" is a fact about what happened, and a model that miscounts its own dayIndexes would
+ * confirm the wrong day with total confidence. Rejected ops are excluded — reference equality is
+ * sound here because `applyPatch` pushes the very op objects it was handed.
+ */
+function daysModified(ops: PatchOp[], rejected: { op: PatchOp }[]): number[] {
+  const applied = ops.filter((op) => !rejected.some((r) => r.op === op));
+  return [...new Set(applied.map((op) => op.dayIndex + 1))].sort((a, b) => a - b);
 }
 
 /**
@@ -112,7 +128,8 @@ export async function POST(req: NextRequest) {
     );
     const parsed = parseJsonResponse<EditResponse>(raw);
 
-    const { itinerary: updated, rejected } = applyPatch(itinerary, parsed.ops ?? [], scope);
+    const ops = parsed.ops ?? [];
+    const { itinerary: updated, rejected } = applyPatch(itinerary, ops, scope);
 
     return NextResponse.json({
       ok: true,
@@ -123,6 +140,9 @@ export async function POST(req: NextRequest) {
       reply: parsed.reply ?? null,
       options: parsed.options ?? [],
       changes: parsed.changes ?? [],
+      warnings: parsed.warnings ?? [],
+      // Empty on a turn that only answered a question.
+      daysModified: daysModified(ops, rejected),
       why: parsed.why ?? null,
       knockOn: parsed.knockOn ?? null,
       // Non-empty only when the model tried to reach outside its scope — worth surfacing rather
