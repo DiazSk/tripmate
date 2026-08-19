@@ -30,12 +30,11 @@ PowerShell:
 New-NetFirewallRule -DisplayName "TripMate dev 3100" -Direction Inbound -LocalPort 3100 -Protocol TCP -Action Allow -Profile Private
 ```
 
-**On the Mac**, open Safari to (this machine's current LAN IP — re-check with `ipconfig` if it
-has changed):
-
-```
-http://192.168.87.226:3100
-```
+**On the Mac**, open Safari to the serving machine's current LAN IP — get it from `ipconfig` on
+Windows, or `ipconfig getifaddr en0` when the Mac is the one serving. Do not trust an IP written
+down anywhere, including here: the one this document used to hardcode belonged to a machine that is
+no longer the host, and a link-local address over USB renegotiates mid-session (see §3). If both
+ends are Apple, `http://$(scutil --get LocalHostName).local:3100` sidesteps the question entirely.
 
 ## Option B — run it natively on the Mac
 
@@ -54,10 +53,18 @@ Open Safari's console: **Settings → Advanced → "Show features for web develo
 ### 1. Does it work at all
 
 Load `/`, `/trips`, `/profile`, and a real `/trip/[id]`. For each: does the globe appear, do the
-frosted panels look right, and is the console clean? Dragging is only expected to work on `/` —
-`/trip/[id]` sets `enableInputs = false` so the camera stays owned by the itinerary. A
+frosted panels look right, and is the console clean? Dragging the globe is only expected to work on
+`/` — `/trip/[id]` sets `enableInputs = false` so the camera stays owned by the itinerary. A
 `ReferenceError` mentioning `OffscreenCanvas` would mean the Safari version is below 16.4 and
 Cesium cannot start — check **Safari → About Safari**.
+
+**Scroll every route with a finger, not only a wheel.** These are different code paths and one
+worked while the other was completely broken: the content overlay is `pointer-events-none` so drags
+reach the globe, and a wheel scrolls the nearest scrollable ancestor regardless of that, but a touch
+scroll is resolved by hit-testing and found nothing to scroll. `/trips` held 2938px of content in an
+812px viewport with no way to reach any of it, on every phone, invisibly to every desktop test. See
+the `.content-overlay` rule in globals.css. Any change to overlay layering or `pointer-events` wants
+a real touch pass, and the Simulator is enough for that one — it is hit-testing, not GPU.
 
 ### 2. Paint cost — scripted, on a production build
 
@@ -201,11 +208,18 @@ const command = (wsUrl, method, params) => new Promise((resolve, reject) => {
 });
 ```
 
-**Four things that block the connection, in the order they bit:**
+**Five things that block a device run, in the order they bit:**
 
 - **Safari's own Web Inspector must be CLOSED.** One client owns a page; with the inspector
   attached the proxy logs `Taking page … from remote` on a loop and the phone answers nothing at
   all — not an error, silence.
+- **iOS will discard the tab out from under you, and it looks like a bug in your probe.** Four
+  consecutive trials returned nothing because every `window` handle had been wiped while
+  `__tripmateCesium` was mysteriously back — the tab had been killed for memory and restored.
+  `performance.getEntriesByType("navigation")[0].type === "back_forward"` on a page nobody
+  navigated is the fingerprint. Set a sentinel (`window.__sentinel = Date.now()`) and check it
+  survived after every run; a lost sentinel means the numbers are gone, not small. This is a real
+  product signal too, not only a testing nuisance — see the tile cache note in the iPhone baseline.
 - **The phone must actually be on the Mac's network.** Joining "the wifi" is not enough if it is a
   different SSID or band. Check from the Mac: `ping -c3 192.168.87.255` then `arp -a` — if the
   phone is not in that list it cannot reach the server, whatever the phone's settings screen says.
@@ -229,6 +243,86 @@ __tm.armed = (ms) => { const c = document.querySelector(".cesium-widget canvas")
 Battery temperature, for the thermal run, comes from `idevicediagnostics ioregentry
 AppleSmartBattery` (centi-Celsius, so divide by 100). Note the cable keeps the phone *charging*,
 which adds heat — a thermal test this way is harsher than pocket use, not gentler.
+
+**The dev build will not boot Cesium on the phone.** The page renders completely — content, panels,
+toggles — and makes *zero* requests for Cesium, so there is no canvas and no `__tripmateViewer`,
+indefinitely. Do not debug it; use a production build. When a device test needs the viewer handle
+that production strips, the cheap move is to temporarily replace the `NODE_ENV` gate in
+`GlobeBackground.tsx` with `if (true)`, build, measure, then `git checkout --` the file. That gives
+production performance characteristics *and* runtime access, which is what makes a same-session
+A/B on the device possible at all. It also means the shipped code is never the thing you measured,
+so re-verify once on the real build afterwards.
+
+### 4. Attributing a stall to tiles
+
+Painted-fps tells you a frame was long, not why. Here it has been tiles every time — and the two
+most obvious ways to measure that are both actively misleading:
+
+- **`statistics.numberOfTilesProcessing` sampled at `postRender` reads ~0 on the very frames that
+  stalled.** Processing for that frame has already finished by the time the event fires, so the
+  counter makes tiles look *uncorrelated* with stalls (measured 1.3 on slow frames against 0.5 on
+  fast ones — nothing). They are the entire cause.
+- **Timing `preUpdate` → `postUpdate` blames "outside Cesium."** It attributed 153ms of a 159ms
+  frame to outside, with `update` at 0.0ms every single frame. That is an artifact: tile content is
+  finalized in `prePassesUpdate`, *before* the scene raises `preUpdate`, so it lands outside any
+  window those two events can bound. The 0.0ms is the tell — treat a phase that is always exactly
+  zero as a broken probe, not a fast one.
+
+What works is counting `tileLoad` events per frame — the event that fires when a tile actually
+becomes ready — and correlating that against the frame gap:
+
+```js
+(() => {
+  const v = window.__tripmateViewer;            // see §3 for getting this in a production build
+  if (!v) return "no viewer";
+  // The tileset is not exposed anywhere — find it on the primitive collection. It is the only
+  // primitive carrying `maximumScreenSpaceError`.
+  let t = null;
+  for (let i = 0; i < v.scene.primitives.length; i++) {
+    const p = v.scene.primitives.get(i);
+    if (p && "maximumScreenSpaceError" in p) { t = p; break; }
+  }
+  if (!t) return "no tileset";
+  window.__tileset = t;
+  // Attached to the viewer by GlobeBackground, but late — every call site in the app guards it.
+  v.stopAutoRotate?.();
+  const A = (window.__a = { rows: [], loadsThisFrame: 0, recording: false, last: 0 });
+  t.tileLoad.addEventListener(() => { A.loadsThisFrame++; });
+  v.scene.postRender.addEventListener(() => {
+    const now = performance.now();
+    if (A.recording && A.last) A.rows.push({ gap: +(now - A.last).toFixed(1), loads: A.loadsThisFrame });
+    A.loadsThisFrame = 0; A.last = now;
+  });
+  // Drive the camera rather than a finger: identical path every run, so conditions are comparable.
+  A.pan = (ms, mpf = 12) => {
+    A.rows.length = 0; A.last = 0; A.recording = true;
+    const t0 = performance.now();
+    const step = () => {
+      v.camera.moveRight(mpf); v.scene.requestRender();
+      if (performance.now() - t0 < ms) return requestAnimationFrame(step);
+      A.recording = false;
+      const g = A.rows.map(r => r.gap).sort((a, b) => a - b);
+      A.result = { frames: A.rows.length, medianGap: g[g.length >> 1], worstGap: g[g.length - 1],
+        maxLoadsInOneFrame: Math.max(...A.rows.map(r => r.loads)),
+        totalLoads: A.rows.reduce((a, r) => a + r.loads, 0),
+        framesOver45: A.rows.filter(r => r.gap > 45).length };
+    };
+    requestAnimationFrame(step);
+    return "started";
+  };
+  return "attrib installed";
+})();
+```
+
+The correlation comes out immediately: ~20ms on frames where nothing landed, 32–40ms where 9–11
+did. `maxLoadsInOneFrame` is the metric that actually predicts the stall.
+
+Two disciplines make the runs comparable. **Give every condition its own city nobody has visited
+that session** — both the tileset cache and the HTTP cache make a second visit meaningless — and
+park the camera with `setView` at a fixed altitude first (`viewer.stopAutoRotate()` before it, or
+the auto-rotate listener drags the camera off your pose; see DESIGN.md). And **read
+`maxLoadsInOneFrame`, not total tiles fetched**: Sydney pulled the most tiles of any run in this
+session (306) and had the *smallest* stall.
 
 ---
 
@@ -273,6 +367,45 @@ a frame at full size. Worth revisiting if crispness matters more than ~5fps.
 **Cold 36–37fps vs warm 44–45fps.** The gap is Google 3D tile streaming. Measure warm, or say which
 you measured — this is what made the first hand-driven recording look catastrophic.
 
+## Tile streaming — mechanism, and the fix that shipped
+
+The cold-vs-warm gap above *is* the stall, and it has one cause. **Cesium finalizes every tile that
+became ready during a frame, in that frame, with no per-frame budget and no public API to add one.**
+Finalize is main-thread work — glTF finish plus GPU upload — at very roughly **1.8ms a tile**. So
+frame time is set by how many tiles land *together*, and that burst is bounded by how many requests
+are in flight to the single server Google serves from: **18** once `createGooglePhotorealistic3DTileset`
+has run, against Cesium's own default of 6.
+
+Burst size scales with how many pixels are being filled, so the remedy has to as well. Scripted
+lateral pans at 400m, fresh city per run:
+
+| Canvas | MP | Bursts reach | Capping requests to 6 |
+|---|---|---|---|
+| 2520×1422 (laptop full screen) | 3.58 | **14 tiles/frame** | worst frame **257/330ms → 39–78ms**, fps unchanged |
+| 1500×1002 (1000×720 window) | 1.50 | 4–7 either way | **no-op** — 66/46ms against 69/50ms |
+| 603×1071 (iPhone 16 Pro) | 0.65 | ≤8 either way | **worse** — 37/46ms against 51/73/109ms |
+
+A small viewport never *asks* for 14 tiles at once, so there is nothing for the cap to clip and it
+only starves the pipeline. Hence `GlobeBackground.tsx` caps `RequestScheduler.maximumRequestsPerServer`
+to 6 **only above 2MP** of drawing buffer — a threshold placed between the two sizes actually
+measured either side of it, not a round number. It is evaluated once at construction, so a window
+resized across that boundary keeps whichever branch it booted with.
+
+Cutting to 3 removes long frames outright but costs real throughput (median 18 → 23ms). Wrong trade
+for something you drag.
+
+**The phone's stall was memory, not scheduling.** Google's helper leaves `cacheBytes` at 1.5GB and
+this scene fills it — ~1.39GB of resident textures across a few cities — which is enough for iOS to
+discard the tab. `tileset.cacheBytes` is now 512MB, holding ~447MB of textures, which costs nothing
+measurable anywhere (laptop 39.4 → 40.9fps at identical settings). Do not mistake it for a desktop
+stall fix: it moved the laptop's worst frame by **3ms**. It is headroom, and headroom is the whole
+game on a phone.
+
+**One measured win deliberately not taken.** `skipLevelOfDetail: true` gave **+22% fps and −67%
+tile loads** on the laptop (39.4 → 48.1fps, 80 → 26 loads). It is off by default for Google's tiles
+for a reason — it can pop visually between levels — so it is a `/impeccable critique` question, not
+a perf one. It also does not help the stall (worst frame 141ms).
+
 **Routes.** `/`, `/trips`, `/profile`, `/trip/[id]` all clean: no JS errors, no failed
 subresources, globe canvas 1920×1122 on each. The globe is deliberately non-interactive on
 `/trip/[id]` (`enableInputs = false` — the camera is driven by the itinerary), so "does it drag"
@@ -295,19 +428,31 @@ laptop at this.
 |---|---|---|---|
 | Idle, 10s | **0 painted / 600 rAF** | — | — |
 | Drag, tiles cached | **58.5** | 17 ms | 36 ms |
-| Drag, new ground | 51 | 17 ms | **311 ms** |
+| Drag, new ground — *before* the tile fix | 51 | 17 ms | **311 ms** |
+| Drag, new ground — *after* the tile fix | **54.4** | 17 ms | **132 ms** |
 | Drag, after 5 min sustained | 30–47 | 22–33 ms | 92–221 ms |
 | Drag, after 2 min rest | **58.2** | 17 ms | 36 ms |
+
+Both "new ground" rows are the same protocol — production build, real finger, cold city, first drag
+after load — but they are different cities (Rome, then Lisbon) and one run each. Consistent with the
+controlled A/B in the tile section above, but not itself a controlled result.
 
 The expectation this document was written with — that a phone would be the harsh case, fill-rate
 bound, with `backdrop-filter` the likely culprit — is wrong on every count. Warm, the phone runs
 at the refresh rate and beats the MacBook's 44 fps, because the DPR cap leaves it 5.5× fewer
 pixels to fill.
 
-**The only real jank is first-visit 3D-tile streaming**, and it is a main-thread block, not GPU
-cost: on new ground rAF itself drops to 55.7/s and one frame took 311 ms. Re-drag the same area
-and it is 36 ms. Anything spent here should go on keeping tile work off the main thread; there is
-nothing left to win in fill rate or glass.
+**The only real jank was first-visit 3D-tile streaming**, and it is a main-thread block, not GPU
+cost: on new ground rAF itself drops to 55.7/s. That is now addressed — see the tile section above
+for the mechanism and the two settings — and the phone's half of it turned out to be memory
+headroom, not scheduling. There is nothing left to win in fill rate or glass.
+
+**Incidental, but worth knowing before reading any animation bug report from this device:** the test
+phone has **Reduce Motion enabled** — `Page.defaultUserPreferencesDidChange` reports
+`PrefersReducedMotion: Reduce` over the inspector protocol. Every CSS entrance animation in the app
+(`.hero-rise`, `.settle-in`, `.value-in`, `.pop-in`, the tier fan) is gated behind
+`prefers-reduced-motion: no-preference`, so none of them have ever run on it. The globe is exempt by
+nature — it is a WebGL render loop, not CSS.
 
 **It throttles, and that is not the app's fault.** Under five minutes of continuous dragging,
 battery temperature rose 41.1 → 43.6 °C and the frame rate became unstable from ~90 s, repeatedly
