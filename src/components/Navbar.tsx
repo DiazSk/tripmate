@@ -59,10 +59,15 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Section links only exist on `/`, so there's nothing for the menu to hold — and
-  // nothing to leave stuck open — on any other route.
-  useEffect(() => {
+  // nothing to leave stuck open — on any other route. Reset during render rather
+  // than in an effect: an effect would paint one frame of the stale-open menu first
+  // (and React flags the cascading render). This is React's documented
+  // adjust-state-on-prop-change pattern.
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
     setMenuOpen(false);
-  }, [pathname]);
+  }
 
   // Closes on an outside tap. A 2-item menu doesn't need a full focus-trap/modal
   // treatment, but leaving it open until the next unrelated tap lands somewhere else
