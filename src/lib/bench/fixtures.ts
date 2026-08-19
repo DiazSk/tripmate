@@ -88,6 +88,9 @@ interface PoiSpec {
   lon: number;
   kinds: string | null;
   openingHours: string | null;
+  /** OSM `wheelchair`, as `fetchPoiOsmTags` now returns it. Omit for "no tag on record", which is
+   *  the common case and is NOT the same as `"no"`. */
+  wheelchair?: "yes" | "limited" | "no";
 }
 
 function candidate(p: PoiSpec): CandidatePoi {
@@ -160,6 +163,7 @@ function buildFixture(spec: FixtureSpec): BenchFixture {
     closedDays: closedDaysFromOpeningHours(p.openingHours),
     visitMinutes: estimateVisitMinutes(p.kinds),
     visitMinutesEstimated: true,
+    wheelchair: p.wheelchair ?? null,
     partial: p.openingHours === null,
   }));
 
@@ -194,6 +198,64 @@ function buildFixture(spec: FixtureSpec): BenchFixture {
 // --- the fixtures ------------------------------------------------------------------------------
 
 const SPECS: FixtureSpec[] = [
+  {
+    // The only fixture exercising the three inputs the pipeline gained last: a hard dietary
+    // constraint, a step-free requirement that must outrank `high` energy, and logistics that
+    // bound day 1 and the last day. Every other fixture leaves all three unstated, which is the
+    // other case worth covering but not the one that can regress silently.
+    id: "barcelona-access-dietary",
+    title: "Barcelona — step-free, vegan, booked stay and flights",
+    covers:
+      "Dietary + accessibility + booked logistics all stated; step-free overrides high energy; OSM wheelchair tags present.",
+    region: "Catalonia, Spain",
+    lat: 41.3874,
+    lon: 2.1686,
+    timezone: "Europe/Madrid",
+    countryCode: "ES",
+    startDate: "2026-10-15",
+    tripDays: 4,
+    leadTimeDays: 58,
+    season: "fall",
+    weatherDays: [
+      weather("2026-10-15", 17, 24, 10, "08:02", "19:31"),
+      weather("2026-10-16", 18, 25, 0, "08:03", "19:29"),
+      weather("2026-10-17", 16, 21, 70, "08:04", "19:28"),
+      weather("2026-10-18", 17, 23, 20, "08:05", "19:26"),
+    ],
+    holidays: [{ date: "2026-10-17", name: "Fiesta Nacional observed", localName: "Fiesta Nacional" }],
+    transportModes: ["walk", "transit"],
+    candidates: [
+      { name: "Sagrada Família", lat: 41.4036, lon: 2.1744, kinds: "religion,architecture", openingHours: "Mo-Su 09:00-18:00", wheelchair: "yes" },
+      { name: "Park Güell", lat: 41.4145, lon: 2.1527, kinds: "gardens_and_parks", openingHours: "Mo-Su 09:30-18:00", wheelchair: "limited" },
+      { name: "Casa Batlló", lat: 41.3917, lon: 2.1650, kinds: "architecture,historic", openingHours: "Mo-Su 09:00-20:00", wheelchair: "yes" },
+      { name: "Mercat de Sant Josep de la Boqueria", lat: 41.3817, lon: 2.1717, kinds: "foods,marketplaces", openingHours: "Mo-Sa 08:00-20:30; Su off", wheelchair: "yes" },
+      { name: "Bunkers del Carmel", lat: 41.4194, lon: 2.1619, kinds: "view_points", openingHours: "24/7", wheelchair: "no" },
+      { name: "Museu Picasso", lat: 41.3851, lon: 2.1810, kinds: "museums", openingHours: "Tu-Su 10:00-19:00; Mo off", wheelchair: "yes" },
+      { name: "Barceloneta Beach", lat: 41.3784, lon: 2.1925, kinds: "beaches,natural", openingHours: "24/7" },
+      { name: "Gothic Quarter", lat: 41.3833, lon: 2.1766, kinds: "historic,architecture", openingHours: null },
+    ],
+    anchorIndexes: [0, 3, 5],
+    answers: {
+      purpose: "Anniversary trip; wheelchair user, so step-free routes matter more than covering ground",
+      explorerStyle: "mixed",
+      group: "couple",
+      // Deliberately `high`: energy answers "how much do you want to be out", and on its own it
+      // would produce walk_leg_cap=normal. The step-free requirement has to override it, which is
+      // exactly the bug `deriveMobilityProfile` had while energy was the only input.
+      energy: "high",
+      crowds: "mixed",
+      budget: 3200,
+      priorities: ["Culture & History", "Food", "Photography"],
+      topPriorities: ["Culture & History", "Food"],
+      dietary: { tags: ["Vegan"], note: "severe tree-nut allergy" },
+      accessibility: { stepFreeRequired: true, limitStairs: true, note: "manual wheelchair, no steps at all" },
+      logistics: {
+        arrivalTime: "13:45",
+        departureTime: "11:00",
+        stayBooked: "Hotel Ronda Sant Pere (already paid)",
+      },
+    },
+  },
   {
     id: "kyoto-couple-mixed",
     title: "Kyoto — couple, mixed pace, crowd-averse",

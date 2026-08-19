@@ -25,6 +25,7 @@ import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId, TIERS } from "@/lib/tiers";
 import {
+  AccessibilityNeeds,
   CrowdPreference,
   DestinationContext,
   EnergyLevel,
@@ -32,11 +33,13 @@ import {
   GroupType,
   Itinerary,
   RawFetch,
+  TripLogistics,
 } from "@/lib/types";
 import { CandidatePoi } from "@/lib/pois";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
+import { tripEndDate } from "@/lib/tripDays";
 import { devLabel } from "@/lib/devInspector";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
@@ -226,6 +229,31 @@ export default function Home() {
   // Held here only so generate()/refine() can send it.
   const [dietary, setDietary] = useState<DietaryNeeds>({ tags: [], note: "" });
 
+  // Per-trip and deliberately NOT on the profile: a booked hotel and a flight time belong to one
+  // trip, not to the traveler. Empty strings mean "not stated", which the context renders as
+  // "nothing booked" — different from a value we failed to ask for.
+  const [logistics, setLogistics] = useState<TripLogistics>({
+    arrivalTime: null,
+    departureTime: null,
+    stayBooked: null,
+  });
+
+  // Asked rather than inferred from `energy`. Starts null so an untouched form sends nothing at
+  // all — a default-valued object would claim the traveler stated "no needs" when they were never
+  // asked, and `deriveMobilityProfile` treats those two cases differently.
+  const [accessibility, setAccessibility] = useState<AccessibilityNeeds | null>(null);
+
+  /** Patches one accessibility field, materialising the object on first touch. */
+  function setAccess(patch: Partial<AccessibilityNeeds>) {
+    setAccessibility((prev) => ({
+      stepFreeRequired: false,
+      limitStairs: false,
+      note: "",
+      ...prev,
+      ...patch,
+    }));
+  }
+
   // Shown once, after the first generation, only when there is no profile yet. `hasProfile`
   // starts null (unknown) so the card cannot flash before the profile fetch resolves.
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
@@ -323,7 +351,7 @@ export default function Home() {
     detailLoading,
     detailError,
   } = useTripCamera(destination);
-  const { resetToHome } = useMapCamera();
+  const { resetToHome, activateGlobe } = useMapCamera();
 
   // Mount-only on purpose. The globe lives above the route boundary and never unmounts, so
   // arriving here from /trips ("New trip") would otherwise keep the last trip's route, markers
@@ -336,9 +364,10 @@ export default function Home() {
 
   // Drives this page's own cosmetics (dark dashboard header/nav once results exist,
   // destination-form positioning) — AppShell's layout itself no longer varies by route/step.
-  // Also gates the map control stack via .map-chrome-hidden: hidden on landing (that step is
-  // a poster, not a map to read) and on plan (the panel reaches the bottom-left corner below
-  // ~1292px), shown on result. Do not "simplify" this to step === "landing".
+  // Also gates the map control stack via .map-chrome-hidden: hidden on landing (the globe is
+  // scenery behind the hero copy there, not a map to read) and on plan (the panel reaches the
+  // bottom-left corner below ~1292px), shown on result. Do not "simplify" this to
+  // step === "landing".
   const preResult = step !== "result";
 
   // Null until both dates are set, so the tier cards show per-day rates rather than a total
@@ -406,10 +435,10 @@ export default function Home() {
   }
 
   // One geocode per completed edit of the destination field, fired on blur. Not on a
-  // keystroke debounce: mapCamera's flyTo calls stopAutoRotate(), which is a permanent lock
-  // only resetToHome() ever clears, so the first keystroke-triggered flight would kill the
-  // idle spin for the session — and the overlapping 2.5s flights visibly lurch the camera
-  // through everywhere the prefix matched on the way to the real destination.
+  // keystroke debounce: a flight both brings the 3D viewer up (mapCamera's flyTo is the
+  // activation signal) and takes 2.5s, so per-keystroke flights would build the globe on the
+  // first letter and then visibly lurch the camera through everywhere the prefix matched on
+  // the way to the real destination.
   const lastFlownRef = useRef("");
   async function flyToTypedDestination() {
     const name = destination.trim();
@@ -425,8 +454,8 @@ export default function Home() {
     setStep("landing");
     setPlanStep("basics");
     setError(null);
-    // Required, not cosmetic: a blur-triggered flight left the spin locked and a pin dropped.
-    // resetToHome is the only thing that clears the pin and calls startAutoRotate() again.
+    // Required, not cosmetic: a blur-triggered flight left a pin dropped and the 3D viewer
+    // up. resetToHome is the only thing that clears the pin and puts the poster back.
     resetToHome();
   }
 
@@ -453,6 +482,12 @@ export default function Home() {
       topPriorities: starredInterests,
       selectedPois,
       customPois,
+      // Dietary rides along with the per-trip answers so the staged pipeline sees it too. The
+      // legacy path still receives it as its own top-level field (formatDietary's contract);
+      // this is the same value, not a second source of truth.
+      dietary,
+      logistics,
+      accessibility,
     };
   }
 
@@ -603,6 +638,13 @@ export default function Home() {
     setItinerary(updated);
   }
 
+  /** A hand-rearranged itinerary from the card's drag-and-drop. Already re-timed by `moveStop`,
+   *  so there is nothing to recompute here — and nothing to persist yet, same as the day edits. */
+  function handleRearrange(next: Itinerary) {
+    setRevealAnimation(false);
+    setItinerary(next);
+  }
+
 
 
   async function save() {
@@ -616,7 +658,11 @@ export default function Home() {
         body: JSON.stringify({
           destination,
           startDate,
-          endDate,
+          // Not the form's `endDate`: a chat edit before saving can add or remove days, so the
+          // itinerary — not the original form input — is what says how long the trip now is.
+          endDate: itinerary.days.length
+            ? tripEndDate(startDate, itinerary.days.length)
+            : endDate,
           budget,
           itinerary,
           runId: lastRunId,
@@ -687,7 +733,20 @@ export default function Home() {
           with real scroll height, so it replaces the single centered hero this step used to
           be — but it hands off to the same setStep("plan"), which is this app's own multi-step
           form rather than the standalone build's one-card console. */}
-      {step === "landing" && <ScrollStory onPlan={() => setStep("plan")} />}
+      {step === "landing" && (
+        <ScrollStory
+          onPlan={() => {
+            // Hand the camera over here rather than waiting for a destination. The globe behind
+            // the landing story is parked and input-disabled (`static`), which is right while it
+            // is scenery behind hero copy — but pressing "Plan a trip" is the moment it stops
+            // being scenery, and a globe you cannot grab on the screen where you are being asked
+            // to choose a place reads as a broken one. The flight itself still waits for an
+            // actual destination.
+            activateGlobe();
+            setStep("plan");
+          }}
+        />
+      )}
 
       {/* Form and tier picker merged into one card: the dates and budget are what price the
           tiers, so splitting them across two steps meant choosing a style blind. One <form>
@@ -895,6 +954,69 @@ export default function Home() {
                             onToggleStar={toggleInterestStar}
                           />
                         </div>
+
+                        {/* Both blocks below stay inside this one expander on purpose — see the
+                            note above the block. All four inputs are optional; blank is the
+                            normal answer and costs the traveler nothing. */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted">Already booked or fixed</label>
+                          <input
+                            type="text"
+                            value={logistics.stayBooked ?? ""}
+                            placeholder="Where you're staying, if it's booked"
+                            onChange={(e) => setLogistics((v) => ({ ...v, stayBooked: e.target.value || null }))}
+                            className={`${fieldInputClass} ${logistics.stayBooked ? fieldFilledTone : fieldEmptyTone}`}
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="space-y-1">
+                              <span className="text-[11px] text-muted">Arrive (day 1)</span>
+                              <input
+                                type="time"
+                                value={logistics.arrivalTime ?? ""}
+                                onChange={(e) => setLogistics((v) => ({ ...v, arrivalTime: e.target.value || null }))}
+                                className={`${fieldInputClass} tabular-nums ${logistics.arrivalTime ? fieldFilledTone : fieldEmptyTone}`}
+                              />
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-[11px] text-muted">Depart (last day)</span>
+                              <input
+                                type="time"
+                                value={logistics.departureTime ?? ""}
+                                onChange={(e) => setLogistics((v) => ({ ...v, departureTime: e.target.value || null }))}
+                                className={`${fieldInputClass} tabular-nums ${logistics.departureTime ? fieldFilledTone : fieldEmptyTone}`}
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-muted">Getting around</label>
+                          <label className="flex items-center gap-2 text-xs text-muted">
+                            <input
+                              type="checkbox"
+                              checked={accessibility?.stepFreeRequired ?? false}
+                              onChange={(e) => setAccess({ stepFreeRequired: e.target.checked })}
+                              className="accent-accent"
+                            />
+                            I need step-free routes throughout
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-muted">
+                            <input
+                              type="checkbox"
+                              checked={accessibility?.limitStairs ?? false}
+                              onChange={(e) => setAccess({ limitStairs: e.target.checked })}
+                              className="accent-accent"
+                            />
+                            Avoid stairs and steep climbs where possible
+                          </label>
+                          <input
+                            type="text"
+                            value={accessibility?.note ?? ""}
+                            placeholder="Anything else we should plan around"
+                            onChange={(e) => setAccess({ note: e.target.value })}
+                            className={`${fieldInputClass} ${accessibility?.note ? fieldFilledTone : fieldEmptyTone}`}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1081,7 +1203,14 @@ export default function Home() {
                   activeDayIndex={activeDayIndex}
                   onActiveDayChange={setActiveDayIndex}
                   onEditDay={handleEditDay}
-                  onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
+                  // Same window "Refine with AI" opens, just starting on the day whose icon was
+                  // clicked: one chat surface with day navigation, rather than a second
+                  // day-locked variant that looked identical but couldn't reach other days.
+                  onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
+                  onItineraryChange={handleRearrange}
+                  // The board only needs a name, a budget and the dates; pre-save there is no trip
+                  // row yet, so this is assembled from the form's own values.
+                  trip={{ id: "preview", destination, startDate, endDate, budget }}
                   animateReveal={revealAnimation}
                 />
               )}

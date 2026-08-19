@@ -1,3 +1,4 @@
+import type { TripLogistics } from "../types";
 /** Result shapes for every scorer. One file so the API route, the DB row and the UI agree. */
 
 /**
@@ -9,11 +10,9 @@
  * makes the early part of day 1 unusable). Reading it structurally means the rule is a no-op when
  * the field is absent and starts working the moment that feature lands, with no change here.
  */
-export interface BenchLogistics {
-  arrivalTime: string | null;
-  departureTime: string | null;
-  stayBooked: string | null;
-}
+/** Kept as a re-export rather than a second declaration: this shape is now `UserAnswers.logistics`
+ *  in src/lib/types.ts, and two copies of it is how they drift. */
+export type BenchLogistics = TripLogistics;
 
 export type ScorerKind = "deterministic" | "lexical" | "operational" | "model-judged";
 
@@ -186,8 +185,13 @@ export interface BudgetScore {
   pricedStops: number;
   breakdown: Record<string, number>;
   excludes: string[];
-  /** Always true: the pipeline carries no prices, so this rests on a configurable estimate table. */
+  /** True when the total rests on the configurable estimate table because the output carried no
+   *  `$cost` fields; false when it's the model's own stated costs, which §11 now requires. */
   estimateBased: boolean;
+  /** How much of the trip's total is the traveler's target. §5 asks for 85-100% of the budget, so
+   *  a plan that lands at 40% is a miss in the other direction — one the estimate table could
+   *  never see, since it priced stops rather than reading them. Null when not measurable. */
+  budgetUsedFraction: number | null;
   normalized: number | null;
 }
 

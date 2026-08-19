@@ -1,8 +1,32 @@
 import { spawn } from "child_process";
+import { accessSync, constants, readdirSync } from "fs";
 import { homedir } from "os";
+import { join } from "path";
 import { insertTrace, updateTrace } from "./db";
 
-export const MODEL = "claude-haiku-4-5-20251001";
+/**
+ * The production model for every call in the app.
+ *
+ * Was `claude-haiku-4-5-20251001`. The benchmark's own sweep (one fixture, 3 runs each) scored
+ * Haiku 4.5 at 0.842 composite against 0.959 for Sonnet 4.5 and 0.952 for Opus 4.5 — the
+ * Sonnet/Opus gap is noise at that sample size, the Haiku gap is not. This is a single call that
+ * produces the entire product, so the tier matters more here than the per-token rate does.
+ *
+ * Sonnet 4.5 specifically, and NOT Sonnet 5, for three measured reasons:
+ *
+ * 1. **It is the model that actually scored 0.959.** Sonnet 5 was never benchmarked on this task;
+ *    picking it was an extrapolation from "same tier, one generation newer".
+ * 2. **Sonnet 5 doesn't fit the timeout.** It spent 164s before its first token and 196s in total
+ *    on an 8-day trip, then timed out twice at 216s on a *3-day* trip — `itineraryTimeoutMs()`
+ *    can't accommodate it without making every user wait four minutes for a plan.
+ * 3. **Its compliance broke the day shape.** It followed "about 3 stops per day" literally where
+ *    Haiku had loosely ignored it, so days ended at 1pm. That prompt bug is fixed now (see
+ *    travelerProfilePrompt.ts), but it is a reminder that a model change is a behaviour change and
+ *    wants a real generation looked at, not just a benchmark number.
+ *
+ * Bare id, no date suffix — the dated form is a stale convention.
+ */
+export const MODEL = "claude-sonnet-4-5";
 export const DEFAULT_TIMEOUT_MS = 90_000;
 
 /**
@@ -28,9 +52,58 @@ export const CRITIQUE_TIMEOUT_MS = 150_000;
  * different terminal. The native installer puts the binary in ~/.local/bin, and npm-global
  * installs land somewhere already on PATH, so appending the standard locations covers both.
  * CLAUDE_CLI_PATH is the escape hatch for anything else.
+ *
+ * Appending those directories is necessary but not sufficient. `~/.local/bin/claude` is usually a
+ * symlink into the *version-stamped* VS Code extension directory
+ * (`…/anthropic.claude-code-2.1.221-darwin-arm64/resources/native-binary/claude`), and the
+ * extension deletes the old directory when it auto-updates. The link is then dangling: PATH still
+ * appears to contain `claude`, and every call dies with the same ENOENT. That has now happened
+ * twice (2026-08-04, 2026-08-18), each time reading to the traveller as "The planner didn't
+ * finish" with no hint that the cause was an editor update. So resolve to a path that is
+ * executable *right now* rather than trusting the name, and fall back to the newest installed
+ * extension binary — which is what the stale symlink was pointing at before the upgrade.
  */
-const CLI_BIN = process.env.CLAUDE_CLI_PATH ?? "claude";
 const CLI_SEARCH_PATH = [`${homedir()}/.local/bin`, `${homedir()}/.claude/local`];
+
+/** False for a dangling symlink too — `access()` follows the link, which is the whole point here. */
+function isExecutable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Native binaries shipped by the VS Code extension, newest version first. */
+function extensionBinaries(): string[] {
+  const dir = join(homedir(), ".vscode", "extensions");
+  try {
+    return readdirSync(dir)
+      .filter((name) => name.startsWith("anthropic.claude-code-"))
+      // Numeric compare, not lexical: a plain sort ranks 2.1.9 above 2.1.235.
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+      .map((name) => join(dir, name, "resources", "native-binary", "claude"));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The first candidate that actually exists and is executable, searched against the child's own
+ * (already augmented) PATH before the extension fallback, so an npm-global or Homebrew install
+ * still wins over whatever the editor happens to ship.
+ *
+ * Resolved per call rather than memoised: the extension can update mid-session — that is exactly
+ * the failure being defended against — and a handful of `stat` calls is nothing beside a request
+ * that runs for two minutes. Falls back to the bare name so an install-less machine still gets
+ * the familiar ENOENT and the hint below.
+ */
+function resolveCliBin(pathEnv: string): string {
+  if (process.env.CLAUDE_CLI_PATH) return process.env.CLAUDE_CLI_PATH;
+  const onPath = pathEnv.split(":").filter(Boolean).map((dir) => join(dir, "claude"));
+  return [...onPath, ...extensionBinaries()].find(isExecutable) ?? "claude";
+}
 
 const BASE_TIMEOUT_MS = 210_000;
 const PER_DAY_TIMEOUT_MS = 2_000;
@@ -127,13 +200,14 @@ export function runClaude(
     const { CLAUDECODE: _drop, ...env } = process.env;
     void _drop;
     env.PATH = [env.PATH, ...CLI_SEARCH_PATH].filter(Boolean).join(":");
+    const cliBin = resolveCliBin(env.PATH);
 
     const model = meta?.model ?? MODEL;
     const traceId = insertTrace({ type, prompt, model, runId: meta?.runId });
     const startedAt = Date.now();
 
     const child = spawn(
-      CLI_BIN,
+      cliBin,
       [
         "-p",
         prompt,
@@ -182,11 +256,16 @@ export function runClaude(
       // generic "exited null" would replace the ENOENT hint below — which is the one message
       // that actually tells you what to do about it.
       settled = true;
-      // ENOENT here means only one thing, and the bare message never said so.
+      // ENOENT here means only one thing, and the bare message never said so. It no longer says
+      // "install it" — the two real occurrences were both a *dangling* ~/.local/bin/claude on a
+      // machine where the CLI was installed the whole time, and that advice sent the reader the
+      // wrong way.
       const hint =
         (err as NodeJS.ErrnoException).code === "ENOENT"
-          ? ` — '${CLI_BIN}' is not on the dev server's PATH. Install it, or set CLAUDE_CLI_PATH` +
-            ` to its absolute path (\`which claude\`) and restart the server.`
+          ? ` — no runnable claude CLI was found (tried '${cliBin}'). If ~/.local/bin/claude is a` +
+            ` symlink into a VS Code extension directory that an update has since deleted, repoint` +
+            ` it at the current one; otherwise set CLAUDE_CLI_PATH to the binary's absolute path` +
+            ` and restart the server.`
           : "";
       updateTrace(traceId, {
         status: "error",

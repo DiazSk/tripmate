@@ -201,14 +201,31 @@ const MEAL_WORDS = /\b(breakfast|brunch|lunch|dinner|supper|meal|dining|restaura
 /**
  * budget_accuracy_score — would this plan fit the traveler's stated budget?
  *
- * Estimates spend per stop from the category table above and compares the trip total against
- * `userAnswers.budget`. Lodging and flights are NOT included: the staged path recommends a stay
- * area rather than a priced property, so charging for it would be inventing a second number on top
- * of an estimate.
+ * Two bases, and which one was used is reported rather than assumed:
  *
- * 1.0 = within budget. Below that, the ratio of budget to estimated spend — so a plan estimated at
- * twice the budget scores 0.5.
+ * 1. **Stated costs** — §11 requires a `$cost` on every stop and on the lodging line, so when the
+ *    output carries them this sums the real numbers, lodging included. This is the only basis that
+ *    can see the §5 rule at all, which asks the total to land at 85-100% of the budget.
+ * 2. **The estimate table** — the fallback for output with no costs in it (every run before §11's
+ *    format landed). Lodging and flights are excluded there, because pricing a recommended *area*
+ *    would be inventing a second number on top of an estimate.
+ *
+ * 1.0 = inside the target band. Overspending scores the ratio of budget to spend, so twice the
+ * budget scores 0.5. Underspending scores the fraction of the budget used against the 85% floor —
+ * a plan that spends a third of a luxury budget is not a good plan, and the old estimate-only
+ * scorer called that a perfect 1.0.
  */
+/** Skill §5's target band: "come close to the full stated budget (aim for 85-100% of it)". */
+export const BUDGET_TARGET_FLOOR = 0.85;
+
+/** 1.0 inside the band; the shortfall ratio below it, the overshoot ratio above it. Both sides are
+ *  penalised because §5 treats an unspent budget as a failure to plan, not as thrift. */
+export function scoreAgainstBand(total: number, budget: number): number {
+  if (total > budget) return Math.max(0, budget / total);
+  const used = total / budget;
+  return used >= BUDGET_TARGET_FLOOR ? 1 : Math.max(0, used / BUDGET_TARGET_FLOOR);
+}
+
 export function scoreBudget(itinerary: ParsedItinerary, fixture: BenchFixture): BudgetScore {
   const prices = stopPrices();
   const budget = fixture.reconciled.userAnswers.budget;
@@ -234,6 +251,34 @@ export function scoreBudget(itinerary: ParsedItinerary, fixture: BenchFixture): 
     }
   }
 
+  // Stated costs win when they're there. `costUsd` of 0 is a real answer (a free shrine, an
+  // already-booked stay), so presence is what's counted, not truthiness.
+  const statedStops = itinerary.days.flatMap((d) =>
+    dayEntries(d).filter((e) => e.costUsd !== null)
+  );
+  const statedLodging = itinerary.days
+    .map((d) => d.lodging)
+    .filter((l): l is NonNullable<typeof l> => l?.costUsd != null);
+  const useStated = statedStops.length > 0;
+
+  if (useStated) {
+    const stopTotal = statedStops.reduce((sum, e) => sum + (e.costUsd ?? 0), 0);
+    const lodgingTotal = statedLodging.reduce((sum, l) => sum + (l.costUsd ?? 0), 0);
+    const total = stopTotal + lodgingTotal;
+    const statedBreakdown: Record<string, number> = { stops: stopTotal, lodging: lodgingTotal };
+    return {
+      estimatedUsd: Math.round(total),
+      budgetUsd: budget,
+      withinBudget: budget <= 0 ? true : total <= budget,
+      pricedStops: statedStops.length,
+      breakdown: statedBreakdown,
+      excludes: ["flights"],
+      estimateBased: false,
+      budgetUsedFraction: budget > 0 ? total / budget : null,
+      normalized: budget > 0 ? scoreAgainstBand(total, budget) : null,
+    };
+  }
+
   if (budget <= 0 || pricedStops === 0) {
     return {
       estimatedUsd: Math.round(estimated),
@@ -243,6 +288,7 @@ export function scoreBudget(itinerary: ParsedItinerary, fixture: BenchFixture): 
       breakdown,
       excludes: ["lodging", "flights"],
       estimateBased: true,
+      budgetUsedFraction: null,
       normalized: null,
     };
   }
@@ -255,6 +301,7 @@ export function scoreBudget(itinerary: ParsedItinerary, fixture: BenchFixture): 
     breakdown,
     excludes: ["lodging", "flights"],
     estimateBased: true,
+    budgetUsedFraction: estimated / budget,
     normalized: estimated <= budget ? 1 : Math.max(0, budget / estimated),
   };
 }

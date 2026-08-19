@@ -1,8 +1,8 @@
 import { haversineKm } from "../../travelTime";
 import { knownPois } from "../fixtures";
 import type { BenchFixture } from "../fixtures";
-import { SLOTS, dayEntries, parseClock } from "../parseItinerary";
-import type { ParsedDay, ParsedItinerary, Slot } from "../parseItinerary";
+import { dayEntries, parseClock } from "../parseItinerary";
+import type { ParsedItinerary, Slot } from "../parseItinerary";
 import { VIOLATION_TYPES } from "../types";
 import type {
   BenchLogistics,
@@ -111,6 +111,31 @@ const DAY_CODES = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
  * Returns `null` for syntax it can't read confidently, and the caller counts that as unchecked —
  * never as compliant.
  */
+/** Stops that are explicitly nighttime experiences, or simply don't need daylight at all. */
+const NIGHT_OK_WORDS =
+  /\b(night|nighttime|evening|dusk|sunset|illuminat|lantern|lit|star|stargaz|dinner|supper|drinks|bar|izakaya|pub|club|nightlife|show|theatre|theater|concert|onsen|spa|museum|gallery|aquarium|indoor|arcade|mall|restaurant|cafe|café|lunch|breakfast|brunch)\b/i;
+
+/**
+ * Does §10's daylight rule apply to this stop?
+ *
+ * The rule applies by default and is switched OFF by evidence, rather than switched on by it. A
+ * dinner, a bar, an indoor show, a museum, or an explicitly-nighttime stop after sunset is correct
+ * planning, not a violation. Everything else is treated as daylight-dependent.
+ *
+ * The default matters: an earlier version required a positive outdoor-word match, and "Kiyomizu-dera"
+ * matches no such word — so a temple scheduled at 19:30 passed silently. For a scorer,
+ * under-measuring is the worse failure, so an unrecognised stop is checked rather than skipped.
+ */
+export function daylightDependent(entry: {
+  name: string;
+  raw: string;
+  why?: string | null;
+  category?: string | null;
+}): boolean {
+  if (entry.category === "food" || entry.category === "transit") return false;
+  return !NIGHT_OK_WORDS.test(`${entry.name} ${entry.raw} ${entry.why ?? ""}`);
+}
+
 export function hoursForWeekday(
   openingHours: string | null,
   weekday: string
@@ -329,13 +354,22 @@ export function scoreConstraints(
       }
     }
 
-    // --- daylight (Evening slot exempt per skill §5)
+    // --- daylight (skill §10)
+    //
+    // The exemption used to be `slot === "Evening"`, which stopped working the moment slots were
+    // derived from each stop's start time: anything after 17:00 is Evening by definition, so an
+    // after-dark stop could never breach the rule and the check silently measured nothing.
+    //
+    // §10's actual exemption is about the KIND of stop, not the hour — "don't schedule an outdoor,
+    // scenic, or view-dependent stop after dark unless the point of the stop is a nighttime
+    // experience", and "evening stops that don't depend on daylight (dinner, a bar, an indoor
+    // show) are unaffected". `daylightDependent` below is that test.
     if (forecast?.sunrise && forecast?.sunset) {
       const sunrise = parseClock(forecast.sunrise.split("T")[1]?.slice(0, 5) ?? "");
       const sunset = parseClock(forecast.sunset.split("T")[1]?.slice(0, 5) ?? "");
       if (sunrise !== null && sunset !== null) {
         for (const entry of entries) {
-          if (entry.slot === "Evening" || !entry.window) continue;
+          if (!daylightDependent(entry) || !entry.window) continue;
           checkedByType.daylight++;
           if (entry.window.startMin < sunrise || entry.window.endMin > sunset) {
             add(
@@ -659,10 +693,15 @@ export function usableSlot(
 // --- format_adherence --------------------------------------------------------------------------
 
 /**
- * format_adherence — does the output match the fixed schema in skill §6?
+ * format_adherence — does the output match the fixed schema in skill §11?
  *
- * Pass/fail plus the fraction of individual checks passed, so a near-miss (one missing `Stay near:`)
- * reads differently from a model that ignored the format wholesale.
+ * Pass/fail plus the fraction of individual checks passed, so a near-miss (one stop missing its
+ * cost) reads differently from a model that ignored the format wholesale.
+ *
+ * Rewritten from the §6 checks. Those required slot blocks and a `Stay near:` line that §11 does
+ * not emit, so every run failed them regardless of the model. The per-stop field checks below are
+ * §11's own list — time, category, duration, cost, lat/lng, why, note — which is also what makes
+ * the budget scorer able to read a real total for the first time.
  */
 export function scoreFormat(
   itinerary: ParsedItinerary,
@@ -687,62 +726,51 @@ export function scoreFormat(
     "day headings carry a date",
     itinerary.days.length > 0 && itinerary.days.every((d) => d.date !== null)
   );
+  // §11 forbids a preamble outright ("no preamble, no commentary, no code fences").
+  check("no preamble", itinerary.preamble.trim().length === 0);
   check(
-    "day headings carry a weekday",
-    itinerary.days.length > 0 && itinerary.days.every((d) => d.dayOfWeek !== null)
-  );
-  check(
-    "day headings carry a theme",
+    "every day has a narrative line",
     itinerary.days.length > 0 && itinerary.days.every((d) => d.theme !== null)
   );
-  // A slot the traveler can't physically use is not a missing slot. Skill §4c-bis: a booked
-  // arrival "makes the early part of day 1 unusable — allow for immigration, bags and the
-  // transfer in, then start", and a departure does the same to the end of the last day. Requiring
-  // all three blocks unconditionally fails a model for obeying that rule, which is how this
-  // surfaced: a 14:30 arrival correctly produced an empty Day 1 morning.
-  const expectedSlots = (dayIndex: number): Slot[] =>
-    SLOTS.filter((slot) => usableSlot(slot, dayIndex, itinerary.days.length, fixture));
   check(
-    "all usable slot blocks present",
-    itinerary.days.length > 0 &&
-      itinerary.days.every((d: ParsedDay, i) =>
-        expectedSlots(i).every((s) => d.entriesBySlot[s].length > 0)
-      ),
-    itinerary.days
-      .flatMap((d, i) => expectedSlots(i).filter((s) => d.entriesBySlot[s].length === 0).map((s) => `day ${i + 1} ${s}`))
-      .join(", ") || undefined
+    "every day has a Weather line",
+    itinerary.days.length > 0 && itinerary.days.every((d) => d.weather !== null)
+  );
+  // §11: "Omit the Lodging line on the last day only." Requiring it there would fail a model for
+  // following the format, and requiring it nowhere would miss a plan with no base at all.
+  const lodgingDays = itinerary.days.slice(0, -1);
+  check(
+    "Lodging line on every day but the last",
+    lodgingDays.length === 0 || lodgingDays.every((d) => d.lodging !== null),
+    `${lodgingDays.filter((d) => d.lodging === null).length} of ${lodgingDays.length} missing`
   );
   check(
-    "every day has a Stay near line",
-    itinerary.days.length > 0 && itinerary.days.every((d) => d.stayNear !== null)
+    "no Lodging line on the last day",
+    itinerary.days.length === 0 || itinerary.days[itinerary.days.length - 1].lodging === null
   );
 
+  // §11's per-stop field list, checked one field at a time: "1 of 14 missing a cost" is actionable
+  // in a way that a single lumped "malformed stops" count is not.
   const entries = itinerary.days.flatMap(dayEntries);
-  check(
-    "every entry has a time window",
-    entries.length > 0 && entries.every((e) => e.window !== null),
-    `${entries.filter((e) => e.window === null).length} of ${entries.length} missing`
-  );
-  // §6's bullet template carries `(<est. duration>)` on POI stops; the Evening meal/flexible-slot
-  // line it specifies has a time window and "what to look for there" but no duration. Requiring one
-  // on area-level entries would fail a model for following the format exactly.
-  const timedEntries = entries.filter((e) => !e.areaLevel);
-  check(
-    "every POI stop has a duration",
-    timedEntries.length > 0 && timedEntries.every((e) => e.durationMin !== null),
-    `${timedEntries.filter((e) => e.durationMin === null).length} of ${timedEntries.length} missing`
-  );
+  const fieldCheck = (name: string, ok: (e: (typeof entries)[number]) => boolean) => {
+    const missing = entries.filter((e) => !ok(e)).length;
+    check(name, entries.length > 0 && missing === 0, `${missing} of ${entries.length} missing`);
+  };
+  fieldCheck("every stop has a start time", (e) => e.window !== null);
+  fieldCheck("every stop has a duration", (e) => e.durationMin !== null);
+  fieldCheck("every stop has a category", (e) => e.category !== null);
+  fieldCheck("every stop has a cost", (e) => e.costUsd !== null);
+  fieldCheck("every stop has coordinates", (e) => e.lat !== null && e.lng !== null);
+  fieldCheck("every stop has a why line", (e) => Boolean(e.why));
+  fieldCheck("every stop has a note line", (e) => Boolean(e.note));
 
-  // §6: "After every stop except the day's last, state the transport mode and rough travel time."
-  const missingTransport = itinerary.days.reduce((sum, day) => {
+  // §3c: the leg from the previous stop rides in that stop's note, so the first stop of each day
+  // is exempt. Read from the note rather than from a `→` line, which §11 doesn't have.
+  const missingLeg = itinerary.days.reduce((sum, day) => {
     const list = dayEntries(day);
-    return sum + list.slice(0, -1).filter((e) => e.transport === null).length;
+    return sum + list.slice(1).filter((e) => e.transport === null).length;
   }, 0);
-  check(
-    "transport line between consecutive stops",
-    missingTransport === 0,
-    `${missingTransport} gaps`
-  );
+  check("note carries the travel leg from the previous stop", missingLeg === 0, `${missingLeg} gaps`);
 
   const passed = checks.filter((c) => c.passed).length;
   return {

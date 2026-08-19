@@ -1,4 +1,5 @@
 import type {
+  AccessibilityNeeds,
   CrowdBias,
   CrowdPreference,
   EnergyLevel,
@@ -63,15 +64,26 @@ export function labelPace(spotsPerDay: number): Pace {
   return "fast";
 }
 
-/** Energy alone decides this. Someone who says they'd rather keep it easy gets tighter walking
- *  legs, fewer stairs and built-in rests regardless of anything else they picked. */
-export function deriveMobilityProfile(energy: EnergyLevel): MobilityProfile {
+/** Energy sets the baseline: someone who says they'd rather keep it easy gets tighter walking legs,
+ *  fewer stairs and built-in rests regardless of anything else they picked.
+ *
+ *  Stated accessibility then overrides it in one direction only — it can tighten the profile, never
+ *  loosen it. `energy` answers "how much walking do you want", which is a different question from
+ *  "can you manage stairs"; using it as a proxy for both meant a wheelchair user who described
+ *  their energy as high got no accommodation at all. `stepFreeRequired` is a hard constraint, so it
+ *  pins every field regardless of energy. */
+export function deriveMobilityProfile(
+  energy: EnergyLevel,
+  accessibility?: AccessibilityNeeds | null
+): MobilityProfile {
   const constrained = energy === "low";
+  const stepFree = accessibility?.stepFreeRequired === true;
+  const limitStairs = stepFree || accessibility?.limitStairs === true;
   return {
-    walkLegCap: constrained ? "tight" : "normal",
-    minimizeStairs: constrained,
-    restBreaks: constrained,
-    preferTransitOverLongWalks: constrained,
+    walkLegCap: constrained || stepFree ? "tight" : "normal",
+    minimizeStairs: constrained || limitStairs,
+    restBreaks: constrained || stepFree,
+    preferTransitOverLongWalks: constrained || stepFree,
   };
 }
 
@@ -116,7 +128,7 @@ export function deriveFlags(answers: UserAnswers): ResolvedFlags {
   return {
     paceSpotsPerDay,
     paceResolved: labelPace(paceSpotsPerDay),
-    mobilityProfile: deriveMobilityProfile(answers.energy),
+    mobilityProfile: deriveMobilityProfile(answers.energy, answers.accessibility),
     crowdBias: deriveCrowdBias(answers.crowds),
     prioritiesRanked: derivePrioritiesRanked(answers.priorities, answers.topPriorities),
     familyRules: deriveFamilyRules(answers.group),
