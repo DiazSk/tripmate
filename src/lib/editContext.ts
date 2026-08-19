@@ -1,4 +1,4 @@
-import { Itinerary, TripSummary, UserAnswers } from "./types";
+import type { Itinerary, TripSummary, UserAnswers } from "./types";
 import { TIERS } from "./tiers";
 
 /**

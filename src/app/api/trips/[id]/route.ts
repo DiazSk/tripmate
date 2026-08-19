@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteTrip, getTrip, updateTripItinerary } from "@/lib/db";
 import { normalizeDays } from "@/lib/itinerary";
+import { tripEndDate } from "@/lib/tripDays";
 
 export async function GET(
   _req: NextRequest,
@@ -46,8 +47,15 @@ export async function PATCH(
     return NextResponse.json({ error: "Missing itinerary" }, { status: 400 });
   }
 
-  updateTripItinerary(id, JSON.stringify(itinerary));
-  return NextResponse.json({ ok: true });
+  // Derived here rather than trusted from the client: the trip's length is a property of the
+  // itinerary being saved, and the days are consecutive dates from the (immutable) start date. So
+  // the end date is computable, and computing it means an edit that added or removed a day can't
+  // leave `trips.end_date` disagreeing with the plan stored beside it.
+  const days = Array.isArray(itinerary.days) ? itinerary.days : [];
+  const endDate = days.length ? tripEndDate(trip.start_date, days.length) : undefined;
+
+  updateTripItinerary(id, JSON.stringify(itinerary), endDate);
+  return NextResponse.json({ ok: true, endDate: endDate ?? trip.end_date, days: days.length });
 }
 
 export async function DELETE(

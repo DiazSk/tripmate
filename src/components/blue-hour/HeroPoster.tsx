@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { gsap, ScrollTrigger, prefersReducedMotion } from "@/lib/gsap";
 import { useScrollContainer } from "@/lib/scrollContainer";
+import { useMapCamera } from "@/lib/mapCamera";
 
 /**
  * The final beat of the Blue Hour scroll story — the reveal. Everything above it
@@ -13,6 +14,34 @@ import { useScrollContainer } from "@/lib/scrollContainer";
 export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
   const container = useScrollContainer();
   const sectionRef = useRef<HTMLElement>(null);
+  const { setGlobeSpinning } = useMapCamera();
+
+  /**
+   * This section owns the globe's idle drift, because it is the only part of the landing route
+   * that shows the globe at all — Hero, ImageRow and HowItWorks are opaque bands over it, and
+   * turning the Earth behind them is work no one can see. Rotation is the most expensive thing
+   * the app does (a moving camera renders every frame), so it is bought for the seconds this
+   * section is on screen rather than left running for the session.
+   *
+   * The observer's root is the app shell's scroll container, not the window — `.app-shell` is
+   * `h-dvh overflow-hidden`, so the window never scrolls here and viewport-relative
+   * intersection would be measuring the wrong box.
+   */
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setGlobeSpinning(entry.isIntersecting),
+      { root: container?.current ?? null },
+    );
+    observer.observe(section);
+    return () => {
+      observer.disconnect();
+      // Leaving the landing story at all — pressing "Plan a trip", or navigating away — must
+      // stop the drift, and unmount is the one signal that covers every way out.
+      setGlobeSpinning(false);
+    };
+  }, [container, setGlobeSpinning]);
 
   useEffect(() => {
     if (!sectionRef.current || prefersReducedMotion()) return;

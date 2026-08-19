@@ -12,12 +12,32 @@ const SUGGESTIONS = [
   "Make the morning start later",
 ];
 
+/** "day 2", "days 1 and 3", "days 1, 2 and 4" — the scope confirmation reads as a sentence
+ *  rather than an array, so a one-day edit doesn't say "days 2". */
+function formatDays(days: number[]): string {
+  const label = days.length === 1 ? "day" : "days";
+  const list =
+    days.length <= 1
+      ? days.join("")
+      : `${days.slice(0, -1).join(", ")} and ${days[days.length - 1]}`;
+  return `${label} ${list}`;
+}
+
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   /** Present on assistant turns that actually changed something — rendered as the change
    *  summary beneath the reply. The full updated itinerary is never shown here. */
   changes?: string[];
+  /** Guardrail alerts (skill §12): a leg that no longer fits, a venue's hours, a day pushed past
+   *  8-9 active hours, a budget overshoot. Shown, not suppressed — the change was still made. */
+  warnings?: string[];
+  /** 1-based day numbers this turn actually changed, computed route-side from the applied ops.
+   *  Every turn that edits anything says which days moved, so the scope is never implied. */
+  daysModified?: number[];
+  /** Ops the applier refused (a stale index, a day out of range). Rare, but silence here reads
+   *  as "done" for a turn that partly wasn't. */
+  rejected?: string[];
   knockOn?: string | null;
   /** Tappable answers the model offered with a question. Cleared once one is used, so an old
    *  turn's options can't be answered after the conversation has moved on. */
@@ -100,6 +120,9 @@ export default function EditChatPanel({
           role: "assistant",
           content: data.reply || "Done.",
           changes: data.changes ?? [],
+          warnings: data.warnings ?? [],
+          daysModified: data.daysModified ?? [],
+          rejected: data.rejected ?? [],
           knockOn: data.knockOn ?? null,
           options: data.options ?? [],
         },
@@ -152,8 +175,13 @@ export default function EditChatPanel({
               {m.content}
             </div>
             {/* The shown delta — the persisted itinerary is updated silently behind this. */}
+            {m.role === "assistant" && m.daysModified && m.daysModified.length > 0 && (
+              <p className="mt-1.5 text-xs font-medium text-foreground/70">
+                Updated {formatDays(m.daysModified)}
+              </p>
+            )}
             {m.role === "assistant" && m.changes && m.changes.length > 0 && (
-              <ul className="mt-1.5 space-y-0.5">
+              <ul className="mt-1 space-y-0.5">
                 {m.changes.map((c, ci) => (
                   <li key={ci} className="text-xs text-muted">
                     · {c}
@@ -161,8 +189,29 @@ export default function EditChatPanel({
                 ))}
               </ul>
             )}
+            {/* Guardrails read louder than the change list they qualify: the point of the alert is
+                that the plan is now something the traveler might not have intended. */}
+            {m.role === "assistant" && m.warnings && m.warnings.length > 0 && (
+              <ul className="mt-1.5 space-y-1">
+                {m.warnings.map((w, wi) => (
+                  <li
+                    key={wi}
+                    className="flex gap-1.5 rounded-lg bg-amber-400/10 px-2 py-1.5 text-xs text-amber-200"
+                  >
+                    <span aria-hidden="true">⚠️</span>
+                    <span>{w}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {m.role === "assistant" && m.knockOn && (
               <p className="mt-1 text-xs text-amber-300/80">Also: {m.knockOn}</p>
+            )}
+            {m.role === "assistant" && m.rejected && m.rejected.length > 0 && (
+              <p className="mt-1 text-xs text-red-400/80">
+                {m.rejected.length === 1 ? "1 change" : `${m.rejected.length} changes`} couldn&rsquo;t
+                be applied ({m.rejected.join("; ")}) — ask again to retry.
+              </p>
             )}
             {/* Tap-to-answer. The model is told to supply these whenever it asks something, so
                 a question costs a tap rather than a sentence. Typing still works. */}
