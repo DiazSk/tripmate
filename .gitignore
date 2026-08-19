@@ -49,8 +49,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# safari web inspector timeline exports — hundreds of MB each
+# browser performance captures — hundreds of MB to gigabytes each. The Chrome trace that
+# diagnosed the main-thread scrolling was 1.1GB.
 *-recording.json
+Trace-*.json
 
 # Claude — worktree scratch, local settings, and dev-server config stay untracked; the
 # skills/ subdirectory is tracked (it's not machine-local — it's real planning content

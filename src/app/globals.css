@@ -691,13 +691,16 @@ body {
    photo isn't, so this reuses the app's frosted-card *frame* language (hairline +
    radius + soft highlight) instead of a literal blur. Replaces the old full-bleed
    .scene-photo-scrim now that beats use a contained card, not a full-bleed background. */
-/* Fog banks over the hero's lower edge — drawn, not photographed, so each layer can
-   drift on its own period (see Hero.tsx). Sits low and fades out upward so the dark
-   treeline still reads through; the densest bank is bottom-left, where the source photo
-   has a blown-out yellow bokeh blob that this is covering. */
+/* Fog banks over the hero's lower edge — drawn, not photographed, so they can hide the source
+   photo's flaws without desaturating it. Sits low and fades out upward so the dark treeline still
+   reads through; the densest bank is bottom-left, where the photo has a blown-out yellow bokeh
+   blob that this is covering. Three banks, all static: they used to drift on independent periods,
+   which was three of the five infinite tweens the Hero ran. Held still they cost one
+   rasterisation and nothing after it, so the tuned density is kept for free. */
 .hero-fog {
   position: absolute;
-  /* Wider than the frame so the horizontal drift never pulls an edge into view. */
+  /* Bled past both edges so each gradient's horizontal falloff completes off-frame rather than
+     against the viewport edge. */
   inset-inline: -15%;
   bottom: -8%;
   /* Deliberately shallow. Taller banks covered the photo's bokeh blob more completely
@@ -706,30 +709,140 @@ body {
   pointer-events: none;
 }
 
+/* No `filter: blur()` here, and no `will-change`. Each layer used to carry both, plus an
+   infinite transform tween — the worst combination available. A blurred element gets its own
+   render surface, and moving one forces Chromium to re-raster it, so three of these were
+   re-rasterising forever. The same hazard is already documented on `.scene-frost` below, whose
+   `transition-property` is narrowed to `opacity` alone precisely so a hover never re-blurs its
+   backdrop.
+   The blur is replaced by the gradients' own falloff: an added mid stop plus a longer transparent
+   tail (74% -> 88%) gives a 26-34px blur's softness at no raster cost, because a radial gradient
+   is already smooth — the filter was mostly softening where two radials overlap. `will-change`
+   goes because nothing animates these any more; it was pinning three full-width textures in
+   memory for a hint about motion that no longer exists. */
 .hero-fog-layer {
   position: absolute;
   inset: 0;
-  will-change: transform;
 }
 
+/* Every vertical extent below is <= 100% and every stop reaches `transparent` by 88%, so each
+   gradient finishes inside its own box rather than being clipped by it.
+   These radials used to run to 130% of the layer's height, which the box then cut off mid-ramp.
+   That was safe only because `filter: blur(26px)` smeared the cut; with the blur gone, a box
+   clipping a still-opaque gradient is a hairline waiting to appear at 70% viewport height, where
+   `bottom: -8%` + `height: 38%` puts the top edge. Measured after this change: the brightness
+   step across that boundary is 0.06 against a median of 0.94 elsewhere in the frame, i.e. no
+   discontinuity at all. (A visible seam in a downscaled screenshot prompted this and turned out
+   to be resampling aliasing, not a real edge — but a gradient that terminates inside its own box
+   is the correct construction either way, and costs nothing.) */
 .hero-fog-layer:nth-child(1) {
   background:
-    radial-gradient(58% 130% at 16% 100%, rgb(255 255 255 / 0.62), transparent 74%),
-    radial-gradient(45% 105% at 62% 100%, rgb(255 255 255 / 0.38), transparent 74%);
-  filter: blur(26px);
+    radial-gradient(
+      58% 100% at 16% 100%,
+      rgb(255 255 255 / 0.62),
+      rgb(255 255 255 / 0.24) 44%,
+      transparent 88%
+    ),
+    radial-gradient(
+      45% 88% at 62% 100%,
+      rgb(255 255 255 / 0.38),
+      rgb(255 255 255 / 0.15) 46%,
+      transparent 88%
+    );
 }
 
 .hero-fog-layer:nth-child(2) {
   background:
-    radial-gradient(50% 95% at 38% 100%, rgb(255 255 255 / 0.42), transparent 72%),
-    radial-gradient(60% 110% at 88% 100%, rgb(255 255 255 / 0.34), transparent 74%);
-  filter: blur(34px);
+    radial-gradient(
+      50% 92% at 38% 100%,
+      rgb(255 255 255 / 0.42),
+      rgb(255 255 255 / 0.17) 44%,
+      transparent 88%
+    ),
+    radial-gradient(
+      60% 96% at 88% 100%,
+      rgb(255 255 255 / 0.34),
+      rgb(255 255 255 / 0.13) 46%,
+      transparent 88%
+    );
   opacity: 0.85;
 }
 
 .hero-fog-layer:nth-child(3) {
-  background: linear-gradient(to top, rgb(255 255 255 / 0.4), transparent 58%);
-  filter: blur(18px);
+  background: linear-gradient(to top, rgb(255 255 255 / 0.4), rgb(255 255 255 / 0.14) 34%, transparent 72%);
+}
+
+/* The scroll cue. Two jobs on two nested elements rather than two timelines on one: the inner
+   bob is time-driven, the outer fade is scroll-driven, and pairing an `animation-timeline` list
+   to an `animation-name` list is far easier to get subtly wrong than nesting one div. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-cue-bob {
+    animation: hero-cue-bob 900ms ease-in-out infinite alternate;
+  }
+}
+
+@keyframes hero-cue-bob {
+  to {
+    transform: translateY(8px);
+  }
+}
+
+/* Scroll-linked without JavaScript. This replaces the component's last ScrollTrigger, and is
+   the first scroll-driven animation in the app — hence the `@supports`, whose fallback is a cue
+   that simply never fades. `scroll(nearest block)` resolves to the shell's content overlay,
+   which is the real scroller here; `scroll(root)` would resolve to the document, which never
+   scrolls (see AppShell). */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-cue {
+      animation: hero-cue-fade linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 200px;
+    }
+  }
+}
+
+@keyframes hero-cue-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The hero's one ambient loop, and the only thing on this beat that moves: a blue hour *is* light
+   changing, so the light travels and the photograph holds still. That is also what brings this
+   surface inside the One Ambient Loop Rule literally — it previously ran four (a photo drift plus
+   three fog banks) on a dispensation that counted them as one.
+   An oversized, very soft warm wash translated across the frame. `transform` only, so the
+   compositor owns it; deliberately NOT `.console-sheen`'s `background-position` technique, which
+   repaints — fine on one small card, not across a whole viewport. Kept deliberately below the
+   threshold of notice: it should read as weather on the photograph rather than as an effect on the
+   page. `color-mix` keeps it on `--accent` instead of introducing a literal warm hue, so it
+   retints with the rest of `.blue-hour-scene`. */
+.hero-light {
+  position: absolute;
+  /* Bled well past every edge so the pass never reveals its own boundary. */
+  inset: -25% -45%;
+  pointer-events: none;
+  background: radial-gradient(
+    38% 54% at 28% 42%,
+    color-mix(in oklab, var(--accent) 14%, transparent),
+    transparent 68%
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-light {
+    animation: hero-light-pass 24s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes hero-light-pass {
+  from {
+    transform: translate3d(-6%, 2%, 0);
+  }
+  to {
+    transform: translate3d(24%, -4%, 0);
+  }
 }
 
 /* The cobalt-teal band behind the scroll story's content sections. The gradient is

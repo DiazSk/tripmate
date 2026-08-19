@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { gsap, ScrollTrigger, prefersReducedMotion } from "@/lib/gsap";
 import { useScrollContainer } from "@/lib/scrollContainer";
+import { useMapCamera } from "@/lib/mapCamera";
 
 /**
  * The final beat of the Blue Hour scroll story — the reveal. Everything above it
@@ -13,6 +14,7 @@ import { useScrollContainer } from "@/lib/scrollContainer";
 export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
   const container = useScrollContainer();
   const sectionRef = useRef<HTMLElement>(null);
+  const { viewerRef, ready } = useMapCamera();
 
   useEffect(() => {
     if (!sectionRef.current || prefersReducedMotion()) return;
@@ -53,6 +55,51 @@ export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
     }, sectionRef);
     return () => ctx.revert();
   }, [container]);
+
+  // Stop the globe rendering while nothing can see it.
+  //
+  // This is the last of the four beats and the only one with no opaque band — Hero's photograph
+  // and ImageRow/HowItWorks' `.scene-band` completely cover the canvas, so for most of the story
+  // Cesium is rendering a scene behind a wall. It is not cheap: in a Chrome trace of a real
+  // session the Cesium chunk was 976ms of main-thread JS over 34.4s, the single largest entry,
+  // and because that trace also showed every scrolling frame resolving on the main thread rather
+  // than the compositor, main-thread JS is exactly what makes this page's scrolling feel late.
+  //
+  // Written through `viewerRef` rather than a new context method, following the reasoning already
+  // recorded on `viewerRef` itself: one consumer does not justify wrapping it. This mirrors what
+  // the route-level effect in GlobeBackground already does for `/backend` and `/bench`, including
+  // the `requestRender()` — under `requestRenderMode` restarting the loop does not by itself draw
+  // anything, and arriving back is a demand nothing else signals.
+  //
+  // `rootMargin` is a half viewport so the loop restarts *before* the poster is on screen and the
+  // tiles are warm on arrival, rather than the globe visibly assembling under the headline. The
+  // cleanup restores the loop unconditionally: leaving the landing page must never strand a
+  // paused globe on a route that expects a live one.
+  useEffect(() => {
+    const section = sectionRef.current;
+    const root = container?.current;
+    if (!section || !root) return;
+
+    const setLoop = (on: boolean) => {
+      const viewer = viewerRef.current;
+      if (!viewer || viewer.isDestroyed()) return;
+      viewer.useDefaultRenderLoop = on;
+      if (on) viewer.scene.requestRender();
+    };
+
+    const io = new IntersectionObserver(([entry]) => setLoop(entry.isIntersecting), {
+      root,
+      rootMargin: "50% 0px",
+    });
+    io.observe(section);
+    return () => {
+      io.disconnect();
+      setLoop(true);
+    };
+    // `ready` is in the deps because the observer's first callback can fire before the viewer
+    // exists (the 3D tileset takes seconds); re-running once it does is what makes the pause
+    // actually take effect on a cold load rather than silently no-op.
+  }, [container, viewerRef, ready]);
 
   return (
     // pointer-events-auto: this is a section in the scroll story, and empty space
