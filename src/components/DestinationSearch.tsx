@@ -120,7 +120,16 @@ export default function DestinationSearch({
   const inputClassName =
     variant === "bare"
       ? "w-full bg-transparent pl-6 text-base font-medium text-foreground outline-none placeholder:font-normal placeholder:text-white/65"
-      : "w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pr-4 pl-11 text-[0.95rem] text-white outline-none transition-all duration-200 placeholder:text-white/45 focus:border-[#00F2FE] focus:shadow-[0_0_12px_rgba(0,242,254,0.25)]";
+      : // Focus is the accent ring, matching every other field in the app. This branch used to
+        // focus to `#00F2FE` with a cyan glow — a leftover from the palette that predates "The
+        // Lit Cockpit", and a direct contradiction of the One Accent Rule, which names focus
+        // rings as amber. Nothing reaches this branch today (the one call site passes
+        // `variant="bare"`), but "panel" is the default, so the next caller who omits the prop
+        // would have inherited the old world.
+        // `text-base`, not the 0.95rem this carried: that is 15.2px, and DESIGN.md's own rule is
+        // that anything typed into stays at 16px or iOS Safari zooms the whole viewport on focus.
+        // It is also the documented `field` type step, so the ramp and the bug agree here.
+        "w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pr-4 pl-11 text-base text-white transition-colors duration-200 placeholder:text-white/45 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
   const iconClassName =
     variant === "bare"
       ? "pointer-events-none absolute top-1/2 left-0 h-3.5 w-3.5 -translate-y-1/2 text-muted"
