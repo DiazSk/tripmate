@@ -187,6 +187,24 @@ body {
     bottom: calc(var(--mobile-sheet-h) + 0.75rem);
     left: auto;
   }
+
+  /* Hands touch back to the content overlay, whose `pointer-events-none` (see AppShell)
+     is invisible on a desktop and total on a phone: a wheel scrolls the nearest scrollable
+     ancestor regardless, but a touch scroll is resolved by hit-testing, so a finger found
+     nothing to scroll and `/`, `/trips` and `/profile` were all frozen at the top. Measured
+     on iOS 26.5 with identical markup and gesture: `none` moved 0px, `auto` moved the full
+     extent.
+
+     Only the routes that scroll the overlay itself need this. A route that mounts a
+     DockedPanel has opted out already — that panel is `pointer-events-auto` with its own
+     `overflow-y-auto` — and leaving the overlay transparent there is exactly what keeps the
+     globe draggable in the strip the collapsed bottom sheet reveals. The cost is that the
+     hero globe stops being draggable on a phone on the routes this does apply to; it is
+     decorative there (see `.map-chrome-hidden` above), and a page that cannot scroll at all
+     is the worse trade. */
+  .content-overlay:not(:has(.docked-panel)) {
+    pointer-events: auto;
+  }
 }
 
 /* --- Floating stop markers -------------------------------------------------------------
@@ -317,6 +335,20 @@ body {
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.32);
+}
+
+/* The one control that is only glass on a phone. Above `sm` "Refine with AI" sits in the dark
+   panel column, where the bare `text-muted` label it has always been reads fine and a second
+   glass chip would just be noise. Below `sm` the panel's top edge is transparent, so the same
+   label lands on the map strip's satellite imagery and disappears — there it takes the same
+   treatment every other control floating over the globe already uses. */
+@media (width >= 40rem) {
+  .refine-affordance {
+    background: none;
+    backdrop-filter: none;
+    border-color: transparent;
+    box-shadow: none;
+  }
 }
 
 /* The fixed top navbar. Blur alone (no tint) is Vita Travels' own reference value, but

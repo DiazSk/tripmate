@@ -273,13 +273,17 @@ export default function TripView({
             <div className={selectedStop ? "hidden" : "space-y-4"}>
               {/* Above the card, not below it: at the foot of the panel this sat under the
                   floating trace/terminal button in the same bottom-right corner, and a
-                  30-day trip buried it behind a full scroll of the itinerary. */}
+                  30-day trip buried it behind a full scroll of the itinerary.
+
+                  `px-5` below `sm`: the panel is full-bleed there, and this row — unlike its
+                  `.glass-itinerary` sibling, which insets its own inner box — has nothing to
+                  inset it, so the label sat hard against the screen edge. */}
               {trip && itinerary && (
-                <div className="flex justify-end">
+                <div className="flex justify-end px-5 sm:px-0">
                   <button
                     type="button"
                     onClick={() => focus.open(0, "trip")}
-                    className="pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/10"
+                    className="refine-affordance glass-control pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/10"
                   >
                     Refine with AI
                   </button>
