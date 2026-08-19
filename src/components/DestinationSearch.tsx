@@ -175,7 +175,7 @@ export default function DestinationSearch({
                   )}
                 </span>
                 {s.countryCode && (
-                  <span className="shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white/60 uppercase">
+                  <span className="shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-white/60 uppercase">
                     {s.countryCode}
                   </span>
                 )}
