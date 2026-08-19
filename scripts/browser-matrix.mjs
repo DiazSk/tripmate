@@ -73,8 +73,14 @@ function probe() {
     webgl: gl,
     // NOT `window.__tripmateViewer` — that handle is deliberately dev-only and stripped from
     // production builds, so it reports false on exactly the bundle this script exists to check.
-    // Cesium's own widget root is the signal that survives minification.
-    cesiumBooted: !!document.querySelector(".cesium-widget canvas"),
+    //
+    // And not the canvas alone either: Cesium builds its widget DOM *before* it can fail, so a
+    // crashed viewer still leaves a `.cesium-widget canvas` behind. Checking only for that
+    // reported a healthy globe on WebKit while construction was throwing. The error panel is
+    // Cesium's own signal that it gave up, so a boot is the canvas present AND that absent.
+    cesiumBooted:
+      !!document.querySelector(".cesium-widget canvas") &&
+      !document.querySelector(".cesium-widget-errorPanel"),
     fcpMs: Math.round(paint.find((p) => p.name === "first-contentful-paint")?.startTime ?? -1),
     errors: err.slice(0, 6),
   };
