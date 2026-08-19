@@ -19,7 +19,13 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
   if (!flags) return "";
 
   const lines: string[] = [
-    `Plan about ${flags.paceSpotsPerDay} stops per day — the traveler's resolved pace is "${flags.paceResolved}". Treat it as a target, not a minimum: fewer, better-chosen stops beat a day they cannot finish.`,
+    // "About N stops per day" alone is what produced days that ended at 1pm: the model counted
+    // meals toward N, so a target of 3 became one sight plus lunch plus dinner and the afternoon
+    // simply vanished. Measured — Sonnet 5 on this exact line returned 9:00/11:00/1:00 PM days and
+    // was fully compliant while doing it. The count now names what it counts, and the day's SPAN is
+    // stated separately, because the two are independent and only one of them was ever specified.
+    `Plan about ${flags.paceSpotsPerDay} sightseeing stops per day — the traveler's resolved pace is "${flags.paceResolved}". Meals, coffee and rest breaks do NOT count toward that number; they are additional entries on top of it.`,
+    `Each day must still span the whole day, roughly morning through evening. Include lunch around 12:00-13:30 and dinner around 18:30-20:30, and end the day in the evening rather than at lunchtime. A lower stops-per-day target means more time and breathing room per stop — not a day that stops after lunch.`,
   ];
 
   const mobility = flags.mobilityProfile;

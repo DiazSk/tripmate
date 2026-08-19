@@ -7,7 +7,7 @@ import { generateItinerary } from "@/lib/generateItinerary";
  * validation in, JSON out.
  */
 export async function POST(req: NextRequest) {
-  const { reconciled, poiDetails, tripId } = await req.json();
+  const { reconciled, poiDetails, tripId, destination } = await req.json();
   if (!reconciled || !poiDetails) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       reconciled,
       poiDetails,
       tripId,
+      destination,
     });
     return NextResponse.json({ ok: true, runId, tripContextMd, itineraryMd });
   } catch (err) {
