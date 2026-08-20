@@ -44,13 +44,16 @@ export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
         { clipPath: "inset(0 0 100% 0)", y: 20 },
         { clipPath: "inset(0 0 0% 0)", y: 0, duration: 0.9, ease: "expo.out", stagger: 0.09, scrollTrigger },
       );
-      // delay: 0.45 continues the .poster-reveal stagger's own rhythm (4 headline
-      // spans + the subline = 5 elements at 0.09s apart; this is next in that sequence)
-      // rather than introducing an unrelated second cadence.
+      // The delay continues the .poster-reveal stagger's own rhythm rather than introducing an
+      // unrelated second cadence: it is the next slot in that sequence, so it equals
+      // (number of .poster-reveal elements) x 0.09. That was 0.45 when the headline was four
+      // spans plus the subline; the headline is one word now, so two elements, so 0.18. Leaving
+      // it at 0.45 would have parked the CTA a third of a second after everything above it had
+      // finished — a gap, not a beat.
       gsap.fromTo(
         ".poster-fade",
         { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, duration: 0.9, ease: "expo.out", delay: 0.45, scrollTrigger },
+        { opacity: 1, y: 0, duration: 0.9, ease: "expo.out", delay: 0.18, scrollTrigger },
       );
     }, sectionRef);
     return () => ctx.revert();
@@ -110,13 +113,28 @@ export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
       ref={sectionRef}
       className="pointer-events-auto flex min-h-dvh flex-col items-center justify-center p-5 text-center sm:p-6"
     >
-      <h1 className="hero-legible font-scene-hero text-[clamp(2.5rem,8vw,6rem)] leading-[0.88] text-on-deep">
-        <span className="poster-reveal block">Every day</span>
-        <span className="poster-reveal block">planned.</span>
-        <span className="poster-reveal block">Every dollar</span>
-        <span className="poster-reveal block">spent.</span>
+      {/* One word, and it is the whole reveal.
+          This was "Every day planned. Every dollar spent." across four centred ragged lines,
+          which is a sentence set large rather than a poster: four lines of a claim compete with
+          each other, none of them gets to be big, and the mechanism they describe is already
+          spelled out in the subline directly beneath and in HowItWorks above. The reference's
+          own hero is the single word "Travel". Reducing to one word is what buys the scale —
+          capped at 6rem across four lines, it runs to 12rem on one.
+          "Elsewhere." rather than a stock imperative: it answers the word the sequence opened
+          on. Hero says "Somewhere, it's the blue hour"; this closes the loop.
+
+          The 10.5vw is measured, not guessed. Archivo at 900/125% with this tracking renders
+          "Elsewhere." at about 6.87x its font-size, so the vw term is what decides whether it
+          fits and the rem cap only bites past ~2280px. A single word cannot wrap, so the failure
+          mode is overflow rather than an ugly line break: 15vw filled 93% of a 1920 viewport with
+          74px of total slack, which one differently-metricked fallback face would have blown
+          through. 10.5vw holds it at 66-82% of the available width from 375px to 2560px — the
+          proportion the reference's own one-word hero sits at — with room to spare. */}
+      <h1 className="hero-legible font-scene-hero text-[clamp(2.5rem,10.5vw,12rem)] leading-[0.88] text-on-deep">
+        <span className="poster-reveal block">Elsewhere.</span>
       </h1>
-      {/* Not text-sm: 96px to 14px is a jump, not a scale step, and this line carries the
+      {/* Not text-sm: the poster above is 134px at a laptop width and 202px at 1920, so 14px is a
+          cliff rather than a scale step, and this line carries the
           mechanism the rest of the page only implies. */}
       <p className="poster-reveal hero-legible mt-7 max-w-xl text-balance scene-prose text-base text-on-deep sm:text-lg">
         Tell us where, when, and how much. Get a day-by-day plan that actually costs what
