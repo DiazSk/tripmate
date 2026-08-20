@@ -223,7 +223,7 @@ function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => voi
       // puts above any `@layer`-emitted rule regardless of specificity — including Tailwind's
       // `ring-*` utilities, which compose onto `box-shadow` and would render as invisible
       // here. `outline` is a separate property, so the two don't fight.
-      className="glass-itinerary memory-card pointer-events-auto block rounded-2xl p-2.5 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+      className="glass-itinerary is-opaque memory-card pointer-events-auto block rounded-2xl p-2.5 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
     >
       {/* Base tile paints first and never unmounts — the Constant-Ground Rule, same as
           ItineraryCard's header: a photo miss or a slow Wikipedia lookup must not leave a

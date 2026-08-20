@@ -104,7 +104,10 @@ const ghostButtonClass =
 // panels use, reused here for consistency across every step of this page.
 // `pointer-events-auto` opts back in from AppShell's `pointer-events-none` overlay, which
 // exists so the Cesium canvas underneath stays draggable. Every interactive box needs it.
-const cardClass = "glass-itinerary pointer-events-auto rounded-2xl p-5 sm:p-6";
+// `is-opaque`: the plan step runs with `globeWanted` false, so there is nothing behind this
+// card to frost. It never coexists with a visible globe — submitting unmounts it and boots
+// the globe in the same beat. See `.glass-itinerary.is-opaque`.
+const cardClass = "glass-itinerary is-opaque pointer-events-auto rounded-2xl p-5 sm:p-6";
 
 // `text-base`, not the 14px body step: 16px is what stops iOS Safari zooming the viewport on
 // focus, and it's already a step the system uses (the hero subline).
