@@ -11,6 +11,7 @@ rolls up the timeline across all of them.
 | [`llm.md`](./llm.md) | Prompting, the `claude` CLI integration, trace logging |
 | [`system-design.md`](./system-design.md) | Diagrams for the preference step + LLM trace viewer |
 | [`itinerary-quality.md`](./itinerary-quality.md) | Rubric audit of plan quality, and what's data-blocked |
+| [`branch-comparison-globe-and-llm.md`](./branch-comparison-globe-and-llm.md) | `dev-aryan` vs `feat/ui-optimization` — the two overlapping globe/LLM implementations, and which evidence backs which |
 
 ## What it is
 
