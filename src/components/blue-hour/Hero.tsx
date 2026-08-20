@@ -99,6 +99,11 @@ export default function Hero() {
           <ChevronDown size={28} strokeWidth={1.5} />
         </div>
       </div>
+
+      {/* The exit wash — see `.hero-dusk`. Last child and `z-10` so it covers the type as well as
+          the photograph: the composition has to dim as one image, or the headline survives its
+          own ground and reads as text pasted onto a dark rectangle. Still no JavaScript here. */}
+      <div aria-hidden className="hero-dusk pointer-events-none absolute inset-0 z-10" />
     </section>
   );
 }

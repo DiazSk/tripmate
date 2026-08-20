@@ -24,8 +24,13 @@ const menuItemClass =
 
 // Shared style for every link in the nav, aside from the wordmark — plain
 // text-foreground, no hero-legible, since this bar is real glass, not bare canvas.
+// The rule arrives on hover/focus rather than sitting under every item permanently. Four
+// always-underlined items read as unstyled anchors, and the underline was carrying no
+// information: everything in this bar is a link, so marking all of them marks none of them.
+// The hover state keeps the affordance where it means something, and text-foreground →
+// white on hover carries it for anyone who can't see the 1px rule.
 const navLinkClass =
-  "inline-flex min-h-11 items-center text-sm font-medium text-foreground underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none";
+  "inline-flex min-h-11 items-center text-sm font-medium text-foreground decoration-white/60 underline-offset-4 transition-colors hover:text-white hover:underline focus-visible:rounded-sm focus-visible:underline focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none";
 
 // Landing-only: the two beats worth a direct jump to. Deliberately excludes the final
 // reveal section — naming it in a permanent nav item is exactly the shortcut that would
