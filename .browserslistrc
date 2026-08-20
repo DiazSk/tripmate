@@ -25,6 +25,18 @@
 # polyfill we would want. Cesium + WebGL2 + a photorealistic tileset is not an experience an old
 # browser was going to have.
 #
+# One feature inside this range is NOT universally available and is used anyway, as a degrade:
+#
+#   animation-timeline / scroll()  — Chrome 115, Firefox 144, Safari 26.0. So Chrome 108-114,
+#                        Firefox 121-143 and Safari/iOS 16.4-18.7 are all in support and all get
+#                        no scroll-driven animation. Two things ride it: `.hero-cue`'s fade (which
+#                        simply never fades) and `.hero-dusk`'s wash (which never appears, so the
+#                        hero-to-ImageRow seam is a hard cut). Both are behind `@supports`, so the
+#                        resting state is the unobscured composition rather than a broken one.
+#                        This was previously masked above `lg` by a GSAP pin doing the same wash;
+#                        that pin is deleted, so the degrade now reaches those browsers' desktop
+#                        widths too. Taken knowingly — see DESIGN.md's The Story's One Exit.
+#
 # Check what this resolves to:  npx browserslist
 # Check what it costs:          npx browserslist --coverage
 

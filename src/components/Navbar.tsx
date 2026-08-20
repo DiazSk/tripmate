@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bookmark, Compass, Sparkles, UserRound } from "lucide-react";
-import { prefersReducedMotion } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 
 // Same ease every other motion in this app already uses for a "smooth, not
 // snappy" settle (--marker-transition, --scene-hover, the *-in keyframes).

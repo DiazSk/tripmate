@@ -5,7 +5,7 @@ import { Check } from "lucide-react";
 import { TIERS, TierId, estimateTierTotal } from "@/lib/tiers";
 import { devLabel } from "@/lib/devInspector";
 import { formatMoney } from "@/lib/format";
-import { prefersReducedMotion } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 
 // Above this multiple of the entered budget, a tier's real price is treated
 // as an aspirational stretch rather than a genuine option worth the same
@@ -126,8 +126,18 @@ export default function TierPicker({
               {/* The over-budget mute is weight and text alpha only — the badge keeps its slate
                   backing either way. Dropping to bg-white/10 put the price, which is data, near
                   2:1 over the card's bright illustration, and live repricing as the budget field
-                  changes means this state is now reachable mid-keystroke. */}
-              <div className="absolute top-3 right-3 flex flex-col items-end gap-0.5 rounded-2xl bg-surface-deep/85 px-3 py-1 backdrop-blur-sm">
+                  changes means this state is now reachable mid-keystroke.
+
+                  No `backdrop-blur` either, for two reasons that both already have precedent in
+                  globals.css. The backdrop here is an opaque illustration, and a blur needs
+                  something translucent behind it to do anything at all (see `.scene-photo-frame`
+                  — "real backdrop-filter blur needs something behind the element to blur, which
+                  an opaque photo isn't"). And this badge sits inside the tilt plane above, whose
+                  transform is rewritten on every `pointermove`, so the blur re-rasterised on
+                  every frame of every hover, on three cards (see `.hero-fog-layer`). At 0.85
+                  slate, 15% of a sharp photo and 15% of an 8px-blurred one are the same
+                  picture. */}
+              <div className="absolute top-3 right-3 flex flex-col items-end gap-0.5 rounded-2xl bg-surface-deep/85 px-3 py-1">
                 {/* Keyed on the text so a re-price remounts the span and replays `value-in`.
                     React would otherwise reuse the node and the figure would swap with no
                     acknowledgement at all — and this figure now changes mid-keystroke. */}

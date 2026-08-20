@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import Image from "next/image";
 import { ChevronDown } from "lucide-react";
-import { gsap } from "@/lib/gsap";
-import { useScrollContainer } from "@/lib/scrollContainer";
 import { useLineReveal } from "@/lib/lineReveal";
 
 /**
@@ -12,25 +10,41 @@ import { useLineReveal } from "@/lib/lineReveal";
  * drifting light, and no CTA — "Plan a trip" is withheld until HeroPoster at the very end so its
  * arrival still reads as a reveal.
  *
- * **The ambient motion here runs no JavaScript**, and that is deliberate rather than incidental.
- * This component used to run five infinite GSAP tweens (a photo drift, three fog layers, a cue
- * bob) plus a `pointermove` parallax driving six `quickTo` tweens across two nested transform
- * planes. A Chrome trace of a real session found every scrolling frame resolving on the main
- * thread (`scroll_state: SCROLL_MAIN_THREAD` on 1688 of 3426 frames) rather than the compositor —
- * frames were not being dropped, only 2.1% were, they were arriving *late*, queued behind
- * main-thread work. So the resting-state motion is CSS keyframes on `transform`/`opacity` only
- * (`.hero-light`, `.hero-cue*` in globals.css), which the compositor owns outright, and the
- * globe's render loop — 976ms of that trace, its largest single entry — is paused while this
- * beat covers it; see HeroPoster.
+ * **Nothing here is scroll-driven from JavaScript, and the hero is not pinned.** Both of those
+ * were true for exactly one commit and both were wrong, in ways worth writing down because the
+ * reasoning that produced them was reasonable.
  *
- * **Two scroll-driven exceptions, both requested and both gated.** The masked line reveal on the
- * headline and the pinned scrub that hands the beat off to ImageRow are ScrollTrigger, which is
- * per-frame main-thread work by definition. They are confined accordingly: the pin only exists
- * at `lg` and above and only with `prefers-reduced-motion: no-preference`, so the narrow
- * viewports and low-power devices the trace was worried about get the CSS-only version
- * (`.hero-dusk`'s scroll timeline) instead. Neither runs on a loop — a scrub does work only
- * while the wheel is actually moving, which is the difference between this and the four infinite
- * tweens that were removed.
+ * The pin was `ScrollTrigger({ pin: true, scrub: true, start: "top top", end: "+=100%" })`
+ * scrubbing three tweens: a push into the photograph, the type drifting up and out, and
+ * `.hero-dusk`'s wash to full opacity. The design audit that asked for it asked for the hero to
+ * *collapse into the band below instead of hard-cutting* — and a pin does not do that. It holds
+ * the section still for a whole viewport of scroll, so the first thing a visitor does to the page
+ * is discover it does not move, and the composition they are left looking at while it does not
+ * move is a flat `#082130` rectangle, since the wash reached 1 and the type reached 0 together.
+ * Three further costs came free with it: the scroller is an element, not the window, so GSAP
+ * resolved `pinType: "transform"` and held the section by rewriting `translateY` every frame; the
+ * pin spacer changed the scroller's `scrollHeight` mid-gesture; and `refreshPriority: -1` did the
+ * *opposite* of its own comment — ScrollTrigger's sort key is `refreshPriority * -1e6`, so it
+ * sorted the pin last, and every trigger below it measured against a layout with no pin spacer
+ * and fired a full viewport early, finishing before it was on screen.
+ *
+ * So the hand-off is CSS now: `.hero-dusk` rides `animation-timeline: --story` on every viewport,
+ * which is compositor-owned, needs no scroller plumbing, and was already the shipping path
+ * everywhere below `lg`. It is capped below opaque — see that rule for why the cap only became
+ * correct once the pin was gone.
+ *
+ * The ambient motion is CSS keyframes on `transform`/`opacity` only (`.hero-light`, `.hero-cue*`),
+ * which the compositor owns outright. This component used to run five infinite GSAP tweens plus a
+ * `pointermove` parallax driving six `quickTo`s across two nested transform planes; a Chrome trace
+ * of a real session found scrolling frames resolving on the main thread (`SCROLL_MAIN_THREAD` on
+ * 1688 of 3426) rather than the compositor — frames were not being dropped, only 2.1% were, they
+ * were arriving *late*, queued behind main-thread work. The globe's render loop, 976ms of that
+ * trace and its largest single entry, is paused while this beat covers it; see HeroPoster.
+ *
+ * The one remaining scroll-driven exception is `useLineReveal` on the headline, which is
+ * ScrollTrigger and therefore per-frame main-thread work by definition. It is a one-shot: it
+ * plays once on entry and does nothing for the rest of the session, which is the difference
+ * between it and a scrub.
  *
  * The cursor parallax is gone by request, and it is worth recording that it was *not* the
  * expensive part: `pointermove` dispatch totalled 53ms of a 34.4s trace. It went because a hero
@@ -45,72 +59,17 @@ import { useLineReveal } from "@/lib/lineReveal";
  * dispensation.
  */
 export default function Hero() {
-  const container = useScrollContainer();
-  const sectionRef = useRef<HTMLElement>(null);
-  const photoRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
-  const duskRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useLineReveal(headingRef);
 
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-    // matchMedia rather than an `if` on a media query: GSAP tears the whole timeline down and
-    // reverts every property it touched when the query stops matching, so a resize from desktop
-    // to phone width does not leave a half-scrubbed photo scaled at 1.06 forever.
-    const mm = gsap.matchMedia();
-    mm.add("(min-width: 1024px) and (prefers-reduced-motion: no-preference)", () => {
-      // The CSS scroll-timeline version of the same wash is the fallback for every context this
-      // pin does not cover. Both driving `.hero-dusk`'s opacity at once is not a race that
-      // resolves gracefully — a CSS animation outranks an inline style, so GSAP would write
-      // opacity every frame and the keyframe would overwrite it every frame. The attribute
-      // switches the CSS one off for exactly as long as this timeline owns the property.
-      section.dataset.heroPinned = "true";
-
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: section,
-          scroller: container?.current ?? undefined,
-          start: "top top",
-          // One viewport of scroll held in place. Longer reads as the page having jammed;
-          // shorter and the hand-off is over before it registers as one.
-          end: "+=100%",
-          scrub: true,
-          pin: true,
-          // Refreshed before anything below it, so its pin spacer is measured first and the
-          // sections after it are laid out against the height it actually claims.
-          refreshPriority: -1,
-        },
-      });
-      // A slow push into the photograph while it is held — the camera moving, not the subject.
-      // On the photo *wrapper*, never the <Image> itself: next/image owns that element's own
-      // sizing, and the Transform-Ownership Rule means one node, one writer.
-      tl.fromTo(photoRef.current, { scale: 1 }, { scale: 1.12, ease: "none" }, 0)
-        // The type leaves faster than the ground it sits on, which is what reads as depth
-        // rather than as the whole frame sliding.
-        .fromTo(textRef.current, { yPercent: 0, opacity: 1 }, { yPercent: -22, opacity: 0, ease: "none" }, 0)
-        // The blue hour ending — the same wash `.hero-dusk` does in CSS, on this timeline so it
-        // stays locked to the pin's progress rather than to raw scrollTop, which during a pin
-        // no longer corresponds to where the section visually is.
-        .fromTo(duskRef.current, { opacity: 0 }, { opacity: 1, ease: "none" }, 0);
-
-      return () => {
-        delete section.dataset.heroPinned;
-      };
-    });
-    return () => mm.revert();
-  }, [container]);
-
   return (
-    <section
-      ref={sectionRef}
-      className="pointer-events-auto relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-5 text-center sm:p-6"
-    >
+    <section className="pointer-events-auto relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-5 text-center sm:p-6">
       {/* No scrim, matching DESIGN.md's landing-headline rule: nothing sits between the type and
-          the photograph — hero-legible's own three-layer shadow carries legibility. */}
-      <div ref={photoRef} className="absolute inset-0 -z-10">
+          the photograph — hero-legible's own three-layer shadow carries legibility.
+          The wrapper stays now that nothing animates it: `next/image` with `fill` needs a
+          positioned parent, and this is it. */}
+      <div className="absolute inset-0 -z-10">
         <Image src="/scenes/hero-dawn.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
       </div>
 
@@ -131,7 +90,11 @@ export default function Hero() {
         <div className="hero-fog-layer" />
       </div>
 
-      <div ref={textRef}>
+      {/* This wrapper also stays, and for a less obvious reason than the photo's: promoting the
+          `<h1>` to a direct child of `items-center` would give it `align-self: center` and
+          shrink-to-fit width, which changes where the headline wraps — and `useLineReveal` masks
+          the line boxes it *measures*, so a wrap change is a change to the reveal. */}
+      <div>
         {/* The headline is one string now, not two hand-split phrase spans on `.hero-rise`.
             SplitText measures the real line boxes at the real font size and masks each one, so
             the reveal follows however the type actually wraps at this viewport instead of a
@@ -160,10 +123,9 @@ export default function Hero() {
       </div>
 
       {/* The scroll cue: fades out over the first 200px of real scroll, so its absence itself
-          confirms the page moved. That fade is now `animation-timeline: scroll()` rather than a
-          ScrollTrigger — the bob is time-driven and lives on the inner element, the scroll-driven
-          fade on the outer, so neither needs an `animation-timeline` list. Decorative only, not a
-          control. */}
+          confirms the page moved. That fade is `animation-timeline: scroll()` — the bob is
+          time-driven and lives on the inner element, the scroll-driven fade on the outer, so
+          neither needs an `animation-timeline` list. Decorative only, not a control. */}
       <div
         aria-hidden
         className="hero-cue hero-legible pointer-events-none absolute bottom-8 text-on-deep/70"
@@ -175,8 +137,8 @@ export default function Hero() {
 
       {/* The exit wash — see `.hero-dusk`. Last child and `z-10` so it covers the type as well as
           the photograph: the composition has to dim as one image, or the headline survives its
-          own ground and reads as text pasted onto a dark rectangle. Still no JavaScript here. */}
-      <div ref={duskRef} aria-hidden className="hero-dusk pointer-events-none absolute inset-0 z-10" />
+          own ground and reads as text pasted onto a dark rectangle. No JavaScript. */}
+      <div aria-hidden className="hero-dusk pointer-events-none absolute inset-0 z-10" />
     </section>
   );
 }

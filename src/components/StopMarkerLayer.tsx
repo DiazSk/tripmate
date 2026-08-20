@@ -200,16 +200,17 @@ export default function StopMarkerLayer() {
           placed[placedCount * 2 + 1] = projected.y;
           placedCount++;
 
-          // `transform`, `visibility` and this custom property. The first two are composited, but
-          // `--marker-depth` is *not* free: it feeds `opacity` and `filter: blur()` on the title
-          // card, so each write invalidates style for that subtree and recomputes a blur. That is
-          // affordable now only because `.marker-title-card` no longer *transitions* those two
-          // properties — when it did, every frame restarted a 400ms blur on every card at once.
-          // See the transition comment in globals.css before changing either side.
+          // `transform`, `visibility` and this custom property. `--marker-depth` feeds `opacity`
+          // on the title card, so each write invalidates style for that subtree — but the
+          // resulting change is compositor-only, and the card no longer *transitions* it (when it
+          // did, every frame restarted a 400ms fade on every card at once). It also used to drive
+          // a `filter: blur()`, which gave every card its own render surface to re-raster on
+          // every one of these writes; that is gone. See the comments in globals.css before
+          // putting either back.
           // `translate(-50%, -100%)` puts the card's bottom edge on
           // the stem tip; the anchor's `transform-origin: bottom center` keeps it there through
           // the scale. `--marker-depth` is the same already-computed `scale` (0.55-1), handed to
-          // the title card below via CSS inheritance so it can drive opacity/blur for the
+          // the title card below via CSS inheritance so it can drive opacity for the
           // rack-focus effect — not a second distance calculation.
           node.style.setProperty("--marker-depth", scale.toFixed(3));
           node.style.transform = `translate3d(${projected.x.toFixed(1)}px, ${projected.y.toFixed(

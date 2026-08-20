@@ -203,24 +203,44 @@ body {
     bottom: calc(var(--mobile-sheet-h) + 0.75rem);
     left: auto;
   }
+}
 
-  /* Hands touch back to the content overlay, whose `pointer-events-none` (see AppShell)
-     is invisible on a desktop and total on a phone: a wheel scrolls the nearest scrollable
-     ancestor regardless, but a touch scroll is resolved by hit-testing, so a finger found
-     nothing to scroll and `/`, `/trips` and `/profile` were all frozen at the top. Measured
-     on iOS 26.5 with identical markup and gesture: `none` moved 0px, `auto` moved the full
-     extent.
+/* Hands pointer events back to the content overlay, whose `pointer-events-none` (see AppShell)
+   makes the globe draggable but takes the scroller out of hit-testing along with it.
 
-     Only the routes that scroll the overlay itself need this. A route that mounts a
-     DockedPanel has opted out already — that panel is `pointer-events-auto` with its own
-     `overflow-y-auto` — and leaving the overlay transparent there is exactly what keeps the
-     globe draggable in the strip the collapsed bottom sheet reveals. The cost is that the
-     hero globe stops being draggable on a phone on the routes this does apply to; it is
-     decorative there (see `.map-chrome-hidden` above), and a page that cannot scroll at all
-     is the worse trade. */
-  .content-overlay:not(:has(.docked-panel)) {
-    pointer-events: auto;
-  }
+   This was scoped to `width < 40rem`, on the reasoning that the problem was touch-only: a touch
+   scroll is resolved by hit-testing, so a finger found nothing to scroll and `/`, `/trips` and
+   `/profile` were frozen at the top (measured on iOS 26.5: `none` moved 0px, `auto` moved the
+   full extent), whereas "a wheel scrolls the nearest scrollable ancestor regardless". That last
+   part is false as stated, and it is why this is no longer behind a media query. A wheel's
+   scroll target is resolved by hit-testing *first*, then by walking the hit element's ancestor
+   chain — and the Cesium canvas is the overlay's **sibling**, not its descendant. So a wheel
+   over any patch of viewport with no `pointer-events-auto` box under the cursor walks
+   `canvas -> div.z-0 -> .app-shell (h-dvh overflow-hidden) -> html`, finds nothing scrollable,
+   and lands on Cesium's own ScreenSpaceEventHandler, which consumes it as a camera zoom and
+   `preventDefault`s it. The page does not move, the globe lurches, and tiles start streaming.
+   TripsView.tsx says the same thing from the other direction, having hit it on its own hero.
+
+   Reproduces at desktop widths wherever the overlay does not fully cover the viewport:
+   `/profile` (a `max-w-2xl` column leaves ~350px of dead margin each side at 1440px) and the
+   `/` plan step. Not the landing — all four scroll-story sections are full-bleed and opted in.
+
+   Only the routes that scroll the overlay itself take this. A route that mounts a DockedPanel
+   has opted out already — that panel is `pointer-events-auto` with its own `overflow-y-auto` —
+   and leaving the overlay transparent there is what keeps the globe draggable in the strip the
+   collapsed bottom sheet reveals, *and* keeps StopMarkerLayer's cards (z-5, under this overlay)
+   clickable. Both marker routes mount a panel, so `:not(:has(.docked-panel))` covers it.
+
+   The cost is that the globe stops being draggable on the routes this applies to. It is
+   decorative on every one of them (they all carry `.map-chrome-hidden`; `/backend` and `/bench`
+   never boot Cesium at all), most of their area was already covered by opted-in boxes, and a
+   wheel that zooms a decorative globe instead of scrolling the page is the worse trade.
+
+   Note this now makes `pointer-events-auto` redundant on those routes, since the property
+   inherits. Do not go remove those classes — they are still required on `/` result and
+   `/trip/[id]`, and they are the correct default for a box over the globe. */
+.content-overlay:not(:has(.docked-panel)) {
+  pointer-events: auto;
 }
 
 /* --- Floating stop markers -------------------------------------------------------------
@@ -280,13 +300,27 @@ body {
     0 0 6px rgb(0 0 0 / 0.9),
     0 3px 16px rgb(0 0 0 / 0.55);
   opacity: calc(0.5 + var(--marker-depth, 1) * 0.5);
-  filter: blur(calc((1 - var(--marker-depth, 1)) * 1.5px));
-  /* `color` only. `opacity` and `filter` are driven off `--marker-depth`, which the render loop
-     rewrites on the anchor every frame — so transitioning them meant every frame *restarted* a
-     400ms blur-and-fade toward a target that had already moved, on every card at once. That is
-     a full GPU blur pass per card per frame that can never be cached, and it was one of the
-     larger single costs in the app. The per-frame write is itself the animation; depth already
-     changes smoothly because the camera does. Do not add them back. */
+  /* `isolation`, and not the `filter: blur(calc((1 - var(--marker-depth,1)) * 1.5px))` that used
+     to sit here. The blur was the soft half of the rack-focus effect and it cost a render surface
+     per card: this element's parent has its `transform` rewritten on every `postRender` frame
+     (screen position *and* scale), a blurred element owns its own render surface, and moving one
+     forces a re-raster every frame. That is the same hazard `.hero-fog-layer` below is built
+     around avoiding, applied to elements that move far more often than those ever did. It was
+     also barely visible: `--marker-depth` is the anchor's `scale`, which floors at SCALE_MIN
+     0.55, so the blur never exceeded 0.675px. Depth reads off `opacity` here plus the `scale()`
+     the anchor already writes from the same number — which is where the effect was mostly coming
+     from anyway. If the far end reads flat, widen this ramp (`0.35 + depth * 0.65`) rather than
+     bringing a filter back.
+
+     `isolation` is load-bearing, not tidiness: the ::before vignette below sits at `z-index: -1`
+     and needs a stacking context on this element to stay scoped to it. `filter` used to supply
+     one unconditionally; `opacity` only forms one while it is below 1, i.e. everywhere except
+     full zoom-in, which is precisely the case that would have leaked. */
+  isolation: isolate;
+  /* `color` only. `opacity` is driven off `--marker-depth`, which the render loop rewrites on the
+     anchor every frame — so transitioning it meant every frame *restarted* a 400ms fade toward a
+     target that had already moved, on every card at once. The per-frame write is itself the
+     animation; depth already changes smoothly because the camera does. Do not add it back. */
   transition: color var(--marker-transition);
 }
 
@@ -294,9 +328,10 @@ body {
    a viewer could point at and call "a box". It exists purely so contrast never depends on
    what happens to be under a stop; the shadow above handles the common case, this is the
    guarantee for the worst one (a bright, busy rooftop directly behind the text). Negative
-   z-index needs no extra work to land behind the text: `filter` on the parent always creates a
-   stacking context (even at blur(0px)), so this is scoped to sit under this card's own text and
-   nothing else. */
+   z-index needs no extra work to land behind the text: the parent sets `isolation: isolate`, so
+   this is scoped to sit under this card's own text and nothing else. That property is there for
+   this, and only this — it replaced a `filter: blur()` that had been creating the stacking
+   context as a side effect. Deleting it puts the vignette behind the whole marker layer. */
 .marker-title-card::before {
   content: "";
   position: absolute;
@@ -671,11 +706,17 @@ body {
   /* Stop scroll chaining at these two elements. Nothing above them scrolls — `.app-shell` is
      `h-dvh overflow-hidden` and the document never scrolls at all — so a wheel that runs off the
      end of one of these has nowhere legitimate to go, and letting it propagate produces an
-     ancestor overscroll/rubber-band animation fighting whatever these were already doing. It is
-     also the other half of the end-of-page stutter fix in `useSmoothScroll`: when a settled
-     scroller at its limit deliberately hands a wheel back to the browser, this is what keeps
-     that from becoming a bounce somewhere else. `contain` rather than `none` so the element's own
-     overscroll affordance survives. */
+     ancestor overscroll/rubber-band animation fighting whatever these were already doing.
+     `contain` rather than `none` so the element's own overscroll affordance survives.
+
+     Scrolling here is otherwise entirely native and compositor-owned, and that is a decision
+     rather than an absence. A `useSmoothScroll` hook used to `preventDefault()` the wheel on
+     `.content-overlay` and ease `scrollTop` toward a target in rAF. It is deleted: trailing
+     *render* reads as softness, delayed *input* reads as lag, and a hook that moves the page
+     itself can only produce the second. Every millisecond of its glide was a millisecond of real
+     input latency, and it put every scrolling frame on the main thread behind Cesium's tile
+     work. Do not reintroduce it — the correct shape for that effect lags the rendered content
+     behind a native scroll, which needs the window to be the scroller, and here it never is. */
   overscroll-behavior: contain;
 }
 
@@ -921,15 +962,25 @@ body {
   background: rgb(var(--surface-deep-rgb));
 }
 
-/* `[data-hero-pinned]` is set by Hero.tsx for exactly as long as its pinned ScrollTrigger owns
-   this element's opacity. Both driving it at once does not resolve gracefully: a CSS animation
-   outranks an inline style, so GSAP would write opacity on every scrub frame and this keyframe
-   would overwrite it on every frame. Whichever mechanism is live, the other is off. */
+/* This is the only thing driving the wash now. It used to share the job with a scrubbed GSAP
+   timeline in Hero.tsx, arbitrated by a `[data-hero-pinned]` attribute — a CSS animation outranks
+   an inline style, so both at once meant GSAP writing opacity every frame and this keyframe
+   overwriting it every frame. The pin is deleted (see Hero.tsx for why), so the attribute, the
+   `animation: none` override it gated, and the arbitration are all gone with it.
+
+   `animation-range` is unchanged and deliberately so: `[data-hero-pinned]` meant this animation
+   only ever ran *below* `lg`, i.e. only in the unpinned layout that is now universal. It was
+   already tuned against exactly this geometry. The values are `<length>`s rather than
+   `<percentage>`s, so they measure absolute scroll distance and are indifferent to the ~100vh the
+   page lost when the pin spacer went.
+
+   The `prefers-reduced-motion` gate is load-bearing and is not redundant with the blanket rule at
+   the top of this file. That blanket sets `animation-duration: 0.01ms !important`, and
+   `animation-duration` is *ignored* for a progress-based timeline — the timeline supplies
+   progress. This gate is the only thing honouring the preference for a scroll-driven animation.
+   Same for `.hero-cue` above. */
 @supports (animation-timeline: scroll()) {
   @media (prefers-reduced-motion: no-preference) {
-    [data-hero-pinned] .hero-dusk {
-      animation: none;
-    }
     .hero-dusk {
       animation: hero-dusk linear both;
       animation-timeline: --story;
@@ -941,9 +992,29 @@ body {
   }
 }
 
+/* 0.8, not 1, and the cap only became correct once the pin was gone. Pinned, the hero was held
+   full-screen for a whole viewport, so the wash had to *become* the next band or the visitor sat
+   looking at a half-dimmed still. Unpinned, the wash's visible extent shrinks as it deepens — at
+   85vh of scroll only the hero's bottom 15vh is still on screen — so full opacity buys a flat
+   rectangle nobody has time to see, at the cost of the photograph.
+
+   What the wash actually has to hide is the fog. The three `.hero-fog-layer` banks composite to
+   roughly 0.68 white across the hero's bottom edge, which against `.scene-band`'s top edge
+   (~rgb(20 48 82)) is a ~9.8:1 step — a genuinely hard cut. Seam contrast by cap: 1.0 -> 1.24:1,
+   0.8 -> 1.26:1, 0.7 -> 1.64:1, 0.0 -> 9.8:1. So 0.8 costs 0.02 of seam quality against full
+   opacity and keeps 20% of the photograph; 0.7 costs 0.40 for another 10%. The return falls off a
+   cliff just past 0.8, which is why the knob sits here. Note the wash was never the band's colour
+   anyway — `--surface-deep-rgb` is darker and less saturated than the gradient over it — so
+   "dissolve into the band" was always approximate, and a cap is not a new inaccuracy.
+
+   Browsers without scroll-driven animations (Chrome <115, Firefox <144, Safari <26) get no wash
+   at all and the hard cut. That degrade already shipped for all of them below `lg`; the pin was
+   gated on `min-width`, not on `@supports`, so this widens it to their desktop widths too. A
+   static bottom-anchored gradient would cover it and is rejected: it would be permanently
+   visible, which is the exact thing the transparent resting state exists to avoid. */
 @keyframes hero-dusk {
   to {
-    opacity: 1;
+    opacity: 0.8;
   }
 }
 
@@ -1596,10 +1667,25 @@ body {
   height: 132px;
 }
 
+/* `.glass-itinerary`'s fill, hairline and shadow, but not its blur — only `.is-front` gets that
+   back, below. Two reasons, both already documented in this file. `DEPTH` in FactStack.tsx puts
+   the two wings at opacity 0.5 and 0.22, and a 56px backdrop blur seen through 22% is invisible
+   work. And every card here transitions `transform` for 420ms on each advance: a blurred element
+   owns its own render surface, so moving one re-rasterises it every frame — the same hazard
+   `.hero-fog-layer` and `.scene-frost`'s narrowed `transition-property` are both built around.
+   That was five simultaneous 56px surfaces, four of them all but invisible, on the one screen
+   that is also running the globe and an SSE stream.
+   The alpha steps 0.62 -> 0.72 because at 0.62 the blur was doing part of the legibility work.
+   This rule already sets its own `color`, so nothing is lost by not inheriting the glass class's
+   `--foreground`/`--muted` overrides. The two arrow buttons keep `glass-itinerary`: they are
+   static, and there are two of them. */
 .fact-stack-card {
   position: absolute;
   top: 50%;
   left: 50%;
+  background: rgb(var(--surface-deep-rgb) / 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   width: min(78vw, 20rem);
   min-height: 84px;
   display: flex;
@@ -1620,9 +1706,13 @@ body {
 }
 
 /* The front card is the one being read, so it is the one that is not interactive: clicking it
-   would do nothing, and a pointer cursor on it would promise otherwise. */
+   would do nothing, and a pointer cursor on it would promise otherwise. It is also the only one
+   that gets real glass: it holds still between advances — the component's whole design property —
+   and it is the only one carrying legible body text over arbitrary terrain. One blurred surface
+   per advance instead of five. */
 .fact-stack-card.is-front {
   cursor: default;
+  backdrop-filter: blur(56px) saturate(180%);
 }
 
 /* The single amber mark, and it is doing status work rather than decoration — it says which
