@@ -648,7 +648,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // hues. The extra top padding is what ScrollStory's negative top margin cancels —
       // see the note on that component's wrapper.
       className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : "map-chrome-hidden"} ${
-        step === "landing" ? "blue-hour-scene font-scene-body" : ""
+        step === "landing" ? "blue-hour-scene" : ""
       }`}
     >
       <GenerationLoader

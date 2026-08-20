@@ -265,8 +265,16 @@ export default function ItineraryCard({
 
   return (
     <div className="glass-itinerary overflow-hidden rounded-none sm:rounded-2xl" {...devLabel("ItineraryCard")}>
+      {/* The min-height is the photo's frame, so it only exists when there is a photo. The
+          header photo is a best-effort Wikipedia lookup that legitimately misses, and an
+          unconditional 14/18rem left a 288px slab of flat slate above the day badge with the
+          title marooned at its bottom edge — a reserved space for a value that isn't there,
+          which is the one thing this system says not to render. Without the photo the band
+          sizes to the title and the panel simply starts higher. */}
       <div
-        className="relative flex min-h-[14rem] flex-col justify-end overflow-hidden p-5 text-on-deep sm:min-h-[18rem] sm:p-6"
+        className={`relative flex flex-col justify-end overflow-hidden p-5 text-on-deep sm:p-6 ${
+          headerPhoto ? "min-h-[14rem] sm:min-h-[18rem]" : ""
+        }`}
         style={{ backgroundColor: "var(--surface-deep)" }}
         {...devLabel("ItineraryCard.Header")}
       >

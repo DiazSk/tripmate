@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* The one measurement everything else hangs off. Tailwind's whole scale is rem, so moving
+   the root moves type, padding, gaps and radii together and the composition *scales* rather
+   than reflowing — which is what a fixed 16px root was costing: past ~1400px the interface
+   stayed the same physical size and simply sat in a smaller and smaller fraction of the
+   screen, reading as a boxed web app rather than a full-bleed one.
+   Floored at 16px, never below. Under it the 44px targets drop beneath the touch minimum and
+   iOS Safari zooms the viewport on input focus — the exact rule the trip form's 16px fields
+   already exist to satisfy. So this only ever grows, and every viewport narrower than
+   ~1416px renders byte-identical to before. */
+html {
+  font-size: clamp(16px, 1.13vw, 20px);
+}
+
 :root {
   /* Frosted slate glass over live satellite imagery, with a single warm accent.
      Supersedes the warm cream/teal "Roamly" palette, which was built for solid
@@ -117,7 +130,10 @@
   --color-tag-highlight-fg: var(--tag-highlight-fg);
   --color-tile: var(--tile);
   --color-tile-foreground: var(--tile-foreground);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Manrope carries every label, figure and control in the app. The system stack behind it is
+     a fallback for the seconds before the webfont lands, not the design: a platform default is
+     not a typographic choice, and it was the one face here nobody had picked. */
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* Blue Hour Expedition scene hues — only ever set inside .blue-hour-scene below,
      registered here so Tailwind utilities (bg-scene-teal, etc.) can reference them. */
@@ -446,31 +462,33 @@ body {
   letter-spacing: -0.035em;
 }
 
-/* Blue Hour Expedition scene typefaces. Deliberately separate from .font-display/.font-hero
-   rather than an indirection through those tokens' values — the One Poster Rule already
-   states .font-hero means one specific typeface, and making that context-dependent would
-   trap the next person to touch this file. Used only inside .blue-hour-scene (page.tsx's
-   pre-generation flow); every other route keeps Source Serif 4 / Archivo unchanged. */
+/* The Blue Hour scene's display voice. It was Playfair Display — a whole second high-contrast
+   serif, loaded so the landing could have its own face — and is now the app's own serif set in
+   italic. The scene keeps its distinct register through colour, scale and motion, which is
+   where the difference belongs; splitting the *display role* by route was what made the
+   landing and the app read as two products rather than two moods of one.
+   Kept as its own class rather than folded into `.font-display`: the italic is the scene's,
+   not the system's, and `.font-display` upright is still what a panel heading wants. */
 .font-scene-display {
-  font-family: var(--font-scene-display), ui-serif, Georgia, serif;
+  font-family: var(--font-display), ui-serif, Georgia, serif;
   font-style: italic;
 }
 
-/* The closing poster's voice: hyperbold and spread out. Archivo rather than Bricolage
-   Grotesque, because the request needs both axes pushed and Bricolage's width axis stops
-   at 100% — Archivo carries weight to 900 and width to 125%, so the face itself widens
-   instead of the letters merely being pushed apart. Positive tracking on top, which is
-   the opposite of `.font-hero`'s -0.035em: that one is packing a wide face tight, this
-   one is deliberately airy. */
+/* The closing poster's voice: hyperbold and wide. Archivo rather than Bricolage Grotesque,
+   because the request needs both axes pushed and Bricolage's width axis stops at 100% —
+   Archivo carries weight to 900 and width to 125%, so the face itself widens instead of the
+   letters merely being pushed apart.
+   The tracking used to be +0.035em, deliberately airy, as the counterpart to `.font-hero`'s
+   -0.035em. Reversed to match: at 900 weight and 125% width the face is already carrying all
+   the width this poster needs, and adding letter-space on top read as a stock big-sans hero
+   rather than as one authored word. Width comes from the axis; tracking's job here is to pack
+   what the axis widened. Both display faces now sit at the same -0.035em, just inside the
+   -0.04em floor. */
 .font-scene-hero {
   font-family: var(--font-hero), ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   font-stretch: 125%;
-  letter-spacing: 0.035em;
-}
-
-.font-scene-body {
-  font-family: var(--font-scene-body), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.035em;
 }
 
 /* Landing hero legibility over live satellite imagery of arbitrary brightness — the globe
@@ -614,6 +632,36 @@ body {
   display: none;
 }
 
+/* The two long dark scrollers keep their scrollbar — unlike the day-tab row there is no other
+   affordance telling you an itinerary runs past the fold — but not the UA's default one. At
+   `auto` width, Chrome on Windows paints a 16px light track down the right edge of the frosted
+   panel: the widest, brightest, squarest element on a surface whose whole material argument is
+   translucent slate and 16px radii. `thin` with a white-18% thumb on a transparent track keeps
+   the signal and drops the chrome. Standard properties only; where they aren't supported the
+   UA default is a correct fallback, not a defect. */
+.docked-panel,
+.content-overlay {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.18) transparent;
+}
+
+/* The scroll timeline every scroll-driven animation in this app binds to, declared here on the
+   real scroller and referenced by name.
+   `animation-timeline: scroll(nearest block)` cannot be used for this and never could: "nearest"
+   resolves to the nearest ancestor *scroll container*, and `overflow: hidden` makes an element
+   one — it has a scrolling box, it simply never scrolls. Both the landing hero and the two scene
+   bands carry `overflow-hidden` for their own reasons (fog and light wash bleed; cards animating
+   in from negative X), so `nearest` bound to a section that is pinned at scrollTop 0 forever and
+   every such animation sat frozen at 0% progress. `.hero-cue`'s scroll fade shipped this way and
+   had never once run — its ScrollTimeline reported `currentTime: 0%` at every scroll offset.
+   A named timeline is referenceable by any descendant of the element declaring it, which
+   `.content-overlay` is for every route, so this needs no `timeline-scope`. */
+@supports (animation-timeline: scroll()) {
+  .content-overlay {
+    scroll-timeline: --story block;
+  }
+}
+
 /* Cesium's on-screen credits are required by Google's terms to stay visible. Two fixes:
    Cesium pins them `position:absolute; left:0`, which makes them escape the shrink-to-fit
    container we relocate them into — so flow them normally instead. And they default to
@@ -667,13 +715,17 @@ body {
    Also deliberately not overriding --canvas: GlobeBackground reads that via
    getComputedStyle(document.documentElement) once at Viewer construction, so a scoped
    override here would be silently inert. */
+/* The scene retints the *ground*, not the accent. It used to also swap --accent to a brass
+   #c9905a family, which is the exact move The Profile Panel Tint rule already argues against
+   in DESIGN.md: "switching the accent to brass mid-app, on a route reachable from the amber
+   result view, would read as a different product rather than a different surface — the
+   sections needed separating from the globe, which is a background problem, and the accent
+   was never the thing at fault." That reasoning was written for /profile and is just as true
+   here; the landing was the one surface still doing it. Amber also simply survives its
+   backdrop better: the poster CTA sits on live desert terrain, where brass on tan was the
+   lowest-contrast primary button in the app. */
 .blue-hour-scene {
   --surface-deep-rgb: 8 33 48; /* deep cobalt-teal, replaces slate-900's 15 23 42 */
-  --accent: #c9905a; /* brass/copper, replaces amber #ffb340 */
-  --accent-hover: #d9a877;
-  --accent-foreground: #2b1608;
-  --tag-highlight-bg: rgba(201, 144, 90, 0.2);
-  --tag-highlight-fg: #e8b98a;
 
   /* Net-new hues for a richer register than the rest of the app's one-slate/one-accent
      rule — consumed only by src/components/blue-hour/* scene components. */
@@ -787,16 +839,19 @@ body {
   }
 }
 
-/* Scroll-linked without JavaScript. This replaces the component's last ScrollTrigger, and is
-   the first scroll-driven animation in the app — hence the `@supports`, whose fallback is a cue
-   that simply never fades. `scroll(nearest block)` resolves to the shell's content overlay,
-   which is the real scroller here; `scroll(root)` would resolve to the document, which never
-   scrolls (see AppShell). */
+/* Scroll-linked without JavaScript. This replaces the component's last ScrollTrigger, and is the
+   first scroll-driven animation in the app — hence the `@supports`, whose fallback is a cue that
+   simply never fades.
+   It shipped as `scroll(nearest block)` on the assumption that "nearest" would find the shell's
+   content overlay. It did not: the hero section's own `overflow-hidden` makes *it* a scroll
+   container, so the timeline bound to an element pinned at scrollTop 0 and this fade never ran a
+   single time. Bound by name to `--story` now (declared on `.content-overlay`); see that rule for
+   the full account. */
 @supports (animation-timeline: scroll()) {
   @media (prefers-reduced-motion: no-preference) {
     .hero-cue {
       animation: hero-cue-fade linear both;
-      animation-timeline: scroll(nearest block);
+      animation-timeline: --story;
       animation-range: 0 200px;
     }
   }
@@ -805,6 +860,49 @@ body {
 @keyframes hero-cue-fade {
   to {
     opacity: 0;
+  }
+}
+
+/* The hero's exit, and this story's one authored transition. Every other beat *arrives*; this
+   is the only thing that leaves, and it leaves by doing what the beat is named after — the blue
+   hour ending. A wash of the next band's own ground colour ramps up over the whole composition
+   (photograph, ambient light, fog and type together, hence the positive z-index) across the
+   first viewport of scroll, so the seam into ImageRow is a dissolve into that band rather than
+   the hard cut it was. ImageRow then scrolls over an already-dark hero instead of a bright one.
+
+   Deliberately CSS and not a ScrollTrigger scrub. Hero.tsx runs no JavaScript at all by design:
+   a Chrome trace found scrolling frames resolving on the main thread rather than the compositor,
+   and stripping this component's five tweens and its pointer parallax was the fix. A scrubbed
+   GSAP timeline here would put per-frame work back in exactly the place it was removed from.
+   `scroll(nearest block)` is the same mechanism `.hero-cue` already uses — one scroll-driven
+   technique on this surface, not two — and it resolves to the shell's content overlay, which is
+   the real scroller (`scroll(root)` would resolve to the document, which never scrolls).
+
+   One element, `opacity` only: the compositor owns it outright, and with no transform involved
+   nothing competes with `.hero-light`'s ambient pass underneath. The resting state is fully
+   transparent, so a browser without scroll-driven animation — or a reduced-motion visitor —
+   gets the composition unobscured rather than a hero hidden behind a wash that never lifts. */
+.hero-dusk {
+  opacity: 0;
+  background: rgb(var(--surface-deep-rgb));
+}
+
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-dusk {
+      animation: hero-dusk linear both;
+      animation-timeline: --story;
+      /* Starts after a beat of scroll so the first flick doesn't dim the photograph, and lands
+         before 100vh rather than at it: at exactly one viewport ImageRow's top edge is already
+         at the top of the screen, so the tail of the ramp would play behind it, unseen. */
+      animation-range: 25vh 85vh;
+    }
+  }
+}
+
+@keyframes hero-dusk {
+  to {
+    opacity: 1;
   }
 }
 
@@ -921,6 +1019,33 @@ body {
 .group:hover .scene-card-detail {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* On a device whose primary pointer cannot hover, none of the three rules above ever fire: the
+   frost sheet never clears, the edge frost never gathers, and the detail sentence — a full
+   sentence of real copy, not decoration — is invisible for the entire life of the page. Every
+   phone visitor was getting four permanently-frosted photographs and none of the writing, which
+   is the exact failure the Don't in DESIGN.md describes ("don't ship a control that only appears
+   on hover ... with `@media (hover: none)` so it is simply always visible on touch"). Touch gets
+   the resolved state outright, since that is the one carrying the information.
+
+   Known gap, deliberately not papered over here: a sighted keyboard-only visitor on a desktop
+   pointer device still can't reach the detail, because the card is a `<div>` with nothing
+   focusable in it — there is no `:focus-within` to hang this on without inventing a control for
+   an element that performs no action. The real fix is for the beat to stop hiding content behind
+   hover at all, which is a change to the beat, not a fallback for it. */
+@media (hover: none) {
+  .scene-frost {
+    opacity: 0;
+    backdrop-filter: none;
+  }
+  .scene-frost-edge {
+    opacity: 1;
+  }
+  .scene-card-detail {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .scene-photo-sheen {

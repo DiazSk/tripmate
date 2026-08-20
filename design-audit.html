@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TripMate vs Vita Travels — design audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  font-size:clamp(12px,1.128vw,19px);
+  --base:#091b20; --surface:#0d2e37; --rule:rgba(255,255,255,.1);
+  --w100:#fff; --w60:rgba(255,255,255,.6); --w40:rgba(255,255,255,.4);
+  --accent:#fb9826; --bad:#e2564a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--base);color:var(--w100);font-family:Inter,sans-serif;font-size:1rem;line-height:1.85;-webkit-font-smoothing:antialiased}
+.wrap{padding:0 2.5rem}
+section{padding:5rem 0;border-top:.0625rem solid var(--rule)}
+h1{font-size:7.5rem;font-weight:600;line-height:.92;letter-spacing:-.078em}
+h2{font-size:3.75rem;font-weight:600;line-height:1.05;letter-spacing:-.089em}
+h3{font-size:1.75rem;font-weight:600;line-height:1.2;letter-spacing:-.06em}
+.label{font-size:.875rem;font-weight:600;line-height:.9;letter-spacing:-.03em;color:var(--w40);text-transform:uppercase}
+.lede{font-size:1.125rem;color:var(--w60);max-width:42rem}
+.meta{font-size:.875rem;color:var(--w40);line-height:1.6}
+a{color:var(--accent);text-decoration:none;border-bottom:.0625rem solid rgba(251,152,38,.35)}
+
+.open{display:grid;grid-template-columns:11rem 1fr;gap:2.5rem;align-items:start;margin-bottom:2.5rem}
+.head-hero{padding:5rem 0 4rem}
+
+table{width:100%;border-collapse:collapse;margin-top:1.5rem}
+th,td{text-align:left;padding:1rem 1.5rem 1rem 0;border-bottom:.0625rem solid var(--rule);vertical-align:top}
+th{font-size:.875rem;font-weight:600;letter-spacing:-.02em;color:var(--w40);text-transform:uppercase;line-height:1.2}
+td:first-child{width:9rem;color:var(--w40);font-size:.875rem}
+td b{font-weight:600}
+.them{color:#fff}
+.you{color:rgba(255,255,255,.72)}
+
+.diff{display:grid;grid-template-columns:3rem 1fr;gap:2.5rem;padding:2.5rem 0;border-bottom:.0625rem solid var(--rule)}
+.diff:last-child{border-bottom:0}
+.num{font-size:1.75rem;font-weight:600;letter-spacing:-.08em;color:var(--w40);line-height:1}
+.diff h3{margin-bottom:1rem}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;margin:1.5rem 0}
+.cols > div > .label{display:block;margin-bottom:.5rem}
+.cols p{font-size:.9375rem;line-height:1.7;color:var(--w60)}
+.fix{background:var(--surface);padding:1.5rem;margin-top:1.5rem}
+.fix .label{color:var(--accent);display:block;margin-bottom:.75rem}
+pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;line-height:1.7;color:#cfe3e8;overflow-x:auto;white-space:pre-wrap}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;color:#9fd7c9}
+
+ul{list-style:none}
+li{padding:.875rem 0;border-bottom:.0625rem solid var(--rule);display:grid;grid-template-columns:1.5rem 1fr;gap:1rem;font-size:.9375rem;line-height:1.6}
+li::before{content:"—";color:var(--bad)}
+.where{color:var(--w40);font-size:.875rem}
+
+.prio{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:2.5rem;border-top:.0625rem solid var(--rule)}
+.prio div{padding:1.5rem;border-right:.0625rem solid var(--rule);border-bottom:.0625rem solid var(--rule)}
+.prio div:nth-child(3n){border-right:0}
+.prio .label{display:block;margin-bottom:.75rem;color:var(--accent)}
+.prio p{font-size:.9375rem;line-height:1.6;color:var(--w60)}
+
+.sw{display:flex;gap:0;margin-top:1rem;height:4rem;outline:.0625rem solid var(--rule)}
+.sw span{flex:1;position:relative}
+.sw span::after{content:attr(data-l);position:absolute;bottom:-1.5rem;left:0;font-size:.75rem;color:var(--w40)}
+.verdict{border-left:.125rem solid var(--accent);padding-left:1.5rem;margin-top:2.5rem}
+@media (max-width:800px){
+  :root{font-size:15px}
+  h1{font-size:3.5rem}h2{font-size:2.25rem}
+  .open,.cols,.diff{grid-template-columns:1fr;gap:1rem}
+  .prio{grid-template-columns:1fr}.prio div{border-right:0}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="head-hero">
+    <p class="label" style="margin-bottom:2.5rem">Design audit · 19 Aug 2026</p>
+    <h1>Why theirs<br>looks paid for.</h1>
+    <p class="lede" style="margin-top:2.5rem">
+      <b>Reference:</b> vita-travel.webflow.io (Phenomenon Studio) &nbsp;·&nbsp;
+      <b>Yours:</b> TripMate, localhost:3000
+    </p>
+    <div class="verdict">
+      <p class="lede">Vita is <b>one typeface, one hue, zero corner radius, and a scale that grows with the
+      viewport</b>. TripMate is five typefaces, four palettes, three aesthetics and a 1152&nbsp;px box.
+      Their restraint isn't taste you can't afford — it's a token file you can copy in an afternoon.</p>
+    </div>
+  </header>
+
+  <section>
+    <div class="open">
+      <p class="label">01 / Tokens</p>
+      <h2>Measured, not guessed</h2>
+    </div>
+    <p class="lede">Both columns are read from live computed styles. Vita's numbers are in rem because its root
+    font-size is viewport-derived — that single decision is most of the difference.</p>
+    <table>
+      <thead><tr><th></th><th class="them">Vita Travels</th><th class="you">TripMate</th></tr></thead>
+      <tbody>
+        <tr><td>Typefaces</td><td class="them"><b>1</b> — Inter 400/500/600</td><td class="you"><b>5</b> — Archivo 900, Playfair Display, Source Serif 4, Manrope, system sans</td></tr>
+        <tr><td>Root size</td><td class="them"><b>Fluid</b>, ≈1.13vw (10.8px at 956w → 16.3px at 1440w)</td><td class="you"><b>16px fixed</b></td></tr>
+        <tr><td>Container</td><td class="them">None — full-bleed, 2.5rem gutters</td><td class="you"><code>max-w-6xl</code> = 1152px, 24px gutters</td></tr>
+        <tr><td>Display type</td><td class="them">11.9rem / 600 / lh 1.0 / <b>ls −0.078em</b></td><td class="you">77.7px / 900 / lh 0.88 / <b>ls +0.035em</b>, stretch 125%</td></tr>
+        <tr><td>Heading tracking</td><td class="them">−0.078em → −0.106em (tighter as it shrinks)</td><td class="you">normal, or positive</td></tr>
+        <tr><td>Body leading</td><td class="them"><b>1.85</b>, against 1.0 headings</td><td class="you">1.45–1.63, headings 0.88–1.3</td></tr>
+        <tr><td>Corner radius</td><td class="them"><b>0</b> everywhere. 5rem pill on buttons only</td><td class="you">16px, 12px, 4px, full — on nearly everything</td></tr>
+        <tr><td>Separation</td><td class="them">0.667px <code>rgba(255,255,255,.1)</code> rule, and space</td><td class="you">Border + 16–56px backdrop-blur + shadow, per element</td></tr>
+        <tr><td>Spacing scale</td><td class="them">1 / 1.5 / 2.5 / 4 / 5 rem — all fluid</td><td class="you">24px gutters, 96px sections, 24/40px gaps — all fixed</td></tr>
+        <tr><td>Palette</td><td class="them">1 hue + white at 6 alphas + 1 accent used ~once</td><td class="you">canvas #0b0f19, band #082130, cobalt, teal, paper #f4f1ea, route #0a84ff, and <b>two</b> accents (#c9905a, #ffb340)</td></tr>
+        <tr><td>Motion</td><td class="them">GSAP + ScrollSmoother + SplitText + ScrollTrigger — line reveals, pinned scrubs</td><td class="you">GSAP + framer-motion installed; the landing fades</td></tr>
+      </tbody>
+    </table>
+
+    <p class="label" style="margin-top:3rem">Vita's entire palette</p>
+    <div class="sw" style="margin-bottom:2.5rem">
+      <span style="background:#091b20" data-l="#091b20"></span>
+      <span style="background:#0d2e37" data-l="#0d2e37"></span>
+      <span style="background:#3d585f" data-l="#3d585f"></span>
+      <span style="background:rgba(255,255,255,.1)" data-l="white 10%"></span>
+      <span style="background:rgba(255,255,255,.4)" data-l="white 40%"></span>
+      <span style="background:#fff" data-l="white"></span>
+      <span style="background:#fb9826" data-l="#fb9826"></span>
+    </div>
+  </section>
+
+  <section>
+    <div class="open">
+      <p class="label">02 / Differences</p>
+      <h2>The eight that<br>actually matter</h2>
+    </div>
+
+    <div class="diff">
+      <p class="num">01</p>
+      <div>
+        <h3>One typeface. All the drama from size.</h3>
+        <div class="cols">
+          <div><span class="label">Vita</span><p>Inter only. The h1 is 3.2× the h2. Every bit of expression comes from scale jumps, negative tracking and 1.0 leading — never from a second family.</p></div>
+          <div><span class="label">TripMate</span><p>Archivo 900 poster, Playfair Display scene headings, Source Serif 4 app headings, Manrope scene body, system sans everywhere else. Two or three families are visible in a single viewport.</p></div>
+        </div>
+        <div class="fix"><span class="label">Fix</span>
+<pre>Keep TWO, maximum: Source Serif 4 (display) + one grotesk (body/UI).
+Delete Archivo, Playfair Display, Manrope.
+
+Playfair Display and Source Serif 4 are both high-contrast serifs
+doing the same job in different sections. That is the tell.</pre></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <p class="num">02</p>
+      <div>
+        <h3>The page should zoom, not reflow.</h3>
+        <div class="cols">
+          <div><span class="label">Vita</span><p>Root font-size is viewport-derived and <em>every</em> value — type, padding, gaps, radii — is expressed in rem. On a 27-inch monitor the whole composition scales up as one drawing.</p></div>
+          <div><span class="label">TripMate</span><p>16px fixed plus <code>max-w-6xl</code>. At 1920px you get a 1152px column with roughly 380px of dead margin either side, while the photos go full-bleed. That mismatch is the loudest "web app, not magazine" signal in the build.</p></div>
+        </div>
+        <div class="fix"><span class="label">Fix — two lines, biggest single win</span>
+<pre>html { font-size: clamp(13px, 1.13vw, 20px); }
+
+/* then drop max-w-6xl and let the gutter do the work */
+.wrap { padding-inline: 2.5rem; }</pre></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <p class="num">03</p>
+      <div>
+        <h3>Negative tracking, not positive.</h3>
+        <div class="cols">
+          <div><span class="label">Vita</span><p>−0.078em at 11.9rem, tightening to −0.106em at 1.75rem. The letters pack into a solid block and the word becomes a shape.</p></div>
+          <div><span class="label">TripMate</span><p>The poster headline is Archivo 900 at <b>+0.035em with font-stretch 125%</b>. Widened heavy sans is the single strongest template giveaway, and four centred ragged lines compound it.</p></div>
+        </div>
+        <div class="fix"><span class="label">Fix</span>
+<pre>letter-spacing: -.075em;  font-stretch: normal;  line-height: .95;
+
+Cut "Every day planned. Every dollar spent." down to ONE word set
+huge, with the sentence as 1rem support text beneath it.
+Vita's hero is literally the single word "Travel".</pre></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <p class="num">04</p>
+      <div>
+        <h3>Sections need an opening chord.</h3>
+        <div class="cols">
+          <div><span class="label">Vita</span><p>Every section opens the same way: a 0.875rem/600 label pinned in the far-left column with a mark glyph, the display heading offset into column two, then a full-width hairline. You always know a new movement has started.</p></div>
+          <div><span class="label">TripMate</span><p>No eyebrows, no rules, no column offset. Headings start at the same left edge as the body copy, so "How it actually works." just floats in the band.</p></div>
+        </div>
+        <div class="fix"><span class="label">Fix — the exact pattern</span>
+<pre>&lt;div class="grid grid-cols-[11rem_1fr] gap-10 border-t
+            border-white/10 pt-10"&gt;
+  &lt;p class="text-[.875rem] font-semibold text-white/40"&gt;Journey&lt;/p&gt;
+  &lt;h2&gt;How it actually works&lt;/h2&gt;
+&lt;/div&gt;</pre></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <p class="num">05</p>
+      <div>
+        <h3>Kill the radius. Separate with rules.</h3>
+        <div class="cols">
+          <div><span class="label">Vita</span><p>0px radius on every card and image. No card fill, no border, no shadow. Separation is a 0.667px white-10% rule plus space. Only buttons are pills.</p></div>
+          <div><span class="label">TripMate</span><p>16/12/4px radius plus backdrop-blur plus border plus shadow on nearly every element. Everything floats, so nothing is grounded, and the photo cards read as stickers.</p></div>
+        </div>
+        <div class="fix"><span class="label">Fix</span>
+<pre>Images and content cards: radius 0, no border, no shadow.
+
+Keep the glass treatment ONLY for things genuinely floating over
+the globe — the itinerary panel and the map controls.
+Keep the pill on buttons; that contrast is the point.</pre></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <p class="num">06</p>
+      <div>
+        <h3>Card anatomy: title left, meta right, rule under.</h3>
+        <div class="cols">
+          <div><span class="label">Vita</span><p><code>Introvert Retreats</code> left, <code>/ 78+ Countries</code> right, on a hairline; image below at a fixed 0.92 portrait ratio; price and detail stacked in a two-column grid. The right-aligned meta with a leading slash is most of what makes it read editorial.</p></div>
+          <div><span class="label">TripMate</span><p>The four Blue Hour cards are title over caption over image, all left-aligned, no rule, no meta, no ratio discipline — and the photos are visibly soft.</p></div>
+        </div>
+        <div class="fix"><span class="label">Fix</span>
+<pre>&lt;div class="flex justify-between border-b border-white/10 pb-2"&gt;
+  &lt;span class="font-semibold"&gt;The Blue Hour&lt;/span&gt;
+  &lt;span class="text-white/40"&gt;/ 20 min, daily&lt;/span&gt;
+&lt;/div&gt;
+&lt;img class="mt-4 aspect-[11/12] w-full object-cover"&gt;
+
+Then replace the sources — yours are upscaled or over-compressed.</pre></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <p class="num">07</p>
+      <div>
+        <h3>One hue, one accent, one product.</h3>
+        <div class="cols">
+          <div><span class="label">Vita</span><p>Teal-black base, one surface a shade lighter, white at 10/20/40/50/60/100%, and #fb9826 appearing essentially once on the whole page. Colour is punctuation, not a system.</p></div>
+          <div><span class="label">TripMate</span><p>Three visual languages in one product: editorial blue-hour landing, glass cockpit app, then rotated paper postcards on /trips (#f4f1ea, drop shadows, random rotation). Plus two accents — copper #c9905a on the landing CTA, amber #ffb340 in the app — so the accent changes mid-flow.</p></div>
+        </div>
+        <div class="fix"><span class="label">Fix</span>
+<pre>Pick ONE accent and delete the scoped override. Amber #ffb340
+survives on the globe; copper on the desert does not.
+
+Then retire the postcard skin or commit to it everywhere —
+right now /trips looks like a different product.</pre></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <p class="num">08</p>
+      <div>
+        <h3>Their "premium" is 60% choreography.</h3>
+        <div class="cols">
+          <div><span class="label">Vita</span><p>ScrollSmoother for inertia, SplitText for per-line masked reveals, ScrollTrigger for the hero's scrubbed collapse into the section below. Text arrives; it does not appear.</p></div>
+          <div><span class="label">TripMate</span><p>GSAP and framer-motion are already in package.json. The landing fades. Nothing is masked, split, pinned or scrubbed.</p></div>
+        </div>
+        <div class="fix"><span class="label">Fix — best ratio of perceived polish to effort</span>
+<pre>1. SplitText lines inside an overflow-hidden wrapper,
+   y: 100% -> 0, stagger .08, ease "expo.out", on every h2.
+   About 15 lines of code.
+2. ScrollTrigger scrub on the hero image so it collapses into
+   the band below instead of hard-cutting.
+3. Gate both behind gsap.matchMedia() + prefers-reduced-motion.</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="open">
+      <p class="label">03 / Craft</p>
+      <h2>Defects that cost<br>you "expensive"</h2>
+    </div>
+    <p class="lede">Verified against the source, not the screenshots. Five of the eleven items in the first
+    version of this list were not defects at all — they are struck through below with what they actually were.</p>
+    <ul style="margin-top:2.5rem">
+      <li><div>Chunky <b>native scrollbar</b> inside the itinerary panel, light on dark, full height —
+        a 16px gutter down the brightest edge of a frosted panel. <span class="where">/trip/[id] · fixed</span></div></li>
+      <li><div>All four <b>nav links are underlined</b> by default. That is anchor styling, not a nav —
+        and since everything in the bar is a link, marking all of them marks none. <span class="where">Every page · fixed</span></div></li>
+      <li><div>Day tabs <b>truncate</b> ("Day 2", "Da…") inside chevron shapes, with prev/next arrows crowding them. <span class="where">/trip/[id]</span></div></li>
+      <li><div>Native <b><code>mm/dd/yyyy</code> placeholders</b> in the trip form, next to fully custom labels. <span class="where">Trip form</span></div></li>
+      <li><div><b>Emoji in generated copy</b> inside otherwise editorial serif-italic prose. <span class="where">Itinerary text</span></div></li>
+      <li><div>Blue Hour card photos are <b>visibly soft</b>; Vita's are sharp at full res. <span class="where">Landing</span></div></li>
+      <li><div>The itinerary header photo is a <b>3:5 portrait source <code>object-cover</code>'d into a 4:3 box</b>,
+        so it crops to a slice that is mostly sky. Needs an <code>object-position</code>, not a bigger box. <span class="where">/trip/[id]</span></div></li>
+    </ul>
+
+    <p class="label" style="margin-top:3rem">Withdrawn — not defects</p>
+    <table style="margin-top:1rem">
+      <tbody>
+        <tr><td style="width:22rem">Unlabelled "—" button, top-left</td><td class="you"><code>DevInspectorOverlay</code>, gated on <code>NODE_ENV === "development"</code>. Never reaches a visitor.</td></tr>
+        <tr><td>Compass overlapping "3 trips remembered"</td><td class="you">Preview-pane chrome, not the app. <code>.map-controls</code> is <code>display:none</code> on <code>/trips</code>, and the page has no fixed bottom-left element.</td></tr>
+        <tr><td>Two stacked compasses</td><td class="you">Same. <code>MapControls</code> mounts exactly once, from <code>AppShell</code>.</td></tr>
+        <tr><td>Empty dark block above "DAY 1 OF 4"</td><td class="you">The Denver photo loads and renders. The screenshot was taken before it decoded.</td></tr>
+        <tr><td>Poster copy on a heavy text-shadow</td><td class="you">Documented, deliberate: <code>.hero-legible</code>'s three-layer shadow exists so nothing sits between the type and the globe. A scrim was built, measured and removed by decision.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="open">
+      <p class="label">04 / Order</p>
+      <h2>Do it in this order</h2>
+    </div>
+    <div class="prio">
+      <div><span class="label">Day 1 — free wins</span><p>Fluid root font-size. Drop <code>max-w-6xl</code>. Negative tracking on all headings, <code>font-stretch: normal</code>. Un-underline the nav. Fix the four overlap and empty-block bugs.</p></div>
+      <div><span class="label">Day 2 — the system</span><p>Cut to two typefaces. One accent. Radius 0 on content cards and images, glass only over the globe. Add the label + offset-heading + hairline section opener.</p></div>
+      <div><span class="label">Day 3 — the feel</span><p>SplitText line reveals on every heading. One scrubbed hero collapse. Replace the four card images with sharp sources at a fixed 11:12 ratio, meta right-aligned on a rule.</p></div>
+    </div>
+    <div class="verdict" style="margin-top:3rem">
+      <p class="lede">The reference has <b>less</b> in it than yours — fewer fonts, fewer colours, fewer shapes,
+      fewer effects. It reads as more expensive for exactly that reason. Your fastest path is not adding polish;
+      it is deleting variety until one system is left, then spending what you saved on motion.</p>
+    </div>
+  </section>
+
+  <footer style="padding:4rem 0;border-top:.0625rem solid var(--rule)">
+    <p class="meta">Tokens read from live computed styles on both sites, 19 Aug 2026 ·
+    <a href="https://vita-travel.webflow.io/">vita-travel.webflow.io</a></p>
+  </footer>
+</div>
+</body>
+</html>

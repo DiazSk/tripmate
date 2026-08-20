@@ -26,6 +26,9 @@ colors:
   shadow-thumb: "rgba(0, 0, 0, 0.4)"
   shadow-object: "rgba(0, 0, 0, 0.55)"
 typography:
+  root:
+    fontSize: "clamp(16px, 1.13vw, 20px)"
+    note: "Fluid root; every rem below scales with it. Floors at 16px, never shrinks."
   hero:
     fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
     fontSize: "clamp(2.5rem, 8vw, 6rem)"
@@ -39,23 +42,28 @@ typography:
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "-0.01em"
+  sceneDisplay:
+    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
+    fontStyle: "italic"
+    fontSize: "1.875rem"
+    fontWeight: 400
   title:
     fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
     fontSize: "1.125rem"
     fontWeight: 600
     lineHeight: 1.3
   body:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.625
   field:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "1rem"
     fontWeight: 500
     lineHeight: 1.4
   label:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 600
     letterSpacing: "0.025em"
@@ -217,11 +225,17 @@ or the separation between map and interface erodes one reasonable-looking case a
 
 ## Typography
 
-**Display Font:** Source Serif 4 (weights 500/600/700, via `--font-display`, falling back to `ui-serif, Georgia, serif`)
+**Display Font:** Source Serif 4 (weights 500/600/700, upright *and italic*, via `--font-display`, falling back to `ui-serif, Georgia, serif`)
+**Body Font:** Manrope (weights 400/500/600, via `--font-body`, wired to Tailwind's `--font-sans`; the system sans stack behind it is a load fallback, not the design)
 **Poster Font:** Archivo variable, width axis loaded (via `--font-hero`)
-**Body Font:** system sans stack (`ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`)
 
-**Character:** A warm, slightly bookish serif does the naming — wordmark, page titles, card and day headings — while an unadorned system sans carries every piece of data, label and control. The pairing keeps the interface quiet enough that the one poster voice, a very wide grotesque, lands as an event rather than as a style.
+**Two faces and a poster — that is the whole set.** It was five: these two, plus Playfair Display and a bare system stack, with the Blue Hour scene running its own face family. Playfair is retired — Source Serif 4's italic does the same job, and two high-contrast serifs splitting the display role *by route* was the single clearest reason the landing and the app read as different products. Manrope was the scene's body face and is now the app's; a platform default is not a typographic choice, and it was the one face here nobody had picked. Adding a fourth family needs a reason that survives being asked "which of the three can't do this."
+
+**Character:** A warm, slightly bookish serif does the naming — wordmark, page titles, card and day headings, and in italic the scene's own headlines — while a clean geometric-humanist sans carries every piece of data, label and control. The pairing keeps the interface quiet enough that the one poster voice, a very wide grotesque, lands as an event rather than as a style.
+
+**Load the italic; never synthesise it.** `Source_Serif_4` is loaded with `style: ["normal", "italic"]` because `.font-scene-display` sets `font-style: italic` at 60px+. A browser with no italic cut shears the upright instead, and at that size a faux italic's even stroke weights and unchanged letterforms are obvious next to a drawn one.
+
+**The root grows; it never shrinks.** `html { font-size: clamp(16px, 1.13vw, 20px) }` is the one measurement every step below hangs off. Tailwind's whole scale is rem, so moving the root moves type, padding, gaps and radii *together* and the composition scales rather than reflows — which is what a fixed 16px root was costing: past roughly 1400px the interface stayed the same physical size and occupied a shrinking fraction of the screen, reading as a boxed web app sitting on a full-bleed globe. The `16px` floor is not a taste call and is not negotiable downward: below it the `min-h-11` targets fall under the 44px touch minimum and iOS Safari zooms the viewport on input focus, which is the same constraint the Field step already exists to satisfy. Every viewport narrower than ~1416px therefore renders exactly as it did before this rule existed; the rule only ever adds size. Sizes quoted in this section are at the 16px floor.
 
 ### Hierarchy
 - **Poster** (`.font-hero`; Archivo 800, `font-stretch: 125%`, `clamp(2.5rem, 8vw, 6rem)`, line-height 0.88, tracking -0.035em): the landing headline only, set as four `<span class="block">` lines in a centred column. The width axis is doing as much work as the weight — 800 alone reads bold; 800 at 125% width reads like a poster. The negative tracking is what stops a wide face from sprawling at display size.
@@ -514,9 +528,13 @@ Measured before and after: **23 infinite CSS animations → 11**, four moving 56
 
 A scoped alternate identity for the two steps before an itinerary exists — the landing scroll and the merged trip-form/tier-picker step (`page.tsx`'s `step !== "result"`, wrapped in `.blue-hour-scene`). It exists because the base system's amber-on-slate is tuned for *reading a plan*: dense data, budget figures, day tabs. Before there is a plan to read, the job is to sell the idea of one, and a richer, more cinematic register earns that without touching a single component the result view depends on.
 
-**Retint, don't replace.** `.blue-hour-scene` (`globals.css`) overrides `--surface-deep-rgb` (deep cobalt-teal `8 33 48`, replacing slate-900's `15 23 42`), `--accent`/`--accent-hover`/`--accent-foreground` (brass/copper `#c9905a` family, replacing amber `#ffb340`), and `--tag-highlight-*`, plus two net-new hues consumed only by scene components: `--scene-teal-rgb` (`45 125 130`) and `--scene-cobalt-rgb` (`30 60 110`). Every component that already reads those token names — `TierPicker`, `Field`, `.glass-itinerary`, `.hero-legible`'s shadow, the CTA buttons — retints for free. `--canvas` is deliberately **not** overridden here: `GlobeBackground` reads it once via `getComputedStyle(document.documentElement)` at Viewer construction, so a scoped override would be silently inert.
+**Retint the ground, not the accent.** `.blue-hour-scene` (`globals.css`) overrides `--surface-deep-rgb` (deep cobalt-teal `8 33 48`, replacing slate-900's `15 23 42`), plus two net-new hues consumed only by scene components: `--scene-teal-rgb` (`45 125 130`) and `--scene-cobalt-rgb` (`30 60 110`).
 
-**Typography is a separate face family, not a re-skin of the existing tokens.** `.font-scene-display` (Playfair Display, italic, via `--font-scene-display`) is the mood-setting serif — the Hero headline, the "How it actually works" heading, the plan step's own section titles. `.font-scene-hero` (Archivo at weight 900 / `font-stretch: 125%` / `letter-spacing: 0.035em`, sharing `--font-hero` with the base system's `.font-hero`) is the closing poster's voice — hyperbold and spread wide, the positive-tracking opposite of `.font-hero`'s tightly-packed `-0.035em`. `.font-scene-body` (Manrope, via `--font-scene-body`) carries everything else. These are deliberately not built as indirections through `.font-display`/`.font-hero` — the One Poster Rule already says `.font-hero` means one specific typeface, and making that context-dependent would trap the next person to touch this file.
+It also used to swap `--accent`/`--accent-hover`/`--accent-foreground` to a brass/copper `#c9905a` family and retint `--tag-highlight-*` to match. That is gone, on the strength of the argument **The Profile Panel Tint** rule above already makes: switching the accent mid-app, on surfaces reachable from the amber result view, reads as a different product rather than a different surface — the sections needed separating from the globe, which is a background problem, and the accent was never the thing at fault. That reasoning was written for `/profile` while the landing was still doing the thing it warns against. Amber also simply survives its backdrop better here: the poster's CTA lands on live desert terrain, where brass on tan was the lowest-contrast primary button in the app. The scene keeps its distinct register through ground, scale and motion — which is where a mood belongs.
+
+Every component that already reads `--surface-deep-rgb` — `TierPicker`, `Field`, `.glass-itinerary`, `.hero-legible`'s shadow — retints for free; that free retint is the whole point of overriding a token rather than restyling a component. `--canvas` is deliberately **not** overridden here: `GlobeBackground` reads it once via `getComputedStyle(document.documentElement)` at Viewer construction, so a scoped override would be silently inert.
+
+**Typography is the system's, in the scene's voice.** This used to read "a separate face family, not a re-skin" — Playfair Display for display, Manrope for body, loaded so the landing could have its own faces. Both are gone as *scene* faces: Playfair retired outright, Manrope promoted to the app's body face (see **Typography**, above). `.font-scene-display` is now Source Serif 4 in italic — the app's own serif, set the scene's way. It stays its own class rather than folding into `.font-display` because the italic belongs to the scene and an upright is still what a panel heading wants. `.font-scene-body` is deleted; Manrope is the default now, so the class was a no-op that would have misled the next reader into thinking the scene still had a body face of its own. `.font-scene-hero` (Archivo at weight 900 / `font-stretch: 125%` / `letter-spacing: -0.035em`, sharing `--font-hero` with the base system's `.font-hero`) is the closing poster's voice — hyperbold and wide. It shipped at `+0.035em`, deliberately airy as the counterpart to `.font-hero`'s tightly-packed `-0.035em`, and was reversed to match it: at 900 weight and 125% width the face already carries every bit of width the poster needs, and letter-space on top of the width axis read as a stock big-sans hero rather than as one authored word. Width comes from the axis; tracking's job is to pack what the axis widened. Both display faces now sit at `-0.035em`, just inside the `-0.04em` floor. `.font-scene-hero` is deliberately not an indirection through `.font-hero` — the One Poster Rule already says `.font-hero` means one specific typeface, and making that context-dependent would trap the next person to touch this file.
 
 ### The Sequence (`src/components/blue-hour/`)
 
@@ -552,6 +570,10 @@ Worth recording precisely, because the intuition was wrong: the cursor parallax 
 **The Cobalt-Teal Band (`.scene-band`).** `ImageRow` and `HowItWorks` sit on a full-width gradient of `--scene-cobalt-rgb`/`--scene-teal-rgb` layered *over* `--surface-deep-rgb`, never the two scene hues at raw full strength — both are far too light to carry body copy alone. This is also what stops the live globe from showing through those two sections; before it existed, "How it actually works" sat directly on the globe and dropped below readable contrast over bright terrain.
 
 **The One Ambient Loop Rule.** The base system's "no other ambient motion competes with the globe" characteristic is loosened, not dropped, inside `.blue-hour-scene`: a scene beat may carry exactly one authored ambient loop of its own — `.hero-light` on the opener is the first, `.console-sheen` on the trip-form card is the second. One loop per surface, never stacked, and always behind the same `prefers-reduced-motion: no-preference` gate as every other keyframe class in the file. The Hero originally ran four (a photo drift plus three drifting fog bands) counted collectively as one instance; it now honours the rule literally, with a single moving element and the fog held static. **"One loop" means one, and a loop must be a `transform`/`opacity` animation the compositor can own** — a moving `filter: blur()` is not an ambient loop, it is a permanent re-raster. This is still narrower than the base system allows anywhere else; it does not license ambient motion on `.glass-itinerary` generally.
+
+**The Named-Timeline Rule (`--story`).** Every scroll-driven animation in this app binds to `animation-timeline: --story`, a named scroll timeline declared once on `.content-overlay` — never to `scroll(nearest block)`. `nearest` resolves to the nearest ancestor **scroll container**, and `overflow: hidden` makes an element one: it has a scrolling box, it simply never scrolls and shows no bar. The landing hero and both scene bands all carry `overflow-hidden` for their own reasons (the light wash and fog banks bleed past the frame; the cards animate in from negative X), so `nearest` bound to a section pinned at `scrollTop` 0 forever, and the animation sat frozen at 0% progress with no error anywhere. `.hero-cue`'s scroll fade shipped this way and **had never run once** — its `ScrollTimeline.currentTime` read `0%` at every scroll offset, which is indistinguishable at a glance from a cue that simply hasn't reached its range yet. A named timeline is referenceable by any descendant of the element that declares it, and `.content-overlay` is an ancestor on every route, so this needs no `timeline-scope`. If a new scroll-driven animation appears not to run, check the timeline's `source` before checking the range.
+
+**The Story's One Exit (`.hero-dusk`).** Every beat in the Blue Hour sequence arrives; the hero is the only thing that *leaves*, and it leaves by performing the thing it is named after. A full-bleed wash of `--surface-deep-rgb` — `.scene-band`'s own ground colour — ramps from transparent to opaque across `25vh`–`85vh` of scroll, over the photograph, the ambient light, the fog and the type together, so the seam into `ImageRow` is a dissolve into that band rather than the hard cut it was. It sits at `z-10`, above the type, deliberately: covering only the ground leaves the headline surviving its own photograph, reading as text pasted onto a dark rectangle. It ends before `100vh` because at exactly one viewport `ImageRow`'s top edge is already at the top of the screen and the tail of the ramp would play unseen. This is **CSS and not a ScrollTrigger scrub**, and that is not a style preference: `Hero.tsx` runs no JavaScript at all by design, after a Chrome trace found scrolling frames resolving on the main thread and stripping its five tweens and pointer parallax was the fix. A scrubbed GSAP timeline here would put per-frame work back exactly where it was removed. One element, `opacity` only, resting state fully transparent so a browser without scroll-driven animation — or a reduced-motion visitor — gets the composition unobscured rather than a hero behind a wash that never lifts.
 
 ## Navigation (App-Wide)
 
@@ -605,7 +627,7 @@ It is also the one place per-route utility links live now: the wordmark (`href="
 - **Don't** use a second accent hue for status, category or sentiment. Positive/neutral chips are both neutral glass by design.
 - **Don't** put a kicker, eyebrow, or all-caps label above a headline; don't use a hard offset shadow; don't use glyph or icon-font icons — every icon in the system is inline SVG.
 - **Don't** let map-native colours (route blue, pin red) into the interface. Interface colours stay off the globe too, with the single documented exception of `--accent` marking the hovered or selected stop.
-- **Don't** ship a control that only appears on hover. Pair every `:hover` reveal with `:focus-within` so it is reachable by keyboard, and with `@media (hover: none)` so it is simply always visible on touch, where there is no hover state to enter. The postcard's delete button does all three.
+- **Don't** ship a control that only appears on hover. Pair every `:hover` reveal with `:focus-within` so it is reachable by keyboard, and with `@media (hover: none)` so it is simply always visible on touch, where there is no hover state to enter. The postcard's delete button does all three. So do the four `ImageRow` beat cards, as of the pass that found them failing it: their frost sheet, edge frost and hover caption were all `.group:hover`-only, so every phone visitor got four permanently-frosted photographs and none of the caption copy. `@media (hover: none)` now hands touch the resolved state outright. The keyboard half is still open there and is recorded as such — the card is a `<div>` performing no action, so there is no `:focus-within` to hang it on without inventing a control; the real fix is for the beat to stop putting a sentence of real copy behind hover at all.
 - **Don't** verify that an overlay is clickable with `element.click()`. It dispatches straight at the node and skips hit-testing, so it passes on a control no human pointer can reach — which is exactly how a `pointer-events: none` dialog shipped looking fine. Use a real pointer event, or read the computed `pointer-events` up the ancestor chain.
 - **Don't** animate anything on the globe from JS without checking `prefers-reduced-motion` yourself. The blanket rule in `globals.css` reaches CSS only; a WebGL material driven from `performance.now()` pulses straight through the preference.
 - **Don't** mark the selected stop with a ring, halo or pulse on the ground. Selection is the accent on that stop's stem, pool and adjoining arcs, plus the thin rule under its own name card. A pulsing blue circle at the stem's base was built and removed: it drew a second marker for a stop that already had one, and put the emphasis at the bottom of the stem where nothing else is.
