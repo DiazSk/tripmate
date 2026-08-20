@@ -49,6 +49,7 @@ import { formatMoney } from "@/lib/format";
 import type { ArrivalPoint } from "@/lib/arrivalPoints";
 import { devLabel } from "@/lib/devInspector";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
+import type { AccessibilityNeeds } from "@/lib/types";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
 import type { StageProgress } from "@/lib/generationStages";
@@ -254,6 +255,21 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [arrivalPoint, setArrivalPoint] = useState("");
   const [departureTime, setDepartureTime] = useState("");
   const [departurePoint, setDeparturePoint] = useState("");
+  // Asked rather than inferred from `energy`. Starts null so an untouched form sends nothing at
+  // all — a default-valued object would claim the traveler stated "no needs" when they were never
+  // asked, and `deriveMobilityProfile` treats those two cases differently.
+  const [accessibility, setAccessibility] = useState<AccessibilityNeeds | null>(null);
+
+  /** Patches one accessibility field, materialising the object on first touch. */
+  function setAccess(patch: Partial<AccessibilityNeeds>) {
+    setAccessibility((prev) => ({
+      stepFreeRequired: false,
+      limitStairs: false,
+      note: "",
+      ...prev,
+      ...patch,
+    }));
+  }
   const [arrivalPointOptions, setArrivalPointOptions] = useState<SuggestOption[]>([]);
   const [budget, setBudget] = useState(1000);
   const [tier, setTier] = useState<TierId>(initialProfile?.tier ?? "midrange");
@@ -583,6 +599,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         departurePoint: departurePoint || null,
         stayBooked: null,
       },
+      accessibility,
     };
   }
 
@@ -731,6 +748,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     const updated: Itinerary = structuredClone(itinerary);
     Object.assign(updated.days[dayIndex], updates);
     setItinerary(updated);
+  }
+
+  /** A hand-rearranged itinerary from the card's drag-and-drop. Already re-timed by `moveStop`,
+   *  so there is nothing to recompute here — and nothing to persist yet, same as the day edits. */
+  function handleRearrange(next: Itinerary) {
+    setRevealAnimation(false);
+    setItinerary(next);
   }
 
 
@@ -1046,6 +1070,35 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     </div>
                   </div>
 
+                  <div className="mt-3 space-y-2 rounded-2xl border border-white/10 bg-surface-deep/50 px-4 py-3">
+                    <label className="text-xs font-medium text-muted">Getting around</label>
+                    <label className="flex items-center gap-2 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        checked={accessibility?.stepFreeRequired ?? false}
+                        onChange={(e) => setAccess({ stepFreeRequired: e.target.checked })}
+                        className="accent-accent"
+                      />
+                      I need step-free routes throughout
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        checked={accessibility?.limitStairs ?? false}
+                        onChange={(e) => setAccess({ limitStairs: e.target.checked })}
+                        className="accent-accent"
+                      />
+                      Avoid stairs and steep climbs where possible
+                    </label>
+                    <input
+                      type="text"
+                      value={accessibility?.note ?? ""}
+                      placeholder="Anything else we should plan around"
+                      onChange={(e) => setAccess({ note: e.target.value })}
+                      className={`${fieldInputClass} ${accessibility?.note ? fieldFilledTone : fieldEmptyTone}`}
+                    />
+                  </div>
+
                   {/* The collapsed state names the remembered values rather than hiding behind
                       a bare "Adjust" link — a traveler who cannot see these has no way to know
                       the app applied them, and a hidden control reads as the app having
@@ -1306,7 +1359,14 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   activeDayIndex={activeDayIndex}
                   onActiveDayChange={setActiveDayIndex}
                   onEditDay={handleEditDay}
-                  onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
+                  // Same window "Refine with AI" opens, just starting on the day whose icon was
+                  // clicked: one chat surface with day navigation, rather than a second
+                  // day-locked variant that looked identical but couldn't reach other days.
+                  onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
+                  onItineraryChange={handleRearrange}
+                  // The board only needs a name, a budget and the dates; pre-save there is no trip
+                  // row yet, so this is assembled from the form's own values.
+                  trip={{ id: "preview", destination, startDate, endDate, budget }}
                   animateReveal={revealAnimation}
                 />
               )}
