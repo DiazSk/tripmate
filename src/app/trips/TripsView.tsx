@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Trash2 } from "lucide-react";
@@ -9,7 +9,6 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
-import { useMapCamera } from "@/lib/mapCamera";
 import { useLineReveal } from "@/lib/lineReveal";
 
 /** One tile of the hero collage. A photo miss or slow lookup must not open a hole in the
@@ -312,7 +311,6 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
   // failed leaves a perfectly good grid on screen, so reusing `error` would blank the very
   // list the message is about.
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const { resetToHome } = useMapCamera();
 
   async function confirmDelete() {
     if (!pendingDelete) return;
@@ -341,18 +339,6 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
       setDeleting(false);
     }
   }
-
-  // Mount-only, mirroring page.tsx's own reset effect: the globe lives above the route
-  // boundary and never unmounts, so arriving here from /trip/[id] (which flies to that
-  // trip's destination and stops) would otherwise leave the camera, its marker pin, and
-  // its drawn route exactly where that page last left them — visible through this page's
-  // own grid gaps once the hero scrolls past. `page.tsx` only ever needed to handle the
-  // opposite direction (/trips → /), back when this page never touched the camera at all;
-  // now that its hero/grid keep the globe on screen, this side needs the same reset too.
-  useEffect(() => {
-    resetToHome();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // `map-chrome-hidden` is a deliberate behaviour change, not
   // a copy of the plan step's own class list: this route used to leave the zoom/compass
