@@ -163,8 +163,9 @@ export default function MapControls() {
       }
       setFlat(pitch < FLAT_THRESHOLD_RAD);
     };
-    // postRender over `camera.changed`: the globe's auto-rotate loop moves the camera every
-    // frame, so `changed` fires continuously anyway and offers no throttle of its own.
+    // postRender over `camera.changed`: under `requestRenderMode` a frame only happens when
+    // something asked for one, so this fires exactly as often as the camera can have moved —
+    // and `changed` would need a `percentageChanged` threshold tuned to be useful.
     viewer.scene.postRender.addEventListener(tick);
     return () => {
       if (!viewer.isDestroyed()) viewer.scene.postRender.removeEventListener(tick);
@@ -173,11 +174,9 @@ export default function MapControls() {
 
   if (!Cesium || !ready) return null;
 
-  /** Every control implies "I'm driving now", so the idle auto-rotation stops for good. */
   function withViewer(fn: (viewer: Viewer, cesium: CesiumModule) => void) {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed() || !Cesium) return;
-    (viewer as Viewer & { stopAutoRotate?: () => void }).stopAutoRotate?.();
     fn(viewer, Cesium);
   }
 
