@@ -140,18 +140,10 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
   if (trips.length === 0) {
     return (
       <section className="pointer-events-auto relative flex min-h-dvh items-center justify-center overflow-hidden p-5 text-center sm:p-6">
-        {/* No photo to collage, so the base system's own material carries the beat instead
-            of reaching for stock imagery — a low-alpha accent wash over slate, matching the
-            wider app's "one warm accent on a cool neutral field" rather than inventing a
-            new palette for one empty state. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(60% 70% at 50% 30%, rgba(255,179,64,0.10), transparent 65%), radial-gradient(80% 60% at 50% 100%, rgb(var(--surface-deep-rgb) / 0.92), transparent 70%), rgb(var(--surface-deep-rgb))",
-          }}
-        />
+        {/* No photo to collage, so the base system's own material carries the beat instead of
+            reaching for stock imagery. `.scene-void` — shared with the landing's closing poster,
+            which is the same problem: an empty beat carrying one amber CTA. */}
+        <div aria-hidden="true" className="scene-void absolute inset-0" />
         <div className="relative z-10 max-w-lg">
           <h1 className="font-display text-4xl font-bold text-foreground sm:text-6xl">
             Your memories start here

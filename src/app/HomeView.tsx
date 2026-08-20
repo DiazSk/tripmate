@@ -31,7 +31,7 @@ import {
 } from "@/lib/types";
 import { CandidatePoi } from "@/lib/pois";
 import { useTripCamera } from "@/lib/useTripCamera";
-import { useMapCamera } from "@/lib/mapCamera";
+import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 import { devLabel } from "@/lib/devInspector";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
@@ -354,6 +354,15 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // Also gates the map control stack via .map-chrome-hidden: hidden on landing (that step is
   // a poster, not a map to read) and on plan (the panel reaches the bottom-left corner below
   // ~1292px), shown on result. Do not "simplify" this to step === "landing".
+  // Raised when generation *starts*, not when the result renders. The traveller is then watching
+  // a ~150s loader, which makes the 2.3MB Cesium import and the first tiles free — and buys a
+  // warm globe for nothing: MapCameraProvider already queued the plan step's destination flight
+  // and highway fetch in `pendingRef`/`pendingHighwaysRef`, and those replay on `setViewer`, so
+  // the result view opens already framed on the destination with its highways drawn.
+  // `refining` is deliberately absent: refine is only reachable from `result`, where this is
+  // already true.
+  useGlobeOnScreen(generating || step === "result");
+
   const preResult = step !== "result";
 
   // Null until both dates are set, so the tier cards show per-day rates rather than a total

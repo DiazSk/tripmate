@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { useMapCamera } from "@/lib/mapCamera";
-import { isGlobeHiddenRoute } from "@/lib/globeVisibility";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 /**
@@ -70,25 +68,50 @@ function installLodController(
 export default function GlobeBackground({ creditClassName }: { creditClassName?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const creditRef = useRef<HTMLDivElement>(null);
-  const { setViewer } = useMapCamera();
-  const pathname = usePathname();
+  const { setViewer, globeWanted, ready } = useMapCamera();
   const viewerInstanceRef = useRef<import("cesium").Viewer | null>(null);
 
-  // Separate from the mount effect below (which runs once): this reacts to route changes on the
+  /**
+   * One-way latch on `globeWanted`, and the only dependency of the construction effect below.
+   *
+   * One-way because **a viewer swap is unrecoverable.** `viewer.destroy()` takes the camera pose,
+   * the 512MB tile cache and every `viewer.entities` — route arcs, stems, glow pools, the
+   * destination pin — and nothing replays them: `showDayRoute` is a `useCallback(…, [])` whose
+   * only caller (ItineraryCard's effect, deps `[day, showDayRoute]`) sees neither dep change on a
+   * swap, and `setViewer`'s pending queues were consumed and nulled on the first registration.
+   * So the globe is built at most once per mount of this component, and torn down only when this
+   * component genuinely unmounts — which it never does, since AppShell renders it from the root
+   * layout.
+   *
+   * Depending on `globeWanted` directly would be wrong for exactly that reason: React runs the
+   * cleanup on every dep change, so leaving a globe surface would destroy the viewer.
+   */
+  const [built, setBuilt] = useState(false);
+  // Adjusted during render rather than in an effect — React's documented pattern for deriving
+  // state from a changed input, and the same in-render adjustment GenerationLoader already uses
+  // for its caption index. An effect would be a cascading render, and `react-hooks/set-state-in-
+  // effect` rejects it outright.
+  if (globeWanted && !built) setBuilt(true);
+
+  // Separate from the construction effect below (which runs once): this reacts to the gate on the
   // one already-constructed viewer, rather than tearing down and rebuilding the whole globe.
   useEffect(() => {
     const viewer = viewerInstanceRef.current;
     if (!viewer || viewer.isDestroyed()) return;
-    const hidden = isGlobeHiddenRoute(pathname);
     // Stops the render loop entirely rather than just hiding the canvas — with it running,
     // Cesium keeps re-rendering the (Google photorealistic, tile-streaming) scene and ticking
     // the auto-rotate spin every frame regardless of whether anything is drawn on top of it.
-    viewer.useDefaultRenderLoop = !hidden;
+    viewer.useDefaultRenderLoop = globeWanted;
     // Under requestRenderMode, restarting the loop is not by itself enough to draw anything —
     // it renders on demand, and arriving back from a hidden route is a demand nothing else
     // signals. One frame is all it needs; the idle logic takes it from there.
-    if (!hidden) viewer.scene.requestRender();
-  }, [pathname]);
+    if (globeWanted) viewer.scene.requestRender();
+    // `ready` is in the deps and is not decoration: it flips exactly when `setViewer` lands, so
+    // this re-runs the moment the viewer registers and applies whatever the gate says *then*.
+    // Without it, a gate that closed mid-construction — a generation cancelled during the ~5s
+    // import — would leave Cesium's own constructor default of a live render loop running on a
+    // hidden canvas, because this effect's own deps would not have changed.
+  }, [globeWanted, ready]);
 
   useEffect(() => {
     let viewer: import("cesium").Viewer | undefined;
@@ -99,17 +122,7 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
     let wakeSpin: (() => void) | undefined;
 
     (async () => {
-      if (!containerRef.current) return;
-      // Skip booting Cesium at all when landing directly on a globe-hidden route (`/backend` and
-      // `/bench`, both dev-only dashboards on opaque backgrounds, reached and left exclusively
-      // via typed URLs / hard loads — neither has inbound or outbound links to the rest of the
-      // app, so there's no soft-navigation path where this would ever need to construct late).
-      // Pausing the render loop (the effect above) still matters for a page that arrives here
-      // from a soft nav with the globe already live, but a
-      // cold load pays for the dynamic `cesium` import, the WebGL context, and Google's
-      // photorealistic tileset fetch *before* that pause ever takes effect — this skips all of
-      // it up front instead.
-      if (isGlobeHiddenRoute(pathname)) return;
+      if (!built || !containerRef.current) return;
       (window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = "/cesium/";
       const Cesium = await import("cesium");
       if (cancelled || !containerRef.current) return;
@@ -430,9 +443,6 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
         };
 
       viewerInstanceRef.current = viewer;
-      // Always true here: reaching this line already means the early `isGlobeHiddenRoute` return
-      // above didn't fire, i.e. the current route wants the globe running.
-      viewer.useDefaultRenderLoop = true;
 
       // Dev-only handle for inspecting the scene from the console or a browser-automation
       // probe: entity counts after a day switch, camera pose, tile detail. Nothing else
@@ -464,11 +474,33 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       viewer?.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [built]);
 
   return (
     <>
-      <div ref={containerRef} className="h-full w-full" />
+      {/* `invisible` (visibility: hidden) — not `hidden` (display: none), and not unmounting.
+          A zero-size canvas sends Cesium's own resize path through a 0x0 drawing buffer and back,
+          which reallocates the framebuffer and re-rasters every resident tile on the way in; and
+          `scene.canvas.clientWidth`/`clientHeight` are read per frame by StopMarkerLayer's
+          reprojection and once at construction by the `renderMegapixels` request-cap decision.
+          `visibility` keeps layout, the WebGL context and the drawing buffer, and costs one
+          composite of a texture the GPU already owns.
+
+          This is also what kills the stale-geometry bug, for every surface at once rather than
+          per call site: `.map-chrome-hidden` hides `.map-controls` and `.stop-marker-layer`, two
+          DOM layers, but route arcs and glow pools are Cesium entities *inside* the canvas, so
+          navigating `/trip/[id]` -> `/profile` used to leave the last trip's arcs in the margins
+          of a settings form.
+
+          It also takes the canvas out of hit-testing, so Cesium's ScreenSpaceEventHandler stops
+          consuming wheel events as camera zooms here. That does NOT make the page scroll on its
+          own — this canvas's ancestor is `.app-shell`, `h-dvh overflow-hidden` — so
+          `.content-overlay:not(:has(.docked-panel))` in globals.css is still the only thing
+          handing scroll back. Do not delete it as redundant. */}
+      <div
+        ref={containerRef}
+        className={`h-full w-full ${globeWanted ? "" : "invisible"}`}
+      />
       {/* Visually hidden per request — NOTE: Google's Photorealistic 3D Tiles terms of
           service require this attribution to stay visible when those tiles are in use
           (see the token check above). Re-enable if shipping with a live Ion token. */}
