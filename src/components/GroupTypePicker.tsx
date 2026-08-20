@@ -7,6 +7,9 @@ const GROUP_TYPES: { id: GroupType; label: string }[] = [
   { id: "solo", label: "Solo" },
   { id: "couple", label: "Couple" },
   { id: "family_with_kids", label: "Family with kids" },
+  // Three pills covered three trips. Five friends, a work offsite and three generations all had
+  // to pick the least wrong one, and the plan was built on that wrong answer.
+  { id: "other", label: "Other" },
 ];
 
 export default function GroupTypePicker({

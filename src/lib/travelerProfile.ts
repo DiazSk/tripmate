@@ -30,7 +30,7 @@ export interface TravelerProfile {
   dietary: DietaryNeeds;
 }
 
-const GROUPS: GroupType[] = ["solo", "couple", "family_with_kids"];
+const GROUPS: GroupType[] = ["solo", "couple", "family_with_kids", "other"];
 const STYLES: ExplorerStyle[] = ["packed", "relaxed", "offbeat", "mixed"];
 const ENERGIES: EnergyLevel[] = ["high", "moderate", "low"];
 const CROWDS: CrowdPreference[] = ["love", "mixed", "avoid"];

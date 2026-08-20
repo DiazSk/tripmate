@@ -4,12 +4,23 @@ import { ComponentType, ReactNode, useEffect, useMemo, useRef, useState } from "
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarCheck,
+  CalendarDays,
+  MapPin,
+  PlaneLanding,
+  PlaneTakeoff,
+  Wallet,
+} from "lucide-react";
 import type { DayEditUpdates } from "@/components/DayHeader";
 import FeedbackLoop from "@/components/FeedbackLoop";
 import InterestPicker from "@/components/InterestPicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
+import PartyCounter, { DEFAULT_PARTY } from "@/components/PartyCounter";
+import SuggestInput, { TIME_OPTIONS, SuggestOption } from "@/components/SuggestInput";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import PoiCandidatePicker from "@/components/PoiCandidatePicker";
 import { useFocusEdit } from "@/lib/useFocusEdit";
@@ -27,12 +38,15 @@ import {
   ExplorerStyle,
   GroupType,
   Itinerary,
+  PartyCounts,
   RawFetch,
 } from "@/lib/types";
 import { CandidatePoi } from "@/lib/pois";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
+import { formatMoney } from "@/lib/format";
+import type { ArrivalPoint } from "@/lib/arrivalPoints";
 import { devLabel } from "@/lib/devInspector";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
@@ -143,11 +157,16 @@ function Field({
   delay,
   onActivate,
   grow = "flex-1",
+  optional = false,
   children,
 }: {
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   label: string;
   delay: number;
+  /** Says so on the label rather than leaving it to be inferred from the absence of a `*`. A cell
+   *  that looks exactly like the four required ones beside it reads as a question you are failing
+   *  to answer, which is what "Airport or station" was doing to anyone who didn't know theirs. */
+  optional?: boolean;
   /** Supplied by the date cells, which open the native picker from a click anywhere in the
    *  cell rather than only on the UA's own (removed) calendar glyph. */
   onActivate?: (cell: HTMLLabelElement, target: EventTarget | null) => void;
@@ -168,6 +187,9 @@ function Field({
       <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.025em] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
         {label}
+        {optional && (
+          <span className="font-normal tracking-normal text-white/40 normal-case">optional</span>
+        )}
       </span>
       <div className="mt-1.5">{children}</div>
       <span
@@ -226,6 +248,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [destination, setDestination] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  // Every one of these is optional — this is the row nobody has to fill in. Times are "HH:MM"
+  // straight from `<input type="time">`; the points are free text and never geocoded.
+  const [arrivalTime, setArrivalTime] = useState("");
+  const [arrivalPoint, setArrivalPoint] = useState("");
+  const [departureTime, setDepartureTime] = useState("");
+  const [departurePoint, setDeparturePoint] = useState("");
+  const [arrivalPointOptions, setArrivalPointOptions] = useState<SuggestOption[]>([]);
   const [budget, setBudget] = useState(1000);
   const [tier, setTier] = useState<TierId>(initialProfile?.tier ?? "midrange");
   const [interests, setInterests] = useState<string[]>(initialProfile?.priorities ?? []);
@@ -246,6 +275,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     initialProfile?.explorerStyle ?? "mixed"
   );
   const [group, setGroup] = useState<GroupType>(initialProfile?.group ?? "solo");
+  const [groupOther, setGroupOther] = useState("");
+  const [party, setParty] = useState<PartyCounts>(DEFAULT_PARTY);
   const [energy, setEnergy] = useState<EnergyLevel>(initialProfile?.energy ?? "moderate");
   const [crowds, setCrowds] = useState<CrowdPreference>(initialProfile?.crowds ?? "mixed");
   const [selectedPois, setSelectedPois] = useState<CandidatePoi[]>([]);
@@ -312,6 +343,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [error, setError] = useState<string | null>(null);
 
   const {
+    destinationCoords,
     flyToDestinationByName,
     flyToDestinationByCoords,
     selectStop,
@@ -404,6 +436,61 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setTier(next);
   }
 
+  /** Presets from the pill are the common case typed in one tap: Solo is 1, Couple is 2, Family is
+   *  2 and a child. Deliberately one-way — the counts never flip the pill back, because a
+   *  two-way binding here means picking "Other" and setting 2 adults silently reads as a couple.
+   *  "Other" leaves the counts alone: it's the case with no assumable shape. */
+  // Airports and stations near wherever the destination resolved to, so the arrive/depart fields
+  // can offer real places instead of asking a first-time visitor to know that Kyoto means Kansai.
+  //
+  // Keyed on the coordinates rather than the typed string: both paths that resolve a destination
+  // set them (picking a suggestion, and the geocode on blur), so typing the name without touching
+  // the dropdown still works, just a moment later.
+  //
+  // Fails to an empty list and says nothing. The route already answers 200 with `points: []` on an
+  // Overpass outage, and these fields are optional free text — an upstream being down costs the
+  // traveler a convenience, not the form. Same reasoning as the geocode miss below.
+  useEffect(() => {
+    if (!destinationCoords) return;
+    let cancelled = false;
+    const { lat, lon } = destinationCoords;
+    fetch(`/api/arrival-points?lat=${lat}&lon=${lon}`)
+      .then((r) => r.json())
+      .then((d: { points?: ArrivalPoint[] }) => {
+        if (cancelled) return;
+        setArrivalPointOptions(
+          // The kind belongs in the hint, not welded onto the name. OSM calls Kyoto's main station
+          // "Kyoto" — beside a destination also called Kyoto, the bare name says nothing, and
+          // appending "Station" ourselves would produce "Gare du Nord Station" elsewhere.
+          (d.points ?? []).map((p) => ({
+            value: p.name,
+            label: p.name,
+            hint: `${p.kind === "airport" ? "airport" : "rail"} · ${p.distanceKm}km`,
+          }))
+        );
+      })
+      .catch(() => {});
+    // Clearing on the way out rather than on the way in covers both orderings: a slow response for
+    // a destination the traveler has already changed can't land after the new one's, and the old
+    // city's airports don't sit in the list while the new city's are still in flight.
+    return () => {
+      cancelled = true;
+      setArrivalPointOptions([]);
+    };
+  }, [destinationCoords]);
+
+  // "Airport or station" read as a demand for knowledge a first-time visitor doesn't have. Once
+  // there is a list to offer, say so; until then, invite rather than ask.
+  const arrivalPointPlaceholder =
+    arrivalPointOptions.length > 0 ? "Pick or type a place" : "Anywhere you like";
+
+  function pickGroup(next: GroupType) {
+    setGroup(next);
+    if (next === "solo") setParty({ adults: 1, children: 0, infants: 0 });
+    else if (next === "couple") setParty({ adults: 2, children: 0, infants: 0 });
+    else if (next === "family_with_kids") setParty({ adults: 2, children: 1, infants: 0 });
+  }
+
   function toggleInterest(tag: string) {
     setInterests((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
@@ -478,6 +565,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       purpose,
       explorerStyle,
       group,
+      groupOther,
+      party,
       energy,
       crowds,
       budget,
@@ -485,6 +574,15 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       topPriorities: starredInterests,
       selectedPois,
       customPois,
+      // Sent as-is; `sanitizeLogistics` on the server collapses an all-empty object to null, so
+      // a traveler who skipped the row gets the prompt they'd have got before it existed.
+      logistics: {
+        arrivalTime: arrivalTime || null,
+        arrivalPoint: arrivalPoint || null,
+        departureTime: departureTime || null,
+        departurePoint: departurePoint || null,
+        stayBooked: null,
+      },
     };
   }
 
@@ -878,6 +976,72 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                             className={`${fieldInputClass} tabular-nums ${budget === 0 ? fieldEmptyTone : fieldFilledTone}`}
                           />
                         </div>
+                        {/* Until this line existed, picking two dates never told you how long the
+                            trip was — the day count was computed for the tier cards and never
+                            shown. Saying what the budget buys per day answers both at once, and
+                            it's the division the traveler was going to do anyway. */}
+                        {days !== null && budget > 0 && (
+                          <div
+                            key={`${budget}-${days}`}
+                            className="value-in mt-0.5 text-xs tabular-nums text-muted"
+                          >
+                            {formatMoney(Math.round(budget / days))}/day for {days}{" "}
+                            {days === 1 ? "day" : "days"}
+                          </div>
+                        )}
+                      </Field>
+                    </div>
+
+                    {/* Optional, and its own row rather than three more cells crushed into the one
+                        above. A traveler landing at 20:15 was getting a full first day planned
+                        for them; a traveler landing at an airport was getting a first stop
+                        downtown. */}
+                    <div className="flex flex-col divide-y divide-white/10 md:flex-row md:divide-x md:divide-y-0">
+                      <Field icon={PlaneLanding} label="Arrive" delay={320} optional>
+                        <div className="flex items-baseline gap-2">
+                          <SuggestInput
+                            ariaLabel="Arrival time on day 1"
+                            value={arrivalTime}
+                            onChange={setArrivalTime}
+                            options={TIME_OPTIONS}
+                            placeholder="Time"
+                            className="w-[6.5rem] shrink-0"
+                            inputClassName={`w-full bg-transparent text-base tabular-nums outline-none placeholder:font-normal placeholder:text-white/65 ${arrivalTime ? fieldFilledTone : fieldEmptyTone}`}
+                          />
+                          <SuggestInput
+                            freeText
+                            ariaLabel="Where you arrive"
+                            value={arrivalPoint}
+                            onChange={setArrivalPoint}
+                            options={arrivalPointOptions}
+                            placeholder={arrivalPointPlaceholder}
+                            className="flex-1"
+                            inputClassName={`${fieldInputClass} ${arrivalPoint ? fieldFilledTone : fieldEmptyTone}`}
+                          />
+                        </div>
+                      </Field>
+                      <Field icon={PlaneTakeoff} label="Depart" delay={380} optional>
+                        <div className="flex items-baseline gap-2">
+                          <SuggestInput
+                            ariaLabel="Departure time on the last day"
+                            value={departureTime}
+                            onChange={setDepartureTime}
+                            options={TIME_OPTIONS}
+                            placeholder="Time"
+                            className="w-[6.5rem] shrink-0"
+                            inputClassName={`w-full bg-transparent text-base tabular-nums outline-none placeholder:font-normal placeholder:text-white/65 ${departureTime ? fieldFilledTone : fieldEmptyTone}`}
+                          />
+                          <SuggestInput
+                            freeText
+                            ariaLabel="Where you depart from"
+                            value={departurePoint}
+                            onChange={setDeparturePoint}
+                            options={arrivalPointOptions}
+                            placeholder={arrivalPointPlaceholder}
+                            className="flex-1"
+                            inputClassName={`${fieldInputClass} ${departurePoint ? fieldFilledTone : fieldEmptyTone}`}
+                          />
+                        </div>
                       </Field>
                     </div>
                   </div>
@@ -984,7 +1148,24 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   title="Who's going?"
                   subtitle="This changes trip to trip, so we ask every time."
                 >
-                  <GroupTypePicker selected={group} onSelect={setGroup} />
+                  <div className="space-y-4">
+                    <GroupTypePicker selected={group} onSelect={pickGroup} />
+                    {group === "other" && (
+                      <input
+                        type="text"
+                        value={groupOther}
+                        onChange={(e) => setGroupOther(e.target.value)}
+                        placeholder="e.g. five college friends, work offsite, three generations"
+                        aria-label="Who's going"
+                        className="value-in w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                      />
+                    )}
+                    {/* Shown for every group, not just families: a party of six friends is
+                        exactly the case where headcount changes the lodging and the table. */}
+                    <div className="border-t border-white/10 pt-3">
+                      <PartyCounter value={party} onChange={setParty} />
+                    </div>
+                  </div>
                 </Screen>
               )}
 

@@ -50,3 +50,18 @@ function parseISO(iso: string): Date | null {
   const date = new Date(y, m - 1, d);
   return Number.isNaN(date.getTime()) ? null : date;
 }
+
+/** "20:15" → "8:15 PM". The two cases worth naming: midnight's hour is 0, which must read as 12
+ *  rather than 0, and noon is 12 PM rather than 12 AM — `h % 12` alone gets both wrong.
+ *
+ *  Deliberately not `toLocaleTimeString`: that needs a Date, and building one from a bare clock
+ *  time means inventing a date for it, which is how a time-only value picks up a timezone it
+ *  never had. */
+export function formatClockLabel(hhmm: string): string {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec((hhmm ?? "").trim());
+  if (!m) return hhmm ?? "";
+  const hour = Number(m[1]);
+  const period = hour < 12 ? "AM" : "PM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${m[2]} ${period}`;
+}

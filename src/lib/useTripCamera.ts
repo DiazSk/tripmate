@@ -108,6 +108,9 @@ export function useTripCamera(destination: string, tripId?: string) {
   }, [destinationCoords, flyToDestination]);
 
   return {
+    /** Exposed for the arrive/depart pickers, which need somewhere to look up airports near.
+     *  Set by both paths that resolve a destination — picking a suggestion and the blur geocode. */
+    destinationCoords,
     flyToDestinationByName,
     flyToDestinationByCoords,
     selectStop,
