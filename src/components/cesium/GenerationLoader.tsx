@@ -128,15 +128,12 @@ export default function GenerationLoader({
   // Cancel appears after a beat rather than immediately: most refines and every cached path
   // finish well inside this, and a control that flashes up and vanishes reads as a glitch.
   const [cancelReady, setCancelReady] = useState(false);
-  // Reset during render rather than in the effect, the same in-render adjustment the caption
-  // index below already uses. The component stays mounted between runs, so without a reset a
-  // second generation would offer Cancel from its first frame — and doing it in the effect is
-  // a synchronous setState that cascades an extra render pass after paint.
-  const [wasActive, setWasActive] = useState(active);
-  if (wasActive !== active) {
-    setWasActive(active);
-    setCancelReady(false);
-  }
+  // No in-render reset of this to match the caption index below, and that is a consequence of
+  // the call site rather than an omission: HomeView gates this component on `generating ||
+  // refining` behind a dynamic() boundary, so it *unmounts* between runs rather than staying
+  // mounted with `active: false`. A fresh mount already initialises `cancelReady` to false. The
+  // `!active` guards through this file stay — `active` is still part of the prop contract, and
+  // they are two words each.
   useEffect(() => {
     if (!active) return;
     const id = setTimeout(() => setCancelReady(true), CANCEL_AFTER_MS);

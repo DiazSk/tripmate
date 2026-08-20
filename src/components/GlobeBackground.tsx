@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { HERO_VIEW, useMapCamera } from "@/lib/mapCamera";
-import { prefersReducedMotion } from "@/lib/reducedMotion";
-import { isGlobeHiddenRoute } from "@/lib/globeVisibility";
-import GlobePoster from "@/components/GlobePoster";
+import { useMapCamera } from "@/lib/mapCamera";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 /**
@@ -25,22 +21,17 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
  * `dynamicScreenSpaceError` inflates the allowed error with distance from the camera, which is
  * a real saving on a horizon-filling view and a liability on a tilted close-up where much of
  * the frame is "far". It rides the same tier.
- *
- * The 20km tier was split out of the old 2km–50km band for exactly that reason. A destination
- * flight lands at 15,000m *range* at -45°, which is ≈10.6km altitude — squarely inside that
- * band, and squarely a tilted close-up: at -45° the far half of the frame is the city you just
- * asked to see, and `dynamicScreenSpaceError` was coarsening precisely that. The band was also
- * carrying maximumScreenSpaceError 12, chosen for a view that reaches the horizon. So the
- * arrival view of a city was being served by the settings for looking at a region. Everything
- * above 20km keeps the old numbers, so wide multi-stop framings are unaffected.
  */
 const LOD_TIERS = [
   // [ceiling in metres, maximumScreenSpaceError, dynamicScreenSpaceError]
   [2_000, 8, false],
-  [20_000, 10, false],
   [50_000, 12, true],
   [Infinity, 16, true],
 ] as const;
+
+/** Ceiling on the device-pixel ratio the scene renders at — see the `resolutionScale` comment
+ *  below for the measurement behind 1.5. */
+const MAX_RENDER_PIXEL_RATIO = 1.5;
 
 /**
  * Applies the tier for the camera's current height, once per change.
@@ -52,7 +43,7 @@ const LOD_TIERS = [
  */
 function installLodController(
   viewer: import("cesium").Viewer,
-  tileset: import("cesium").Cesium3DTileset,
+  tileset: import("cesium").Cesium3DTileset
 ) {
   let applied = -1;
   viewer.scene.preRender.addEventListener(() => {
@@ -66,75 +57,61 @@ function installLodController(
   });
 }
 
-/** How long the poster holds before revealing the canvas regardless. The reveal normally waits
- *  for Google's first tiles, which is the difference between fading into a city and fading into
- *  a blank blue sphere — but a stalled or rate-limited tile fetch must not strand the app on a
- *  poster that no longer matches where the camera has flown. */
-const REVEAL_TIMEOUT_MS = 4000;
-
-/**
- * The idle drift: 0.05 rad/s, a full turn in about two minutes — unchanged from the original
- * auto-rotation, so the landing page reads exactly as it did.
- *
- * What is different is *when* it runs. This used to be an unconditional loop for the tab's
- * lifetime, and a rotating camera renders every frame by definition, so it was the one thing
- * that could never coexist with `requestRenderMode`. It now runs only while the landing story's
- * reveal section is on screen (the one place on that route where the globe isn't behind an
- * opaque band), only in `static` mode, and never under `prefers-reduced-motion`. Off that
- * screen the globe is still and the GPU is idle.
- */
-const SPIN_RATE_RAD_PER_S = 0.05;
-/** Camera steps per second while drifting. Half the cost of stepping every frame. */
-const SPIN_FPS = 30;
-/** Ceiling on one integration step, in seconds — see the clamp in the spin effect. */
-const MAX_SPIN_STEP_S = 0.1;
-
-export default function GlobeBackground({
-  creditClassName,
-}: {
-  creditClassName?: string;
-}) {
+export default function GlobeBackground({ creditClassName }: { creditClassName?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const creditRef = useRef<HTMLDivElement>(null);
-  const {
-    setViewer,
-    viewerRef,
-    ready,
-    globeMode,
-    globeSpinning,
-    activateGlobe,
-    posterPlace,
-  } = useMapCamera();
-  const pathname = usePathname();
-  /** Drives the cross-fade: false means the poster is what you are looking at. */
-  const [canvasVisible, setCanvasVisible] = useState(false);
+  const { setViewer, globeWanted, ready } = useMapCamera();
+  const viewerInstanceRef = useRef<import("cesium").Viewer | null>(null);
 
-  const hidden = isGlobeHiddenRoute(pathname);
   /**
-   * Cesium exists once a surface has asked for a globe of either kind (`static` or `live`) and
-   * the route has something to show it through.
+   * One-way latch on `globeWanted`, and the only dependency of the construction effect below.
    *
-   * A boolean, not the mode itself, and that is load-bearing: this is the mount effect's only
-   * dependency, so promoting `static` → `live` when the CTA is pressed must not register as a
-   * change here. Input handling is switched separately, below, on the viewer that already
-   * exists — a rebuild would cost seconds of re-fetched tiles to change one flag.
+   * One-way because **a viewer swap is unrecoverable.** `viewer.destroy()` takes the camera pose,
+   * the 512MB tile cache and every `viewer.entities` — route arcs, stems, glow pools, the
+   * destination pin — and nothing replays them: `showDayRoute` is a `useCallback(…, [])` whose
+   * only caller (ItineraryCard's effect, deps `[day, showDayRoute]`) sees neither dep change on a
+   * swap, and `setViewer`'s pending queues were consumed and nulled on the first registration.
+   * So the globe is built at most once per mount of this component, and torn down only when this
+   * component genuinely unmounts — which it never does, since AppShell renders it from the root
+   * layout.
    *
-   * The globe used to be built on mount for every route and merely paused
-   * (`useDefaultRenderLoop = false`) on a hidden one, which still paid for the dynamic `cesium`
-   * import, the WebGL context and Google's tileset fetch before the pause could take effect.
+   * Depending on `globeWanted` directly would be wrong for exactly that reason: React runs the
+   * cleanup on every dep change, so leaving a globe surface would destroy the viewer.
    */
-  const shouldMount = globeMode !== "off" && !hidden;
+  const [built, setBuilt] = useState(false);
+  // Adjusted during render rather than in an effect — React's documented pattern for deriving
+  // state from a changed input, and the same in-render adjustment GenerationLoader already uses
+  // for its caption index. An effect would be a cascading render, and `react-hooks/set-state-in-
+  // effect` rejects it outright.
+  if (globeWanted && !built) setBuilt(true);
+
+  // Separate from the construction effect below (which runs once): this reacts to the gate on the
+  // one already-constructed viewer, rather than tearing down and rebuilding the whole globe.
+  useEffect(() => {
+    const viewer = viewerInstanceRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+    // Stops the render loop entirely rather than just hiding the canvas — with it running,
+    // Cesium keeps re-rendering the (Google photorealistic, tile-streaming) scene regardless of
+    // whether anything is drawn on top of it.
+    viewer.useDefaultRenderLoop = globeWanted;
+    // Under requestRenderMode, restarting the loop is not by itself enough to draw anything —
+    // it renders on demand, and arriving back from a hidden route is a demand nothing else
+    // signals. One frame is all it needs; the idle logic takes it from there.
+    if (globeWanted) viewer.scene.requestRender();
+    // `ready` is in the deps and is not decoration: it flips exactly when `setViewer` lands, so
+    // this re-runs the moment the viewer registers and applies whatever the gate says *then*.
+    // Without it, a gate that closed mid-construction — a generation cancelled during the ~5s
+    // import — would leave Cesium's own constructor default of a live render loop running on a
+    // hidden canvas, because this effect's own deps would not have changed.
+  }, [globeWanted, ready]);
 
   useEffect(() => {
-    if (!shouldMount) return;
     let viewer: import("cesium").Viewer | undefined;
     let cancelled = false;
-    let revealTimer: ReturnType<typeof setTimeout> | undefined;
 
     (async () => {
-      if (!containerRef.current) return;
-      (window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL =
-        "/cesium/";
+      if (!built || !containerRef.current) return;
+      (window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = "/cesium/";
       const Cesium = await import("cesium");
       if (cancelled || !containerRef.current) return;
 
@@ -157,30 +134,28 @@ export default function GlobeBackground({
         infoBox: false,
         selectionIndicator: false,
         baseLayer: false,
-        /**
-         * Render on demand, not on a clock.
-         *
-         * Cesium's default is a 60fps loop that redraws an identical frame for as long as the
-         * page is open — on a stationary city overview that is a continuously busy GPU and a
-         * measurably shorter battery for a picture that never changes. With this on, a frame is
-         * drawn only when the scene actually changes: the camera moves, a tile lands, an entity
-         * is added or restyled.
-         *
-         * `maximumRenderTimeChange: Infinity` removes the other trigger — by default Cesium
-         * re-renders whenever the simulation clock has advanced past a threshold, which for a
-         * scene with no time-varying anything (no sun-position animation, no CZML, no clocked
-         * materials) is a redraw for nothing. Together these take a still camera to zero draw
-         * calls per second.
-         *
-         * The cost is that anything changing the scene *without* moving the camera has to say
-         * so: `requestRender()` in mapCamera covers entity adds, hover emphasis and the delayed
-         * route-altitude correction, and `tileLoad` below covers streaming. Camera flights are
-         * unaffected — their tween runs in `initializeFrame`, which is outside this gate, and
-         * moving the camera requests its own frames.
-         */
+        // Render on demand instead of on every rAF tick. Cesium's default is a continuous loop
+        // that re-renders the whole photorealistic tileset at display refresh (measured ~160fps
+        // here) whether or not anything changed — and because every glass panel in this app is a
+        // `backdrop-filter` sibling sitting directly over this canvas, a canvas that repaints
+        // every frame forces each of those panels to re-sample and re-blur its backdrop every
+        // frame too. That coupling, not the globe alone, is what made the whole UI feel stuck.
+        //
+        // Cesium re-renders by itself on camera movement, tile loads and property changes, so
+        // interaction and flights are unaffected. What stops is the idle case.
         requestRenderMode: true,
+        // Never re-render merely because the simulation clock advanced: nothing in this scene is
+        // driven by Cesium time (no sun/lighting animation). The route dash shimmer reads
+        // `performance.now()` from a CallbackProperty, which is evaluated only on frames that
+        // actually render — so it animates whenever the scene is awake and settles with the rest
+        // of it when the scene is not, which is the intended behaviour rather than a casualty.
         maximumRenderTimeChange: Infinity,
       });
+
+      // Ceiling for the frames that *do* render. On a high-refresh display the uncapped loop was
+      // spending 160fps of full tileset draw on a scene whose fastest motion is a slow drift;
+      // 60 is the smoothness bar for dragging and costs under half as much.
+      viewer.targetFrameRate = 60;
 
       // Solid dark space behind/beyond the globe — not the default transparent canvas,
       // which would otherwise let the page background show through any gap. Read from
@@ -189,9 +164,7 @@ export default function GlobeBackground({
       const canvasColor = getComputedStyle(document.documentElement)
         .getPropertyValue("--canvas")
         .trim();
-      viewer.scene.backgroundColor = Cesium.Color.fromCssColorString(
-        canvasColor || "#0b0f19",
-      );
+      viewer.scene.backgroundColor = Cesium.Color.fromCssColorString(canvasColor || "#0b0f19");
 
       // Everything else on the camera controller stays at Cesium's defaults — the map is
       // meant to be freely draggable/zoomable/tiltable. These two just stop the extremes:
@@ -200,27 +173,37 @@ export default function GlobeBackground({
       viewer.scene.screenSpaceCameraController.minimumZoomDistance = 50;
       viewer.scene.screenSpaceCameraController.maximumZoomDistance = 25_000_000;
 
-      // Render at the display's real pixel density instead of CSS pixels. Cesium's default
-      // (`useBrowserRecommendedResolution: true`) ignores devicePixelRatio, so on any scaled
-      // display the canvas is upscaled and building edges go soft no matter how good the mesh
-      // underneath is. Capped at 2x because fill cost grows with the square of the ratio and a
-      // 3x phone would otherwise render 9x the pixels for detail nobody can resolve. This is a
-      // no-op at devicePixelRatio 1.
+      // Render above CSS pixel density, but not all the way to the display's. Cesium's default
+      // (`useBrowserRecommendedResolution: true`) ignores devicePixelRatio entirely, so on a
+      // scaled display the canvas is upscaled and building edges go soft no matter how good the
+      // mesh underneath is. Fill cost grows with the square of the ratio, hence a cap.
+      //
+      // The cap is 1.5, lowered from 2 against a measurement rather than a guess. On a 2x /
+      // 160Hz Windows display the 2x cap produced a 3204x2654 canvas — 8.5 megapixels, larger
+      // than a 4K framebuffer — and a moving camera sustained only 33.7 painted fps against a
+      // 60 target, i.e. squarely fill-rate bound. 1.5 cuts that to ~4.8 megapixels (-44%), which
+      // predicts ~60 fps, and it costs sharpness only on displays above 1.5x while still
+      // rendering well above the CSS-pixel default this exists to beat. Every backdrop-filter
+      // panel over the canvas samples the same device pixels, so this is also the one knob that
+      // scales the glass blurs. No-op at devicePixelRatio 1.
       const dpr = window.devicePixelRatio || 1;
       viewer.useBrowserRecommendedResolution = false;
-      viewer.resolutionScale = Math.min(dpr, 2) / dpr;
+      viewer.resolutionScale = Math.min(dpr, MAX_RENDER_PIXEL_RATIO) / dpr;
 
       let usingPhotorealistic = false;
-      let tileset: import("cesium").Cesium3DTileset | undefined;
       if (token) {
         try {
-          tileset = await Cesium.createGooglePhotorealistic3DTileset();
-          // Deactivation is now routine (every return to the landing page is one), so this
-          // window — viewer built, tileset still in flight — is genuinely reachable. The
-          // cleanup below has already run and saw no viewer to destroy, so it has to happen
-          // here or the WebGL context leaks for the tab's lifetime.
+          const tileset = await Cesium.createGooglePhotorealistic3DTileset();
+          // Destroys rather than just returning. The cleanup at the bottom of this effect closes
+          // over `viewer`, and by the time an unmount can land *here* that cleanup has already
+          // run — with `viewer` still undefined, because it is only assigned after the earlier
+          // `await import("cesium")` resolves. So a bare `return` orphans a live WebGL context
+          // and its whole tile cache. Not reachable from Strict Mode's double-invoke (that
+          // unmount lands before the import resolves, and the guard up there catches it), but
+          // every Fast Refresh during a tileset load hits it — and Chrome caps live contexts and
+          // starts killing the oldest, which presents as "the globe went black in dev".
           if (cancelled) {
-            viewer?.destroy();
+            viewer.destroy();
             return;
           }
           // Google's tiles ship at full satellite vibrance, which reads harsh against the
@@ -235,80 +218,108 @@ export default function GlobeBackground({
           // is contrasty enough to absorb that; Mumbai's is hazy and low-contrast to begin
           // with, and the same blend read as mud — structures stopped separating from each
           // other. Half the amount keeps the cool register and returns the contrast.
-          tileset.style = new Cesium.Cesium3DTileStyle({
-            color: "color('#9BA6B4')",
-          });
+          tileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#9BA6B4')" });
           tileset.colorBlendMode = Cesium.Cesium3DTileColorBlendMode.MIX;
           tileset.colorBlendAmount = 0.1;
-          /**
-           * Load the whole frame, not just the middle of it.
-           *
-           * Cesium defers tiles outside a narrow cone around the view centre (`foveatedConeSize`
-           * 0.1) by *raising their screen-space error*, then waits `foveatedTimeDelay` — 0.2s by
-           * default — after the camera stops before requesting them properly. That is a sound
-           * optimization under a continuous render loop, and a trap under `requestRenderMode`:
-           * a deferred tile satisfies the raised error, so `tilesLoaded` can report true, the
-           * keep-alive stops asking for frames, and the delay never elapses in a rendered frame.
-           * The periphery then stays coarse for good — a sharp patch in the middle of the screen
-           * with a pixelated city around it.
-           *
-           * 0 means "request everything in this view now". `cullRequestsWhileMoving` (left on)
-           * still suppresses requests that a moving camera would waste, so this costs requests
-           * only where they are actually wanted: on a camera that has arrived and stopped.
-           */
-          tileset.foveatedTimeDelay = 0;
+
+          // Draw the coarse ancestor immediately instead of waiting for the whole chain down to
+          // the target detail. `createGooglePhotorealistic3DTileset` leaves this false.
+          //
+          // The reason is what the *first two seconds* look like, which is when a visitor forms
+          // their opinion. Measured over a scripted arrival at 400m on Prague, with the `true` case
+          // handicapped by running first on a cold HTTP cache while `false` got the warm one:
+          //
+          //   t=2s   skipLOD true: 84,971 triangles — a legible city, roofs and streets
+          //          skipLOD false: 8,494 triangles — an empty grey void
+          //   t=12s  visually indistinguishable; 0.84% mean pixel difference across the frame
+          //
+          // It also loads far less: re-measured in this file's *shipped* configuration (the request
+          // cap above, 512MB cache) over pans across four cities nobody had visited, tile loads per
+          // pan fell from 38/137 to 16/21, and the largest burst in a single frame from 4-5 tiles to
+          // 1-2. Burst size is the thing that sets frame time here (see the request-cap note), so
+          // this compounds with that cap rather than duplicating it.
+          //
+          // It is **not** a throughput win any more, and that is worth knowing before anyone cites
+          // the old number: painted fps is 36.4/36.5 against 37.5/35.8, i.e. identical. An earlier
+          // +22% (39.4 -> 48.1) predates the request cap, and capping concurrency has since taken
+          // that headroom.
+          //
+          // Settled detail does not suffer. Same city, same pose, fully settled: 0.65% mean pixel
+          // difference between on and off — an indistinguishable frame, which is the evidence that
+          // actually matters. Triangle counts agree (649k from 890 tiles against 431k from 839) but
+          // are the weaker signal: DESIGN.md's "judge globe detail by minimum geometric error, not
+          // triangle count" applies, and ignoring it is how a four-city sample first appeared to
+          // show detail *dropping* — mesh density per declared error is Google's data and varies by
+          // region, so cross-city counts compare regions rather than settings.
+          //
+          // The documented risk is popping between levels, and it is real but transient: a coarse
+          // wedge survived to 12s on a cold run (12.9% of that corner's pixels differing from the
+          // settled reference) and was gone warm (1.4%). Since the alternative at that moment is a
+          // blank viewport, approximate geometry that sharpens is the better failure.
+          tileset.skipLevelOfDetail = true;
+
+          // Two different stalls live here, and they want opposite things — which is why this
+          // is conditional rather than one global number.
+          //
+          // Cesium finalizes *every* tile that became ready during a frame, in that frame, with
+          // no per-frame budget and no public API to add one. Finalize is main-thread work
+          // (glTF finish + GPU upload) at very roughly 1.8ms a tile, so frame time is set by how
+          // many tiles land *together*, and that burst is bounded by how many requests are in
+          // flight to the single server Google serves from — 18 once its tileset helper has run,
+          // against Cesium's own default of 6.
+          //
+          // How big those bursts get scales with how many pixels are being filled, so the fix
+          // does too. Measured with a scripted lateral pan at 400m over cities the session had
+          // never visited:
+          //
+          //   3.58MP canvas (laptop, 2520x1422): bursts reach 14 tiles/frame at 18. Capping to
+          //   6 takes the worst frame from 257/330ms to 39-78ms across six cities, sustained fps
+          //   unchanged. This is a large, obvious win.
+          //
+          //   1.5MP canvas (1000x720 desktop window): bursts reach only 4-7 either way, and the
+          //   cap is a no-op — worst frame 66/46ms at 18 against 69/50ms at 6, inside noise.
+          //
+          //   0.65MP canvas (iPhone 16 Pro, 603x1071): bursts never exceed 8 at *either* limit,
+          //   because a small viewport simply never asks for that many tiles at once. There is
+          //   nothing for the cap to clip, so all it does is starve the pipeline — worst frame
+          //   goes the wrong way, 37/46ms at 18 against 51/73/109ms at 6.
+          //
+          // So the threshold sits above the size where the cap stops paying (and starts costing)
+          // and below the size where it pays enormously; 2MP is between the 1.5 and 3.58 that
+          // were actually measured, not a round number picked for looks. Evaluated once at
+          // construction: a window resize or an orientation change will not re-pick, which is
+          // the accepted cost of not re-tuning a global scheduler mid-drag.
+          const renderMegapixels =
+            (viewer.scene.drawingBufferWidth * viewer.scene.drawingBufferHeight) / 1e6;
+          if (renderMegapixels > 2) {
+            Cesium.RequestScheduler.maximumRequestsPerServer = 6;
+          }
+
+          // The phone's actual problem, and a different one: Google's helper leaves the tile
+          // cache at 1.5GB, and this scene fills it — ~1.39GB of resident textures over a few
+          // cities. On a real iPhone that is enough for iOS to discard the tab outright; it was
+          // caught mid-measurement, with `performance.getEntriesByType("navigation")[0].type`
+          // coming back `back_forward` on a page nobody had navigated. 512MB holds ~447MB of
+          // textures instead, costs nothing measurable on either device (laptop fps 39.4 -> 40.9
+          // at the same settings), and on the phone is the difference between a 311-417ms worst
+          // frame and 37-109ms. It is not a stall fix on desktop — it moved the laptop's worst
+          // frame by 3ms — it is a memory-headroom fix that happens to matter enormously where
+          // memory is scarce.
+          tileset.cacheBytes = 512 * 1024 * 1024;
+
           viewer.scene.primitives.add(tileset);
           viewer.scene.globe.show = false;
           usingPhotorealistic = true;
           installLodController(viewer, tileset);
-          // Hold the poster until there is a city under the camera rather than a blank sphere.
-          tileset.initialTilesLoaded.addEventListener(() => setCanvasVisible(true));
         } catch {
           usingPhotorealistic = false;
         }
       }
       if (!usingPhotorealistic) {
         viewer.imageryLayers.addImageryProvider(
-          new Cesium.OpenStreetMapImageryProvider({
-            url: "https://tile.openstreetmap.org/",
-          }),
+          new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })
         );
       }
-
-      /**
-       * Keep drawing for as long as the view is still resolving, then stop dead.
-       *
-       * Refinement is a multi-frame conversation, not one request: a frame traverses the tree,
-       * asks for the tiles that meet the current screen-space error, and only the *next* frame
-       * can ask for the level below that once the parents have landed. A 60fps loop hid this
-       * completely — the traversal simply ran forever, so a view always reached full detail.
-       *
-       * Under `requestRenderMode` the conversation has to be kept alive deliberately, and doing
-       * it per-arriving-tile (`tileset.tileLoad`) was not enough: that chain has to be unbroken
-       * to survive, and any gap in it — a request that errors, a frame whose traversal is
-       * waiting on a parent and asks for nothing, `skipLevelOfDetail` jumping levels — ends it
-       * permanently, because with the camera stopped nothing exists to start it again. What
-       * that looked like was a stop you had just flown to sitting at whatever coarse level
-       * happened to be loaded when the flight ended, and staying there.
-       *
-       * `tilesLoaded` is the honest predicate: "all tiles that meet the screen space error this
-       * frame are loaded". It cannot stall, because it is re-read every frame rather than
-       * chained off an event, and it goes false again by itself whenever the LOD controller
-       * raises the detail ceiling or the camera lands somewhere new. This is the one thing in
-       * the scene allowed to hold the GPU, and it holds it for exactly as long as the picture
-       * is still arriving — which is the cost the old always-on loop paid permanently.
-       */
-      const keepRenderingWhileResolving = () => {
-        // Only ask the surface that is actually drawing. `globe.show` is false on the
-        // photorealistic path, and a hidden globe is not updated — reading its `tilesLoaded`
-        // there risks a predicate that never becomes true, i.e. a render loop that never ends,
-        // which is the exact failure this whole change exists to remove.
-        const resolving = usingPhotorealistic
-          ? !!tileset && !tileset.tilesLoaded
-          : !viewer!.scene.globe.tilesLoaded;
-        if (resolving) viewer!.scene.requestRender();
-      };
-      viewer.scene.postRender.addEventListener(keepRenderingWhileResolving);
 
       // Hero framing: horizon roughly at frame centre, so the curve sits around
       // 45-50% down the screen (space above for the header/card, Earth below). At
@@ -320,29 +331,15 @@ export default function GlobeBackground({
       // no visible curve). NOTE altitude here is a true altitude — unlike
       // mapCamera's flyTo, whose height argument is a HeadingPitchRange *range*.
       viewer.camera.setView({
-        destination: Cesium.Cartesian3.fromDegrees(
-          HERO_VIEW.lng,
-          HERO_VIEW.lat,
-          HERO_VIEW.height,
-        ),
+        destination: Cesium.Cartesian3.fromDegrees(8, 22, 2_500_000),
         orientation: {
-          heading: Cesium.Math.toRadians(HERO_VIEW.headingDeg),
-          pitch: Cesium.Math.toRadians(HERO_VIEW.pitchDeg),
+          heading: Cesium.Math.toRadians(5),
+          pitch: Cesium.Math.toRadians(-45),
           roll: 0,
         },
       });
 
-      /*
-       * The idle auto-rotation that used to live here is gone.
-       *
-       * It existed for one screen — the landing hero — and it was the single most expensive
-       * thing the app did: rotating the camera every frame means the scene is never still, so
-       * it defeats `requestRenderMode` outright (a moved camera always redraws) *and* keeps
-       * Google's tile traversal re-evaluating for a globe nobody had asked to look at yet. The
-       * landing page is now a poster (GlobePoster), so there is no screen left that wants a
-       * spinning globe: by the time this viewer exists, the user has asked to go somewhere
-       * specific, and a flight is already on its way.
-       */
+      viewerInstanceRef.current = viewer;
 
       // Dev-only handle for inspecting the scene from the console or a browser-automation
       // probe: entity counts after a day switch, camera pose, tile detail. Nothing else
@@ -350,10 +347,7 @@ export default function GlobeBackground({
       // route geometry is only verifiable by counting what is actually in the collection.
       // Stripped from production builds by the NODE_ENV check.
       if (process.env.NODE_ENV === "development") {
-        const w = window as Window & {
-          __tripmateViewer?: unknown;
-          __tripmateCesium?: unknown;
-        };
+        const w = window as Window & { __tripmateViewer?: unknown; __tripmateCesium?: unknown };
         w.__tripmateViewer = viewer;
         // The module too, so a probe can build a BoundingSphere or HeadingPitchRange and check
         // the framing instantly. Cesium is only ever reached through a dynamic import here, so
@@ -362,114 +356,41 @@ export default function GlobeBackground({
       }
 
       setViewer(viewer);
-      // Without a photorealistic tileset there is nothing to stream and nothing to wait for, so
-      // the fallback OSM imagery can come straight in.
-      if (!usingPhotorealistic) setCanvasVisible(true);
-      revealTimer = setTimeout(() => setCanvasVisible(true), REVEAL_TIMEOUT_MS);
     })();
 
     return () => {
       cancelled = true;
-      clearTimeout(revealTimer);
-      if (process.env.NODE_ENV === "development") {
-        // Otherwise a console or probe reads a handle to a destroyed viewer and gets
-        // `isDestroyed()` errors that look like scene bugs.
-        const w = window as Window & {
-          __tripmateViewer?: unknown;
-          __tripmateCesium?: unknown;
-        };
-        w.__tripmateViewer = undefined;
-      }
-      // Back to the poster before the canvas goes, so the fade out runs over a still-painted
-      // scene rather than over the bare page background.
-      setCanvasVisible(false);
+      viewerInstanceRef.current = null;
       setViewer(null);
       viewer?.destroy();
     };
-    // `setViewer` is stable (a useCallback over stable callbacks) and deliberately left out:
-    // it is not a reason to rebuild a viewer, and rebuilding one is seconds of tile fetching.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldMount]);
-
-  // The idle drift, restored — but scoped, capped and reduced-motion-aware rather than the
-  // unconditional 60fps loop it used to be. See SPIN_RATE_RAD_PER_S above.
-  useEffect(() => {
-    if (!ready || !globeSpinning || globeMode !== "static") return;
-    if (prefersReducedMotion()) return;
-    const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed()) return;
-
-    let frame = 0;
-    let cancelled = false;
-    let last = performance.now();
-    let lastStep = 0;
-
-    import("cesium").then((Cesium) => {
-      if (cancelled || viewer.isDestroyed()) return;
-      const tick = (now: number) => {
-        frame = requestAnimationFrame(tick);
-        // Cadence cap. rAF still runs at display rate, but the *camera* only moves at SPIN_FPS,
-        // and a frame is only drawn when the camera moves — so this halves the GPU cost against
-        // rotating every frame, for a difference nobody can see: at 2.9°/s a 30fps step is 0.1°.
-        if (now - lastStep < 1000 / SPIN_FPS) return;
-        // Clamped, and load-bearing. rAF stops in a background tab, so `now - last` can be
-        // minutes on return; integrating that raw would snap the globe through everything it
-        // "missed" while nobody was watching. The clamp turns a resumed tab into one ordinary
-        // step — the previous implementation needed an explicit timestamp reset for the same
-        // hazard and still didn't cover the background-tab case.
-        const delta = Math.min((now - last) / 1000, MAX_SPIN_STEP_S);
-        last = now;
-        lastStep = now;
-        viewer.scene.camera.rotate(
-          Cesium.Cartesian3.UNIT_Z,
-          -SPIN_RATE_RAD_PER_S * delta,
-        );
-        // No requestRender: moving the camera is itself a render trigger
-        // (`checkForCameraUpdates` in Scene.render), so asking again would be redundant.
-      };
-      frame = requestAnimationFrame(tick);
-    });
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frame);
-    };
-  }, [globeSpinning, globeMode, ready, viewerRef]);
-
-  // `static` vs `live` is exactly this one flag. Separate from the mount effect so the promotion
-  // happens on the viewer that is already up, and keyed on `ready` as well as the mode because
-  // the viewer usually registers *after* the mode that asked for it was set.
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!ready || !viewer || viewer.isDestroyed()) return;
-    // Parked, not frozen: the camera can still be flown programmatically (that is what a
-    // destination flight is), but the hero globe cannot be dragged, zoomed or tilted by hand.
-    // Without this, a wheel event anywhere over the landing page's own scroll gaps would zoom
-    // the Earth — and, worse for the battery, wake the render loop for as long as it took the
-    // inertia to settle.
-    viewer.scene.screenSpaceCameraController.enableInputs =
-      globeMode === "live";
-  }, [globeMode, ready, viewerRef]);
+  }, [built]);
 
   return (
     <>
-      {/* No poster on a globe-hidden route: those pages are fully opaque, so it would only
-          fetch a photo nobody can see. */}
-      {!hidden && (
-        <GlobePoster
-          place={posterPlace}
-          visible={!canvasVisible}
-          // Offered only while there is genuinely no viewer — once one is coming up (static or
-          // live) the button would re-arm something that is already building.
-          onActivate={globeMode === "off" ? activateGlobe : undefined}
-        />
-      )}
-      {/* Absolute rather than in flow so it stacks over the poster instead of below it.
-          Cross-fades in once there is something worth looking at (see setCanvasVisible). */}
+      {/* `invisible` (visibility: hidden) — not `hidden` (display: none), and not unmounting.
+          A zero-size canvas sends Cesium's own resize path through a 0x0 drawing buffer and back,
+          which reallocates the framebuffer and re-rasters every resident tile on the way in; and
+          `scene.canvas.clientWidth`/`clientHeight` are read per frame by StopMarkerLayer's
+          reprojection and once at construction by the `renderMegapixels` request-cap decision.
+          `visibility` keeps layout, the WebGL context and the drawing buffer, and costs one
+          composite of a texture the GPU already owns.
+
+          This is also what kills the stale-geometry bug, for every surface at once rather than
+          per call site: `.map-chrome-hidden` hides `.map-controls` and `.stop-marker-layer`, two
+          DOM layers, but route arcs and glow pools are Cesium entities *inside* the canvas, so
+          navigating `/trip/[id]` -> `/profile` used to leave the last trip's arcs in the margins
+          of a settings form.
+
+          It also takes the canvas out of hit-testing, so Cesium's ScreenSpaceEventHandler stops
+          consuming wheel events as camera zooms here. That does NOT make the page scroll on its
+          own — this canvas's ancestor is `.app-shell`, `h-dvh overflow-hidden` — so
+          `.content-overlay:not(:has(.docked-panel))` in globals.css is still the only thing
+          handing scroll back. Do not delete it as redundant. */}
       <div
         ref={containerRef}
-        className="absolute inset-0 transition-opacity duration-300"
-        style={{ opacity: canvasVisible ? 1 : 0 }}
+        className={`h-full w-full ${globeWanted ? "" : "invisible"}`}
       />
       {/* Visually hidden per request — NOTE: Google's Photorealistic 3D Tiles terms of
           service require this attribution to stay visible when those tiles are in use

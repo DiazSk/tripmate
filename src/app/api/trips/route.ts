@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { insertTrip, listTrips } from "@/lib/db";
+import { toTripSummary } from "@/lib/tripPayload";
 
 export async function GET() {
-  const trips = listTrips().map((t) => ({
-    id: t.id,
-    destination: t.destination,
-    startDate: t.start_date,
-    endDate: t.end_date,
-    budget: t.budget,
-  }));
-  return NextResponse.json({ trips });
+  return NextResponse.json({ trips: listTrips().map(toTripSummary) });
 }
 
 export async function POST(req: NextRequest) {

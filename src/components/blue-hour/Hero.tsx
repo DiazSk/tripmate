@@ -1,188 +1,144 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import Image from "next/image";
 import { ChevronDown } from "lucide-react";
-import { gsap, prefersReducedMotion } from "@/lib/gsap";
-import { useScrollContainer } from "@/lib/scrollContainer";
-
-// How far each plane travels per pixel of cursor offset from centre, and how much it
-// yaws. Two planes at different speeds is what reads as depth — the photo barely
-// drifts, the type rides noticeably further and turns more.
-const PHOTO_SPEED = 0.035;
-const PHOTO_YAW = 1.2;
-const TEXT_SPEED = 0.085;
-const TEXT_YAW = 2.6;
+import { useLineReveal } from "@/lib/lineReveal";
 
 /**
- * The opening moment of the Blue Hour scroll story: a curated photo, a mood-setting
- * headline, drifting fog, and no CTA — "Plan a trip" is withheld until HeroPoster at
- * the very end so its arrival still reads as a reveal.
+ * The opening moment of the Blue Hour scroll story: a curated photo, a mood-setting headline,
+ * drifting light, and no CTA — "Plan a trip" is withheld until HeroPoster at the very end so its
+ * arrival still reads as a reveal.
  *
- * A true multi-layer parallax (the kind built from separately painted mountain and fog
- * PNGs) needs art that ships pre-separated; depth cannot be recovered from one flat
- * photograph. What this does instead: the photo and the type are two real planes moving
- * at different speeds, and the fog is drawn rather than photographed, so it can have as
- * many independently drifting layers as it likes.
+ * **Nothing here is scroll-driven from JavaScript, and the hero is not pinned.** Both of those
+ * were true for exactly one commit and both were wrong, in ways worth writing down because the
+ * reasoning that produced them was reasonable.
+ *
+ * The pin was `ScrollTrigger({ pin: true, scrub: true, start: "top top", end: "+=100%" })`
+ * scrubbing three tweens: a push into the photograph, the type drifting up and out, and
+ * `.hero-dusk`'s wash to full opacity. The design audit that asked for it asked for the hero to
+ * *collapse into the band below instead of hard-cutting* — and a pin does not do that. It holds
+ * the section still for a whole viewport of scroll, so the first thing a visitor does to the page
+ * is discover it does not move, and the composition they are left looking at while it does not
+ * move is a flat `#082130` rectangle, since the wash reached 1 and the type reached 0 together.
+ * Three further costs came free with it: the scroller is an element, not the window, so GSAP
+ * resolved `pinType: "transform"` and held the section by rewriting `translateY` every frame; the
+ * pin spacer changed the scroller's `scrollHeight` mid-gesture; and `refreshPriority: -1` did the
+ * *opposite* of its own comment — ScrollTrigger's sort key is `refreshPriority * -1e6`, so it
+ * sorted the pin last, and every trigger below it measured against a layout with no pin spacer
+ * and fired a full viewport early, finishing before it was on screen.
+ *
+ * So the hand-off is CSS now: `.hero-dusk` rides `animation-timeline: --story` on every viewport,
+ * which is compositor-owned, needs no scroller plumbing, and was already the shipping path
+ * everywhere below `lg`. It is capped below opaque — see that rule for why the cap only became
+ * correct once the pin was gone.
+ *
+ * The ambient motion is CSS keyframes on `transform`/`opacity` only (`.hero-light`, `.hero-cue*`),
+ * which the compositor owns outright. This component used to run five infinite GSAP tweens plus a
+ * `pointermove` parallax driving six `quickTo`s across two nested transform planes; a Chrome trace
+ * of a real session found scrolling frames resolving on the main thread (`SCROLL_MAIN_THREAD` on
+ * 1688 of 3426) rather than the compositor — frames were not being dropped, only 2.1% were, they
+ * were arriving *late*, queued behind main-thread work. The globe's render loop, 976ms of that
+ * trace and its largest single entry, is paused while this beat covers it; see HeroPoster.
+ *
+ * The one remaining scroll-driven exception is `useLineReveal` on the headline, which is
+ * ScrollTrigger and therefore per-frame main-thread work by definition. It is a one-shot: it
+ * plays once on entry and does nothing for the rest of the session, which is the difference
+ * between it and a scrub.
+ *
+ * The cursor parallax is gone by request, and it is worth recording that it was *not* the
+ * expensive part: `pointermove` dispatch totalled 53ms of a 34.4s trace. It went because a hero
+ * that follows the mouse is a design choice the product no longer wants, and because removing it
+ * is what let this file lose its effects entirely — with no JS writing transforms here, the
+ * Transform-Ownership Rule that forced the old drift and parallax onto two separate nested nodes
+ * no longer applies, and neither does the `[perspective:2300px]` those planes needed.
+ *
+ * The composition now moves the way the subject does: the photograph is held still and the
+ * *light* travels across it, which is what a blue hour actually is. That is also one ambient loop
+ * where there were four, satisfying the One Ambient Loop Rule literally rather than by
+ * dispensation.
  */
 export default function Hero() {
-  const container = useScrollContainer();
-  const sectionRef = useRef<HTMLElement>(null);
-  const driftRef = useRef<HTMLDivElement>(null);
-  const photoRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
-  const fogRef = useRef<HTMLDivElement>(null);
-  const cueRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
-  // Scroll cue.
-  useEffect(() => {
-    if (!sectionRef.current || !cueRef.current || prefersReducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.to(cueRef.current, {
-        y: 8,
-        duration: 0.9,
-        ease: "sine.inOut",
-        repeat: -1,
-        yoyo: true,
-      });
-      // Scrubbed to scroll position rather than timed, so it can't drift out of sync
-      // with where the reader actually is.
-      gsap.to(cueRef.current, {
-        opacity: 0,
-        ease: "none",
-        scrollTrigger: {
-          trigger: sectionRef.current,
-          scroller: container?.current ?? undefined,
-          start: "top top",
-          end: "+=200",
-          scrub: true,
-        },
-      });
-    }, sectionRef);
-    return () => ctx.revert();
-  }, [container]);
-
-  // Fog banks. Each layer drifts on its own period so they slide past one another
-  // instead of moving as one sheet — the cheapest convincing depth cue there is.
-  useEffect(() => {
-    if (!fogRef.current || prefersReducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.utils.toArray<HTMLElement>(".hero-fog-layer").forEach((layer, i) => {
-        gsap.to(layer, {
-          xPercent: i % 2 === 0 ? 7 : -7,
-          yPercent: -2 - i,
-          duration: 19 + i * 8,
-          ease: "sine.inOut",
-          repeat: -1,
-          yoyo: true,
-        });
-      });
-    }, fogRef);
-    return () => ctx.revert();
-  }, []);
-
-  // Ambient drift + cursor parallax.
-  useEffect(() => {
-    const drift = driftRef.current;
-    const photo = photoRef.current;
-    const text = textRef.current;
-    if (!drift || !photo || !text || prefersReducedMotion()) return;
-
-    // The ambient drift and the cursor parallax deliberately live on two *different*
-    // nested elements. Both are transforms, and GSAP's CSSPlugin folds any transform it
-    // finds on a node into its own matrix — so an element carrying a looping GSAP tween
-    // will quietly erase anything else written to its transform on the next tick. That
-    // is what killed the first version of this effect, which set the cursor offset as an
-    // inline `translate` on the same node the drift was animating.
-    const ctx = gsap.context(() => {
-      // Scaled past the frame so neither the drift nor the parallax exposes an edge.
-      gsap.set(drift, { scale: 1.14 });
-      // Runs regardless of pointer type: on a touch screen mousemove never fires at all,
-      // and the hero still has to be alive.
-      gsap.to(drift, {
-        xPercent: 1.8,
-        yPercent: -1.4,
-        duration: 16,
-        ease: "sine.inOut",
-        repeat: -1,
-        yoyo: true,
-      });
-    });
-
-    // No cursor to track on a touch device, so don't install the listener at all.
-    if (!window.matchMedia("(pointer: fine)").matches) return () => ctx.revert();
-
-    // quickTo keeps the planes easing toward the cursor rather than snapping to it, and
-    // routes the writes through GSAP so nothing is fighting over the same property.
-    const photoX = gsap.quickTo(photo, "x", { duration: 0.9, ease: "power3" });
-    const photoY = gsap.quickTo(photo, "y", { duration: 0.9, ease: "power3" });
-    const photoRot = gsap.quickTo(photo, "rotationY", { duration: 0.9, ease: "power3" });
-    const textX = gsap.quickTo(text, "x", { duration: 0.7, ease: "power3" });
-    const textY = gsap.quickTo(text, "y", { duration: 0.7, ease: "power3" });
-    const textRot = gsap.quickTo(text, "rotationY", { duration: 0.7, ease: "power3" });
-
-    const onPointerMove = (e: PointerEvent) => {
-      const dx = e.clientX - window.innerWidth / 2;
-      const dy = e.clientY - window.innerHeight / 2;
-      photoX(-dx * PHOTO_SPEED);
-      photoY(-dy * PHOTO_SPEED);
-      photoRot((dx / window.innerWidth) * PHOTO_YAW);
-      textX(-dx * TEXT_SPEED);
-      textY(-dy * TEXT_SPEED);
-      textRot((dx / window.innerWidth) * TEXT_YAW);
-    };
-
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      ctx.revert();
-      gsap.set([photo, text], { clearProps: "all" });
-    };
-  }, []);
+  useLineReveal(headingRef);
 
   return (
-    // perspective: without it the planes' rotationY is a flat skew rather than a turn.
-    <section
-      ref={sectionRef}
-      className="pointer-events-auto relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-5 text-center [perspective:2300px] sm:p-6"
-    >
-      {/* No scrim, matching DESIGN.md's landing-headline rule: nothing sits between
-          the type and the photo — hero-legible's own shadow carries legibility. */}
-      <div ref={driftRef} className="absolute inset-0 -z-10 will-change-transform">
-        <div ref={photoRef} className="absolute inset-0 will-change-transform">
-          <Image src="/scenes/hero-dawn.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
-        </div>
+    <section className="pointer-events-auto relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-5 text-center sm:p-6">
+      {/* No scrim, matching DESIGN.md's landing-headline rule: nothing sits between the type and
+          the photograph — hero-legible's own three-layer shadow carries legibility.
+          The wrapper stays now that nothing animates it: `next/image` with `fill` needs a
+          positioned parent, and this is it. */}
+      <div className="absolute inset-0 -z-10">
+        <Image src="/scenes/hero-dawn.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
       </div>
 
-      {/* Fog banks over the lower edge. Always rendered, even under reduced motion —
-          they are part of the composition, not just decoration. Kept shallow and fading
-          out upward so the ridgeline behind them still reads. */}
-      <div ref={fogRef} aria-hidden className="hero-fog -z-10">
+      {/* The one ambient loop: a slow warm pass over the photograph. Over the image and under
+          nothing — it is weather, not a scrim, so it never sits between the type and the photo. */}
+      <div aria-hidden className="hero-light -z-10" />
+
+      {/* Fog banks over the lower edge. Drawn rather than photographed so they can hide the source
+          photo's flaws without desaturating it — the densest bank is bottom-left, covering a
+          blown-out yellow bokeh blob. Still, now: their old per-layer drift was three of the five
+          infinite tweens this component used to run, and once the light is the thing that moves, a
+          second drifting element is a competing loop. Held static they cost one rasterisation and
+          nothing thereafter, so all three banks stay — the density here was tuned against this
+          exact photograph and is worth keeping. */}
+      <div aria-hidden className="hero-fog -z-10">
         <div className="hero-fog-layer" />
         <div className="hero-fog-layer" />
         <div className="hero-fog-layer" />
       </div>
 
-      <div ref={textRef} className="will-change-transform">
-        <h1 className="hero-rise hero-legible font-scene-display text-[clamp(2rem,6vw,4.5rem)] italic leading-[1.05] text-on-deep">
+      {/* This wrapper also stays, and for a less obvious reason than the photo's: promoting the
+          `<h1>` to a direct child of `items-center` would give it `align-self: center` and
+          shrink-to-fit width, which changes where the headline wraps — and `useLineReveal` masks
+          the line boxes it *measures*, so a wrap change is a change to the reveal. */}
+      <div>
+        {/* The headline is one string now, not two hand-split phrase spans on `.hero-rise`.
+            SplitText measures the real line boxes at the real font size and masks each one, so
+            the reveal follows however the type actually wraps at this viewport instead of a
+            two-phrase guess that was right at one width. See `useLineReveal`. */}
+        <h1
+          ref={headingRef}
+          className="hero-legible font-scene-display text-[clamp(2.25rem,6.5vw,5rem)] italic leading-[1.05] text-on-deep"
+        >
           Somewhere, it&rsquo;s the blue hour.
         </h1>
-        {/* mx-auto because this block is no longer a direct child of the section's
-            items-center flex — the parallax wrapper sits between them. */}
-        <p className="hero-rise hero-legible mx-auto mt-5 max-w-md text-balance text-base leading-relaxed text-on-deep [animation-delay:90ms] sm:text-lg">
+        {/* mx-auto because this block is no longer a direct child of the section's items-center
+            flex — the type wrapper sits between them.
+            The delay is an inline style, not `[animation-delay:...]`. That Tailwind arbitrary
+            property generates no rule in this project — verified by scanning every stylesheet for
+            an `animation-delay` declaration and finding none, and by probing an element carrying
+            both classes, which computes `0s` where an inline value computes `0.09s`. The previous
+            Hero used the class form, so the stagger DESIGN.md documents here had never actually
+            run; both lines arrived together. Inline is what the app's other three staggers already
+            use (TierPicker, HomeView, TripFormConsole). */}
+        <p
+          className="hero-rise hero-legible mx-auto mt-5 max-w-md text-balance scene-prose text-base text-on-deep sm:text-lg"
+          style={{ animationDelay: "180ms" }}
+        >
           Every trip we plan is built around finding it.
         </p>
       </div>
 
-      {/* The scroll cue: fades out over the first 200px of real scroll, so its
-          absence itself confirms the page moved. Decorative only, not a control. */}
+      {/* The scroll cue: fades out over the first 200px of real scroll, so its absence itself
+          confirms the page moved. That fade is `animation-timeline: scroll()` — the bob is
+          time-driven and lives on the inner element, the scroll-driven fade on the outer, so
+          neither needs an `animation-timeline` list. Decorative only, not a control. */}
       <div
-        ref={cueRef}
         aria-hidden
-        className="hero-legible pointer-events-none absolute bottom-8 text-on-deep/70"
+        className="hero-cue hero-legible pointer-events-none absolute bottom-8 text-on-deep/70"
       >
-        <ChevronDown size={28} strokeWidth={1.5} />
+        <div className="hero-cue-bob">
+          <ChevronDown size={28} strokeWidth={1.5} />
+        </div>
       </div>
+
+      {/* The exit wash — see `.hero-dusk`. Last child and `z-10` so it covers the type as well as
+          the photograph: the composition has to dim as one image, or the headline survives its
+          own ground and reads as text pasted onto a dark rectangle. No JavaScript. */}
+      <div aria-hidden className="hero-dusk pointer-events-none absolute inset-0 z-10" />
     </section>
   );
 }

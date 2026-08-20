@@ -39,12 +39,19 @@ function flagsSection(trip: ReconciledTrip): string {
     `crowd_bias: prefer_offpeak_timing=${c.preferOffpeakTiming}, boost_offbeat_pois=${c.boostOffbeatPois}, schedule_icons_at_offpeak=${c.scheduleIconsAtOffpeak}, markets_and_lively_ok=${c.marketsAndLivelyOk}, peak_timing_ok=${c.peakTimingOk}`,
     `priorities_ranked (primary): ${f.prioritiesRanked.primary.length > 0 ? f.prioritiesRanked.primary.join(" > ") : "none starred"}`,
     `priorities_ranked (tie-breakers): ${f.prioritiesRanked.tiebreakers.length > 0 ? f.prioritiesRanked.tiebreakers.join(", ") : "none"}`,
-    `group: ${a.group}`,
+    `group: ${a.group}${a.group === "other" && a.groupOther?.trim() ? ` (${a.groupOther.trim()})` : ""}`,
   ];
+
+  if (a.party) {
+    lines.push(
+      `party: ${a.party.adults} adults, ${a.party.children} children (2-11), ${a.party.infants} infants (under 2)`
+    );
+  }
+  if (f.partySize !== null) lines.push(`party_size: ${f.partySize}`);
 
   if (f.familyRules) {
     lines.push(
-      `family_rules: kid_friendly_bias=${f.familyRules.kidFriendlyBias}, no_late_night=${f.familyRules.noLateNight}, short_travel_legs=${f.familyRules.shortTravelLegs}`
+      `family_rules: kid_friendly_bias=${f.familyRules.kidFriendlyBias}, no_late_night=${f.familyRules.noLateNight}, short_travel_legs=${f.familyRules.shortTravelLegs}, stroller_access=${f.familyRules.strollerAccess}, nap_window=${f.familyRules.napWindow}, youngest_band=${f.familyRules.youngestBand ?? "unknown"}`
     );
   }
 
@@ -131,8 +138,28 @@ function destinationSection(trip: ReconciledTrip): string {
 
 function datesSection(trip: ReconciledTrip): string {
   const dc = trip.rawFetch.dateContext;
-  const header = `${dc.tripDays} days, ${dc.days[0]?.date} to ${dc.days[dc.days.length - 1]?.date} (${dc.leadTimeDays} days out${dc.season ? `, ${dc.season}` : ""})`;
-  return header;
+  const lines = [
+    `${dc.tripDays} days, ${dc.days[0]?.date} to ${dc.days[dc.days.length - 1]?.date} (${dc.leadTimeDays} days out${dc.season ? `, ${dc.season}` : ""})`,
+  ];
+
+  // Facts only, per the pipeline's separation — what to do about a late arrival is §4c-bis of the
+  // skill, not a line here.
+  const l = trip.userAnswers.logistics;
+  if (l) {
+    if (l.arrivalTime || l.arrivalPoint) {
+      lines.push(
+        `arrival (day 1): ${l.arrivalTime ?? "time unknown"}${l.arrivalPoint ? ` at ${l.arrivalPoint}` : ""}`
+      );
+    }
+    if (l.departureTime || l.departurePoint) {
+      lines.push(
+        `departure (last day): ${l.departureTime ?? "time unknown"}${l.departurePoint ? ` from ${l.departurePoint}` : ""}`
+      );
+    }
+    if (l.stayBooked) lines.push(`lodging already booked: ${l.stayBooked}`);
+  }
+
+  return lines.join("\n");
 }
 
 /** One line per day: weather + sunset, the two facts the skill schedules against. */

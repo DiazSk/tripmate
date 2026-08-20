@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bookmark, Compass, Sparkles, UserRound } from "lucide-react";
-import { prefersReducedMotion } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 
 // Same ease every other motion in this app already uses for a "smooth, not
 // snappy" settle (--marker-transition, --scene-hover, the *-in keyframes).
@@ -24,8 +24,13 @@ const menuItemClass =
 
 // Shared style for every link in the nav, aside from the wordmark — plain
 // text-foreground, no hero-legible, since this bar is real glass, not bare canvas.
+// The rule arrives on hover/focus rather than sitting under every item permanently. Four
+// always-underlined items read as unstyled anchors, and the underline was carrying no
+// information: everything in this bar is a link, so marking all of them marks none of them.
+// The hover state keeps the affordance where it means something, and text-foreground →
+// white on hover carries it for anyone who can't see the 1px rule.
 const navLinkClass =
-  "inline-flex min-h-11 items-center text-sm font-medium text-foreground underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none";
+  "inline-flex min-h-11 items-center text-sm font-medium text-foreground decoration-white/60 underline-offset-4 transition-colors hover:text-white hover:underline focus-visible:rounded-sm focus-visible:underline focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none";
 
 // Landing-only: the two beats worth a direct jump to. Deliberately excludes the final
 // reveal section — naming it in a permanent nav item is exactly the shortcut that would
@@ -59,10 +64,15 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Section links only exist on `/`, so there's nothing for the menu to hold — and
-  // nothing to leave stuck open — on any other route.
-  useEffect(() => {
+  // nothing to leave stuck open — on any other route. Reset during render rather
+  // than in an effect: an effect would paint one frame of the stale-open menu first
+  // (and React flags the cascading render). This is React's documented
+  // adjust-state-on-prop-change pattern.
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
     setMenuOpen(false);
-  }, [pathname]);
+  }
 
   // Closes on an outside tap. A 2-item menu doesn't need a full focus-trap/modal
   // treatment, but leaving it open until the next unrelated tap lands somewhere else

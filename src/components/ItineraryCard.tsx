@@ -271,8 +271,16 @@ export default function ItineraryCard({
 
   return (
     <div className="glass-itinerary overflow-hidden rounded-none sm:rounded-2xl" {...devLabel("ItineraryCard")}>
+      {/* The min-height is the photo's frame, so it only exists when there is a photo. The
+          header photo is a best-effort Wikipedia lookup that legitimately misses, and an
+          unconditional 14/18rem left a 288px slab of flat slate above the day badge with the
+          title marooned at its bottom edge — a reserved space for a value that isn't there,
+          which is the one thing this system says not to render. Without the photo the band
+          sizes to the title and the panel simply starts higher. */}
       <div
-        className="relative flex min-h-[14rem] flex-col justify-end overflow-hidden p-5 text-on-deep sm:min-h-[18rem] sm:p-6"
+        className={`relative flex flex-col justify-end overflow-hidden p-5 text-on-deep sm:p-6 ${
+          headerPhoto ? "min-h-[14rem] sm:min-h-[18rem]" : ""
+        }`}
         style={{ backgroundColor: "var(--surface-deep)" }}
         {...devLabel("ItineraryCard.Header")}
       >
@@ -412,17 +420,73 @@ export default function ItineraryCard({
             />
           </div>
           {/* Mode A, day-scoped. Sits beside the day header because that is the day's own
-              edit affordance — the whole-trip equivalent lives with the save/refine actions. */}
+              edit affordance — the whole-trip equivalent lives with the save/refine actions.
+
+              An icon alone did not say what it did, so the label unfurls on hover and on
+              keyboard focus. Three decisions in here are load-bearing:
+
+              The 28px wrapper holds the collapsed footprint and the button is absolutely
+              positioned inside it, anchored `right-0`. So the pill grows *leftward* out of the
+              icon, the icon itself never moves out from under the cursor, and the DayHeader
+              sibling — `min-w-0 flex-1`, i.e. free to be squeezed — is not reflowed on every
+              frame of the expansion. Growing it in flow instead would rewrap the day title
+              while the label slid out.
+
+              `max-width`, and the `grid-cols-[0fr]` -> `[1fr]` trick was tried here first and
+              does not work. `fr` is a fraction of *free* space, so it needs a definite
+              container size to resolve against; this button is absolutely positioned and
+              shrink-to-fit, so its width depends on the grid whose track depends on its width,
+              and the browser breaks that circularity by resolving the track to its minimum.
+              Measured: `grid-template-columns` computed to `6px` — the label's padding and
+              nothing else — in *both* states, so the label never appeared at all. `max-width`
+              is indifferent to container definiteness, which is what makes it the right tool
+              inside a shrink-to-fit box. Its one cost is that the transition visually finishes
+              once max-width passes the text's natural width — measured at 77px in both engines,
+              against an 88px ceiling, so the motion lands at about 88% of the 300ms. The
+              remaining 11px of slack is deliberate and is not worth reclaiming: tightening the
+              ceiling to the measured width buys an imperceptible 12% of timing and risks
+              clipping the label outright on any system whose fallback face sets wider than
+              Manrope before the webfont lands.
+
+              The 6px gap is `mr` on the label, not `gap` on the button, so one transition
+              drives both and they cannot drift apart. It has to be margin and not padding:
+              `overflow: hidden` clips *content*, and a padding box cannot shrink below its own
+              padding, so `pr-1.5` on a `max-w-0` span left 6px of dead width behind — the
+              collapsed button measured 34px instead of 28px.
+
+              The expanded chip is opaque slate, not the `bg-white/10` wash this button used to
+              take, and that is a legibility fix rather than a style choice. DayHeader is
+              `justify-between` with `WeatherBadge` pinned right, so the 83px the label needs is
+              exactly the space the weather chip occupies — measured overlap, 75px. Expanding in
+              flow instead is worse, not better: DayHeader is `flex-wrap`, so squeezing it wraps
+              the badge onto a second line and the whole row jumps taller. So the pill covers the
+              badge for as long as the pointer is on it, and it has to do that opaquely, over a
+              `.glass-itinerary` backdrop that is 0.62 slate over a live and often bright map.
+              The control shadow and a hairline ring lift it off the chip underneath — without
+              them its left edge cut the weather text mid-glyph with no separation, which read as
+              a clipping bug rather than as one object in front of another. `ring` rather than
+              `border` because a border would widen the collapsed 28px footprint.
+
+              The label is not a second accessible name: `aria-label` leads with the same words
+              it renders, so the accessible name contains the visible one (WCAG Label in Name)
+              while still carrying the day. The old `title` is gone — a native tooltip repeating
+              a label that is now visible on hover is noise, and it would have faded in on top
+              of the expanded pill a second later. Reduced motion needs nothing here; the
+              blanket rule in globals.css collapses both transitions to 0.01ms. */}
           {onChatDay && (
-            <button
-              type="button"
-              onClick={() => onChatDay(dayIndex)}
-              aria-label={`Refine day ${dayIndex + 1} with AI`}
-              title="Refine this day with AI"
-              className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-white/10 hover:text-foreground"
-            >
-              <Sparkles className="h-4 w-4" />
-            </button>
+            <div className="relative h-7 w-7 shrink-0">
+              <button
+                type="button"
+                onClick={() => onChatDay(dayIndex)}
+                aria-label={`Refine with AI — day ${dayIndex + 1}`}
+                className="group absolute top-0 right-0 flex items-center rounded-md p-1.5 text-muted shadow-none transition-[background-color,color,box-shadow] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-[rgb(var(--surface-deep-rgb))] hover:text-foreground hover:shadow-[0_4px_16px_rgba(0,0,0,0.32)] hover:ring-1 hover:ring-card-border focus-visible:bg-[rgb(var(--surface-deep-rgb))] focus-visible:text-foreground focus-visible:shadow-[0_4px_16px_rgba(0,0,0,0.32)] focus-visible:ring-1 focus-visible:ring-card-border"
+              >
+                <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium transition-[max-width,margin-right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:mr-1.5 group-hover:max-w-[5.5rem] group-focus-visible:mr-1.5 group-focus-visible:max-w-[5.5rem]">
+                  Refine with AI
+                </span>
+                <Sparkles className="h-4 w-4 shrink-0" />
+              </button>
+            </div>
           )}
         </div>
 
@@ -562,10 +626,18 @@ export default function ItineraryCard({
               last row instead of orphaning it at half width. */}
           {tiles.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
+              {/* No `backdrop-blur` on these tiles, and up to five of them are on screen at once.
+                  There is nothing left to blur: this band's own ground is `--surface-deep` at
+                  0.7, over BlurredPhotoLayer's already-blurred header photo, inside
+                  `.glass-itinerary`'s 56px pass. Blurring an already-flat backdrop through a 25%
+                  black fill is visually identical to the fill alone, for five extra render
+                  surfaces on the panel that gets scrolled most. `bg-black/25` stays — a blur does
+                  not darken; `bg-black/30` is the knob if the row reads busy over an unusually
+                  high-contrast photo. */}
               {tiles.map((tile) => (
                 <div
                   key={tile.label}
-                  className="flex min-w-24 max-w-48 flex-1 flex-col items-center rounded-xl border border-white/20 bg-black/25 p-3 text-center text-on-deep backdrop-blur-md"
+                  className="flex min-w-24 max-w-48 flex-1 flex-col items-center rounded-xl border border-white/20 bg-black/25 p-3 text-center text-on-deep"
                 >
                   <tile.Icon className="h-4 w-4" />
                   <div className="mt-1 text-xs opacity-90">{tile.label}</div>

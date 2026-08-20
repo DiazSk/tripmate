@@ -1,8 +1,17 @@
+// `import type` on everything that is only a type: Node erases those, which is the difference
+// between this module being reachable from a `.test.mjs` and not (see CLAUDE.md). `TIERS` and
+// the two formatters are real values and keep ordinary imports.
 import type { DayWeather } from "./weather";
-import type { DestinationContext, Itinerary, ItineraryPreferences, ResolvedFlags } from "./types";
+import type {
+  DestinationContext,
+  Itinerary,
+  ItineraryPreferences,
+  ResolvedFlags,
+  TripLogistics,
+} from "./types";
 import { TIERS } from "./tiers";
 import type { TierId } from "./tiers";
-import { formatTravelerProfile } from "./travelerProfilePrompt";
+import { formatTravelLegs, formatTravelerProfile } from "./travelerProfilePrompt";
 import { formatDietary } from "./dietaryPrompt";
 import type { DietaryNeeds } from "./travelerProfile";
 
@@ -129,6 +138,7 @@ export function buildGeneratePrompt(params: {
   contextInsight?: string;
   resolvedFlags?: ResolvedFlags | null;
   dietary?: DietaryNeeds | null;
+  logistics?: TripLogistics | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -136,7 +146,7 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
+${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
 Every day except the last should include a "lodging" entry representing that night's stay, priced to the style above. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${LODGING_INSTRUCTION}
@@ -161,6 +171,7 @@ export function buildRefinePrompt(params: {
   contextInsight?: string;
   resolvedFlags?: ResolvedFlags | null;
   dietary?: DietaryNeeds | null;
+  logistics?: TripLogistics | null;
 }): string {
   return `Here is a trip itinerary for ${params.destination} (${params.startDate} to ${params.endDate}, budget $${params.budget}):
 
@@ -169,7 +180,7 @@ ${JSON.stringify(params.previousItinerary)}
 Style: ${tierStyle(params.previousItinerary.tier)}
 
 The user's feedback on this itinerary: "${params.feedback}"
-${formatTravelerProfile(params.resolvedFlags ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
+${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
 Revise the itinerary to address this feedback. Keep real, well-known places with real approximate latitude/longitude, keep the lodging entries, and keep per-stop costs realistic.
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}

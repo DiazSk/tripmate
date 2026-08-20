@@ -1,13 +1,19 @@
 /**
- * Does this visitor want motion kept to a minimum?
+ * Whether the OS asks for reduced motion.
  *
- * Its own module rather than living in `@/lib/gsap` (which re-exports it, so the scene
- * components that already import it from there are unchanged): the map stack needs this check
- * too, and importing it from the gsap module would pull GSAP and its plugins into
- * `GlobeBackground` and `mapCamera` — i.e. into every route that renders the globe, including
- * the ones that have no scroll story at all.
+ * Deliberately *not* in `lib/gsap.ts`, where it used to live. That module exists for its import
+ * side effect — `gsap.registerPlugin(ScrollTrigger, SplitText)` — so anything that touches it
+ * drags 120KB of GSAP into its bundle. `Navbar` wanted only this one-liner, and `Navbar` renders
+ * from `AppShell` in the root layout, so ScrollTrigger and SplitText were landing in the
+ * bootstrap of every route in the app. Visible in the build output: before this split, the GSAP
+ * chunk was referenced by the prerendered HTML of `/bench`, `/backend` and `/_not-found` — pages
+ * that have never run a tween.
  *
- * Read at call time, not cached: the OS setting can change while the tab is open.
+ * No `"use client"`: this is a pure leaf with no React import, like `lib/format.ts`. A client
+ * component importing it is what makes it client code.
+ *
+ * Read on demand rather than cached at module scope, because the query can change mid-session.
+ * Callers that deliberately want a one-time answer (TierPicker's tilt gate) cache it themselves.
  */
 export const prefersReducedMotion = () =>
   typeof window !== "undefined" &&

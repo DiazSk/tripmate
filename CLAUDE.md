@@ -8,10 +8,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev      # next dev (Turbopack)
-npm run build
+npm run build    # next build, then verify-build.mjs (see below)
 npm run lint     # eslint (no path arg needed)
 npx tsc --noEmit -p tsconfig.json   # typecheck — not wired to a script
+node scripts/browser-matrix.mjs     # cross-engine boot check against a running server
 ```
+
+**`npm run build` fails the build if any emitted chunk cannot be parsed.** That second step is
+not ceremony. `next build` reported success for months while shipping a Cesium chunk no browser
+could parse: `@spz-loader/core` embeds its WASM decoder as a string of raw bytes, and SWC's
+minifier re-encoded it as a template literal, where a NUL byte followed by a digit is an illegal
+escape. Production served a 200 and rendered the whole interface **with no globe at all** — in
+Chromium, Firefox and WebKit alike. `next dev` never showed it because dev does not minify, and
+neither `tsc`, `eslint` nor `node --test` can see a bundler's output. `shims/spz-loader-core.ts`
+is the fix (aliased in `next.config.ts`); `scripts/verify-build.mjs` is the guard.
 
 **Node ≥ 22 is mandatory.** `better-sqlite3`'s native binding silently kills the dev server on Node 20 the moment any DB-touching route is hit. `.nvmrc` pins 22 — run `nvm use` if the shell drifts.
 
