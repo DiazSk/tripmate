@@ -1784,21 +1784,29 @@ body {
     box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Opaque on this route only, unlike everywhere else `.glass-itinerary` is used. The globe no
-   longer boots on `/trips`, so a 56px blur here samples a flat --canvas — and it did so once per
-   saved trip, which is where this route's backdrop-filter count actually lived: 1 + 2N surfaces
-   became 1 + N.
+/* `.glass-itinerary` with the frost taken off, for the surfaces that have no globe behind them.
+   A 56px blur of a flat `--canvas` is a blur of nothing — the argument `.scene-photo-frame` and
+   TierPicker's price badge already make from the other side — and it is not free: each one is a
+   render surface, and on `/trips` there was one per saved trip.
 
-   `.glass-itinerary` itself is untouched on purpose: `/` result and `/trip/[id]` still sit over a
-   real aerial map and still need the real thing. Hence the scope — `.memory-card` exists only on
-   this route. Written at two classes rather than one because both are specificity (0,1,0), and
-   `.memory-card` currently only wins on source order; a rule that depends on sitting 570 lines
-   later in the file is a rule waiting to lose a coin toss.
+   Four call sites, all of them routes or steps where `globeWanted` is false and the canvas is
+   `visibility: hidden`: `/trips`' memory cards, the plan step's form card, and the two dead-end
+   cards (`/trip/latest` with an empty database, and `/trip/[id]`'s not-found). `.glass-itinerary`
+   itself is deliberately untouched — `/` result, `/trip/[id]` and the generation loader still sit
+   over a real aerial map and still need the real thing.
+
+   Written at two classes rather than one so it cannot lose a source-order coin toss: a bare
+   `.is-opaque` is specificity (0,1,0), the same as `.glass-itinerary`, and would only win by
+   sitting later in the file.
 
    Fill only. The hairline, the panel shadow and every token override on `.glass-itinerary` still
    apply, so #cbd5e1 lands at 12.1:1 and white at 18:1. `--surface-deep` is *lighter* than
-   `--canvas`, so an opaque fill is the lift the blur used to be, not a flattening. */
-.glass-itinerary.memory-card {
+   `--canvas`, so an opaque fill is the lift the blur used to be, not a flattening.
+
+   `ConfirmDialog` deliberately does NOT take this, even on `/trips`. Its panel sits over its own
+   `::backdrop` — 55% black plus a 4px blur over the live page — so there is something behind it
+   to frost. Blur over a dimmed page is not blur over nothing. */
+.glass-itinerary.is-opaque {
   background: rgb(var(--surface-deep-rgb));
   backdrop-filter: none;
 }

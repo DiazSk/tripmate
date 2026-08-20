@@ -11,7 +11,9 @@ import Link from "next/link";
 export default function TripNotFound() {
   return (
     <main className="pointer-events-auto flex min-h-full items-center justify-center p-8">
-      <div className="glass-itinerary max-w-md rounded-2xl p-6 text-center">
+      {/* `is-opaque` — no TripView mounts here, so no globe. Kept identical to `/trip/latest`'s
+          empty card, per the note above. */}
+      <div className="glass-itinerary is-opaque max-w-md rounded-2xl p-6 text-center">
         <h1 className="font-display text-lg font-semibold text-foreground">
           That trip isn&rsquo;t saved here
         </h1>
