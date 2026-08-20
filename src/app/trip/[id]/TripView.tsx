@@ -11,6 +11,7 @@ import DockedPanel from "@/components/DockedPanel";
 import ErrorNote from "@/components/ErrorNote";
 import { Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
+import { useGlobeOnScreen } from "@/lib/mapCamera";
 import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
 import { formatMoney } from "@/lib/format";
 import { devLabel } from "@/lib/devInspector";
@@ -58,6 +59,11 @@ export default function TripView({
     detailLoading,
     detailError,
   } = useTripCamera(trip?.destination ?? "", trip?.id);
+
+  // This route is the globe, for its whole life. `not-found.tsx` and `/trip/latest`'s empty-DB
+  // card are separate components that never mount this one — which is exactly why the gate is a
+  // mounted-component declaration rather than a `/trip/` path prefix.
+  useGlobeOnScreen(true);
 
   // The trip itself already arrived as a prop; this effect only has to move the camera. The
   // `/api/trips/[id]` fetch that used to live here was a second read of a row the server had

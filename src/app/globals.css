@@ -1070,6 +1070,33 @@ body {
   --muted: #cbd5e1;
 }
 
+/* The scroll story's closing beat, and `/trips`' empty state — the two surfaces in this app that
+   are deliberately empty. Extracted here from an inline style in TripsView so the two cannot
+   drift; they are the same designed object, a beat with no photograph to collage and one amber
+   CTA.
+
+   Deliberately not `.scene-band`, which sits eight lines up. That is a flat linear wall whose job
+   is to *stop* something showing through. This is the opposite — a lit void — and three things
+   carry the "arrival, not a third band" read. The gradient is radial and centred, so it has a
+   light source and reads as somewhere rather than as a surface. It carries no
+   `border-t border-white/10`, and that hairline is precisely what says "next band" on the two
+   beats above it. And it owns a full `min-h-dvh` rather than the bands' `py-16 sm:py-24`.
+
+   Both layers read `--surface-deep-rgb`, so one recipe resolves to slate on `/trips` and to
+   `.blue-hour-scene`'s cobalt-teal `8 33 48` on the landing, with no second token and no new hue.
+
+   The amber does not put the accent behind the accent: 0.10 at 30% height, behind the headline and
+   clear of the CTA row, computing to about rgb(33 48 50) over the cobalt ground — which leaves the
+   solid `bg-accent` pill at roughly 8:1 against it and `text-on-deep` at about 12:1. It reads as
+   depth, not as colour. The amber stays a literal because `--accent` is a hex and `rgb()` cannot
+   take it; a `--accent-rgb` token for two call sites is not worth it. */
+.scene-void {
+  background:
+    radial-gradient(60% 70% at 50% 30%, rgb(255 179 64 / 0.1), transparent 65%),
+    radial-gradient(80% 60% at 50% 100%, rgb(var(--surface-deep-rgb) / 0.92), transparent 70%),
+    rgb(var(--surface-deep-rgb));
+}
+
 /* The image cards' resting state: a full sheet of frost over the photo. On hover the
    sheet clears and the frost retreats to the card's inside edges, so the photo resolves
    out of the glass rather than the glass simply switching off. Two stacked layers rather
@@ -1205,7 +1232,16 @@ body {
    .glass-itinerary's panel-level alpha (0.62) rather than .scene-band's lighter band alpha.
    Deliberately does NOT retint --accent the way .blue-hour-scene does — this is a background
    treatment for a settings form, not a scene, so every picker's amber selected-state and the
-   Save button stay the app's one accent instead of switching to brass/copper mid-app. */
+   Save button stay the app's one accent instead of switching to brass/copper mid-app.
+
+   Opaque, and no longer frosted, since the globe stopped booting on this route: the backdrop is a
+   flat --canvas now, and a 56px blur of a flat colour is a blur of nothing. That is the same
+   argument .scene-photo-frame and TierPicker's price badge already make from the other side.
+   The two scene layers keep their original alphas over the one slate, now at alpha 1 — so this is
+   still the Profile Panel Tint on the one material rather than a new grey — and the contrast floor
+   goes *up*: #cbd5e1 measures 9.7:1 on the cobalt end and 7.7:1 on the teal end, white 14.3:1 and
+   11.4:1, against a translucent 0.62 panel whose real ratio over live terrain was never
+   measurable. */
 .profile-glass {
   background:
     linear-gradient(
@@ -1213,8 +1249,7 @@ body {
       rgb(var(--scene-cobalt-rgb, 30 60 110) / 0.5),
       rgb(var(--scene-teal-rgb, 45 125 130) / 0.38)
     ),
-    rgb(var(--surface-deep-rgb) / 0.62);
-  backdrop-filter: blur(56px) saturate(180%);
+    rgb(var(--surface-deep-rgb));
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --foreground: #ffffff;
@@ -1747,6 +1782,25 @@ body {
   transition:
     transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Opaque on this route only, unlike everywhere else `.glass-itinerary` is used. The globe no
+   longer boots on `/trips`, so a 56px blur here samples a flat --canvas — and it did so once per
+   saved trip, which is where this route's backdrop-filter count actually lived: 1 + 2N surfaces
+   became 1 + N.
+
+   `.glass-itinerary` itself is untouched on purpose: `/` result and `/trip/[id]` still sit over a
+   real aerial map and still need the real thing. Hence the scope — `.memory-card` exists only on
+   this route. Written at two classes rather than one because both are specificity (0,1,0), and
+   `.memory-card` currently only wins on source order; a rule that depends on sitting 570 lines
+   later in the file is a rule waiting to lose a coin toss.
+
+   Fill only. The hairline, the panel shadow and every token override on `.glass-itinerary` still
+   apply, so #cbd5e1 lands at 12.1:1 and white at 18:1. `--surface-deep` is *lighter* than
+   `--canvas`, so an opaque fill is the lift the blur used to be, not a flattening. */
+.glass-itinerary.memory-card {
+  background: rgb(var(--surface-deep-rgb));
+  backdrop-filter: none;
 }
 
 /* Keeps a bright photo's edge from bleeding into the card's own translucent border. Was a

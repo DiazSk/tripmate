@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import type { Cartesian3, Viewer } from "cesium";
 import { useMapCamera } from "@/lib/mapCamera";
-import { isGlobeHiddenRoute } from "@/lib/globeVisibility";
 
 type CesiumModule = typeof import("cesium");
 
@@ -112,8 +110,7 @@ function pivot(
  * from AppShell as a sibling of the globe, so it sits outside the `pointer-events-none` overlay.
  */
 export default function MapControls() {
-  const { viewerRef, ready } = useMapCamera();
-  const pathname = usePathname();
+  const { viewerRef, ready, globeWanted } = useMapCamera();
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
   const [flat, setFlat] = useState(false);
   const needleRef = useRef<HTMLSpanElement>(null);
@@ -124,13 +121,17 @@ export default function MapControls() {
   const zoomSeqRef = useRef(0);
 
   // Cesium is dynamically imported everywhere in this app — a static import would pull it into
-  // the server bundle. That the import has resolved doubles as the readiness gate. Skipped
-  // entirely on globe-hidden routes (e.g. /backend): this used to run unconditionally on every
-  // route, pulling in the multi-MB Cesium bundle even where `GlobeBackground` itself had already
-  // skipped it — there is nothing here for these controls to ever attach to on that route anyway
-  // (`ready` never becomes true, since no viewer gets created).
+  // the server bundle. That the import has resolved doubles as the readiness gate. Gated on
+  // `globeWanted` rather than run unconditionally, because this is a *second*, independent
+  // `import("cesium")`: without the gate it pulled the multi-MB bundle in on every route,
+  // including ones where `GlobeBackground` had already declined to, for a component that then has
+  // nothing to attach to (`ready` never becomes true, since no viewer gets created).
+  //
+  // This used to read a `/backend`-and-`/bench` path list. That list could not express the real
+  // predicate — see `globeWanted` in mapCamera.tsx — and it also re-ran on `[pathname]`, so
+  // arriving at `/` from `/backend` imported all 2.3MB for controls that stayed `null` forever.
   useEffect(() => {
-    if (isGlobeHiddenRoute(pathname)) return;
+    if (!globeWanted) return;
     let cancelled = false;
     import("cesium").then((mod) => {
       if (!cancelled) setCesium(mod);
@@ -138,7 +139,7 @@ export default function MapControls() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [globeWanted]);
 
   // Live readout of the camera. Compass angle and slider position are DOM properties, so they
   // get written directly rather than through state — that keeps the steady-state re-render

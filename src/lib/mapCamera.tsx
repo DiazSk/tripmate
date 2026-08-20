@@ -29,6 +29,25 @@ interface MapCameraContextValue {
   /** False until the viewer exists — the 3D tileset takes seconds, so map chrome must not
    *  render (and reach for `viewerRef.current`) before then. */
   ready: boolean;
+  /** Whether the currently-mounted surface puts the globe on screen. Exactly two do: `/trip/[id]`
+   *  for its whole life, and `/` from the moment generation starts through the result view.
+   *  Everywhere else this stays false and Cesium is never imported at all — a cold `/profile` was
+   *  measured at 5410ms of long tasks across 32 tasks, a 2287KB chunk, 33 `/cesium/` asset
+   *  requests and a live WebGL2 context, for a settings form.
+   *
+   *  Deliberately NOT derived from `usePathname()`, which replaced a `globeVisibility.ts` that
+   *  was. A pathname cannot tell `/`'s three steps apart (all local state in HomeView), and it
+   *  cannot tell `/trip/<real-id>` from `/trip/<unknown-id>` — the latter renders not-found.tsx,
+   *  a glass card that wants no globe, and the 404 case is not expressible as a path at all.
+   *  Same for `/trip/latest` on an empty database. The two surfaces that want the globe are two
+   *  mounted components, so they are what declares it, via `useGlobeOnScreen`.
+   *
+   *  A plain boolean and not a reference count: exactly one route is mounted at a time, React
+   *  runs every effect cleanup in a commit before every setup, and there is no `loading.tsx`
+   *  anywhere in `src/app` to split a navigation across two commits.
+   *  ponytail: make this a counter if a route ever mounts two globe surfaces at once. */
+  globeWanted: boolean;
+  setGlobeWanted: (wanted: boolean) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   flyToPlace: (lat: number, lng: number, label?: string) => void;
   /** Wipe every trip overlay, fly back to the hero pose and resume the idle spin. The globe
@@ -126,6 +145,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
    *  before the previous city's highways landed) can't draw over the newer city's roads. */
   const highwayGenerationRef = useRef(0);
   const [ready, setReady] = useState(false);
+  const [globeWanted, setGlobeWanted] = useState(false);
   const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -447,6 +467,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       setViewer,
       viewerRef,
       ready,
+      globeWanted,
+      setGlobeWanted,
       flyToDestination,
       flyToPlace,
       resetToHome,
@@ -462,6 +484,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     [
       setViewer,
       ready,
+      globeWanted,
       flyToDestination,
       flyToPlace,
       resetToHome,
@@ -480,4 +503,19 @@ export function useMapCamera() {
   const ctx = useContext(MapCameraContext);
   if (!ctx) throw new Error("useMapCamera must be used within MapCameraProvider");
   return ctx;
+}
+
+/**
+ * Declares that the calling surface puts the globe on screen for as long as `wanted` holds.
+ *
+ * Released on unmount, so leaving a globe surface hides the canvas and pauses the render loop.
+ * The viewer is never *destroyed* — see `GlobeBackground`'s construction effect for why a swap is
+ * unrecoverable — so this is a visibility gate, not a lifecycle one.
+ */
+export function useGlobeOnScreen(wanted: boolean) {
+  const { setGlobeWanted } = useMapCamera();
+  useEffect(() => {
+    setGlobeWanted(wanted);
+    return () => setGlobeWanted(false);
+  }, [wanted, setGlobeWanted]);
 }
