@@ -71,3 +71,9 @@ test("rejects a malformed dietary rather than silently dropping it", () => {
   assert.equal(parseProfile({ ...valid, dietary: [] }), null);
   assert.equal(parseProfile({ ...valid, dietary: { tags: [], note: 42 } }), null);
 });
+
+test('a saved profile with the "other" group parses', () => {
+  // Rejecting it would silently wipe the traveler's whole saved profile back to defaults the
+  // first time they loaded the page after picking the new pill.
+  assert.deepEqual(parseProfile({ ...valid, group: "other" }), { ...valid, group: "other" });
+});

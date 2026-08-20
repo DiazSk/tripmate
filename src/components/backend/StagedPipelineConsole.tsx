@@ -409,6 +409,7 @@ export default function StagedPipelineConsole() {
                 <option value="solo">solo</option>
                 <option value="couple">couple</option>
                 <option value="family_with_kids">family_with_kids</option>
+                <option value="other">other</option>
               </select>
             </label>
             <label className={labelClass}>

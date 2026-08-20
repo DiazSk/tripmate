@@ -1,19 +1,14 @@
 /** Result shapes for every scorer. One file so the API route, the DB row and the UI agree. */
 
 /**
- * Booked flights/stay, as the benchmark reads them.
+ * Booked flights/stay. This used to be a local duplicate, declared here because `UserAnswers` had
+ * no `logistics` field and the traveler-facing form didn't collect one. It does now, so the
+ * benchmark reads the same shape the app writes.
  *
- * Declared here rather than imported from `UserAnswers` because this branch's `UserAnswers` has no
- * `logistics` field — the traveler-facing "what's already booked" work isn't merged. The benchmark
- * form still collects these, and `usableSlot()` still honours them (skill 4c-bis: a booked arrival
- * makes the early part of day 1 unusable). Reading it structurally means the rule is a no-op when
- * the field is absent and starts working the moment that feature lands, with no change here.
+ * `usableSlot()` still reads it structurally off `userAnswers`, which keeps the rule a no-op for
+ * every fixture and stored trip written before the field existed.
  */
-export interface BenchLogistics {
-  arrivalTime: string | null;
-  departureTime: string | null;
-  stayBooked: string | null;
-}
+export type { TripLogistics } from "../types";
 
 export type ScorerKind = "deterministic" | "lexical" | "operational" | "model-judged";
 

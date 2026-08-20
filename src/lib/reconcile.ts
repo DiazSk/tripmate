@@ -1,4 +1,4 @@
-import { deriveFlags } from "./userAnswers";
+import { deriveFlags, sanitizeAnswers } from "./userAnswers";
 import type {
   RawFetch,
   ReconciledTrip,
@@ -21,8 +21,13 @@ const DEFAULT_TRANSPORT_MODES: TransportMode[] = ["walk", "transit"];
  * continues. Only a genuinely unusable state — no POIs from either the candidate list or the
  * user's own entries — is surfaced as a real error.
  */
-export function reconcileTrip(rawFetch: RawFetch, userAnswers: UserAnswers): ReconciledTrip {
+export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): ReconciledTrip {
   const notes: ReconcileNote[] = [];
+
+  // Normalize before anything reads them. The answers are handed on verbatim below and rendered
+  // straight into `trip-context.md`, so a raw POST to /api/trip-prepare would otherwise put
+  // `NaN adults` or a `25:99` arrival in front of the model.
+  const userAnswers = sanitizeAnswers(rawAnswers);
 
   // Part C derivation happens here, at the normalize boundary — the single point where raw
   // answers become the resolved flags everything downstream reads. Deliberately not in the UI:

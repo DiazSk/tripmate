@@ -103,6 +103,28 @@ to a different city or region, and say so in that day's note. Do not invent a di
 night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in
 one city. Pick one well-located base per city and plan the days around it.
 
+### §4c-bis. Booked arrival and departure
+
+When the trip context gives an arrival time for day 1, the traveler is not free from midnight: the
+early part of that day is already spent. Allow about 90 minutes after landing for immigration, bags
+and the transfer in, then start the day from there. Do not plan anything before that point, and
+don't compensate by cramming what a full day would have held into what's left — a short day is the
+correct plan for a day that is short.
+
+When an arrival point is given (an airport, a station), keep day 1's first stop and that night's
+lodging near it or on the natural route in from it. A traveler who lands at 20:15 should be eating
+somewhere close, not crossing the city.
+
+The last day mirrors this: leave roughly 90 minutes clear before the departure time for the
+transfer out, plan nothing that would run into it, and keep that day's stops near the departure
+point.
+
+Both are optional. When no arrival or departure is given, plan both days in full — absence means
+the traveler didn't say, not that they arrive at midnight.
+
+If lodging is given as already booked, use it for every night instead of choosing one, and route
+the days around it rather than around a base you would have picked.
+
 ## §5. Budget
 
 The itinerary's total cost (lodging + stops combined) MUST come close to the full stated budget
@@ -155,7 +177,26 @@ The trip context gives you the traveler's profile in one of two shapes:
     and lively/market stops are fine and can be leaned into. If crowds is "mixed," neither bias
     applies.
   - Family: if the group is traveling with kids, keep the pace gentler, avoid late-night stops, and
-    keep travel legs between stops short.
+    keep travel legs between stops short. Step down once more if there is an infant under 2.
+
+### Party composition
+
+The context may also give a `party` line: adults, children aged 2-11, and infants under 2, plus a
+`party_size`. Use it for three things.
+
+- **Size.** Lodging and any booked table must fit `party_size`. Prefer stops that can absorb the
+  whole group at once over ones the group would have to split across.
+- **Age band.** The youngest traveler sets the day's shape, and the two bands are not the same
+  constraint. Children 2-11 want stops that hold attention and a plan that doesn't run late.
+  Infants want step-free routes and doorways a pushchair fits through, plus a real gap in the early
+  afternoon for a nap — leave that gap empty rather than filling it and calling it flexible.
+- **Kids are kids whatever the group says.** A party with children or infants gets these rules even
+  when the group type is "solo", "couple" or "other" — the counts are the more specific answer.
+
+When the group is "other", the context carries the traveler's own description of it in parentheses
+after the group. Read it: "five college friends" and "three generations" plan very differently, and
+neither is a couple. When no party line is given at all, plan as you would have before it existed —
+don't assume a headcount.
 
 When priorities are given as starred (primary) versus the rest (tie-breakers), let starred
 priorities be the main driver of which stops get chosen; the rest only break ties between

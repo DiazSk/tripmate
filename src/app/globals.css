@@ -668,8 +668,12 @@ body {
    icon, and the date cells open the picker from a click anywhere in the cell via
    showPicker(). The native glyphs can only be inverted, never restyled to the system's icon
    stroke, so they'd read as borrowed chrome sitting inside an authored control. Typing and
-   keyboard entry are untouched — this removes painting, not behaviour. */
-.field-console input[type="date"]::-webkit-calendar-picker-indicator {
+   keyboard entry are untouched — this removes painting, not behaviour.
+
+   The time cells need it for a second reason: the arrive/depart cells put the clock beside a
+   free-text field, and the glyph's width was enough to clip "08:15 PM" to "08:15 P". */
+.field-console input[type="date"]::-webkit-calendar-picker-indicator,
+.field-console input[type="time"]::-webkit-calendar-picker-indicator {
   display: none;
 }
 .field-console input[type="number"]::-webkit-inner-spin-button,
