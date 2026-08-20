@@ -7,6 +7,7 @@ import { MapCameraProvider } from "@/lib/mapCamera";
 import Navbar from "@/components/Navbar";
 import DevInspectorOverlay from "@/components/dev/DevInspectorOverlay";
 import { ScrollContainerContext } from "@/lib/scrollContainer";
+import { useSmoothScroll } from "@/lib/smoothScroll";
 
 const GlobeBackground = dynamic(() => import("@/components/GlobeBackground"), {
   ssr: false,
@@ -22,6 +23,10 @@ const StopMarkerLayer = dynamic(() => import("@/components/StopMarkerLayer"), { 
  */
 export default function AppShell({ children }: { children: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Inertial wheel scrolling on the one real scroller in the app. See smoothScroll.ts for why
+  // this is a lerp on `scrollTop` rather than GSAP's ScrollSmoother, which structurally cannot
+  // attach to anything but the window.
+  useSmoothScroll(scrollRef);
   return (
     // `reducedMotion="user"` makes every framer-motion component honour
     // `prefers-reduced-motion` automatically (jumping straight to its end state)

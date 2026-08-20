@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { gsap, SplitText, prefersReducedMotion } from "@/lib/gsap";
-import { useScrollContainer } from "@/lib/scrollContainer";
+import { useRef } from "react";
+import { useLineReveal } from "@/lib/lineReveal";
 
 const STEPS = [
   {
@@ -28,38 +27,10 @@ const STEPS = [
  * between terse image captions (ImageRow) and separate prose sections. No photos.
  */
 export default function HowItWorks() {
-  const container = useScrollContainer();
   const headingRef = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    if (!headingRef.current || prefersReducedMotion()) return;
-    const split = new SplitText(headingRef.current, { type: "words" });
-    // fromTo inside a context, for the same reason as ImageRow and HeroPoster: a bare
-    // from() re-created by React's double-invoked dev effects would take the leftover
-    // hidden state as its destination and never reveal the words.
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        split.words,
-        { opacity: 0, y: 16 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.5,
-          ease: "power2.out",
-          stagger: 0.06,
-          scrollTrigger: {
-            trigger: headingRef.current,
-            scroller: container?.current ?? undefined,
-            start: "top 85%",
-          },
-        },
-      );
-    }, headingRef);
-    return () => {
-      ctx.revert();
-      split.revert();
-    };
-  }, [container]);
+  // Was `type: "words"` with a 16px fade-and-rise. Lines, masked, on the sequence's one shared
+  // text entrance — see `useLineReveal` for why a line is the right unit and a word is not.
+  useLineReveal(headingRef);
 
   return (
     // Same full-width band as ImageRow. Without it this copy sat directly on the live
@@ -91,7 +62,7 @@ export default function HowItWorks() {
             <div key={step.number}>
               <p className="font-scene-display text-3xl text-muted/60">{step.number}</p>
               <p className="mt-2 text-base font-medium text-foreground">{step.label}</p>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
+              <p className="scene-prose mt-2 text-sm text-muted">{step.body}</p>
             </div>
           ))}
         </div>

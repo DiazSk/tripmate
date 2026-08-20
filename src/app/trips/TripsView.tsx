@@ -1,23 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Stamp, Trash2 } from "lucide-react";
+import { ArrowRight, Trash2 } from "lucide-react";
 import { TripSummary } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { useMapCamera } from "@/lib/mapCamera";
+import { useLineReveal } from "@/lib/lineReveal";
 
 /** One tile of the hero collage. A photo miss or slow lookup must not open a hole in the
  *  hero back to the live globe behind it — the tile's own solid slate base (matching
- *  MemoryPostcard's photo tile) is the permanent layer, the photo fades in over it.
+ *  MemoryCard's photo tile) is the permanent layer, the photo fades in over it.
  *
  *  next/image, not a CSS background-image: a background-image on a box that also has
  *  overflow-hidden + a hover transform (this one, via the bento grid's own hover — and
- *  MemoryPostcard's) is a common trigger for the browser to promote it to its own
+ *  MemoryCard's) is a common trigger for the browser to promote it to its own
  *  GPU-composited layer, which can rasterize/scale the photo at a visibly softer filter
  *  quality than a plain <img> gets on the normal paint path. next/image also resizes and
  *  re-encodes server-side instead of shipping the raw ~3840px source and asking the
@@ -111,7 +112,7 @@ const HERO_LAYOUTS: Record<number, { grid: string; spans: string[]; sizes: strin
 
 /**
  * The page's own opening beat, full-bleed like the landing page's Hero — occludes the
- * globe for one viewport-height stretch, then the postcard grid below returns to floating
+ * globe for one viewport-height stretch, then the card grid below returns to floating
  * over it. Two variants rather than one component with a loading branch: there's nothing
  * true to collage until there's at least one saved trip, so "no photos yet" and "no trips
  * yet" are the same state, not two.
@@ -130,6 +131,12 @@ const HERO_LAYOUTS: Record<number, { grid: string; spans: string[]; sizes: strin
  * Pointer-Events Opt-In Rule.
  */
 function MemoriesHero({ trips }: { trips: TripSummary[] }) {
+  // Same masked line entrance the landing sequence uses, so arriving here from the story reads
+  // as the same product speaking rather than a second one. Declared before the early return
+  // because hooks cannot be conditional; the ref simply stays null on the empty-state branch.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useLineReveal(headingRef);
+
   if (trips.length === 0) {
     return (
       <section className="pointer-events-auto relative flex min-h-dvh items-center justify-center overflow-hidden p-5 text-center sm:p-6">
@@ -195,7 +202,10 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
         }}
       />
       <div className="relative z-10 max-w-2xl">
-        <h1 className="font-display text-5xl leading-[0.98] font-bold text-foreground sm:text-7xl">
+        <h1
+          ref={headingRef}
+          className="font-display text-5xl leading-[0.98] font-bold text-foreground sm:text-7xl"
+        >
           My memories
         </h1>
         <p className="mt-3 text-base tabular-nums text-foreground/75">
@@ -207,42 +217,26 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
   );
 }
 
-/** A small, stable tilt per trip so the stack doesn't re-shuffle on every render — derived
- *  from the id itself rather than `Math.random()`, which would pick a new angle on every
- *  re-render (a fresh save, a refetch) and make the "physical object" read as jittery. */
-function tiltFor(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return (Math.abs(hash) % 41) / 10 - 2;
-}
-
-function MemoryPostcard({ trip, onDelete }: { trip: TripSummary; onDelete: () => void }) {
+function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => void }) {
   const photo = usePlacePhoto(trip.destination, "full");
   return (
-    // The delete button is a *sibling* of the card, never a child: the whole postcard is
-    // one <a>, and HTML forbids interactive content inside an anchor — nesting a <button>
-    // there is invalid, and browsers resolve the overlap unpredictably. This wrapper is
-    // what gives the button a positioning context and what `.memory-postcard-slot:hover /
-    // :focus-within` keys the reveal off, so hovering the card (or tabbing into it) is
-    // what surfaces the control.
-    <div className="memory-postcard-slot relative">
+    // The delete button is a *sibling* of the card, never a child: the whole card is one <a>,
+    // and HTML forbids interactive content inside an anchor — nesting a <button> there is
+    // invalid, and browsers resolve the overlap unpredictably. This wrapper is what gives the
+    // button a positioning context and what `.memory-card-slot:hover / :focus-within` keys
+    // the reveal off, so hovering the card (or tabbing into it) is what surfaces the control.
+    <div className="memory-card-slot relative">
     <Link
       href={`/trip/${trip.id}`}
-      // The resting tilt is a CSS custom property, not a `transform` written here directly —
-      // an inline `transform` would permanently outrank the stylesheet's own
-      // `:hover`/`:focus-visible` rule that straightens the card, no matter how that rule's
-      // specificity compares, so the straighten-on-hover motion would never play.
-      style={{ "--tilt": `${tiltFor(trip.id)}deg` } as React.CSSProperties}
-      // `.memory-postcard`'s own box-shadow is plain unlayered CSS, which the cascade
-      // layers spec puts above any `@layer`-emitted rule regardless of specificity —
-      // including Tailwind's `ring-*` utilities, which compose onto `box-shadow` and
-      // would render as invisible here. `outline` is a separate property, so the two
-      // don't fight.
-      className="memory-postcard pointer-events-auto block rounded-2xl p-2.5 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+      // `.glass-itinerary`'s box-shadow is plain unlayered CSS, which the cascade layers spec
+      // puts above any `@layer`-emitted rule regardless of specificity — including Tailwind's
+      // `ring-*` utilities, which compose onto `box-shadow` and would render as invisible
+      // here. `outline` is a separate property, so the two don't fight.
+      className="glass-itinerary memory-card pointer-events-auto block rounded-2xl p-2.5 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
     >
       {/* Base tile paints first and never unmounts — the Constant-Ground Rule, same as
           ItineraryCard's header: a photo miss or a slow Wikipedia lookup must not leave a
-          blank postcard, and a resolved photo must not repaint the card's own material. The
+          blank card, and a resolved photo must not repaint the card's own material. The
           photo itself lives on its own layer over that base, keyed on its URL, and fades in
           with .value-in rather than overwriting the tile's own paint — mirroring
           BlurredPhotoLayer (ItineraryCard.tsx) instead of a hard pop the moment it resolves. */}
@@ -252,10 +246,7 @@ function MemoryPostcard({ trip, onDelete }: { trip: TripSummary; onDelete: () =>
           that made it recognizable. 200px matches the Tier Cards' own established photo
           height (DESIGN.md: "a three-up grid of 200px-tall image buttons") rather than
           inventing a second photo aspect ratio for the same kind of card. */}
-      <div
-        className="memory-postcard-photo relative h-[200px] overflow-hidden rounded-xl"
-        style={{ backgroundColor: "var(--postcard-ink-muted)" }}
-      >
+      <div className="memory-card-photo relative h-[200px] overflow-hidden rounded-xl bg-tile">
         {/* next/image, not a CSS background-image — see HeroTile's own comment for why a
             background-image on an overflow-hidden + hover-transform box like this one
             rasterizes softer than a plain <img>, independent of the source file's own
@@ -271,31 +262,19 @@ function MemoryPostcard({ trip, onDelete }: { trip: TripSummary; onDelete: () =>
             className="value-in object-cover contrast-105 saturate-110"
           />
         )}
-        {/* A lucide icon rather than the comp's literal "TRIP/MATE" wordmark: repeating the
-            brand mark at a size this small read as barely-legible clutter, and a stamp glyph
-            carries the same postal motif without it. */}
-        <div
-          aria-hidden="true"
-          className="absolute top-3 right-3 flex h-9 w-8 flex-col items-center justify-center gap-0.5 rounded-[3px] border border-dashed"
-          style={{
-            borderColor: "rgba(0,0,0,0.35)",
-            backgroundColor: "rgba(255,255,255,0.35)",
-            color: "rgba(0,0,0,0.45)",
-          }}
-        >
-          <Stamp className="h-3.5 w-3.5" strokeWidth={2} />
-        </div>
+        {/* The dashed postage stamp that used to sit here went with the paper. It was the one
+            purely representational element in the app — a drawn object standing for a physical
+            thing this surface is no longer pretending to be. */}
       </div>
       <div className="flex items-baseline justify-between gap-2 px-1.5 pt-2.5 pb-1">
-        <h2 className="font-display text-base font-semibold" style={{ color: "var(--postcard-ink)" }}>
+        <h2 className="font-display text-base font-semibold text-foreground">
           {trip.destination}
         </h2>
       </div>
-      {/* Stacked rather than the comp's single baseline row: the comp only carried a date
-          range, but keeping the budget figure (per an explicit ask, so the postcard's own
-          caption doesn't lose data the old list showed) makes one row too long to stay
-          legible at the docked panel's ~360-520px width. */}
-      <div className="px-1.5 pb-1 text-xs tabular-nums" style={{ color: "var(--postcard-ink-muted)" }}>
+      {/* Stacked rather than one baseline row: keeping the budget figure alongside the date
+          range (so this caption doesn't lose data the old list showed) makes a single row too
+          long to stay legible at the docked panel's ~360-520px width. */}
+      <div className="px-1.5 pb-1 text-xs tabular-nums text-muted">
         {formatDateRange(trip.startDate, trip.endDate)} · {formatMoney(trip.budget)} budget
       </div>
     </Link>
@@ -307,7 +286,7 @@ function MemoryPostcard({ trip, onDelete }: { trip: TripSummary; onDelete: () =>
         type="button"
         onClick={onDelete}
         aria-label={`Delete your ${trip.destination} trip`}
-        className="memory-postcard-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm hover:bg-red-600 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
+        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm hover:bg-red-600 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
       >
         <Trash2 className="h-4 w-4" strokeWidth={2.25} />
       </button>
@@ -415,10 +394,10 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
               <ErrorNote>{deleteError}</ErrorNote>
             </div>
           )}
-          <ul className="memory-postcards grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <ul className="memory-cards grid grid-cols-1 gap-5 sm:grid-cols-2">
             {trips.map((trip) => (
               <li key={trip.id}>
-                <MemoryPostcard trip={trip} onDelete={() => setPendingDelete(trip)} />
+                <MemoryCard trip={trip} onDelete={() => setPendingDelete(trip)} />
               </li>
             ))}
           </ul>

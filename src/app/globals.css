@@ -447,8 +447,17 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
+/* The tracking DESIGN.md has documented on the Display step since it was written, and which
+   the stylesheet never actually carried — the serif shipped at the browser's default 0. It is
+   a small number on purpose: a high-contrast serif at 1–1.5rem needs a fraction of the
+   negative tracking a grotesk does at the same size, because its own stroke contrast and
+   bracketed serifs already close the counters. The reference site packs its headings to
+   -0.078em and tightens to -0.106em as they shrink; that is grotesk logic and copying it onto
+   Source Serif 4 would collide the serifs into each other. The poster face carries the big
+   negative tracking here, and it is the one that should. */
 .font-display {
   font-family: var(--font-display), ui-serif, Georgia, serif;
+  letter-spacing: -0.01em;
 }
 
 /* The landing headline, and nothing else. Archivo's width axis is doing as much work as
@@ -472,6 +481,22 @@ body {
 .font-scene-display {
   font-family: var(--font-display), ui-serif, Georgia, serif;
   font-style: italic;
+  /* Three times the upright Display step's, because this class only ever runs at 30–63px and
+     tracking is an optical correction, not a constant: what reads as normal spacing at 18px
+     reads as gaps at 60px. Still nowhere near the reference's -0.078em — see `.font-display`
+     for why a serif cannot take a grotesk's numbers. */
+  letter-spacing: -0.03em;
+}
+
+/* Prose leading for the landing sequence, and only there. The reference runs its body copy at
+   1.85 against 1.0 headings, and that contrast is a real part of why it reads as a magazine —
+   but it is a marketing page made of short paragraphs. This app's other surfaces are dense
+   instrument panels (day rows, budget tiles, stop lists) where the same leading would cost a
+   screenful of scanning for nothing, so this is a class on the Persuade surface rather than a
+   change to the Body step. The headings it plays against sit at 0.88–1.2, so the contrast
+   lands even at 1.8 rather than the reference's 1.85. */
+.scene-prose {
+  line-height: 1.8;
 }
 
 /* The closing poster's voice: hyperbold and wide. Archivo rather than Bricolage Grotesque,
@@ -643,6 +668,15 @@ body {
 .content-overlay {
   scrollbar-width: thin;
   scrollbar-color: rgb(255 255 255 / 0.18) transparent;
+  /* Stop scroll chaining at these two elements. Nothing above them scrolls — `.app-shell` is
+     `h-dvh overflow-hidden` and the document never scrolls at all — so a wheel that runs off the
+     end of one of these has nowhere legitimate to go, and letting it propagate produces an
+     ancestor overscroll/rubber-band animation fighting whatever these were already doing. It is
+     also the other half of the end-of-page stutter fix in `useSmoothScroll`: when a settled
+     scroller at its limit deliberately hands a wheel back to the browser, this is what keeps
+     that from becoming a bounce somewhere else. `contain` rather than `none` so the element's own
+     overscroll affordance survives. */
+  overscroll-behavior: contain;
 }
 
 /* The scroll timeline every scroll-driven animation in this app binds to, declared here on the
@@ -887,8 +921,15 @@ body {
   background: rgb(var(--surface-deep-rgb));
 }
 
+/* `[data-hero-pinned]` is set by Hero.tsx for exactly as long as its pinned ScrollTrigger owns
+   this element's opacity. Both driving it at once does not resolve gracefully: a CSS animation
+   outranks an inline style, so GSAP would write opacity on every scrub frame and this keyframe
+   would overwrite it on every frame. Whichever mechanism is live, the other is off. */
 @supports (animation-timeline: scroll()) {
   @media (prefers-reduced-motion: no-preference) {
+    [data-hero-pinned] .hero-dusk {
+      animation: none;
+    }
     .hero-dusk {
       animation: hero-dusk linear both;
       animation-timeline: --story;
@@ -1359,19 +1400,19 @@ body {
   }
 }
 
-/* The postcard's delete affordance. Hidden at rest so a wall of postcards isn't a wall of
+/* The delete affordance. Hidden at rest so a wall of trips isn't a wall of
    trash icons, revealed when the card is hovered or anything inside it takes focus.
    `:focus-within` on the wrapper is what keeps it keyboard-reachable — tabbing to the
    button reveals the button. */
-.memory-postcard-delete {
+.memory-card-delete {
   opacity: 0;
   transition:
     opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
     background-color 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.memory-postcard-slot:hover .memory-postcard-delete,
-.memory-postcard-slot:focus-within .memory-postcard-delete {
+.memory-card-slot:hover .memory-card-delete,
+.memory-card-slot:focus-within .memory-card-delete {
   opacity: 1;
 }
 
@@ -1379,7 +1420,7 @@ body {
    enter, and the card itself is a link, so long-press does nothing useful either. On any
    device whose primary pointer can't hover, the button is simply always visible. */
 @media (hover: none) {
-  .memory-postcard-delete {
+  .memory-card-delete {
     opacity: 1;
   }
 }
@@ -1598,51 +1639,42 @@ body {
   background: var(--accent);
 }
 
-/* My Memories' postcards are the one other scoped material exception in the app besides
-   Blue Hour, and for the same kind of reason: a physical paper object cannot be frosted
-   slate glass, so this trades the One Slate Rule for an opaque cream paper surface —
-   confined to this one class, never bleeding into `.glass-itinerary` or any shared
-   component. `--postcard-ink`/`--postcard-ink-muted` exist because the base system's
-   `--foreground`/`--muted` are tuned for light text on dark glass; paper needs the
-   opposite pairing, so this is a second, narrower retint scope rather than a text-color
-   override scattered across each card. */
-.memory-postcards {
-  --postcard-paper: #f4f1ea;
-  --postcard-ink: #2b2620;
-  --postcard-ink-muted: #6b6355;
-}
+/* My Memories used to be paper: an opaque cream surface (`--postcard-paper` #f4f1ea) with its
+   own dark-ink token pair, each card rotated a degree or two off true and dropped on a heavy
+   shadow, a dashed postage stamp in the photo's corner. It was defended here as a scoped
+   material exception on the grounds that a physical postcard cannot be frosted glass — which
+   is true, and beside the point. It made this route the third visual language in a product
+   that should have one: glass over the globe on `/` and `/trip/[id]`, a cobalt scene on the
+   landing, and light paper objects here. A visitor arriving from a trip detail crossed from
+   dark translucent slate to tilted cream stationery in a single click, and read it as a
+   different application rather than as a different room of the same one.
 
-/* The resting tilt is read from a --tilt custom property (set inline per card, since it's
-   derived from the trip id) rather than written as an inline `transform` directly — an
-   inline style always wins over any stylesheet rule, hover or not, so the :hover/
-   :focus-visible rule below could never have straightened a card whose tilt was inline. */
-.memory-postcard {
-  background: var(--postcard-paper);
-  color: var(--postcard-ink);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-  transform: rotate(var(--tilt, 0deg));
+   The cards are `.glass-itinerary` now, like every other surface in the app. What made this
+   route feel like a collection was never the paper — it was the photographs, and they are
+   untouched. `.memory-card` carries only what glass does not: the resting shadow and the
+   hover lift. */
+.memory-card {
   transition:
     transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Keeps a bright photo's own edge from bleeding straight into the cream paper border —
-   the card's radius (rounded-2xl/xl, the app's documented 16px/12px steps rather than the
-   approved comp's own unvetted 10px/6px) means the photo tile shares the paper's rounded
-   corner, so this has to be an inset shadow on the tile itself, not a border on the card. */
-.memory-postcard-photo {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+/* Keeps a bright photo's edge from bleeding into the card's own translucent border. Was a
+   black inset against cream; white at a low alpha is the same job on the far side of the
+   palette. */
+.memory-card-photo {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
-/* Straightening is shared, but the shadow-deepen is hover-only: Tailwind's focus-visible
-   ring utility also composes onto `box-shadow`, so a shared rule setting box-shadow here
-   would silently overwrite the ring and leave keyboard focus invisible on the one card
-   type in the app that isn't itself a `ring-accent` glass edge. */
-.memory-postcard:hover,
-.memory-postcard:focus-visible {
-  transform: rotate(0deg) scale(1.02);
+/* A lift, not a straighten — there is no tilt left to undo. Kept off `:focus-visible`,
+   unlike the old rule: `.glass-itinerary`'s box-shadow is plain unlayered CSS and outranks
+   any `@layer`-emitted utility, so a shared rule setting box-shadow here would silently
+   overwrite a focus ring. Focus uses `outline` on the element itself for that reason. */
+.memory-card:hover,
+.memory-card:focus-visible {
+  transform: translateY(-3px);
 }
 
-.memory-postcard:hover {
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55);
+.memory-card:hover {
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
 }

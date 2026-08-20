@@ -42,7 +42,7 @@ export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
       gsap.fromTo(
         ".poster-reveal",
         { clipPath: "inset(0 0 100% 0)", y: 20 },
-        { clipPath: "inset(0 0 0% 0)", y: 0, duration: 0.7, ease: "power3.out", stagger: 0.09, scrollTrigger },
+        { clipPath: "inset(0 0 0% 0)", y: 0, duration: 0.9, ease: "expo.out", stagger: 0.09, scrollTrigger },
       );
       // delay: 0.45 continues the .poster-reveal stagger's own rhythm (4 headline
       // spans + the subline = 5 elements at 0.09s apart; this is next in that sequence)
@@ -50,7 +50,7 @@ export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
       gsap.fromTo(
         ".poster-fade",
         { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", delay: 0.45, scrollTrigger },
+        { opacity: 1, y: 0, duration: 0.9, ease: "expo.out", delay: 0.45, scrollTrigger },
       );
     }, sectionRef);
     return () => ctx.revert();
@@ -118,7 +118,7 @@ export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
       </h1>
       {/* Not text-sm: 96px to 14px is a jump, not a scale step, and this line carries the
           mechanism the rest of the page only implies. */}
-      <p className="poster-reveal hero-legible mt-7 max-w-xl text-balance text-base leading-relaxed text-on-deep sm:text-lg">
+      <p className="poster-reveal hero-legible mt-7 max-w-xl text-balance scene-prose text-base text-on-deep sm:text-lg">
         Tell us where, when, and how much. Get a day-by-day plan that actually costs what
         you said — with the weather already factored in.
       </p>

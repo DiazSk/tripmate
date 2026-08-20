@@ -1,23 +1,36 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { ChevronDown } from "lucide-react";
+import { gsap } from "@/lib/gsap";
+import { useScrollContainer } from "@/lib/scrollContainer";
+import { useLineReveal } from "@/lib/lineReveal";
 
 /**
  * The opening moment of the Blue Hour scroll story: a curated photo, a mood-setting headline,
  * drifting light, and no CTA — "Plan a trip" is withheld until HeroPoster at the very end so its
  * arrival still reads as a reveal.
  *
- * **This component runs no JavaScript. No state, no effects, no per-frame work at all.** It used
- * to run five infinite GSAP tweens (an ambient photo drift, three fog layers, a cue bob) plus a
- * `pointermove` parallax driving six `quickTo` tweens across two nested transform planes. All
- * motion is now CSS keyframes on `transform`/`opacity` only — see `.hero-light`, `.hero-cue*` in
- * globals.css — which the compositor can run without waking the main thread.
+ * **The ambient motion here runs no JavaScript**, and that is deliberate rather than incidental.
+ * This component used to run five infinite GSAP tweens (a photo drift, three fog layers, a cue
+ * bob) plus a `pointermove` parallax driving six `quickTo` tweens across two nested transform
+ * planes. A Chrome trace of a real session found every scrolling frame resolving on the main
+ * thread (`scroll_state: SCROLL_MAIN_THREAD` on 1688 of 3426 frames) rather than the compositor —
+ * frames were not being dropped, only 2.1% were, they were arriving *late*, queued behind
+ * main-thread work. So the resting-state motion is CSS keyframes on `transform`/`opacity` only
+ * (`.hero-light`, `.hero-cue*` in globals.css), which the compositor owns outright, and the
+ * globe's render loop — 976ms of that trace, its largest single entry — is paused while this
+ * beat covers it; see HeroPoster.
  *
- * Why it mattered: a Chrome trace of a real session found every scrolling frame resolving on the
- * main thread (`scroll_state: SCROLL_MAIN_THREAD` on 1688 of 3426 frames) rather than the
- * compositor. Frames were not being dropped — only 2.1% were — they were arriving late, queued
- * behind main-thread work. Less main-thread work is therefore the whole fix, and the globe's
- * render loop (976ms of that trace, the largest single entry) is now paused while this beat
- * covers it; see HeroPoster.
+ * **Two scroll-driven exceptions, both requested and both gated.** The masked line reveal on the
+ * headline and the pinned scrub that hands the beat off to ImageRow are ScrollTrigger, which is
+ * per-frame main-thread work by definition. They are confined accordingly: the pin only exists
+ * at `lg` and above and only with `prefers-reduced-motion: no-preference`, so the narrow
+ * viewports and low-power devices the trace was worried about get the CSS-only version
+ * (`.hero-dusk`'s scroll timeline) instead. Neither runs on a loop — a scrub does work only
+ * while the wheel is actually moving, which is the difference between this and the four infinite
+ * tweens that were removed.
  *
  * The cursor parallax is gone by request, and it is worth recording that it was *not* the
  * expensive part: `pointermove` dispatch totalled 53ms of a 34.4s trace. It went because a hero
@@ -32,11 +45,72 @@ import { ChevronDown } from "lucide-react";
  * dispensation.
  */
 export default function Hero() {
+  const container = useScrollContainer();
+  const sectionRef = useRef<HTMLElement>(null);
+  const photoRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const duskRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useLineReveal(headingRef);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    // matchMedia rather than an `if` on a media query: GSAP tears the whole timeline down and
+    // reverts every property it touched when the query stops matching, so a resize from desktop
+    // to phone width does not leave a half-scrubbed photo scaled at 1.06 forever.
+    const mm = gsap.matchMedia();
+    mm.add("(min-width: 1024px) and (prefers-reduced-motion: no-preference)", () => {
+      // The CSS scroll-timeline version of the same wash is the fallback for every context this
+      // pin does not cover. Both driving `.hero-dusk`'s opacity at once is not a race that
+      // resolves gracefully — a CSS animation outranks an inline style, so GSAP would write
+      // opacity every frame and the keyframe would overwrite it every frame. The attribute
+      // switches the CSS one off for exactly as long as this timeline owns the property.
+      section.dataset.heroPinned = "true";
+
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: section,
+          scroller: container?.current ?? undefined,
+          start: "top top",
+          // One viewport of scroll held in place. Longer reads as the page having jammed;
+          // shorter and the hand-off is over before it registers as one.
+          end: "+=100%",
+          scrub: true,
+          pin: true,
+          // Refreshed before anything below it, so its pin spacer is measured first and the
+          // sections after it are laid out against the height it actually claims.
+          refreshPriority: -1,
+        },
+      });
+      // A slow push into the photograph while it is held — the camera moving, not the subject.
+      // On the photo *wrapper*, never the <Image> itself: next/image owns that element's own
+      // sizing, and the Transform-Ownership Rule means one node, one writer.
+      tl.fromTo(photoRef.current, { scale: 1 }, { scale: 1.12, ease: "none" }, 0)
+        // The type leaves faster than the ground it sits on, which is what reads as depth
+        // rather than as the whole frame sliding.
+        .fromTo(textRef.current, { yPercent: 0, opacity: 1 }, { yPercent: -22, opacity: 0, ease: "none" }, 0)
+        // The blue hour ending — the same wash `.hero-dusk` does in CSS, on this timeline so it
+        // stays locked to the pin's progress rather than to raw scrollTop, which during a pin
+        // no longer corresponds to where the section visually is.
+        .fromTo(duskRef.current, { opacity: 0 }, { opacity: 1, ease: "none" }, 0);
+
+      return () => {
+        delete section.dataset.heroPinned;
+      };
+    });
+    return () => mm.revert();
+  }, [container]);
+
   return (
-    <section className="pointer-events-auto relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-5 text-center sm:p-6">
+    <section
+      ref={sectionRef}
+      className="pointer-events-auto relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-5 text-center sm:p-6"
+    >
       {/* No scrim, matching DESIGN.md's landing-headline rule: nothing sits between the type and
           the photograph — hero-legible's own three-layer shadow carries legibility. */}
-      <div className="absolute inset-0 -z-10">
+      <div ref={photoRef} className="absolute inset-0 -z-10">
         <Image src="/scenes/hero-dawn.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
       </div>
 
@@ -57,17 +131,16 @@ export default function Hero() {
         <div className="hero-fog-layer" />
       </div>
 
-      <div>
-        {/* Two phrases, not five words: DESIGN.md documents this block's stagger as 0 / 90 / 180ms
-            and the third slot has never had an occupant. Splitting by phrase fills it exactly
-            rather than inventing a longer per-word budget, and it stops "hour." being orphaned
-            onto a line of its own. `inline-block` because a transform does nothing to an inline
-            box. */}
-        <h1 className="hero-legible font-scene-display text-[clamp(2.25rem,6.5vw,5rem)] italic leading-[1.05] text-on-deep">
-          <span className="hero-rise inline-block">Somewhere,</span>{" "}
-          <span className="hero-rise inline-block" style={{ animationDelay: "90ms" }}>
-            it&rsquo;s the blue hour.
-          </span>
+      <div ref={textRef}>
+        {/* The headline is one string now, not two hand-split phrase spans on `.hero-rise`.
+            SplitText measures the real line boxes at the real font size and masks each one, so
+            the reveal follows however the type actually wraps at this viewport instead of a
+            two-phrase guess that was right at one width. See `useLineReveal`. */}
+        <h1
+          ref={headingRef}
+          className="hero-legible font-scene-display text-[clamp(2.25rem,6.5vw,5rem)] italic leading-[1.05] text-on-deep"
+        >
+          Somewhere, it&rsquo;s the blue hour.
         </h1>
         {/* mx-auto because this block is no longer a direct child of the section's items-center
             flex — the type wrapper sits between them.
@@ -79,7 +152,7 @@ export default function Hero() {
             run; both lines arrived together. Inline is what the app's other three staggers already
             use (TierPicker, HomeView, TripFormConsole). */}
         <p
-          className="hero-rise hero-legible mx-auto mt-5 max-w-md text-balance text-base leading-relaxed text-on-deep sm:text-lg"
+          className="hero-rise hero-legible mx-auto mt-5 max-w-md text-balance scene-prose text-base text-on-deep sm:text-lg"
           style={{ animationDelay: "180ms" }}
         >
           Every trip we plan is built around finding it.
@@ -103,7 +176,7 @@ export default function Hero() {
       {/* The exit wash — see `.hero-dusk`. Last child and `z-10` so it covers the type as well as
           the photograph: the composition has to dim as one image, or the headline survives its
           own ground and reads as text pasted onto a dark rectangle. Still no JavaScript here. */}
-      <div aria-hidden className="hero-dusk pointer-events-none absolute inset-0 z-10" />
+      <div ref={duskRef} aria-hidden className="hero-dusk pointer-events-none absolute inset-0 z-10" />
     </section>
   );
 }
