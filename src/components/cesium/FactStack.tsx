@@ -77,7 +77,7 @@ export default function FactStack({ facts }: { facts: string[] }) {
               tabIndex={front ? -1 : 0}
               aria-label={front ? undefined : `Show: ${factAt(position)}`}
               onClick={() => !front && move(position)}
-              className={`fact-stack-card glass-itinerary ${front ? "is-front" : ""}`}
+              className={`fact-stack-card ${front ? "is-front" : ""}`}
               style={{
                 zIndex: depth.z,
                 opacity: depth.opacity,

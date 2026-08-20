@@ -193,7 +193,18 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       if (token) {
         try {
           const tileset = await Cesium.createGooglePhotorealistic3DTileset();
-          if (cancelled) return;
+          // Destroys rather than just returning. The cleanup at the bottom of this effect closes
+          // over `viewer`, and by the time an unmount can land *here* that cleanup has already
+          // run — with `viewer` still undefined, because it is only assigned after the earlier
+          // `await import("cesium")` resolves. So a bare `return` orphans a live WebGL context
+          // and its whole tile cache. Not reachable from Strict Mode's double-invoke (that
+          // unmount lands before the import resolves, and the guard up there catches it), but
+          // every Fast Refresh during a tileset load hits it — and Chrome caps live contexts and
+          // starts killing the oldest, which presents as "the globe went black in dev".
+          if (cancelled) {
+            viewer.destroy();
+            return;
+          }
           // Google's tiles ship at full satellite vibrance, which reads harsh against the
           // Apple Maps look this design targets. Blending each tile toward a cool grey pulls
           // saturation down. This has to happen on the tileset rather than as a CSS filter

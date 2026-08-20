@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, RefObject } from "react";
-import { gsap, SplitText, prefersReducedMotion } from "@/lib/gsap";
+import { gsap, SplitText } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
 
 /**

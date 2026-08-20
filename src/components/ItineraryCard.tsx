@@ -540,10 +540,18 @@ export default function ItineraryCard({
               last row instead of orphaning it at half width. */}
           {tiles.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
+              {/* No `backdrop-blur` on these tiles, and up to five of them are on screen at once.
+                  There is nothing left to blur: this band's own ground is `--surface-deep` at
+                  0.7, over BlurredPhotoLayer's already-blurred header photo, inside
+                  `.glass-itinerary`'s 56px pass. Blurring an already-flat backdrop through a 25%
+                  black fill is visually identical to the fill alone, for five extra render
+                  surfaces on the panel that gets scrolled most. `bg-black/25` stays — a blur does
+                  not darken; `bg-black/30` is the knob if the row reads busy over an unusually
+                  high-contrast photo. */}
               {tiles.map((tile) => (
                 <div
                   key={tile.label}
-                  className="flex min-w-24 max-w-48 flex-1 flex-col items-center rounded-xl border border-white/20 bg-black/25 p-3 text-center text-on-deep backdrop-blur-md"
+                  className="flex min-w-24 max-w-48 flex-1 flex-col items-center rounded-xl border border-white/20 bg-black/25 p-3 text-center text-on-deep"
                 >
                   <tile.Icon className="h-4 w-4" />
                   <div className="mt-1 text-xs opacity-90">{tile.label}</div>

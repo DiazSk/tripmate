@@ -7,7 +7,6 @@ import { MapCameraProvider } from "@/lib/mapCamera";
 import Navbar from "@/components/Navbar";
 import DevInspectorOverlay from "@/components/dev/DevInspectorOverlay";
 import { ScrollContainerContext } from "@/lib/scrollContainer";
-import { useSmoothScroll } from "@/lib/smoothScroll";
 
 const GlobeBackground = dynamic(() => import("@/components/GlobeBackground"), {
   ssr: false,
@@ -22,11 +21,9 @@ const StopMarkerLayer = dynamic(() => import("@/components/StopMarkerLayer"), { 
  * a separate opaque content pane.
  */
 export default function AppShell({ children }: { children: ReactNode }) {
+  // Handed to ScrollContainerContext below. Nothing animates it — scrolling here is native and
+  // compositor-owned, which is the whole point; see globals.css's `.content-overlay`.
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Inertial wheel scrolling on the one real scroller in the app. See smoothScroll.ts for why
-  // this is a lerp on `scrollTop` rather than GSAP's ScrollSmoother, which structurally cannot
-  // attach to anything but the window.
-  useSmoothScroll(scrollRef);
   return (
     // `reducedMotion="user"` makes every framer-motion component honour
     // `prefers-reduced-motion` automatically (jumping straight to its end state)
@@ -47,11 +44,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
               whole viewport, so without it every pointer event lands here and the Cesium canvas
               at z-0 never sees one. Each real content box opts back in with `pointer-events-auto`.
 
-              That reasoning only holds for a wheel. A wheel scrolls the nearest scrollable
-              ancestor whatever its pointer-events; a finger does not — WebKit resolves a touch
-              scroll by hit-testing, and this element is not hit-testable, so on iOS nothing
-              here scrolled at all. `.content-overlay` in globals.css hands touch back below
-              `sm`, on the routes that scroll *this* element rather than a DockedPanel. */}
+              It also takes this element out of hit-testing, which is how a scroller stops being
+              scrollable — for a wheel as much as for a finger. The canvas is this element's
+              *sibling*, so a gesture that lands on it walks an ancestor chain containing nothing
+              scrollable and reaches Cesium, which zooms. `.content-overlay` in globals.css hands
+              pointer events back on every route that scrolls *this* element rather than a
+              DockedPanel; see that rule for the full account and for what it costs. */}
           {/* Sits at z-5, under the content overlay below — the markers are part of the world
               behind the glass, so a panel covers them rather than the other way round. Still a
               sibling rather than a child of that overlay, and for a sharper reason than the

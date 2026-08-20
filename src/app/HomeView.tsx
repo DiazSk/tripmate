@@ -1,22 +1,18 @@
 "use client";
 
 import { ComponentType, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
-import ItineraryCard from "@/components/ItineraryCard";
-import { DayEditUpdates } from "@/components/DayHeader";
+import type { DayEditUpdates } from "@/components/DayHeader";
 import FeedbackLoop from "@/components/FeedbackLoop";
-import TierPicker from "@/components/TierPicker";
 import InterestPicker from "@/components/InterestPicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import PoiCandidatePicker from "@/components/PoiCandidatePicker";
-import FocusEditMode from "@/components/FocusEditMode";
 import { useFocusEdit } from "@/lib/useFocusEdit";
-import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import GenerationLoader from "@/components/cesium/GenerationLoader";
 import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
 import DockedPanel from "@/components/DockedPanel";
@@ -46,6 +42,32 @@ import { buildDestinationFacts } from "@/lib/destinationFacts";
 import { formatDateRange } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { summarizeDurable } from "@/lib/profileSummary";
+
+/* Five `next/dynamic` boundaries, the same `{ ssr: false }` idiom AppShell uses for the globe.
+   None of these renders on the landing step — the landing renders `<ScrollStory>` and nothing
+   else — yet all five were parsed at module scope before its first paint, because this module is
+   one `"use client"` component covering all three steps of the flow. `ssr: false` costs nothing:
+   the initial server render is always `step: "landing"`.
+
+   ItineraryCard is the one that matters. It pulls DayHeader, StopList, BudgetBar, Typewriter and
+   icons.tsx behind it — about half of what this module used to parse up front. `DayEditUpdates`
+   above is now a `type` import for the same reason: without the keyword it dragged DayHeader and
+   framer-motion in for an annotation, defeating this boundary from a different direction.
+
+   Six other pickers stayed static (`InterestPicker`, `ExplorerStylePicker`, `GroupTypePicker`,
+   `PoiCandidatePicker`, `FeedbackLoop`, `OnboardingCard`): 1-4KB each, 20KB across six more
+   boundaries, which one ItineraryCard boundary already beats. `ChoicePicker` *cannot* be split —
+   it exports CROWD_PREFERENCES and ENERGY_LEVELS as values used in the render below.
+   `DestinationSearch` is deliberately static too: it is the first field of the plan step,
+   rendered in the same tick as the "Plan a trip" click, and the failure mode of a prefetch miss
+   there is a form with no destination input. `ScrollStory` static is the whole point. */
+const ItineraryCard = dynamic(() => import("@/components/ItineraryCard"), { ssr: false });
+const FocusEditMode = dynamic(() => import("@/components/FocusEditMode"), { ssr: false });
+const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), { ssr: false });
+const GenerationLoader = dynamic(() => import("@/components/cesium/GenerationLoader"), {
+  ssr: false,
+});
+const TierPicker = dynamic(() => import("@/components/TierPicker"), { ssr: false });
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -306,6 +328,26 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     resetToHome();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Warms the chunks the dynamic() boundaries at the top of this file split out, so none of them
+  // ever shows its fallback. Fired on leaving the landing, which is the whole point: the landing's
+  // first paint must not parse these, and it must not race them against Cesium's own dynamic
+  // import either — the globe boots on mount and is orders of magnitude larger than everything
+  // here put together. Entering `plan` puts every fetch at least one full step ahead of the
+  // render that needs it: the plan step renders none of them, TierPicker is a click further in,
+  // and `result` is a generation away.
+  //
+  // Plain `import()` rather than next/dynamic's `.preload()`. That method exists at runtime but
+  // is absent from next's own `dynamic.d.ts`, so reaching it needs a cast to an undocumented API.
+  // These hit the same module registry, fully typed.
+  useEffect(() => {
+    if (step === "landing") return;
+    void import("@/components/cesium/GenerationLoader");
+    void import("@/components/ItineraryCard");
+    void import("@/components/PlaceDetailPanel");
+    void import("@/components/FocusEditMode");
+    void import("@/components/TierPicker");
+  }, [step]);
 
   // Drives this page's own cosmetics (dark dashboard header/nav once results exist,
   // destination-form positioning) — AppShell's layout itself no longer varies by route/step.
@@ -651,14 +693,20 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         step === "landing" ? "blue-hour-scene" : ""
       }`}
     >
-      <GenerationLoader
-        active={generating || refining}
-        mode={refining ? "refine" : "generate"}
-        stages={stages}
-        facts={destinationFacts}
-        subject={loaderSubject}
-        onCancel={cancelGeneration}
-      />
+      {/* Gated here rather than left to the component's own `if (!active) return null`. It is
+          behind a dynamic() boundary now, and an unconditionally-rendered dynamic component
+          fetches its chunk on first render — i.e. on the landing, which is the one thing the
+          boundary exists to prevent. */}
+      {(generating || refining) && (
+        <GenerationLoader
+          active
+          mode={refining ? "refine" : "generate"}
+          stages={stages}
+          facts={destinationFacts}
+          subject={loaderSubject}
+          onCancel={cancelGeneration}
+        />
+      )}
 
       {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
           explainer, and "Plan a trip" uncovered only at the end. It owns full-bleed sections
