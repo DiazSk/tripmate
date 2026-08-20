@@ -1,48 +1,26 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { gsap, ScrollTrigger, prefersReducedMotion } from "@/lib/gsap";
+import { gsap } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
-import { useMapCamera } from "@/lib/mapCamera";
 
 /**
- * The final beat of the Blue Hour scroll story — the reveal. Everything above it
- * (Hero, ImageRow, HowItWorks) is curated photography on opaque bands; this one has
- * neither, sitting directly on the live globe with nothing behind it. Arriving at the
- * real, moving thing after a sequence of stills is the point of putting it last.
+ * The final beat of the Blue Hour scroll story — the reveal. Everything above it (Hero, ImageRow,
+ * HowItWorks) is curated photography on opaque bands; this one has neither, and sits on `.scene-void`
+ * — a lit emptiness rather than a surface. Arriving somewhere open after a sequence of walls is the
+ * point of putting it last.
+ *
+ * It used to sit on the live Cesium globe, with an IntersectionObserver here pausing the render
+ * loop for the three covered beats above. That is gone, and with it Cesium's entire presence on
+ * this route: the globe now boots when generation starts (see `globeWanted` in mapCamera.tsx),
+ * because a cold landing was paying a 2287KB chunk, 33 `/cesium/` asset requests, a WebGL2 context
+ * and 1525ms of long tasks to show a globe on exactly one of four beats. The reveal that mattered
+ * was never the globe — it is "Plan a trip" being withheld until here.
  */
 export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
   const container = useScrollContainer();
   const sectionRef = useRef<HTMLElement>(null);
-  const { setGlobeSpinning } = useMapCamera();
-
-  /**
-   * This section owns the globe's idle drift, because it is the only part of the landing route
-   * that shows the globe at all — Hero, ImageRow and HowItWorks are opaque bands over it, and
-   * turning the Earth behind them is work no one can see. Rotation is the most expensive thing
-   * the app does (a moving camera renders every frame), so it is bought for the seconds this
-   * section is on screen rather than left running for the session.
-   *
-   * The observer's root is the app shell's scroll container, not the window — `.app-shell` is
-   * `h-dvh overflow-hidden`, so the window never scrolls here and viewport-relative
-   * intersection would be measuring the wrong box.
-   */
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setGlobeSpinning(entry.isIntersecting),
-      { root: container?.current ?? null },
-    );
-    observer.observe(section);
-    return () => {
-      observer.disconnect();
-      // Leaving the landing story at all — pressing "Plan a trip", or navigating away — must
-      // stop the drift, and unmount is the one signal that covers every way out.
-      setGlobeSpinning(false);
-    };
-  }, [container, setGlobeSpinning]);
-
   useEffect(() => {
     if (!sectionRef.current || prefersReducedMotion()) return;
     // A mask wipe, not a fade: each line is uncovered bottom-to-top. This used to be the
@@ -69,19 +47,23 @@ export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
       gsap.fromTo(
         ".poster-reveal",
         { clipPath: "inset(0 0 100% 0)", y: 20 },
-        { clipPath: "inset(0 0 0% 0)", y: 0, duration: 0.7, ease: "power3.out", stagger: 0.09, scrollTrigger },
+        { clipPath: "inset(0 0 0% 0)", y: 0, duration: 0.9, ease: "expo.out", stagger: 0.09, scrollTrigger },
       );
-      // delay: 0.45 continues the .poster-reveal stagger's own rhythm (4 headline
-      // spans + the subline = 5 elements at 0.09s apart; this is next in that sequence)
-      // rather than introducing an unrelated second cadence.
+      // The delay continues the .poster-reveal stagger's own rhythm rather than introducing an
+      // unrelated second cadence: it is the next slot in that sequence, so it equals
+      // (number of .poster-reveal elements) x 0.09. That was 0.45 when the headline was four
+      // spans plus the subline; the headline is one word now, so two elements, so 0.18. Leaving
+      // it at 0.45 would have parked the CTA a third of a second after everything above it had
+      // finished — a gap, not a beat.
       gsap.fromTo(
         ".poster-fade",
         { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", delay: 0.45, scrollTrigger },
+        { opacity: 1, y: 0, duration: 0.9, ease: "expo.out", delay: 0.18, scrollTrigger },
       );
     }, sectionRef);
     return () => ctx.revert();
   }, [container]);
+
 
   return (
     // pointer-events-auto: this is a section in the scroll story, and empty space
@@ -90,17 +72,35 @@ export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
     // default so the globe stays draggable elsewhere in the app).
     <section
       ref={sectionRef}
-      className="pointer-events-auto flex min-h-dvh flex-col items-center justify-center p-5 text-center sm:p-6"
+      className="pointer-events-auto relative flex min-h-dvh flex-col items-center justify-center p-5 text-center sm:p-6"
     >
-      <h1 className="hero-legible font-scene-hero text-[clamp(2.5rem,8vw,6rem)] leading-[0.88] text-on-deep">
-        <span className="poster-reveal block">Every day</span>
-        <span className="poster-reveal block">planned.</span>
-        <span className="poster-reveal block">Every dollar</span>
-        <span className="poster-reveal block">spent.</span>
+      {/* The ground where the globe used to be — see `.scene-void`. No `overflow-hidden`: unlike
+          the Hero's fog banks, nothing here bleeds past its own box. */}
+      <div aria-hidden className="scene-void absolute inset-0 -z-10" />
+      {/* One word, and it is the whole reveal.
+          This was "Every day planned. Every dollar spent." across four centred ragged lines,
+          which is a sentence set large rather than a poster: four lines of a claim compete with
+          each other, none of them gets to be big, and the mechanism they describe is already
+          spelled out in the subline directly beneath and in HowItWorks above. The reference's
+          own hero is the single word "Travel". Reducing to one word is what buys the scale —
+          capped at 6rem across four lines, it runs to 12rem on one.
+          "Elsewhere." rather than a stock imperative: it answers the word the sequence opened
+          on. Hero says "Somewhere, it's the blue hour"; this closes the loop.
+
+          The 10.5vw is measured, not guessed. Archivo at 900/125% with this tracking renders
+          "Elsewhere." at about 6.87x its font-size, so the vw term is what decides whether it
+          fits and the rem cap only bites past ~2280px. A single word cannot wrap, so the failure
+          mode is overflow rather than an ugly line break: 15vw filled 93% of a 1920 viewport with
+          74px of total slack, which one differently-metricked fallback face would have blown
+          through. 10.5vw holds it at 66-82% of the available width from 375px to 2560px — the
+          proportion the reference's own one-word hero sits at — with room to spare. */}
+      <h1 className="font-scene-hero text-[clamp(2.5rem,10.5vw,12rem)] leading-[0.88] text-on-deep">
+        <span className="poster-reveal block">Elsewhere.</span>
       </h1>
-      {/* Not text-sm: 96px to 14px is a jump, not a scale step, and this line carries the
+      {/* Not text-sm: the poster above is 134px at a laptop width and 202px at 1920, so 14px is a
+          cliff rather than a scale step, and this line carries the
           mechanism the rest of the page only implies. */}
-      <p className="poster-reveal hero-legible mt-7 max-w-xl text-balance text-base leading-relaxed text-on-deep sm:text-lg">
+      <p className="poster-reveal mt-7 max-w-xl text-balance scene-prose text-base text-on-deep sm:text-lg">
         Tell us where, when, and how much. Get a day-by-day plan that actually costs what
         you said — with the weather already factored in.
       </p>

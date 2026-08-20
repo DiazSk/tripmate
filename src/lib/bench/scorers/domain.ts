@@ -5,7 +5,7 @@ import { dayEntries, parseClock } from "../parseItinerary";
 import type { ParsedItinerary, Slot } from "../parseItinerary";
 import { VIOLATION_TYPES } from "../types";
 import type {
-  BenchLogistics,
+  TripLogistics,
   ConstraintViolationScore,
   CoverageScore,
   FeasibilityScore,
@@ -674,7 +674,7 @@ export function usableSlot(
   dayCount: number,
   fixture: BenchFixture
 ): boolean {
-  const logistics = (fixture.reconciled.userAnswers as { logistics?: BenchLogistics | null })
+  const logistics = (fixture.reconciled.userAnswers as { logistics?: TripLogistics | null })
     .logistics;
   if (!logistics) return true;
   const bounds = SLOT_BOUNDS[slot];

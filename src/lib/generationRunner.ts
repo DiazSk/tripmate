@@ -7,8 +7,15 @@ import { insertRun } from "./db";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
 import { normalizeDays } from "./itinerary";
 import { tripDays, TierId } from "./tiers";
-import { deriveFlags } from "./userAnswers";
-import { CritiqueResult, Itinerary, ItineraryPreferences, ResolvedFlags, UserAnswers } from "./types";
+import { deriveFlags, sanitizeLogistics } from "./userAnswers";
+import {
+  CritiqueResult,
+  Itinerary,
+  ItineraryPreferences,
+  ResolvedFlags,
+  TripLogistics,
+  UserAnswers,
+} from "./types";
 import { StageEvent } from "./generationStages";
 import type { DietaryNeeds } from "./travelerProfile";
 
@@ -64,9 +71,11 @@ export async function runGeneration(
   // as absent rather than fatal — a bad shape must not fail a generation that is
   // otherwise fine, and the prompt is unchanged when this is null.
   let resolvedFlags: ResolvedFlags | null = null;
+  let logistics: TripLogistics | null = null;
   if (userAnswers) {
     try {
       resolvedFlags = deriveFlags(userAnswers as UserAnswers);
+      logistics = sanitizeLogistics((userAnswers as UserAnswers).logistics);
     } catch (err) {
       console.error("[itinerary] ignoring malformed userAnswers", err);
     }
@@ -109,6 +118,7 @@ export async function runGeneration(
       contextInsight,
       resolvedFlags,
       dietary,
+      logistics,
     });
   } else {
     if (!tier) {
@@ -148,6 +158,7 @@ export async function runGeneration(
       contextInsight,
       resolvedFlags,
       dietary,
+      logistics,
     });
   }
 

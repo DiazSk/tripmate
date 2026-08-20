@@ -39,8 +39,7 @@ export function useStopTour() {
     const go = () => {
       setActiveIndex(index);
       // No label: the card already names the place, and flyToPlace's own pin would be a second
-      // one. This is also what brings the viewer up if the page was still on the poster, so
-      // pressing Play on a static city overview is a valid way to start the tour.
+      // one.
       flyToPlace(stops[index].lat, stops[index].lng);
     };
     go();
@@ -68,10 +67,9 @@ export function useStopTour() {
   // listener goes on the Cesium canvas rather than the window so clicking the panel's own
   // controls — including the stop button — doesn't count as taking over.
   //
-  // `ready` is in the deps because starting the tour is now one of the things that *builds* the
-  // viewer: on a trip page running off the poster there is no canvas at the moment Play is
-  // pressed, and without a re-run once one exists, dragging the freshly-arrived globe would
-  // never stop the tour.
+  // `ready` is in the deps because the viewer is built on demand and its canvas may not exist
+  // at the moment Play is pressed. Without a re-run once it does, dragging the freshly-arrived
+  // globe would never stop the tour.
   useEffect(() => {
     if (!playing) return;
     const canvas = viewerRef.current?.scene.canvas;

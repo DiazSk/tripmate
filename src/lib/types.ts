@@ -126,15 +126,49 @@ export interface RawFetch {
 // --- Step 2b: user_answers -------------------------------------------------------------------
 
 export type ExplorerStyle = "packed" | "relaxed" | "offbeat" | "mixed";
-export type GroupType = "solo" | "couple" | "family_with_kids";
+export type GroupType = "solo" | "couple" | "family_with_kids" | "other";
 export type Pace = "slow" | "moderate" | "fast";
 
 /** Who the traveler is, rather than where they've already decided to go. These drive stop
  *  selection: the model reasons from the profile outward to places, instead of being handed a
- *  list of names. Age is deliberately not collected — `energy` is the planning-relevant signal
- *  ("will happily walk all day" vs "wants a bench every hour") and it's answerable directly. */
+ *  list of names. Adult age is still deliberately not collected — `energy` is the
+ *  planning-relevant signal there ("will happily walk all day" vs "wants a bench every hour") and
+ *  it's answerable directly. Children are the exception (see `PartyCounts`): a stroller and a nap
+ *  window are constraints no adult-facing energy answer can express. */
 export type EnergyLevel = "high" | "moderate" | "low";
 export type CrowdPreference = "love" | "mixed" | "avoid";
+
+/** Age bands, not exact ages — the bands are what map onto a planning rule (stroller access, nap
+ *  windows, ride height limits), and asking for a precise age would imply a precision that changes
+ *  nothing. Mirrors how flight booking collects a party, which is where travelers have met it. */
+export interface PartyCounts {
+  /** At least 1. */
+  adults: number;
+  /** Aged 2-11. */
+  children: number;
+  /** Under 2. */
+  infants: number;
+}
+
+/** What the traveler has already booked around the trip. Every field is nullable and the whole
+ *  object is optional: this is the one part of the form nobody is required to fill in, and a rule
+ *  that reads it must no-op rather than guess (see `usableSlot` in the benchmark scorers).
+ *
+ *  Deliberately times, not dates. `startDate`/`endDate` stay the trip's only date range — a second
+ *  one would give the app two competing notions of trip length, and tier pricing, the day count and
+ *  the weather window all read the first. */
+export interface TripLogistics {
+  /** "HH:MM", local, on `startDate`. */
+  arrivalTime: string | null;
+  /** Free text — "Kansai Intl (KIX)", "Kyoto Station". Deliberately not geocoded: it is a fact for
+   *  the prompt, and a lookup would add a fetch that can fail for no planning gain. */
+  arrivalPoint: string | null;
+  /** "HH:MM", local, on `endDate`. */
+  departureTime: string | null;
+  departurePoint: string | null;
+  /** Collected by the benchmark form only; the traveler-facing form does not write it yet. */
+  stayBooked: string | null;
+}
 
 /** Normalized, enum-like flags the itinerary-planner skill branches on — never free text where
  *  a fixed choice is expected. Pace and the other resolved flags are derived in code from these
@@ -143,6 +177,14 @@ export interface UserAnswers {
   purpose: string;
   explorerStyle: ExplorerStyle;
   group: GroupType;
+  /** Free text, meaningful only when `group` is "other" — "five college friends", "work offsite". */
+  groupOther?: string;
+  /** Optional on purpose: every one of these three is absent from rows written before the field
+   *  existed, so each reader treats absence as "not asked" rather than rejecting the row. */
+  party?: PartyCounts;
+  /** What the traveler has already committed to, which outranks anything the model would pick.
+   *  Every rule that reads these degrades rather than assuming when they are absent. */
+  logistics?: TripLogistics | null;
   energy: EnergyLevel;
   crowds: CrowdPreference;
   budget: number;
@@ -160,10 +202,6 @@ export interface UserAnswers {
    *  traveler cannot eat at is the worst defect this app can produce. Both fields empty means
    *  "no restrictions", which is different from the field being absent. */
   dietary?: DietaryNeeds | null;
-  /** What the traveler has already committed to, which outranks anything the model would pick.
-   *  All optional: absent means "not stated", and every rule that reads them degrades rather
-   *  than assuming. */
-  logistics?: TripLogistics | null;
   /** Mobility needs stated directly, rather than inferred from `energy`. Absent means nothing was
    *  stated — NOT that the traveler has no needs. */
   accessibility?: AccessibilityNeeds | null;
@@ -222,6 +260,13 @@ export interface FamilyRules {
   kidFriendlyBias: boolean;
   noLateNight: boolean;
   shortTravelLegs: boolean;
+  /** Infants: step-free routes and somewhere to park a pushchair. */
+  strollerAccess: boolean;
+  /** Infants: leave a usable gap in the middle of the day rather than packing it. */
+  napWindow: boolean;
+  /** The binding constraint — an infant's day and an eleven-year-old's are not the same day.
+   *  Null when the rules fired on the group type alone, with no counts given. */
+  youngestBand: "infant" | "child" | null;
 }
 
 /** Computed from `UserAnswers` in code (never asked, never model-generated) and written into
@@ -235,8 +280,15 @@ export interface ResolvedFlags {
   crowdBias: CrowdBias;
   /** Starred tags first (primary drivers), then the rest as tie-breakers. */
   prioritiesRanked: { primary: string[]; tiebreakers: string[] };
-  /** Only present for group === "family_with_kids". */
+  /** Present whenever the party actually includes children, whatever group type was picked. */
   familyRules: FamilyRules | null;
+  /** Total heads, for lodging capacity and table sizing. Null when no party was given. */
+  partySize: number | null;
+  /** The group in words — the traveler's own description when they picked "other", the pill's
+   *  label otherwise. `formatTravelerProfile` only ever receives resolved flags, so without this
+   *  the legacy prompt carried no group at all: "solo" and "couple" never reached the model, and
+   *  the free-text "other" description would have been collected and discarded. */
+  groupLabel: string;
 }
 
 // --- Step 3: join / barrier ------------------------------------------------------------------

@@ -1,18 +1,14 @@
-import type { TripLogistics } from "../types";
 /** Result shapes for every scorer. One file so the API route, the DB row and the UI agree. */
 
 /**
- * Booked flights/stay, as the benchmark reads them.
+ * Booked flights/stay. This used to be a local duplicate, declared here because `UserAnswers` had
+ * no `logistics` field and the traveler-facing form didn't collect one. It does now, so the
+ * benchmark reads the same shape the app writes.
  *
- * Declared here rather than imported from `UserAnswers` because this branch's `UserAnswers` has no
- * `logistics` field — the traveler-facing "what's already booked" work isn't merged. The benchmark
- * form still collects these, and `usableSlot()` still honours them (skill 4c-bis: a booked arrival
- * makes the early part of day 1 unusable). Reading it structurally means the rule is a no-op when
- * the field is absent and starts working the moment that feature lands, with no change here.
+ * `usableSlot()` still reads it structurally off `userAnswers`, which keeps the rule a no-op for
+ * every fixture and stored trip written before the field existed.
  */
-/** Kept as a re-export rather than a second declaration: this shape is now `UserAnswers.logistics`
- *  in src/lib/types.ts, and two copies of it is how they drift. */
-export type BenchLogistics = TripLogistics;
+export type { TripLogistics } from "../types";
 
 export type ScorerKind = "deterministic" | "lexical" | "operational" | "model-judged";
 
@@ -185,8 +181,7 @@ export interface BudgetScore {
   pricedStops: number;
   breakdown: Record<string, number>;
   excludes: string[];
-  /** True when the total rests on the configurable estimate table because the output carried no
-   *  `$cost` fields; false when it's the model's own stated costs, which §11 now requires. */
+  /** Always true: the pipeline carries no prices, so this rests on a configurable estimate table. */
   estimateBased: boolean;
   /** How much of the trip's total is the traveler's target. §5 asks for 85-100% of the budget, so
    *  a plan that lands at 40% is a miss in the other direction — one the estimate table could

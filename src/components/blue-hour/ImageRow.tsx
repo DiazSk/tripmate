@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import Image from "next/image";
-import { gsap, ScrollTrigger, prefersReducedMotion } from "@/lib/gsap";
+import { gsap } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
 import { sceneBeats } from "./sceneBeats";
 
@@ -16,8 +17,10 @@ const PLACEHOLDER_GRADIENTS = [
 /**
  * The "images together" row — Vita Travels' own pattern for a set of related
  * photos: side by side, sharp/compact, a one-line caption above each, never a
- * paragraph on the image. Keeps TripMate's own rounded-2xl card language rather
- * than Vita's sharp 0px corners (see plan addendum for why). Replaces the earlier
+ * paragraph on the image. These four are square-cornered, unlike every other card
+ * in the app: the 16px radius belongs to glass floating over the globe, and these
+ * are content sitting on a solid band. Rounding them made four photographs read as
+ * four UI cards. Replaces the earlier
  * per-beat full-viewport "Framed Card" sections — four full-screen stops was the
  * reason the landing didn't hit hard; this is one compact moment instead.
  */
@@ -63,9 +66,8 @@ export default function ImageRow() {
       id="journey"
       // scroll-mt: Navbar's anchor links call scrollIntoView({block:"start"}), which
       // would otherwise land this section's top edge flush under the fixed nav.
-      className="scene-band pointer-events-auto scroll-mt-[var(--nav-h)] overflow-hidden px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band pointer-events-auto grid scroll-mt-[var(--nav-h)] grid-cols-2 gap-4 overflow-hidden px-5 py-16 sm:px-6 sm:py-24 md:grid-cols-4 md:gap-6"
     >
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
       {sceneBeats.map((beat, index) => (
         // `group` drives the whole hover treatment: the frost clears, the photo eases up
         // in scale, the description rises out of the bottom edge. Pure CSS transitions
@@ -73,20 +75,28 @@ export default function ImageRow() {
         // not depend on a JS animation loop. Every property references the single
         // `--scene-hover` clock so they start and land on the same frame.
         <div key={beat.id} className="image-row-item group">
-          {/* Label + stat together, so the area above the card is a complete "what /
-              how much" pairing rather than a single word standing alone — the same
-              two-line shape Vita Travels uses ("Introvert Retreats / 78+ Countries").
-              min-h reserves room for a 2-line stat regardless of how many lines this
-              particular one actually wraps to — without it, a card whose stat happened
-              to fit on one line sat next to one whose stat wrapped to two, and the grid
-              row's photos (each mt-3 below its own text block) started at different
-              heights. line-clamp-2 is the matching upper bound, so a future longer stat
-              can't blow past the reserved space and reintroduce the same drift. */}
-          <div className="min-h-14 [transition:var(--scene-hover)] [transition-property:transform] group-hover:-translate-y-1">
-            <p className="font-scene-body text-sm font-medium text-foreground">{beat.label}</p>
-            <p className="font-scene-body mt-0.5 line-clamp-2 text-xs text-muted">{beat.stat}</p>
+          {/* Label + stat on a hairline — Vita Travels' own card head ("Introvert Retreats"
+              left, "/ 78+ Countries" right, rule beneath). The rule is what makes the pair
+              read as a caption belonging to the photograph below it rather than as two loose
+              lines of text floating above it.
+              The split to one line is `lg` and up only, because this copy is not Vita's: their
+              stats are three words, ours run to "Lodging, food, and transit — itemized", which
+              needs roughly 200px beside an 80px label. That fits in a card at 1024px and wider
+              and wraps into a mess below it, so narrow viewports keep the stacked shape.
+              min-h-14 reserves room for a 2-line stat while stacked — without it, a card whose
+              stat fit on one line sat beside one that wrapped to two, and the row's photos (each
+              mt-3 below its own text block) started at different heights. Dropped at `lg`, where
+              the row is one line by definition and the reserved space would just push the rule
+              away from the text it belongs to. line-clamp-2 is the matching upper bound. */}
+          <div className="min-h-14 border-b border-white/10 pb-2 [transition:var(--scene-hover)] [transition-property:transform] group-hover:-translate-y-1 lg:flex lg:min-h-0 lg:items-baseline lg:justify-between lg:gap-4">
+            <p className="text-sm font-medium text-foreground">{beat.label}</p>
+            <p className="mt-0.5 line-clamp-2 text-xs text-muted lg:mt-0 lg:text-right">
+              {beat.stat}
+            </p>
           </div>
-          <div className="relative mt-3 aspect-[3/4] transform-gpu overflow-hidden rounded-2xl border border-card-border [transition:var(--scene-hover)] [transition-property:box-shadow] group-hover:shadow-2xl group-hover:shadow-black/40">
+          {/* 11:12 rather than 3:4 — near-square, matching the reference's own 0.92. At 3:4 four
+              portraits side by side ran taller than the viewport once the row went full-bleed. */}
+          <div className="relative mt-3 aspect-[11/12] transform-gpu overflow-hidden border border-card-border [transition:var(--scene-hover)] [transition-property:box-shadow] group-hover:shadow-2xl group-hover:shadow-black/40">
             {beat.photo ? (
               <Image
                 src={beat.photo.src}
@@ -104,17 +114,16 @@ export default function ImageRow() {
             {/* Resting frost sheet — clears on hover. */}
             <div className="scene-frost pointer-events-none absolute inset-0" />
             {/* …and reappears as frost gathered on the inside edges. */}
-            <div className="scene-frost-edge pointer-events-none absolute inset-0 rounded-2xl" />
+            <div className="scene-frost-edge pointer-events-none absolute inset-0" />
             <div className="scene-photo-sheen pointer-events-none absolute inset-0" />
             {/* The description lives in the card now, hidden until hover. Its scrim is
                 part of the same element, so the photo is unobstructed at rest. */}
-            <p className="scene-card-detail font-scene-body pointer-events-none absolute inset-x-0 bottom-0 p-4 pt-10 text-xs leading-relaxed text-on-deep">
+            <p className="scene-card-detail pointer-events-none absolute inset-x-0 bottom-0 p-4 pt-10 text-xs leading-relaxed text-on-deep">
               {beat.detail}
             </p>
           </div>
         </div>
       ))}
-      </div>
     </section>
   );
 }

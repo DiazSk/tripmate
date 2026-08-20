@@ -251,7 +251,11 @@ const SPECS: FixtureSpec[] = [
       accessibility: { stepFreeRequired: true, limitStairs: true, note: "manual wheelchair, no steps at all" },
       logistics: {
         arrivalTime: "13:45",
+        // Null rather than invented: this fixture predates the arrival/departure *points*, and
+        // null is exactly what "not stated" means to every rule that reads them.
+        arrivalPoint: null,
         departureTime: "11:00",
+        departurePoint: null,
         stayBooked: "Hotel Ronda Sant Pere (already paid)",
       },
     },
