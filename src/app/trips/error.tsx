@@ -17,7 +17,9 @@ import ErrorNote from "@/components/ErrorNote";
 export default function TripsError({ reset }: { error: Error; reset: () => void }) {
   return (
     <main className="dashboard-page map-chrome-hidden flex min-h-full items-center p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)]">
-      <div className="pointer-events-auto mx-auto w-full max-w-5xl">
+      {/* Uncapped, matching the grid it stands in for - this file's whole contract is that
+          the failure occupies the same box the content would have. */}
+      <div className="pointer-events-auto w-full">
         <ErrorNote>
           We couldn&rsquo;t load your memories.{" "}
           <button type="button" onClick={reset} className="underline underline-offset-2">

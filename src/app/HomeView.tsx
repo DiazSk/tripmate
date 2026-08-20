@@ -673,7 +673,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           button that now sits below the tier cards. */}
       {step === "plan" && !generating && (
         <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-5xl space-y-4">
+          {/* 84rem, not the 64rem this was. A rem cap is the right shape here because the root is
+              fluid - the ceiling scales with the design rather than pinning it - but 64rem still left
+              320px of dead slate either side at 1920 and 640px at 2560, next to a landing that now
+              runs edge to edge. Not removed outright, unlike the photo grid: this is a form, and a
+              four-cell field row spanning 1900px puts Back and Next at opposite ends of the screen
+              and stops them reading as a pair. */}
+          <div className="w-full max-w-[84rem] space-y-4">
             {/* Same hero-rise as the landing block, so the step reads as one move in both
                 directions rather than an instant swap forward and an animated one back. */}
             <form

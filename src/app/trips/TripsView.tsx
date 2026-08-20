@@ -240,13 +240,17 @@ function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => voi
           photo itself lives on its own layer over that base, keyed on its URL, and fades in
           with .value-in rather than overwriting the tile's own paint — mirroring
           BlurredPhotoLayer (ItineraryCard.tsx) instead of a hard pop the moment it resolves. */}
-      {/* 200px, not the h-36 (144px) this started at — at this card's own width that was
-          roughly a 3:1 letterbox, and a landscape photo whose subject is a single tall
-          landmark (a tower, a bridge) center-crops straight through the part of the photo
-          that made it recognizable. 200px matches the Tier Cards' own established photo
-          height (DESIGN.md: "a three-up grid of 200px-tall image buttons") rather than
-          inventing a second photo aspect ratio for the same kind of card. */}
-      <div className="memory-card-photo relative h-[200px] overflow-hidden rounded-xl bg-tile">
+      {/* A ratio, not a fixed height, and the grid going uncapped is what forced it. This was
+          `h-[200px]`, borrowed from the Tier Cards to avoid inventing a second photo aspect for
+          the same kind of card — which held while the grid was boxed at 1024px and two cards
+          were always ~490px wide. Uncapped and three-up, a card runs past 600px on a wide
+          display, and 600x200 is the 3:1 letterbox the previous note here was written to warn
+          about: a landscape photo whose subject is one tall landmark (a tower, a bridge) gets
+          centre-cropped straight through the part that made it recognizable. 16:10 holds that
+          framing at every column count — 209px tall on a phone, near the 200px this replaces,
+          and it grows with the card instead of stretching a slot. The Tier Cards keep their
+          fixed height because they are still inside a capped panel. */}
+      <div className="memory-card-photo relative aspect-[16/10] overflow-hidden rounded-xl bg-tile">
         {/* next/image, not a CSS background-image — see HeroTile's own comment for why a
             background-image on an overflow-hidden + hover-transform box like this one
             rasterizes softer than a plain <img>, independent of the source file's own
@@ -257,7 +261,12 @@ function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => voi
             src={photo}
             alt=""
             fill
-            sizes="(max-width: 640px) 100vw, 50vw"
+            // Tracks the column count, per the Optimized-Photo Rule: one card is the full width
+            // on a phone, half up to `xl`, a third above it. Leaving this at a flat `50vw` after
+            // the grid gained a third column is the same mistake the hero tiles shipped — an
+            // over-wide candidate on one breakpoint and an under-wide, visibly soft one on
+            // another.
+            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
             // See HeroTile's own comment: same real-photo inconsistency, same fix.
             className="value-in object-cover contrast-105 saturate-110"
           />
@@ -385,8 +394,12 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
         <MemoriesHero trips={trips} />
       </div>
 
+      {/* Uncapped, like the landing bands. This is a grid of photographs, and a photo grid boxed
+          in the middle of a 2560px screen with 640px of dead slate either side is the thing the
+          whole full-bleed pass was correcting. The gutter from `<main>` is the only constraint it
+          needs. */}
       {trips.length > 0 && (
-        <div className="pointer-events-auto mx-auto max-w-5xl pt-10 sm:pt-12">
+        <div className="pointer-events-auto pt-10 sm:pt-12">
           {/* A delete that failed reports here rather than inside the dialog, which has
               already closed — the grid it refers to is what's on screen. */}
           {deleteError && (
@@ -394,7 +407,11 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
               <ErrorNote>{deleteError}</ErrorNote>
             </div>
           )}
-          <ul className="memory-cards grid grid-cols-1 gap-5 sm:grid-cols-2">
+          {/* A third column from `xl`. Widening an uncapped grid by making two cards enormous is
+              not opening it up, it is just a bigger box — the extra room goes into more
+              photographs. Stops at three: a fourth would put the caption's destination name and
+              date row on cards narrow enough to wrap again. */}
+          <ul className="memory-cards grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {trips.map((trip) => (
               <li key={trip.id}>
                 <MemoryCard trip={trip} onDelete={() => setPendingDelete(trip)} />
