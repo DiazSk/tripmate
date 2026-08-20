@@ -98,6 +98,33 @@ tables are maintained.
 
 ## Eliminated
 
+<details><summary>Globe idle auto-rotation — Eliminated 2026-08-20 (Claude)</summary>
+
+A continuous slow drift on `scene.postRender`, eased out after 4s idle over 2.5s, paused on
+`pointerdown` and resumed on `pointerup`, permanently locked by `stopAutoRotate()` on the first
+camera flight and only ever unlocked by `resetToHome()`'s flight-complete callback. About 60 lines
+in `GlobeBackground`, plus call sites in `mapCamera` (x3), `MapControls`, and comments in
+`HomeView`, `useStopTour`, `DESIGN.md` and `docs/mac-safari-testing.md`.
+
+Unreachable once the globe was gated to two surfaces. Both of them command the camera on arrival —
+`TripView` flies to the trip, `showDayRoute` frames the day — so `rotating` went false on the first
+flight and stayed false: `startAutoRotate` was only reachable from a flight-complete callback that
+cannot fire while the render loop is paused, and `pauseSpin`/`resumeSpin` were gated on a `locked`
+flag nothing could clear. The drift was never visible again.
+
+The one part that needed proving rather than reasoning was `wake()`, the `wheel` handler, whose
+docblock claimed it was "load-bearing under `requestRenderMode`" because `postRender` only fires on
+frames that rendered. Tested with it removed, on a scene confirmed asleep (0 painted frames in
+1.5s): 8 wheel notches took the camera from 4561m to 1236m across 30 painted frames, and a drag
+moved it and returned to 0 frames within 2.5s of release. Cesium requests its own renders for both
+gestures; `wake()` was only ever restarting the drift.
+
+Also removed the older **Do** rule that told every camera-dependent probe to call
+`stopAutoRotate()` first — the hazard it guarded (a `setView` pose being rotated away during the
+settle window, which once corrupted a tile-detail probe into reporting 2,054m of geometric error at
+900m) no longer exists. The replacement rule is about the scene being *asleep*, not about it moving.
+</details>
+
 <details><summary>Per-page duplicated header markup — Eliminated 2026-08-05 (Aryan)</summary>
 
 Each of the three pages (`/`, `/trips`, `/trip/[id]`) had its own inline

@@ -171,9 +171,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         pendingRef.current = [lat, lng, height, pitchDeg, label, centreHeightM];
         return;
       }
-      // Flying toward a specific place means the globe shouldn't keep auto-rotating
-      // under it — see stopAutoRotate in GlobeBackground.
-      (viewer as Viewer & { stopAutoRotate?: () => void }).stopAutoRotate?.();
       import("cesium").then((Cesium) => {
         // The viewer can be torn down while this dynamic import is in flight.
         if (viewer.isDestroyed()) return;
@@ -253,7 +250,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       // this", so this deliberately overrides wherever the user had dragged the camera. Started
       // before the height sampling below, since framing needs no heights and the 2s flight
       // covers the sampling latency.
-      (viewer as Viewer & { stopAutoRotate?: () => void }).stopAutoRotate?.();
       const sphere = Cesium.BoundingSphere.fromPoints(groundPositions);
       const radius = Math.max(sphere.radius, MIN_ROUTE_RADIUS_M);
       // The itinerary panel covers the right ~40% from `sm:` up, so aim east of the route's
@@ -438,8 +434,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
 
     import("cesium").then((Cesium) => {
       if (viewer.isDestroyed()) return;
-      // camera.flyTo directly rather than this module's flyTo helper — that one calls
-      // stopAutoRotate on every invocation, which is the opposite of what's wanted here.
+      // camera.flyTo directly rather than this module's flyTo helper, which layers this app's
+      // own pitch/range conventions on top of a destination — this wants the raw hero pose.
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(HERO_VIEW.lng, HERO_VIEW.lat, HERO_VIEW.height),
         orientation: {
@@ -448,8 +444,6 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
           roll: 0,
         },
         duration: 2.0,
-        complete: () =>
-          (viewer as Viewer & { startAutoRotate?: () => void }).startAutoRotate?.(),
       });
     });
   }, []);

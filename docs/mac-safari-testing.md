@@ -284,8 +284,6 @@ becomes ready — and correlating that against the frame gap:
   }
   if (!t) return "no tileset";
   window.__tileset = t;
-  // Attached to the viewer by GlobeBackground, but late — every call site in the app guards it.
-  v.stopAutoRotate?.();
   const A = (window.__a = { rows: [], loadsThisFrame: 0, recording: false, last: 0 });
   t.tileLoad.addEventListener(() => { A.loadsThisFrame++; });
   v.scene.postRender.addEventListener(() => {
@@ -319,8 +317,9 @@ did. `maxLoadsInOneFrame` is the metric that actually predicts the stall.
 
 Two disciplines make the runs comparable. **Give every condition its own city nobody has visited
 that session** — both the tileset cache and the HTTP cache make a second visit meaningless — and
-park the camera with `setView` at a fixed altitude first (`viewer.stopAutoRotate()` before it, or
-the auto-rotate listener drags the camera off your pose; see DESIGN.md). And **read
+park the camera with `setView` at a fixed altitude first — it stays where you put it now that the
+idle auto-rotate drift is deleted, but the scene is also *asleep*, so ask for a frame with
+`scene.requestRender()` rather than waiting for one (see DESIGN.md). And **read
 `maxLoadsInOneFrame`, not total tiles fetched**: Sydney pulled the most tiles of any run in this
 session (306) and had the *smallest* stall.
 

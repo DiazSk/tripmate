@@ -29,14 +29,6 @@ const LOD_TIERS = [
   [Infinity, 16, true],
 ] as const;
 
-/** How long the globe sits untouched before the idle drift starts easing out, and how long that
- *  ease takes. Together they bound how long the scene keeps repainting after the last
- *  interaction — past that the canvas goes quiet and every glass panel over it stops re-blurring.
- *  Long enough that the drift still reads as "alive" on arrival; short enough that a page left
- *  open costs nothing. */
-const SPIN_IDLE_AFTER_MS = 4_000;
-const SPIN_EASE_OUT_MS = 2_500;
-
 /** Ceiling on the device-pixel ratio the scene renders at — see the `resolutionScale` comment
  *  below for the measurement behind 1.5. */
 const MAX_RENDER_PIXEL_RATIO = 1.5;
@@ -99,8 +91,8 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
     const viewer = viewerInstanceRef.current;
     if (!viewer || viewer.isDestroyed()) return;
     // Stops the render loop entirely rather than just hiding the canvas — with it running,
-    // Cesium keeps re-rendering the (Google photorealistic, tile-streaming) scene and ticking
-    // the auto-rotate spin every frame regardless of whether anything is drawn on top of it.
+    // Cesium keeps re-rendering the (Google photorealistic, tile-streaming) scene regardless of
+    // whether anything is drawn on top of it.
     viewer.useDefaultRenderLoop = globeWanted;
     // Under requestRenderMode, restarting the loop is not by itself enough to draw anything —
     // it renders on demand, and arriving back from a hidden route is a demand nothing else
@@ -116,10 +108,6 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
   useEffect(() => {
     let viewer: import("cesium").Viewer | undefined;
     let cancelled = false;
-    let spinListener: (() => void) | undefined;
-    let pauseSpin: (() => void) | undefined;
-    let resumeSpin: (() => void) | undefined;
-    let wakeSpin: (() => void) | undefined;
 
     (async () => {
       if (!built || !containerRef.current) return;
@@ -351,97 +339,6 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
         },
       });
 
-      // Continuous slow auto-rotation, paused while the user is actively dragging/
-      // touching the globe and resumed after release. `draggingFromCanvas` (not just
-      // "rotating") gates resume, because pointerup is tracked on window (so a drag
-      // that ends off-canvas still resumes) — without it, releasing a click on any
-      // other UI (e.g. the "Choose your style" button) would also resume rotation,
-      // fighting with whatever flyTo that button just triggered. `locked` is set once
-      // a destination is actually chosen (see stopAutoRotate below) and, unlike a
-      // drag pause, is never auto-resumed.
-      let rotating = true;
-      let locked = false;
-      let draggingFromCanvas = false;
-      let lastTime = Date.now();
-      let lastInteraction = Date.now();
-
-      /**
-       * Wakes the scene.
-       *
-       * Load-bearing under `requestRenderMode`: `postRender` only fires on frames that actually
-       * rendered, so once the drift has eased out and stopped asking for frames, `spinListener`
-       * can no longer restart itself. Every path back into motion has to go through here.
-       */
-      const wake = () => {
-        lastInteraction = Date.now();
-        lastTime = lastInteraction;
-        if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender();
-      };
-
-      spinListener = () => {
-        if (!rotating) {
-          lastTime = Date.now();
-          return;
-        }
-        const now = Date.now();
-        const delta = (now - lastTime) / 1000;
-        lastTime = now;
-        // Ease the drift to a standstill once the user has been idle, rather than cutting it:
-        // an abrupt stop reads as a stall. Squared so the last few degrees are the gentlest.
-        // When `remaining` reaches 0 this returns *without* requesting another frame, and the
-        // canvas — along with every backdrop-filter panel sampling it — stops repainting.
-        const idleFor = now - lastInteraction;
-        const remaining =
-          1 - Math.min(1, Math.max(0, idleFor - SPIN_IDLE_AFTER_MS) / SPIN_EASE_OUT_MS);
-        if (remaining <= 0) return;
-        viewer!.scene.camera.rotate(
-          Cesium.Cartesian3.UNIT_Z,
-          -0.05 * delta * remaining * remaining
-        );
-        viewer!.scene.requestRender();
-      };
-      pauseSpin = () => {
-        draggingFromCanvas = true;
-        rotating = false;
-      };
-      resumeSpin = () => {
-        if (draggingFromCanvas && !locked) {
-          rotating = true;
-          wake();
-        }
-        draggingFromCanvas = false;
-      };
-      viewer.scene.postRender.addEventListener(spinListener);
-      viewer.scene.canvas.addEventListener("pointerdown", pauseSpin);
-      // Zoom is the one globe interaction that never goes through pointerdown/pointerup, so it
-      // would otherwise leave the drift eased-out while the user is plainly still using the map.
-      viewer.scene.canvas.addEventListener("wheel", wake, { passive: true });
-      wakeSpin = wake;
-      window.addEventListener("pointerup", resumeSpin);
-
-      // Exposed on the viewer so code elsewhere holding the same viewer instance
-      // (mapCamera's flyTo, triggered once a destination is chosen) can permanently
-      // stop the spin — flying toward a specific place while the globe keeps
-      // spinning under it makes no sense.
-      (viewer as import("cesium").Viewer & { stopAutoRotate?: () => void }).stopAutoRotate = () => {
-        locked = true;
-        rotating = false;
-      };
-
-      // The counterpart, for returning to the landing page. Without it `locked` is never written
-      // back, so the first flight of the session kills the idle spin for the tab's lifetime —
-      // a soft navigation home would sit still where a hard reload spins.
-      (viewer as import("cesium").Viewer & { startAutoRotate?: () => void }).startAutoRotate =
-        () => {
-          locked = false;
-          rotating = true;
-          // Load-bearing: spinListener integrates (now - lastTime), so resuming without this
-          // snaps the globe through however long the spin was paused. `wake` also resets the
-          // idle clock and asks for the frame that restarts the loop — without that second half
-          // this resumes a spin that, under requestRenderMode, would never be stepped.
-          wake();
-        };
-
       viewerInstanceRef.current = viewer;
 
       // Dev-only handle for inspecting the scene from the console or a browser-automation
@@ -465,12 +362,6 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       cancelled = true;
       viewerInstanceRef.current = null;
       setViewer(null);
-      if (viewer) {
-        if (spinListener) viewer.scene.postRender.removeEventListener(spinListener);
-        if (pauseSpin) viewer.scene.canvas.removeEventListener("pointerdown", pauseSpin);
-        if (wakeSpin) viewer.scene.canvas.removeEventListener("wheel", wakeSpin);
-      }
-      if (resumeSpin) window.removeEventListener("pointerup", resumeSpin);
       viewer?.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

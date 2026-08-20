@@ -434,11 +434,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setCustomPois((prev) => prev.filter((p) => p !== name));
   }
 
-  // One geocode per completed edit of the destination field, fired on blur. Not on a
-  // keystroke debounce: mapCamera's flyTo calls stopAutoRotate(), which is a permanent lock
-  // only resetToHome() ever clears, so the first keystroke-triggered flight would kill the
-  // idle spin for the session — and the overlapping 2.5s flights visibly lurch the camera
-  // through everywhere the prefix matched on the way to the real destination.
+  // One geocode per completed edit of the destination field, fired on blur rather than on a
+  // keystroke debounce. The reason is the flights themselves: overlapping 2.5s camera flights
+  // visibly lurch through everywhere the prefix matched on the way to the real destination.
+  // (It also used to be about the auto-rotate lock — the first keystroke-triggered flight killed
+  // the idle spin for the session. That spin is gone, and this reason on its own still holds.)
   const lastFlownRef = useRef("");
   async function flyToTypedDestination() {
     const name = destination.trim();
@@ -454,8 +454,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setStep("landing");
     setPlanStep("basics");
     setError(null);
-    // Required, not cosmetic: a blur-triggered flight left the spin locked and a pin dropped.
-    // resetToHome is the only thing that clears the pin and calls startAutoRotate() again.
+    // Required, not cosmetic: a blur-triggered flight leaves a destination pin dropped and the
+    // camera parked on it, and resetToHome is the only thing that clears them.
     resetToHome();
   }
 

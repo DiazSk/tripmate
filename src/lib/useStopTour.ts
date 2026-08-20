@@ -39,7 +39,7 @@ export function useStopTour() {
     const go = () => {
       setActiveIndex(index);
       // No label: the card already names the place, and flyToPlace's own pin would be a second
-      // one. This also calls stopAutoRotate, so the tour needs no opinion about the idle spin.
+      // one.
       flyToPlace(stops[index].lat, stops[index].lng);
     };
     go();
