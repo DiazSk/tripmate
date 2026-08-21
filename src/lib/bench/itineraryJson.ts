@@ -19,9 +19,11 @@ import type { StopCategory } from "../types";
  * than the model's prose — the same "attach the fetched weather server-side, don't trust the
  * model's guess" rule `/api/itinerary` already applies via `weatherDetail`.
  *
- * Two fields the markdown genuinely cannot supply are omitted rather than faked: per-stop `cost`
- * (the staged path never asks for money) and `tier`. Emitting `cost: 0` would put a wrong number
- * into a machine-readable payload, which is worse than an absent one.
+ * `cost` is now carried: skill §11 requires a `$cost` on every stop and on the lodging line, so it
+ * is the model's own stated figure rather than an invention of ours. It stays `null` when a stop
+ * omitted it — an absent price and a free stop are different facts, and emitting `0` for the first
+ * would put a wrong number into a machine-readable payload. `tier` is still omitted: it belongs to
+ * the legacy single-shot path, not this one.
  */
 
 export interface BenchStopJson {
@@ -37,6 +39,8 @@ export interface BenchStopJson {
   /** True for §3b area-level entries (a district + a meal, not a specific venue). */
   areaLevel: boolean;
   category: StopCategory;
+  /** The model's own stated `$cost` from §11. Null when the stop omitted it — not the same as 0. */
+  costUsd: number | null;
   /** Resolved from the trip's candidate/anchor set when the name matches one; null otherwise. */
   lat: number | null;
   lng: number | null;
@@ -59,6 +63,8 @@ export interface BenchDayJson {
     estimated: boolean;
   } | null;
   stayNear: string | null;
+  /** §11's `**Lodging:**` line, parsed. Null on the last day, where the format omits it. */
+  lodging: { name: string; costUsd: number | null; note: string | null } | null;
   note: string | null;
   stops: BenchStopJson[];
 }
@@ -122,9 +128,15 @@ export function toItineraryJson(
             ? { mode: entry.transport.mode, minutes: entry.transport.minutes }
             : null,
           areaLevel: entry.areaLevel,
-          category: categorize(entry.name, entry.raw, poi !== null),
-          lat: poi?.lat ?? null,
-          lng: poi?.lon ?? null,
+          // §11's own category when the model wrote a valid one; the lexical guess only as fallback,
+          // which is all this had before the format carried the field.
+          category: entry.category ?? categorize(entry.name, entry.raw, poi !== null),
+          costUsd: entry.costUsd,
+          // A matched context POI wins: its coordinates are OSM's, the model's are from memory and
+          // measurably wrong (Fushimi Inari came out 11km off). The model's own pair is the
+          // fallback for anything not in the bundle, which is most stops.
+          lat: poi?.lat ?? entry.lat,
+          lng: poi?.lon ?? entry.lng,
           matchedPoi: poi?.name ?? null,
           raw: entry.raw,
         };
@@ -146,6 +158,9 @@ export function toItineraryJson(
           }
         : null,
       stayNear: day.stayNear,
+      lodging: day.lodging
+        ? { name: day.lodging.name, costUsd: day.lodging.costUsd, note: day.lodging.note }
+        : null,
       note: day.note,
       stops,
     };
@@ -157,10 +172,7 @@ export function toItineraryJson(
     model,
     preamble: parsed.preamble.trim() || null,
     days,
-    omittedFields: [
-      "stop.cost — the staged generation path never asks the model for prices",
-      "tier — belongs to the legacy single-shot path, not this one",
-    ],
+    omittedFields: ["tier — belongs to the legacy single-shot path, not this one"],
   };
 }
 

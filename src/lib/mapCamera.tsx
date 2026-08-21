@@ -48,6 +48,23 @@ interface MapCameraContextValue {
    *  ponytail: make this a counter if a route ever mounts two globe surfaces at once. */
   globeWanted: boolean;
   setGlobeWanted: (wanted: boolean) => void;
+  /** The two inert setters below are retained deliberately, and they mark the seam where a deferred
+   *  piece of `dev-aryan` meets this branch. That branch models the globe as `off | static | live`,
+   *  with a still `GlobePoster` standing in whenever Cesium is not mounted; this branch instead
+   *  gates Cesium to two surfaces (see `globeWanted`) and shows flat canvas elsewhere. Ours was kept
+   *  at merge time because seven commits of measured work live in it, and `GlobePoster.tsx` was left
+   *  in the tree unreferenced against porting the idea properly later.
+   *
+   *  Until then these exist so his callers still compile:
+   *  - `setGlobeSpinning` — `HeroPoster` gates the globe's idle drift on an IntersectionObserver.
+   *    That drift was deleted in `0d32882` after being proven unreachable, and `ScrollStory` no
+   *    longer renders `HeroPoster`, but the file is kept on disk.
+   *  - `setPosterPlace` — `useTripCamera` tells the poster which destination photo to show. With no
+   *    poster rendered there is nothing to tell.
+   *
+   *  If the poster architecture is ever ported, these are the two hooks it reconnects to. */
+  setGlobeSpinning: (spinning: boolean) => void;
+  setPosterPlace: (place: string | null) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   flyToPlace: (lat: number, lng: number, label?: string) => void;
   /** Wipe every trip overlay, fly back to the hero pose and resume the idle spin. The globe
@@ -463,6 +480,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       ready,
       globeWanted,
       setGlobeWanted,
+      setGlobeSpinning: noopGlobeSpinning,
+      setPosterPlace: noopPosterPlace,
       flyToDestination,
       flyToPlace,
       resetToHome,
@@ -506,6 +525,11 @@ export function useMapCamera() {
  * The viewer is never *destroyed* — see `GlobeBackground`'s construction effect for why a swap is
  * unrecoverable — so this is a visibility gate, not a lifecycle one.
  */
+/** Module scope, not an inline arrow: a fresh function on every render would change the context
+ *  value's identity and defeat the `useMemo` wrapped around it. */
+function noopGlobeSpinning(): void {}
+function noopPosterPlace(): void {}
+
 export function useGlobeOnScreen(wanted: boolean) {
   const { setGlobeWanted } = useMapCamera();
   useEffect(() => {

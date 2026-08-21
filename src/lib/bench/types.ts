@@ -8,6 +8,9 @@
  * `usableSlot()` still reads it structurally off `userAnswers`, which keeps the rule a no-op for
  * every fixture and stored trip written before the field existed.
  */
+/** Re-exported rather than declared a second time: this shape is now `UserAnswers.logistics` in
+ *  src/lib/types.ts, and two copies of it is how they drift. `bench/customTrip.ts` imports it from
+ *  here by this name. */
 export type { TripLogistics } from "../types";
 
 export type ScorerKind = "deterministic" | "lexical" | "operational" | "model-judged";
@@ -181,8 +184,13 @@ export interface BudgetScore {
   pricedStops: number;
   breakdown: Record<string, number>;
   excludes: string[];
-  /** Always true: the pipeline carries no prices, so this rests on a configurable estimate table. */
+  /** True when the total rests on the configurable estimate table because the output carried no
+   *  `$cost` fields; false when it's the model's own stated costs, which §11 now requires. */
   estimateBased: boolean;
+  /** How much of the trip's total is the traveler's target. §5 asks for 85-100% of the budget, so
+   *  a plan that lands at 40% is a miss in the other direction — one the estimate table could
+   *  never see, since it priced stops rather than reading them. Null when not measurable. */
+  budgetUsedFraction: number | null;
   normalized: number | null;
 }
 

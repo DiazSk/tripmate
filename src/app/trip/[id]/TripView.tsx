@@ -95,6 +95,15 @@ export default function TripView({
       body: JSON.stringify({ itinerary: updated }),
     });
     if (!res.ok) throw new Error("That amount didn't save. Check your connection and re-enter it.");
+
+    // An edit can now change the trip's LENGTH (the chat can add or remove days), which moves the
+    // end date. The route recomputes it from the saved itinerary, so take its answer rather than
+    // deriving a second one here — otherwise the header keeps showing the old date range until a
+    // reload.
+    const saved = await res.json().catch(() => null);
+    if (saved?.endDate) {
+      setTrip((prev) => (prev && prev.endDate !== saved.endDate ? { ...prev, endDate: saved.endDate } : prev));
+    }
   }
 
   function handleActualCostChange(
@@ -118,6 +127,15 @@ export default function TripView({
       next.delete(dayIndex);
       return next;
     });
+  }
+
+  /** A hand-rearranged itinerary from the card's drag-and-drop. `moveStop` has already re-timed
+   *  every day it touched, so this only has to commit it — and it saves immediately rather than
+   *  waiting for a Save button, matching how the actual-cost inputs on this page already behave. */
+  function handleRearrange(next: Itinerary) {
+    setItinerary(next);
+    setError(null);
+    persist(next).catch((e) => setError(errorMessage(e, "That change didn't save.")));
   }
 
   function handleEditDay(dayIndex: number, updates: DayEditUpdates) {
@@ -309,7 +327,12 @@ export default function TripView({
                   activeDayIndex={activeDayIndex}
                   onActiveDayChange={setActiveDayIndex}
                   onEditDay={handleEditDay}
-                  onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
+                  // Same window "Refine with AI" opens, just starting on the day whose icon was
+                  // clicked: one chat surface with day navigation, rather than a second
+                  // day-locked variant that looked identical but couldn't reach other days.
+                  onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
+                  onItineraryChange={handleRearrange}
+                  trip={trip}
                 />
               )}
 

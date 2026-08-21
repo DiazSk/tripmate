@@ -16,7 +16,7 @@ const TOUR_INTERVAL_MS = 6500;
  * there is no way to tell "still going" from "went round again" without watching the whole thing.
  */
 export function useStopTour() {
-  const { routeStops, flyToPlace, setActiveIndex, viewerRef } = useMapCamera();
+  const { routeStops, flyToPlace, setActiveIndex, viewerRef, ready } = useMapCamera();
   const [playing, setPlaying] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -39,7 +39,8 @@ export function useStopTour() {
     const go = () => {
       setActiveIndex(index);
       // No label: the card already names the place, and flyToPlace's own pin would be a second
-      // one.
+      // one. This is also what brings the viewer up if the page was still on the poster, so
+      // pressing Play on a static city overview is a valid way to start the tour.
       flyToPlace(stops[index].lat, stops[index].lng);
     };
     go();
@@ -66,13 +67,18 @@ export function useStopTour() {
   // Grabbing the globe means the visitor has taken over, so the tour gets out of the way. The
   // listener goes on the Cesium canvas rather than the window so clicking the panel's own
   // controls — including the stop button — doesn't count as taking over.
+  //
+  // `ready` is in the deps because starting the tour is now one of the things that *builds* the
+  // viewer: on a trip page running off the poster there is no canvas at the moment Play is
+  // pressed, and without a re-run once one exists, dragging the freshly-arrived globe would
+  // never stop the tour.
   useEffect(() => {
     if (!playing) return;
     const canvas = viewerRef.current?.scene.canvas;
     if (!canvas) return;
     canvas.addEventListener("pointerdown", stop);
     return () => canvas.removeEventListener("pointerdown", stop);
-  }, [playing, viewerRef, stop]);
+  }, [playing, viewerRef, ready, stop]);
 
   const toggle = useCallback(() => setPlaying((p) => !p), []);
 

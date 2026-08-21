@@ -182,6 +182,14 @@ body {
   display: none;
 }
 
+/* And for the poster's way into 3D. `GlobePoster` is the backdrop on every route now, but
+   "Explore in 3D" is only an offer worth making where there is something on the globe to go
+   and look at — the same test the control stack passes. On a settings form or a photo gallery
+   it would invite you to spin up a WebGL context for scenery. */
+.app-shell:has(.map-chrome-hidden) .globe-poster-activate {
+  display: none;
+}
+
 /* --- The map on a phone -----------------------------------------------------------------
    Below `sm` the docked panel is full-bleed, so two things are true at once: the globe is
    invisible, and the control stack has nowhere to sit that isn't on top of the panel. That

@@ -1,8 +1,67 @@
-import { DayPlan, Itinerary, Stop } from "./types";
+import { dayActiveSpan } from "./itinerary";
+import type { DayPlan, Itinerary, Stop } from "./types";
 
-/** The op vocabulary both modes answer in. Kept identical across the two so the applier and the
- *  response shape never diverge. */
-const OPS_SHAPE = `{"op":"replace_stop","dayIndex":0,"stopIndex":0,"stop":{"name":"...","lat":0.0,"lng":0.0,"cost":0,"why":"one line","note":"one line","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}}`;
+/** The stop payload every op that writes a stop carries. */
+const STOP_SHAPE = `{"name":"...","lat":0.0,"lng":0.0,"cost":0,"why":"one line","note":"one line","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}`;
+
+/** Mode B answers in `replace_stop` alone — it is scope-locked to one slot, and the applier
+ *  rejects everything else, so offering the rest would only invite rejected ops. */
+const OPS_SHAPE = `{"op":"replace_stop","dayIndex":0,"stopIndex":0,"stop":${STOP_SHAPE}}`;
+
+/** Mode A gets the applier's full vocabulary (see itineraryPatch.ts). It used to be handed
+ *  `replace_stop` only, which quietly capped the conversation at swapping stops one-for-one:
+ *  asked to add a stop or drop one, the model's only legal move was to overwrite a neighbour. */
+const CHAT_OPS_SHAPE = [
+  `{"op":"replace_stop","dayIndex":0,"stopIndex":0,"stop":${STOP_SHAPE}}`,
+  `{"op":"add_stop","dayIndex":0,"stopIndex":2,"stop":${STOP_SHAPE}}`,
+  `{"op":"remove_stop","dayIndex":0,"stopIndex":3}`,
+  `{"op":"replace_lodging","dayIndex":0,"lodging":{"name":"...","cost":0,"note":"one line"}}`,
+  `{"op":"add_day","dayIndex":3}`,
+  `{"op":"remove_day","dayIndex":2}`,
+].join(",");
+
+/** What the ops above can and cannot express, and the index arithmetic that makes a multi-op
+ *  patch land where it was aimed. Sequential application is the trap: two removes on one day
+ *  written low-index-first delete the wrong second stop. */
+const CHAT_CAPABILITIES = `You can, within the scope stated below:
+- Add a stop ("add_stop" at the position it should occupy), remove one, or swap one for another
+  ("replace_stop").
+- Reorder a day: emit one "replace_stop" per position whose contents change, keeping the indices
+  as they are now. Don't remove-then-re-add to reorder.
+- Move a stop to a different day: "remove_stop" on the day it leaves, "add_stop" on the day it
+  joins. Give it a time that works in its new day.
+- Retime or re-length a stop: "replace_stop" with a new "time" and/or "durationLabel".
+- Change a night's stay: "replace_lodging".
+- Make the trip longer or shorter: "add_day" / "remove_day" (see the rules below).
+
+Whenever you move, add, remove or retime anything, restate the "time" of every stop whose slot
+shifted as a result, so the day stays in sequential order with no overlaps.
+
+Ops apply in the order you list them, against an itinerary that is already changing as they do.
+So: list several removals on the SAME day from the highest stopIndex down to the lowest, and treat
+the indices shown below as valid only until your first op on that day. Ops on different days never
+affect each other's indices.
+
+Lengthening or shortening the trip:
+- "add_day" inserts a NEW EMPTY day at that position ("dayIndex":3 on a 3-day trip appends a
+  fourth; "dayIndex":1 inserts a day between today's day 1 and day 2 and pushes the rest later).
+  "remove_day" drops a day and everything on it.
+- Never set a date on anything. Days are consecutive calendar dates from the trip's start date, so
+  the dates restate themselves after any day op — the trip's START date never moves, its END date
+  moves out or in by one per day added or removed. Say the trip's new end date in your reply.
+- A day you add arrives EMPTY. Fill it in the same batch: add its stops, and give it lodging unless
+  it is now the last day. An empty day left behind is worse than not adding one.
+- There is no weather forecast for a day that did not exist a moment ago. Don't state one, and
+  prefer flexible choices there over anything that depends on the weather being right.
+- More days almost always costs more. Check the total against the budget (§12d) and warn if it now
+  overshoots — the budget does NOT grow just because the trip did.
+- Order matters: list "add_day" BEFORE the ops that fill it, and remember every later dayIndex
+  shifts by one once it applies.
+- A trip must keep at least one day; "remove_day" on the only day will be refused.
+
+What you still cannot do: change the destination, the budget, or the trip's start date. If the
+traveler asks for one of those, say plainly that it can't be done from this chat and offer the
+nearest thing you can.`;
 
 /** Trimmed view of the itinerary: enough to reason about geography, timing and sequence without
  *  spending tokens on fields an edit never consults. */
@@ -13,9 +72,16 @@ function compactDay(day: DayPlan, dayIndex: number): string {
         `    stopIndex=${i}: ${s.name} — ${s.time || "no time"}, ${s.durationLabel || "no duration"}, $${s.cost}, ${s.lat.toFixed(3)}/${s.lng.toFixed(3)}${s.note ? ` — ${s.note}` : ""}`
     )
     .join("\n");
+  // The day's end-to-end length, computed rather than left to be derived from the clock times
+  // below — see dayActiveSpan. Without it the pace guardrail (§12c) got narrated in the reply
+  // and then not acted on, because the model had to do the arithmetic before it could compare.
+  const span = dayActiveSpan(day);
+  const spanNote = span
+    ? ` — runs ${span.start}-${span.end}, ${(span.minutes / 60).toFixed(1).replace(/\.0$/, "")}h active`
+    : "";
   // Both numbers, always: the traveler says "day 1" meaning the first day, while ops address
   // days 0-indexed. Showing only one of them got the wrong day edited.
-  return `  Day ${dayIndex + 1} of the trip — dayIndex=${dayIndex} (${day.date})${day.lodging ? ` — staying: ${day.lodging.name} ($${day.lodging.cost})` : ""}\n${stops || "    (no stops)"}`;
+  return `  Day ${dayIndex + 1} of the trip — dayIndex=${dayIndex} (${day.date})${spanNote}${day.lodging ? ` — staying: ${day.lodging.name} ($${day.lodging.cost})` : ""}\n${stops || "    (no stops)"}`;
 }
 
 /** Every day, always — even when only one is editable.
@@ -51,10 +117,11 @@ export function buildChatEditPrompt(params: {
   dayIndex?: number;
   messages: { role: "user" | "assistant"; content: string }[];
 }): string {
+  const target = params.dayIndex === undefined ? undefined : params.itinerary.days[params.dayIndex];
   const scope =
     params.dayIndex === undefined
       ? "the whole trip"
-      : `day ${params.dayIndex + 1} of the trip (dayIndex=${params.dayIndex}) only — do not change any other day`;
+      : `day ${params.dayIndex + 1} of the trip (dayIndex=${params.dayIndex}${target ? `, ${target.date}` : ""}) only — do not change any other day`;
 
   const transcript = params.messages
     .map((m) => `${m.role === "user" ? "Traveler" : "You"}: ${m.content}`)
@@ -92,12 +159,20 @@ Ask a question ONLY if the change is genuinely impossible to attempt without it,
 
 When the traveler refers to "day N", they mean the Nth day of the trip — that is dayIndex=N-1. Always copy the exact dayIndex and stopIndex values shown above rather than counting them yourself.
 
+${CHAT_CAPABILITIES}
+
+Before you answer, check the plan your ops would PRODUCE — not the one you started from — against each §12 guardrail: travel time between consecutive stops, opening hours and time clashes, the day's total active hours (each day's current length is given as "runs X-Y, Nh active" — work out what your ops do to it), and the trip's total against the budget. Restructure to satisfy them wherever you can.
+
+Every check that still fails goes in "warnings", one line each — plain, specific, and quantified where you have the number ("day 1 now runs 8:00 AM to 8:30 PM, about 12 active hours"; "Nijo Castle to the bamboo grove is ~30 min across the city, so 4:30 PM is tight"). No leading emoji and no "Warning:" label — the UI supplies those.
+
+The traveler having asked for it is NOT a reason to leave it out. "I don't mind a long day" tells you to make the change, not to keep quiet about what it costs them: make it AND warn. Likewise, anything you say in "reply" about hours, travel time, or the budget belongs in "warnings" too — the reply is conversation, "warnings" is the record. An empty "warnings" array claims every guardrail actually passed, so only send one when that is true.
+
 ${SHARED_RULES}
 
 Respond with ONLY valid JSON, no markdown fences:
-{"reply":"conversational answer to their message, 1-3 sentences","options":["short tappable reply","another"],"changes":["one short line per change, in plain language"],"knockOn":"one line if a change forced an unavoidable adjustment elsewhere, else null","ops":[${OPS_SHAPE}]}
+{"reply":"conversational answer to their message, 1-3 sentences","options":["short tappable reply","another"],"changes":["one short line per change, in plain language"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an unavoidable adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
 
-"options" must be an empty array unless you asked a question. Each option is what the traveler would tap to answer it — under 6 words, and directly usable as their next message.`;
+"ops" may mix the op types shown above. "warnings" is an empty array when nothing tripped a guardrail. "options" must be an empty array unless you asked a question. Each option is what the traveler would tap to answer it — under 6 words, and directly usable as their next message.`;
 }
 
 /**

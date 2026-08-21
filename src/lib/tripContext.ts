@@ -1,4 +1,11 @@
-import type { EnrichedPoi, PoiDetails, ReconciledTrip, ReconcileNote, TravelLeg } from "./types";
+import type {
+  DestinationContext,
+  EnrichedPoi,
+  PoiDetails,
+  ReconciledTrip,
+  ReconcileNote,
+  TravelLeg,
+} from "./types";
 
 /** Above this many legs, listing every pair stops being readable (and cheap) — n POIs produce
  *  n(n-1)/2 legs — so the digest switches to each POI's nearest neighbours, which is what
@@ -56,6 +63,67 @@ function flagsSection(trip: ReconciledTrip): string {
   );
   if (a.purpose.trim()) lines.push(`purpose: ${a.purpose.trim()}`);
   return lines.join("\n");
+}
+
+/** A hard constraint, not a preference — so it gets its own section rather than riding along in
+ *  the flags list where it could read as one more soft signal. "None stated" is written out
+ *  explicitly: an absent section would be indistinguishable from a section we forgot to build. */
+function dietarySection(trip: ReconciledTrip): string {
+  const d = trip.userAnswers.dietary;
+  const tags = d?.tags ?? [];
+  const note = d?.note?.trim() ?? "";
+  if (tags.length === 0 && !note) return "None stated.";
+  return [tags.length > 0 ? tags.join(", ") : null, note || null].filter(Boolean).join("; ");
+}
+
+/** Stated mobility needs, kept separate from `mobility_profile` in the flags. The flags are the
+ *  derived planning knobs; this is what the traveler actually said, which is the thing a stop's
+ *  note has to answer to. */
+function accessibilitySection(trip: ReconciledTrip): string {
+  const a = trip.userAnswers.accessibility;
+  if (!a) return "Nothing stated.";
+  const parts: string[] = [];
+  if (a.stepFreeRequired) parts.push("step-free routes required throughout (hard constraint)");
+  if (a.limitStairs && !a.stepFreeRequired) parts.push("avoid stairs and steep climbs where possible");
+  if (a.note.trim()) parts.push(a.note.trim());
+  return parts.length > 0 ? parts.join("; ") : "Nothing stated.";
+}
+
+/** Commitments already made. Listed even when empty so the model can tell "they have no booking"
+ *  apart from "we didn't ask" — the first lets it recommend lodging, the second doesn't. */
+function logisticsSection(trip: ReconciledTrip): string {
+  const l = trip.userAnswers.logistics;
+  const lines: string[] = [];
+  if (l?.stayBooked?.trim()) {
+    lines.push(`booked_lodging: ${l.stayBooked.trim()} — already paid for, cost 0, every night`);
+  }
+  if (l?.arrivalTime?.trim()) lines.push(`arrival_time (day 1, local): ${l.arrivalTime.trim()}`);
+  if (l?.departureTime?.trim()) {
+    lines.push(`departure_time (last day, local): ${l.departureTime.trim()}`);
+  }
+  return lines.length > 0 ? lines.join("\n") : "Nothing booked or stated — lodging is yours to choose.";
+}
+
+/** Model-sourced (one cached LLM call), so it is ranked below the fetched facts above and labelled
+ *  as background rather than ground truth. Reaches the staged pipeline only since this section
+ *  existed; before it, the skill's destination-context branch could never fire. */
+function destinationContextSection(ctx: DestinationContext | null): string {
+  if (!ctx) return "Unavailable.";
+  const lines: string[] = [];
+  if (ctx.festivals.length > 0) {
+    lines.push(
+      ...ctx.festivals.map((f) => `- festival: ${f.name} (${f.dates}) — ${f.note}`)
+    );
+  }
+  if (ctx.safety.length > 0) {
+    lines.push(...ctx.safety.map((x) => `- safety [${x.severity}]: ${x.note}`));
+  }
+  if (ctx.shopping.length > 0) {
+    lines.push(...ctx.shopping.map((x) => `- shopping: ${x.name} (${x.area}) — ${x.note}`));
+  }
+  if (ctx.trends.length > 0) lines.push(...ctx.trends.map((x) => `- trend: ${x.note}`));
+  if (lines.length === 0) return "Fetched, nothing notable for these dates.";
+  return ["(background, model-sourced — weigh it below the fetched facts above)", ...lines].join("\n");
 }
 
 function destinationSection(trip: ReconciledTrip): string {
@@ -151,6 +219,11 @@ function poiLine(p: EnrichedPoi): string {
   if (p.closedDays && p.closedDays.length > 0) bits.push(`closed ${p.closedDays.join("/")}`);
 
   bits.push(`~${p.visitMinutes} min${p.visitMinutesEstimated ? " (est)" : ""}`);
+
+  // Only stated when OSM actually has the tag. Silence means unknown, never "no" — routing someone
+  // with a step-free requirement to a place we merely failed to look up is the failure to avoid.
+  if (p.wheelchair) bits.push(`wheelchair ${p.wheelchair}`);
+
   return `- ${p.name} — ${bits.join(" — ")}`;
 }
 
@@ -190,13 +263,26 @@ function travelSection(details: PoiDetails): string {
  * the itinerary-planner skill. Every degraded field states its default inline and is marked, so
  * the model is never left guessing silently at what's missing.
  */
-export function buildTripContext(trip: ReconciledTrip, details: PoiDetails): string {
+export function buildTripContext(
+  trip: ReconciledTrip,
+  details: PoiDetails,
+  destinationContext: DestinationContext | null = null
+): string {
   const unknownPois = details.pois.filter((p) => p.partial).length;
 
   return `# Trip Context
 
 ## Flags
 ${flagsSection(trip)}
+
+## Dietary needs
+${dietarySection(trip)}
+
+## Accessibility
+${accessibilitySection(trip)}
+
+## Fixed commitments
+${logisticsSection(trip)}
 
 ## Destination
 ${destinationSection(trip)}
@@ -226,5 +312,8 @@ ${
 
 ## Travel times
 ${travelSection(details)}
+
+## Destination background
+${destinationContextSection(destinationContext)}
 `;
 }

@@ -1,6 +1,13 @@
-import { DayWeather } from "./weather";
-import { DestinationContext, Itinerary, ItineraryPreferences, ResolvedFlags, TripLogistics } from "./types";
-import { TierId, TIERS } from "./tiers";
+import type { DayWeather } from "./weather";
+import type {
+  DestinationContext,
+  Itinerary,
+  ItineraryPreferences,
+  ResolvedFlags,
+  TripLogistics,
+} from "./types";
+import { TIERS } from "./tiers";
+import type { TierId } from "./tiers";
 import { formatTravelLegs, formatTravelerProfile } from "./travelerProfilePrompt";
 import { formatDietary } from "./dietaryPrompt";
 import type { DietaryNeeds } from "./travelerProfile";

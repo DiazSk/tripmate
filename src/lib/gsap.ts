@@ -4,15 +4,12 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
 
-// Registered once per module load rather than per-component — gsap.registerPlugin is a no-op on
-// repeat calls, but this keeps every consumer's import list to just `import { gsap } from
-// "@/lib/gsap"` instead of re-registering everywhere.
-//
-// ScrollTrigger is registered but not re-exported, and that is not an oversight: both of its users
-// reach it through a config object (`scrollTrigger: {…}` in lineReveal, ImageRow and DestinationMap),
-// never by name. Registration is the whole contract. Nothing else may be added to this module's
-// exports without a GSAP dependency — `prefersReducedMotion` used to live here and pulled all of
-// GSAP into the root bundle for a `matchMedia` call; it is in `lib/reducedMotion.ts` now.
+// Registered once per module load rather than per-component — gsap.registerPlugin is a
+// no-op on repeat calls, but this keeps every scene component's import list to just
+// `import { gsap, ScrollTrigger } from "@/lib/gsap"` instead of re-registering everywhere.
 gsap.registerPlugin(ScrollTrigger, SplitText);
 
-export { gsap, SplitText };
+// Re-exported, not defined here — see the note in `reducedMotion.ts` for why it moved out.
+export { prefersReducedMotion } from "./reducedMotion";
+
+export { gsap, ScrollTrigger, SplitText };

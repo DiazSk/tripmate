@@ -16,6 +16,16 @@ interface OverpassPoiElement {
   tags?: Record<string, string>;
 }
 
+/** OSM's `wheelchair` values in the wild include `designated`, `partial` and `limited?`. Only the
+ *  three documented values are trusted; anything else reads as unknown rather than being coerced
+ *  into a guess, since a wrong "yes" here sends someone to a place they can't get into. */
+function parseWheelchair(raw: string | undefined): "yes" | "limited" | "no" | null {
+  if (raw === "yes" || raw === "designated") return "yes";
+  if (raw === "limited") return "limited";
+  if (raw === "no") return "no";
+  return null;
+}
+
 function escapeForOverpass(name: string): string {
   return name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
@@ -65,6 +75,7 @@ export async function fetchPoiOsmTags(
         openingHours: el.tags?.opening_hours ?? null,
         lat: point?.lat ?? null,
         lon: point?.lon ?? null,
+        wheelchair: parseWheelchair(el.tags?.wheelchair),
       };
     }
     return byName;

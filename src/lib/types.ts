@@ -2,6 +2,7 @@ import type { DayWeather } from "./weather";
 import type { TierId } from "./tiers";
 import type { Holiday } from "./holidays";
 import type { CandidatePoi } from "./pois";
+import type { DietaryNeeds } from "./travelerProfile";
 
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
@@ -178,10 +179,10 @@ export interface UserAnswers {
   group: GroupType;
   /** Free text, meaningful only when `group` is "other" — "five college friends", "work offsite". */
   groupOther?: string;
-  /** Optional on purpose: every one of these three is absent from rows written before the field
-   *  existed, so each reader treats absence as "not asked" rather than rejecting the row. */
+  /** Optional on purpose: both of these are absent from rows written before the field existed, so
+   *  each reader treats absence as "not asked" rather than rejecting the row. `logistics` belongs to
+   *  the same group and is declared below, next to `accessibility`, where its docblock is. */
   party?: PartyCounts;
-  logistics?: TripLogistics | null;
   energy: EnergyLevel;
   crowds: CrowdPreference;
   budget: number;
@@ -194,6 +195,50 @@ export interface UserAnswers {
    *  traveler profile above; these just pin anything already decided on. */
   selectedPois: CandidatePoi[];
   customPois: string[];
+  /** Carried per-trip even though it lives on the profile: the legacy prompt has had this since
+   *  `formatDietary` shipped, and the staged pipeline dropped it silently — a food stop the
+   *  traveler cannot eat at is the worst defect this app can produce. Both fields empty means
+   *  "no restrictions", which is different from the field being absent. */
+  dietary?: DietaryNeeds | null;
+  /** What the traveler has already committed to, which outranks anything the model would pick.
+   *  All optional: absent means "not stated", and every rule that reads them degrades rather
+   *  than assuming. */
+  logistics?: TripLogistics | null;
+  /** Mobility needs stated directly, rather than inferred from `energy`. Absent means nothing was
+   *  stated — NOT that the traveler has no needs. */
+  accessibility?: AccessibilityNeeds | null;
+}
+
+/**
+ * Fixed commitments the plan has to bend around: a booked bed, and the two clock times that bound
+ * the first and last usable day. Stated by the traveler, never guessed; `null` per field means
+ * "not stated".
+ *
+ * These field names are not new — `src/lib/bench/customTrip.ts` has been assigning exactly this
+ * shape to `userAnswers.logistics` since the harness landed, against a field `UserAnswers` never
+ * actually declared (a latent type error). Declaring it here with the bench's own names fixes that
+ * rather than adding a second, differently-named copy.
+ */
+export interface TripLogistics {
+  /** Local "HH:MM" on the first day. */
+  arrivalTime: string | null;
+  /** Local "HH:MM" on the last day. */
+  departureTime: string | null;
+  /** Free text, e.g. "Hotel Granvia Kyoto" or "Airbnb in Gion". */
+  stayBooked: string | null;
+}
+
+/** Asked directly rather than derived: `energy` answers "how much do you want to walk", which is
+ *  a different question from "can you manage stairs". `deriveMobilityProfile` used `energy` as a
+ *  proxy for both, and a wheelchair user who describes their energy as high got no accommodation
+ *  at all. */
+export interface AccessibilityNeeds {
+  /** Step-free routes required throughout — the hard constraint, not a preference. */
+  stepFreeRequired: boolean;
+  /** Stairs and steep climbs are manageable but should be avoided where an alternative exists. */
+  limitStairs: boolean;
+  /** Anything the two flags above don't cover. */
+  note: string;
 }
 
 // --- Step 2b → 3: derived flags ---------------------------------------------------------------
@@ -288,6 +333,9 @@ export interface PoiOsmTags {
   openingHours: string | null;
   lat: number | null;
   lon: number | null;
+  /** OSM `wheelchair=yes|limited|no`. Already present in the tags Overpass returns — it was being
+   *  discarded, which left `minimize_stairs` as a rule with no fact to act on. */
+  wheelchair: "yes" | "limited" | "no" | null;
 }
 
 export interface TravelLeg {
@@ -309,6 +357,9 @@ export interface EnrichedPoi {
   closedDays: string[] | null;
   visitMinutes: number;
   visitMinutesEstimated: boolean;
+  /** Null/absent means OSM has no `wheelchair` tag for this place — genuinely unknown, not "no".
+   *  Optional because every construction site predating the field is still a valid POI. */
+  wheelchair?: "yes" | "limited" | "no" | null;
   /** True when nothing could be resolved for this POI — it still ships, with unknown fields. */
   partial: boolean;
 }
