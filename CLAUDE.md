@@ -25,11 +25,24 @@ is the fix (aliased in `next.config.ts`); `scripts/verify-build.mjs` is the guar
 
 **Node ≥ 22 is mandatory.** `better-sqlite3`'s native binding silently kills the dev server on Node 20 the moment any DB-touching route is hit. `.nvmrc` pins 22 — run `nvm use` if the shell drifts.
 
-**The test suite is deliberately minimal.** `npm test` runs `node --test 'src/**/*.test.mjs'` — no framework, no build step (Node strips the TypeScript, so the `.mjs` tests import `.ts` directly). It covers only pure, deterministic logic that has already broken once: `src/lib/itinerary.test.mjs` and `src/lib/perfAggregate.test.mjs`. Nothing renders, no route is booted, no DB is opened.
+**The test suite is deliberately narrow, not small.** `npm test` runs
+`node --import ./scripts/ts-resolve.mjs --test "src/**/*.test.mjs"` — 17 files, ~220 tests, no
+framework and no build step. It covers only pure, deterministic logic, most of it logic that has
+already broken once. Nothing renders, no route is booted, no DB is opened.
 
 So passing tests prove far less here than in a normally-covered repo. Verification still means: `npm test`, `tsc --noEmit`, `eslint`, **and** exercising routes against a running dev server with `curl`. Don't claim a change is verified on typecheck alone.
 
-**A `.test.mjs` can only import a `.ts` module whose own imports are all `import type`.** Node erases those, so nothing is resolved at runtime — which is why `itinerary.ts` and `perfAggregate.ts` are testable. A module importing a *value* (`import { TIERS } from "./tiers"`), or importing a type without the `type` keyword, fails with `ERR_MODULE_NOT_FOUND`: Node's ESM loader needs the file extension that the rest of the codebase correctly omits for the bundler. `itineraryPrompt.ts` is in that state today. Put logic you want covered in a module with type-only imports rather than adding extensions piecemeal.
+**A `.test.mjs` can import any `.ts` module, value imports included.** `scripts/ts-resolve.mjs`
+registers an ESM resolve hook that retries an extensionless relative specifier as `.ts`, then
+`/index.ts`, then `.tsx` — so `import { TIERS } from "./tiers"` inside a module under test resolves
+fine. `src/lib/tripDays.test.mjs` imports `applyPatch` from `itineraryPatch.ts`, which value-imports
+`./tripDays`; `src/lib/bench/bench.test.mjs` reaches `runBenchmark.ts`, which pulls in `../db` and
+`better-sqlite3`. Write the test where the logic lives.
+
+The hook is registered by `--import` in the `test` script only, so the dev server and the build never
+load it. Import specifiers **inside a `.test.mjs` itself** still need the explicit `.ts` extension —
+the hook fires on the failed resolve of a relative import, and the test files all write `./foo.ts`
+directly.
 
 The glob in the `test` script needs **double** quotes. Single quotes reach Node literally on Windows and it matches nothing — the suite reported success while running zero tests.
 
