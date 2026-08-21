@@ -86,11 +86,16 @@ adapter plus four patch-specific metrics.
 
 ## Non-goals
 
-- **The `element-edit` call type** (the per-stop sparkle button). Chat only for this pass; element-edit
-  is a follow-up once the adapter and delta scoring have proven out.
+- **The `element-edit` call type — because nothing calls it.** `/api/trip-edit` accepts
+  `mode: "element"` and `buildElementEditPrompt` is fully written (`src/lib/editPrompt.ts:185`), but
+  no component, script or test ever sends it: the only match for `"element"` in the whole repo is the
+  type union declaring it (`route.ts:51`). Its zero rows in `llm_traces` are not "no data yet", they
+  are unreachable code. Benchmarking a feature no user can trigger would be measuring nothing.
+  Deciding whether to wire it up or delete it is its own question.
 - **Streaming, caching, or any model change.** This spec produces the evidence; acting on it is separate work.
 - **Semantic grading of the reply prose.** Only the patch and the resulting itinerary are scored.
-- **Widening the fixture set.** Three fixtures to start; the field is optional so more cost nothing later.
+- **Hardening `applyPatch` against malformed payloads.** Related and worth doing, but it changes app
+  behaviour rather than measuring it — see "Prevention vs detection" below.
 
 ## Design
 
@@ -137,13 +142,9 @@ literals — each fixture instantiates them with day indices valid for its own t
 | Add a constrained stop ("add a vegetarian dinner to day N") | scope adherence and the no-duplicate-stop rule | `opsExpected: true`, `allowedDays: [N]` |
 | Ask, don't tell ("is day N too packed?") | restraint — the task a weaker model most often fails | `opsExpected: false` |
 
-The first cut uses three fixtures chosen for constraint variety rather than convenience:
-
-| fixture | why this one |
-|---|---|
-| `barcelona-access-dietary` | step-free + vegan — the dietary archetype has real constraints to violate |
-| `kyoto-couple-mixed` | real opening hours, closed days, a mid-trip holiday, `crowd_bias` on |
-| `rome-family-slow` | `family_rules`, pace floor 2/day, rain — the retime archetype has a floor to breach |
+All seven existing fixtures get refine tasks. They already span both hemispheres, the full pace
+range, all three group types and three degraded-data paths, and the marginal cost of a fixture is
+usage rather than cash (see "Cost and runtime"), so there is no reason to sample them.
 
 `baseItinerary` is minted by a one-time pass: run the existing generation path once per fixture on
 a fixed model, commit the result. The starting plan's quality ceiling is that model's, which is
@@ -185,10 +186,31 @@ Four new deterministic patch metrics, all derived from data the route already re
 | `patch_restraint` | `ops.length > 0` matches `expect.opsExpected` |
 | `guardrail_delta` | new violations introduced, via `evaluateItinerary` (`src/lib/guardrails.ts`) before vs after |
 
-`rejected` alone is not sufficient and `guardrail_delta` is what covers the gap: `applyPatch`
-catches hallucinated day/stop indexes — the dominant weak-model failure — but `add_stop` clamps
-its index rather than rejecting (`src/lib/itineraryPatch.ts:105`), and `replace_lodging` never
-rejects at all.
+`rejected` alone is not sufficient, and `guardrail_delta` is what covers the gap.
+
+### Prevention vs detection
+
+`applyPatch` validates *positions* well and *payloads* not at all. What it catches: `dayIndex` and
+`stopIndex` out of range on `replace_stop` / `remove_stop`, the scope lock for a single-element edit,
+and "a trip needs at least one day". What passes straight through:
+
+| hole | line |
+|---|---|
+| `add_stop` clamps its index into range instead of rejecting it | `itineraryPatch.ts:105` |
+| `replace_lodging` assigns whatever it is handed, unchecked | `itineraryPatch.ts:115` |
+| No field validation on any stop — a missing `name`, a `lat`/`lng` of `0,0`, a non-numeric `cost` all apply cleanly | — |
+| `replace_stop` **merges** rather than overwrites, so a near-empty payload looks like a successful edit | `itineraryPatch.ts:102` |
+
+Two distinct jobs follow, and they compound:
+
+- **Prevention** — reject malformed payloads in `applyPatch`, so garbage cannot reach a saved trip
+  regardless of which model produced it. This is app-behaviour work, independent of any benchmark,
+  and valuable on its own.
+- **Detection** — this spec: measure which models emit garbage and how often.
+
+Order matters. Hardening `applyPatch` first makes `rejected` a far sharper benchmark signal and
+reduces how much weight `guardrail_delta` has to carry. Doing the benchmark first means measuring
+model quality through a patcher that silently launders some bad output into plausible-looking trips.
 
 ### 4. Execution and API
 
@@ -218,26 +240,34 @@ time-windowed and would force sequential passes.
 Per `CLAUDE.md`, passing tests prove little here on their own. Verification also means exercising
 `/bench` against a running dev server and reading real output, not just a typecheck.
 
-> **Correction to `CLAUDE.md` needed:** it states a `.test.mjs` may only import a `.ts` module whose
-> imports are all `import type`. That constraint is **stale**. `scripts/ts-resolve.mjs` (added in
-> Aryan's `4c42c95`) registers an ESM resolve hook for extensionless relative specifiers, and
-> `src/lib/tripDays.test.mjs:18` already imports `applyPatch` from `itineraryPatch.ts`, which
-> value-imports `./tripDays`. Worth fixing while in here.
+> **`CLAUDE.md` corrected 2026-08-21.** It claimed a `.test.mjs` may only import a `.ts` module whose
+> imports are all `import type`, and that the suite was two files. Both were stale:
+> `scripts/ts-resolve.mjs` (added in Aryan's `4c42c95`) registers an ESM resolve hook for
+> extensionless relative specifiers, and the suite is 17 files / ~220 tests. `tripDays.test.mjs:18`
+> imports `applyPatch` from `itineraryPatch.ts`, which value-imports `./tripDays`. Verified by running
+> `npm test` — 220 pass.
 
 ## Cost and runtime
 
-A refine call is ~35 s and ~$0.31.
+Full sweep: 7 fixtures × 3 tasks × 3 models = **63 calls, ~37 min, ~2.8M input tokens.** Plus a
+one-time generation pass to mint the seven frozen `baseItinerary` values. Sequential, because
+`BenchConsole` deliberately issues one POST per cell — a full sweep in one request would exceed any
+timeout (`src/app/api/bench/route.ts:31-34`).
 
-| scope | calls | time | cost |
-|---|---|---|---|
-| First cut: 3 fixtures × 3 tasks × 3 models | 27 | ~16 min | ~$8 |
-| Full: 7 fixtures × 3 tasks × 3 models | 63 | ~37 min | ~$19 |
+**The `$0.31`-per-call figure is not a bill.** `runClaude` spawns the `claude` CLI, and this repo has
+no `ANTHROPIC_API_KEY` and no `@anthropic-ai/sdk` dependency — the CLI authenticates however the
+developer's own CLI is configured. On a Pro/Max subscription the sweep draws down session and weekly
+usage limits, not a card; `total_cost_usd` in the envelope is the CLI's token-equivalent price, which
+it reports either way. (With an API key configured instead, it does bill.)
 
-Sequential, because `BenchConsole` deliberately issues one POST per cell — a full sweep in one
-request would exceed any timeout (`src/app/api/bench/route.ts:31-34`). Plus a one-time generation
-pass to mint the frozen `baseItinerary` values.
+That makes usage, not cost, the real constraint:
 
-Starting at 3 fixtures is the plan. Widening is free later since `refineTasks` is optional.
+- ~2.8M input tokens in one sweep is a meaningful share of a weekly limit
+- **Hitting the limit mid-sweep contaminates the run** — `runClaude` records the failure as
+  `error`/`timeout` and `listTracesForPerf` filters to `status = 'ok'`, so a throttled cell reads as
+  a missing score rather than a loud failure. `balancedPanel` protects the aggregate, but the sweep
+  has to be re-run
+- Run it when the session isn't needed for other work, and check `status` counts before trusting a sweep
 
 ## Verification
 
@@ -246,9 +276,11 @@ Starting at 3 fixtures is the plan. Widening is free later since `refineTasks` i
 3. `npm run dev`, open `/bench`, confirm the generation path renders **identically** to before
 4. Switch to refine, run one cell, confirm: the patch applied, both before/after scores populated,
    no scorer showing a dash (a dash means the adapter fed it an empty denominator)
-5. Run the 27-cell first cut; read Haiku vs Sonnet 4.5 deltas off the radar and the Pareto chart
-6. Cross-check latency and cost per model with `SELECT model, count(*), avg(duration_ms) FROM
-   llm_traces WHERE type='chat' GROUP BY model`
+5. Run the full 63-cell sweep; read Haiku vs Sonnet 4.5 deltas off the radar and the Pareto chart
+6. **Before trusting it, confirm no cell was throttled:** `SELECT model, status, count(*) FROM
+   llm_traces WHERE type='chat' GROUP BY model, status` — any `error` or `timeout` row means re-run
+7. Cross-check latency per model with `SELECT model, count(*), avg(duration_ms) FROM llm_traces
+   WHERE type='chat' AND status='ok' GROUP BY model`
 
 Success looks like a defensible answer to: *does Haiku 4.5 degrade a refine patch, and by how much?*
 
