@@ -1,10 +1,21 @@
-import { getTrace, insertBenchResult } from "../db";
+import { randomUUID } from "node:crypto";
+import { getTrace, insertBenchResult, insertRun } from "../db";
 import type { BenchResultRow } from "../db";
 import { generateItinerary } from "../generateItinerary";
 import { parseUsage } from "../runs";
+import { runClaude, parseJsonResponse } from "../claude";
+import { applyPatch } from "../itineraryPatch";
+import type { PatchOp } from "../itineraryPatch";
+import { buildChatEditPrompt } from "../editPrompt";
+import { buildEditContext } from "../editContext";
+import { loadSkill } from "../skill";
 import type { BenchFixture } from "./fixtures";
+import { benchTripSummary, benchUserAnswers } from "./refineTasks";
+import type { RefineTask } from "./refineTasks";
+import { itineraryToParsed } from "./itineraryToParsed";
 import { benchTimeoutMs, computeCostUsd, promptTokens } from "./models";
 import { parseItinerary } from "./parseItinerary";
+import type { ParsedItinerary } from "./parseItinerary";
 import {
   scoreConstraints,
   scoreCoverage,
@@ -16,6 +27,7 @@ import {
 import { scoreBacktrack, scoreDowntime, scoreMealProximity } from "./scorers/route";
 import { scoreBudget, scoreVibe, scoreWeatherAlignment } from "./scorers/context";
 import { outputSimilarity, scoreLexical, scoreSemantic } from "./scorers/text";
+import { deltaGroups, measuredGroups, refineComposite, scorePatch } from "./scorers/patch";
 import { COMPOSITE_WEIGHTS, RADAR_AXES } from "./types";
 import type {
   BenchCell,
@@ -23,6 +35,8 @@ import type {
   CompositeGroups,
   ModelAgreement,
   OperationalScore,
+  RefineCell,
+  RefineCellScores,
 } from "./types";
 
 /**
@@ -65,12 +79,13 @@ export function compositeGroups(scores: BenchCellScores): CompositeGroups {
   };
 }
 
-export function scoreItinerary(
+/** The twelve scorers over an already-parsed itinerary. `scoreItinerary` is this plus the parse. */
+export function scoreParsed(
   fixture: BenchFixture,
-  itineraryMd: string,
+  parsed: ParsedItinerary,
+  rawText: string,
   operational: OperationalScore
 ): BenchCellScores {
-  const parsed = parseItinerary(itineraryMd);
   return {
     geoCoherence: scoreGeoCoherence(parsed, fixture),
     constraints: scoreConstraints(parsed, fixture),
@@ -84,11 +99,19 @@ export function scoreItinerary(
     weather: scoreWeatherAlignment(parsed, fixture),
     budget: scoreBudget(parsed, fixture),
     vibe: scoreVibe(parsed, fixture),
-    lexical: scoreLexical(itineraryMd),
-    semantic: scoreSemantic(itineraryMd, fixture),
+    lexical: scoreLexical(rawText),
+    semantic: scoreSemantic(rawText, fixture),
     operational,
     judge: null,
   };
+}
+
+export function scoreItinerary(
+  fixture: BenchFixture,
+  itineraryMd: string,
+  operational: OperationalScore
+): BenchCellScores {
+  return scoreParsed(fixture, parseItinerary(itineraryMd), itineraryMd, operational);
 }
 
 /**
@@ -197,6 +220,120 @@ export async function runBenchCell(fixture: BenchFixture, model: string): Promis
     runId,
     traceId,
     itineraryMd,
+    scores,
+    composite,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * One (fixture × task × model) refine cell.
+ *
+ * Assembles the prompt through `buildChatEditPrompt` — the same function `/api/trip-edit` calls,
+ * with the same skill and the same `buildEditContext` — so the only argument differing between
+ * cells for one (fixture, task) is `model`. Nothing here may build a prompt of its own; that is
+ * the harness's entire claim to attributing a difference to the model.
+ */
+export async function runRefineCell(
+  fixture: BenchFixture,
+  task: RefineTask,
+  model: string
+): Promise<RefineCell> {
+  const startedAt = Date.now();
+  const base = fixture.baseItinerary;
+  if (!base) throw new Error(`fixture ${fixture.id} has no baseItinerary`);
+
+  const trip = benchTripSummary(fixture);
+  const answers = benchUserAnswers(fixture);
+
+  let rawResponse = "";
+  let ops: PatchOp[] = [];
+  let runId: string | null = null;
+  let traceId: string | null = null;
+  let operational: OperationalScore;
+
+  try {
+    const skill = await loadSkill("itinerary-planner");
+    const editContext = buildEditContext(trip, base, answers);
+    const prompt = buildChatEditPrompt({
+      skill,
+      editContext,
+      itinerary: base,
+      dayIndex: task.dayIndex,
+      messages: [{ role: "user", content: task.message }],
+    });
+
+    runId = randomUUID();
+    insertRun({ id: runId, kind: "refine", destination: trip.destination, tripId: null });
+
+    const result = await runClaude(prompt, "chat", benchTimeoutMs(), { runId, effort: "low", model });
+    rawResponse = result.result;
+    traceId = result.traceId;
+    ops = parseJsonResponse<{ ops?: PatchOp[] }>(rawResponse).ops ?? [];
+
+    const usage = parseUsage(getTrace(result.traceId)?.raw_response ?? null, model);
+    operational = {
+      latencyMs: result.durationMs,
+      inputTokens: promptTokens(usage),
+      outputTokens: usage.outputTokens,
+      costUsd: computeCostUsd(model, usage),
+      cliReportedCostUsd: usage.costUsd,
+      parsedOk: true,
+      failed: false,
+      errorMessage: null,
+    };
+  } catch (err) {
+    operational = failedOperational(
+      Date.now() - startedAt,
+      err instanceof Error ? err.message : "refine failed"
+    );
+  }
+
+  const patch = scorePatch({ base, ops, task, budget: trip.budget });
+  // scorePatch already applied `ops` internally to score the patch's own mechanics (see
+  // scorers/patch.ts); this second `applyPatch` gets the resulting itinerary so it can be scored
+  // by the same twelve scorers the generation path uses. Duplicating one pure ~10KB-object apply
+  // is the cost of scorePatch owning its own apply — the seam that lets patch.test.mjs test it
+  // from a bare `Itinerary` literal and ops array with no caller state threaded in — and it is
+  // negligible next to the ~35s model call it sits beside.
+  const { itinerary: after } = applyPatch(base, ops);
+
+  // `before`/`after` both score `rawResponse` (the model's JSON patch, not markdown) through
+  // `lexical`/`semantic`, so those two scorers see the same string on both sides — their delta is
+  // always 0, and neither is in COMPOSITE_WEIGHTS, so this is inert rather than a bug. Synthesizing
+  // different text for `before` would manufacture a fake delta on a metric nobody weights.
+  const before = scoreParsed(fixture, itineraryToParsed(base), rawResponse, operational);
+  const afterScores = scoreParsed(fixture, itineraryToParsed(after), rawResponse, operational);
+
+  const delta = deltaGroups(compositeGroups(before), compositeGroups(afterScores));
+  const scores: RefineCellScores = {
+    before,
+    after: afterScores,
+    delta,
+    measuredGroups: measuredGroups(delta),
+    patch,
+    operational,
+  };
+  const composite = refineComposite(scores);
+
+  const row = insertBenchResult({
+    fixture_id: fixture.id,
+    task_id: task.id,
+    model,
+    run_id: runId,
+    trace_id: traceId,
+    itinerary_md: rawResponse,
+    scores_json: JSON.stringify(scores),
+    composite,
+  });
+
+  return {
+    fixtureId: fixture.id,
+    taskId: task.id,
+    model,
+    runId,
+    traceId,
+    rawResponse,
     scores,
     composite,
     createdAt: row.created_at,
