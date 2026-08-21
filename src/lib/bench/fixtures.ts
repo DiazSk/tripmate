@@ -8,6 +8,7 @@ import type { DayWeather } from "../weather";
 import type {
   DateContext,
   EnrichedPoi,
+  Itinerary,
   PoiDetails,
   RawFetch,
   ReconciledTrip,
@@ -43,6 +44,10 @@ export interface BenchFixture {
   covers: string;
   reconciled: ReconciledTrip;
   poiDetails: PoiDetails;
+  /** Frozen starting plan for refine cells, minted once by scripts/mint-base-itineraries.mjs and
+   *  committed. Every model refines the byte-identical plan, so only `model` varies — the same
+   *  claim the generation cells make about the trip-context bytes. Absent = generation-only. */
+  baseItinerary?: Itinerary;
 }
 
 // --- compact literal builders ------------------------------------------------------------------
