@@ -19,7 +19,7 @@ import type { DestinationContext, RawFetch } from "./types";
  * filler. The caller decides what to do with a short list.
  */
 
-export type FactFamily = "holiday" | "weather" | "sun" | "poi" | "context" | "wiki" | "calendar";
+export type FactFamily = "holiday" | "weather" | "sun" | "poi" | "context" | "wiki" | "calendar" | "trend";
 
 export interface FactInput {
   /** What the user typed. Only the part before the first comma is used in copy. */
@@ -45,9 +45,16 @@ interface Fact {
 /** Longer than this and the card stops being glanceable. Dropped, never truncated — half a
  *  fact can say something the whole fact didn't. */
 const MAX_LEN = 120;
-const DEFAULT_LIMIT = 12;
-/** At most this many from any one family, or a seven-day forecast alone fills the feed. */
-const PER_FAMILY = 2;
+/** The wait runs about 150 seconds and the screen shows a fact every 7, so ~21 slots. The cap is
+ *  set above that on purpose: a feed that loops back to fact one while the traveller is still
+ *  reading is the thing this number exists to prevent. It is a ceiling, not a target — the pool
+ *  is whatever the fetched data genuinely supports, and no fact is invented to reach it. */
+const DEFAULT_LIMIT = 30;
+/** At most this many from any one family. Was 2, which was tuned for a 12-fact feed and left most
+ *  of the fetched material unused — a seven-day forecast contributed two lines and twelve
+ *  candidate POIs contributed one. The round-robin interleave below is what actually stops any
+ *  family clustering, so the cap can be loose without the feed reading as all-weather. */
+const PER_FAMILY = 5;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -118,20 +125,31 @@ const MIN_SENTENCE = 20;
  *  Walks the ". " candidates and skips any preceded by a known abbreviation, rather than the
  *  cheaper trick of only looking past character 40 — that dodges "Mt. Fuji" but also swallows
  *  a legitimately short opener like "Kyoto is a city in Japan." and returns two sentences. */
-function firstSentence(extract: string): string | null {
+/**
+ * Split a Wikipedia extract into sentences, respecting `ABBREVIATIONS` so "St. Peter's" does not
+ * become two. Length is deliberately *not* filtered here — `push` enforces `MAX_LEN` against the
+ * finished string with its attribution attached, which is the only length that matters.
+ */
+function sentences(extract: string): string[] {
   const trimmed = extract.trim();
+  const out: string[] = [];
+  let start = 0;
   let from = 0;
   for (;;) {
     const cut = trimmed.indexOf(". ", from);
     if (cut === -1) break;
     const precedingWord = /(\S+)$/.exec(trimmed.slice(0, cut))?.[1] ?? "";
-    if (!ABBREVIATIONS.has(precedingWord)) {
-      const sentence = trimmed.slice(0, cut + 1);
-      return sentence.length >= MIN_SENTENCE && sentence.length <= MAX_LEN ? sentence : null;
+    if (ABBREVIATIONS.has(precedingWord)) {
+      from = cut + 2;
+      continue;
     }
-    from = cut + 2;
+    out.push(trimmed.slice(start, cut + 1).trim());
+    start = cut + 2;
+    from = start;
   }
-  return trimmed.length >= MIN_SENTENCE && trimmed.length <= MAX_LEN ? trimmed : null;
+  const tail = trimmed.slice(start).trim();
+  if (tail) out.push(tail);
+  return out.filter((sentence) => sentence.length >= MIN_SENTENCE);
 }
 
 export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_LIMIT): string[] {
@@ -262,6 +280,18 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
             ? `${three} — three of the ${names.length} we're weighing.`
             : `${three}, and the plan is picking between them.`
         );
+        // Everything past the first three used to go unmentioned: twelve fetched places produced
+        // one line. They are named in trios now, scored below the first so the headline trio
+        // still leads, and capped by PER_FAMILY like everything else.
+        for (let i = 3; i + 2 < names.length; i += 3) {
+          push("poi", 50 - i, `${names[i]}, ${names[i + 1]} and ${names[i + 2]} are on the shortlist too.`);
+        }
+        const tail = names.length % 3;
+        if (names.length > 5 && tail === 2) {
+          push("poi", 30, `${names[names.length - 2]} and ${names[names.length - 1]} round out the list.`);
+        } else if (names.length > 4 && tail === 1) {
+          push("poi", 30, `${names[names.length - 1]} is on the list as well.`);
+        }
       } else if (names.length > 0) {
         push("poi", 35, `${names.length} rated sight${names.length === 1 ? "" : "s"} sit near ${place}, and the plan is picking from those.`);
       }
@@ -296,21 +326,39 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
   // it never claims an overlap with the trip window that the data can't actually support.
   const ctx = input.context;
   if (ctx) {
-    const festival = ctx.festivals?.[0];
-    if (festival?.name && festival.dates) {
-      push("context", 75, `${festival.name}, around ${festival.dates} — an event we're checking against your dates.`);
-    }
-    const shop = ctx.shopping?.[0];
-    if (shop?.name && shop.area) {
-      push("context", 40, `${shop.name} sits in ${shop.area} — a shopping stop on the shortlist.`);
-    }
+    // Every festival and every shopping area, not just the first of each. The model returns
+    // several of both and only index 0 was ever read.
+    (ctx.festivals ?? []).forEach((festival, i) => {
+      if (!festival?.name || !festival.dates) return;
+      push("context", 75 - i, `${festival.name}, around ${festival.dates} — an event we're checking against your dates.`);
+    });
+    (ctx.shopping ?? []).forEach((shop, i) => {
+      if (!shop?.name || !shop.area) return;
+      push("context", 40 - i, `${shop.name} sits in ${shop.area} — a shopping stop on the shortlist.`);
+    });
+
+    // Trends are new here and get their own family so they interleave rather than competing with
+    // festivals for the context cap. The prompt asks for "popular new spots, seasonal crowds",
+    // which is exactly the register this screen wants.
+    //
+    // Safety notes stay excluded, and that is a decision rather than an omission: "pickpockets in
+    // crowds" is useful inside a plan and a sour thing to read while waiting for a holiday to be
+    // written. The model still receives them — see `formatContextBlock` in itineraryPrompt.ts.
+    (ctx.trends ?? []).forEach((trend, i) => {
+      const note = trend?.note?.trim();
+      if (note) push("trend", 35 - i, note.endsWith(".") ? note : `${note}.`);
+    });
   }
 
   // --- Wikipedia: verbatim CC BY-SA prose, so it carries attribution. Unattributed it reads
   // as something TripMate asserted rather than quoted.
   if (input.wikiExtract) {
-    const sentence = firstSentence(input.wikiExtract);
-    if (sentence) push("wiki", 85, `${sentence} — Wikipedia`);
+    // Every sentence that fits, not just the first. The old version took `firstSentence` and gave
+    // up if it was too long — and Kyoto's opening sentence is 146 characters, over `MAX_LEN` once
+    // attribution is attached, so the *richest* extracts contributed zero facts while thin ones
+    // contributed theirs. Measured against the live Kyoto extract: 0 facts before, 3 after.
+    // `85 - i` keeps them in document order; `PER_FAMILY` caps how many actually ship.
+    sentences(input.wikiExtract).forEach((sentence, i) => push("wiki", 85 - i, `${sentence} — Wikipedia`));
   }
 
   return rank(facts, limit);

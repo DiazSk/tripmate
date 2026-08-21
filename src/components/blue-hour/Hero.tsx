@@ -1,14 +1,66 @@
 "use client";
 
 import { useRef } from "react";
-import Image from "next/image";
-import { ChevronDown } from "lucide-react";
+import { getImageProps } from "next/image";
 import { useLineReveal } from "@/lib/lineReveal";
 
+/** The hero is two photographs, not one: a back layer that hangs from the top and a front layer
+ *  that stands on the bottom, with the headline sandwiched between them. Each has a landscape and a
+ *  portrait crop.
+ *
+ *  Sizes are stated rather than imported because `getImageProps` needs them at module scope, and
+ *  they must be the files' *true* intrinsics — `getImageProps` builds the srcset from this ratio, so
+ *  a wrong pair here stretches the horizon.
+ *
+ *  All four carry a real alpha channel: BACK's sky is intact but its lower edge is torn away, FRONT's
+ *  sky is absent entirely. That is what lets them interlock over the canvas. If a replacement ever
+ *  ships as JPEG the missing regions arrive as white slabs — the format is load-bearing, not an
+ *  optimisation. */
+const BACK = {
+  landscape: { src: "/scenes/hero-background-1.webp", width: 2899, height: 1086 },
+  portrait: { src: "/scenes/mobile-hero-background-1.webp", width: 750, height: 1363 },
+};
+const FRONT = {
+  landscape: { src: "/scenes/hero-background-2.webp", width: 2899, height: 1350 },
+  portrait: { src: "/scenes/mobile-hero-background-2.webp", width: 750, height: 1026 },
+};
+
+/** Both landscape files carry 5px of fully transparent margin on the left and 14px on the right —
+ *  0.17% and 0.48% of their 2899px width — which at full bleed shows as slivers of bare canvas down
+ *  each edge. Pulling both edges outward by their own margin hides them; this is the same trick the
+ *  reference uses (`max-width: calc(100% + 8px); right: -8px`). The portrait pair measures zero on
+ *  every edge and keeps `left-0 right-0`.
+ *
+ *  **Both width branches are inside media queries, and neither may be unprefixed.** Pairing a base
+ *  `w-full` with a variant `w-[100.65%]` does not work: Tailwind emits the two `w-*` utilities in one
+ *  sorted group with the unprefixed one last, so `w-full` quietly won and the images still fell 1–2px
+ *  short of the right edge. Dropping `w-full` entirely is worse — an absolutely positioned *replaced*
+ *  element with `width: auto` takes its **intrinsic** width rather than the left/right gap, so every
+ *  viewport rendered the images at a flat 750px. Two mutually exclusive media queries cannot collide
+ *  with each other, which is the only arrangement that holds.
+ *
+ *  `max-w-none` is load-bearing too. Tailwind's Preflight sets `img { max-width: 100% }`, which
+ *  silently clamped the widened layer straight back to 100% and left the right edge 4px short at
+ *  2560. Preflight is a set of opinions that outrank what you wrote, not a neutral reset — the same
+ *  lesson as The Preflight-Beats-The-UA Rule. The reference hits this too and answers it the same
+ *  way, with an explicit `max-width: calc(100% + 8px)`. */
+const LAYER_WIDTH =
+  "max-w-none [@media(max-aspect-ratio:3/5)]:w-full [@media(min-aspect-ratio:3/5)]:w-[100.65%] [@media(min-aspect-ratio:3/5)]:-left-[0.17%]";
+
 /**
- * The opening moment of the Blue Hour scroll story: a curated photo, a mood-setting headline,
- * drifting light, and no CTA — "Plan a trip" is withheld until HeroPoster at the very end so its
- * arrival still reads as a reveal.
+ * The opening moment of the Blue Hour scroll story: a curated photo, a one-word headline,
+ * drifting light, and the CTA.
+ *
+ * The CTA used to live at the very end, on a closing `HeroPoster` beat, and being withheld across
+ * the whole sequence was the story's organising idea. That worked when the page was four beats and
+ * the poster was the densest thing on it. It is seven beats now — the card row, the method strip,
+ * four priced plans and a world map all arrived — and against those the poster was one word on an
+ * empty ground, the least substantial screen on the page arriving last and asking for the click.
+ * A reveal that lands softer than everything before it is not a reveal.
+ *
+ * So the ask sits where the reference puts it, in the hero, under the support line. That is also
+ * the one place the sequence can afford it: everything after this beat is evidence, and a visitor
+ * convinced by the evidence should not have to scroll back up to act on it.
  *
  * **Nothing here is scroll-driven from JavaScript, and the hero is not pinned.** Both of those
  * were true for exactly one commit and both were wrong, in ways worth writing down because the
@@ -33,13 +85,14 @@ import { useLineReveal } from "@/lib/lineReveal";
  * everywhere below `lg`. It is capped below opaque — see that rule for why the cap only became
  * correct once the pin was gone.
  *
- * The ambient motion is CSS keyframes on `transform`/`opacity` only (`.hero-light`, `.hero-cue*`),
+ * The ambient motion is CSS keyframes on `transform`/`opacity` only (`.hero-light`), 
  * which the compositor owns outright. This component used to run five infinite GSAP tweens plus a
  * `pointermove` parallax driving six `quickTo`s across two nested transform planes; a Chrome trace
  * of a real session found scrolling frames resolving on the main thread (`SCROLL_MAIN_THREAD` on
  * 1688 of 3426) rather than the compositor — frames were not being dropped, only 2.1% were, they
  * were arriving *late*, queued behind main-thread work. The globe's render loop, 976ms of that
- * trace and its largest single entry, is paused while this beat covers it; see HeroPoster.
+ * trace and its largest single entry, does not run on this route at all — see The
+ * Mounted-Surface Gate.
  *
  * The one remaining scroll-driven exception is `useLineReveal` on the headline, which is
  * ScrollTrigger and therefore per-frame main-thread work by definition. It is a one-shot: it
@@ -58,82 +111,202 @@ import { useLineReveal } from "@/lib/lineReveal";
  * where there were four, satisfying the One Ambient Loop Rule literally rather than by
  * dispensation.
  */
-export default function Hero() {
+export default function Hero({ onPlan }: { onPlan: () => void }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useLineReveal(headingRef);
 
+  // Four `getImageProps` calls: a landscape and a portrait crop for each of the two layers. This is
+  // Next's own art-direction pattern — `<Image>` cannot switch source on a media query, and two
+  // `<Image>`s toggled with `hidden` would download both files, since `display: none` does not stop
+  // a fetch. `priority` still yields `fetchpriority=high` and eager loading but *not* the
+  // `<link rel=preload>` a rendered `<Image>` emits, which is the right trade: a preload fires
+  // before the media query resolves and would fetch the crop this viewport is not going to use.
+  const common = { alt: "", sizes: "100vw", priority: true } as const;
+  const { props: { srcSet: backLandscape } } = getImageProps({ ...common, ...BACK.landscape });
+  const { props: { srcSet: backPortrait, ...backRest } } = getImageProps({ ...common, ...BACK.portrait });
+  const { props: { srcSet: frontLandscape } } = getImageProps({ ...common, ...FRONT.landscape });
+  const { props: { srcSet: frontPortrait, ...frontRest } } = getImageProps({ ...common, ...FRONT.portrait });
+
   return (
-    <section className="pointer-events-auto relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-5 text-center sm:p-6">
-      {/* No scrim, matching DESIGN.md's landing-headline rule: nothing sits between the type and
-          the photograph — hero-legible's own three-layer shadow carries legibility.
-          The wrapper stays now that nothing animates it: `next/image` with `fill` needs a
-          positioned parent, and this is it. */}
-      <div className="absolute inset-0 -z-10">
-        <Image src="/scenes/hero-dawn.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
-      </div>
+    // **`aspect-ratio`, not `min-h-dvh`.** The section's height follows its *width*, which is the
+    // whole mechanism: both layers sit at natural size (`h-auto`, no `object-cover` crop, which is
+    // why the scene reads zoomed-out and uncropped) and therefore always overlap by a fixed
+    // fraction of the width. Pinned to the viewport instead they would come apart — at 768x1024 the
+    // two landscape layers total 646px against a 1024px section, opening a 378px band of bare
+    // canvas between the mountains and the steppe.
+    //
+    // Ratios are the reference's own: 1440/922 landscape, 375/812 portrait. The reference also caps
+    // portrait at `max-height: 50rem`; we cannot, and the reason is worth recording. A `max-height`
+    // against an `aspect-ratio` does not clamp height alone — it shrinks the box on *both* axes to
+    // preserve the ratio, so at 390px the section came out 369px wide and left a 21px strip of the
+    // page showing down the right edge. Unclamped, 390px gives 845px, which is the viewport anyway.
+    // The known cost is that the hero is no longer exactly one screen — shorter than the viewport on
+    // a portrait tablet (768x1024 gives 492px, so the next beat peeks) and taller on wide displays.
+    // That is the reference's behaviour and it is what keeps the layers interlocked at every size.
+    //
+    // The type is simply centred. The old `pb-[26vh]`/`pb-[18vh]` offsets existed only because a
+    // bottom-anchored crop put the CTA on the yurts; with the layers at natural size the centre is
+    // already right — the reference's own text block measures 241px in a 639px section, landing at
+    // exactly `(639-241)/2`.
+    <section className="pointer-events-auto relative flex aspect-[1440/922] flex-col items-center justify-center overflow-hidden px-5 text-center sm:px-6 [@media(max-aspect-ratio:3/5)]:aspect-[375/812]">
+      {/* BACK — mountains, hanging from the top edge.
+          Its own sky is intact, so this is the one layer that puts bright imagery behind the type;
+          the veil below is what makes that safe. Switched on aspect ratio rather than a width
+          breakpoint because orientation is what actually differs between the crops (2.67 against
+          0.55), and 3/5 rather than 1/1 because at full width the portrait file stands 1.37x its own
+          width tall — fine on a phone, impossible on a 4:3 tablet. */}
+      <picture>
+        <source media="(min-aspect-ratio: 3/5)" srcSet={backLandscape} sizes="100vw" />
+        <source srcSet={backPortrait} sizes="100vw" />
+        <img
+          {...backRest}
+          alt=""
+          aria-hidden
+          className={`absolute top-0 left-0 z-0 h-auto ${LAYER_WIDTH}`}
+        />
+      </picture>
 
-      {/* The one ambient loop: a slow warm pass over the photograph. Over the image and under
-          nothing — it is weather, not a scrim, so it never sits between the type and the photo. */}
-      <div aria-hidden className="hero-light -z-10" />
+      {/* The one ambient loop: a slow warm pass across the composition. Over the mountains and
+          under the type — it is weather, not a scrim. */}
+      <div aria-hidden className="hero-light z-[1]" />
 
-      {/* Fog banks over the lower edge. Drawn rather than photographed so they can hide the source
-          photo's flaws without desaturating it — the densest bank is bottom-left, covering a
-          blown-out yellow bokeh blob. Still, now: their old per-layer drift was three of the five
-          infinite tweens this component used to run, and once the light is the thing that moves, a
-          second drifting element is a competing loop. Held static they cost one rasterisation and
-          nothing thereafter, so all three banks stay — the density here was tuned against this
-          exact photograph and is worth keeping. */}
-      <div aria-hidden className="hero-fog -z-10">
-        <div className="hero-fog-layer" />
-        <div className="hero-fog-layer" />
-        <div className="hero-fog-layer" />
-      </div>
-
-      {/* This wrapper also stays, and for a less obvious reason than the photo's: promoting the
-          `<h1>` to a direct child of `items-center` would give it `align-self: center` and
-          shrink-to-fit width, which changes where the headline wraps — and `useLineReveal` masks
-          the line boxes it *measures*, so a wrap change is a change to the reveal. */}
+      {/* The wrapper stays: promoting the `<h1>` to a direct child of `items-center` would give it
+          `align-self: center` and shrink-to-fit width, changing where the headline wraps — and
+          `useLineReveal` masks the line boxes it *measures*, so a wrap change is a change to the
+          reveal. It is `static` with no `z-index`, which matters: it must not open a stacking
+          context, or the z values on its children could not straddle FRONT. */}
       <div>
-        {/* The headline is one string now, not two hand-split phrase spans on `.hero-rise`.
-            SplitText measures the real line boxes at the real font size and masks each one, so
-            the reveal follows however the type actually wraps at this viewport instead of a
-            two-phrase guess that was right at one width. See `useLineReveal`. */}
+        {/* `z-2` — the sandwich. This is the one element FRONT passes in front of, so the steppe's
+            horizon cuts across the bottom of the word instead of stopping beneath it. Everything
+            else in this block sits at `z-4`, above FRONT, so the support copy stays fully legible.
+            One word, set as large as the viewport allows; 13rem is past the craft floor's 6rem
+            display ceiling, deliberately, because this headline *is* the viewport. It rhymes with
+            the closing "Elsewhere." */}
         <h1
           ref={headingRef}
-          className="hero-legible font-scene-display text-[clamp(2.25rem,6.5vw,5rem)] italic leading-[1.05] text-on-deep"
+          className="hero-legible relative z-[2] font-scene-hero text-[clamp(3rem,11vw,13rem)] leading-[0.92] text-on-deep"
         >
-          Somewhere, it&rsquo;s the blue hour.
+          Somewhere.
         </h1>
-        {/* mx-auto because this block is no longer a direct child of the section's items-center
-            flex — the type wrapper sits between them.
-            The delay is an inline style, not `[animation-delay:...]`. That Tailwind arbitrary
-            property generates no rule in this project — verified by scanning every stylesheet for
-            an `animation-delay` declaration and finding none, and by probing an element carrying
-            both classes, which computes `0s` where an inline value computes `0.09s`. The previous
-            Hero used the class form, so the stagger DESIGN.md documents here had never actually
-            run; both lines arrived together. Inline is what the app's other three staggers already
-            use (TierPicker, HomeView, TripFormConsole). */}
+        {/* The support line, on the reference's own paragraph step rather than the app's body step:
+            1.75rem / 600 / 1.3 / -0.0714em on desktop, dropping to 1.1875rem / 1.0 / -0.028em on a
+            phone. Every axis moved, and one of them was silently broken — this element computed
+            `letter-spacing: normal`, so the body tracking DESIGN.md documents had never reached it.
+
+            **`scene-prose` had to come off, not be overridden.** It is an unlayered
+            `line-height: 1.8` in globals.css, and an unlayered rule beats a layered one regardless
+            of specificity — Tailwind emits `leading-*` inside `@layer utilities`, so the class would
+            have silently won and held the old 1.8. That is The Unlayered-Shadow Rule, met on
+            line-height instead of box-shadow. The class stays in globals.css for the four other
+            components that use it.
+
+            19px on mobile, not the reference's 18px. At 600 weight that crosses WCAG's 18.66px
+            large-text threshold, which drops the bar from 4.5:1 to 3:1 and is what lets this line
+            pass on a phone at all — 1px of deviation for a measurable legibility gain.
+
+            The delay is an inline style, not `[animation-delay:...]` — that Tailwind arbitrary
+            property generates no rule in this project, so the documented stagger had never actually
+            run and both lines arrived together. Inline is what the app's other three staggers use. */}
         <p
-          className="hero-rise hero-legible mx-auto mt-5 max-w-md text-balance scene-prose text-base text-on-deep sm:text-lg"
+          className="hero-rise hero-legible relative z-[4] mx-auto mt-6 max-w-[22rem] text-balance text-[1.1875rem] leading-none font-semibold tracking-[-0.028em] text-on-deep sm:max-w-[34rem] sm:text-[1.75rem] sm:leading-[1.3] sm:tracking-[-0.0714em]"
           style={{ animationDelay: "180ms" }}
         >
-          Every trip we plan is built around finding it.
+          It&rsquo;s the blue hour, and every trip we plan is built around finding it.
         </p>
-      </div>
 
-      {/* The scroll cue: fades out over the first 200px of real scroll, so its absence itself
-          confirms the page moved. That fade is `animation-timeline: scroll()` — the bob is
-          time-driven and lives on the inner element, the scroll-driven fade on the outer, so
-          neither needs an `animation-timeline` list. Decorative only, not a control. */}
-      <div
-        aria-hidden
-        className="hero-cue hero-legible pointer-events-none absolute bottom-8 text-on-deep/70"
-      >
-        <div className="hero-cue-bob">
-          <ChevronDown size={28} strokeWidth={1.5} />
+        {/* Shares the subline's entrance one step later, so the ask arrives after the sentence that
+            justifies it. `shadow-lg` because this is the one button on the page sitting on bare
+            photography with no panel behind it — the reference carries no shadow here, but its
+            button is not over a full-bleed landscape.
+
+            **White at rest, amber on hover** — the reference's own arrangement, read off its live
+            CSS rather than its screenshots. Its `.btn-primary` has exactly one hover rule and it
+            touches `background-color` only; the label stays dark in both states. That is worth
+            stating because the obvious reading is "amber background, white text", and white on
+            `#fb9826` measures **2.19:1** — under even the 3:1 large-text bar. `--accent-foreground`
+            holds for both states at 16.5:1 on white and 7.55:1 on amber, which is exactly the job
+            The Two Foregrounds Rule gives it.
+
+            The focus indicator was broken here and the white fill is what exposed it. It read
+            `focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none`, and under
+            real keyboard focus `:focus-visible` matched while every ring slot in the composed
+            `box-shadow` stayed `rgba(0,0,0,0)` — no indicator at all, in any colour.
+
+            **The cause is unexplained and the note is deliberately narrow about that.** Three
+            hypotheses were tested and all three are wrong: it is not the colour token (`ring-accent`,
+            which renders correctly on `FeaturedPlans`' button, is equally invisible here), not
+            `shadow-lg` occupying the shadow stack (adding it to that other button does not break its
+            ring), and not `transition-all` catching the measurement mid-animation (still transparent
+            after 1500ms). So this is *not* a general "ring loses to box-shadow" rule — rings work
+            elsewhere in this project. Something element-specific defeats it on this button and it was
+            not worth more time to find, because `outline` is a different property, measurably renders
+            (`2px solid rgb(9,27,32)`), and is already the pattern three other call sites use.
+
+            `outline-accent-foreground` with **no offset**, deliberately. Offset would put the ring
+            on the photograph, where a dark line disappears; hugging the button keeps it against a
+            known colour in both states — 17.66:1 on the white rest fill, 8.09:1 on the amber
+            hover. An amber outline would have vanished on hover, and a white one on rest.
+
+            Type and padding are the reference's too: `0.875rem / 600 / -0.5px` tracking at 90%
+            line-height, in a `1.25rem 2rem` box — 4px taller than ours was. */}
+        <div
+          className="hero-rise relative z-[4] mt-8 flex justify-center"
+          style={{ animationDelay: "300ms" }}
+        >
+          <button
+            type="button"
+            // `() => onPlan()` and not a bare `onClick={onPlan}`: React hands the click handler a
+            // MouseEvent as its first argument, and `onPlan` now takes an optional prefill in that
+            // position. A bare reference would post a MouseEvent into the wizard's form state, and
+            // it typechecks, because `Hero` declares the prop as `() => void` and TypeScript
+            // happily assigns a wider handler to a narrower one.
+            onClick={() => onPlan()}
+            className="pointer-events-auto inline-flex items-center gap-4 rounded-full border border-transparent bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground shadow-lg shadow-black/30 transition-all duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
+          >
+            Plan a trip
+            {/* The reference's button mark, drawn to its own path rather than borrowed from
+                `SectionOpener`. Those are two different shapes and the reference has both: the
+                section opener sets a six-point `❋`, which `SectionMark` redraws as three crossing
+                strokes, while the button carries this four-point star with concave sides, filled.
+                Reusing the stroked one here would not have worked at this size anyway — 1.5 units
+                of stroke inside an 8px box closes the gaps between the arms and reads as a blob.
+                A filled path stays crisp.
+
+                `fill="currentColor"` rather than the reference's hard-coded `#0D2E37`, so the mark
+                tracks `text-accent-foreground` and cannot drift from the label it sits beside.
+                `gap-4` is the reference's own `1rem`. */}
+            <svg
+              aria-hidden
+              width="8"
+              height="8"
+              viewBox="0 0 8 8"
+              fill="currentColor"
+              className="shrink-0"
+            >
+              <path d="M8 0C8 0 7.32057 2.41553 7.32057 4C7.32057 5.58447 8 8 8 8C8 8 5.58447 7.32057 4 7.32057C2.41553 7.32057 0 8 0 8C0 8 0.679427 5.58447 0.679427 4C0.679427 2.41553 0 0 0 0C0 0 2.41553 0.679426 4 0.679426C5.58447 0.679426 8 0 8 0Z" />
+            </svg>
+          </button>
         </div>
       </div>
+
+      {/* FRONT — the steppe, standing on the bottom edge at `z-3`, in front of the headline and
+          behind everything else. Its sky is absent, so the mountains and the canvas show through
+          above the horizon.
+          `-bottom-[0.4vw]` on the landscape crop only: that file carries an 11px fully transparent
+          margin under the grass, which bottom-anchored left a strip of bare canvas along the screen
+          edge (measured at 1440x900 as five rows dropping to mean RGB 23 under grass at 58). 11px of
+          a 2899px frame is 0.38vw at any width. The portrait file has no such margin. */}
+      <picture>
+        <source media="(min-aspect-ratio: 3/5)" srcSet={frontLandscape} sizes="100vw" />
+        <source srcSet={frontPortrait} sizes="100vw" />
+        <img
+          {...frontRest}
+          alt=""
+          aria-hidden
+          className={`absolute bottom-0 left-0 z-[3] h-auto ${LAYER_WIDTH} [@media(min-aspect-ratio:3/5)]:-bottom-[0.4vw]`}
+        />
+      </picture>
 
       {/* The exit wash — see `.hero-dusk`. Last child and `z-10` so it covers the type as well as
           the photograph: the composition has to dim as one image, or the headline survives its

@@ -26,6 +26,7 @@ import PoiCandidatePicker from "@/components/PoiCandidatePicker";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
+import type { PlanPrefill } from "@/components/blue-hour/planExamples";
 import DockedPanel from "@/components/DockedPanel";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
@@ -79,7 +80,7 @@ import { summarizeDurable } from "@/lib/profileSummary";
 const ItineraryCard = dynamic(() => import("@/components/ItineraryCard"), { ssr: false });
 const FocusEditMode = dynamic(() => import("@/components/FocusEditMode"), { ssr: false });
 const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), { ssr: false });
-const GenerationLoader = dynamic(() => import("@/components/cesium/GenerationLoader"), {
+const GenerationScreen = dynamic(() => import("@/components/GenerationScreen"), {
   ssr: false,
 });
 const TierPicker = dynamic(() => import("@/components/TierPicker"), { ssr: false });
@@ -189,7 +190,7 @@ function Field({
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
         {label}
         {optional && (
-          <span className="font-normal tracking-normal text-white/40 normal-case">optional</span>
+          <span className="font-normal tracking-normal text-white/55 normal-case">optional</span>
         )}
       </span>
       <div className="mt-1.5">{children}</div>
@@ -393,7 +394,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // These hit the same module registry, fully typed.
   useEffect(() => {
     if (step === "landing") return;
-    void import("@/components/cesium/GenerationLoader");
+    void import("@/components/GenerationScreen");
     void import("@/components/ItineraryCard");
     void import("@/components/PlaceDetailPanel");
     void import("@/components/FocusEditMode");
@@ -743,18 +744,24 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
   // Pre-save editing is local-state only — there's no trip row to persist to
   // until save() runs, so these just mutate the in-progress itinerary.
+  /** A hand-rearranged itinerary from the card's drag-and-drop. `moveStop` has already re-timed the
+   *  affected days, so there is nothing to recompute here — and nothing to persist yet, same as the
+   *  inline day edits.
+   *
+   *  This wiring is why the feature is reachable at all. `ItineraryCard` renders `ArrangeBoard`
+   *  itself, but `onItineraryChange` is optional and a caller that omits it gets a board whose drops
+   *  go nowhere. The handler lived in `page.tsx` until that file was split into this one, so the
+   *  merge that brought the board across would otherwise have landed it dead. */
+  function handleRearrange(next: Itinerary) {
+    setRevealAnimation(false);
+    setItinerary(next);
+  }
+
   function handleEditDay(dayIndex: number, updates: DayEditUpdates) {
     if (!itinerary) return;
     const updated: Itinerary = structuredClone(itinerary);
     Object.assign(updated.days[dayIndex], updates);
     setItinerary(updated);
-  }
-
-  /** A hand-rearranged itinerary from the card's drag-and-drop. Already re-timed by `moveStop`,
-   *  so there is nothing to recompute here — and nothing to persist yet, same as the day edits. */
-  function handleRearrange(next: Itinerary) {
-    setRevealAnimation(false);
-    setItinerary(next);
   }
 
 
@@ -790,17 +797,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // page already holds. Deliberately no model call: `runClaude` spends almost all of its wall
   // clock waiting for a first token, so trivia fetched that way would arrive after the plan it
   // was meant to fill the time for.
-  // What the loader names while it works. The plan form unmounts during generation, so
-  // without this the screen shows a spinner over a globe and never once states which trip it
-  // is building — the single thing a waiting traveler most wants confirmed.
-  const loaderSubject = [
-    destination.split(",")[0]?.trim() || destination.trim(),
-    startDate && endDate ? formatDateRange(startDate, endDate) : null,
-    TIERS.find((t) => t.id === tier)?.name ?? null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
   const wikiExtract = usePlacePhoto(destination, "extract");
   const destinationFacts = useMemo(
     () =>
@@ -813,6 +809,43 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       }),
     [destination, rawFetch, destContext, wikiExtract]
   );
+
+  /**
+   * Opens the wizard, optionally filled in from a featured card.
+   *
+   * Only the six fields a card can honestly speak for are written. Everything else — energy,
+   * crowds, interests, explorer style — keeps whatever the traveller's saved profile put there,
+   * because a marketing example has no business overwriting a stated preference.
+   *
+   * `tier` and `group` are derived rather than carried: `closestTier` already owns the
+   * budget-to-tier mapping the tier cards use, and re-stating it in the card data would be a second
+   * copy to keep in sync. Same for the group — it falls out of the party counts.
+   *
+   * Dates arrive already rolled forward to the next occurrence of the card's season, so they can
+   * never be behind the `min={todayISO()}` the date inputs enforce.
+   *
+   * Deliberately *not* geocoded here. Geocoding happens on the destination field's blur, and a
+   * programmatic set fires no blur — but these destinations are curated and real, the globe does not
+   * boot on this step anyway, and a missed geocode is non-blocking by design. The traveller
+   * touching the field is what resolves it, exactly as when they type their own.
+   */
+  function startPlanning(prefill?: PlanPrefill) {
+    if (prefill) {
+      setDestination(prefill.destination);
+      setStartDate(prefill.startDate);
+      setEndDate(prefill.endDate);
+      setBudget(prefill.budgetUsd);
+      setTier(closestTier(prefill.budgetUsd, tripDays(prefill.startDate, prefill.endDate)));
+      setParty({ adults: prefill.adults, children: prefill.children, infants: 0 });
+      setGroup(
+        prefill.children > 0 ? "family_with_kids" : prefill.adults === 1 ? "solo" : "couple"
+      );
+    }
+    // Always the first sub-step, even fully prefilled: the card is a suggestion and the traveller
+    // should see what it filled in before it prices anything.
+    setPlanStep("basics");
+    setStep("plan");
+  }
 
   return (
     <main
@@ -832,12 +865,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           fetches its chunk on first render — i.e. on the landing, which is the one thing the
           boundary exists to prevent. */}
       {(generating || refining) && (
-        <GenerationLoader
-          active
+        <GenerationScreen
           mode={refining ? "refine" : "generate"}
           stages={stages}
           facts={destinationFacts}
-          subject={loaderSubject}
+          destination={destination}
+          dateRange={startDate && endDate ? formatDateRange(startDate, endDate) : null}
+          tripDays={days}
+          tierName={TIERS.find((t) => t.id === tier)?.name ?? null}
+          budget={budget}
+          rawFetch={rawFetch}
           onCancel={cancelGeneration}
         />
       )}
@@ -847,7 +884,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           with real scroll height, so it replaces the single centered hero this step used to
           be — but it hands off to the same setStep("plan"), which is this app's own multi-step
           form rather than the standalone build's one-card console. */}
-      {step === "landing" && <ScrollStory onPlan={() => setStep("plan")} />}
+      {step === "landing" && <ScrollStory onPlan={startPlanning} />}
 
       {/* Form and tier picker merged into one card: the dates and budget are what price the
           tiers, so splitting them across two steps meant choosing a style blind. One <form>
@@ -1190,7 +1227,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     value={purpose}
                     onChange={(e) => setPurpose(e.target.value)}
                     placeholder="e.g. anniversary trip, first time in Japan, work + play"
-                    className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                    className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
                   />
                 </Screen>
               )}
@@ -1210,7 +1247,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                         onChange={(e) => setGroupOther(e.target.value)}
                         placeholder="e.g. five college friends, work offsite, three generations"
                         aria-label="Who's going"
-                        className="value-in w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                        className="value-in w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
                       />
                     )}
                     {/* Shown for every group, not just families: a party of six friends is

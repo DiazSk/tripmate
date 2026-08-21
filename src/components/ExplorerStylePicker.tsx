@@ -32,7 +32,7 @@ export default function ExplorerStylePicker({
             }`}
           >
             <span className="text-sm font-medium">{s.label}</span>
-            <span className={`text-xs ${isActive ? "text-accent-foreground/80" : "text-muted/70"}`}>
+            <span className={`text-xs ${isActive ? "text-accent-foreground/80" : "text-muted"}`}>
               {s.hint}
             </span>
           </button>
