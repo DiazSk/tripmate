@@ -1,11 +1,16 @@
 /* Run: npm test
  *
  * These metrics exist because applyPatch launders some bad output into plausible-looking trips:
- * add_stop clamps a wild index, replace_lodging is unchecked, replace_stop merges. Each of those
- * holes gets a test here, because `rejected` cannot see any of them. */
+ * add_stop clamps a wild index, replace_lodging is unchecked, and replace_stop merges rather than
+ * overwrites. Each hole gets a test below, because `rejected` cannot see any of them — but they
+ * don't all turn out to be equally visible once you look past `rejected`. add_stop and
+ * replace_lodging both end up caught by guardrailDelta (pace, and budget, respectively).
+ * replace_stop's merge does not: a near-empty payload applies as a clean, fully-applied edit, and
+ * nothing in the current metric set notices. That gap is asserted directly rather than hidden
+ * behind a test that happens to pass. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deltaGroups, scorePatch } from "./patch.ts";
+import { deltaGroups, refineComposite, scorePatch } from "./patch.ts";
 
 const stop = (name, time, cost = 10) => ({
   name, lat: 43.08, lng: 11.68, cost, why: "because", note: "5-minute walk",
@@ -72,6 +77,49 @@ test("blowing the budget shows up as a new guardrail", () => {
   const ops = [{ op: "replace_stop", dayIndex: 0, stopIndex: 0, stop: stop("Gold", "9:00 AM", 99999) }];
   const s = scorePatch({ base, ops, task: { expect: { opsExpected: true, allowedDays: [0] } }, budget: 100 });
   assert.ok(s.guardrailsAfter > s.guardrailsBefore);
+});
+
+test("replace_lodging is unchecked, but an absurd cost still flows into the budget guardrail", () => {
+  // applyPatch assigns `op.lodging` straight onto the day with no shape check at all — any payload
+  // "succeeds". The only reason this particular payload is visible afterward is that lodging cost
+  // feeds tripSpend same as a stop's does, so an absurd number still trips §12d incidentally.
+  const ops = [{ op: "replace_lodging", dayIndex: 0, lodging: { name: "Fake Hotel", cost: 99999 } }];
+  const s = scorePatch({ base, ops, task: { expect: { opsExpected: true, allowedDays: [0] } }, budget: 100 });
+  assert.equal(s.opsRejected, 0, "replace_lodging has no validation of its payload — this is the hole");
+  assert.ok(s.guardrailDelta > 0, "the cost side-effect is what catches it, not any check on the payload itself");
+});
+
+test("replace_stop's merge lets a near-empty payload pass as a full success, undetected", () => {
+  // The model can send `{ name: "B (renamed)" }` for `stop`, and applyPatch merges it onto B rather
+  // than requiring a full replacement — every other field, including time and cost, survives
+  // untouched. opsRejected/applied read this as a clean, fully-applied edit, and because nothing
+  // about the schedule or cost actually changed, no guardrail reacts either. Unlike the two holes
+  // above, nothing in RefinePatchScore currently reveals this one — asserted here as a documented
+  // gap, not papered over with an assertion that would only pass by accident.
+  const ops = [{ op: "replace_stop", dayIndex: 0, stopIndex: 1, stop: { name: "B (renamed)" } }];
+  const s = scorePatch({ base, ops, task: { expect: { opsExpected: true, allowedDays: [0] } }, budget: 2000 });
+  assert.equal(s.opsRejected, 0, "the merge means an incomplete payload is never rejected");
+  assert.equal(s.applied, 1, "scorePatch reports a clean success even though only `name` actually changed");
+  assert.equal(s.guardrailDelta, 0, "nothing about the schedule or cost changed, so no guardrail notices either");
+});
+
+test("refineComposite weights the delta by COMPOSITE_WEIGHTS, not evenly across the five groups", () => {
+  // routeEfficiency (weight 0.15) and coverageGrounding (weight 0.30) both regress, the other three
+  // groups hold steady. An even mean over 5 groups gives -0.5/5 = -0.1; weighting by
+  // COMPOSITE_WEIGHTS and renormalizing over the two measurable groups' summed weight (1.0, since
+  // every group is measurable here) gives (-0.4*0.15 + -0.1*0.30)/1.0 = -0.09 instead. The two
+  // numbers must differ for this test to mean anything — if a future edit reverts to an even mean,
+  // this assertion is what catches it.
+  const delta = {
+    routeEfficiency: -0.4,
+    constraintAdherence: 0,
+    weatherFeasibility: 0,
+    mealVibeAlignment: 0,
+    coverageGrounding: -0.1,
+  };
+  const scores = { delta, patch: { normalized: 1 }, operational: { failed: false } };
+  const c = refineComposite(scores);
+  assert.ok(Math.abs(c - 0.955) < 1e-9, `expected the weighted composite 0.955, got ${c}`);
 });
 
 test("deltaGroups subtracts per group and keeps nulls null", () => {

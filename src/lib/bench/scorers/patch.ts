@@ -81,18 +81,28 @@ export function deltaGroups(before: CompositeGroups, after: CompositeGroups): Co
 /**
  * A refine cell's headline number: half "did the trip get worse", half "was the patch well-formed".
  *
- * The delta half is `1 + mean(delta)` clamped to [0,1], so leaving the plan's quality untouched
- * scores 1.0 and degrading it subtracts. Improvement cannot push past 1.0 — an edit that
+ * The delta half is `1 + weighted-mean(delta)` clamped to [0,1], so leaving the plan's quality
+ * untouched scores 1.0 and degrading it subtracts. Improvement cannot push past 1.0 — an edit that
  * incidentally raises the trip's score is not evidence the model followed the instruction, and
  * rewarding it would let a model win by rewriting days nobody asked about.
+ *
+ * The weighting mirrors `compositeScore()` in `runBenchmark.ts`: each measurable group's delta is
+ * weighted by `COMPOSITE_WEIGHTS`, then renormalized over the summed weight of the groups that
+ * were measurable (not divided by 5 groups regardless of which ones were null). Weighting the
+ * absolute score by `coverageGrounding: 0.30` but averaging its delta evenly would let a model's
+ * generation and refine composites disagree about which group matters most.
  */
 export function refineComposite(scores: RefineCellScores): number | null {
   if (scores.operational.failed) return null;
-  const deltas = Object.values(scores.delta).filter((v): v is number => v !== null);
+
+  const entries = (Object.keys(COMPOSITE_WEIGHTS) as (keyof CompositeGroups)[])
+    .map((key) => ({ value: scores.delta[key], weight: COMPOSITE_WEIGHTS[key] }))
+    .filter((e): e is { value: number; weight: number } => e.value !== null);
+  const totalWeight = entries.reduce((s, e) => s + e.weight, 0);
   const deltaScore =
-    deltas.length === 0
+    entries.length === 0 || totalWeight === 0
       ? null
-      : Math.max(0, Math.min(1, 1 + deltas.reduce((s, v) => s + v, 0) / deltas.length));
+      : Math.max(0, Math.min(1, 1 + entries.reduce((s, e) => s + e.value * e.weight, 0) / totalWeight));
 
   const parts = [deltaScore, scores.patch.normalized].filter((p): p is number => p !== null);
   return parts.length > 0 ? parts.reduce((s, p) => s + p, 0) / parts.length : null;
