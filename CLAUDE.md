@@ -103,6 +103,14 @@ SQLite via `better-sqlite3`, single file `tripmate.db` at repo root. `src/lib/db
 
 - **Calendar dates are parsed as UTC midnight.** `new Date("2026-09-19")` formatted with local accessors rolls back a day anywhere west of Greenwich. Use `getUTC*()` / `timeZone: "UTC"` for anything date-only — this has already caused a wrong day-of-week to reach generated output.
 - **`AGENTS.md` is rewritten by `next dev`.** Deleting it from a diff just recreates the uncommitted change; commit it with your work.
+- **Don't compare `created_at` against SQLite's `datetime()`.** Every timestamp in this DB is written
+  as `new Date().toISOString()` — `2026-08-21T21:41:26.123Z`, with a `T` and a `Z`. SQLite's
+  `datetime('now','-10 minutes')` returns `2026-08-21 21:26:50`, space-separated. Compared as
+  strings, `T` (0x54) beats `' '` (0x20), so `created_at > datetime('now', …)` silently matches
+  **every row whose date is today**, whatever its time — it looks like a working filter and returns
+  far too much. Build the cutoff as an ISO string instead
+  (`node -e "console.log(new Date(Date.now()-15*60000).toISOString())"`) so both sides share a
+  format. `tagRunsCreatedBetween()` is safe because it compares ISO to ISO.
 - Geocoding misses are **deliberately non-blocking** (an Open-Meteo outage shouldn't read as "the app is broken"). Don't convert them into hard validation errors — see the comments in `src/app/page.tsx` and `src/app/api/itinerary/route.ts`.
 
 ## Docs convention
