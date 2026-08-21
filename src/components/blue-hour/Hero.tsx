@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { getImageProps } from "next/image";
+import ButtonMark from "@/components/ButtonMark";
 import { useLineReveal } from "@/lib/lineReveal";
 
 /** The hero is two photographs, not one: a back layer that hangs from the top and a front layer
@@ -175,8 +176,13 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
           `align-self: center` and shrink-to-fit width, changing where the headline wraps — and
           `useLineReveal` masks the line boxes it *measures*, so a wrap change is a change to the
           reveal. It is `static` with no `z-index`, which matters: it must not open a stacking
-          context, or the z values on its children could not straddle FRONT. */}
-      <div>
+          context, or the z values on its children could not straddle FRONT.
+
+          `w-full` in the portrait composition only, so the CTA below can span the section's real
+          content box. It cannot change where the headline wraps — "Somewhere." is one word at 48px
+          and the subline carries its own `max-w-[22rem]` — which is the thing this wrapper exists to
+          protect, since `useLineReveal` masks the line boxes it measures. */}
+      <div className="[@media(max-aspect-ratio:3/5)]:w-full">
         {/* `z-2` — the sandwich. This is the one element FRONT passes in front of, so the steppe's
             horizon cuts across the bottom of the word instead of stopping beneath it. Everything
             else in this block sits at `z-4`, above FRONT, so the support copy stays fully legible.
@@ -250,8 +256,21 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
 
             Type and padding are the reference's too: `0.875rem / 600 / -0.5px` tracking at 90%
             line-height, in a `1.25rem 2rem` box — 4px taller than ours was. */}
+        {/* **Full width in the portrait composition, and still inside the centred block** — the
+            reference's `full-width-mobile` button variant, without moving where the button sits.
+            Docking it to the section's floor was tried and reverted: this hero's height follows its
+            *width* on purpose (see the note above the `<section>`), so it is deliberately taller
+            than a phone screen and its floor lands roughly 200px below the fold. The button is at
+            ~560px today, which is on screen; the "bottom" of a section that runs past the viewport
+            is further from the reader, not closer. Pulling it out of the flow also shortens the
+            centred block, which drops the headline ~45px into the grass and loses the horizon cut
+            the whole two-layer sandwich exists to produce.
+
+            `w-full` here needs the wrapper's width to be the real content box: this `div` sits
+            inside a shrink-to-fit flex item, so without the mobile `w-full` on that ancestor the
+            button sizes to the subline's `max-w-[22rem]` and stops short of each gutter. */}
         <div
-          className="hero-rise relative z-[4] mt-8 flex justify-center"
+          className="hero-rise relative z-[4] mt-8 flex justify-center [@media(max-aspect-ratio:3/5)]:w-full"
           style={{ animationDelay: "300ms" }}
         >
           <button
@@ -262,30 +281,12 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
             // it typechecks, because `Hero` declares the prop as `() => void` and TypeScript
             // happily assigns a wider handler to a narrower one.
             onClick={() => onPlan()}
-            className="pointer-events-auto inline-flex items-center gap-4 rounded-full border border-transparent bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground shadow-lg shadow-black/30 transition-all duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
+            className="pointer-events-auto inline-flex items-center gap-4 rounded-full border border-transparent bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground shadow-lg shadow-black/30 transition-all duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98] [@media(max-aspect-ratio:3/5)]:w-full [@media(max-aspect-ratio:3/5)]:justify-center"
           >
             Plan a trip
-            {/* The reference's button mark, drawn to its own path rather than borrowed from
-                `SectionOpener`. Those are two different shapes and the reference has both: the
-                section opener sets a six-point `❋`, which `SectionMark` redraws as three crossing
-                strokes, while the button carries this four-point star with concave sides, filled.
-                Reusing the stroked one here would not have worked at this size anyway — 1.5 units
-                of stroke inside an 8px box closes the gaps between the arms and reads as a blob.
-                A filled path stays crisp.
-
-                `fill="currentColor"` rather than the reference's hard-coded `#0D2E37`, so the mark
-                tracks `text-accent-foreground` and cannot drift from the label it sits beside.
-                `gap-4` is the reference's own `1rem`. */}
-            <svg
-              aria-hidden
-              width="8"
-              height="8"
-              viewBox="0 0 8 8"
-              fill="currentColor"
-              className="shrink-0"
-            >
-              <path d="M8 0C8 0 7.32057 2.41553 7.32057 4C7.32057 5.58447 8 8 8 8C8 8 5.58447 7.32057 4 7.32057C2.41553 7.32057 0 8 0 8C0 8 0.679427 5.58447 0.679427 4C0.679427 2.41553 0 0 0 0C0 0 2.41553 0.679426 4 0.679426C5.58447 0.679426 8 0 8 0Z" />
-            </svg>
+            {/* `gap-4` is the reference's own `1rem`. The mark is `ButtonMark` — see there for why
+                it is inline and why it fills `currentColor`. */}
+            <ButtonMark />
           </button>
         </div>
       </div>

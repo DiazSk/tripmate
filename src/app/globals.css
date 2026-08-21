@@ -426,13 +426,31 @@ body {
   backdrop-filter: blur(12px);
 }
 
-/* The mobile menu panel, not the bar itself: a real tappable surface with rows on it
-   wants more of the one slate than the whisper-thin bar tint above, the same
-   more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` already take
-   over `.glass-nav`. */
+/* The mobile menu panel, not the bar itself. It used to be a dropdown at 0.85 of the one
+   slate — the more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` take over
+   `.glass-nav`. Now that it fills the viewport it goes to the top of that same step rather
+   than to a new colour: still `--surface-deep-rgb`, at alpha 1. **Raising the alpha within the
+   one slate is the move; leaving the material for `--canvas` is not**, and full opacity is
+   where that step ends.
+
+   Two things earned the last 15%. A full-screen panel has the whole page behind it, not a
+   sliver of nav — on a phone the footer photograph was legibly ghosting through the menu rows.
+   And the blur goes with it, by the same reasoning `.glass-itinerary.is-opaque` already uses on
+   the four globe-less routes: nothing shows through an opaque surface, so a 20px blur is a
+   compositing layer rendering a blur of nothing. On the phone this fires during a full-viewport
+   fade. */
 .glass-nav-menu {
-  background: rgb(var(--surface-deep-rgb) / 0.85);
-  backdrop-filter: blur(20px);
+  background: rgb(var(--surface-deep-rgb));
+}
+
+/* The bar while that panel is open. `.glass-nav` is a whisper of the slate at 0.15, which is
+   right over a live globe and wrong butting up against the solid panel below it: the header row
+   read as a visibly lighter strip across the top of one surface. The reference treats its own
+   header and menu as a single field, and so does this — the divider under the row is then the
+   panel's `border-t`, which is the only line that should be there. */
+.glass-nav.is-menu-open {
+  background: rgb(var(--surface-deep-rgb));
+  backdrop-filter: none;
 }
 
 /* Native range input for the tilt slider — no library. It's laid out horizontally and rotated
