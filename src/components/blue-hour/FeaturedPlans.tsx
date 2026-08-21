@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRef } from "react";
 
+import ButtonMark from "@/components/ButtonMark";
 import { devLabel } from "@/lib/devInspector";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { useLineReveal } from "@/lib/lineReveal";
@@ -152,22 +153,12 @@ export default function FeaturedPlans({
                 className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
               >
                 Plan a trip like this
-                {/* The reference's button mark, matching the hero CTA. `fill="currentColor"` is what
-                    makes it work on this button in particular: unlike the hero's, this one *does*
-                    invert its text on hover (white on slate becomes dark on amber), and the mark has
-                    to follow. A hard-coded fill would have gone invisible in one state or the other.
-                    Kept at this button's own `gap-2` rather than the reference's `1rem` — that is
-                    tuned for a 20px-tall primary CTA and reads loose at this size. */}
-                <svg
-                  aria-hidden
-                  width="8"
-                  height="8"
-                  viewBox="0 0 8 8"
-                  fill="currentColor"
-                  className="shrink-0"
-                >
-                  <path d="M8 0C8 0 7.32057 2.41553 7.32057 4C7.32057 5.58447 8 8 8 8C8 8 5.58447 7.32057 4 7.32057C2.41553 7.32057 0 8 0 8C0 8 0.679427 5.58447 0.679427 4C0.679427 2.41553 0 0 0 0C0 0 2.41553 0.679426 4 0.679426C5.58447 0.679426 8 0 8 0Z" />
-                </svg>
+                {/* Kept at this button's own `gap-2` rather than the reference's `1rem` — that is
+                    tuned for a 20px-tall primary CTA and reads loose at this size. `ButtonMark`
+                    fills `currentColor`, which is what makes it work on this button in particular:
+                    unlike the hero's, this one *does* invert its text on hover (white on slate
+                    becomes dark on amber) and the mark has to follow. */}
+                <ButtonMark />
               </button>
             </div>
 
