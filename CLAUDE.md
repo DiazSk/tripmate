@@ -44,6 +44,20 @@ load it. Import specifiers **inside a `.test.mjs` itself** still need the explic
 the hook fires on the failed resolve of a relative import, and the test files all write `./foo.ts`
 directly.
 
+**What the hook does NOT fix: a type imported without the `type` keyword.** Node erases
+`import type { X }`, but a plain `import { X }` stays in the emitted module, so if `X` is an
+`interface` or `type` the loader throws at instantiation:
+
+```
+SyntaxError: The requested module './types' does not provide an export named 'CritiqueResult'
+```
+
+That is `src/lib/generationRunner.ts` today (line 11 pulls `CritiqueResult` into a value import
+block), which is why `runGeneration()` cannot be reached from a `.mjs` script at all — a script that
+needs it has to go through `/api/itinerary` over HTTP against a running dev server, the way
+`scripts/perf-bench.mjs` does. Path resolution is solved; import *kind* is not. Move the type into an
+`import type` block if you need a module to be script-reachable.
+
 The glob in the `test` script needs **double** quotes. Single quotes reach Node literally on Windows and it matches nothing — the suite reported success while running zero tests.
 
 ## Git commits
