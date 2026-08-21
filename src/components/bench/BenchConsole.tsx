@@ -5,7 +5,7 @@ import type { BenchModel } from "@/lib/bench/models";
 import type { ModelAggregate } from "@/lib/bench/runBenchmark";
 import { paretoFrontier } from "@/lib/bench/pareto";
 import { RADAR_AXES, VIOLATION_TYPES } from "@/lib/bench/types";
-import type { BenchCell, ModelAgreement } from "@/lib/bench/types";
+import type { BenchCell, ModelAgreement, RefineCell } from "@/lib/bench/types";
 import { GroupedBars, ParetoScatter, RadarChart, SimpleBars, StackedBars, seriesColor } from "./charts";
 import BenchTripForm from "./BenchTripForm";
 import ItineraryOutput from "./ItineraryOutput";
@@ -35,6 +35,15 @@ interface FixtureSummary {
 /** Cells arrive with both output forms attached — see the API's snapshot(). */
 type BenchCellWithJson = BenchCell & { json: BenchItineraryJson };
 
+/** Mirrors `RefineTask` (src/lib/bench/refineTasks.ts) as it comes back over JSON. */
+interface RefineTaskSummary {
+  id: string;
+  message: string;
+  dayIndex?: number;
+  covers: string;
+  expect: { opsExpected: boolean; allowedDays?: number[] };
+}
+
 interface Snapshot {
   fixtures: FixtureSummary[];
   models: BenchModel[];
@@ -46,6 +55,8 @@ interface Snapshot {
   /** Which trips the aggregate averages over, and which are excluded as incomplete. */
   panel: { included: string[]; excluded: string[] };
   agreement: ModelAgreement[];
+  /** Keyed by fixture id — the refine tasks available for that trip. */
+  refineTasks: Record<string, RefineTaskSummary[]>;
 }
 
 const fmtMs = (v: number) => `${(v / 1000).toFixed(1)}s`;
@@ -82,10 +93,23 @@ export default function BenchConsole() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
+  // Defaults to "generate" so the page opens exactly as it always has.
+  const [callType, setCallType] = useState<"generate" | "refine">("generate");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Refine results aren't in the GET snapshot (only `refineTasks` is) — each POST response is the
+  // only source, so this accumulates them for the session rather than re-deriving from `snap`.
+  const [refineCells, setRefineCells] = useState<RefineCell[]>([]);
 
   const fetchSnapshot = useCallback(async (): Promise<Snapshot | null> => {
     const res = await fetch("/api/bench");
-    return res.ok ? ((await res.json()) as Snapshot) : null;
+    if (!res.ok) return null;
+    const data = (await res.json()) as Snapshot;
+    // `listLatestBenchResults` (src/lib/db.ts) has no task_id filter, so once any refine cell has
+    // been run, its row comes back here too — read as a `BenchCellScores` (it's actually
+    // `RefineCellScores`) with `itineraryMd` holding the model's raw JSON patch, not markdown. Left
+    // in, that silently corrupts every generation-mode chart and table below. A generation cell's
+    // scores always carry `geoCoherence`; a refine cell's never do.
+    return { ...data, cells: data.cells.filter((c) => c.scores && "geoCoherence" in c.scores) };
   }, []);
 
   const applySnapshot = useCallback((data: Snapshot) => {
@@ -121,7 +145,7 @@ export default function BenchConsole() {
 
   /** Cells run one request at a time — a real generation is ~90-400s, far past any batch timeout. */
   const runCells = useCallback(
-    async (pairs: { fixtureId: string; model: string }[], label: string) => {
+    async (pairs: { fixtureId: string; model: string; taskId?: string }[], label: string) => {
       setBusy(label);
       setError(null);
       setProgress({ done: 0, total: pairs.length });
@@ -130,11 +154,25 @@ export default function BenchConsole() {
           const res = await fetch("/api/bench", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            // `taskId` omitted entirely when absent (JSON.stringify drops `undefined`), so the
+            // generation path's request body is byte-identical to before this task.
             body: JSON.stringify({ action: "run-cell", ...pair }),
           });
+          const body = await res.json().catch(() => ({}));
           if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            setError(`${pair.model} on ${pair.fixtureId}: ${body.error ?? res.statusText}`);
+            setError(
+              `${pair.model} on ${pair.fixtureId}${pair.taskId ? ` (${pair.taskId})` : ""}: ${body.error ?? res.statusText}`
+            );
+          } else if (pair.taskId && body.cell) {
+            // Refine results have no GET snapshot of their own — the POST response is the only
+            // place they exist client-side, so each one lands straight into local state here.
+            const cell = body.cell as RefineCell;
+            setRefineCells((prev) => [
+              ...prev.filter(
+                (c) => !(c.fixtureId === cell.fixtureId && c.taskId === cell.taskId && c.model === cell.model)
+              ),
+              cell,
+            ]);
           }
         } catch (err) {
           setError(err instanceof Error ? err.message : "request failed");
@@ -150,6 +188,17 @@ export default function BenchConsole() {
 
   const runFullSweep = () => {
     if (!snap) return;
+    if (callType === "refine") {
+      void runCells(
+        snap.fixtures.flatMap((f) =>
+          (snap.refineTasks[f.id] ?? []).flatMap((t) =>
+            snap.models.map((m) => ({ fixtureId: f.id, model: m.id, taskId: t.id }))
+          )
+        ),
+        "full refine sweep"
+      );
+      return;
+    }
     void runCells(
       snap.fixtures.flatMap((f) => snap.models.map((m) => ({ fixtureId: f.id, model: m.id }))),
       "full sweep"
@@ -158,6 +207,18 @@ export default function BenchConsole() {
 
   const runOneTrip = () => {
     if (!snap || !selectedFixture) return;
+    if (callType === "refine") {
+      const tasks = selectedTaskId
+        ? (snap.refineTasks[selectedFixture] ?? []).filter((t) => t.id === selectedTaskId)
+        : snap.refineTasks[selectedFixture] ?? [];
+      void runCells(
+        tasks.flatMap((t) =>
+          snap.models.map((m) => ({ fixtureId: selectedFixture, model: m.id, taskId: t.id }))
+        ),
+        "one trip (refine)"
+      );
+      return;
+    }
     void runCells(
       snap.models.map((m) => ({ fixtureId: selectedFixture, model: m.id })),
       "one trip"
@@ -281,6 +342,35 @@ export default function BenchConsole() {
     return snap.models.filter((m) => !have.has(m.id));
   }, [snap, selectedFixture, fixtureCells]);
 
+  /** Refine tasks for the currently selected trip — the picker's source list. */
+  const refineTasksForFixture = useMemo(() => {
+    if (!snap || !selectedFixture) return [];
+    return snap.refineTasks[selectedFixture] ?? [];
+  }, [snap, selectedFixture]);
+
+  /** Falls back to the fixture's first task rather than needing an effect to re-sync on switch. */
+  const selectedTask = useMemo(
+    () => refineTasksForFixture.find((t) => t.id === selectedTaskId) ?? refineTasksForFixture[0] ?? null,
+    [refineTasksForFixture, selectedTaskId]
+  );
+
+  /** Locally accumulated refine cells for the selected (fixture, task), in configured model order. */
+  const taskCells = useMemo(() => {
+    if (!snap || !selectedFixture || !selectedTask) return [];
+    const order = new Map(snap.models.map((m, i) => [m.id, i]));
+    return refineCells
+      .filter((c) => c.fixtureId === selectedFixture && c.taskId === selectedTask.id)
+      .sort((a, b) => (order.get(a.model) ?? 99) - (order.get(b.model) ?? 99));
+  }, [snap, refineCells, selectedFixture, selectedTask]);
+
+  const totalRefineCells = useMemo(() => {
+    if (!snap) return 0;
+    return snap.fixtures.reduce(
+      (sum, f) => sum + (snap.refineTasks[f.id]?.length ?? 0) * snap.models.length,
+      0
+    );
+  }, [snap]);
+
   const scatterPoints = useMemo(() => {
     if (!snap) return [];
     const raw = aggregates.map((a) => ({
@@ -311,23 +401,48 @@ export default function BenchConsole() {
       {/* --- controls ------------------------------------------------------------------ */}
       <section className="rounded-lg border border-stone-200 bg-white p-4">
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center rounded-md border border-stone-300 p-0.5 text-sm">
+            <button
+              onClick={() => setCallType("generate")}
+              className={`rounded px-2 py-1 ${
+                callType === "generate" ? "bg-stone-900 text-white" : "text-stone-600"
+              }`}
+            >
+              Generate
+            </button>
+            <button
+              onClick={() => setCallType("refine")}
+              className={`rounded px-2 py-1 ${
+                callType === "refine" ? "bg-stone-900 text-white" : "text-stone-600"
+              }`}
+            >
+              Refine
+            </button>
+          </div>
           <button
             onClick={runFullSweep}
-            disabled={busy !== null}
+            disabled={busy !== null || (callType === "refine" && totalRefineCells === 0)}
             className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
           >
-            Run full sweep ({snap.fixtures.length} trips × {snap.models.length} models)
+            {callType === "refine"
+              ? `Run full refine sweep (${snap.fixtures.length} trips × tasks × ${snap.models.length} models = ${totalRefineCells} cells)`
+              : `Run full sweep (${snap.fixtures.length} trips × ${snap.models.length} models)`}
           </button>
           <button
             onClick={runOneTrip}
-            disabled={busy !== null || !selectedFixture}
+            disabled={
+              busy !== null ||
+              !selectedFixture ||
+              (callType === "refine" && refineTasksForFixture.length === 0)
+            }
             className="rounded-md border border-stone-300 px-3 py-1.5 text-sm disabled:opacity-40"
           >
             Run selected trip only
           </button>
           <button
             onClick={runJudge}
-            disabled={busy !== null || fixtureCells.length === 0}
+            disabled={busy !== null || fixtureCells.length === 0 || callType === "refine"}
+            title={callType === "refine" ? "The judge grades generations only" : undefined}
             className="rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-900 disabled:opacity-40"
           >
             Run blinded judge on selected trip
@@ -690,6 +805,30 @@ export default function BenchConsole() {
           })}
         </div>
 
+        {callType === "refine" && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {refineTasksForFixture.length === 0 ? (
+              <p className="text-xs text-stone-400">No refine tasks defined for this trip.</p>
+            ) : (
+              refineTasksForFixture.map((t) => {
+                const active = selectedTask?.id === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedTaskId(t.id)}
+                    title={t.covers}
+                    className={`rounded border px-2 py-1 text-xs ${
+                      active ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 text-stone-600"
+                    }`}
+                  >
+                    {t.id}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
+
         {(() => {
           const fixture = snap.fixtures.find((f) => f.id === selectedFixture);
           if (!fixture) return null;
@@ -731,7 +870,7 @@ export default function BenchConsole() {
           );
         })()}
 
-        {missingModels.length > 0 && (
+        {callType === "generate" && missingModels.length > 0 && (
           <div className="mb-3 rounded border border-dashed border-stone-300 bg-stone-50 p-3">
             <p className="text-xs text-stone-600">
               {fixtureCells.length === 0
@@ -771,7 +910,7 @@ export default function BenchConsole() {
           </div>
         )}
 
-        {fixtureCells.length === 0 ? null : (
+        {callType === "generate" && fixtureCells.length > 0 && (
           <>
             <div className="mb-4 overflow-x-auto">
               <table className="w-full text-xs">
@@ -887,6 +1026,23 @@ export default function BenchConsole() {
 
             <OutputColumns cells={fixtureCells} label={modelLabel} color={modelColor} />
           </>
+        )}
+
+        {callType === "refine" && selectedFixture && selectedTask && (
+          <RefineDrillDown
+            models={snap.models}
+            fixtureId={selectedFixture}
+            task={selectedTask}
+            cells={taskCells}
+            busy={busy}
+            label={modelLabel}
+            onRunOne={(model) =>
+              void runCells(
+                [{ fixtureId: selectedFixture, model, taskId: selectedTask.id }],
+                `${modelLabel(model)} · ${selectedTask.id}`
+              )
+            }
+          />
         )}
       </section>
     </div>
@@ -1043,6 +1199,216 @@ function OutputColumns({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// --- refine mode --------------------------------------------------------------------------------
+
+/**
+ * Composite-group delta: `after - before` per weighted group, so NEGATIVE MEANS THE PATCH MADE THE
+ * TRIP WORSE. This is the opposite of `PerfDashboard`'s convention elsewhere in this codebase
+ * (lower latency is good, so it greens negatives) — carrying that habit here would invert what the
+ * benchmark says, so colour and label are made explicit at every use.
+ */
+function fmtGroupDelta(v: number | null): string {
+  if (v === null) return "—";
+  return `${v > 0 ? "+" : ""}${v.toFixed(3)}`;
+}
+function groupDeltaClass(v: number | null): string {
+  if (v === null) return "text-stone-400";
+  if (v < 0) return "text-red-700 font-semibold";
+  if (v > 0) return "text-emerald-700 font-semibold";
+  return "text-stone-600";
+}
+
+/**
+ * Guardrail-violation delta: `after - before` violation count, so negative is the IMPROVEMENT here
+ * — the opposite sign convention from the composite-group deltas rendered right beside it.
+ */
+function fmtGuardrailDelta(v: number): string {
+  return `${v > 0 ? "+" : ""}${v}`;
+}
+function guardrailDeltaClass(v: number): string {
+  if (v < 0) return "text-emerald-700 font-semibold";
+  if (v > 0) return "text-red-700 font-semibold";
+  return "text-stone-600";
+}
+
+/**
+ * The refine sweep's per-task table: every model's patch against the fixture's frozen
+ * `baseItinerary`, scored as a delta rather than an absolute (`RefineCellScores` in
+ * src/lib/bench/types.ts). Cells only ever arrive through direct POST responses — there is no
+ * persisted snapshot of refine results the way generation cells have one — so an empty `cells`
+ * array means nothing has been run this session, not that nothing exists.
+ */
+function RefineDrillDown({
+  models,
+  fixtureId,
+  task,
+  cells,
+  busy,
+  label,
+  onRunOne,
+}: {
+  models: BenchModel[];
+  fixtureId: string;
+  task: RefineTaskSummary;
+  cells: RefineCell[];
+  busy: string | null;
+  label: (id: string) => string;
+  onRunOne: (model: string) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-3 rounded border border-stone-200 bg-stone-50 p-2 text-xs text-stone-600">
+        <p>
+          <span className="font-medium text-stone-800">Traveler says:</span> &ldquo;{task.message}
+          &rdquo;{task.dayIndex !== undefined && ` (day ${task.dayIndex + 1} focused)`}
+        </p>
+        <p className="mt-1">
+          {task.covers} · expects{" "}
+          <strong>{task.expect.opsExpected ? "an edit" : "an answer, no edit"}</strong>
+          {task.expect.allowedDays &&
+            ` · allowed days: ${task.expect.allowedDays.map((d) => d + 1).join(", ")}`}
+        </p>
+      </div>
+
+      <div className="mb-3 flex flex-wrap gap-2">
+        {models.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => onRunOne(m.id)}
+            disabled={busy !== null}
+            className="rounded-md border border-stone-300 px-2 py-1.5 text-xs disabled:opacity-40"
+          >
+            Run {m.label} on this task
+          </button>
+        ))}
+      </div>
+
+      {cells.length === 0 ? (
+        <p className="rounded border border-dashed border-stone-300 p-4 text-center text-xs text-stone-500">
+          No refine results yet for {fixtureId} · {task.id}. Run a model above.
+        </p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-stone-500">
+            <strong className="text-stone-700">Δ vs base (negative = worse).</strong> Each delta
+            below is <code>after − before</code> for that weighted group — the opposite sign
+            convention from <code>PerfDashboard</code>&apos;s latency colouring elsewhere in this
+            app, where lower is good. <strong className="text-stone-700">Measured</strong> counts
+            how many of the five groups were non-null: <code>refineComposite</code> is deliberately
+            ungated, so a composite built from one group looks identical to one built from five
+            unless this column is read alongside it.
+          </p>
+          <div className="mb-4 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left text-stone-500">
+                <tr className="border-b border-stone-200">
+                  <th className="py-1.5 pr-3">Model</th>
+                  <th className="py-1.5 pr-3">Composite</th>
+                  <th
+                    className="py-1.5 pr-3"
+                    title="How many of the five delta groups were measurable — refineComposite has no minimum, so this is what makes cells comparable"
+                  >
+                    Measured
+                  </th>
+                  {RADAR_AXES.map((a) => (
+                    <th key={a.key} className="py-1.5 pr-3" title="Δ vs base (negative = worse)">
+                      Δ {a.label}
+                    </th>
+                  ))}
+                  <th className="py-1.5 pr-3">Ops emit/rej</th>
+                  <th className="py-1.5 pr-3" title="Did emitting-or-not match what the task asked for">
+                    Restraint
+                  </th>
+                  <th
+                    className="py-1.5 pr-3"
+                    title="Guardrail violations after − before; negative is the improvement here (opposite sign from the Δ columns)"
+                  >
+                    Guardrail Δ
+                  </th>
+                  <th className="py-1.5 pr-3">Latency</th>
+                  <th className="py-1.5 pr-3">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cells.map((c) => (
+                  <tr key={c.model} className="border-b border-stone-100">
+                    <td className="py-1.5 pr-3 font-medium text-stone-900">{label(c.model)}</td>
+                    <td className="py-1.5 pr-3 font-medium">{fmtNum(c.composite, 3)}</td>
+                    <td className="py-1.5 pr-3">{c.scores.measuredGroups}/5</td>
+                    {RADAR_AXES.map((a) => (
+                      <td
+                        key={a.key}
+                        className={`py-1.5 pr-3 ${groupDeltaClass(c.scores.delta[a.key])}`}
+                      >
+                        {fmtGroupDelta(c.scores.delta[a.key])}
+                      </td>
+                    ))}
+                    <td className="py-1.5 pr-3">
+                      {c.scores.patch.opsEmitted}/{c.scores.patch.opsRejected}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 font-medium ${
+                        c.scores.patch.restraint ? "text-emerald-700" : "text-red-700"
+                      }`}
+                    >
+                      {c.scores.patch.restraint ? "yes" : "no"}
+                    </td>
+                    <td className={`py-1.5 pr-3 ${guardrailDeltaClass(c.scores.patch.guardrailDelta)}`}>
+                      {fmtGuardrailDelta(c.scores.patch.guardrailDelta)}
+                    </td>
+                    <td className="py-1.5 pr-3">{fmtMs(c.scores.operational.latencyMs)}</td>
+                    <td className="py-1.5 pr-3">
+                      {c.scores.operational.costUsd === null ? "—" : fmtUsd(c.scores.operational.costUsd)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <details className="text-xs">
+            <summary className="cursor-pointer text-stone-600">Patch detail per model</summary>
+            <div className="mt-2 space-y-3">
+              {cells.map((c) => (
+                <div key={c.model} className="rounded border border-stone-200 p-2">
+                  <p className="font-medium text-stone-800">{label(c.model)}</p>
+                  <p className="mt-1 text-stone-600">
+                    opsEmitted {c.scores.patch.opsEmitted} · opsRejected {c.scores.patch.opsRejected}{" "}
+                    · applied {fmtPct(c.scores.patch.applied)} · scope {fmtPct(c.scores.patch.scope)} ·
+                    restraint {c.scores.patch.restraint ? "yes" : "no"} · guardrails{" "}
+                    {c.scores.patch.guardrailsBefore} → {c.scores.patch.guardrailsAfter} (
+                    <span className={guardrailDeltaClass(c.scores.patch.guardrailDelta)}>
+                      {fmtGuardrailDelta(c.scores.patch.guardrailDelta)}
+                    </span>
+                    )
+                  </p>
+                  {c.scores.patch.rejectedReasons.length > 0 && (
+                    <ul className="ml-4 mt-1 list-disc text-red-700">
+                      {c.scores.patch.rejectedReasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {c.scores.operational.failed ? (
+                    <p className="mt-1 text-red-700">{c.scores.operational.errorMessage}</p>
+                  ) : (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-stone-500">Raw model response</summary>
+                      <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-stone-50 p-2 text-stone-700">
+                        {c.rawResponse}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        </>
+      )}
     </div>
   );
 }
