@@ -1493,3 +1493,67 @@ output, everything downstream reports dashes instead of scores, which is the exa
 `docs/itinerary-quality.md` records. And Task 4's markdown → `Itinerary` conversion is the least
 certain step in the plan; its fallback (`POST /api/itinerary`, which returns `Itinerary` JSON
 directly) is stated in the task rather than left to be rediscovered.
+
+---
+
+## Status and resume — as of 2026-08-21 22:45Z
+
+> Duplicated here from the execution ledger on purpose. The ledger lives in
+> `.superpowers/sdd/`, which is git-ignored, so it does not survive `git clean -fdx`.
+> This copy is tracked. If the two disagree, trust `git log`.
+
+```
+RESUME PROCEDURE — read this first if the session died or the usage limit hit
+
+Branch: feat/refine-bench. Nothing is lost; everything below is in git history.
+
+DONE and reviewed clean: Tasks 1, 2 (2 fix rounds), 3, 5.
+  ca78dbb adapter | a816376 + 3a1e776 + 72a230b patch metrics | 42799bc refine tasks
+  67c7a55 task_id column | 4fb6b8f bangkok covers | caa16d7 + 2116f91 CLAUDE.md gotchas
+  12f1b11 generation-loader honesty fix (separate from the plan — was a spawned chip)
+  b67e03b BANKED the 5 completed base itineraries (scratch-base-itineraries.json)
+
+TASK 4 IS THE ONLY THING IN FLIGHT. State:
+  5 of 7 minted and COMMITTED: kyoto, lisbon, rome, reykjavik, bangkok
+  queenstown: was in flight at ~22:45Z
+  barcelona: NOT minted — failed twice (8300-char prompt, killed at 218s both times)
+  To finish, with `npm run dev` running on :3000:
+      node --import ./scripts/ts-resolve.mjs scripts/mint-base-itineraries.mjs barcelona-access-dietary
+  The script MERGES into scratch-base-itineraries.json on read, so this re-spends ONLY the named
+  fixture. Never run it with no args again — that would re-spend all seven.
+
+WHY TASK 4 IS SLOW (measured, not guessed):
+  generate  11 calls  31 min
+  critique   7 calls  17 min   <-- one third of the wall clock, and DISCARDED
+  context    7 calls   3 min
+  /api/itinerary runs context -> generate -> critique and only returns after critique. The mint
+  reads `itinerary` and throws the critique away. So a third of the time is spent on a step this
+  task does not use — and CRITIQUE_TIMEOUT_MS went 150s -> 300s mid-run, doubling that step's
+  worst case. Nothing to fix here; it is the cost of using the production route, which is the only
+  one returning a real `Itinerary` with coordinates.
+
+STILL TO DO: Tasks 6, 7, 8, 9. Briefs and supplements are already written in this directory:
+  task-6-brief.md + task-6-supplement.md   (runRefineCell; supplement has 4 corrections)
+  task-7-brief.md                          (route accepts taskId)
+  task-8-brief.md                          (BenchConsole toggle + signed deltas + measuredGroups)
+  task-9-brief.md                          (the sweep)
+
+MUST HAPPEN BEFORE TASK 6 WRITES ANY REFINE ROW (ruling recorded above):
+  Fix getBenchResultsForFixture (db.ts:428). It groups by bare (fixture_id, model) with no
+  task_id filter, and feeds the blinded judge (/api/bench/route.ts:164). Once refine rows exist it
+  would hand the judge a raw JSON patch to grade as an itinerary — and the existing
+  `.filter(r => r.itinerary_md.trim())` guard will NOT catch it, because a refine row's
+  itinerary_md is non-empty. Fix:
+      WHERE fixture_id = ? AND task_id IS NULL AND rowid IN (
+        SELECT MAX(rowid) FROM bench_results WHERE task_id IS NULL GROUP BY fixture_id, model )
+  Decision was to fold this into Task 6's dispatch as a SEPARATE first commit.
+
+TASK 9 COSTS ~63 chat calls / ~37 min / ~2.8M input tokens. Do NOT start it on a depleted limit —
+  a mid-sweep throttle records error/timeout rows, listTracesForPerf filters to status='ok', and a
+  throttled cell then reads as a MISSING score rather than a failure. Check before trusting it:
+      SELECT model, status, count(*) FROM llm_traces WHERE type='chat' GROUP BY model, status;
+
+PEER SESSIONS (not mine, uncommitted in this same tree — do not commit or revert them):
+  src/lib/claude.ts + src/lib/claudeTimeout.test.mjs belong to tripmate-04. Both timeout constants
+  are at 300_000. It is waiting on Zaid for commit authorization.
+```
