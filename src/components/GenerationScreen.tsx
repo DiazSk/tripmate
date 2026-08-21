@@ -9,15 +9,17 @@ import SectionOpener from "./blue-hour/SectionOpener";
 import { formatMoney } from "@/lib/format";
 import {
   STAGE_SECONDS,
-  type StageId,
+  STEP_GROUPS,
   type StageProgress,
   generationProgress,
+  isStepTerminal,
+  stepGroupState,
 } from "@/lib/generationStages";
 import type { RawFetch } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 
 /**
- * What a traveller looks at for the two and a half minutes a plan takes to write.
+ * What a traveller looks at for the ~five minutes a plan takes to write.
  *
  * This replaced a spinning "Generating" orb and a fanned stack of trivia cards floating over the
  * live Cesium globe. Three things were wrong with that. The globe is the busiest possible ground
@@ -59,19 +61,6 @@ const FALLBACK = {
   portrait: { src: "/scenes/mobile-scenic-cloudy-background.webp", width: 750, height: 1714 },
 };
 
-/** The five reported stages, grouped into the four a traveller can act on.
- *
- *  `geocode` and `context` total three seconds of the ~150 and mean nothing to anyone waiting, so
- *  they share a column. The four that remain are the same four the landing's "How it actually
- *  works" promises — the page says what will happen, and this shows it happening. Progress itself
- *  is still computed from all five by `generationProgress`; only the display groups. */
-const STEPS: { id: string; label: string; stages: StageId[] }[] = [
-  { id: "read", label: "Reading the place", stages: ["geocode", "context"] },
-  { id: "write", label: "Writing the plan", stages: ["generate"] },
-  { id: "check", label: "Checking it over", stages: ["critique"] },
-  { id: "place", label: "Placing every stop", stages: ["placing"] },
-];
-
 /** Longest week the strip will lay out before collapsing the rest into a count. Trips run to 30
  *  days and thirty columns is not a strip, it is a spreadsheet. */
 const MAX_WEEK_COLUMNS = 7;
@@ -92,15 +81,6 @@ function spellMinutes(n: number): string {
   const w = words[whole] ?? String(whole);
   if (!half) return `${w} minute${whole === 1 ? "" : "s"}`;
   return whole === 0 ? "half a minute" : `${w} and a half minutes`;
-}
-
-type StepState = "done" | "active" | "waiting";
-
-function stepState(step: (typeof STEPS)[number], stages: StageProgress[]): StepState {
-  const mine = stages.filter((s) => step.stages.includes(s.stage) && s.status !== "skipped");
-  if (mine.length === 0) return "done"; // every stage in this group was skipped (refine)
-  if (mine.some((s) => s.status === "start")) return "active";
-  return mine.every((s) => s.status === "done") ? "done" : "waiting";
 }
 
 /** "2026-08-20" → "Thu 20", using UTC accessors. A date-only string parses as UTC midnight, so
@@ -155,8 +135,10 @@ export default function GenerationScreen({
   const [cancelReady, setCancelReady] = useState(false);
 
   const city = destination.split(",")[0]?.trim() || destination.trim() || "your trip";
-  const activeStep = STEPS.find((s) => stepState(s, stages) === "active") ?? null;
-  const complete = STEPS.every((s) => stepState(s, stages) === "done");
+  const activeStep = STEP_GROUPS.find((s) => stepGroupState(s, stages) === "active") ?? null;
+  // Terminal, not "done": a failed critique must still let the loader finish, or it would sit
+  // on "usually about five minutes" with a cancel button while the finished plan waited.
+  const complete = STEP_GROUPS.every((s) => isStepTerminal(stepGroupState(s, stages)));
 
   // Progress is written straight to a CSS custom property, never to React state. It ticks ten
   // times a second, and re-rendering this tree at that rate would reconcile the week strip and the
@@ -296,13 +278,13 @@ export default function GenerationScreen({
               <div className="gen-fill absolute inset-y-0 left-0 w-full origin-left bg-accent [transform:scaleX(var(--gen-progress))] [transition:transform_200ms_linear]" />
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 pt-4 lg:grid-cols-4">
-              {STEPS.map((step, i) => {
-                const state = stepState(step, stages);
+              {STEP_GROUPS.map((step, i) => {
+                const state = stepGroupState(step, stages);
                 return (
                   <div key={step.id} className="flex items-start gap-2">
                     <span
                       className={`text-[0.62rem] font-semibold leading-none ${
-                        state === "waiting" ? "text-white/40" : "text-accent"
+                        state === "waiting" || state === "failed" ? "text-white/40" : "text-accent"
                       }`}
                     >
                       {String(i + 1).padStart(2, "0")}
@@ -310,13 +292,19 @@ export default function GenerationScreen({
                     <div>
                       <p
                         className={`text-sm font-medium ${
-                          state === "waiting" ? "text-white/55" : "text-foreground"
+                          state === "waiting" || state === "failed" ? "text-white/55" : "text-foreground"
                         }`}
                       >
                         {step.label}
                       </p>
                       <p className="mt-0.5 text-xs text-muted">
-                        {state === "done" ? "done" : state === "active" ? "now" : "—"}
+                        {state === "done"
+                          ? "done"
+                          : state === "active"
+                            ? "now"
+                            : state === "failed"
+                              ? "not run"
+                              : "—"}
                       </p>
                     </div>
                   </div>
