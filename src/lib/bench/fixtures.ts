@@ -2,6 +2,7 @@ import { closedDaysFromOpeningHours } from "../poiDetails";
 import { reconcileTrip } from "../reconcile";
 import { buildTravelLegs } from "../travelTime";
 import { estimateVisitMinutes } from "../visitDuration";
+import { BASE_ITINERARIES } from "./baseItineraries";
 import type { CandidatePoi } from "../pois";
 import type { Holiday } from "../holidays";
 import type { DayWeather } from "../weather";
@@ -197,6 +198,7 @@ function buildFixture(spec: FixtureSpec): BenchFixture {
     covers: spec.covers,
     reconciled,
     poiDetails,
+    baseItinerary: BASE_ITINERARIES[spec.id],
   };
 }
 

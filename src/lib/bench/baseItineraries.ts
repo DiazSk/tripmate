@@ -1,4 +1,435 @@
-{
+import type { Itinerary } from "../types";
+
+/**
+ * The frozen plan each refine cell starts from, one per fixture.
+ *
+ * Minted once by scripts/mint-base-itineraries.mjs on the production model and committed verbatim.
+ * Re-minting invalidates every stored refine result, because the delta a cell reports is measured
+ * against these exact bytes.
+ */
+export const BASE_ITINERARIES: Record<string, Itinerary> = {
+  "barcelona-access-dietary": {
+    "tier": "midrange",
+    "days": [
+      {
+        "date": "2026-10-15",
+        "weather": "No weather data available",
+        "summary": "Arrive in Barcelona and ease into the city with Art Nouveau splendor and an evening stroll through medieval lanes. 🏛️✨",
+        "lodging": {
+          "name": "Hotel Ronda Sant Pere",
+          "cost": 230,
+          "note": "Boutique hotel in Eixample; central location near Gothic Quarter suits culture-focused couple with mobility needs"
+        },
+        "stops": [
+          {
+            "name": "Private transfer from Barcelona-El Prat Airport",
+            "lat": 41.2974,
+            "lng": 2.0833,
+            "cost": 90,
+            "why": "Door-to-door comfort after international flight, no stairs or metro transfers",
+            "note": "Pre-book for arrival; 30-min drive to hotel depending on traffic",
+            "time": "3:00 PM",
+            "durationLabel": "45 minutes",
+            "tags": [
+              "Transit"
+            ],
+            "category": "transit"
+          },
+          {
+            "name": "Palau de la Música Catalana",
+            "lat": 41.3875,
+            "lng": 2.1754,
+            "cost": 35,
+            "why": "Art Nouveau masterpiece close to hotel, elevator access, deep cultural history",
+            "note": "Book 4:30pm guided tour online; concert hall mosaics are photo-worthy",
+            "time": "4:30 PM",
+            "durationLabel": "1 hour",
+            "tags": [
+              "Must-See",
+              "Reservation Needed"
+            ],
+            "category": "entry"
+          },
+          {
+            "name": "Gothic Quarter walk",
+            "lat": 41.3833,
+            "lng": 2.1769,
+            "cost": 0,
+            "why": "Layered Roman and medieval history on mostly flat lanes, core culture stop",
+            "note": "5-min walk from Palau; focus on Plaça del Rei and Cathedral exterior",
+            "time": "6:00 PM",
+            "durationLabel": "1 hour",
+            "tags": [
+              "Free",
+              "Local Pick"
+            ],
+            "category": "other"
+          },
+          {
+            "name": "Dinner in El Born",
+            "lat": 41.3851,
+            "lng": 2.1833,
+            "cost": 140,
+            "why": "Historic quarter with strong vegan dining scene, easy walk from hotel",
+            "note": "Flax & Kale (all vegan, nut-free on request); order veggie bowl or pizza",
+            "time": "7:30 PM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Local Pick"
+            ],
+            "category": "food"
+          },
+          {
+            "name": "Port Vell evening stroll",
+            "lat": 41.3764,
+            "lng": 2.1833,
+            "cost": 20,
+            "why": "Flat waterfront walk, romantic evening atmosphere for couple",
+            "note": "Short taxi to marina; 20-min stroll then taxi back to hotel",
+            "time": "9:30 PM",
+            "durationLabel": "45 minutes",
+            "tags": [
+              "Free"
+            ],
+            "category": "other"
+          }
+        ]
+      },
+      {
+        "date": "2026-10-16",
+        "weather": "No weather data available",
+        "summary": "Dive deep into Catalan culture with Picasso's Blue Period, Gothic stone, and lively market flavors. 🎨🏰",
+        "lodging": {
+          "name": "Hotel Ronda Sant Pere",
+          "cost": 230,
+          "note": "Same central base; no check-in/out time wasted, perfect for full sightseeing day"
+        },
+        "stops": [
+          {
+            "name": "Picasso Museum",
+            "lat": 41.3851,
+            "lng": 2.1803,
+            "cost": 35,
+            "why": "World's finest Picasso collection, elevator throughout, culture priority met",
+            "note": "Book 9:30am timed entry online; Blue Period rooms are the highlight",
+            "time": "9:30 AM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Must-See",
+              "Reservation Needed"
+            ],
+            "category": "entry"
+          },
+          {
+            "name": "Santa Caterina Market",
+            "lat": 41.3856,
+            "lng": 2.175,
+            "cost": 30,
+            "why": "Gaudí-designed roof, food culture focus, vendor interaction and photography",
+            "note": "5-min walk from museum; buy fresh fruit and vegan snacks to try",
+            "time": "11:15 AM",
+            "durationLabel": "1 hour",
+            "tags": [
+              "Local Pick",
+              "Food"
+            ],
+            "category": "other"
+          },
+          {
+            "name": "Taxi to El Born",
+            "lat": 41.3847,
+            "lng": 2.1828,
+            "cost": 18,
+            "why": "Avoid 15-min walk with bags from market, keeps energy for afternoon",
+            "note": "Quick ride across neighborhood",
+            "time": "12:20 PM",
+            "durationLabel": "10 minutes",
+            "tags": [
+              "Transit"
+            ],
+            "category": "transit"
+          },
+          {
+            "name": "Lunch around El Born",
+            "lat": 41.3847,
+            "lng": 2.1828,
+            "cost": 130,
+            "why": "Vegan-forward Catalan cuisine, sit-down midday rest, food priority",
+            "note": "Teresa Carles for Catalan-vegan fusion; order vegetable paella (nut-free)",
+            "time": "12:30 PM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Local Pick"
+            ],
+            "category": "food"
+          },
+          {
+            "name": "Barcelona Cathedral & Cloister",
+            "lat": 41.384,
+            "lng": 2.1761,
+            "cost": 20,
+            "why": "Gothic architecture centerpiece, elevator to roof, deep medieval history",
+            "note": "8-min walk from lunch; elevator access to terrace for panoramic views",
+            "time": "2:30 PM",
+            "durationLabel": "1 hour 15 minutes",
+            "tags": [
+              "Must-See"
+            ],
+            "category": "entry"
+          },
+          {
+            "name": "Coffee break & rest",
+            "lat": 41.3829,
+            "lng": 2.1744,
+            "cost": 18,
+            "why": "Essential sit-down break for mobility pacing, energizes for evening",
+            "note": "Satan's Coffee Corner nearby; vegan milk available, request no nuts",
+            "time": "4:00 PM",
+            "durationLabel": "45 minutes",
+            "tags": [
+              "Local Pick"
+            ],
+            "category": "food"
+          },
+          {
+            "name": "Jewish Quarter & Plaça del Rei",
+            "lat": 41.3836,
+            "lng": 2.1769,
+            "cost": 0,
+            "why": "Roman-medieval layers, atmospheric narrow lanes, culture and history depth",
+            "note": "Adjacent to Cathedral; Plaça del Rei shows preserved Roman walls",
+            "time": "5:15 PM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Free",
+              "Must-See"
+            ],
+            "category": "other"
+          },
+          {
+            "name": "Taxi to Raval",
+            "lat": 41.3794,
+            "lng": 2.1686,
+            "cost": 15,
+            "why": "Avoids 20-min walk after full sightseeing day, preserves evening energy",
+            "note": "10-min ride across old town",
+            "time": "7:00 PM",
+            "durationLabel": "10 minutes",
+            "tags": [
+              "Transit"
+            ],
+            "category": "transit"
+          },
+          {
+            "name": "Dinner in Raval",
+            "lat": 41.3794,
+            "lng": 2.1686,
+            "cost": 145,
+            "why": "Bohemian neighborhood with diverse vegan scene, international food focus",
+            "note": "Vegetalia (fully vegan); try seitan dishes or chickpea burgers",
+            "time": "7:15 PM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Local Pick"
+            ],
+            "category": "food"
+          }
+        ]
+      },
+      {
+        "date": "2026-10-17",
+        "weather": "No weather data available",
+        "summary": "Stand beneath Sagrada Família's soaring columns, then stroll Modernisme and shop the elegant Passeig. 🏛️🛍️",
+        "lodging": {
+          "name": "Hotel Ronda Sant Pere",
+          "cost": 230,
+          "note": "Final night in same base; maximizes sightseeing time, no packing/moving hassle"
+        },
+        "stops": [
+          {
+            "name": "Sagrada Família",
+            "lat": 41.4036,
+            "lng": 2.1744,
+            "cost": 45,
+            "why": "Barcelona's icon, elevator to towers avoids stairs, unmissable architecture",
+            "note": "Book 9am entry online; elevator to Passion facade tower for views",
+            "time": "9:00 AM",
+            "durationLabel": "2 hours",
+            "tags": [
+              "Must-See",
+              "Reservation Needed"
+            ],
+            "category": "entry"
+          },
+          {
+            "name": "Taxi to Sant Pau",
+            "lat": 41.4143,
+            "lng": 2.1755,
+            "cost": 22,
+            "why": "Avoids 15-min uphill walk, preserves energy for site exploration",
+            "note": "5-min ride northeast",
+            "time": "11:15 AM",
+            "durationLabel": "10 minutes",
+            "tags": [
+              "Transit"
+            ],
+            "category": "transit"
+          },
+          {
+            "name": "Sant Pau Art Nouveau Site",
+            "lat": 41.4143,
+            "lng": 2.1755,
+            "cost": 25,
+            "why": "Modernist hospital campus, flat landscaped grounds, fewer crowds than Gaudí",
+            "note": "Peaceful gardens included; underground tunnels connect pavilions",
+            "time": "11:30 AM",
+            "durationLabel": "1 hour",
+            "tags": [
+              "Local Pick"
+            ],
+            "category": "entry"
+          },
+          {
+            "name": "Taxi to Gràcia",
+            "lat": 41.4028,
+            "lng": 2.1581,
+            "cost": 20,
+            "why": "Bypasses 20-min walk, arrives fresh for lunch in local neighborhood",
+            "note": "10-min ride southwest to Vila de Gràcia",
+            "time": "12:40 PM",
+            "durationLabel": "10 minutes",
+            "tags": [
+              "Transit"
+            ],
+            "category": "transit"
+          },
+          {
+            "name": "Lunch in Gràcia",
+            "lat": 41.4028,
+            "lng": 2.1581,
+            "cost": 135,
+            "why": "Authentic local neighborhood away from tourists, strong vegan culture",
+            "note": "Aguaribay (organic vegan); order Buddha bowls or mushroom risotto",
+            "time": "12:45 PM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Local Pick"
+            ],
+            "category": "food"
+          },
+          {
+            "name": "Passeig de Gràcia architecture walk",
+            "lat": 41.3948,
+            "lng": 2.1638,
+            "cost": 0,
+            "why": "Casa Batlló, Casa Milà and Modernisme gems on flat boulevard, culture focus",
+            "note": "Taxi from Gràcia; admire exteriors from sidewalk for free photos",
+            "time": "2:45 PM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Free",
+              "Must-See"
+            ],
+            "category": "other"
+          },
+          {
+            "name": "Shopping on Passeig de Gràcia",
+            "lat": 41.3931,
+            "lng": 2.1622,
+            "cost": 500,
+            "why": "Premier shopping district per brief, mix of luxury and local boutiques",
+            "note": "Same street as architecture walk; El Corte Inglés for variety",
+            "time": "4:30 PM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Shopping"
+            ],
+            "category": "other"
+          },
+          {
+            "name": "Taxi to Eixample dinner",
+            "lat": 41.39,
+            "lng": 2.1686,
+            "cost": 20,
+            "why": "Short ride to upscale dining district, avoids bags from shopping walk",
+            "note": "5-min ride within same neighborhood",
+            "time": "6:15 PM",
+            "durationLabel": "10 minutes",
+            "tags": [
+              "Transit"
+            ],
+            "category": "transit"
+          },
+          {
+            "name": "Dinner in Eixample",
+            "lat": 41.39,
+            "lng": 2.1686,
+            "cost": 155,
+            "why": "Upscale modern Catalan dining, near hotel for easy return, food priority",
+            "note": "CatBar (vegan tasting menu available); confirm nut-free preparation",
+            "time": "6:45 PM",
+            "durationLabel": "1.5 hours",
+            "tags": [
+              "Reservation Needed"
+            ],
+            "category": "food"
+          },
+          {
+            "name": "Magic Fountain of Montjuïc",
+            "lat": 41.3711,
+            "lng": 2.1514,
+            "cost": 25,
+            "why": "Evening light-and-water spectacle, photography opportunity, sit-down viewing",
+            "note": "Taxi each way; Fri/Sat shows in Oct; view from lower terrace (no stairs)",
+            "time": "9:00 PM",
+            "durationLabel": "1 hour",
+            "tags": [
+              "Free",
+              "Local Pick"
+            ],
+            "category": "other"
+          }
+        ]
+      },
+      {
+        "date": "2026-10-18",
+        "weather": "No weather data available",
+        "summary": "A final taste of Barcelona's market energy before heading home. 🍇🛫",
+        "stops": [
+          {
+            "name": "La Boqueria Market breakfast",
+            "lat": 41.3816,
+            "lng": 2.1719,
+            "cost": 40,
+            "why": "Iconic food market, final cultural immersion, fresh vegan options everywhere",
+            "note": "Pinotxo Bar has grilled vegetables; fresh fruit stalls for breakfast",
+            "time": "8:00 AM",
+            "durationLabel": "1 hour 15 minutes",
+            "tags": [
+              "Must-See",
+              "Food"
+            ],
+            "category": "food"
+          },
+          {
+            "name": "Private transfer to Barcelona-El Prat Airport",
+            "lat": 41.2974,
+            "lng": 2.0833,
+            "cost": 90,
+            "why": "Stress-free departure with luggage, no metro stairs or connections",
+            "note": "Pre-booked pickup at 9:30am from hotel for 11am flight",
+            "time": "9:30 AM",
+            "durationLabel": "45 minutes",
+            "tags": [
+              "Transit"
+            ],
+            "category": "transit"
+          }
+        ]
+      }
+    ]
+  },
+
   "kyoto-couple-mixed": {
     "tier": "midrange",
     "days": [
@@ -374,7 +805,6 @@
         "date": "2026-09-22",
         "weather": "No weather data available",
         "summary": "Honor the Autumnal Equinox with a temple ceremony and Zen meditation, then a final golden pavilion visit and leisurely lunch before departing Kyoto. 🍂⛩️",
-        "lodging": null,
         "stops": [
           {
             "name": "Nanzen-ji Temple Equinox ceremony",
@@ -467,6 +897,7 @@
       }
     ]
   },
+
   "lisbon-solo-offbeat": {
     "tier": "midrange",
     "days": [
@@ -800,6 +1231,7 @@
       }
     ]
   },
+
   "rome-family-slow": {
     "tier": "midrange",
     "days": [
@@ -1283,7 +1715,6 @@
         "date": "2026-11-05",
         "weather": "No weather data available",
         "summary": "Walk in ancient footsteps along the Appian Way, then a final stroll through Rome's chic shopping heart. 🛤️🛍️",
-        "lodging": null,
         "stops": [
           {
             "name": "Taxi to Appian Way",
@@ -1402,6 +1833,7 @@
       }
     ]
   },
+
   "reykjavik-couple-packed": {
     "tier": "midrange",
     "days": [
@@ -1876,6 +2308,7 @@
       }
     ]
   },
+
   "bangkok-solo-degraded": {
     "tier": "midrange",
     "days": [
@@ -2236,5 +2669,529 @@
         ]
       }
     ]
-  }
-}
+  },
+
+  "queenstown-couple-noweather": {
+    "tier": "midrange",
+    "days": [
+      {
+        "date": "2026-09-26",
+        "weather": "Late spring, variable conditions, daytime highs around 12-15°C",
+        "summary": "Ease into Otago with peaceful lakeside gardens and private hot pools overlooking the Remarkables. 🌸♨️",
+        "lodging": {
+          "name": "Boutique hotel in Queenstown",
+          "cost": 300,
+          "note": "Central yet quiet, easy walk to lake; alternative: luxury lodge for more seclusion"
+        },
+        "stops": [
+          {
+            "name": "Queenstown Gardens",
+            "lat": -45.0312,
+            "lng": 168.6626,
+            "cost": 0,
+            "why": "Peaceful lakeside botanicals, easy flat paths — nature without the crowds",
+            "note": "Go early; loop walk takes 30-45 min, longer if you linger by rose garden",
+            "time": "10:00 AM",
+            "durationLabel": "1.5 hours",
+            "category": "other",
+            "tags": [
+              "Free",
+              "Nature"
+            ]
+          },
+          {
+            "name": "Lunch around Queenstown Bay",
+            "lat": -45.0312,
+            "lng": 168.6626,
+            "cost": 60,
+            "why": "Waterfront dining with multiple casual-nice options, easy walk from gardens",
+            "note": "Try The Bathhouse or lakefront cafés; book ahead for window seats",
+            "time": "12:00 PM",
+            "durationLabel": "1 hour",
+            "category": "food",
+            "tags": [
+              "Lake Views"
+            ]
+          },
+          {
+            "name": "Onsen Hot Pools",
+            "lat": -45.0192,
+            "lng": 168.7459,
+            "cost": 185,
+            "why": "Private cedar tubs with Remarkables views — pure wellness and relaxation",
+            "note": "Book the couple's pool for privacy; 90-min sessions, bring swimwear",
+            "time": "2:00 PM",
+            "durationLabel": "2 hours",
+            "category": "entry",
+            "tags": [
+              "Wellness",
+              "Reservation Needed"
+            ]
+          },
+          {
+            "name": "Scenic drive to Arrowtown",
+            "lat": -44.9383,
+            "lng": 168.8278,
+            "cost": 0,
+            "why": "20-min drive through Shotover Gorge leads to quieter historic village",
+            "note": "Peak autumn color is late April, but golden poplars start late September",
+            "time": "4:30 PM",
+            "durationLabel": "30 minutes",
+            "category": "transit",
+            "tags": [
+              "Scenic Drive"
+            ]
+          },
+          {
+            "name": "Arrowtown Historic Walk",
+            "lat": -44.9383,
+            "lng": 168.8278,
+            "cost": 0,
+            "why": "Quiet gold-rush town, fewer tourists than Queenstown, charming cottages",
+            "note": "Walk Buckingham Street's historic buildings; free and self-guided",
+            "time": "5:00 PM",
+            "durationLabel": "45 minutes",
+            "category": "other",
+            "tags": [
+              "Free",
+              "Local Pick"
+            ]
+          },
+          {
+            "name": "Dinner in Arrowtown",
+            "lat": -44.9383,
+            "lng": 168.8278,
+            "cost": 130,
+            "why": "Village restaurants feel intimate and local vs. Queenstown bustle",
+            "note": "Provisions or Chop Shop for casual-nice; book ahead for weekends",
+            "time": "7:00 PM",
+            "durationLabel": "1.5 hours",
+            "category": "food",
+            "tags": [
+              "Local Pick"
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-09-27",
+        "weather": "Cool spring morning, temperatures 8-14°C, possible showers",
+        "summary": "Early start to remote Glenorchy's pristine lagoons, then a lakeside walk and afternoon cruise on mirror-calm Lake Wakatipu. 🏔️⛵",
+        "lodging": {
+          "name": "Boutique hotel in Queenstown",
+          "cost": 300,
+          "note": "Same base — convenient for Glenorchy day trip; saves check-in time"
+        },
+        "stops": [
+          {
+            "name": "Scenic drive to Glenorchy",
+            "lat": -44.85,
+            "lng": 168.3833,
+            "cost": 0,
+            "why": "The 'Road to Paradise' — stunning lake and mountains, almost no traffic at dawn",
+            "note": "45km scenic route; watch for sheep on road, fuel up in Queenstown first",
+            "time": "6:30 AM",
+            "durationLabel": "1 hour",
+            "category": "transit",
+            "tags": [
+              "Scenic Drive",
+              "Off Peak"
+            ]
+          },
+          {
+            "name": "Glenorchy Lagoon Walkway",
+            "lat": -44.845,
+            "lng": 168.378,
+            "cost": 0,
+            "why": "Remote wetland with Humboldt and Earnslaw reflections — truly crowd-free",
+            "note": "Easy 45-min loop; bring sandfly repellent, especially near lagoon",
+            "time": "7:30 AM",
+            "durationLabel": "2 hours",
+            "category": "other",
+            "tags": [
+              "Free",
+              "Nature"
+            ]
+          },
+          {
+            "name": "Coffee in Glenorchy",
+            "lat": -44.85,
+            "lng": 168.3833,
+            "cost": 15,
+            "why": "Tiny township, one café — perfect rest stop before return drive",
+            "note": "Glenorchy Café does good coffee; extremely limited hours, check ahead",
+            "time": "10:00 AM",
+            "durationLabel": "30 minutes",
+            "category": "food",
+            "tags": [
+              "Local Pick"
+            ]
+          },
+          {
+            "name": "Return drive to Queenstown",
+            "lat": -45.0312,
+            "lng": 168.6626,
+            "cost": 0,
+            "why": "Lakeside route with photo stops at Bennett's Bluff and other viewpoints",
+            "note": "Allow time for roadside lookouts; viewpoints every few km",
+            "time": "10:45 AM",
+            "durationLabel": "1.5 hours",
+            "category": "transit",
+            "tags": [
+              "Scenic Drive"
+            ]
+          },
+          {
+            "name": "Lunch in Queenstown",
+            "lat": -45.0312,
+            "lng": 168.6626,
+            "cost": 70,
+            "why": "Refuel in town center before afternoon lakeside activities",
+            "note": "Fergburger is famous but crowded; try Botswana Butchery for quieter spot",
+            "time": "12:30 PM",
+            "durationLabel": "1 hour",
+            "category": "food",
+            "tags": [
+              "Local Pick"
+            ]
+          },
+          {
+            "name": "Bob's Cove Track",
+            "lat": -45.005,
+            "lng": 168.5983,
+            "cost": 0,
+            "why": "Quiet lakeside walk through beech forest — locals' favorite, rarely crowded",
+            "note": "20-min drive from town; easy 1-hour walk, peaceful beach at the end",
+            "time": "2:00 PM",
+            "durationLabel": "1 hour",
+            "category": "other",
+            "tags": [
+              "Free",
+              "Nature"
+            ]
+          },
+          {
+            "name": "TSS Earnslaw cruise on Lake Wakatipu",
+            "lat": -45.0312,
+            "lng": 168.6626,
+            "cost": 180,
+            "why": "Vintage steamship cruise — scenic and leisurely, fits relaxation priority",
+            "note": "Book afternoon departure; fewer families than morning sailings",
+            "time": "3:30 PM",
+            "durationLabel": "2.5 hours",
+            "category": "entry",
+            "tags": [
+              "Scenic",
+              "Reservation Needed"
+            ]
+          },
+          {
+            "name": "Dinner in Queenstown",
+            "lat": -45.0312,
+            "lng": 168.6626,
+            "cost": 130,
+            "why": "Nice restaurant to end active day — waterfront or hill-view dining",
+            "note": "Rātā or The Bunker for upscale-casual; reservations essential",
+            "time": "6:30 PM",
+            "durationLabel": "1.5 hours",
+            "category": "food",
+            "tags": [
+              "Reservation Needed"
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-09-28",
+        "weather": "Partly cloudy, 10-15°C, occasional light winds",
+        "summary": "Traverse the dramatic Crown Range into Wanaka, then unwind with lakeside strolls and local wine tasting. 🍷🏔️",
+        "lodging": {
+          "name": "Boutique hotel in Wanaka",
+          "cost": 280,
+          "note": "Lake views, walkable to everything; alternative: apartment for longer stays"
+        },
+        "stops": [
+          {
+            "name": "Crown Range Road to Wanaka",
+            "lat": -44.8833,
+            "lng": 168.9167,
+            "cost": 0,
+            "why": "New Zealand's highest sealed road — dramatic alpine scenery, photo stops",
+            "note": "Check weather before going; conditions can change, allow extra time",
+            "time": "9:00 AM",
+            "durationLabel": "1.5 hours",
+            "category": "transit",
+            "tags": [
+              "Scenic Drive",
+              "Must-See"
+            ]
+          },
+          {
+            "name": "Arrive and settle into Wanaka",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 0,
+            "why": "Check in to new base — quieter lake town, less commercial than Queenstown",
+            "note": "Main street is compact and walkable; hotel likely near lakefront",
+            "time": "10:30 AM",
+            "durationLabel": "30 minutes",
+            "category": "other",
+            "tags": [
+              "Local Pick"
+            ]
+          },
+          {
+            "name": "Lunch in Wanaka",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 65,
+            "why": "Relaxed lunch to settle into new town — good local cafés and bistros",
+            "note": "Francesca's, Bistro Gentil, or lakefront spots; less busy than Queenstown",
+            "time": "12:00 PM",
+            "durationLabel": "1 hour",
+            "category": "food",
+            "tags": [
+              "Local Pick"
+            ]
+          },
+          {
+            "name": "Wanaka Lakefront to Eely Point",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 0,
+            "why": "Easy flat walk, stunning lake views, almost no crowds — perfect moderate pace",
+            "note": "~3km walk from town; willow trees and crystal-clear water",
+            "time": "2:00 PM",
+            "durationLabel": "1.5 hours",
+            "category": "other",
+            "tags": [
+              "Free",
+              "Nature"
+            ]
+          },
+          {
+            "name": "Rippon Vineyard",
+            "lat": -44.6833,
+            "lng": 169.1167,
+            "cost": 40,
+            "why": "Lakefront winery with mountain backdrop — wine and scenery, quiet tasting room",
+            "note": "Open limited hours in spring; tastings ~$15-20pp, check website first",
+            "time": "4:00 PM",
+            "durationLabel": "1.5 hours",
+            "category": "entry",
+            "tags": [
+              "Local Pick",
+              "Scenic"
+            ]
+          },
+          {
+            "name": "Rest at hotel",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 0,
+            "why": "Downtime before dinner — unpack, relax, enjoy hotel amenities",
+            "note": "Boutique hotels often have gardens or lake-view terraces",
+            "time": "6:00 PM",
+            "durationLabel": "30 minutes",
+            "category": "other",
+            "tags": [
+              "Relaxation"
+            ]
+          },
+          {
+            "name": "Dinner in Wanaka",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 120,
+            "why": "Local dining scene is excellent and relaxed — farm-to-table focus",
+            "note": "Kika, Bistro Gentil, or Francesca's for nice meals; book ahead",
+            "time": "7:00 PM",
+            "durationLabel": "1.5 hours",
+            "category": "food",
+            "tags": [
+              "Reservation Needed"
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-09-29",
+        "weather": "Clear morning, 9-16°C, ideal conditions for outdoor activities",
+        "summary": "Morning hike to glacial Blue Pools through beech forest, then indulge in a couples spa retreat with alpine views. 💙🧘",
+        "lodging": {
+          "name": "Boutique hotel in Wanaka",
+          "cost": 280,
+          "note": "Same base — no repacking, just wellness and nature today"
+        },
+        "stops": [
+          {
+            "name": "Helicopter scenic flight over Mount Aspiring",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 450,
+            "why": "Ultimate nature experience — glaciers and alpine peaks, weather-dependent thrill",
+            "note": "Early flight has clearest conditions; book ahead, flexible cancellation advised",
+            "time": "7:00 AM",
+            "durationLabel": "30 minutes",
+            "category": "entry",
+            "tags": [
+              "Premium",
+              "Reservation Needed"
+            ]
+          },
+          {
+            "name": "Drive to Blue Pools Track",
+            "lat": -44.4167,
+            "lng": 169.2667,
+            "cost": 0,
+            "why": "Scenic route north toward Mount Aspiring National Park — gateway to wilderness",
+            "note": "~45 min drive toward Haast Pass; easy sealed road, stunning scenery",
+            "time": "8:00 AM",
+            "durationLabel": "45 minutes",
+            "category": "transit",
+            "tags": [
+              "Scenic Drive"
+            ]
+          },
+          {
+            "name": "Blue Pools Track",
+            "lat": -44.4167,
+            "lng": 169.2667,
+            "cost": 0,
+            "why": "Glacial-fed turquoise pools, swing bridge — moderate walk through beech forest",
+            "note": "30-min walk each way; morning has best light and fewest people",
+            "time": "9:00 AM",
+            "durationLabel": "2 hours",
+            "category": "other",
+            "tags": [
+              "Free",
+              "Nature"
+            ]
+          },
+          {
+            "name": "Return drive to Wanaka",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 0,
+            "why": "Head back for lunch and afternoon wellness activities",
+            "note": "Same route; could stop at Makarora Country Café if hungry early",
+            "time": "11:15 AM",
+            "durationLabel": "45 minutes",
+            "category": "transit",
+            "tags": [
+              "Scenic Drive"
+            ]
+          },
+          {
+            "name": "Lunch in Wanaka",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 75,
+            "why": "Refuel before spa — good cafés near town center for casual-nice meals",
+            "note": "Federal Diner, Relishes, or Ardour for relaxed lunch",
+            "time": "12:30 PM",
+            "durationLabel": "1 hour",
+            "category": "food",
+            "tags": [
+              "Local Pick"
+            ]
+          },
+          {
+            "name": "Couples spa treatment",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 350,
+            "why": "Wellness priority — massage and relaxation with views after morning hike",
+            "note": "Lake Spa or similar; book several days ahead, especially in peak season",
+            "time": "2:30 PM",
+            "durationLabel": "2.5 hours",
+            "category": "entry",
+            "tags": [
+              "Wellness",
+              "Reservation Needed"
+            ]
+          },
+          {
+            "name": "Wanaka Tree lakeside walk",
+            "lat": -44.695,
+            "lng": 169.132,
+            "cost": 0,
+            "why": "Famous willow tree in the lake — short stroll for iconic photo at golden hour",
+            "note": "5-min walk from town center; best light late afternoon, usually quiet",
+            "time": "5:30 PM",
+            "durationLabel": "30 minutes",
+            "category": "other",
+            "tags": [
+              "Free",
+              "Scenic"
+            ]
+          },
+          {
+            "name": "Dinner in Wanaka",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 140,
+            "why": "Celebrate final night — upscale dining with lake or mountain views",
+            "note": "Kika or Ripe for fine dining; Alchemy is good mid-range alternative",
+            "time": "6:30 PM",
+            "durationLabel": "1.5 hours",
+            "category": "food",
+            "tags": [
+              "Reservation Needed"
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-09-30",
+        "weather": "Crisp spring morning, 8-14°C, light breeze",
+        "summary": "Final morning by the lake with a peaceful bay walk before departing Otago refreshed. 🌅",
+        "stops": [
+          {
+            "name": "Glendhu Bay lakeside walk",
+            "lat": -44.6833,
+            "lng": 169.1667,
+            "cost": 0,
+            "why": "Peaceful final morning by the lake — easy track, mountain views, very quiet",
+            "note": "~15 min drive from town; flat scenic track, rarely crowded even in summer",
+            "time": "8:00 AM",
+            "durationLabel": "1.5 hours",
+            "category": "other",
+            "tags": [
+              "Free",
+              "Nature"
+            ]
+          },
+          {
+            "name": "Coffee at Wanaka café",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 15,
+            "why": "Final excellent Wanaka coffee before departing — local café culture shines",
+            "note": "Pembroke Patisserie or Federal Diner for coffee and pastries",
+            "time": "10:00 AM",
+            "durationLabel": "30 minutes",
+            "category": "food",
+            "tags": [
+              "Local Pick"
+            ]
+          },
+          {
+            "name": "Lunch in Wanaka",
+            "lat": -44.7,
+            "lng": 169.15,
+            "cost": 90,
+            "why": "Last meal before heading to Queenstown Airport or onward journey",
+            "note": "Allow time for relaxed farewell meal; airport is ~1 hour drive",
+            "time": "12:00 PM",
+            "durationLabel": "1 hour",
+            "category": "food",
+            "tags": [
+              "Local Pick"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+};

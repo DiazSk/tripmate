@@ -53,3 +53,44 @@ test("userAnswers passes through, so the edit context sees the real profile", ()
 test("findRefineTask returns undefined for an unknown id rather than throwing", () => {
   assert.equal(findRefineTask(BENCH_FIXTURES[0].id, "nope"), undefined);
 });
+
+test("every fixture with refine tasks has a frozen base itinerary with days", () => {
+  for (const f of BENCH_FIXTURES) {
+    if (refineTasksFor(f.id).length === 0) continue;
+    assert.ok(f.baseItinerary, `${f.id} has tasks but no baseItinerary`);
+    assert.ok(f.baseItinerary.days.length > 0, `${f.id}'s baseItinerary has no days`);
+    assert.ok(
+      f.baseItinerary.days.some((d) => d.stops.length > 0),
+      `${f.id}'s baseItinerary has no stops — a patch against it would measure nothing`
+    );
+  }
+});
+
+test("every task's dayIndex exists in its fixture's base itinerary", () => {
+  for (const f of BENCH_FIXTURES) {
+    for (const t of refineTasksFor(f.id)) {
+      if (t.dayIndex === undefined) continue;
+      assert.ok(t.dayIndex < f.baseItinerary.days.length, `${f.id}/${t.id}: dayIndex out of range`);
+    }
+  }
+});
+
+test("every base itinerary's stops carry real numeric coordinates, not 0,0", () => {
+  // 0,0 is open ocean off West Africa — the exact shape of garbage a model can emit and a
+  // naive numeric check would miss (0 is a valid number, just never a valid trip stop here).
+  for (const f of BENCH_FIXTURES) {
+    if (!f.baseItinerary) continue;
+    for (const day of f.baseItinerary.days) {
+      for (const stop of day.stops) {
+        assert.ok(
+          Number.isFinite(stop.lat) && Number.isFinite(stop.lng),
+          `${f.id}/"${stop.name}" has a non-numeric coordinate (lat=${stop.lat}, lng=${stop.lng})`
+        );
+        assert.ok(
+          stop.lat !== 0 || stop.lng !== 0,
+          `${f.id}/"${stop.name}" is pinned at 0,0 — a patch against it would measure nothing real`
+        );
+      }
+    }
+  }
+});
