@@ -51,6 +51,10 @@ interface Snapshot {
   judgeModel: string;
   semanticMethod: string;
   cells: BenchCellWithJson[];
+  /** Persisted refine cells (server knows which rows are refine vs. generation — see
+   *  listLatestRefineResults in src/lib/db.ts). Session-run refine cells arrive over each
+   *  run-cell POST response too; both are merged in applySnapshot below. */
+  refineCells: RefineCell[];
   aggregates: ModelAggregate[];
   /** Which trips the aggregate averages over, and which are excluded as incomplete. */
   panel: { included: string[]; excluded: string[] };
@@ -96,24 +100,28 @@ export default function BenchConsole() {
   // Defaults to "generate" so the page opens exactly as it always has.
   const [callType, setCallType] = useState<"generate" | "refine">("generate");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  // Refine results aren't in the GET snapshot (only `refineTasks` is) — each POST response is the
-  // only source, so this accumulates them for the session rather than re-deriving from `snap`.
+  // Seeded from the snapshot's persisted `refineCells` (see applySnapshot) and topped up with
+  // whatever this session runs itself — a fresh run-cell POST response lands here immediately,
+  // ahead of the next reload.
   const [refineCells, setRefineCells] = useState<RefineCell[]>([]);
 
   const fetchSnapshot = useCallback(async (): Promise<Snapshot | null> => {
     const res = await fetch("/api/bench");
     if (!res.ok) return null;
-    const data = (await res.json()) as Snapshot;
-    // `listLatestBenchResults` (src/lib/db.ts) has no task_id filter, so once any refine cell has
-    // been run, its row comes back here too — read as a `BenchCellScores` (it's actually
-    // `RefineCellScores`) with `itineraryMd` holding the model's raw JSON patch, not markdown. Left
-    // in, that silently corrupts every generation-mode chart and table below. A generation cell's
-    // scores always carry `geoCoherence`; a refine cell's never do.
-    return { ...data, cells: data.cells.filter((c) => c.scores && "geoCoherence" in c.scores) };
+    return (await res.json()) as Snapshot;
   }, []);
 
   const applySnapshot = useCallback((data: Snapshot) => {
     setSnap(data);
+    // Merge the server's persisted refine cells with whatever this session has already
+    // accumulated locally (e.g. from a run-cell POST response that landed before this reload) —
+    // keyed by (fixture, task, model) so a re-run supersedes rather than duplicates.
+    setRefineCells((prev) => {
+      const key = (c: RefineCell) => `${c.fixtureId}::${c.taskId}::${c.model}`;
+      const merged = new Map(data.refineCells.map((c) => [key(c), c]));
+      for (const c of prev) merged.set(key(c), c);
+      return [...merged.values()];
+    });
     // Prefer a trip that already has results — landing on an empty drill-down when other trips
     // have output makes the page look broken on load.
     setSelectedFixture((current) => {

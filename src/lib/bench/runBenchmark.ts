@@ -354,6 +354,27 @@ export function rowToCell(row: BenchResultRow): BenchCell {
 }
 
 /**
+ * Maps a refine row (`task_id` set) to a `RefineCell`. Two divergences from `rowToCell`, both
+ * deliberate: `task_id` maps to `taskId` (absent from `BenchCell` entirely), and `itinerary_md`
+ * maps to `rawResponse` rather than `itineraryMd` — the column is reused, but for a refine row it
+ * holds the model's raw JSON patch, not §11 markdown, so the field name at the type level says so.
+ */
+export function rowToRefineCell(row: BenchResultRow): RefineCell {
+  if (!row.task_id) throw new Error(`rowToRefineCell: row ${row.id} has no task_id`);
+  return {
+    fixtureId: row.fixture_id,
+    taskId: row.task_id,
+    model: row.model,
+    runId: row.run_id,
+    traceId: row.trace_id,
+    rawResponse: row.itinerary_md,
+    scores: JSON.parse(row.scores_json) as RefineCellScores,
+    composite: row.composite,
+    createdAt: row.created_at,
+  };
+}
+
+/**
  * model_agreement — pairwise similarity between models' outputs on the same trip. Computed across
  * cells rather than per-cell, since it has no meaning for a single model in isolation.
  */

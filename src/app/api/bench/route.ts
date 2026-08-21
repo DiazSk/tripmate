@@ -7,6 +7,7 @@ import {
   insertBenchFixture,
   insertRun,
   listLatestBenchResults,
+  listLatestRefineResults,
   updateBenchResultScores,
 } from "@/lib/db";
 import { buildCustomFixture } from "@/lib/bench/customTrip";
@@ -19,6 +20,7 @@ import {
   compositeScore,
   computeModelAgreement,
   rowToCell,
+  rowToRefineCell,
   runBenchCell,
   runRefineCell,
 } from "@/lib/bench/runBenchmark";
@@ -58,6 +60,14 @@ function snapshot() {
       json: toItineraryJson(cell.itineraryMd, byId.get(cell.fixtureId)!, cell.model),
     }));
 
+  // Kept as its own array rather than merged into `cells`: a refine row's `scores_json` is a
+  // `RefineCellScores`, not `BenchCellScores`, so mixing them back together would just move the
+  // "which kind is this" guess from the server (which knows) to the client (which would have to
+  // sniff a scorer key again, the exact workaround this fix removes).
+  const refineCells = listLatestRefineResults()
+    .map(rowToRefineCell)
+    .filter((c) => byId.has(c.fixtureId));
+
   const models = benchModels();
   return {
     fixtures: fixtures.map((f) => ({
@@ -84,6 +94,7 @@ function snapshot() {
     judgeModel: judgeModel(),
     semanticMethod: SEMANTIC_METHOD,
     cells,
+    refineCells,
     aggregates: aggregateByModel(cells, models.map((m) => m.id)),
     // What the aggregate is actually averaging over, so the UI can say so instead of implying
     // every trip is represented.

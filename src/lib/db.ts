@@ -399,13 +399,42 @@ export function insertBenchResult(row: Omit<BenchResultRow, "id" | "created_at">
   return { ...row, id, created_at };
 }
 
-/** Most recent row per (fixture, model, task). `task_id IS NULL` is the generation cell. */
+/**
+ * Most recent row per (fixture, model) among GENERATION cells only. Refine rows (`task_id` set)
+ * are excluded outright rather than merely de-duplicated: they carry an incompatible
+ * `scores_json` shape (`RefineCellScores`, not `BenchCellScores`) and their `itinerary_md` holds
+ * the model's raw JSON patch, not markdown — mixing them into this list is what let a refine row
+ * get rendered as a generation cell before this fix. See `listLatestRefineResults` for the
+ * counterpart. The grouping no longer needs `COALESCE(task_id, '')` once `task_id IS NULL` is
+ * filtered — every remaining row's `task_id` is NULL — so it's dropped here for that reason,
+ * while it stays in `listLatestRefineResults` because that grouping still needs to partition by
+ * the (non-null) task.
+ */
 export function listLatestBenchResults(): BenchResultRow[] {
   return db
     .prepare(
       `SELECT * FROM bench_results
-       WHERE rowid IN (
+       WHERE task_id IS NULL AND rowid IN (
          SELECT MAX(rowid) FROM bench_results
+         WHERE task_id IS NULL
+         GROUP BY fixture_id, model
+       )
+       ORDER BY fixture_id, model`
+    )
+    .all() as BenchResultRow[];
+}
+
+/** Most recent row per (fixture, model, task) among REFINE cells only — the `task_id IS NOT NULL`
+ *  counterpart to `listLatestBenchResults`. `COALESCE(task_id, '')` is harmless here (task_id is
+ *  never null in this filtered set) but kept so the grouping expression stays correct if that
+ *  invariant ever loosens. */
+export function listLatestRefineResults(): BenchResultRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM bench_results
+       WHERE task_id IS NOT NULL AND rowid IN (
+         SELECT MAX(rowid) FROM bench_results
+         WHERE task_id IS NOT NULL
          GROUP BY fixture_id, model, COALESCE(task_id, '')
        )
        ORDER BY fixture_id, model, COALESCE(task_id, '')`
