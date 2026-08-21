@@ -176,8 +176,17 @@ export default function FeaturedPlans({
                 longer title got a visibly taller, differently-cropped image than the one beside it.
                 Filling the row's shared height instead means the frame is identical across all
                 four and only the text reflows, which is the reference's own behaviour.
-                Stacked below `sm` it falls back to the 11:12 the Blue Hour row uses. */}
-            <div className="relative aspect-[11/12] transform-gpu overflow-hidden sm:aspect-auto sm:h-full">
+                Stacked below `sm` it falls back to the 11:12 the Blue Hour row uses.
+
+                `order-first` below `sm`, and it is a correctness fix rather than a preference. The
+                DOM order is text-then-photo because that is the reading order at `sm` and up, where
+                they are side by side. Stacked, that same order put each photograph *between* its own
+                CTA and the next card's title — so on a phone the Amber Fort elephant sat directly
+                above "Sinaia when the weather decides", and with `alt=""` there was nothing to
+                correct the impression. Reordering visually rather than in the DOM is the right tool
+                here precisely because these images are decorative: a screen reader never reaches
+                them, so the two orders cannot disagree for anyone. */}
+            <div className="relative order-first aspect-[11/12] transform-gpu overflow-hidden sm:order-none sm:aspect-auto sm:h-full">
               <Image
                 src={plan.photo.src}
                 alt={plan.photo.alt}

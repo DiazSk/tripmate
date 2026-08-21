@@ -83,10 +83,16 @@ export default function HowItWorks() {
           the bottom of an equal-height cell is what the reference does, and it works there because
           all four of its bodies run to exactly two lines — ours run two to three, so the same rule
           left one column's text sitting a line lower than its neighbours. A fixed gap aligns every
-          text block's top edge and keeps the proportion. */}
+          text block's top edge and keeps the proportion.
+
+          **That air is `lg` and up only, where the steps sit side by side.** Below `lg` the grid
+          stacks, and 56px inside a step against the 40px between steps put every icon closer to
+          the *previous* step's body copy than to its own heading — proximity said the icons
+          belonged to the wrong text. Anything below the step gap restores the grouping; 20px reads
+          as one object without collapsing onto the 8px heading-to-body step. */}
       <div className="mt-16 grid gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
         {STEPS.map(({ number, label, body, Icon }) => (
-          <div key={number} className="flex flex-col gap-14">
+          <div key={number} className="flex flex-col gap-5 lg:gap-14">
             <div className="flex items-start gap-2">
               {/* Drawn line icons at the app's own lucide stroke, matching the reference's thin
                   outline set. */}

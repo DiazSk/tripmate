@@ -30,6 +30,23 @@ export type PlanExample = {
    *  the desert on the Marrakesh card was not Marrakesh — which made it the weakest thing on an
    *  otherwise honest card. Every photo now shows the place its card names.
    *
+   *  **All four are 1200×1288, and that number is a floor rather than a preference.** They were
+   *  600×644, which is right for the desktop card (~330 CSS px, half of a two-column cell) and
+   *  wrong for the phone, where the frame goes full-width: 362 CSS px on a 3x screen wants 1086
+   *  real pixels, so the browser was upscaling 1.81× and the fine texture went to mush. Worth
+   *  knowing before "optimising" these back down — `next/image` will not paper over it, because the
+   *  optimiser does not enlarge. Every width from 640 to 1200 returned the same 600px original.
+   *
+   *  Sources, recorded because their absence already cost a round trip — the first attempt to
+   *  re-fetch these larger had nothing to re-fetch *from*, and a photo whose origin is unknown
+   *  cannot be re-cropped, re-encoded or replaced in kind:
+   *    - tuscany-cypress-road        Pexels 10406386 (Stan Swinnen)
+   *    - jaipur-amber-fort-elephant  Pexels 11750442 (Mayur Sable)
+   *    - peles-castle-romania-snow   Unsplash photo-1657374689601-35a4cb47b111 (Oana Ciurcanu)
+   *    - wadi-rum-desert             Pexels 28086996 (Nikola Čedíková)
+   *  Pexels and the Unsplash License both permit commercial use without attribution, so nothing
+   *  renders these names — they are here so the next person can find the original.
+   *
    *  `alt` stays empty by design, not by omission: the title and the "Where" row directly beside the
    *  image already name the place, so alt text here would make a screen reader say it three times.
    *  It is a field rather than a constant so a future card whose photo carries information the copy
