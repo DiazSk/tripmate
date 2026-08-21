@@ -287,3 +287,52 @@ export const RADAR_AXES = [
 ] as const;
 
 export type RadarAxis = (typeof RADAR_AXES)[number]["key"];
+
+/**
+ * What the patch itself did, as distinct from what the patched trip looks like.
+ *
+ * `applyPatch` validates positions but not payloads: `add_stop` clamps its index instead of
+ * rejecting, `replace_lodging` is unchecked, and `replace_stop` merges — so a near-empty payload
+ * applies cleanly. `rejected` alone therefore understates a bad patch, which is why
+ * `guardrailDelta` is here beside it.
+ */
+export interface RefinePatchScore {
+  opsEmitted: number;
+  opsRejected: number;
+  rejectedReasons: string[];
+  /** Fraction of emitted ops that landed. Null when none were emitted — nothing to measure. */
+  applied: number | null;
+  /** Fraction of modified days inside the task's allowed set. Null when the task allows any day. */
+  scope: number | null;
+  /** Did emitting-or-not match what the task asked for. */
+  restraint: boolean;
+  guardrailsBefore: number;
+  guardrailsAfter: number;
+  /** after − before. Negative is an improvement; positive means the patch broke something. */
+  guardrailDelta: number;
+  /** 0-1 roll-up of the four above. */
+  normalized: number | null;
+}
+
+export interface RefineCellScores {
+  before: BenchCellScores;
+  after: BenchCellScores;
+  /** after − before per weighted group. Null where either side was unmeasurable. */
+  delta: CompositeGroups;
+  patch: RefinePatchScore;
+  operational: OperationalScore;
+}
+
+/** One (fixture × task × model) refine run. */
+export interface RefineCell {
+  fixtureId: string;
+  taskId: string;
+  model: string;
+  runId: string | null;
+  traceId: string | null;
+  /** The model's raw JSON response, verbatim — stored so a bad patch is inspectable after the fact. */
+  rawResponse: string;
+  scores: RefineCellScores;
+  composite: number | null;
+  createdAt: string;
+}
