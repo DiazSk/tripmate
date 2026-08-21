@@ -4,9 +4,16 @@ import Image from "next/image";
 import { useRef } from "react";
 
 import { devLabel } from "@/lib/devInspector";
-import { formatMoney } from "@/lib/format";
+import { formatDateRange, formatMoney } from "@/lib/format";
 import { useLineReveal } from "@/lib/lineReveal";
-import { planExamples } from "./planExamples";
+import {
+  formatExampleParty,
+  formatExampleSpan,
+  planExamples,
+  resolveExampleDates,
+  toPrefill,
+  type PlanPrefill,
+} from "./planExamples";
 import SectionOpener from "./SectionOpener";
 
 /**
@@ -21,7 +28,29 @@ import SectionOpener from "./SectionOpener";
  * sharing one hairline. The photography is reused scene imagery and is the one thing here worth
  * replacing — see `planExamples.ts`.
  */
-export default function FeaturedPlans({ onPlan }: { onPlan: () => void }) {
+/** Local rather than imported from `HomeView`, which does not export it — and identical to it on
+ *  purpose: the roll below must agree with the form's own `min` attribute about what day it is, and
+ *  `sv-SE` is what yields `YYYY-MM-DD` from a *local* date. UTC would be wrong here; "today" is the
+ *  traveller's today, not Greenwich's. */
+const todayISO = () => new Date().toLocaleDateString("sv-SE");
+
+/** "Sep 12 – 20, 2026". `formatDateRange` gives the range but no year, and these are always future
+ *  dates that may be next year, so the year has to be said. Appended only when both ends share it —
+ *  across a year boundary `formatDateRange` already prints two full dates and one year would be a
+ *  lie about the other. */
+function formatExampleWhen(startDate: string, endDate: string): string {
+  const range = formatDateRange(startDate, endDate);
+  const startYear = startDate.slice(0, 4);
+  return endDate.slice(0, 4) === startYear ? `${range}, ${startYear}` : range;
+}
+
+export default function FeaturedPlans({
+  onPlan,
+}: {
+  /** Called with the card's own details so the wizard opens already filled in. `Hero` calls the
+   *  same prop with nothing, which is why the argument is optional rather than a second callback. */
+  onPlan: (prefill?: PlanPrefill) => void;
+}) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useLineReveal(headingRef);
 
@@ -59,7 +88,11 @@ export default function FeaturedPlans({ onPlan }: { onPlan: () => void }) {
           fixed 322px — measured — but a magic number breaks the moment a title wraps to three
           lines, where equal fractional rows just grow together. */}
       <div className="mt-10 grid md:auto-rows-fr md:grid-cols-2">
-        {planExamples.map((plan) => (
+        {planExamples.map((plan) => {
+          // Resolved per render rather than hoisted: the value depends on today's date, and a module
+          // constant would freeze it for the life of the server process.
+          const dates = resolveExampleDates(plan.startMonthDay, plan.days, todayISO());
+          return (
           <article
             key={plan.id}
             className="group grid h-full gap-5 border-white/10 py-8 sm:grid-cols-2 sm:gap-6 md:px-6 md:[&:nth-child(2n)]:border-l md:[&:nth-child(n+3)]:border-t [&:nth-child(n+2)]:border-t md:[&:nth-child(2)]:border-t-0"
@@ -74,7 +107,7 @@ export default function FeaturedPlans({ onPlan }: { onPlan: () => void }) {
               <p className="mt-2 text-sm text-muted">
                 from{" "}
                 <span className="text-base font-semibold text-foreground">
-                  {formatMoney(plan.fromUsd)}
+                  {formatMoney(plan.budgetUsd)}
                 </span>
               </p>
 
@@ -82,27 +115,59 @@ export default function FeaturedPlans({ onPlan }: { onPlan: () => void }) {
                   reader should hear the pairing. Term left, value right, on hairlines. */}
               <dl className="mt-6 space-y-0 text-xs">
                 {[
-                  ["Where", plan.region],
-                  ["When", plan.dates],
-                  ["Length", plan.span],
-                  ["Party", plan.party],
+                  ["Where", plan.destination],
+                  ["When", formatExampleWhen(dates.startDate, dates.endDate)],
+                  ["Length", formatExampleSpan(plan.days)],
+                  ["Party", formatExampleParty(plan.adults, plan.children)],
                 ].map(([term, value]) => (
                   <div
                     key={term}
                     className="flex items-baseline justify-between gap-4 border-t border-white/10 py-2"
                   >
                     <dt className="shrink-0 text-white/55">{term}</dt>
-                    <dd className="text-right text-muted">{value}</dd>
+                    {/* `suppressHydrationWarning` on the date row only, and narrowly on purpose.
+                        The resolved season depends on what day it is, and `todayISO()` reads a
+                        *local* date — so a server in one timezone and a reader in another can
+                        disagree about "today" and render different years on the one day a year the
+                        season boundary falls between them. This is what the attribute is for: a
+                        value that legitimately differs between server and client. The client's
+                        answer wins after hydration, which is the correct one, because it is the
+                        traveller's calendar the date inputs validate against.
+                        The other three rows are deterministic and are not suppressed — a blanket
+                        suppression here would hide real mismatches in `Where`, `Length` and
+                        `Party`. */}
+                    <dd
+                      className="text-right text-muted"
+                      suppressHydrationWarning={term === "When"}
+                    >
+                      {value}
+                    </dd>
                   </div>
                 ))}
               </dl>
 
               <button
                 type="button"
-                onClick={onPlan}
+                onClick={() => onPlan(toPrefill(plan, todayISO()))}
                 className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
               >
                 Plan a trip like this
+                {/* The reference's button mark, matching the hero CTA. `fill="currentColor"` is what
+                    makes it work on this button in particular: unlike the hero's, this one *does*
+                    invert its text on hover (white on slate becomes dark on amber), and the mark has
+                    to follow. A hard-coded fill would have gone invisible in one state or the other.
+                    Kept at this button's own `gap-2` rather than the reference's `1rem` — that is
+                    tuned for a 20px-tall primary CTA and reads loose at this size. */}
+                <svg
+                  aria-hidden
+                  width="8"
+                  height="8"
+                  viewBox="0 0 8 8"
+                  fill="currentColor"
+                  className="shrink-0"
+                >
+                  <path d="M8 0C8 0 7.32057 2.41553 7.32057 4C7.32057 5.58447 8 8 8 8C8 8 5.58447 7.32057 4 7.32057C2.41553 7.32057 0 8 0 8C0 8 0.679427 5.58447 0.679427 4C0.679427 2.41553 0 0 0 0C0 0 2.41553 0.679426 4 0.679426C5.58447 0.679426 8 0 8 0Z" />
+                </svg>
               </button>
             </div>
 
@@ -123,7 +188,8 @@ export default function FeaturedPlans({ onPlan }: { onPlan: () => void }) {
               <div className="scene-photo-sheen pointer-events-none absolute inset-0" />
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

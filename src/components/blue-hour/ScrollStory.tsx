@@ -2,6 +2,7 @@ import Hero from "./Hero";
 import ImageRow from "./ImageRow";
 import HowItWorks from "./HowItWorks";
 import FeaturedPlans from "./FeaturedPlans";
+import type { PlanPrefill } from "./planExamples";
 import DestinationMap from "./DestinationMap";
 import SiteFooter from "./SiteFooter";
 
@@ -19,7 +20,14 @@ import SiteFooter from "./SiteFooter";
  * of evidence landed in front of it, one word on an empty ground was the least substantial screen
  * on the page, arriving last. See `Hero` for the full reasoning.
  */
-export default function ScrollStory({ onPlan }: { onPlan: () => void }) {
+export default function ScrollStory({
+  onPlan,
+}: {
+  /** Optional payload so `FeaturedPlans` can open the wizard already filled in from a card. `Hero`
+   *  calls the same prop with no argument — one callback, not two, because both mean "start
+   *  planning" and only one of them happens to know what. */
+  onPlan: (prefill?: PlanPrefill) => void;
+}) {
   // Cancels <main>'s own padding exactly: that padding exists for the centered-card
   // layouts (the plan-step form, the result view), but every section here is full-bleed
   // and must reach all four viewport edges — including the top, behind the fixed glass

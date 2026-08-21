@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bookmark, Compass, Sparkles, UserRound } from "lucide-react";
+import LogoMark from "@/components/LogoMark";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
 
@@ -170,10 +171,17 @@ export default function Navbar() {
       ref={navRef}
       className="glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-center justify-between px-5 sm:px-6"
     >
+      {/* Mark then wordmark, which is the reference's own header arrangement. `gap-2.5` and
+          `h-[1.1em]` size the mark off the wordmark rather than in pixels, so the two stay in
+          proportion if the type step ever moves — and `LogoMark` fills `currentColor`, so it
+          inherits `text-foreground` here and the focus colour on keyboard focus without a second
+          rule. The mark is `aria-hidden`; the link's accessible name stays "TripMate" rather than
+          becoming "graphic TripMate". */}
       <Link
         href="/"
-        className="inline-flex min-h-11 items-center font-display text-xl font-semibold tracking-tight text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+        className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold tracking-tight text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
       >
+        <LogoMark className="h-[1.1em] w-[1.1em]" />
         TripMate
       </Link>
       <div className="flex items-center gap-4 sm:gap-6">

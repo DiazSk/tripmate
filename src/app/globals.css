@@ -727,8 +727,10 @@ body {
    one — it has a scrolling box, it simply never scrolls. Both the landing hero and the two scene
    bands carry `overflow-hidden` for their own reasons (fog and light wash bleed; cards animating
    in from negative X), so `nearest` bound to a section that is pinned at scrollTop 0 forever and
-   every such animation sat frozen at 0% progress. `.hero-cue`'s scroll fade shipped this way and
-   had never once run — its ScrollTimeline reported `currentTime: 0%` at every scroll offset.
+   every such animation sat frozen at 0% progress. The hero's since-removed scroll cue shipped this
+   way and had never once run — its ScrollTimeline reported `currentTime: 0%` at every scroll
+   offset. `.hero-dusk` is the one scroll-driven animation left, and it is bound by name for this
+   reason.
    A named timeline is referenceable by any descendant of the element declaring it, which
    `.content-overlay` is for every route, so this needs no `timeline-scope`. */
 @supports (animation-timeline: scroll()) {
@@ -816,45 +818,6 @@ body {
    photo isn't, so this reuses the app's frosted-card *frame* language (hairline +
    radius + soft highlight) instead of a literal blur. Replaces the old full-bleed
    .scene-photo-scrim now that beats use a contained card, not a full-bleed background. */
-/* The scroll cue. Two jobs on two nested elements rather than two timelines on one: the inner
-   bob is time-driven, the outer fade is scroll-driven, and pairing an `animation-timeline` list
-   to an `animation-name` list is far easier to get subtly wrong than nesting one div. */
-@media (prefers-reduced-motion: no-preference) {
-  .hero-cue-bob {
-    animation: hero-cue-bob 900ms ease-in-out infinite alternate;
-  }
-}
-
-@keyframes hero-cue-bob {
-  to {
-    transform: translateY(8px);
-  }
-}
-
-/* Scroll-linked without JavaScript. This replaces the component's last ScrollTrigger, and is the
-   first scroll-driven animation in the app — hence the `@supports`, whose fallback is a cue that
-   simply never fades.
-   It shipped as `scroll(nearest block)` on the assumption that "nearest" would find the shell's
-   content overlay. It did not: the hero section's own `overflow-hidden` makes *it* a scroll
-   container, so the timeline bound to an element pinned at scrollTop 0 and this fade never ran a
-   single time. Bound by name to `--story` now (declared on `.content-overlay`); see that rule for
-   the full account. */
-@supports (animation-timeline: scroll()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .hero-cue {
-      animation: hero-cue-fade linear both;
-      animation-timeline: --story;
-      animation-range: 0 200px;
-    }
-  }
-}
-
-@keyframes hero-cue-fade {
-  to {
-    opacity: 0;
-  }
-}
-
 /* The hero's exit, and this story's one authored transition. Every other beat *arrives*; this
    is the only thing that leaves, and it leaves by doing what the beat is named after — the blue
    hour ending. A wash of the next band's own ground colour ramps up over the whole composition
@@ -866,9 +829,10 @@ body {
    a Chrome trace found scrolling frames resolving on the main thread rather than the compositor,
    and stripping this component's five tweens and its pointer parallax was the fix. A scrubbed
    GSAP timeline here would put per-frame work back in exactly the place it was removed from.
-   `scroll(nearest block)` is the same mechanism `.hero-cue` already uses — one scroll-driven
-   technique on this surface, not two — and it resolves to the shell's content overlay, which is
-   the real scroller (`scroll(root)` would resolve to the document, which never scrolls).
+   It binds to the named `--story` timeline on `.content-overlay`, which is the real scroller;
+   `scroll(root)` would resolve to the document, which never scrolls, and `scroll(nearest block)`
+   resolves to the hero's own `overflow-hidden` box — see the note on `--story` for why that
+   silently reports 0% forever. This is now the only scroll-driven animation on the surface.
 
    One element, `opacity` only: the compositor owns it outright, and with no transform involved
    nothing competes with `.hero-light`'s ambient pass underneath. The resting state is fully
@@ -894,8 +858,7 @@ body {
    The `prefers-reduced-motion` gate is load-bearing and is not redundant with the blanket rule at
    the top of this file. That blanket sets `animation-duration: 0.01ms !important`, and
    `animation-duration` is *ignored* for a progress-based timeline — the timeline supplies
-   progress. This gate is the only thing honouring the preference for a scroll-driven animation.
-   Same for `.hero-cue` above. */
+   progress. This gate is the only thing honouring the preference for a scroll-driven animation. */
 @supports (animation-timeline: scroll()) {
   @media (prefers-reduced-motion: no-preference) {
     .hero-dusk {
