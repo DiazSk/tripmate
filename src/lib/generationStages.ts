@@ -1,5 +1,21 @@
 export type StageId = "geocode" | "context" | "generate" | "critique" | "placing";
-export type StageStatus = "start" | "done" | "skipped";
+
+/**
+ * `skipped` and `failed` are deliberately distinct, and the distinction is load-bearing.
+ *
+ * `skipped` means "this stage was never needed" — refine reuses the previous itinerary's
+ * coordinates, so it never geocodes or places. `failed` means "this stage was attempted, consumed
+ * its time, and did not produce a result."
+ *
+ * They were one value until a real defect proved they cannot be. The runner reported a timed-out
+ * critique as `skipped`; `stepGroupState` collapses a group whose every stage was skipped to
+ * `done`; and the "Checking it over" group contains critique and nothing else. So a review that
+ * never ran rendered to the traveller as "Checking it over — done". A comment in generationRunner
+ * argued a fourth status would touch the shared vocabulary "for no visible difference" — true of
+ * geocode, whose group has a live sibling to report real state, and false of any stage that is
+ * alone in its group.
+ */
+export type StageStatus = "start" | "done" | "skipped" | "failed";
 
 export interface StageEvent {
   stage: StageId;
@@ -20,11 +36,13 @@ export interface StageProgress {
 }
 
 /**
- * Nominal duration per stage, and the reason the progress bar is weighted rather than five
- * equal segments. These are measured, not guessed: `generate` is ~85-105s (see the timeout
- * note in claude.ts) while geocode and placing are network round trips. Split evenly, the bar
- * would jump to 40% and then sit motionless for a minute and a half — worse than no bar,
- * because "not moving" is exactly the signal a waiting traveler reads as "stuck".
+ * Nominal duration per stage. Feeds both the progress bar's segment weights and the single
+ * "usually about N minutes" the loader states, so it has to be a real central estimate, not a
+ * hopeful one.
+ *
+ * Weighted rather than five equal segments because split evenly the bar would jump to 40% and
+ * then sit motionless for over two minutes — worse than no bar, since "not moving" is exactly
+ * the signal a waiting traveler reads as "stuck".
  *
  * Kept adjacent to STAGE_ORDER on purpose, with a test asserting the two carry the same keys:
  * a stage added to one and not the other is a silently wrong bar, not a crash.
@@ -33,15 +51,39 @@ export interface StageProgress {
  * recomputed per call anyway — refine reports `geocode` and `placing` as `skipped`, and their
  * weight has to leave the total so the remaining three still reach exactly 100%.
  *
- * `context` is 1 and not 0 even though it is nearly always a warm cache hit: a zero-weight
- * stage is a zero-width segment, and on the runs where the cache misses and it becomes a real
- * model call, a zero-width segment is a bar that sits dead with no explanation.
+ * **Re-derived 2026-08-21 from `llm_traces`; the previous values understated the wait by ~2x**
+ * (they summed to 151s and told travelers "about two and a half minutes" for a ~5 minute wait).
+ * Medians over ALL rows of each type, censored rows included:
+ *
+ *     context   n=15   p50  24s   (0 censored)
+ *     generate  n=32   p50 145s   (2 censored)
+ *     critique  n=18   p50 146s   (6 censored)
+ *
+ * Two caveats that make these floors rather than point estimates, both worth respecting before
+ * anyone "corrects" them downward:
+ *
+ * 1. **A timed-out row records the cap, not the duration the call needed.** Killed calls are
+ *    censored observations, so any quantile computed over them is biased low, and one computed
+ *    over `status='ok'` rows alone cannot exceed the cap at all. Critique's 6-of-18 censoring
+ *    means its true p50 is above 146s. This exact mistake has rotted the timeout constants in
+ *    claude.ts three times; do not repeat it here.
+ * 2. `CRITIQUE_TIMEOUT_MS` and the generate budget were both raised to 300s on the same day
+ *    these were measured, which widens what is observable. Re-derive once post-change runs
+ *    accumulate.
+ *
+ * `context` is 11 rather than its measured 24s because a `context` trace only exists when the
+ * cache MISSES — `destination_context` is a real table with a freshness window, so a hit makes
+ * no model call and writes no row. Miss rate is therefore unmeasurable directly, but
+ * approximable: 15 context traces against 32 generations is ~47%, and 0.47 x 24s ~= 11s. That is
+ * the right number for the stated total; a miss still gets its full segment from the sub-stage
+ * fill below. It stays well above 0 for the reason it always did — a zero-weight stage is a
+ * zero-width segment, and on a miss that is a bar sitting dead with no explanation.
  */
 export const STAGE_SECONDS: Record<StageId, number> = {
   geocode: 2,
-  context: 1,
-  generate: 95,
-  critique: 50,
+  context: 11,
+  generate: 145,
+  critique: 150,
   placing: 3,
 };
 
@@ -62,7 +104,7 @@ const FILL_RATIO = 0.6;
  * `stageElapsedMs` is time since the *currently running stage* started, not since the run
  * started. `previous` is the last value this returned; the result never goes below it.
  *
- * The sub-stage term is what keeps the strip alive through the 95-second `generate` stage:
+ * The sub-stage term is what keeps the strip alive through the ~145-second `generate` stage:
  * `1 - exp(-t/tau)` approaches its segment's end without ever arriving, so the segment
  * cannot complete until the real `done` event lands. That is a structural guarantee rather
  * than a "stop at 95%" clamp — there is no value of `t` that finishes the segment early.
@@ -81,14 +123,20 @@ export function generationProgress(
   // This is what lets a second generation start from zero without the component holding an
   // "is this a new run" flag: page.tsx already resets `stages` to all-pending before each
   // call, so the data says it.
-  if (!stages.some((s) => s.status === "done" || s.status === "start")) return 0;
+  if (!stages.some((s) => s.status === "done" || s.status === "start" || s.status === "failed"))
+    return 0;
 
   let total = 0;
   let acc = 0;
   for (const s of stages) {
+    // `skipped` leaves the denominator entirely — that stage was never needed, so its weight
+    // would otherwise cap the bar below 100%. `failed` does NOT: the stage was attempted and
+    // really did consume its time (a killed critique burns its whole 300s budget), so counting
+    // it as spent is what keeps the bar honest instead of stalling on weight nothing will ever
+    // fill.
     if (s.status === "skipped") continue;
     total += STAGE_SECONDS[s.stage];
-    if (s.status === "done") acc += STAGE_SECONDS[s.stage];
+    if (s.status === "done" || s.status === "failed") acc += STAGE_SECONDS[s.stage];
   }
   if (total <= 0) return Math.min(1, Math.max(previous, 0));
 
@@ -172,4 +220,60 @@ const REFINE_META: Record<StageId, StageMeta> = {
 
 export function stageMeta(mode: "generate" | "refine", stage: StageId): StageMeta {
   return (mode === "refine" ? REFINE_META : GENERATE_META)[stage];
+}
+
+/**
+ * The five reported stages, grouped into the four a traveller can act on.
+ *
+ * `geocode` and `context` total a few seconds of the ~310 and mean nothing to anyone waiting, so
+ * they share a column. The four that remain are the same four the landing's "How it actually
+ * works" promises — the page says what will happen, and this shows it happening. Progress itself
+ * is still computed from all five by `generationProgress`; only the display groups.
+ *
+ * Lives here rather than in GenerationScreen so `stepGroupState` below is reachable from a test:
+ * a `.test.mjs` can import a `.ts` module (Node strips the types) but not a `.tsx` one, because
+ * nothing in the test runner transforms JSX. The rule this encodes had already shipped a
+ * user-visible lie once while sitting untested inside the component.
+ */
+export const STEP_GROUPS: readonly { id: string; label: string; stages: readonly StageId[] }[] = [
+  { id: "read", label: "Reading the place", stages: ["geocode", "context"] },
+  { id: "write", label: "Writing the plan", stages: ["generate"] },
+  { id: "check", label: "Checking it over", stages: ["critique"] },
+  { id: "place", label: "Placing every stop", stages: ["placing"] },
+];
+
+export type StepState = "done" | "active" | "waiting" | "failed";
+
+/**
+ * What one display group shows, given the stage statuses underneath it.
+ *
+ * The `failed` branch is the whole reason this is a named, tested function. Its absence produced
+ * a real user-visible lie: a timed-out critique reported `skipped`, every stage in the "check"
+ * group was then skipped, the empty-group rule collapsed that to `done`, and the loader told the
+ * traveller "Checking it over — done" about a review that never ran. `skipped` and `failed` being
+ * one value was the root cause; the empty-group rule was correct all along and is kept.
+ *
+ * A group with a failed stage reports `failed` even if its siblings succeeded — a partial result
+ * is the thing worth surfacing, and silently rounding it up to `done` is what went wrong before.
+ */
+export function stepGroupState(
+  group: { stages: readonly StageId[] },
+  stages: readonly StageProgress[]
+): StepState {
+  const mine = stages.filter((s) => group.stages.includes(s.stage));
+  // Every stage here was skipped, so this group had nothing to do. Legitimate: refine reuses the
+  // previous itinerary's coordinates and so never geocodes or places.
+  const live = mine.filter((s) => s.status !== "skipped");
+  if (live.length === 0) return "done";
+
+  if (live.some((s) => s.status === "start")) return "active";
+  if (live.some((s) => s.status === "failed")) return "failed";
+  return live.every((s) => s.status === "done") ? "done" : "waiting";
+}
+
+/** `failed` is terminal, not pending. Without this a timed-out critique would leave the loader
+ *  showing "usually about five minutes" and a cancel button forever, while the finished plan sat
+ *  waiting to open. */
+export function isStepTerminal(state: StepState): boolean {
+  return state === "done" || state === "failed";
 }
