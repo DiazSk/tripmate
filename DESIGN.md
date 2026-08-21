@@ -2,14 +2,15 @@
 name: TripMate
 description: Dark frosted glass over a live photorealistic globe, with one warm accent reserved for interaction.
 colors:
-  canvas: "#0b0f19"
-  surface-deep: "rgb(15 23 42)"
-  foreground: "#f4f7fa"
-  muted: "#97a3b6"
-  on-deep: "#f4f7fa"
-  accent: "#ffb340"
-  accent-hover: "#ffc266"
-  accent-foreground: "#3d2600"
+  canvas: "#091b20"
+  surface-deep: "rgb(13 46 55)"
+  foreground: "#ffffff"
+  muted: "rgba(255, 255, 255, 0.6)"
+  on-deep: "#ffffff"
+  accent: "#fb9826"
+  accent-hover: "#fcac52"
+  accent-foreground: "#091b20"
+  map-dot: "#fba13a"
   card-border: "rgba(255, 255, 255, 0.12)"
   glass-foreground: "#ffffff"
   glass-muted: "#cbd5e1"
@@ -29,44 +30,65 @@ typography:
   root:
     fontSize: "clamp(16px, 1.13vw, 20px)"
     note: "Fluid root; every rem below scales with it. Floors at 16px, never shrinks."
-  hero:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "clamp(2.5rem, 8vw, 6rem)"
-    fontWeight: 800
-    lineHeight: 0.88
-    letterSpacing: "-0.035em"
-    fontVariation: "font-stretch: 125%"
+  family:
+    all: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    note: "One face for the whole product — see The One Face Rule. There is no second family."
+  tracking:
+    note: "Tightens as type grows, which is the inverse of the usual instinct. Nothing at zero or positive."
+    display: "-0.076em"
+    poster: "-0.075em"
+    cardTitle: "-0.09em"
+    heading: "-0.06em"
+    label: "-0.045em"
+    body: "-0.04em"
+  poster:
+    fontSize: "clamp(3rem, 11vw, 13rem)"
+    fontWeight: 900
+    lineHeight: 0.92
+    letterSpacing: "-0.075em"
+    note: "The two one-word posters only. No font-stretch — see The Width-Axis Rule is retired."
+  sectionHeading:
+    fontSize: "clamp(2rem, 5vw, 3.75rem)"
+    fontWeight: 600
+    lineHeight: 1.05
+    letterSpacing: "-0.076em"
+  stat:
+    fontSize: "2.81rem"
+    fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "-0.085em"
+    note: "Step numbers and footer navigation."
+  cardTitle:
+    fontSize: "1.75rem"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.09em"
   display:
-    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
     fontSize: "1.5rem"
     fontWeight: 600
     lineHeight: 1.2
-    letterSpacing: "-0.01em"
-  sceneDisplay:
-    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
-    fontStyle: "italic"
-    fontSize: "1.875rem"
-    fontWeight: 400
+    letterSpacing: "-0.06em"
   title:
-    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
     fontSize: "1.125rem"
     fontWeight: 600
     lineHeight: 1.3
   body:
-    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.625
+    letterSpacing: "-0.04em"
   field:
-    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "1rem"
     fontWeight: 500
     lineHeight: 1.4
   label:
-    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 600
-    letterSpacing: "0.025em"
+    letterSpacing: "-0.045em"
+  index:
+    fontSize: "0.62rem"
+    fontWeight: 600
+    note: "Step numbers beside an icon. An index, not a headline — see How it actually works."
 rounded:
   sm: "6px"
   md: "12px"
@@ -261,11 +283,23 @@ The gate has a material consequence that follows automatically: a surface with n
 
 ### Named Rules
 
-**The One Poster Rule.** `.font-hero` applies to the landing headline and to nothing else, ever. A second wide-Archivo block anywhere in the app dissolves the first one's authority.
+**The One Poster Rule.** `.font-scene-hero` applies to the two one-word posters — the landing's opening "Somewhere." and its closing "Elsewhere." — and to nothing else, ever. A third hyperbold block anywhere dissolves the pair's authority.
 
-**The Width-Axis Rule.** Archivo must be loaded with `axes: ["wdth"]`. Browsers do not synthesise width, so without the axis `font-stretch: 125%` is a silent no-op and the poster quietly degrades to merely-bold.
+Its old subject, `.font-hero`, is deleted. It had drifted into dead CSS: defined and documented as "the landing headline", used by no component, while `.font-scene-hero` quietly did the job.
 
-**The No-Kicker Rule.** Nothing sits above a headline. No eyebrows, no all-caps kickers, no category labels introducing a title. Uppercase is a field-label device only.
+**The Width-Axis Rule is retired.** Archivo no longer loads `axes: ["wdth"]`, because nothing sets `font-stretch` any more. Widening a heavy grotesk was the single strongest template tell on the landing — the reference never touches the width axis and gets its density from negative tracking instead. The poster is weight 900 at `-0.075em` now. Loading a variable axis no rule consumes is bytes for nothing.
+
+**The One Face Rule.** One family, Archivo, for the entire product: display, body, UI, posters. Every step in the ramp comes from size, weight and tracking, never from a second family. This replaced three faces (Source Serif 4, Archivo, Manrope) and, before those, five. What it knowingly gives up is the serif that used to mark "a real plan to look at" — `/trip/[id]` and `/trips` now speak in the same voice as the landing. Adding a second family back is a decision about the whole product, not a local one.
+
+**Tracking tightens as type grows.** The ramp runs `-0.076em` at display, `-0.09em` on card titles, `-0.06em` on panel headings, `-0.04em` on body. Nothing sits at zero or positive. This is the inverse of the usual instinct — loosen small text for legibility — and it is measured off the reference rather than chosen: it is most of why a line reads as one packed shape instead of a row of letters. The `-0.04em` craft-floor tracking floor is deliberately exceeded above the body step; that floor is tuned for text sizes, and these are not.
+
+**The No-Kicker Rule — amended, and narrowed to "above".** Nothing sits *above* a headline: no eyebrow stacked on top of it, no all-caps kicker, no category label introducing a title. Uppercase remains a field-label device only.
+
+What the rule no longer forbids is a label sitting *beside* a heading, in its own column, as a running header. `SectionOpener` is that exception and the only one: a `text-sm`/600 label at `text-white/40` pinned in an 11rem left column, the heading offset into column two, a hairline across the top. It was adopted from the Vita Travels breakdown, on an explicit instruction, as the reference's most recognisable move — the thing that tells a reader a new movement has begun.
+
+The narrowing is honest about its own cost. Below `lg` the column collapses and the label *does* stack above the heading, which is the shape this rule was written against. Two constraints keep that from being a kicker in practice: the label names the movement rather than restating the heading (never "Method" above "How it actually works" — it says "Method" above a heading that does not contain the word), and it never runs uppercase. Anything that fails either test is still banned.
+
+Note this also contradicts the impeccable craft floor, which bans eyebrows outright and says no brief earns them back. The brief did. Recorded here rather than argued each time it comes up.
 
 ## Layout
 
@@ -569,7 +603,7 @@ Worth recording precisely, because the intuition was wrong: the cursor parallax 
 </details>
 - **`ImageRow`** — a compact row of four photo cards on a `.scene-band` (see below), each with a bold label and a fact-grounded stat above it (Vita Travels' own "Label / Stat" pattern), flying in from the left on scroll. The description sentence lives *inside* the card, hidden until hover.
 - **`HowItWorks`** — the mechanism explainer, no photos, a `SplitText`-staggered heading reveal on a matching `.scene-band`.
-- **`HeroPoster`** — the reveal. The only beat with neither curated photography nor a `.scene-band`; it sits on `.scene-void`, a lit emptiness rather than a surface, so arriving somewhere open after a sequence of walls is the point of putting it last. It used to sit on the live globe — see **The Mounted-Surface Gate**; the reveal that mattered was never the globe, it is "Plan a trip" being withheld until here. The headline and subline unmask via a scroll-triggered `clip-path` wipe; the CTA row fades in separately (see the clip-path/box-shadow note below).
+- **`HeroPoster` is retired, and with it the withheld CTA.** It was the closing beat: one word on `.scene-void`, a lit emptiness rather than a surface, and the sequence's organising idea was that "Plan a trip" arrived only there. That held while the page was four beats and the poster was the densest thing in it. The page is six beats now — a method strip, four priced plans and a world map arrived in front of it — and against those the poster was the *least* substantial screen on the page, arriving last and asking for the click. A reveal that lands softer than everything before it is not a reveal, so the ask moved into `Hero`, which is also where the reference puts it. Everything after the hero is evidence, and a visitor convinced by the evidence should not have to scroll back up to act on it.
 
 ### Named Rules
 
@@ -579,7 +613,7 @@ Worth recording precisely, because the intuition was wrong: the cursor parallax 
 
 **The Transform-Ownership Rule.** GSAP's CSSPlugin folds every transform sub-property (`x`, `y`, `xPercent`, `rotationY`, ...) it touches on an element into one matrix per tick, so a looping ambient tween and a pointer-driven write on the *same* element silently overwrite each other. `Hero`'s ambient drift and its cursor parallax therefore live on two different nested DOM nodes (`driftRef` wrapping `photoRef`/`textRef`), and the pointer writes go through `gsap.quickTo()` rather than a raw inline `style.transform`, so nothing is fighting over the same property. The tier cards' cursor-tilt reuses the same split for the same reason: the tilt transform lives on an inner absolutely-positioned layer wrapping the card's image/gradient/badges, never on the outer `<button>`, so the JS-driven `rotateX`/`rotateY` write never fights the button's own `transition-all` on hover/selection scale.
 
-**The Clip-Path-Clips-Shadow Rule.** `clip-path` hard-clips everything that visually bleeds past the clipped box, including a descendant's `box-shadow` blur — not just its content. `HeroPoster`'s mask-wipe reveal (`.poster-reveal`) is therefore scoped to the headline and subline text only; the CTA row, which carries the round amber button's soft `shadow-lg`, uses a separate plain opacity/y fade (`.poster-fade`) with no clip-path anywhere in its ancestry. Sharing the mask wrapper cut that shadow into a hard rectangle, permanently, even once the reveal finished fully open — zero margin still clips anything beyond zero.
+**The Clip-Path-Clips-Shadow Rule.** `clip-path` hard-clips everything that visually bleeds past the clipped box, including a descendant's `box-shadow` blur — not just its content. This was learned on `HeroPoster`, now retired: its mask-wipe reveal had to be scoped to the text only, because sharing the mask wrapper with the CTA row cut the button's soft `shadow-lg` into a hard rectangle permanently, even once the reveal finished fully open — zero margin still clips anything beyond zero. Kept here because the next clip-path reveal will hit it too.
 
 **The Cobalt-Teal Band (`.scene-band`).** `ImageRow` and `HowItWorks` sit on a full-width gradient of `--scene-cobalt-rgb`/`--scene-teal-rgb` layered *over* `--surface-deep-rgb`, never the two scene hues at raw full strength — both are far too light to carry body copy alone. This is also what stops the live globe from showing through those two sections; before it existed, "How it actually works" sat directly on the globe and dropped below readable contrast over bright terrain.
 
@@ -598,10 +632,10 @@ This is **CSS and not a ScrollTrigger scrub**, and that is not a style preferenc
 Three costs came free with the pin and are worth recording, because none of them is visible in the code that creates it:
 
 - **An element scroller means transform pinning.** GSAP resolves `pinType` to `"fixed"` only when the scroller is the viewport. Here it is `.content-overlay`, so the section was held by GSAP rewriting `translateY` on it every frame, and the pin spacer changed the scroller's `scrollHeight` mid-gesture.
-- **`refreshPriority: -1` did the opposite of what it says.** ScrollTrigger's sort key is `refreshPriority * -1e6`, so a negative value sorts a trigger *last* — and it is also the only reason the sort runs at all. The pin therefore refreshed after everything below it, and every one of those triggers measured against a layout with no pin spacer in it: ImageRow, HowItWorks and HeroPoster all fired a full viewport early and finished before they were on screen. This is the trap to remember. Higher priority is a *higher* number.
+- **`refreshPriority: -1` did the opposite of what it says.** ScrollTrigger's sort key is `refreshPriority * -1e6`, so a negative value sorts a trigger *last* — and it is also the only reason the sort runs at all. The pin therefore refreshed after everything below it, and every one of those triggers measured against a layout with no pin spacer in it: ImageRow, HowItWorks and the closing poster all fired a full viewport early and finished before they were on screen. This is the trap to remember. Higher priority is a *higher* number.
 - **A scrub is not a loop, but it is not free either.** The trace that stripped this component's JavaScript was measuring four infinite tweens; a scrub does work only while the wheel turns, which is what made it defensible. It stops being defensible when what it drives is an opaque veil the composition does not need.
 
-**The One Text Entrance (`useLineReveal`).** Every heading in the sequence — the Hero headline, "How it actually works.", and `/trips`' "My memories" — arrives a line at a time, each line rising out from behind its own bottom edge. `SplitText` with `type: "lines"` and `mask: "lines"` (GSAP 3.13+) wraps each measured line in its own `overflow: hidden` box, so translating from `yPercent: 100` reads as type being *uncovered* rather than sliding into place: a fade says an element appeared, a mask says it was always there and something moved off it. `expo.out` over 0.9s at a 0.09 stagger, which is the app's documented `cubic-bezier(0.16, 1, 0.3, 1)` under its GSAP name rather than a second easing vocabulary for text. `HeroPoster` keeps its own `clip-path` mask wipe instead — see The Clip-Path-Clips-Shadow Rule for how hard that was to get right, and it is the same bottom-up line reveal by a different mechanism — but its ease was moved onto `expo.out` so the four beats share one curve.
+**The One Text Entrance (`useLineReveal`).** Every heading in the sequence — the Hero headline, "How it actually works.", and `/trips`' "My memories" — arrives a line at a time, each line rising out from behind its own bottom edge. `SplitText` with `type: "lines"` and `mask: "lines"` (GSAP 3.13+) wraps each measured line in its own `overflow: hidden` box, so translating from `yPercent: 100` reads as type being *uncovered* rather than sliding into place: a fade says an element appeared, a mask says it was always there and something moved off it. `expo.out` over 0.9s at a 0.09 stagger, which is the app's documented `cubic-bezier(0.16, 1, 0.3, 1)` under its GSAP name rather than a second easing vocabulary for text. It is now the only text entrance in the sequence: `HeroPoster` used to run a parallel `clip-path` mask wipe, and retiring that beat left one mechanism instead of two doing the same job.
 
 Three non-obvious requirements, all of which have broken this codebase before: **`fromTo`, never `from`** (Strict Mode's double-invoked effects make a `from()` tween treat the already-hidden state as its destination); **revert the split on cleanup** (SplitText rewrites innerHTML, and re-splitting over a previous split nests wrappers until line measurement is garbage); and **build after `document.fonts.ready`** — line breaks are a function of font metrics, so a split measured against the fallback face wraps at the wrong words, and this app loads three webfonts.
 
@@ -615,7 +649,7 @@ One thing the reference measurement did settle: vita-travel.webflow.io has **no*
 
 A single fixed, frosted `Navbar` — replacing the old plain-text top-left wordmark — spans the full width on every route and stays through the entire scroll (`z-20`, `h-[var(--nav-h)]`, `.glass-nav`: blur with a whisper of the one slate, since unlike a curated reference photo this nav sits over an arbitrary live 3D globe that idles anywhere from open ocean to a snowfield). `--nav-h` (`4rem`) is read wherever something needs to clear the bar — `<main>`'s top padding, `ScrollStory`'s cancelling margins, `DockedPanel`'s top offset — so none of them can drift out of sync with the bar's own height, the same one-token pattern `--mobile-sheet-h` already established.
 
-It is also the one place per-route utility links live now: the wordmark (`href="/"`), section anchors ("The Journey" → `ImageRow`, "How It Works" → `HowItWorks`, landing only), and the route-aware actions — "My memories" on `/` and `/trip/[id]`, "New trip" on `/trips`, and "Profile" on every user-facing route except `/profile` itself. These used to be four separate bare-canvas links (`HeroPoster`'s CTA row, a lone link on the plan step, `/trips`, `TripView.tsx`), each floating in and out with its own page's layout; consolidating them removed the `headerLinkClass` pattern entirely; a page no longer supplies its own top-right link.
+It is also the one place per-route utility links live now: the wordmark (`href="/"`), section anchors ("The Journey" → `ImageRow`, "How It Works" → `HowItWorks`, landing only), and the route-aware actions — "My memories" on `/` and `/trip/[id]`, "New trip" on `/trips`, and "Profile" on every user-facing route except `/profile` itself. These used to be four separate bare-canvas links (the closing poster's CTA row, a lone link on the plan step, `/trips`, `TripView.tsx`), each floating in and out with its own page's layout; consolidating them removed the `headerLinkClass` pattern entirely; a page no longer supplies its own top-right link.
 
 **The route table is an explicit list, not a negation.** "Profile" renders on `pathname === "/trips" || isTripDetail` (plus its own block on `/`), rather than on a `!isHome && pathname !== "/profile"` catch-all that reads cleaner and is shorter. The catch-all silently swept in `/backend` and `/backend/pipeline` — internal dashboards that render this same `Navbar` over their own stone-50 pages and have no business carrying a user-facing profile link. A nav predicate that describes *where a link belongs* survives a new route being added; one that describes *where it doesn't* quietly adopts every future route.
 

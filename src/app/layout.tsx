@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo, Source_Serif_4, Manrope } from "next/font/google";
+import { Archivo } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
 import "./globals.css";
@@ -12,41 +12,27 @@ import "./globals.css";
  */
 const SHOW_LLM_TRACES = process.env.NODE_ENV === "development";
 
-// The one display face, everywhere — page titles, card headings, and (in italic) the Blue
-// Hour scene's own headlines, which used to be Playfair Display. The italic style is loaded
-// explicitly rather than left to the browser: a synthesised oblique is a sheared upright, not
-// a drawn italic, and the scene's headlines are set large enough to show it.
-const sourceSerif = Source_Serif_4({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  style: ["normal", "italic"],
-});
-
-// The landing headline only — everything else keeps Source Serif 4 or the system sans.
-// `axes: ["wdth"]` is load-bearing: Archivo's width axis is what makes it *wide* rather
-// than merely bold, and without the axis loaded `font-stretch: 125%` in .font-hero is a
-// silent no-op (browsers don't synthesise width).
+/**
+ * One face for the entire product — display, body, UI, the landing poster, all of it.
+ *
+ * It was three (Source Serif 4, Archivo, Manrope), and before that five. The cut to one is the
+ * central move of the Vita-derived system: every bit of expression now comes from scale, weight
+ * and negative tracking rather than from a second family. Three webfonts became one, which is
+ * also the cheapest performance win on the page.
+ *
+ * What this deliberately gives up: Source Serif 4's italic was the app's voice on `/trip/[id]`
+ * and `/trips`, and DESIGN.md defended it as the thing that separated "a real plan to look at"
+ * from the marketing surface. That distinction is gone on purpose — landing and app now speak
+ * once. Reversible in one commit if the itinerary views read worse for it.
+ *
+ * No `axes: ["wdth"]` any more. The width axis existed solely for `font-stretch: 125%` on the
+ * poster, and widening a heavy grotesk was the single strongest template tell on the page.
+ * Loading the axis with nothing using it would ship bytes for a property no rule sets.
+ */
 const archivo = Archivo({
-  variable: "--font-hero",
+  variable: "--font-sans-stack",
   subsets: ["latin"],
-  axes: ["wdth"],
-});
-
-// The body/UI face for the whole app — wired to Tailwind's `--font-sans` in globals.css's
-// `@theme`, so every unstyled run of text is Manrope rather than whatever sans the OS
-// happens to ship. It arrived as a Blue Hour scene font (`--font-scene-body`) and was
-// promoted when the app cut from five faces to two: a platform default is not a typographic
-// choice, and having one face carry every label, figure and control is what lets the serif
-// and the poster read as decisions.
-//
-// Playfair Display was the third face, the scene's italic display voice. It is gone: Source
-// Serif 4's italic does the same job, and two high-contrast serifs splitting the display role
-// by route was the clearest of the reasons the landing and the app read as different products.
-const manrope = Manrope({
-  variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700", "900"],
 });
 
 export const metadata: Metadata = {
@@ -58,7 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${sourceSerif.variable} ${archivo.variable} ${manrope.variable} h-full antialiased`}
+      className={`${archivo.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {SHOW_LLM_TRACES ? (

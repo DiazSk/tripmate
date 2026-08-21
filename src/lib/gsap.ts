@@ -9,7 +9,7 @@ import { SplitText } from "gsap/SplitText";
 // "@/lib/gsap"` instead of re-registering everywhere.
 //
 // ScrollTrigger is registered but not re-exported, and that is not an oversight: both of its users
-// reach it through a config object (`scrollTrigger: {…}` in lineReveal, ImageRow and HeroPoster),
+// reach it through a config object (`scrollTrigger: {…}` in lineReveal, ImageRow and DestinationMap),
 // never by name. Registration is the whole contract. Nothing else may be added to this module's
 // exports without a GSAP dependency — `prefersReducedMotion` used to live here and pulled all of
 // GSAP into the root bundle for a `matchMedia` call; it is in `lib/reducedMotion.ts` now.

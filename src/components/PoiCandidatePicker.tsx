@@ -108,7 +108,7 @@ export default function PoiCandidatePicker({
             }
           }}
           placeholder="Add a spot you already know about"
-          className="flex-1 rounded-full bg-white/10 px-3.5 py-1.5 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+          className="flex-1 rounded-full bg-white/10 px-3.5 py-1.5 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
         />
         <button
           type="button"

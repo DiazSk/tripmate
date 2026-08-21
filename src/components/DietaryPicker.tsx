@@ -57,7 +57,7 @@ export default function DietaryPicker({
         value={value.note}
         onChange={(e) => onChange({ ...value, note: e.target.value })}
         placeholder="Anything else — e.g. no shellfish, low salt"
-        className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+        className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
       />
     </div>
   );

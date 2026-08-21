@@ -6,9 +6,19 @@ import { ChevronDown } from "lucide-react";
 import { useLineReveal } from "@/lib/lineReveal";
 
 /**
- * The opening moment of the Blue Hour scroll story: a curated photo, a mood-setting headline,
- * drifting light, and no CTA — "Plan a trip" is withheld until HeroPoster at the very end so its
- * arrival still reads as a reveal.
+ * The opening moment of the Blue Hour scroll story: a curated photo, a one-word headline,
+ * drifting light, and the CTA.
+ *
+ * The CTA used to live at the very end, on a closing `HeroPoster` beat, and being withheld across
+ * the whole sequence was the story's organising idea. That worked when the page was four beats and
+ * the poster was the densest thing on it. It is seven beats now — the card row, the method strip,
+ * four priced plans and a world map all arrived — and against those the poster was one word on an
+ * empty ground, the least substantial screen on the page arriving last and asking for the click.
+ * A reveal that lands softer than everything before it is not a reveal.
+ *
+ * So the ask sits where the reference puts it, in the hero, under the support line. That is also
+ * the one place the sequence can afford it: everything after this beat is evidence, and a visitor
+ * convinced by the evidence should not have to scroll back up to act on it.
  *
  * **Nothing here is scroll-driven from JavaScript, and the hero is not pinned.** Both of those
  * were true for exactly one commit and both were wrong, in ways worth writing down because the
@@ -39,7 +49,8 @@ import { useLineReveal } from "@/lib/lineReveal";
  * of a real session found scrolling frames resolving on the main thread (`SCROLL_MAIN_THREAD` on
  * 1688 of 3426) rather than the compositor — frames were not being dropped, only 2.1% were, they
  * were arriving *late*, queued behind main-thread work. The globe's render loop, 976ms of that
- * trace and its largest single entry, is paused while this beat covers it; see HeroPoster.
+ * trace and its largest single entry, does not run on this route at all — see The
+ * Mounted-Surface Gate.
  *
  * The one remaining scroll-driven exception is `useLineReveal` on the headline, which is
  * ScrollTrigger and therefore per-frame main-thread work by definition. It is a one-shot: it
@@ -58,7 +69,7 @@ import { useLineReveal } from "@/lib/lineReveal";
  * where there were four, satisfying the One Ambient Loop Rule literally rather than by
  * dispensation.
  */
-export default function Hero() {
+export default function Hero({ onPlan }: { onPlan: () => void }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useLineReveal(headingRef);
@@ -95,15 +106,21 @@ export default function Hero() {
           shrink-to-fit width, which changes where the headline wraps — and `useLineReveal` masks
           the line boxes it *measures*, so a wrap change is a change to the reveal. */}
       <div>
-        {/* The headline is one string now, not two hand-split phrase spans on `.hero-rise`.
-            SplitText measures the real line boxes at the real font size and masks each one, so
-            the reveal follows however the type actually wraps at this viewport instead of a
-            two-phrase guess that was right at one width. See `useLineReveal`. */}
+        {/* One word, set as large as the viewport allows.
+            It was the full sentence at clamp(2.25rem, 6.5vw, 5rem), which is less than half this
+            and wrapped to two or three lines — a headline that size reads as a caption on the
+            photograph rather than as a poster on it. The sentence is not lost; it moved down to
+            the support line, which is where its meaning was doing the work anyway.
+            This also makes the two ends of the story rhyme: the page opens on "Somewhere." and
+            closes on "Elsewhere.", both one word, both `.font-scene-hero`.
+            13rem is past the craft floor's 6rem display ceiling. That ceiling is for a page whose
+            headline shares the viewport; this one *is* the viewport, and the reference's own hero
+            measures 11.87rem. Deliberate, and the reason is the brief. */}
         <h1
           ref={headingRef}
-          className="hero-legible font-scene-display text-[clamp(2.25rem,6.5vw,5rem)] italic leading-[1.05] text-on-deep"
+          className="hero-legible font-scene-hero text-[clamp(3rem,11vw,13rem)] leading-[0.92] text-on-deep"
         >
-          Somewhere, it&rsquo;s the blue hour.
+          Somewhere.
         </h1>
         {/* mx-auto because this block is no longer a direct child of the section's items-center
             flex — the type wrapper sits between them.
@@ -115,11 +132,27 @@ export default function Hero() {
             run; both lines arrived together. Inline is what the app's other three staggers already
             use (TierPicker, HomeView, TripFormConsole). */}
         <p
-          className="hero-rise hero-legible mx-auto mt-5 max-w-md text-balance scene-prose text-base text-on-deep sm:text-lg"
+          className="hero-rise hero-legible mx-auto mt-6 max-w-lg text-balance scene-prose text-base text-on-deep sm:text-lg"
           style={{ animationDelay: "180ms" }}
         >
-          Every trip we plan is built around finding it.
+          It&rsquo;s the blue hour, and every trip we plan is built around finding it.
         </p>
+
+        {/* Shares the subline's entrance one step later, so the ask arrives after the sentence
+            that justifies it rather than alongside it. `shadow-lg` because this is the one button
+            on the page sitting on bare photography with no panel behind it. */}
+        <div
+          className="hero-rise mt-8 flex justify-center"
+          style={{ animationDelay: "300ms" }}
+        >
+          <button
+            type="button"
+            onClick={onPlan}
+            className="pointer-events-auto rounded-full border border-transparent bg-accent px-8 py-4 text-base font-medium text-accent-foreground shadow-lg shadow-black/30 transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none active:scale-[0.98]"
+          >
+            Plan a trip
+          </button>
+        </div>
       </div>
 
       {/* The scroll cue: fades out over the first 200px of real scroll, so its absence itself
