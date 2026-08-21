@@ -425,12 +425,19 @@ export function updateBenchResultScores(id: string, scoresJson: string, composit
   );
 }
 
+/**
+ * Feeds the blinded judge, which grades generations only. Without the task_id IS NULL
+ * filter, MAX(rowid) per (fixture, model) would pick up a refine cell's row once those
+ * exist — and a refine row's itinerary_md holds the model's raw JSON patch, not markdown,
+ * which is non-empty and so would slip past the caller's `.trim()` guard and get graded
+ * as an itinerary.
+ */
 export function getBenchResultsForFixture(fixtureId: string): BenchResultRow[] {
   return db
     .prepare(
       `SELECT * FROM bench_results
-       WHERE fixture_id = ? AND rowid IN (
-         SELECT MAX(rowid) FROM bench_results GROUP BY fixture_id, model
+       WHERE fixture_id = ? AND task_id IS NULL AND rowid IN (
+         SELECT MAX(rowid) FROM bench_results WHERE task_id IS NULL GROUP BY fixture_id, model
        )
        ORDER BY model`
     )
