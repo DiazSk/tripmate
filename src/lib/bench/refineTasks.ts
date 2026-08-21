@@ -156,7 +156,7 @@ export const REFINE_TASKS: Record<string, RefineTask[]> = {
       id: "retime-day2",
       message: "Day 2 feels rushed. Can we start later?",
       dayIndex: 1,
-      covers: "holiday and transport data are both unavailable, so the model must not invent either",
+      covers: "retiming with holiday and transport data both missing — the new schedule must not lean on a fabricated closure or transit time",
       expect: { opsExpected: true, allowedDays: [1] },
     },
     {
