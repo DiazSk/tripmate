@@ -78,7 +78,7 @@ import { summarizeDurable } from "@/lib/profileSummary";
 const ItineraryCard = dynamic(() => import("@/components/ItineraryCard"), { ssr: false });
 const FocusEditMode = dynamic(() => import("@/components/FocusEditMode"), { ssr: false });
 const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), { ssr: false });
-const GenerationLoader = dynamic(() => import("@/components/cesium/GenerationLoader"), {
+const GenerationScreen = dynamic(() => import("@/components/GenerationScreen"), {
   ssr: false,
 });
 const TierPicker = dynamic(() => import("@/components/TierPicker"), { ssr: false });
@@ -188,7 +188,7 @@ function Field({
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
         {label}
         {optional && (
-          <span className="font-normal tracking-normal text-white/40 normal-case">optional</span>
+          <span className="font-normal tracking-normal text-white/55 normal-case">optional</span>
         )}
       </span>
       <div className="mt-1.5">{children}</div>
@@ -377,7 +377,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // These hit the same module registry, fully typed.
   useEffect(() => {
     if (step === "landing") return;
-    void import("@/components/cesium/GenerationLoader");
+    void import("@/components/GenerationScreen");
     void import("@/components/ItineraryCard");
     void import("@/components/PlaceDetailPanel");
     void import("@/components/FocusEditMode");
@@ -766,17 +766,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // page already holds. Deliberately no model call: `runClaude` spends almost all of its wall
   // clock waiting for a first token, so trivia fetched that way would arrive after the plan it
   // was meant to fill the time for.
-  // What the loader names while it works. The plan form unmounts during generation, so
-  // without this the screen shows a spinner over a globe and never once states which trip it
-  // is building — the single thing a waiting traveler most wants confirmed.
-  const loaderSubject = [
-    destination.split(",")[0]?.trim() || destination.trim(),
-    startDate && endDate ? formatDateRange(startDate, endDate) : null,
-    TIERS.find((t) => t.id === tier)?.name ?? null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
   const wikiExtract = usePlacePhoto(destination, "extract");
   const destinationFacts = useMemo(
     () =>
@@ -808,12 +797,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           fetches its chunk on first render — i.e. on the landing, which is the one thing the
           boundary exists to prevent. */}
       {(generating || refining) && (
-        <GenerationLoader
-          active
+        <GenerationScreen
           mode={refining ? "refine" : "generate"}
           stages={stages}
           facts={destinationFacts}
-          subject={loaderSubject}
+          destination={destination}
+          dateRange={startDate && endDate ? formatDateRange(startDate, endDate) : null}
+          tripDays={days}
+          tierName={TIERS.find((t) => t.id === tier)?.name ?? null}
+          budget={budget}
+          rawFetch={rawFetch}
           onCancel={cancelGeneration}
         />
       )}
@@ -1137,7 +1130,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     value={purpose}
                     onChange={(e) => setPurpose(e.target.value)}
                     placeholder="e.g. anniversary trip, first time in Japan, work + play"
-                    className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                    className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
                   />
                 </Screen>
               )}
@@ -1157,7 +1150,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                         onChange={(e) => setGroupOther(e.target.value)}
                         placeholder="e.g. five college friends, work offsite, three generations"
                         aria-label="Who's going"
-                        className="value-in w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                        className="value-in w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
                       />
                     )}
                     {/* Shown for every group, not just families: a party of six friends is

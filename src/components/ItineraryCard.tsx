@@ -432,7 +432,7 @@ export default function ItineraryCard({
               remaining 11px of slack is deliberate and is not worth reclaiming: tightening the
               ceiling to the measured width buys an imperceptible 12% of timing and risks
               clipping the label outright on any system whose fallback face sets wider than
-              Manrope before the webfont lands.
+              Archivo before the webfont lands.
 
               The 6px gap is `mr` on the label, not `gap` on the button, so one transition
               drives both and they cannot drift apart. It has to be margin and not padding:
