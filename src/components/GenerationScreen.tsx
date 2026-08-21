@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import Image from "next/image";
+
 import { devLabel } from "@/lib/devInspector";
 import SectionOpener from "./blue-hour/SectionOpener";
 import { formatMoney } from "@/lib/format";
@@ -12,6 +14,7 @@ import {
   generationProgress,
 } from "@/lib/generationStages";
 import type { RawFetch } from "@/lib/types";
+import { usePlacePhoto } from "@/lib/usePlacePhoto";
 
 /**
  * What a traveller looks at for the two and a half minutes a plan takes to write.
@@ -24,8 +27,17 @@ import type { RawFetch } from "@/lib/types";
  * fetched: by the time Generate is reachable, the real forecast for each of the traveller's dates,
  * the public holidays, and up to twelve candidate places are all sitting in memory.
  *
- * So the wait states what is known rather than asking for patience. Flat ground, the destination
- * set large, the four steps as a ruled strip, and the actual week laid out underneath.
+ * So the wait states what is known rather than asking for patience: the destination photographed
+ * full-bleed, its name set large, and — the screen's real content — a rotating feed of facts about
+ * the place, at display size. The machinery (four steps, one forecast line, the cancel) is demoted
+ * into a darkened band at the foot.
+ *
+ * The ordering is deliberate and was corrected once. The first version put the forecast across
+ * seven columns in the best space on the screen and the facts in small prose at the very bottom.
+ * Both were backwards: `DayHeader` already prints each day's temperature, rain chance and
+ * typical-weather flag beside every day of the finished plan, so the week was a preview of
+ * something arriving thirty seconds later, while the facts were the one thing the traveller could
+ * not get anywhere else.
  *
  * **The globe is covered, not switched off.** `useGlobeOnScreen(generating || …)` in HomeView still
  * boots Cesium at generation start, deliberately: the 2.3MB import and first tiles are free inside
@@ -51,6 +63,8 @@ const STEPS: { id: string; label: string; stages: StageId[] }[] = [
  *  days and thirty columns is not a strip, it is a spreadsheet. */
 const MAX_WEEK_COLUMNS = 7;
 
+/** ~150s of waiting at this interval is ~21 facts. `destinationFacts` is capped above that so the
+ *  feed does not loop back to the first while the traveller is still reading. */
 const FACT_INTERVAL_MS = 7000;
 
 /** Measured, not guessed: `STAGE_SECONDS` sums to ~151s. Stated once as a range rather than
@@ -88,11 +102,6 @@ function dayLabel(iso: string): string {
   return `${weekday} ${d.getUTCDate()}`;
 }
 
-function skyLabel(precip: number | null): string | null {
-  if (precip === null) return null;
-  return precip >= 40 ? `${precip}% rain` : precip >= 15 ? `${precip}% cloud` : "clear";
-}
-
 export default function GenerationScreen({
   mode = "generate",
   stages,
@@ -117,6 +126,9 @@ export default function GenerationScreen({
   onCancel?: () => void;
 }) {
   const stripRef = useRef<HTMLDivElement>(null);
+  // Already resolved and cached by the plan step, which asks the same hook for the Wikipedia
+  // extract — all three variants share one request per name, so the photo costs no extra fetch.
+  const photo = usePlacePhoto(destination, "full");
   const [factIndex, setFactIndex] = useState(0);
   const [cancelReady, setCancelReady] = useState(false);
 
@@ -161,13 +173,11 @@ export default function GenerationScreen({
     // day at the same position rather than from the weather row's own date.
     label: dayLabel(calendarDays[i]?.date ?? d.date),
     temp: `${Math.round(d.tempMinC)}–${Math.round(d.tempMaxC)}°`,
-    sky: skyLabel(d.precipitationProbability),
   }));
   const hiddenDays = Math.max(0, weatherDays.length - week.length);
-  // Beyond the 16-day horizon Open-Meteo falls back to the same dates last year, which carries
-  // temperatures but no precipitation probability. A column of em dashes states nothing; one note
-  // under the strip states the actual situation.
-  const hasSky = week.some((d) => d.sky !== null);
+  // Beyond the 16-day horizon Open-Meteo falls back to the same dates last year. Worth one short
+  // tail on the line: a figure presented as a forecast when it is last year's is a lie by omission,
+  // however small the type.
   const historical = rawFetch?.weather.historical === true;
 
   const summary = [dateRange, tripDays ? `${tripDays} days` : null, tierName, budget > 0 ? formatMoney(budget) : null]
@@ -179,12 +189,34 @@ export default function GenerationScreen({
       // Opaque and full-bleed: this is what covers the globe. `z-30` sits under AppShell's
       // `z-20` navbar only because the navbar lives outside the content overlay's stacking
       // context — the bar stays visible, which is intended.
-      className="pointer-events-auto fixed inset-0 z-30 flex flex-col overflow-y-auto bg-canvas px-5 py-[calc(var(--nav-h)+2rem)] sm:px-6"
+      className="pointer-events-auto fixed inset-0 z-30 flex flex-col overflow-y-auto bg-canvas"
       {...devLabel("GenerationScreen")}
     >
-      {/* The only thing announced. The week strip and the rotating fact are deliberately outside
-          it: a live region that re-reads a seven-column table every time a stage advances is worse
-          than silence. */}
+      {/* The destination itself, behind everything.
+          Measured across eight cities before committing to this: every one resolved to a real
+          landscape cityscape (aspect 1.50–1.83), but mean luminance ranged 0.040 to 0.348 and
+          Kyoto peaked at 0.947 — near-white sky. White body text over that peak is 2.41:1 under a
+          60% scrim and 3.56:1 under 75%, so a flat scrim cannot make small text safe anywhere.
+          Hence the gradient: heavy at the top where the type sits (5.5:1 against the worst peak),
+          lighter through the middle so the photograph is actually visible, and heavy again under
+          the band. It is the same split the reference's own Combine section uses — large type on
+          the photo, dense type in a darkened band.
+          No photo resolves to flat canvas, which is what this screen was before. */}
+      {photo && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+          <Image src={photo} alt="" fill priority sizes="100vw" className="object-cover" />
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(to bottom, rgb(var(--surface-deep-rgb) / 0.94) 0%, rgb(var(--surface-deep-rgb) / 0.9) 34%, rgb(var(--surface-deep-rgb) / 0.55) 60%, rgb(var(--surface-deep-rgb) / 0.7) 86%, rgb(var(--surface-deep-rgb) / 0.88) 100%)",
+            }}
+          />
+        </div>
+      )}
+
+      {/* The only thing announced. The rotating fact and the week are deliberately outside it: a
+          live region that re-reads on every stage change is worse than silence. */}
       <p role="status" aria-live="polite" className="sr-only">
         {complete
           ? "Your itinerary is ready."
@@ -194,7 +226,7 @@ export default function GenerationScreen({
       {/* `my-auto`, not `justify-center` on the parent: a flex container that overflows clips its
           start, so on a phone the heading disappeared behind the fixed navbar and could not be
           scrolled back to. This centres when the content fits and tops-out when it doesn't. */}
-      <div className="mx-auto my-auto w-full max-w-[100rem]">
+      <div className="mx-auto my-auto w-full max-w-[100rem] px-5 py-[calc(var(--nav-h)+2rem)] sm:px-6">
         <SectionOpener label={mode === "refine" ? "Reworking" : "Planning"} align="start">
           <h1 className="font-scene-hero text-[clamp(2.5rem,9vw,8rem)] leading-[0.9] text-foreground">
             {city}.
@@ -202,106 +234,105 @@ export default function GenerationScreen({
           {summary && <p className="mt-4 text-sm tabular-nums text-muted">{summary}</p>}
         </SectionOpener>
 
-        {/* The four steps, as a ruled strip. One shared rail carries the fill, so the columns read
-            as one process rather than four independent meters. */}
-        <div ref={stripRef} className="mt-12 [--gen-progress:0]">
-          <div className="relative h-px w-full bg-white/10">
-            {/* Not `motion-safe:` — the transition is what makes this smooth, and removing it
-                leaves the bar jerking through ten JS writes a second. See the reduced-motion
-                exemption in globals.css. */}
-            <div className="gen-fill absolute inset-y-0 left-0 w-full origin-left bg-accent [transform:scaleX(var(--gen-progress))] [transition:transform_200ms_linear]" />
-          </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-8 pt-5 lg:grid-cols-4">
-            {STEPS.map((step, i) => {
-              const state = stepState(step, stages);
-              return (
-                <div key={step.id} className="flex items-start gap-2">
-                  <span
-                    className={`text-[0.62rem] font-semibold leading-none ${
-                      state === "waiting" ? "text-white/40" : "text-accent"
-                    }`}
-                  >
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <div>
-                    <p
-                      className={`text-sm font-medium ${
-                        state === "waiting" ? "text-white/55" : "text-foreground"
+        {/* The fact is the screen's second voice, not its footnote.
+            It sat at the bottom in small prose, below a seven-column weather grid, where a waiting
+            traveller had no reason to look. Set at display scale it earns the attention — and the
+            size is also what makes it safe over photography, since large text needs 3:1 where body
+            text needs 4.5:1.
+            `key` on the index restarts the entrance, so a change reads as a new line arriving
+            rather than as text mutating in place. */}
+        <p
+          key={factIndex}
+          className="mt-16 max-w-4xl text-[clamp(1.375rem,3.2vw,2.5rem)] leading-[1.25] tracking-[-0.045em] text-foreground motion-safe:[animation:value-in_520ms_cubic-bezier(0.16,1,0.3,1)_backwards] lg:ml-[calc(11rem+2.5rem)]"
+        >
+          {facts[factIndex] ?? `Reading everything we can find about ${city}.`}
+        </p>
+      </div>
+
+      {/* The working band. Everything small and dense lives here rather than on the photograph —
+          at 92% the worst measured peak composites to 7.1:1 against white, which clears body text
+          with room, where the same text on the open photo would not. */}
+      <div
+        className="mt-auto w-full border-t border-white/10"
+        style={{ background: "rgb(var(--surface-deep-rgb) / 0.92)" }}
+      >
+        <div className="mx-auto w-full max-w-[100rem] px-5 py-6 sm:px-6">
+          <div ref={stripRef} className="[--gen-progress:0]">
+            <div className="relative h-px w-full bg-white/10">
+              {/* Not `motion-safe:` — the transition is what makes this smooth, and removing it
+                  leaves the bar jerking through ten JS writes a second. See the reduced-motion
+                  exemption in globals.css. */}
+              <div className="gen-fill absolute inset-y-0 left-0 w-full origin-left bg-accent [transform:scaleX(var(--gen-progress))] [transition:transform_200ms_linear]" />
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 pt-4 lg:grid-cols-4">
+              {STEPS.map((step, i) => {
+                const state = stepState(step, stages);
+                return (
+                  <div key={step.id} className="flex items-start gap-2">
+                    <span
+                      className={`text-[0.62rem] font-semibold leading-none ${
+                        state === "waiting" ? "text-white/40" : "text-accent"
                       }`}
                     >
-                      {step.label}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">
-                      {state === "done" ? "done" : state === "active" ? "now" : "—"}
-                    </p>
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <div>
+                      <p
+                        className={`text-sm font-medium ${
+                          state === "waiting" ? "text-white/55" : "text-foreground"
+                        }`}
+                      >
+                        {step.label}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {state === "done" ? "done" : state === "active" ? "now" : "—"}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* The week. Real forecast for the traveller's real dates, fetched three screens before
-            Generate was reachable — the single most useful thing that can be on this screen, and
-            it was previously not on it at all. */}
-        {week.length > 0 && (
-          <div className="mt-14">
-            <p className="text-sm font-semibold tracking-[-0.045em] text-white/55">Your week</p>
-            {/* Rules only at `lg`, where all seven days sit on one row and a divider means
-                "next day". Below that the grid wraps, and `:not(:first-child)` put a left border
-                on the first cell of every wrapped row — a vertical rule floating in open space. */}
-            <div className="mt-4 grid grid-cols-2 gap-y-6 border-t border-white/10 pt-4 sm:grid-cols-4 lg:grid-cols-7 lg:gap-y-0 lg:pt-0">
-              {week.map((d) => (
-                <div
-                  key={d.label}
-                  className="border-white/10 pr-4 lg:py-4 lg:[&:not(:nth-child(7n+1))]:border-l lg:[&:not(:nth-child(7n+1))]:pl-4"
-                >
-                  <p className="text-sm font-medium text-foreground">{d.label}</p>
-                  <p className="mt-2 text-base tabular-nums text-foreground">{d.temp}</p>
-                  {d.sky && <p className="mt-1 text-xs text-muted">{d.sky}</p>}
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 space-y-1 text-xs text-muted">
-              {hiddenDays > 0 && (
-                <p>
-                  +{hiddenDays} more {hiddenDays === 1 ? "day" : "days"} in the plan
-                </p>
-              )}
-              {historical && (
-                <p>
-                  These dates are past the forecast horizon
-                  {hasSky ? "" : ", so there is no rain probability yet"} — the figures are the
-                  same dates last year.
-                </p>
-              )}
+                );
+              })}
             </div>
           </div>
-        )}
 
-        <div className="mt-14 flex flex-col gap-6 border-t border-white/10 pt-6 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
-          {/* One fact, not a fanned stack of five. `key` on the index restarts the entrance so a
-              change reads as a new line arriving rather than as text mutating in place. */}
-          <p
-            key={factIndex}
-            className="scene-prose max-w-xl text-base text-foreground motion-safe:[animation:value-in_420ms_cubic-bezier(0.16,1,0.3,1)_backwards]"
-          >
-            {facts[factIndex] ?? `Reading everything we can find about ${city}.`}
-          </p>
-
-          <div className="flex shrink-0 flex-col items-start gap-4 lg:items-end">
-            <p className="text-xs text-muted">
-              {complete ? "Opening your plan…" : `Usually about ${spellMinutes(TYPICAL_MINUTES)}.`}
-            </p>
-            {onCancel && cancelReady && !complete && (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
-              >
-                Cancel
-              </button>
+          {/* `lg:pr-14` reserves the bottom-right corner for `LlmTraceFab`, which is a `z-50` fixed
+              48px button at a 20px inset and is *not* dev-gated — it renders in production on every
+              route, above this screen's `z-30`. Without the reservation the Cancel button lands
+              underneath it and a hit-test at Cancel's centre returns the FAB: the control looks
+              normal and is completely dead. Only at `lg`, because that is where this row goes
+              horizontal and puts Cancel in the corner; stacked below that it sits at the left.
+              Verified with `elementFromPoint`, not `.click()` — see The Top-Layer-Still-Inherits
+              Rule for why a scripted click would have passed. */}
+          <div className="mt-6 flex flex-col gap-4 border-t border-white/10 pt-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10 lg:pr-14">
+            {/* The forecast, demoted from a seven-column grid to one line. It is the same
+                tempMin–tempMax the result view prints under every day heading (DayHeader.tsx), so
+                laying it out large here spent the screen's best space on a preview of something
+                the traveller sees thirty seconds later. Kept, because it is still the one concrete
+                thing known about the trip before the plan exists — just no longer the headline. */}
+            {week.length > 0 ? (
+              <p className="text-xs tabular-nums text-muted">
+                <span className="text-white/55">Forecast</span>{" "}
+                {week.map((d) => `${d.label} ${d.temp}`).join("  ·  ")}
+                {hiddenDays > 0 && `  ·  +${hiddenDays} more`}
+                {historical && <span className="text-white/40"> · same dates last year</span>}
+              </p>
+            ) : (
+              <span />
             )}
+
+            <div className="flex shrink-0 items-center gap-4">
+              <p className="text-xs text-muted">
+                {complete ? "Opening your plan…" : `Usually about ${spellMinutes(TYPICAL_MINUTES)}.`}
+              </p>
+              {onCancel && cancelReady && !complete && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

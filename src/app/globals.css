@@ -309,8 +309,8 @@ body {
      to sit here. The blur was the soft half of the rack-focus effect and it cost a render surface
      per card: this element's parent has its `transform` rewritten on every `postRender` frame
      (screen position *and* scale), a blurred element owns its own render surface, and moving one
-     forces a re-raster every frame. That is the same hazard `.hero-fog-layer` below is built
-     around avoiding, applied to elements that move far more often than those ever did. It was
+     forces a re-raster every frame. That is the same hazard the hero's since-removed fog banks
+     were built around avoiding, applied to elements that move far more often. It was
      also barely visible: `--marker-depth` is the anchor's `scale`, which floors at SCALE_MIN
      0.55, so the blur never exceeded 0.675px. Depth reads off `opacity` here plus the `scale()`
      the anchor already writes from the same number — which is where the effect was mostly coming
@@ -808,87 +808,6 @@ body {
    photo isn't, so this reuses the app's frosted-card *frame* language (hairline +
    radius + soft highlight) instead of a literal blur. Replaces the old full-bleed
    .scene-photo-scrim now that beats use a contained card, not a full-bleed background. */
-/* Fog banks over the hero's lower edge — drawn, not photographed, so they can hide the source
-   photo's flaws without desaturating it. Sits low and fades out upward so the dark treeline still
-   reads through; the densest bank is bottom-left, where the photo has a blown-out yellow bokeh
-   blob that this is covering. Three banks, all static: they used to drift on independent periods,
-   which was three of the five infinite tweens the Hero ran. Held still they cost one
-   rasterisation and nothing after it, so the tuned density is kept for free. */
-.hero-fog {
-  position: absolute;
-  /* Bled past both edges so each gradient's horizontal falloff completes off-frame rather than
-     against the viewport edge. */
-  inset-inline: -15%;
-  bottom: -8%;
-  /* Deliberately shallow. Taller banks covered the photo's bokeh blob more completely
-     but washed the dark treeline out with it, and the treeline is the point. */
-  height: 38%;
-  pointer-events: none;
-}
-
-/* No `filter: blur()` here, and no `will-change`. Each layer used to carry both, plus an
-   infinite transform tween — the worst combination available. A blurred element gets its own
-   render surface, and moving one forces Chromium to re-raster it, so three of these were
-   re-rasterising forever. The same hazard is already documented on `.scene-frost` below, whose
-   `transition-property` is narrowed to `opacity` alone precisely so a hover never re-blurs its
-   backdrop.
-   The blur is replaced by the gradients' own falloff: an added mid stop plus a longer transparent
-   tail (74% -> 88%) gives a 26-34px blur's softness at no raster cost, because a radial gradient
-   is already smooth — the filter was mostly softening where two radials overlap. `will-change`
-   goes because nothing animates these any more; it was pinning three full-width textures in
-   memory for a hint about motion that no longer exists. */
-.hero-fog-layer {
-  position: absolute;
-  inset: 0;
-}
-
-/* Every vertical extent below is <= 100% and every stop reaches `transparent` by 88%, so each
-   gradient finishes inside its own box rather than being clipped by it.
-   These radials used to run to 130% of the layer's height, which the box then cut off mid-ramp.
-   That was safe only because `filter: blur(26px)` smeared the cut; with the blur gone, a box
-   clipping a still-opaque gradient is a hairline waiting to appear at 70% viewport height, where
-   `bottom: -8%` + `height: 38%` puts the top edge. Measured after this change: the brightness
-   step across that boundary is 0.06 against a median of 0.94 elsewhere in the frame, i.e. no
-   discontinuity at all. (A visible seam in a downscaled screenshot prompted this and turned out
-   to be resampling aliasing, not a real edge — but a gradient that terminates inside its own box
-   is the correct construction either way, and costs nothing.) */
-.hero-fog-layer:nth-child(1) {
-  background:
-    radial-gradient(
-      58% 100% at 16% 100%,
-      rgb(255 255 255 / 0.62),
-      rgb(255 255 255 / 0.24) 44%,
-      transparent 88%
-    ),
-    radial-gradient(
-      45% 88% at 62% 100%,
-      rgb(255 255 255 / 0.38),
-      rgb(255 255 255 / 0.15) 46%,
-      transparent 88%
-    );
-}
-
-.hero-fog-layer:nth-child(2) {
-  background:
-    radial-gradient(
-      50% 92% at 38% 100%,
-      rgb(255 255 255 / 0.42),
-      rgb(255 255 255 / 0.17) 44%,
-      transparent 88%
-    ),
-    radial-gradient(
-      60% 96% at 88% 100%,
-      rgb(255 255 255 / 0.34),
-      rgb(255 255 255 / 0.13) 46%,
-      transparent 88%
-    );
-  opacity: 0.85;
-}
-
-.hero-fog-layer:nth-child(3) {
-  background: linear-gradient(to top, rgb(255 255 255 / 0.4), rgb(255 255 255 / 0.14) 34%, transparent 72%);
-}
-
 /* The scroll cue. Two jobs on two nested elements rather than two timelines on one: the inner
    bob is time-driven, the outer fade is scroll-driven, and pairing an `animation-timeline` list
    to an `animation-name` list is far easier to get subtly wrong than nesting one div. */
@@ -988,14 +907,14 @@ body {
    85vh of scroll only the hero's bottom 15vh is still on screen — so full opacity buys a flat
    rectangle nobody has time to see, at the cost of the photograph.
 
-   What the wash actually has to hide is the fog. The three `.hero-fog-layer` banks composite to
-   roughly 0.68 white across the hero's bottom edge, which against `.scene-band`'s top edge
-   (~rgb(20 48 82)) is a ~9.8:1 step — a genuinely hard cut. Seam contrast by cap: 1.0 -> 1.24:1,
-   0.8 -> 1.26:1, 0.7 -> 1.64:1, 0.0 -> 9.8:1. So 0.8 costs 0.02 of seam quality against full
-   opacity and keeps 20% of the photograph; 0.7 costs 0.40 for another 10%. The return falls off a
-   cliff just past 0.8, which is why the knob sits here. Note the wash was never the band's colour
-   anyway — `--surface-deep-rgb` is darker and less saturated than the gradient over it — so
-   "dissolve into the band" was always approximate, and a cap is not a new inaccuracy.
+   The cap was originally sized against a much harder seam than it now has to cross. Three white
+   `.hero-fog-layer` banks used to composite to roughly 0.68 white along the hero's bottom edge,
+   which met the next section at a ~9.8:1 step, and the measured trade was 1.0 -> 1.24:1,
+   0.8 -> 1.26:1, 0.7 -> 1.64:1, 0.0 -> 9.8:1 — 0.8 gave up 0.02 of seam quality and kept 20% of
+   the photograph. Those banks are gone with the photograph they were drawn to patch, and the
+   hero's bottom edge is now the cut-out's own dark foreground, so the seam it has to cross is
+   mild either way. 0.8 stays on the surviving half of the argument: past it the wash buys a flat
+   rectangle nobody has time to see, at the cost of the image.
 
    Browsers without scroll-driven animations (Chrome <115, Firefox <144, Safari <26) get no wash
    at all and the hard cut. That degrade already shipped for all of them below `lg`; the pin was

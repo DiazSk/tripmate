@@ -36,7 +36,7 @@ export default function SiteFooter() {
           it would interrupt a screen-reader user on their way to the navigation below. */}
       <div className="relative mb-16 aspect-[1200/280] w-full overflow-hidden">
         <Image
-          src="/scenes/hero-dawn.jpg"
+          src="/scenes/footer_scenic.webp"
           alt=""
           aria-hidden
           fill
