@@ -10,7 +10,7 @@
  * behind a test that happens to pass. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deltaGroups, refineComposite, scorePatch } from "./patch.ts";
+import { deltaGroups, measuredGroups, refineComposite, scorePatch } from "./patch.ts";
 
 const stop = (name, time, cost = 10) => ({
   name, lat: 43.08, lng: 11.68, cost, why: "because", note: "5-minute walk",
@@ -120,6 +120,25 @@ test("refineComposite weights the delta by COMPOSITE_WEIGHTS, not evenly across 
   const scores = { delta, patch: { normalized: 1 }, operational: { failed: false } };
   const c = refineComposite(scores);
   assert.ok(Math.abs(c - 0.955) < 1e-9, `expected the weighted composite 0.955, got ${c}`);
+});
+
+test("measuredGroups counts the non-null deltas, and refineComposite stays ungated with just one", () => {
+  // compositeScore() refuses below MIN_GROUPS_FOR_COMPOSITE (3) because a thin absolute verdict on
+  // a plan isn't fair. A delta is a different question -- "did this patch make the trip worse" --
+  // and one group reporting a real drop is still real information, so refineComposite must NOT
+  // refuse here the way compositeScore would. measuredGroups is what lets a caller tell this
+  // one-group composite apart from a five-group one instead of the two reading identically.
+  const delta = {
+    routeEfficiency: null,
+    constraintAdherence: null,
+    weatherFeasibility: null,
+    mealVibeAlignment: null,
+    coverageGrounding: -0.2,
+  };
+  assert.equal(measuredGroups(delta), 1);
+  const scores = { delta, patch: { normalized: 1 }, operational: { failed: false } };
+  const c = refineComposite(scores);
+  assert.ok(c !== null, "one measurable group is real information, not a reason to return null");
 });
 
 test("deltaGroups subtracts per group and keeps nulls null", () => {

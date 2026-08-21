@@ -79,6 +79,17 @@ export function deltaGroups(before: CompositeGroups, after: CompositeGroups): Co
 }
 
 /**
+ * How many of a delta's five groups are non-null — the count that belongs on
+ * `RefineCellScores.measuredGroups`. Standalone rather than folded into `refineComposite`'s return,
+ * because the count is a fact about `delta` that the assembler of `RefineCellScores` needs
+ * alongside (not inside) the composite number; see the field's docblock in `types.ts` for why
+ * `refineComposite` stays ungated instead of refusing below some minimum.
+ */
+export function measuredGroups(delta: CompositeGroups): number {
+  return Object.values(delta).filter((v): v is number => v !== null).length;
+}
+
+/**
  * A refine cell's headline number: half "did the trip get worse", half "was the patch well-formed".
  *
  * The delta half is `1 + weighted-mean(delta)` clamped to [0,1], so leaving the plan's quality
