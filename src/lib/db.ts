@@ -122,6 +122,9 @@ addColumnIfMissing("trips", "user_answers_json", "TEXT");
 // benchmark invocation so the Perf Dashboard can diff two labeled batches.
 // Organic/manual usage keeps this null and shows up under "All time".
 addColumnIfMissing("llm_runs", "batch_tag", "TEXT");
+// Refine cells are keyed by (fixture, model, task); NULL is a generation cell. Nullable rather
+// than defaulted so every row written before refine existed still reads as a generation row.
+addColumnIfMissing("bench_results", "task_id", "TEXT");
 
 export interface TripRow {
   id: string;
@@ -381,6 +384,7 @@ export interface BenchResultRow {
   itinerary_md: string;
   scores_json: string;
   composite: number | null;
+  task_id: string | null;
   created_at: string;
 }
 
@@ -389,21 +393,22 @@ export function insertBenchResult(row: Omit<BenchResultRow, "id" | "created_at">
   const created_at = new Date().toISOString();
   db.prepare(
     `INSERT INTO bench_results
-       (id, fixture_id, model, run_id, trace_id, itinerary_md, scores_json, composite, created_at)
-     VALUES (@id, @fixture_id, @model, @run_id, @trace_id, @itinerary_md, @scores_json, @composite, @created_at)`
+       (id, fixture_id, model, run_id, trace_id, itinerary_md, scores_json, composite, task_id, created_at)
+     VALUES (@id, @fixture_id, @model, @run_id, @trace_id, @itinerary_md, @scores_json, @composite, @task_id, @created_at)`
   ).run({ ...row, id, created_at });
   return { ...row, id, created_at };
 }
 
-/** Most recent row per (fixture, model) pair. */
+/** Most recent row per (fixture, model, task). `task_id IS NULL` is the generation cell. */
 export function listLatestBenchResults(): BenchResultRow[] {
   return db
     .prepare(
       `SELECT * FROM bench_results
        WHERE rowid IN (
-         SELECT MAX(rowid) FROM bench_results GROUP BY fixture_id, model
+         SELECT MAX(rowid) FROM bench_results
+         GROUP BY fixture_id, model, COALESCE(task_id, '')
        )
-       ORDER BY fixture_id, model`
+       ORDER BY fixture_id, model, COALESCE(task_id, '')`
     )
     .all() as BenchResultRow[];
 }

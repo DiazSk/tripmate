@@ -188,6 +188,7 @@ export async function runBenchCell(fixture: BenchFixture, model: string): Promis
     itinerary_md: itineraryMd,
     scores_json: JSON.stringify(scores),
     composite,
+    task_id: null, // null indicates a generation cell, not a refine cell
   });
 
   return {
