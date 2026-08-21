@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { itineraryTimeoutMs, runClaude } from "./claude";
 import { insertRun, insertTripArtifacts } from "./db";
+import { getDestinationContext } from "./destinationContext";
 import { buildItineraryGenerationPrompt } from "./generationPrompt";
 import { loadSkill } from "./skill";
 import { buildTripContext } from "./tripContext";
@@ -22,6 +23,12 @@ export interface GenerateItineraryParams {
    * model. Omitted everywhere in the app, which keeps the trip-length-scaled default.
    */
   timeoutMs?: number;
+  /**
+   * The destination string as the traveler typed it. Only used as the destination-context cache
+   * key, so it should match what the legacy path passes for the same trip — otherwise both paths
+   * pay for their own copy of the same cached LLM call. Falls back to the reconciled region.
+   */
+  destination?: string | null;
 }
 
 export interface GenerateItineraryResult {
@@ -52,7 +59,28 @@ export async function generateItinerary(
 ): Promise<GenerateItineraryResult> {
   const { reconciled, poiDetails, tripId, model, timeoutMs } = params;
 
-  const tripContextMd = buildTripContext(reconciled, poiDetails);
+  const days = reconciled.rawFetch.dateContext.days;
+  const destination =
+    params.destination?.trim() || reconciled.rawFetch.destination.region || "";
+
+  // Festivals/safety/shopping, from the same cached call the legacy path already makes. Awaited
+  // rather than raced because Step 5 is deterministic and cheap, and the skill's destination-context
+  // branch is worth firing; it degrades to `null` (rendered "Unavailable") instead of throwing,
+  // since background colour must never be what stops a trip from being planned.
+  let destinationContext = null;
+  if (destination && days.length > 0) {
+    try {
+      destinationContext = await getDestinationContext(
+        destination,
+        days[0].date,
+        days[days.length - 1].date
+      );
+    } catch {
+      destinationContext = null;
+    }
+  }
+
+  const tripContextMd = buildTripContext(reconciled, poiDetails, destinationContext);
 
   const runId = randomUUID();
   insertRun({

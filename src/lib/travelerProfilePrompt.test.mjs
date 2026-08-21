@@ -44,10 +44,16 @@ test("returns an empty string when there are no flags", () => {
   assert.equal(formatTravelerProfile(null), "");
 });
 
-test("always states the pace target", () => {
+test("always states the pace target, and what it does not count", () => {
   const out = formatTravelerProfile(flags({ paceSpotsPerDay: 2, paceResolved: "slow" }));
-  assert.match(out, /about 2 stops per day/);
+  assert.match(out, /about 2 sightseeing stops per day/);
   assert.match(out, /"slow"/);
+  // The count used to be bare "stops per day", and the model counted meals toward it: a target of
+  // 3 came back as one sight plus lunch plus dinner, with the day over by 1pm. Both halves of the
+  // fix are asserted because either one alone reproduces the bug.
+  assert.match(out, /Meals, coffee and rest breaks do NOT count/);
+  assert.match(out, /span the whole day/);
+  assert.match(out, /dinner around 18:30-20:30/);
 });
 
 test("a low-energy family traveler gets mobility and kid lines", () => {

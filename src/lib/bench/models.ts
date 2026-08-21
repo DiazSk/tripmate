@@ -21,15 +21,18 @@ export interface BenchModel {
  * The app's production model is always first — it's the baseline every comparison is against —
  * and its two siblings are the SAME GENERATION.
  *
- * That generation match is the point: the app runs Haiku 4.5, so the question worth answering is
- * "what would Sonnet or Opus of that same generation buy me", not "what would a model two
- * generations newer buy me". Comparing 4.5 against 5 conflates the tier difference (Haiku →
- * Opus) with the generation difference (4.5 → 5), and no chart can separate them afterwards.
- * Set BENCH_MODELS to compare across generations deliberately.
+ * That generation match is the point: the app runs Sonnet 4.5, so the question worth answering is
+ * "what would Haiku or Opus of that same generation buy me", not "what would a model a generation
+ * newer buy me". Comparing 4.5 against 5 conflates the tier difference with the generation
+ * difference, and no chart can separate them afterwards.
+ *
+ * To weigh a 5-generation model deliberately, set BENCH_MODELS — but note that Sonnet 5 timed out
+ * twice at 216s on a 3-day trip here, so `BENCH_TIMEOUT_MS` has to go up with it or the sweep
+ * measures the timeout rather than the model.
  */
 const DEFAULT_MODELS: BenchModel[] = [
-  { id: MODEL, label: "Haiku 4.5" },
-  { id: "claude-sonnet-4-5", label: "Sonnet 4.5" },
+  { id: MODEL, label: "Sonnet 4.5" },
+  { id: "claude-haiku-4-5", label: "Haiku 4.5" },
   { id: "claude-opus-4-5", label: "Opus 4.5" },
 ];
 

@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  dayActiveSpan,
   dayPlanned,
   daySpend,
   daySpendByCategory,
@@ -94,4 +95,52 @@ test("normalizeDays repairs what the model and old database rows send", () => {
   assert.deepEqual(withStop.stops[0].tags, []);
 
   assert.deepEqual(normalizeDays(undefined), []);
+});
+
+test("dayActiveSpan measures first start to last end, and reads both time formats", () => {
+  const day = {
+    date: "2026-09-01",
+    weather: "",
+    stops: [
+      stop({ time: "8:00 AM", durationLabel: "2 hours" }),
+      stop({ time: "12:00 PM", durationLabel: "45 minutes" }),
+      stop({ time: "6:30 PM", durationLabel: "1.5 hours" }),
+    ],
+  };
+  const span = dayActiveSpan(day);
+  assert.equal(span.start, "8:00 AM");
+  assert.equal(span.end, "8:00 PM");
+  assert.equal(span.minutes, 720);
+
+  // 24-hour input, a bare hour, and an unreadable time that must not poison the span.
+  const mixed = dayActiveSpan({
+    date: "2026-09-01",
+    weather: "",
+    stops: [
+      stop({ time: "14:00", durationLabel: "1 hour" }),
+      stop({ time: "9 AM", durationLabel: "30 min" }),
+      stop({ time: "sometime", durationLabel: "3 hours" }),
+    ],
+  });
+  assert.equal(mixed.start, "9:00 AM");
+  assert.equal(mixed.end, "3:00 PM");
+  assert.equal(mixed.minutes, 360);
+
+  // Latest END wins, not the latest start: a long early stop can outlast a short later one.
+  const overlap = dayActiveSpan({
+    date: "2026-09-01",
+    weather: "",
+    stops: [
+      stop({ time: "9:00 AM", durationLabel: "8 hours" }),
+      stop({ time: "10:00 AM", durationLabel: "30 minutes" }),
+    ],
+  });
+  assert.equal(overlap.end, "5:00 PM");
+  assert.equal(overlap.minutes, 480);
+
+  assert.equal(dayActiveSpan({ date: "2026-09-01", weather: "", stops: [] }), null);
+  assert.equal(
+    dayActiveSpan({ date: "2026-09-01", weather: "", stops: [stop({ time: "", durationLabel: "" })] }),
+    null
+  );
 });

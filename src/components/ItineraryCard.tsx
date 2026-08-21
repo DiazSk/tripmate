@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Sparkles } from "lucide-react";
-import { DayPlan, Itinerary, Stop, StopCategory } from "@/lib/types";
+import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
 import { useStopTour } from "@/lib/useStopTour";
 import { daySpendByCategory } from "@/lib/itinerary";
+import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
+import ArrangeBoard from "./ArrangeBoard";
 import { formatMoney } from "@/lib/format";
 import BudgetBar from "./BudgetBar";
 import DayHeader, { DayEditUpdates } from "./DayHeader";
@@ -30,13 +32,6 @@ import {
   TransitIcon,
 } from "./icons";
 
-const CATEGORY_ICON: Record<StopCategory, typeof FoodIcon> = {
-  food: FoodIcon,
-  entry: EntryIcon,
-  transit: TransitIcon,
-  other: PinIcon,
-};
-
 function cityName(destination: string): string {
   return destination.split(",")[0].trim();
 }
@@ -51,32 +46,6 @@ function BlurredPhotoLayer({ photo, tint }: { photo: string; tint: string }) {
       />
       <div aria-hidden="true" className="absolute inset-0" style={{ background: tint }} />
     </>
-  );
-}
-
-/** Desktop-only column beside the stop list. The category tile is the base layer and
- *  never unmounts; the photo resolves over it on `.value-in`, matching StopList's own
- *  StopAvatar so neither jumps whenever its Wikipedia lookup happens to land. */
-function StackedPhoto({ name, category }: { name: string; category: StopCategory }) {
-  const photo = usePlacePhoto(name);
-  const [failed, setFailed] = useState(false);
-  const Icon = CATEGORY_ICON[category] ?? PinIcon;
-
-  return (
-    <div className="relative h-24 w-full">
-      <div className="flex h-24 w-full items-center justify-center rounded-xl bg-tag-neutral-bg text-accent">
-        <Icon className="h-6 w-6" />
-      </div>
-      {photo && !failed && (
-        // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
-        <img
-          src={photo}
-          alt=""
-          onError={() => setFailed(true)}
-          className="value-in absolute inset-0 h-24 w-full rounded-xl object-cover shadow-sm"
-        />
-      )}
-    </div>
   );
 }
 
@@ -106,6 +75,8 @@ export default function ItineraryCard({
   onLodgingActualCostChange,
   onEditDay,
   onChatDay,
+  onItineraryChange,
+  trip,
   activeDayIndex: controlledDayIndex,
   onActiveDayChange,
   animateReveal,
@@ -119,6 +90,13 @@ export default function ItineraryCard({
   onEditDay?: (dayIndex: number, updates: DayEditUpdates) => void;
   /** Mode A — open the chat scoped to this day. */
   onChatDay?: (dayIndex: number) => void;
+  /** Enables hand-rearranging on the full-page board (opened from a day's pencil, or the
+   *  "Arrange days" button). Re-timing happens locally in `moveStop`, so a drop resolves in the
+   *  same frame — no model call. The host gets a complete itinerary back to persist. */
+  onItineraryChange?: (next: Itinerary) => void;
+  /** Needed by the arrange board for the trip's name and budget. Optional so read-only callers
+   *  (which pass no `onItineraryChange` either) needn't supply it. */
+  trip?: TripSummary;
   /** Optional controlled day selection. The host owns it when this page unmounts the card to
    *  show something else (a stop's detail panel) — otherwise the day would reset to 1 on the
    *  way back, since remounting reinitialises local state. Uncontrolled when omitted. */
@@ -150,6 +128,23 @@ export default function ItineraryCard({
   // The very first "day changed" effect pass fires on mount too — when animating, that pass
   // must defer to the stagger effect below instead of instantly revealing everything.
   const skipNextInstantRevealRef = useRef(!!animateReveal);
+
+  /** The full-page arrange board, opened by a day's edit (pencil) control.
+   *
+   * Rearranging used to happen in this list, which meant a cross-day move had to be performed
+   * against a day the traveller couldn't see: drag onto a day *tab*, hold until it opened, then
+   * drop. The board shows every day at once instead, so both ends of a move are visible for the
+   * whole gesture — and this list goes back to being purely for reading. */
+  const [boardOpen, setBoardOpen] = useState(false);
+  /** Whether this card is an editing surface at all (the host gave us a way to commit changes). */
+  const canRearrange = !!onItineraryChange;
+
+  // Guardrails, recomputed from the itinerary itself rather than remembered from the last drop —
+  // so they describe the plan on screen whoever last changed it, the traveler or the model.
+  const findings = useMemo(
+    () => (canRearrange ? evaluateItinerary(itinerary, { budget }) : []),
+    [canRearrange, itinerary, budget]
+  );
 
   useEffect(() => {
     activeDayRef.current = dayIndex;
@@ -209,12 +204,22 @@ export default function ItineraryCard({
   // itself — on mount it pushed the panel down ~100px and hid the surface's own top row.
   // Setting `scrollLeft` on the one element that should move touches nothing else, and
   // centring reads better than "nearest" on a many-day row.
+  //
+  // Measured from bounding rects rather than `tab.offsetLeft`. `offsetLeft` is relative to the
+  // nearest *positioned* ancestor, and wrapping each tab in a `relative` drop zone made that
+  // wrapper the offset parent — so every tab reported ~0 and the strip scrolled to the start
+  // instead of to the active day. On a 7-day trip that left days 5-7 permanently off-screen: the
+  // arrows moved the selection but the strip never followed. Rects are independent of layout
+  // ancestry, so this can't be re-broken by wrapping the tabs in something else.
   useEffect(() => {
     const strip = dayTabStripRef.current;
     const tab = dayTabRefs.current[dayIndex];
     if (!strip || !tab) return;
+    const stripBox = strip.getBoundingClientRect();
+    const tabBox = tab.getBoundingClientRect();
+    const offsetWithinStrip = tabBox.left - stripBox.left + strip.scrollLeft;
     strip.scrollTo({
-      left: tab.offsetLeft - (strip.clientWidth - tab.clientWidth) / 2,
+      left: offsetWithinStrip - (strip.clientWidth - tabBox.width) / 2,
       behavior: "smooth",
     });
   }, [dayIndex]);
@@ -231,10 +236,11 @@ export default function ItineraryCard({
 
   // Scoped to day 1 only — see the `animateReveal` prop doc above.
   const revealingStops = !!animateReveal && dayIndex === 0;
+  // The shown day's findings, plus trip-wide ones (budget), which belong on whatever day is up.
+  const dayFindings: Guardrail[] = findings.filter(
+    (f) => f.dayIndex === dayIndex || f.dayIndex === null
+  );
   const { tiles, total } = dayBreakdown(day);
-  // Clamped to revealedCount so the column doesn't show three photos beside zero or one
-  // revealed stop mid-stagger.
-  const photoStops = day.stops.slice(0, Math.min(3, revealedCount));
   const tier = TIERS.find((t) => t.id === itinerary.tier);
   const dayCount = itinerary.days.length;
 
@@ -403,6 +409,14 @@ export default function ItineraryCard({
               animateReveal={animateReveal}
               editable={editable}
               onEditDay={onEditDay}
+              // The pencil opens the full-page board rather than an inline form: renaming a day
+              // and rearranging it are the same job, and the board can do both with every day in
+              // view. `isEditing` stays false so the inline rename form never takes over the
+              // header — the board owns that now.
+              isEditing={false}
+              onEditingChange={(editing) => {
+                if (editing && canRearrange) setBoardOpen(true);
+              }}
             />
           </div>
           {/* Mode A, day-scoped. Sits beside the day header because that is the day's own
@@ -539,41 +553,57 @@ export default function ItineraryCard({
           </div>
         )}
 
-        {/* Photo column sits beside the stop list only, so it starts level with the first
-            stop rather than alongside the lodging row above it. */}
-        <div className="flex gap-4">
-          <div className="min-w-0 flex-1">
-            {day.stops.length === 0 ? (
-              <p className="text-sm text-muted">
-                No stops planned for this day — it&rsquo;s yours to fill.
-              </p>
-            ) : (
-              <StopList
-                stops={day.stops}
-                revealedCount={revealedCount}
-                onSelect={selectStop}
-                // Bidirectional highlight: a row lights up when its marker card on the globe
-                // is hovered or stepped onto by the tour, and hovering a row lights its
-                // marker. Both surfaces read and write the same context index, so neither
-                // knows the other exists.
-                highlightedIndex={hoveredIndex ?? activeIndex}
-                onHoverStop={(index) => setHoveredIndex(index)}
-                revealAnimation={revealingStops}
-              />
-            )}
-          </div>
+        {day.stops.length === 0 ? (
+          <p className="text-sm text-muted">
+            No stops planned for this day — it&rsquo;s yours to fill.
+          </p>
+        ) : (
+          <StopList
+            stops={day.stops}
+            revealedCount={revealedCount}
+            onSelect={selectStop}
+            // Bidirectional highlight: a row lights up when its marker card on the globe
+            // is hovered or stepped onto by the tour, and hovering a row lights its
+            // marker. Both surfaces read and write the same context index, so neither
+            // knows the other exists.
+            highlightedIndex={hoveredIndex ?? activeIndex}
+            onHoverStop={(index) => setHoveredIndex(index)}
+            revealAnimation={revealingStops}
+          />
+        )}
 
-          {/* Desktop only by design: at `sm` the docked panel is 360px wide, and a 112px
-              photo column off that leaves the stop names nowhere to wrap. */}
-          {photoStops.length > 0 && (
-            <div className="hidden w-28 shrink-0 flex-col gap-2 lg:flex">
-              {photoStops.map((stop, i) => (
-                <StackedPhoto key={i} name={stop.name} category={stop.category} />
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Findings for the day on screen, plus the trip-wide budget one. Computed locally, so
+            they appear the instant a drop lands rather than after a model round trip. */}
+        {dayFindings.length > 0 && (
+          <ul className="mt-4 space-y-1.5">
+            {dayFindings.map((finding, i) => (
+              <li
+                key={i}
+                className="flex gap-1.5 rounded-lg bg-amber-400/10 px-2.5 py-2 text-xs text-amber-200"
+              >
+                <span aria-hidden="true">⚠️</span>
+                <span>{finding.message}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {canRearrange && itinerary.days.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted/70">
+              Rearranging happens on one page, with every day side by side.
+            </p>
+            <button
+              type="button"
+              onClick={() => setBoardOpen(true)}
+              className="shrink-0 rounded-full border border-card-border bg-white/10 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-white/20"
+            >
+              Arrange days
+            </button>
+          </div>
+        )}
       </div>
+
 
       {/* The band's ground is constant. It used to branch on whether the header photo had
           resolved yet, so the tiles' background/border/text changed a second after paint;
@@ -637,6 +667,19 @@ export default function ItineraryCard({
           </div>
         </div>
       </div>
+
+      {/* Rendered from here so the card owns the state that opens it, but portalled to the body
+          inside ArrangeBoard — a full-screen surface cannot live inside a 520px docked panel. */}
+      {boardOpen && trip && onItineraryChange && (
+        <ArrangeBoard
+          trip={trip}
+          itinerary={itinerary}
+          editable={editable}
+          onEditDay={onEditDay}
+          onItineraryChange={onItineraryChange}
+          onClose={() => setBoardOpen(false)}
+        />
+      )}
     </div>
   );
 }

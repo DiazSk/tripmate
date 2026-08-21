@@ -726,6 +726,19 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
   // Pre-save editing is local-state only — there's no trip row to persist to
   // until save() runs, so these just mutate the in-progress itinerary.
+  /** A hand-rearranged itinerary from the card's drag-and-drop. `moveStop` has already re-timed the
+   *  affected days, so there is nothing to recompute here — and nothing to persist yet, same as the
+   *  inline day edits.
+   *
+   *  This wiring is why the feature is reachable at all. `ItineraryCard` renders `ArrangeBoard`
+   *  itself, but `onItineraryChange` is optional and a caller that omits it gets a board whose drops
+   *  go nowhere. The handler lived in `page.tsx` until that file was split into this one, so the
+   *  merge that brought the board across would otherwise have landed it dead. */
+  function handleRearrange(next: Itinerary) {
+    setRevealAnimation(false);
+    setItinerary(next);
+  }
+
   function handleEditDay(dayIndex: number, updates: DayEditUpdates) {
     if (!itinerary) return;
     const updated: Itinerary = structuredClone(itinerary);
@@ -1300,6 +1313,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   onActiveDayChange={setActiveDayIndex}
                   onEditDay={handleEditDay}
                   onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
+                  onItineraryChange={handleRearrange}
                   animateReveal={revealAnimation}
                 />
               )}

@@ -127,3 +127,67 @@ export function normalizeDays(days: unknown): DayPlan[] {
     })),
   }));
 }
+
+export interface DayActiveSpan {
+  /** First stop's start and last stop's end, both as "8:00 AM". */
+  start: string;
+  end: string;
+  /** Start to end in minutes, travel and gaps included — the §12c fatigue number. */
+  minutes: number;
+}
+
+/** "8:00 AM" / "8 AM" / "14:00" → minutes since midnight, or null if unparseable. */
+export function parseClock(time: string): number | null {
+  const m = /^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*$/i.exec(time);
+  if (!m) return null;
+  let hour = Number(m[1]);
+  const minute = Number(m[2] ?? 0);
+  const meridiem = m[3]?.toLowerCase();
+  if (hour > 23 || minute > 59) return null;
+  // 12-hour input only when a meridiem says so; "14:00" is already 24-hour.
+  if (meridiem === "pm" && hour < 12) hour += 12;
+  if (meridiem === "am" && hour === 12) hour = 0;
+  return hour * 60 + minute;
+}
+
+/** "2 hours" / "1.5 hours" / "45 minutes" → minutes. 0 when there's nothing to read. */
+export function parseDuration(label: string): number {
+  const m = /(\d+(?:\.\d+)?)\s*(h|hr|hour|hours|m|min|mins|minute|minutes)/i.exec(label);
+  if (!m) return 0;
+  const value = Number(m[1]);
+  return /^h/i.test(m[2]) ? Math.round(value * 60) : Math.round(value);
+}
+
+export function formatClock(minutes: number): string {
+  const total = ((minutes % 1440) + 1440) % 1440;
+  const hour24 = Math.floor(total / 60);
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${String(total % 60).padStart(2, "0")} ${hour24 < 12 ? "AM" : "PM"}`;
+}
+
+/**
+ * How long the day actually runs, end to end.
+ *
+ * Computed here rather than asked of the model: judging "is this day too long" against the
+ * pace guardrail means comparing a number to a threshold, and a model handed raw clock times
+ * has to derive that number first — which it reliably narrates in prose and then fails to act
+ * on. Handing it the total instead turns the check into a comparison.
+ *
+ * Takes the earliest start and the latest end across the day's stops rather than trusting array
+ * order, and returns null when no stop carries a readable time.
+ */
+export function dayActiveSpan(day: DayPlan): DayActiveSpan | null {
+  let earliest: number | null = null;
+  let latest: number | null = null;
+
+  for (const stop of day.stops) {
+    const start = parseClock(stop.time ?? "");
+    if (start === null) continue;
+    const end = start + parseDuration(stop.durationLabel ?? "");
+    if (earliest === null || start < earliest) earliest = start;
+    if (latest === null || end > latest) latest = end;
+  }
+
+  if (earliest === null || latest === null) return null;
+  return { start: formatClock(earliest), end: formatClock(latest), minutes: latest - earliest };
+}

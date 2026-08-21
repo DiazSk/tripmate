@@ -10,6 +10,7 @@ rolls up the timeline across all of them.
 | [`frontend.md`](./frontend.md) | Pages, components, theme |
 | [`llm.md`](./llm.md) | Prompting, the `claude` CLI integration, trace logging |
 | [`system-design.md`](./system-design.md) | Diagrams for the preference step + LLM trace viewer |
+| [`itinerary-quality.md`](./itinerary-quality.md) | Rubric audit of plan quality, and what's data-blocked |
 
 ## What it is
 
@@ -30,7 +31,7 @@ viewable later via a Leaflet-based map at `/trip/[id]`.
 | Map | Leaflet / react-leaflet (saved-trip view at `/trip/[id]`) |
 | 3D globe | CesiumJS (home page only) — ion world imagery/terrain if `NEXT_PUBLIC_CESIUM_ION_TOKEN` is set, else bundled offline Natural Earth II + ellipsoid terrain |
 | Storage | SQLite via `better-sqlite3` (requires Node ≥ 22) |
-| LLM | `claude` CLI, spawned as a one-shot subprocess (Haiku model, no tools) |
+| LLM | `claude` CLI, spawned as a one-shot subprocess (Sonnet 5, no tools) |
 | Weather | Open-Meteo geocoding + forecast |
 
 ## How to maintain the tracker docs
