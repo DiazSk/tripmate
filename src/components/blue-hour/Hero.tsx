@@ -150,7 +150,7 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
     // bottom-anchored crop put the CTA on the yurts; with the layers at natural size the centre is
     // already right — the reference's own text block measures 241px in a 639px section, landing at
     // exactly `(639-241)/2`.
-    <section className="pointer-events-auto relative flex aspect-[1440/922] flex-col items-center justify-center overflow-hidden px-5 text-center sm:px-6 [@media(max-aspect-ratio:3/5)]:aspect-[375/812]">
+    <section className="pointer-events-auto relative flex aspect-[1440/922] flex-col items-center justify-center overflow-hidden px-5 text-center sm:px-6 [@media(max-aspect-ratio:3/5)]:aspect-[375/812] [@media(max-aspect-ratio:3/5)]:pb-[5.375rem]">
       {/* BACK — mountains, hanging from the top edge.
           Its own sky is intact, so this is the one layer that puts bright imagery behind the type;
           the veil below is what makes that safe. Switched on aspect ratio rather than a width
@@ -177,12 +177,8 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
           `useLineReveal` masks the line boxes it *measures*, so a wrap change is a change to the
           reveal. It is `static` with no `z-index`, which matters: it must not open a stacking
           context, or the z values on its children could not straddle FRONT.
-
-          `w-full` in the portrait composition only, so the CTA below can span the section's real
-          content box. It cannot change where the headline wraps — "Somewhere." is one word at 48px
-          and the subline carries its own `max-w-[22rem]` — which is the thing this wrapper exists to
-          protect, since `useLineReveal` masks the line boxes it measures. */}
-      <div className="[@media(max-aspect-ratio:3/5)]:w-full">
+ */}
+      <div>
         {/* `z-2` — the sandwich. This is the one element FRONT passes in front of, so the steppe's
             horizon cuts across the bottom of the word instead of stopping beneath it. Everything
             else in this block sits at `z-4`, above FRONT, so the support copy stays fully legible.
@@ -256,21 +252,58 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
 
             Type and padding are the reference's too: `0.875rem / 600 / -0.5px` tracking at 90%
             line-height, in a `1.25rem 2rem` box — 4px taller than ours was. */}
-        {/* **Full width in the portrait composition, and still inside the centred block** — the
-            reference's `full-width-mobile` button variant, without moving where the button sits.
-            Docking it to the section's floor was tried and reverted: this hero's height follows its
-            *width* on purpose (see the note above the `<section>`), so it is deliberately taller
-            than a phone screen and its floor lands roughly 200px below the fold. The button is at
-            ~560px today, which is on screen; the "bottom" of a section that runs past the viewport
-            is further from the reader, not closer. Pulling it out of the flow also shortens the
-            centred block, which drops the headline ~45px into the grass and loses the horizon cut
-            the whole two-layer sandwich exists to produce.
+        {/* **Docked to the floor in the portrait composition, full width between equal gutters.**
+            This is the reference's own construction, measured off its live DOM at 402px rather than
+            inferred: its `.intro__button.mobile-visible` is `position: absolute; inset: 0` with
+            `align-items: flex-end`, and the anchor inside comes out 351px wide with 26px of gutter
+            on the left, the right, and below. Equal inset on three sides — so ours takes `inset-x-5`
+            / `bottom-5`, which is that same equal inset at this project's own 20px page gutter
+            rather than importing their 25.728px into a page where nothing else uses it.
 
-            `w-full` here needs the wrapper's width to be the real content box: this `div` sits
-            inside a shrink-to-fit flex item, so without the mobile `w-full` on that ancestor the
-            button sizes to the subline's `max-w-[22rem]` and stops short of each gutter. */}
+            `inset-x-5` and not `inset-x-0`: an absolutely positioned element's containing block is
+            its ancestor's *padding box*, so `inset-x-0` would ignore the section's `px-5` and touch
+            the screen edge.
+
+            **The section's `pb-[4.5rem]` is what makes this safe, and it is the non-obvious half.**
+            Taking the button out of the flow shortens the centred block by its own height plus its
+            `mt-8`, so the block re-centres ~45px *lower* — the first attempt at this dropped
+            "Somewhere." below the horizon instead of being cut by it, losing the one effect the
+            two-layer sandwich exists to produce. The reference does not hit this because its text
+            block is placed by `padding-top`, not centred, so its button leaving the flow moves
+            nothing. Ours stays centred and reserves the space instead.
+
+            86px, and it is measured rather than derived — worth saying, because the derived number is
+            wrong. The button's own footprint is 73px (53px tall plus its 20px offset), which leaves
+            the headline at 346px; the block's real height is 106px, not the 118px the type metrics
+            suggest, so holding the headline at the 339px it sat at before this change needs
+            `(870 - pb - 106) / 2 = 339`. Re-measure this if the subline's copy or the type step
+            changes, rather than trusting the button's box. Padding-bottom cannot disturb the button
+            itself — the padding box's bottom edge is the section's bottom edge either way.
+
+            Both branches are media-scoped, with no bare `relative`/`mt-8` left to inherit — this
+            file's own hard-won pattern, see `LAYER_WIDTH`, where an unprefixed `w-full` beat the
+            arbitrary media variant meant to override it.
+
+            Known, and the reference's too: at 402px this hero is 870px against a visible viewport of
+            roughly 700px once Safari's chrome is showing, so the floor — and the button on it — sits
+            below the fold. Vita ships exactly that (858px hero, button 26px off its floor). It falls
+            out of the `aspect-ratio` decision above, which both projects made deliberately.
+
+            **`z-11` in the docked branch, above `.hero-dusk`, and that is the consequence of the
+            line above rather than a preference.** `.hero-dusk` is the scroll-driven wash that fades
+            this whole hero into the next beat: `rgb(var(--surface-deep-rgb))` at `z-10`, resting at
+            `opacity: 0`. Since the docked button is below the fold, *reaching* it means scrolling,
+            and scrolling is exactly what raises that wash — measured, the CTA clears the fold around
+            scrollTop 450 where the wash is at 0.353, which renders a white pill as
+            `rgb(170,181,184)`. The primary action arrived on screen already greyed out. Above the
+            wash it stays white while the scenery behind it fades, which is the right division: the
+            photograph is leaving, the button is not.
+
+            Landscape keeps `z-4`. There the button is centred and fully visible at rest with the
+            wash at zero, so fading with the composition as the hero scrolls away is correct — it is
+            leaving with everything else, not being scrolled toward. */}
         <div
-          className="hero-rise relative z-[4] mt-8 flex justify-center [@media(max-aspect-ratio:3/5)]:w-full"
+          className="hero-rise flex justify-center [@media(min-aspect-ratio:3/5)]:z-[4] [@media(max-aspect-ratio:3/5)]:z-[11] [@media(min-aspect-ratio:3/5)]:relative [@media(min-aspect-ratio:3/5)]:mt-8 [@media(max-aspect-ratio:3/5)]:absolute [@media(max-aspect-ratio:3/5)]:inset-x-5 [@media(max-aspect-ratio:3/5)]:bottom-5"
           style={{ animationDelay: "300ms" }}
         >
           <button
