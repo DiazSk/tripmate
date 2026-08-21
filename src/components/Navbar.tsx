@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bookmark, Compass, Sparkles, UserRound } from "lucide-react";
+import LogoMark from "@/components/LogoMark";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
+import { useScrollContainer } from "@/lib/scrollContainer";
 
 // Same ease every other motion in this app already uses for a "smooth, not
 // snappy" settle (--marker-transition, --scene-hover, the *-in keyframes).
@@ -19,23 +21,44 @@ const MENU_ITEMS = [
   { id: "profile", label: "Profile", icon: UserRound, kind: "link" as const, href: "/profile" },
 ];
 
-const menuItemClass =
-  "group flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium text-foreground transition-colors hover:bg-white/8 active:bg-white/12 focus-visible:bg-white/8 focus-visible:outline-none";
+const menuItemBase =
+  "group flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium transition-colors hover:bg-white/8 hover:text-accent active:bg-white/12 focus-visible:bg-white/8 focus-visible:outline-none";
+
+/** Swapped rather than appended, for the same reason as `navLink` below. */
+const menuItem = (active = false) =>
+  `${menuItemBase} ${active ? "text-accent" : "text-foreground"}`;
 
 // Shared style for every link in the nav, aside from the wordmark — plain
 // text-foreground, no hero-legible, since this bar is real glass, not bare canvas.
 // The rule arrives on hover/focus rather than sitting under every item permanently. Four
 // always-underlined items read as unstyled anchors, and the underline was carrying no
 // information: everything in this bar is a link, so marking all of them marks none of them.
-// The hover state keeps the affordance where it means something, and text-foreground →
-// white on hover carries it for anyone who can't see the 1px rule.
-const navLinkClass =
-  "inline-flex min-h-11 items-center text-sm font-medium text-foreground decoration-white/60 underline-offset-4 transition-colors hover:text-white hover:underline focus-visible:rounded-sm focus-visible:underline focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none";
+// The hover state keeps the affordance where it means something. It carries two signals, not
+// one: the rule appears *and* the text goes accent. Colour alone would leave anyone who cannot
+// separate #fb9826 from white with no hover feedback at all, which is the reason the underline
+// survived the cut in the first place.
+const navLinkBase =
+  "inline-flex min-h-11 items-center text-sm font-medium decoration-accent/60 underline-offset-4 transition-colors hover:text-accent hover:underline focus-visible:rounded-sm focus-visible:underline focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none";
 
-// Landing-only: the two beats worth a direct jump to. Deliberately excludes the final
-// reveal section — naming it in a permanent nav item is exactly the shortcut that would
-// undo the "uncover Plan a Trip only at the end" design the rest of the scroll story
-// builds toward.
+/**
+ * The colour is swapped, not appended.
+ *
+ * `text-foreground` and `text-accent` are both `color` utilities at identical specificity, so
+ * concatenating them leaves the winner to Tailwind's output order — which is how the first version
+ * of this rendered a white "active" link while its `aria-current` was already correct. Exactly one
+ * colour utility is emitted per link.
+ *
+ * `aria-current` accompanies it wherever it is used, so the state is never colour alone.
+ */
+const navLink = (active = false) =>
+  `${navLinkBase} ${active ? "text-accent" : "text-foreground"}`;
+
+// Landing-only: the two beats worth a direct jump to.
+// It used to say this "deliberately excludes the final reveal section", because naming the
+// closing poster in the nav would have short-circuited the withheld CTA. That poster is retired
+// and the CTA is in the hero now, so the exclusion no longer defends anything — these two are
+// simply the sections a visitor might want to jump *back* to. Plans and Reach are deliberately
+// not here: five items in a bar this size is a menu, not wayfinding.
 const SECTION_LINKS = [
   { id: "journey", label: "The Journey" },
   { id: "how-it-works", label: "How It Works" },
@@ -45,7 +68,7 @@ const SECTION_LINKS = [
  * The app's one top bar — fixed and blurred through the entire scroll on every route,
  * replacing the old plain-text wordmark that used to sit unblurred over the bare globe.
  * Also the one place "My memories"/"New trip" live now: both used to be scattered across
- * individual pages as bare-canvas links (HeroPoster's CTA row, page.tsx's plan step,
+ * individual pages as bare-canvas links (the landing's closing CTA row, page.tsx's plan step,
  * trips/page.tsx, TripView.tsx) — consolidated here since they're utility wayfinding,
  * not page content, and don't need to float in and out with scroll position or step.
  *
@@ -56,12 +79,60 @@ const SECTION_LINKS = [
  * into something this component can read — a real change for two nav links, and out of
  * scope here. "My memories" has no such gap; it's a plain route, always present.
  */
+/**
+ * Which section anchor is currently on screen, or null.
+ *
+ * `IntersectionObserver` rather than a scroll handler: the callback fires only when a section
+ * crosses the threshold, where a scroll listener would run on every frame of every scroll for a
+ * value that changes five times a page.
+ *
+ * Two details the naive version gets wrong. The `root` has to be AppShell's content overlay —
+ * `window` never scrolls here (see `scrollContainer.ts`), so a null root observes a viewport that
+ * never moves and nothing ever intersects. And with several sections tall enough to be on screen
+ * at once, "is intersecting" is ambiguous; the topmost intersecting one is the one the visitor is
+ * reading, so entries are sorted by position and the first wins.
+ */
+function useActiveSection(ids: string[], enabled: boolean): string | null {
+  const container = useScrollContainer();
+  const [active, setActive] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const root = container?.current ?? null;
+    const sections = ids
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
+    if (sections.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      () => {
+        const onScreen = sections
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            const bottom = root ? root.getBoundingClientRect().bottom : window.innerHeight;
+            return r.top < bottom * 0.5 && r.bottom > 0;
+          })
+          .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+        setActive(onScreen.length ? onScreen[onScreen.length - 1].id : null);
+      },
+      { root, threshold: [0, 0.25, 0.5, 0.75, 1] }
+    );
+    sections.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [ids, enabled, container]);
+
+  return active;
+}
+
+const SECTION_IDS = SECTION_LINKS.map((l) => l.id);
+
 export default function Navbar() {
   const pathname = usePathname();
   const isHome = pathname === "/";
   const isTripDetail = pathname.startsWith("/trip/");
   const navRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const activeSection = useActiveSection(SECTION_IDS, pathname === "/");
 
   // Section links only exist on `/`, so there's nothing for the menu to hold — and
   // nothing to leave stuck open — on any other route. Reset during render rather
@@ -100,10 +171,17 @@ export default function Navbar() {
       ref={navRef}
       className="glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-center justify-between px-5 sm:px-6"
     >
+      {/* Mark then wordmark, which is the reference's own header arrangement. `gap-2.5` and
+          `h-[1.1em]` size the mark off the wordmark rather than in pixels, so the two stay in
+          proportion if the type step ever moves — and `LogoMark` fills `currentColor`, so it
+          inherits `text-foreground` here and the focus colour on keyboard focus without a second
+          rule. The mark is `aria-hidden`; the link's accessible name stays "TripMate" rather than
+          becoming "graphic TripMate". */}
       <Link
         href="/"
-        className="inline-flex min-h-11 items-center font-display text-xl font-semibold tracking-tight text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+        className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold tracking-tight text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
       >
+        <LogoMark className="h-[1.1em] w-[1.1em]" />
         TripMate
       </Link>
       <div className="flex items-center gap-4 sm:gap-6">
@@ -119,26 +197,27 @@ export default function Navbar() {
                 key={link.id}
                 href={`#${link.id}`}
                 onClick={(e) => scrollToSection(e, link.id)}
-                className={navLinkClass}
+                aria-current={activeSection === link.id ? "location" : undefined}
+                className={navLink(activeSection === link.id)}
               >
                 {link.label}
               </a>
             ))}
-            <Link href="/trips" className={navLinkClass}>
+            <Link href="/trips" className={navLink()}>
               My memories
             </Link>
-            <Link href="/profile" className={navLinkClass}>
+            <Link href="/profile" className={navLink()}>
               Profile
             </Link>
           </div>
         )}
         {pathname === "/trips" && (
-          <Link href="/" className={navLinkClass}>
+          <Link href="/" className={navLink()}>
             New trip
           </Link>
         )}
         {isTripDetail && (
-          <Link href="/trips" className={navLinkClass}>
+          <Link href="/trips" className={navLink()}>
             My memories
           </Link>
         )}
@@ -146,7 +225,7 @@ export default function Navbar() {
             explicitly rather than as a `!isHome` catch-all so the internal /backend
             dashboards — which render this same nav — don't pick it up too. */}
         {(pathname === "/trips" || isTripDetail) && (
-          <Link href="/profile" className={navLinkClass}>
+          <Link href="/profile" className={navLink()}>
             Profile
           </Link>
         )}
@@ -214,10 +293,16 @@ export default function Navbar() {
                     href={`#${item.id}`}
                     onClick={(e) => scrollToSection(e, item.id)}
                     tabIndex={menuOpen ? 0 : -1}
+                    aria-current={activeSection === item.id ? "location" : undefined}
                     style={rowStyle}
-                    className={`${menuItemClass} transition-[opacity,transform,background-color] duration-300`}
+                    className={`${menuItem(activeSection === item.id)} transition-[opacity,transform,background-color,color] duration-300`}
                   >
-                    <Icon size={18} className="text-muted transition-colors group-hover:text-foreground" />
+                    <Icon
+                      size={18}
+                      className={`transition-colors group-hover:text-accent ${
+                        activeSection === item.id ? "text-accent" : "text-muted"
+                      }`}
+                    />
                     {item.label}
                   </a>
                 ) : (
@@ -227,9 +312,9 @@ export default function Navbar() {
                     onClick={() => setMenuOpen(false)}
                     tabIndex={menuOpen ? 0 : -1}
                     style={rowStyle}
-                    className={`${menuItemClass} transition-[opacity,transform,background-color] duration-300`}
+                    className={`${menuItem()} transition-[opacity,transform,background-color] duration-300`}
                   >
-                    <Icon size={18} className="text-muted transition-colors group-hover:text-foreground" />
+                    <Icon size={18} className="text-muted transition-colors group-hover:text-accent" />
                     {item.label}
                   </Link>
                 );

@@ -517,7 +517,7 @@ test("with no booked logistics every slot is expected", () => {
 
 test("usableSlot reads a booked arrival as consuming the morning it lands in", () => {
   // §11 has no slot blocks, so format_adherence no longer scores slot coverage — but the arrival
-  // and departure boundaries this encodes still govern feasibility and skill §4e, so the helper
+  // and departure boundaries this encodes still govern feasibility and skill §4c-bis, so the helper
   // stays covered. A 14:30 arrival plus the 90-minute transfer buffer eats day 1's morning.
   const arriving = withLogistics("14:30", null);
   assert.equal(usableSlot("Morning", 0, 3, arriving), false);

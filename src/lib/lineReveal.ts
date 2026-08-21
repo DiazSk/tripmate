@@ -32,7 +32,7 @@ import { useScrollContainer } from "@/lib/scrollContainer";
  *   measurement is garbage.
  * - **Re-split once fonts land.** Line breaks are a function of the font's metrics, so a split
  *   measured against the fallback face wraps at the wrong words. `document.fonts.ready` is the
- *   only reliable signal, and this app loads four webfonts.
+ *   only reliable signal, and this app loads a webfont (one, now — see The One Face Rule).
  */
 export function useLineReveal(
   ref: RefObject<HTMLElement | null>,

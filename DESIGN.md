@@ -2,14 +2,15 @@
 name: TripMate
 description: Dark frosted glass over a live photorealistic globe, with one warm accent reserved for interaction.
 colors:
-  canvas: "#0b0f19"
-  surface-deep: "rgb(15 23 42)"
-  foreground: "#f4f7fa"
-  muted: "#97a3b6"
-  on-deep: "#f4f7fa"
-  accent: "#ffb340"
-  accent-hover: "#ffc266"
-  accent-foreground: "#3d2600"
+  canvas: "#091b20"
+  surface-deep: "rgb(13 46 55)"
+  foreground: "#ffffff"
+  muted: "rgba(255, 255, 255, 0.6)"
+  on-deep: "#ffffff"
+  accent: "#fb9826"
+  accent-hover: "#fcac52"
+  accent-foreground: "#091b20"
+  map-dot: "#fba13a"
   card-border: "rgba(255, 255, 255, 0.12)"
   glass-foreground: "#ffffff"
   glass-muted: "#cbd5e1"
@@ -29,44 +30,65 @@ typography:
   root:
     fontSize: "clamp(16px, 1.13vw, 20px)"
     note: "Fluid root; every rem below scales with it. Floors at 16px, never shrinks."
-  hero:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "clamp(2.5rem, 8vw, 6rem)"
-    fontWeight: 800
-    lineHeight: 0.88
-    letterSpacing: "-0.035em"
-    fontVariation: "font-stretch: 125%"
+  family:
+    all: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    note: "One face for the whole product — see The One Face Rule. There is no second family."
+  tracking:
+    note: "Tightens as type grows, which is the inverse of the usual instinct. Nothing at zero or positive."
+    display: "-0.076em"
+    poster: "-0.075em"
+    cardTitle: "-0.09em"
+    heading: "-0.06em"
+    label: "-0.045em"
+    body: "-0.04em"
+  poster:
+    fontSize: "clamp(3rem, 11vw, 13rem)"
+    fontWeight: 900
+    lineHeight: 0.92
+    letterSpacing: "-0.075em"
+    note: "The two one-word posters only. No font-stretch — see The Width-Axis Rule is retired."
+  sectionHeading:
+    fontSize: "clamp(2rem, 5vw, 3.75rem)"
+    fontWeight: 600
+    lineHeight: 1.05
+    letterSpacing: "-0.076em"
+  stat:
+    fontSize: "2.81rem"
+    fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "-0.085em"
+    note: "Step numbers and footer navigation."
+  cardTitle:
+    fontSize: "1.75rem"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.09em"
   display:
-    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
     fontSize: "1.5rem"
     fontWeight: 600
     lineHeight: 1.2
-    letterSpacing: "-0.01em"
-  sceneDisplay:
-    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
-    fontStyle: "italic"
-    fontSize: "1.875rem"
-    fontWeight: 400
+    letterSpacing: "-0.06em"
   title:
-    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
     fontSize: "1.125rem"
     fontWeight: 600
     lineHeight: 1.3
   body:
-    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.625
+    letterSpacing: "-0.04em"
   field:
-    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "1rem"
     fontWeight: 500
     lineHeight: 1.4
   label:
-    fontFamily: "Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 600
-    letterSpacing: "0.025em"
+    letterSpacing: "-0.045em"
+  index:
+    fontSize: "0.62rem"
+    fontWeight: 600
+    note: "Step numbers beside an icon. An index, not a headline — see How it actually works."
 rounded:
   sm: "6px"
   md: "12px"
@@ -219,6 +241,25 @@ or the separation between map and interface erodes one reasonable-looking case a
 
 **The Darken-Never-Lighten Rule.** Anything layered over photography or terrain is tinted toward slate or black, never toward white. Over the itinerary's photo bands the budget tiles are black-tinted glass at `bg-black/25`; white-tinted tiles drop their labels to roughly 2:1 over a bright photo. The Total row keeps its amber fill, which is opaque and so unaffected by whatever is behind it.
 
+**The Photograph-Is-Not-A-Surface Rule.** A scrim over destination photography makes *large* type
+safe and small type only apparently safe. Measured across eight cities: every one resolves to a real
+cityscape, but mean luminance ranges 0.040 to 0.348 and Kyoto peaks at 0.947 — near-white sky. White
+body text over that peak is 2.41:1 under a 60% scrim and 3.56:1 under 75%, so no flat scrim rescues
+it. The split that follows is the reference's own Combine construction: **large type on the
+photograph, everything small or dense in a darkened band.** The generation screen is built on it —
+a top-weighted gradient (0.94 → 0.90 at 34% → 0.55 at 60% → 0.88) under the city name and the fact,
+and a `0.92` band under the steps, forecast and controls. Verified by sampling the composited pixels
+behind every text run with the text itself hidden, across five cities — 40 measurements, all
+passing. Worst case: 3.81:1 for large type on the photograph against its 3:1 bar, 5.10:1 for the
+two small runs that remain up there (they survive only because the gradient holds 0.90+ over the
+top third), and 8.56:1 for small text down in the band. The first build of that screen
+violated its own rule by leaving a 14px summary line and a 14px opener label on the photo; they
+measured 2.97–3.65:1 on **every** city tested. Measure the pixels — a scrim that looks generous is
+routinely not. Two traps in the measuring itself: Tailwind v4 emits `oklab(...)`, so hand-rolled
+rgb parsing reads the lightness as a red channel and cheerfully reports legible text as 1.00:1 —
+composite through a real canvas or sample rendered pixels instead. And a photo needs *worst*-pixel
+sampling, not mean: the means here were a comfortable 3.9–8.4:1 while the worst pixels failed.
+
 **The Constant-Ground Rule.** A surface's colour must not depend on whether an image has finished loading. The day-spend band once branded its background, its border, its text colour *and* all five tiles on `headerPhoto` being truthy, so the whole band changed character a second or two after first paint. The band now paints `rgb(var(--surface-deep-rgb) / 0.7)` unconditionally and the blurred photo arrives *behind* it on `.value-in`: a photo adds texture, never a repaint. The same applies to a stop's avatar — the category tile is the base layer and never unmounts, the photo resolves over it.
 
 **The Mounted-Surface Gate.** Cesium boots on exactly two surfaces — `/trip/[id]`, and `/` from the moment generation starts through the result view — and the gate is a boolean on `MapCameraProvider` (`globeWanted`), set by the two components that own those surfaces via `useGlobeOnScreen`. It replaced a `globeVisibility.ts` path list, and it is not a pathname for a reason a path list cannot fix: `/` serves three steps from local state, and `/trip/<unknown-id>` renders `not-found.tsx` — a glass card that wants no globe, on a path indistinguishable from a real trip's. Both would have burned the full boot for a card. Two further properties are load-bearing. The viewer is built **at most once and never destroyed**, because a swap is unrecoverable: `destroy()` takes the camera pose, the tile cache and every route entity, and nothing replays them (`showDayRoute` is a stable `useCallback` whose caller's deps don't change on a swap, and the pending queues were consumed on first registration). And leaving a globe surface hides the canvas with `visibility: hidden` rather than `display: none` or an unmount — a zero-size canvas reallocates the framebuffer and re-rasters every resident tile on the way back, where `visibility` keeps the context, the drawing buffer and layout, and costs one composite of a texture the GPU already owns. Hiding it is also what closes the stale-geometry bug for every surface at once: `.map-chrome-hidden` only ever hid two DOM layers, and route arcs are entities *inside* the canvas.
@@ -261,11 +302,23 @@ The gate has a material consequence that follows automatically: a surface with n
 
 ### Named Rules
 
-**The One Poster Rule.** `.font-hero` applies to the landing headline and to nothing else, ever. A second wide-Archivo block anywhere in the app dissolves the first one's authority.
+**The One Poster Rule.** `.font-scene-hero` applies to the two one-word posters — the landing's opening "Somewhere." and its closing "Elsewhere." — and to nothing else, ever. A third hyperbold block anywhere dissolves the pair's authority.
 
-**The Width-Axis Rule.** Archivo must be loaded with `axes: ["wdth"]`. Browsers do not synthesise width, so without the axis `font-stretch: 125%` is a silent no-op and the poster quietly degrades to merely-bold.
+Its old subject, `.font-hero`, is deleted. It had drifted into dead CSS: defined and documented as "the landing headline", used by no component, while `.font-scene-hero` quietly did the job.
 
-**The No-Kicker Rule.** Nothing sits above a headline. No eyebrows, no all-caps kickers, no category labels introducing a title. Uppercase is a field-label device only.
+**The Width-Axis Rule is retired.** Archivo no longer loads `axes: ["wdth"]`, because nothing sets `font-stretch` any more. Widening a heavy grotesk was the single strongest template tell on the landing — the reference never touches the width axis and gets its density from negative tracking instead. The poster is weight 900 at `-0.075em` now. Loading a variable axis no rule consumes is bytes for nothing.
+
+**The One Face Rule.** One family, Archivo, for the entire product: display, body, UI, posters. Every step in the ramp comes from size, weight and tracking, never from a second family. This replaced three faces (Source Serif 4, Archivo, Manrope) and, before those, five. What it knowingly gives up is the serif that used to mark "a real plan to look at" — `/trip/[id]` and `/trips` now speak in the same voice as the landing. Adding a second family back is a decision about the whole product, not a local one.
+
+**Tracking tightens as type grows.** The ramp runs `-0.076em` at display, `-0.09em` on card titles, `-0.06em` on panel headings, `-0.04em` on body. Nothing sits at zero or positive. This is the inverse of the usual instinct — loosen small text for legibility — and it is measured off the reference rather than chosen: it is most of why a line reads as one packed shape instead of a row of letters. The `-0.04em` craft-floor tracking floor is deliberately exceeded above the body step; that floor is tuned for text sizes, and these are not.
+
+**The No-Kicker Rule — amended, and narrowed to "above".** Nothing sits *above* a headline: no eyebrow stacked on top of it, no all-caps kicker, no category label introducing a title. Uppercase remains a field-label device only.
+
+What the rule no longer forbids is a label sitting *beside* a heading, in its own column, as a running header. `SectionOpener` is that exception and the only one: a `text-sm`/600 label at `text-white/40` pinned in an 11rem left column, the heading offset into column two, a hairline across the top. It was adopted from the Vita Travels breakdown, on an explicit instruction, as the reference's most recognisable move — the thing that tells a reader a new movement has begun.
+
+The narrowing is honest about its own cost. Below `lg` the column collapses and the label *does* stack above the heading, which is the shape this rule was written against. Two constraints keep that from being a kicker in practice: the label names the movement rather than restating the heading (never "Method" above "How it actually works" — it says "Method" above a heading that does not contain the word), and it never runs uppercase. Anything that fails either test is still banned.
+
+Note this also contradicts the impeccable craft floor, which bans eyebrows outright and says no brief earns them back. The brief did. Recorded here rather than argued each time it comes up.
 
 ## Layout
 
@@ -345,8 +398,9 @@ Two silhouettes break the rounded-rectangle language deliberately. The day-tab r
 
 ### Buttons
 - **Shape:** fully round (`rounded-full`) at every size.
-- **Primary:** amber fill, espresso text, `px-5 py-2.5` in a panel and `px-8 py-4` for the hero CTA. `shadow-sm` in a panel, `shadow-lg shadow-black/30` on bare terrain.
-- **Hover / Active:** `hover:bg-accent-hover` with `transition-all duration-150`, `active:scale-[0.98]`. Disabled is `opacity-50 pointer-events-none`.
+- **Primary, in the app:** amber fill, espresso text, `px-5 py-2.5` in a panel. `shadow-sm` in a panel, `shadow-lg shadow-black/30` on bare terrain. Hover is `hover:bg-accent-hover` with `transition-all duration-150`, `active:scale-[0.98]`; disabled is `opacity-50 pointer-events-none`.
+- **Primary, on the landing: inverted — white fill at rest, amber on hover, dark text throughout.** `px-8 py-5`, label at `0.875rem / 600 / -0.0357em` tracking and `leading-[0.9]`, `transition-all duration-200`, with the four-point brand mark at `gap-4`. Read off the reference's live CSS rather than its screenshots: its button carries exactly one hover rule and it touches `background-color` only. The obvious reading is "amber fill, white text", and white on `#fb9826` measures **2.19:1** — under even the 3:1 large-text bar. `--accent-foreground` holds both states, measured at **17.66:1** on the white rest fill and **8.09:1** on the amber hover, which is precisely the job The Two Foregrounds Rule gives it. `FeaturedPlans`' card CTA is the same idea one step quieter: slate at rest, amber on hover, and it *does* invert its text, which is why its mark fills `currentColor`.
+- **Focus on the landing CTAs is an `outline`, not a `ring`.** Under real keyboard focus the hero button matched `:focus-visible` while every ring slot in its composed `box-shadow` stayed `rgba(0,0,0,0)` — no indicator at all, in any colour. Three explanations were tested and all three are wrong: not the colour token (`ring-accent`, which renders correctly on the `FeaturedPlans` button, is equally invisible on the hero one), not `shadow-lg` occupying the stack, and not `transition-all` catching the measurement mid-animation. So this is **not** a general "ring loses to box-shadow" rule — rings work elsewhere here. Something element-specific defeats it on that button, unexplained. `outline-2 outline-accent-foreground` with no offset renders, and reads against both fills; offset would put the ring on the photograph where a dark line disappears.
 - **Ghost:** no fill, no border, muted text, `hover:bg-white/10` (or `hover:bg-tag-neutral-bg`). Used for Back, Cancel, Give feedback.
 - **Hero outline:** the landing page's second action — a `border-white/45` outline with no fill and no backdrop blur, so the globe runs clean through it. The border sits at /45 rather than /25 because without frost behind it nothing else holds the shape. It carries a transparent-bordered sibling: the amber hero pill declares `border border-transparent` so the two pills match in height and baseline.
 
@@ -505,39 +559,136 @@ Two mechanics that are not obvious and both shipped as bugs first:
 - **It is a sibling of the card, never a child.** The whole card is one `<a>`, and HTML forbids interactive content inside an anchor; a nested `<button>` is invalid markup that browsers resolve unpredictably. A `.memory-card-slot` wrapper supplies the positioning context and owns the reveal, so the button sits *beside* the link in the DOM while appearing on top of it.
 - **Hidden on hover, but never hover-only.** It rests at `opacity: 0` and reveals on `:hover` *or* `:focus-within`, so a wall of cards is not a wall of trash icons and tabbing to the control still surfaces it. Under `@media (hover: none)` it is simply always visible — a hover-only control is unreachable on a touch screen, where there is no hover state to enter and the card itself is a link, so long-press offers nothing either.
 
-### Generation Loader (signature)
-A 200px near-opaque slate disc — dark is the one axis the imagery is not — with a 1px light rim and a deep cast shadow, centred over the globe at z-30. Its rotating "gradient" is a side effect of three inset box-shadows sweeping from paper white through amber into near-black slate; there is no conic gradient and deliberately no cyan. The word "Generating" is split into ten letter spans that pulse on a staggered delay. **The word must be exactly ten letters** — globals.css hardcodes `.loader-letter:nth-child(1..10)` delays. A frosted caption pill beneath it cross-fades through fixed captions.
+### The Wait (signature)
 
-**The flight path.** Beneath the disc, a `min(92vw, 380px)` rail runs from an amber origin dot to a hollow destination pin, with a diamond marker travelling it and a tick at each stage boundary — travelled portion solid amber, remainder a dashed hairline. It replaced a row of five equal dots, and the reason is the whole design: **the stages are nowhere near equal.** `generate` alone is ~95 of the ~150 nominal seconds. Five equal segments put the marker a fifth of the way along and then hold it motionless for a minute and a half, which is indistinguishable from a hang — the exact anxiety a progress indicator exists to remove. Segment widths therefore come from `STAGE_SECONDS` in `generationStages.ts`, which lives beside `STAGE_ORDER` with a test asserting they carry the same keys. The destination pin stays neutral until the run completes; an amber pin from the start would claim an arrival that hasn't happened.
+Two and a half minutes with nothing to show yet. The screen answers it by stating what is already
+known instead of asking for patience: the destination photographed full-bleed, its name at
+`clamp(2.5rem, 9vw, 8rem)`, and — the actual content — a rotating feed of true facts about the
+place set at `clamp(1.375rem, 3.2vw, 2.5rem)`. The machinery sits in a darkened band at the foot:
+the four steps, one forecast line, the elapsed expectation, and a Cancel that appears only after
+ten seconds.
 
-**The arrival beat.** When every stage settles, the marker reaches the pin and the pin fills amber, and `page.tsx` holds the loader ~650ms on that state before handing the screen to `ItineraryCard`'s own staggered "AI is building this" reveal. This sentence described the pin for a while before any code implemented it — every run hard-cut from a neutral pin straight to the itinerary, so nobody ever saw the plane land. Peak-end weights the last half second of a two-minute wait far above the middle minute, and it was being spent on nothing. **The wait and the reveal are one gesture, not two screens**: the loader ends by arriving, and the itinerary picks up by assembling.
+**Only large type sits on the photograph.** This is measured, not stylistic — see The
+Photograph-Is-Not-A-Surface Rule. It is why the facts are set at display scale rather than as
+prose, and why every small run was pushed into the band.
 
-**The segment cannot finish early.** Inside whichever stage is running, the fill advances on `1 - exp(-t/tau)`, which approaches its segment's end without ever reaching it, so only the real `done` event can complete a segment. That is structural rather than a "stop at 95%" clamp: no elapsed time finishes the segment. A slow run creeps and never arrives; a fast one jumps forward, which is true information. `generationProgress()` is a pure function, unit-tested for monotonicity across a replay of the runner's real emission order — including the deliberate overlap where `context: start` precedes `geocode: start`.
+**The globe is covered, not switched off.** `useGlobeOnScreen(generating || …)` still boots Cesium
+at generation start and this screen is opaque on top of it. The 2.3MB import and first tiles are
+free inside a wait this long, and the queued destination flight replays on `setViewer` so the
+result opens already framed. Un-booting would move that cost to the one moment it would be felt.
 
-### Destination Facts (signature)
-While an itinerary generates, true facts about *this* trip appear in a staggered stack beneath the caption: one card square-on and readable, its neighbours fanned out either side, dimmed and tilted behind it. It advances itself every 7s and can be steered with arrows or by clicking a card forward; taking control resets the timer so a card you just chose gets a full read. **The front card is completely still while it is being read** — motion happens only on a discrete advance, which is the entire distinction from the orbiting version this replaced, and why a reader can stop the rotation by using it. Above the disc, one line names what is being made: `Kyoto · Sep 19 – 22, 2026 · Mid-range`. The plan form unmounts during generation, so without that line the screen never once states which trip it is working on, which is the thing a waiting traveller most wants confirmed.
+**Four steps, not five.** `geocode` and `context` total about three seconds of the ~150 and mean
+nothing to a person waiting, so they share a column. The four that remain are the same four the
+landing's "How it actually works" promises — the page says what will happen and this shows it
+happening. Progress is still computed from all five stages; only the display groups.
 
-- **The facts are real and cost nothing.** They are derived from data already fetched for other reasons — the Step 2a bundle (weather, holidays, POIs, timezone, season, sunrise/sunset), the destination-context cache, and the Wikipedia extract that arrives with the destination photo. **No model call.** `runClaude` spends nearly all its wall clock on time-to-first-token, so trivia fetched that way would land *after* the plan it was meant to fill the time for. `buildDestinationFacts` is pure, type-only-imports, and unit-tested; it never fabricates, so a thin data bundle yields fewer facts rather than filler.
-- **Two copy rules the tests enforce.** Weather wording may not say "forecast", "expect" or "will be" unless the data really is a forecast — beyond ~16 days the app silently serves last year's same dates, and presenting that as a prediction is a lie the traveller cannot detect. And sunrise/sunset are formatted by string slicing, never `new Date()`: they are destination-local wall-clock with no zone suffix, so parsing them would shift a Kyoto sunset by hours for someone planning from London.
-- **Adapted from a stagger-testimonial pattern, without its skin.** The geometry is worth having; the original's notched `clip-path` corners and hard `0 8px 0 4px` block shadows belong to a neobrutalist world this app is not, and the craft floor bans that shadow outside one. Cards are this system's own glass at the documented 16px radius, and the one amber mark under the front card is doing status work — which card is live — rather than decoration.
-- **The fan narrows with the pool.** A full five-card fan needs five distinct facts; below that, wing slots wrap onto sentences already on stage and the same fact renders twice at different depths, which reads as a fault. Position comes from a cursor and a modulo rather than by shifting an array, because the pool genuinely grows mid-wait as the destination context and Wikipedia extract resolve, and a mutated array would reorder under the reader.
-- **The facts sit outside the `role="status"` region.** Inside it they would be announced on every change, which is why the earlier version had to hide them from assistive tech entirely — leaving screen-reader users with no route to the content at all. Outside it they are reachable on demand and never announced.
+**Progress never enters React state.** It ticks ten times a second and is written straight to a
+`--gen-progress` custom property, because re-rendering the tree at that rate would reconcile the
+whole screen for a value one bar reads. The bar's CSS transition is what smooths those ten writes
+into motion, so it is the one element in the app exempted from the blanket reduced-motion
+`animation-duration: 0.01ms` — removing its transition there would make the bar jerkier, not
+calmer, which is the opposite of what the setting asks for.
 
-**Eliminated: the orbiting version.** <details><summary>Two off-screen wheels carried these same sentences on arcing, tilted cards. It was the more impressive build and it was wrong.</summary>
+**The forecast is demoted on purpose.** `DayHeader` already prints each day's temperature, rain
+chance and typical-weather flag beside every day of the finished plan, so a seven-column weather
+grid here spent the screen's best space previewing something arriving thirty seconds later. One
+line in the band keeps the single concrete thing known before the plan exists without pretending
+it is the headline. When the dates are past Open-Meteo's 16-day horizon the line says "same dates
+last year" — a figure presented as a forecast when it is last year's is a lie by omission, however
+small the type.
 
-Cards rode the rim of two large circles whose centres sat off-screen left and right, arcing in near the top, bulging toward centre and back out the same side, counter-rotating three quarters of the wheel angle. Time mapped onto angle non-linearly to produce a slow "dwell" at the readable apex. Three things killed it:
+**Eliminated: the disc, the flight path and the fanned card stack.** <details><summary>A 200px
+rotating slate disc reading "Generating", a stage-weighted flight path beneath it, and facts fanned
+as tilted cards — all over the live globe.</summary>
 
-**Text a person must read cannot move.** The dwell was tuned from ~75px/s down to ~28px/s, which was optimising the wrong axis — the correct speed is zero. A card also stayed rotated up to 9° through most of its legible window, which disables subpixel antialiasing on 14px prose sitting on 0.62-alpha glass over arbitrary satellite terrain.
+The disc's rotating "gradient" was three inset box-shadows sweeping paper white through amber into
+near-black slate; the word was split into ten letter spans on staggered delays and *had* to be
+exactly ten letters, because globals.css hardcoded `.loader-letter:nth-child(1..10)`. Beneath it a
+`min(92vw, 380px)` rail ran from an amber origin dot to a hollow destination pin, segment widths
+taken from `STAGE_SECONDS` because the stages are nowhere near equal — `generate` alone is ~95 of
+the ~150 seconds, and five equal segments held the marker motionless for a minute and a half,
+indistinguishable from a hang.
 
-**WCAG 2.2.2 (Pause, Stop, Hide), Level A.** Motion running over five seconds alongside other content needs a mechanism to stop it. There was none, and `aria-hidden` does not exempt visual motion — it only removed the alternative route to the content. Screen-magnification users were unserved entirely: at 200–400% zoom a sweeping card is unreadable at every point in its arc, and two unrelated access needs had been collapsed onto the `prefers-reduced-motion` switch.
+Three things ended it. The globe is the busiest possible ground for small text — every element
+needed its own 56px-blurred glass panel just to stay legible, and the fact strip's own comment
+recorded measuring **1.02:1** against sampled globe pixels without one. The orb said nothing except
+"working", where naming the running stage in words is both better status feedback and needs no
+reduced-motion exemption. And the screen showed almost none of what the app had already fetched: by
+the time Generate is reachable, the real forecast for every one of the traveller's dates, the public
+holidays, and up to twelve candidate places are all sitting in memory.
 
-**It broke this document's own rules.** The Overview says nothing else competes with the globe's motion; the One Ambient Loop Rule forbids stacked loops and does not license ambient motion on `.glass-itinerary`. The orbit ran three stacked loops per card, on four cards, all carrying `.glass-itinerary`, outside `.blue-hour-scene` where that rule is loosened. It was the largest violation of that rule in the codebase.
-
-It also carried two bugs that reading the code did not reveal and simulation did: with a pool of three or four facts the per-card recycler settled into every slot showing one fact forever, and on mobile the hidden wheel's slots never advanced yet stayed in the exclusion set, so two facts could never be displayed at all. The replacement — a single cursor over a stable window — deletes that machinery entirely.
-
-Measured before and after: **23 infinite CSS animations → 11**, four moving 56px `backdrop-filter` cards → none, and the reduced-motion branch collapsed into one code path because the fallback became the design.
+Two ideas survived into the replacement and are worth keeping distinct from the skin that carried
+them. **A segment cannot finish early**: inside whichever stage is running the fill advances on
+`1 - exp(-t/tau)`, approaching its segment's end without reaching it, so only a real `done` event
+completes it — structural, not a "stop at 95%" clamp. And **the wait and the reveal are one
+gesture**: the run settles, the screen holds briefly, and `ItineraryCard` picks up by assembling.
+Peak-end weights the last half second of a two-minute wait far above the middle minute.
 </details>
 
+### Destination Facts (signature)
+
+True facts about *this* trip, rotating every 7s directly beneath the destination name at display
+scale. They are the screen's content, not its footnote — an earlier arrangement put them in small
+prose at the very bottom under a seven-column weather grid, where a waiting traveller had no reason
+to look, and the correction was to swap the two.
+
+- **The facts are real and cost nothing.** Derived from data already fetched for other reasons —
+  the Step 2a bundle (weather, holidays, POIs, timezone, season, sunrise/sunset), the
+  destination-context cache, and the Wikipedia extract that arrives with the destination photo.
+  **No model call.** `runClaude` spends nearly all its wall clock on time-to-first-token, so trivia
+  fetched that way would land *after* the plan it was meant to fill the time for.
+  `buildDestinationFacts` is pure, type-only-imports, and unit-tested; it never fabricates, so a
+  thin bundle yields fewer facts rather than filler.
+- **The pool is sized to the wait, not to a screenful.** ~150 seconds at 7s is about 21 slots, so
+  the cap is 30 and each family may contribute 5 (was 12 and 2, tuned for a much smaller feed).
+  Every festival and every shopping area surfaces rather than just the first of each, candidate
+  places are named in trios past the first three, and a `trend` family reads the context cache.
+  Tests assert the widened cap did not let weather flood the feed: at most 5, and never half.
+- **The cap is a ceiling; the data is the constraint.** Measured against a live Kyoto run, the real
+  pool is **13** — about 91 seconds of a 150-second wait, so it still wraps once. Raising the cap
+  further would change nothing. What actually moved the number was fixing a silent gap: the
+  Wikipedia reader took only the *first* sentence and returned nothing at all if it was too long,
+  so Kyoto — whose opening sentence runs 146 characters, over `MAX_LEN` once attribution is
+  attached — contributed **zero** Wikipedia facts while thinner extracts contributed theirs.
+  Reading every sentence that fits took the pool from 10 to 13. The remaining shortfall is the POI
+  family, which needs `OPENTRIPMAP_API_KEY`; without it `candidatePois` comes back
+  `{ available: false }` and up to five facts never exist. That is the documented degrade, not a
+  bug — but it means a keyless environment sees a visibly shorter feed.
+- **Safety notes are excluded by decision, not by omission.** A line about pickpocketing or a
+  neighbourhood to avoid is true and useful in an itinerary; delivered as ambient trivia to someone
+  who has already committed and paid, it is anxiety with no action attached. The test asserts they
+  stay out so nobody restores them as a "missing family".
+- **Two copy rules the tests enforce.** Weather wording may not say "forecast", "expect" or "will
+  be" unless the data really is a forecast — beyond ~16 days the app silently serves last year's
+  same dates, and presenting that as a prediction is a lie the traveller cannot detect. And
+  sunrise/sunset are formatted by string slicing, never `new Date()`: they are destination-local
+  wall-clock with no zone suffix, so parsing them would shift a Kyoto sunset by hours for someone
+  planning from London.
+- **The facts sit outside the `role="status"` region.** Inside it they would be announced on every
+  change. Only one line is announced — which stage is running — and the feed stays reachable on
+  demand without interrupting.
+
+**Eliminated: the fanned stack, and the orbiting wheels before it.** <details><summary>Facts as
+tilted glass cards, first riding two off-screen circles, then fanned in a still stack.</summary>
+
+The **orbit** carried these sentences on the rim of two large circles whose centres sat off-screen,
+counter-rotating, with time mapped non-linearly onto angle to produce a slow "dwell" at the
+readable apex. Three things killed it. *Text a person must read cannot move* — the dwell was tuned
+from ~75px/s down to ~28px/s, which was optimising the wrong axis, and a card stayed rotated up to
+9° through most of its legible window, which disables subpixel antialiasing on 14px prose.
+*WCAG 2.2.2 (Pause, Stop, Hide), Level A*: motion over five seconds alongside other content needs a
+stop mechanism, and `aria-hidden` does not exempt visual motion — it only removed the alternative
+route to the content. And it ran three stacked loops per card on four cards, the largest violation
+of the One Ambient Loop Rule in the codebase. Measured at replacement: **23 infinite CSS animations
+→ 11**.
+
+The **fanned stack** that replaced it was still: one card square-on, neighbours tilted and dimmed
+behind it, advancing every 7s, steerable by arrow or click. It was correct about motion and wrong
+about weight — five cards of glass at 16px radius made a component out of what should have been a
+sentence, it needed a five-fact pool before the wings stopped duplicating the front card, and every
+card was a 56px `backdrop-filter` surface. Setting one line at display scale says the same thing,
+carries no glass, and degrades to a single fact without looking broken.
+</details>
 ## The Blue Hour Expedition (Landing & Pre-Generation Flow)
 
 A scoped alternate identity for the two steps before an itinerary exists — the landing scroll and the merged trip-form/tier-picker step (`page.tsx`'s `step !== "result"`, wrapped in `.blue-hour-scene`). It exists because the base system's amber-on-slate is tuned for *reading a plan*: dense data, budget figures, day tabs. Before there is a plan to read, the job is to sell the idea of one, and a richer, more cinematic register earns that without touching a single component the result view depends on.
@@ -554,22 +705,26 @@ Every component that already reads `--surface-deep-rgb` — `TierPicker`, `Field
 
 Four beats, composed by `ScrollStory` inside a wrapper that cancels `<main>`'s own padding (`-mx-5 -mb-5 -mt-[calc(var(--nav-h)+1.25rem)]`, matching breakpoints) so every section reaches all four viewport edges, including the top, behind the transparent fixed nav.
 
-- **`Hero`** — the opener, and the one beat with no CTA at all; "Plan a trip" is withheld until the very end so its arrival still reads as a reveal. **The light moves and the photograph does not.** A blue hour is light changing, so the beat's single ambient loop is `.hero-light`: an oversized, very soft warm wash on `--accent`, translated across the frame over 24s. It is deliberately below the threshold of notice — weather on the photograph, not an effect on the page. Three static `.hero-fog-layer` bands sit across the lower third, drawn rather than photographed so they can hide the source photo's flaws without desaturating it; the densest is bottom-left, covering a blown-out bokeh blob. The headline splits into two `inline-block` phrases so the block's documented 0 / 90 / 180ms stagger has a third occupant, and so "hour." is never orphaned.
-
-  **`Hero` runs no JavaScript at all** — no state, no effects, no per-frame work. Every motion on it is a CSS keyframe on `transform`/`opacity` only, which the compositor runs without waking the main thread, and the scroll cue's fade is `animation-timeline: scroll(nearest block)` rather than a ScrollTrigger. This is the app's first scroll-driven CSS animation; it is behind `@supports`, and the fallback is a cue that simply never fades.
-
-<details><summary>Eliminated: the cursor-parallax hero</summary>
-
-Two real transform planes (the photo, the headline+subline) drifted at different cursor-driven speeds inside a shared `[perspective:2300px]`, with three fog bands drifting on independent periods and a slow GSAP yoyo keeping the hero alive on touch devices where `mousemove` never fires. Five infinite tweens in total, on elements carrying `will-change: transform`, where the fog layers were also `filter: blur(26/34/18px)` — a moving blurred layer forces Chromium to re-raster it, permanently.
-
-Removed after a Chrome trace of a real session showed **every scrolling frame resolving on the main thread** (`scroll_state: SCROLL_MAIN_THREAD` on 1688 of 3426) rather than the compositor. Frames were not being dropped — only 2.1% were — they were late, queued behind main-thread work.
-
-Worth recording precisely, because the intuition was wrong: the cursor parallax was **not** the expensive part. `pointermove` dispatch totalled **53ms of a 34.4s trace**, against **976ms** for the globe's render loop. It went as a design decision, and its removal is what let the component lose its effects entirely.
-
-</details>
+- **`Hero`** — the opener: one word, a support line, and "Plan a trip". **Two photographs with the headline between them.** A back layer hangs from the top edge, a front layer stands on the bottom, they overlap in the middle, and "Somewhere." sits at `z-2` — behind the front layer, in front of the back one. So the steppe's horizon cuts across the bottom of the word rather than stopping beneath it. The subline and CTA sit at `z-4`, deliberately above the front layer, so the support copy stays fully legible while the headline is the only thing occluded. This is the reference's own construction, read off its live DOM rather than inferred.
+  - **`aspect-ratio` is the mechanism, not a viewport height.** The section is `1440/922` landscape, `375/812` portrait, so its height follows its *width*. That is what lets both layers sit at natural size — `h-auto`, no `object-cover` crop, which is why the scene reads zoomed-out and uncropped — and still always overlap, by a fixed `0.201·W`. Pinned to the viewport instead they come apart: at 768x1024 the two landscape layers total 646px against a 1024px section, opening a 378px band of bare canvas. Measured across ten viewports the ratios hold to three decimal places (back `0.377·W`, front `0.469·W`, section `0.640·W`) with overlap 155–693px and never a gap.
+  - **The known cost of that model:** the hero is no longer exactly one screen. It is shorter than the viewport on a portrait tablet (768x1024 gives 492px, so `ImageRow` peeks) and taller on wide displays (1229px at 1920x1080, 2203px at 3440x1440). On very short-and-wide windows — 2560x900 — the CTA falls below the fold. The reference behaves the same way; it is the price of layers that always interlock.
+  - **The reference's `max-height` cap could not come with it.** A `max-height` against an `aspect-ratio` does not clamp height alone — it shrinks the box on *both* axes to preserve the ratio, so `max-h-[50rem]` on the portrait branch produced a 369px-wide section inside a 390px viewport and left a strip of the page showing down the right edge. Unclamped, 390px gives 845px, which is the viewport anyway.
+  - **Three Tailwind ordering traps, all in the layer sizing.** A base `w-full` beats a media-query `w-[100.65%]`, because the two `w-*` utilities sort as one group with the unprefixed one last. Dropping `w-full` is worse: an absolutely positioned *replaced* element with `width: auto` takes its **intrinsic** width, not the left/right gap, so every viewport rendered the layers at a flat 750px. And Preflight's `img { max-width: 100% }` clamps the widened layer straight back, which needs `max-w-none` — Preflight is a set of opinions that outrank what you wrote, the same lesson as The Preflight-Beats-The-UA Rule. The arrangement that holds is both width branches inside mutually exclusive media queries, plus `max-w-none`.
+  - **Both landscape files carry transparent margins** — 5px left, 14px right, 11px bottom — which at full bleed showed as slivers of bare canvas down each edge and a strip along the screen's foot (measured at 1440x900 as five rows dropping to mean RGB 23 under grass at 58). The layers are widened by 0.65% and pulled left 0.17%, and the front layer nudged down 0.4vw. The portrait pair measures zero on every edge and is left alone.
+  - **Alpha is load-bearing.** All four crops are WebP with a real alpha channel: the back layer's sky is intact but its lower edge is torn away, the front layer's sky is absent entirely. They arrived first as JPEG, where a missing sky is stored as opaque white and reads as a white slab over a dark page. A replacement shipped as JPEG breaks the hero in exactly that way.
+  - **No veil, by decision.** A `--surface-deep` layer at 0.55 was built between the back photograph and the headline and then removed: the token is a 76%-saturated teal, and over a near-neutral mountain range (12.3% saturation) it read as a blue cast. See the landing-headline rule for the measured figures and what it costs. The mountains are therefore undimmed and the headline rests on `.hero-legible` alone.
+  - **The support line is on the reference's paragraph step, not the app's body step.** 1.75rem / 600 / line-height 1.3 / -0.0714em tracking on desktop, 1.1875rem / 1.0 / -0.028em on a phone — up from 1.125rem / 400 / 1.8 / *zero* tracking. Two things to know. `scene-prose` had to be **removed from the element**, not overridden: it is an unlayered `line-height: 1.8` and an unlayered rule beats a layered one regardless of specificity, so Tailwind's `leading-*` utility would have silently lost (The Unlayered-Shadow Rule, met on line-height rather than box-shadow). And the mobile size is 19px rather than the reference's 18px, deliberately: at 600 weight that crosses WCAG's 18.66px large-text threshold, dropping this line's bar from 4.5:1 to 3:1, which is what lets it pass on a phone. Discovering that this element computed `letter-spacing: normal` also means the body tracking documented in the ramp had never actually reached it.
+  - **The light still moves and the photographs still do not.** The single ambient loop is `.hero-light`, an oversized soft warm wash on `--accent` crossing the frame over 24s at `z-1`. The three white `.hero-fog-layer` banks are gone — they were drawn to hide a blown-out bokeh blob in the retired `hero-dawn`, and over this composition they would have washed haze across the one edge it depends on.
+  - **The scroll cue is gone**, and with it `.hero-cue` / `.hero-cue-bob` and both keyframes. A bouncing chevron over a full-bleed landscape read as distracting and as an affordance — it looked pressable and was decorative. `.hero-dusk` is now the only scroll-driven animation on the surface, which also simplified the note on `--story`: three CSS comments used the cue as their worked example and now point at the wash instead.
 - **`ImageRow`** — a compact row of four photo cards on a `.scene-band` (see below), each with a bold label and a fact-grounded stat above it (Vita Travels' own "Label / Stat" pattern), flying in from the left on scroll. The description sentence lives *inside* the card, hidden until hover.
 - **`HowItWorks`** — the mechanism explainer, no photos, a `SplitText`-staggered heading reveal on a matching `.scene-band`.
-- **`HeroPoster`** — the reveal. The only beat with neither curated photography nor a `.scene-band`; it sits on `.scene-void`, a lit emptiness rather than a surface, so arriving somewhere open after a sequence of walls is the point of putting it last. It used to sit on the live globe — see **The Mounted-Surface Gate**; the reveal that mattered was never the globe, it is "Plan a trip" being withheld until here. The headline and subline unmask via a scroll-triggered `clip-path` wipe; the CTA row fades in separately (see the clip-path/box-shadow note below).
+- **`FeaturedPlans`** — four worked examples, and the one beat that states figures rather than claims. Text left, photograph right, zero gap, adjacent cells sharing one hairline; `md:auto-rows-fr` plus `h-full` is what keeps every image frame identical so only the text reflows. The four cards **mirror `ImageRow`'s four beats** — the blue hour, real prices, live weather, three ways to travel — so the section reads as evidence for the claims made just above it rather than as four arbitrary trips. That mapping is the constraint to preserve if they are ever rewritten.
+  - **Real destinations, real photography.** The photos were reused scene imagery for a while — thematic, not places, and the desert on the Marrakesh card was not Marrakesh, which made it the weakest thing on an otherwise honest card. Every card now shows the place it names. `alt` stays empty deliberately: the title and the "Where" row beside the image already name it, so alt text would make a screen reader say it three times. Known limitation — the sources are 600–800px against 2400px for the app's other scene photos, which measures fine to 1.04x at 1440@2x and 0.97x at 2560@1x but reaches **1.95x on a 430@3x phone**. Nothing to fix in markup: `sizes` and `srcset` are correct and the optimizer rightly refuses to upscale. ~1200px sources would clear every case.
+  - **Every budget is grounded in `estimateTierTotal`, not chosen for looks.** Each figure is within $50 of a real tier estimate for its own day count, and `closestTier` resolves each to the tier its copy is about — Jaipur and Wadi Rum to `budget` (one *is* the budget story; the other quotes a "from" price, which has to be the cheapest of the three ways it advertises), Tuscany and Sinaia to `midrange`.
+  - **The cards store a season, not a date, and this is load-bearing.** `startMonthDay: "02-06"` plus `days`, resolved to the next occurrence at or after today, so "Sinaia in February" means the next February forever. The reason is the prefill below: the date inputs carry `min={todayISO()}`, so a card whose date has passed fills a value the form rejects — and the nearest hardcoded date was 22 days out when the prefill was built. The displayed When / Length / Party rows are *derived* from the structured fields, so what the card shows and what it fills cannot disagree. The roll is pure arithmetic with no value imports, which is what keeps `planExamples.test.mjs` able to load it; its central test asserts that no card resolves behind "today" across six different todays, including each card's own season day.
+  - **"Plan a trip like this" fills the wizard.** `onPlan` takes an optional `PlanPrefill`; `Hero` calls the same prop with nothing. Six fields are written — destination, both dates, budget, and the party counts — and two more are *derived* rather than carried, because `closestTier` already owns the budget-to-tier mapping and `GroupType` falls out of the counts. Everything else keeps the traveller's saved profile: a marketing example has no business overwriting a stated preference. It lands on `planStep: "basics"` even when fully filled, so the traveller sees what a card decided for them before it prices anything. Not geocoded — that fires on the destination field's blur and a programmatic set fires none, but these destinations are curated, the globe does not boot on this step, and a missed geocode is non-blocking by design.
+  - **A bare `onClick={onPlan}` is a bug here, and it typechecks.** React hands a click handler a `MouseEvent` as its first argument, which is now the `prefill` position — so the bare form posts a MouseEvent into the form state. TypeScript says nothing, because `Hero` declares the prop as `() => void` and a wider handler assigns cleanly to a narrower one. Every landing CTA wraps it: `onClick={() => onPlan()}`.
+- **`HeroPoster` is retired, and with it the withheld CTA.** It was the closing beat: one word on `.scene-void`, a lit emptiness rather than a surface, and the sequence's organising idea was that "Plan a trip" arrived only there. That held while the page was four beats and the poster was the densest thing in it. The page is six beats now — a method strip, four priced plans and a world map arrived in front of it — and against those the poster was the *least* substantial screen on the page, arriving last and asking for the click. A reveal that lands softer than everything before it is not a reveal, so the ask moved into `Hero`, which is also where the reference puts it. Everything after the hero is evidence, and a visitor convinced by the evidence should not have to scroll back up to act on it.
 
 ### Named Rules
 
@@ -579,7 +734,7 @@ Worth recording precisely, because the intuition was wrong: the cursor parallax 
 
 **The Transform-Ownership Rule.** GSAP's CSSPlugin folds every transform sub-property (`x`, `y`, `xPercent`, `rotationY`, ...) it touches on an element into one matrix per tick, so a looping ambient tween and a pointer-driven write on the *same* element silently overwrite each other. `Hero`'s ambient drift and its cursor parallax therefore live on two different nested DOM nodes (`driftRef` wrapping `photoRef`/`textRef`), and the pointer writes go through `gsap.quickTo()` rather than a raw inline `style.transform`, so nothing is fighting over the same property. The tier cards' cursor-tilt reuses the same split for the same reason: the tilt transform lives on an inner absolutely-positioned layer wrapping the card's image/gradient/badges, never on the outer `<button>`, so the JS-driven `rotateX`/`rotateY` write never fights the button's own `transition-all` on hover/selection scale.
 
-**The Clip-Path-Clips-Shadow Rule.** `clip-path` hard-clips everything that visually bleeds past the clipped box, including a descendant's `box-shadow` blur — not just its content. `HeroPoster`'s mask-wipe reveal (`.poster-reveal`) is therefore scoped to the headline and subline text only; the CTA row, which carries the round amber button's soft `shadow-lg`, uses a separate plain opacity/y fade (`.poster-fade`) with no clip-path anywhere in its ancestry. Sharing the mask wrapper cut that shadow into a hard rectangle, permanently, even once the reveal finished fully open — zero margin still clips anything beyond zero.
+**The Clip-Path-Clips-Shadow Rule.** `clip-path` hard-clips everything that visually bleeds past the clipped box, including a descendant's `box-shadow` blur — not just its content. This was learned on `HeroPoster`, now retired: its mask-wipe reveal had to be scoped to the text only, because sharing the mask wrapper with the CTA row cut the button's soft `shadow-lg` into a hard rectangle permanently, even once the reveal finished fully open — zero margin still clips anything beyond zero. Kept here because the next clip-path reveal will hit it too.
 
 **The Cobalt-Teal Band (`.scene-band`).** `ImageRow` and `HowItWorks` sit on a full-width gradient of `--scene-cobalt-rgb`/`--scene-teal-rgb` layered *over* `--surface-deep-rgb`, never the two scene hues at raw full strength — both are far too light to carry body copy alone. This is also what stops the live globe from showing through those two sections; before it existed, "How it actually works" sat directly on the globe and dropped below readable contrast over bright terrain.
 
@@ -598,10 +753,10 @@ This is **CSS and not a ScrollTrigger scrub**, and that is not a style preferenc
 Three costs came free with the pin and are worth recording, because none of them is visible in the code that creates it:
 
 - **An element scroller means transform pinning.** GSAP resolves `pinType` to `"fixed"` only when the scroller is the viewport. Here it is `.content-overlay`, so the section was held by GSAP rewriting `translateY` on it every frame, and the pin spacer changed the scroller's `scrollHeight` mid-gesture.
-- **`refreshPriority: -1` did the opposite of what it says.** ScrollTrigger's sort key is `refreshPriority * -1e6`, so a negative value sorts a trigger *last* — and it is also the only reason the sort runs at all. The pin therefore refreshed after everything below it, and every one of those triggers measured against a layout with no pin spacer in it: ImageRow, HowItWorks and HeroPoster all fired a full viewport early and finished before they were on screen. This is the trap to remember. Higher priority is a *higher* number.
+- **`refreshPriority: -1` did the opposite of what it says.** ScrollTrigger's sort key is `refreshPriority * -1e6`, so a negative value sorts a trigger *last* — and it is also the only reason the sort runs at all. The pin therefore refreshed after everything below it, and every one of those triggers measured against a layout with no pin spacer in it: ImageRow, HowItWorks and the closing poster all fired a full viewport early and finished before they were on screen. This is the trap to remember. Higher priority is a *higher* number.
 - **A scrub is not a loop, but it is not free either.** The trace that stripped this component's JavaScript was measuring four infinite tweens; a scrub does work only while the wheel turns, which is what made it defensible. It stops being defensible when what it drives is an opaque veil the composition does not need.
 
-**The One Text Entrance (`useLineReveal`).** Every heading in the sequence — the Hero headline, "How it actually works.", and `/trips`' "My memories" — arrives a line at a time, each line rising out from behind its own bottom edge. `SplitText` with `type: "lines"` and `mask: "lines"` (GSAP 3.13+) wraps each measured line in its own `overflow: hidden` box, so translating from `yPercent: 100` reads as type being *uncovered* rather than sliding into place: a fade says an element appeared, a mask says it was always there and something moved off it. `expo.out` over 0.9s at a 0.09 stagger, which is the app's documented `cubic-bezier(0.16, 1, 0.3, 1)` under its GSAP name rather than a second easing vocabulary for text. `HeroPoster` keeps its own `clip-path` mask wipe instead — see The Clip-Path-Clips-Shadow Rule for how hard that was to get right, and it is the same bottom-up line reveal by a different mechanism — but its ease was moved onto `expo.out` so the four beats share one curve.
+**The One Text Entrance (`useLineReveal`).** Every heading in the sequence — the Hero headline, "How it actually works.", and `/trips`' "My memories" — arrives a line at a time, each line rising out from behind its own bottom edge. `SplitText` with `type: "lines"` and `mask: "lines"` (GSAP 3.13+) wraps each measured line in its own `overflow: hidden` box, so translating from `yPercent: 100` reads as type being *uncovered* rather than sliding into place: a fade says an element appeared, a mask says it was always there and something moved off it. `expo.out` over 0.9s at a 0.09 stagger, which is the app's documented `cubic-bezier(0.16, 1, 0.3, 1)` under its GSAP name rather than a second easing vocabulary for text. It is now the only text entrance in the sequence: `HeroPoster` used to run a parallel `clip-path` mask wipe, and retiring that beat left one mechanism instead of two doing the same job.
 
 Three non-obvious requirements, all of which have broken this codebase before: **`fromTo`, never `from`** (Strict Mode's double-invoked effects make a `from()` tween treat the already-hidden state as its destination); **revert the split on cleanup** (SplitText rewrites innerHTML, and re-splitting over a previous split nests wrappers until line measurement is garbage); and **build after `document.fonts.ready`** — line breaks are a function of font metrics, so a split measured against the fallback face wraps at the wrong words, and this app loads three webfonts.
 
@@ -615,7 +770,9 @@ One thing the reference measurement did settle: vita-travel.webflow.io has **no*
 
 A single fixed, frosted `Navbar` — replacing the old plain-text top-left wordmark — spans the full width on every route and stays through the entire scroll (`z-20`, `h-[var(--nav-h)]`, `.glass-nav`: blur with a whisper of the one slate, since unlike a curated reference photo this nav sits over an arbitrary live 3D globe that idles anywhere from open ocean to a snowfield). `--nav-h` (`4rem`) is read wherever something needs to clear the bar — `<main>`'s top padding, `ScrollStory`'s cancelling margins, `DockedPanel`'s top offset — so none of them can drift out of sync with the bar's own height, the same one-token pattern `--mobile-sheet-h` already established.
 
-It is also the one place per-route utility links live now: the wordmark (`href="/"`), section anchors ("The Journey" → `ImageRow`, "How It Works" → `HowItWorks`, landing only), and the route-aware actions — "My memories" on `/` and `/trip/[id]`, "New trip" on `/trips`, and "Profile" on every user-facing route except `/profile` itself. These used to be four separate bare-canvas links (`HeroPoster`'s CTA row, a lone link on the plan step, `/trips`, `TripView.tsx`), each floating in and out with its own page's layout; consolidating them removed the `headerLinkClass` pattern entirely; a page no longer supplies its own top-right link.
+The wordmark now carries the brand mark beside it — `LogoMark`, four arms radiating from a pinched centre, the widest member of the same asterisk family as `SectionOpener`'s section rule and the landing CTAs' four-point star. It is inlined rather than loaded from `public/scenes/image-logo.svg` for two reasons that matter: the file fills `white`, which cannot follow a wordmark whose colour changes by state and surface, so inline it binds to `currentColor`; and the file bakes `opacity="0.4"` onto its group, which is right for a watermark and wrong for an identity mark on frosted glass over photography, where it disappears. Sized in `em` so it tracks the type step. The mark is `aria-hidden`, so the link's accessible name stays "TripMate" rather than becoming "graphic TripMate".
+
+It is also the one place per-route utility links live now: the wordmark (`href="/"`), section anchors ("The Journey" → `ImageRow`, "How It Works" → `HowItWorks`, landing only), and the route-aware actions — "My memories" on `/` and `/trip/[id]`, "New trip" on `/trips`, and "Profile" on every user-facing route except `/profile` itself. These used to be four separate bare-canvas links (the closing poster's CTA row, a lone link on the plan step, `/trips`, `TripView.tsx`), each floating in and out with its own page's layout; consolidating them removed the `headerLinkClass` pattern entirely; a page no longer supplies its own top-right link.
 
 **The route table is an explicit list, not a negation.** "Profile" renders on `pathname === "/trips" || isTripDetail` (plus its own block on `/`), rather than on a `!isHome && pathname !== "/profile"` catch-all that reads cleaner and is shorter. The catch-all silently swept in `/backend` and `/backend/pipeline` — internal dashboards that render this same `Navbar` over their own stone-50 pages and have no business carrying a user-facing profile link. A nav predicate that describes *where a link belongs* survives a new route being added; one that describes *where it doesn't* quietly adopts every future route.
 
@@ -657,6 +814,7 @@ It is also the one place per-route utility links live now: the wordmark (`href="
 
 ### Don't:
 - **Don't** put a scrim, panel, gradient or blur behind the landing *hero* headline — the one over the photograph. Nothing sits between that type and the image. (This rule used to cover the closing poster too, on the premise that a live globe was behind it. That globe is gone: the poster sits on `.scene-void`, its ratio is now measurable at about 12:1, and it correspondingly dropped `.hero-legible` — which is what this rule wanted all along.) All darkening on the hero happens inside `.hero-legible`'s three-layer text-shadow, which hugs the glyphs: a 1px/3px hard edge at 0.9, a 3px/14px local pool at 0.75, and a 6px/44px halo at 0.5 that reads as depth rather than as a box. The known and accepted cost: text-shadow does not count toward a WCAG ratio, so over worst-case bright daytime terrain the subline's computed ratio can fall below 4.5:1. A radial scrim was built and measured (headline 6.3:1, subline 5.4:1, ghost CTA 6.4:1 against pure white) and then removed by explicit decision. Reinstating that scrim is the fix if the ratio ever has to be measurable — it is not a question to reopen otherwise.
+  - **Tried once more, and reversed on sight.** Layering the hero put a snow-capped range behind the headline, and a full-bleed veil of `--surface-deep-rgb` at 0.55 was added to make it legible — measured, it took the headline from 1.63:1 to 3.75:1 on a phone. It came straight back out: `--surface-deep` is a 76%-saturated teal, and at that alpha it tripled the saturation of a near-neutral photograph (12.3% → 36.8%), reading as an awkward blue cast over the mountains. A neutral black veil was measured as the alternative (better contrast at a lighter alpha — 4.33:1 at 0.5, saturation held near 6%) and also declined. **So the rule stands unamended, and the cost is now on the headline too, not just the subline:** the shortfall is now on the headline too, and it is a phone problem rather than a general one. Worst pixel against mean, with the share of the headline's own area falling below 3:1: **390x844 1.10:1 / 4.73:1 / 14.5%**, 430x932 1.18 / 5.41 / 9.4%, 768x1024 1.15 / 8.54 / 4.5%, 1024x768 1.32 / 11.61 / **0.4%**, 1440x900 4.08 / 12.89 / **0%**. So from 1024px up it is noise; on a phone roughly one seventh of the word crosses lit snow. Accepted by explicit decision, on the same terms as the subline — `.hero-legible` carries it and WCAG will not count that. Two known-good fixes if it ever has to be measurable, neither reintroducing a tint: a neutral **black** veil at 0.5 (measured 4.33:1, saturation held near 6% against the teal's 36.8%), or a hue-preserving `filter: brightness()` on the back layer alone, which darkens without shifting hue or saturation at all.
 - **Don't** hand-write `-webkit-backdrop-filter` next to `backdrop-filter`.
 - **Don't** unmount, re-key, or conditionally render `GlobeBackground`.
 - **Don't** introduce a solid, opaque card surface. If a panel needs to be more legible, raise its alpha within the one slate; do not leave the material.

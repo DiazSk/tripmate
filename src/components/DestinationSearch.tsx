@@ -129,7 +129,7 @@ export default function DestinationSearch({
         // `text-base`, not the 0.95rem this carried: that is 15.2px, and DESIGN.md's own rule is
         // that anything typed into stays at 16px or iOS Safari zooms the whole viewport on focus.
         // It is also the documented `field` type step, so the ramp and the bug agree here.
-        "w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pr-4 pl-11 text-base text-white transition-colors duration-200 placeholder:text-white/45 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
+        "w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pr-4 pl-11 text-base text-white transition-colors duration-200 placeholder:text-white/55 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
   const iconClassName =
     variant === "bare"
       ? "pointer-events-none absolute top-1/2 left-0 h-3.5 w-3.5 -translate-y-1/2 text-muted"
