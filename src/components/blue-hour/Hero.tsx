@@ -2,7 +2,6 @@
 
 import { useRef } from "react";
 import { getImageProps } from "next/image";
-import { ChevronDown } from "lucide-react";
 import { useLineReveal } from "@/lib/lineReveal";
 
 /** The hero is two photographs, not one: a back layer that hangs from the top and a front layer
@@ -86,7 +85,7 @@ const LAYER_WIDTH =
  * everywhere below `lg`. It is capped below opaque — see that rule for why the cap only became
  * correct once the pin was gone.
  *
- * The ambient motion is CSS keyframes on `transform`/`opacity` only (`.hero-light`, `.hero-cue*`),
+ * The ambient motion is CSS keyframes on `transform`/`opacity` only (`.hero-light`), 
  * which the compositor owns outright. This component used to run five infinite GSAP tweens plus a
  * `pointermove` parallax driving six `quickTo`s across two nested transform planes; a Chrome trace
  * of a real session found scrolling frames resolving on the main thread (`SCROLL_MAIN_THREAD` on
@@ -218,17 +217,75 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
 
         {/* Shares the subline's entrance one step later, so the ask arrives after the sentence that
             justifies it. `shadow-lg` because this is the one button on the page sitting on bare
-            photography with no panel behind it. */}
+            photography with no panel behind it — the reference carries no shadow here, but its
+            button is not over a full-bleed landscape.
+
+            **White at rest, amber on hover** — the reference's own arrangement, read off its live
+            CSS rather than its screenshots. Its `.btn-primary` has exactly one hover rule and it
+            touches `background-color` only; the label stays dark in both states. That is worth
+            stating because the obvious reading is "amber background, white text", and white on
+            `#fb9826` measures **2.19:1** — under even the 3:1 large-text bar. `--accent-foreground`
+            holds for both states at 16.5:1 on white and 7.55:1 on amber, which is exactly the job
+            The Two Foregrounds Rule gives it.
+
+            The focus indicator was broken here and the white fill is what exposed it. It read
+            `focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none`, and under
+            real keyboard focus `:focus-visible` matched while every ring slot in the composed
+            `box-shadow` stayed `rgba(0,0,0,0)` — no indicator at all, in any colour.
+
+            **The cause is unexplained and the note is deliberately narrow about that.** Three
+            hypotheses were tested and all three are wrong: it is not the colour token (`ring-accent`,
+            which renders correctly on `FeaturedPlans`' button, is equally invisible here), not
+            `shadow-lg` occupying the shadow stack (adding it to that other button does not break its
+            ring), and not `transition-all` catching the measurement mid-animation (still transparent
+            after 1500ms). So this is *not* a general "ring loses to box-shadow" rule — rings work
+            elsewhere in this project. Something element-specific defeats it on this button and it was
+            not worth more time to find, because `outline` is a different property, measurably renders
+            (`2px solid rgb(9,27,32)`), and is already the pattern three other call sites use.
+
+            `outline-accent-foreground` with **no offset**, deliberately. Offset would put the ring
+            on the photograph, where a dark line disappears; hugging the button keeps it against a
+            known colour in both states — 17.66:1 on the white rest fill, 8.09:1 on the amber
+            hover. An amber outline would have vanished on hover, and a white one on rest.
+
+            Type and padding are the reference's too: `0.875rem / 600 / -0.5px` tracking at 90%
+            line-height, in a `1.25rem 2rem` box — 4px taller than ours was. */}
         <div
           className="hero-rise relative z-[4] mt-8 flex justify-center"
           style={{ animationDelay: "300ms" }}
         >
           <button
             type="button"
-            onClick={onPlan}
-            className="pointer-events-auto rounded-full border border-transparent bg-accent px-8 py-4 text-base font-medium text-accent-foreground shadow-lg shadow-black/30 transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none active:scale-[0.98]"
+            // `() => onPlan()` and not a bare `onClick={onPlan}`: React hands the click handler a
+            // MouseEvent as its first argument, and `onPlan` now takes an optional prefill in that
+            // position. A bare reference would post a MouseEvent into the wizard's form state, and
+            // it typechecks, because `Hero` declares the prop as `() => void` and TypeScript
+            // happily assigns a wider handler to a narrower one.
+            onClick={() => onPlan()}
+            className="pointer-events-auto inline-flex items-center gap-4 rounded-full border border-transparent bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground shadow-lg shadow-black/30 transition-all duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
           >
             Plan a trip
+            {/* The reference's button mark, drawn to its own path rather than borrowed from
+                `SectionOpener`. Those are two different shapes and the reference has both: the
+                section opener sets a six-point `❋`, which `SectionMark` redraws as three crossing
+                strokes, while the button carries this four-point star with concave sides, filled.
+                Reusing the stroked one here would not have worked at this size anyway — 1.5 units
+                of stroke inside an 8px box closes the gaps between the arms and reads as a blob.
+                A filled path stays crisp.
+
+                `fill="currentColor"` rather than the reference's hard-coded `#0D2E37`, so the mark
+                tracks `text-accent-foreground` and cannot drift from the label it sits beside.
+                `gap-4` is the reference's own `1rem`. */}
+            <svg
+              aria-hidden
+              width="8"
+              height="8"
+              viewBox="0 0 8 8"
+              fill="currentColor"
+              className="shrink-0"
+            >
+              <path d="M8 0C8 0 7.32057 2.41553 7.32057 4C7.32057 5.58447 8 8 8 8C8 8 5.58447 7.32057 4 7.32057C2.41553 7.32057 0 8 0 8C0 8 0.679427 5.58447 0.679427 4C0.679427 2.41553 0 0 0 0C0 0 2.41553 0.679426 4 0.679426C5.58447 0.679426 8 0 8 0Z" />
+            </svg>
           </button>
         </div>
       </div>
@@ -250,21 +307,6 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
           className={`absolute bottom-0 left-0 z-[3] h-auto ${LAYER_WIDTH} [@media(min-aspect-ratio:3/5)]:-bottom-[0.4vw]`}
         />
       </picture>
-
-      {/* The scroll cue: fades out over the first 200px of real scroll, so its absence itself
-          confirms the page moved. Decorative only, not a control.
-          The offset is not a flat `bottom-8` any more. With an aspect-driven section the hero can be
-          taller than the window (1229px at 1920x1080), which would park the cue below the fold —
-          the one place a scroll hint is useless. `max()` keeps it 2rem from the section's bottom
-          when the hero fits and 2rem from the *viewport's* bottom when it does not. */}
-      <div
-        aria-hidden
-        className="hero-cue hero-legible pointer-events-none absolute bottom-[max(2rem,calc(100%-100dvh+2rem))] z-[4] text-on-deep/70"
-      >
-        <div className="hero-cue-bob">
-          <ChevronDown size={28} strokeWidth={1.5} />
-        </div>
-      </div>
 
       {/* The exit wash — see `.hero-dusk`. Last child and `z-10` so it covers the type as well as
           the photograph: the composition has to dim as one image, or the headline survives its

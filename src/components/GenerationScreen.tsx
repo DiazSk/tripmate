@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import Image from "next/image";
+import Image, { getImageProps } from "next/image";
 
 import { devLabel } from "@/lib/devInspector";
 import SectionOpener from "./blue-hour/SectionOpener";
@@ -45,6 +45,19 @@ import { usePlacePhoto } from "@/lib/usePlacePhoto";
  * opens already framed. This screen is opaque and sits on top. Un-booting it would move that cost
  * to the moment the plan arrives, which is the one moment it would be felt.
  */
+
+/** The ground when the destination has no photograph. A real place beats a generic one every time,
+ *  so this appears only where `usePlacePhoto` came back empty — which was previously flat
+ *  `--canvas`, i.e. nothing at all. Dawn mist over hills is the one generic image this screen can
+ *  honestly wear: it says "somewhere, early" without claiming to be the traveller's somewhere.
+ *
+ *  A pair, art-directed on the same 3/5 aspect ratio the hero switches on, because this is a
+ *  full-bleed backdrop and the landscape crop centre-cuts badly on a phone. One threshold in the
+ *  codebase rather than two. */
+const FALLBACK = {
+  landscape: { src: "/scenes/scenic-cloudy-background.webp", width: 2880, height: 1726 },
+  portrait: { src: "/scenes/mobile-scenic-cloudy-background.webp", width: 750, height: 1714 },
+};
 
 /** The five reported stages, grouped into the four a traveller can act on.
  *
@@ -129,6 +142,15 @@ export default function GenerationScreen({
   // Already resolved and cached by the plan step, which asks the same hook for the Wikipedia
   // extract — all three variants share one request per name, so the photo costs no extra fetch.
   const photo = usePlacePhoto(destination, "full");
+  // `getImageProps` only computes URLs — it renders nothing — so building these unconditionally
+  // costs no request unless the `<picture>` below actually mounts.
+  const fallbackCommon = { alt: "", sizes: "100vw", priority: true } as const;
+  const {
+    props: { srcSet: fallbackLandscape },
+  } = getImageProps({ ...fallbackCommon, ...FALLBACK.landscape });
+  const {
+    props: { srcSet: fallbackPortrait, ...fallbackRest },
+  } = getImageProps({ ...fallbackCommon, ...FALLBACK.portrait });
   const [factIndex, setFactIndex] = useState(0);
   const [cancelReady, setCancelReady] = useState(false);
 
@@ -201,19 +223,28 @@ export default function GenerationScreen({
           lighter through the middle so the photograph is actually visible, and heavy again under
           the band. It is the same split the reference's own Combine section uses — large type on
           the photo, dense type in a darkened band.
-          No photo resolves to flat canvas, which is what this screen was before. */}
-      {photo && (
-        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+          With no destination photograph this falls back to `FALLBACK` rather than to flat canvas,
+          which is what the screen showed before. The scrim is shared: it was measured against
+          destination photography peaking near white, and the fallback is darker than any of those,
+          so it inherits a gradient with margin to spare instead of needing one of its own. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        {photo ? (
           <Image src={photo} alt="" fill priority sizes="100vw" className="object-cover" />
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(to bottom, rgb(var(--surface-deep-rgb) / 0.94) 0%, rgb(var(--surface-deep-rgb) / 0.9) 34%, rgb(var(--surface-deep-rgb) / 0.55) 60%, rgb(var(--surface-deep-rgb) / 0.7) 86%, rgb(var(--surface-deep-rgb) / 0.88) 100%)",
-            }}
-          />
-        </div>
-      )}
+        ) : (
+          <picture>
+            <source media="(min-aspect-ratio: 3/5)" srcSet={fallbackLandscape} sizes="100vw" />
+            <source srcSet={fallbackPortrait} sizes="100vw" />
+            <img {...fallbackRest} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          </picture>
+        )}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to bottom, rgb(var(--surface-deep-rgb) / 0.94) 0%, rgb(var(--surface-deep-rgb) / 0.9) 34%, rgb(var(--surface-deep-rgb) / 0.55) 60%, rgb(var(--surface-deep-rgb) / 0.7) 86%, rgb(var(--surface-deep-rgb) / 0.88) 100%)",
+          }}
+        />
+      </div>
 
       {/* The only thing announced. The rotating fact and the week are deliberately outside it: a
           live region that re-reads on every stage change is worse than silence. */}

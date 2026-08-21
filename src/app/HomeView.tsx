@@ -26,6 +26,7 @@ import PoiCandidatePicker from "@/components/PoiCandidatePicker";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
+import type { PlanPrefill } from "@/components/blue-hour/planExamples";
 import DockedPanel from "@/components/DockedPanel";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
@@ -792,6 +793,43 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     [destination, rawFetch, destContext, wikiExtract]
   );
 
+  /**
+   * Opens the wizard, optionally filled in from a featured card.
+   *
+   * Only the six fields a card can honestly speak for are written. Everything else — energy,
+   * crowds, interests, explorer style — keeps whatever the traveller's saved profile put there,
+   * because a marketing example has no business overwriting a stated preference.
+   *
+   * `tier` and `group` are derived rather than carried: `closestTier` already owns the
+   * budget-to-tier mapping the tier cards use, and re-stating it in the card data would be a second
+   * copy to keep in sync. Same for the group — it falls out of the party counts.
+   *
+   * Dates arrive already rolled forward to the next occurrence of the card's season, so they can
+   * never be behind the `min={todayISO()}` the date inputs enforce.
+   *
+   * Deliberately *not* geocoded here. Geocoding happens on the destination field's blur, and a
+   * programmatic set fires no blur — but these destinations are curated and real, the globe does not
+   * boot on this step anyway, and a missed geocode is non-blocking by design. The traveller
+   * touching the field is what resolves it, exactly as when they type their own.
+   */
+  function startPlanning(prefill?: PlanPrefill) {
+    if (prefill) {
+      setDestination(prefill.destination);
+      setStartDate(prefill.startDate);
+      setEndDate(prefill.endDate);
+      setBudget(prefill.budgetUsd);
+      setTier(closestTier(prefill.budgetUsd, tripDays(prefill.startDate, prefill.endDate)));
+      setParty({ adults: prefill.adults, children: prefill.children, infants: 0 });
+      setGroup(
+        prefill.children > 0 ? "family_with_kids" : prefill.adults === 1 ? "solo" : "couple"
+      );
+    }
+    // Always the first sub-step, even fully prefilled: the card is a suggestion and the traveller
+    // should see what it filled in before it prices anything.
+    setPlanStep("basics");
+    setStep("plan");
+  }
+
   return (
     <main
       // pt-[calc(var(--nav-h)+1.25rem)]: clearance for the fixed glass navbar (AppShell
@@ -829,7 +867,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           with real scroll height, so it replaces the single centered hero this step used to
           be — but it hands off to the same setStep("plan"), which is this app's own multi-step
           form rather than the standalone build's one-card console. */}
-      {step === "landing" && <ScrollStory onPlan={() => setStep("plan")} />}
+      {step === "landing" && <ScrollStory onPlan={startPlanning} />}
 
       {/* Form and tier picker merged into one card: the dates and budget are what price the
           tiers, so splitting them across two steps meant choosing a style blind. One <form>
