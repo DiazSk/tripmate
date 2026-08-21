@@ -81,8 +81,14 @@ export default function ImageRow() {
           lets adjacent cells share one hairline, which is most of why theirs reads as an editorial
           grid and ours read as stickers. Same token, same 1px, different reading.
           The dividers are on the cells rather than the container so they land *between* items and
-          never on the outer edge: `-mr-px` would be the alternative and it fights `overflow-hidden`. */}
-      <div className="mt-10 grid grid-cols-2 md:grid-cols-4">
+          never on the outer edge: `-mr-px` would be the alternative and it fights `overflow-hidden`.
+
+          **One column below `sm`, and the shared hairline turns horizontal with it.** Two columns
+          on a phone gave each cell ~171px, which is not a column, it is a gutter with words in it:
+          every `detail` wrapped to five lines two or three words wide. The premise of the section
+          survives the stack — adjacent cells still share exactly one rule — it is just that on a
+          phone "adjacent" means above and below rather than left and right. */}
+      <div className="mt-10 grid sm:grid-cols-2 md:grid-cols-4">
       {sceneBeats.map((beat, index) => (
         // `group` drives the whole hover treatment: the frost clears, the photo eases up
         // in scale, the description rises out of the bottom edge. Pure CSS transitions
@@ -91,7 +97,7 @@ export default function ImageRow() {
         // `--scene-hover` clock so they start and land on the same frame.
         <div
           key={beat.id}
-          className="image-row-item group border-white/10 px-4 py-4 [&:not(:nth-child(2n+1))]:border-l md:px-5 md:[&:not(:nth-child(4n+1))]:border-l md:[&:nth-child(3)]:border-l"
+          className="image-row-item group border-white/10 px-4 py-4 [&:nth-child(n+2)]:border-t sm:[&:nth-child(n+2)]:border-t-0 sm:[&:not(:nth-child(2n+1))]:border-l md:px-5 md:[&:not(:nth-child(4n+1))]:border-l"
         >
           {/* Label + stat on a hairline — Vita Travels' own card head ("Introvert Retreats"
               left, "/ 78+ Countries" right, rule beneath). The rule is what makes the pair
@@ -125,7 +131,7 @@ export default function ImageRow() {
                 src={beat.photo.src}
                 alt={beat.photo.alt}
                 fill
-                sizes="(min-width: 768px) 25vw, 50vw"
+                sizes="(min-width: 768px) 25vw, (min-width: 640px) 50vw, 100vw"
                 className="object-cover [transition:var(--scene-hover)] [transition-property:transform] group-hover:scale-[1.08]"
               />
             ) : (
