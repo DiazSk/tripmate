@@ -319,6 +319,18 @@ export interface RefineCellScores {
   after: BenchCellScores;
   /** after − before per weighted group. Null where either side was unmeasurable. */
   delta: CompositeGroups;
+  /**
+   * How many of `delta`'s five groups were non-null and so contributed to `refineComposite`.
+   *
+   * `refineComposite` deliberately has no equivalent of `compositeScore`'s
+   * `MIN_GROUPS_FOR_COMPOSITE` gate: a delta answers "did this patch make the trip worse," and one
+   * group reporting a real drop is still real information, not a verdict to withhold the way a
+   * thin absolute score would be. But an ungated composite hides its own denominator — a composite
+   * built from one group reads identical to one built from five. This field is what keeps cells
+   * comparable instead of discarding that signal. `0` is a legitimate, measured value ("no group
+   * was measurable"), not an absence, so it is a number and never null.
+   */
+  measuredGroups: number;
   patch: RefinePatchScore;
   operational: OperationalScore;
 }
