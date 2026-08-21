@@ -20,7 +20,9 @@ import {
   computeModelAgreement,
   rowToCell,
   runBenchCell,
+  runRefineCell,
 } from "@/lib/bench/runBenchmark";
+import { findRefineTask, refineTasksFor } from "@/lib/bench/refineTasks";
 import { SEMANTIC_METHOD } from "@/lib/bench/scorers/text";
 import { judgeFixture, judgeModel } from "@/lib/bench/scorers/judge";
 
@@ -87,6 +89,8 @@ function snapshot() {
     // every trip is represented.
     panel: balancedPanel(cells, models.map((m) => m.id)),
     agreement: computeModelAgreement(cells),
+    // Keyed by fixture id so the console can render the refine-task picker without a second request.
+    refineTasks: Object.fromEntries(fixtures.map((f) => [f.id, refineTasksFor(f.id)])),
   };
 }
 
@@ -147,6 +151,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing model" }, { status: 400 });
     }
     try {
+      // Absent taskId keeps the generation path byte-identical for every existing caller.
+      if (body.taskId) {
+        const task = findRefineTask(body.fixtureId, body.taskId);
+        if (!task) return NextResponse.json({ error: "Unknown task" }, { status: 400 });
+        const cell = await runRefineCell(fixture, task, body.model);
+        return NextResponse.json({ ok: true, cell });
+      }
+
       const cell = await runBenchCell(fixture, body.model);
       return NextResponse.json({ ok: true, cell });
     } catch (err) {
