@@ -289,35 +289,18 @@ export default function ProfileForm({
           Back
         </BackButton>
 
-        {/* `SectionOpener` rather than a hand-rolled label: the label sits *beside* the heading in
-            its own column with a hairline across the top, which is the one exception DESIGN.md's
-            No-Kicker Rule was amended to allow. An eyebrow stacked *above* the heading — which is
-            literally what the reference's contact page does — is still banned, and this is the
-            established way the rest of the app takes the same move. */}
-        <SectionOpener label="Profile">
-          {/* `.font-display`, the app's own display step — not `.font-scene-display`. They are the
-              same face at the same weight and differ only in tracking, but the scene classes are
-              scoped to the Persuade surface, and this is an Operate one. Same reason the subline
-              below does not take `.scene-prose`: its own comment reserves that 1.8 leading for the
-              landing and warns it costs a screenful of scanning on a dense panel. */}
-          <h1 className="font-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground">
-            Your travel profile
-          </h1>
-          <p className="max-w-md pt-4 text-sm leading-relaxed text-muted">
-            The things that stay true between trips. We apply these to every plan so the wizard
-            only has to ask what actually changes.
-          </p>
-        </SectionOpener>
-
         {/* The reference's contact-page split: photography one side, the form the other. Single
             column until `lg` — two columns on a phone would give the photo a strip too narrow to
             be a photograph and the pickers too little room to stay tappable.
 
             The reference does not float two columns in whitespace; it draws a grid. So the split is
             a shared hairline rather than a gap: `lg:gap-0` with symmetric `pr-10`/`pl-10` puts the
-            rule dead centre in an 80px gutter, and `border-b` closes the region underneath the
-            taller column the way the reference's own rule closes its content section above the
-            footer. `SectionOpener` already ruled the top edge, so the composition is bracketed.
+            rule dead centre in an 80px gutter, and `border-y` brackets the region top and bottom
+            the way the reference's own rules bracket its content section. The top rule lives here
+            rather than on the header because the header now sits *inside* the right cell — the
+            reference's arrangement, and what makes the vertical rule run the region's whole height
+            instead of starting below a full-width heading. `SectionOpener` takes `rule={false}` so
+            it does not draw a second, half-width one.
 
             The bottom padding sits on the two cells, not on the grid. On the container it is
             outside the row, so the vertical rule stopped at the row's end and the closing rule sat
@@ -331,14 +314,38 @@ export default function ProfileForm({
             as the form, and the `sticky` div inside it has that whole height to travel within.
             This page is far longer than the reference's short contact form, so without sticky the
             photography would scroll away in the first screenful. */}
-        <div className="mt-12 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:gap-0 lg:border-b lg:border-white/10">
-          <div className="lg:pr-10 lg:pb-16">
+        <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:gap-0 lg:border-y lg:border-white/10">
+          <div className="lg:pr-10 lg:pt-16 lg:pb-16">
             <div className="lg:sticky lg:top-[calc(var(--nav-h)+2rem)]">
               <Memories trips={recentTrips} />
             </div>
           </div>
 
-          <div className="min-w-0 divide-y divide-card-border lg:border-l lg:border-white/10 lg:pb-16 lg:pl-10">
+          <div className="min-w-0 divide-y divide-card-border lg:border-l lg:border-white/10 lg:pt-16 lg:pb-16 lg:pl-10">
+            {/* `SectionOpener` rather than a hand-rolled label: the label sits *beside* the
+                heading in its own column, which is the one exception DESIGN.md's No-Kicker Rule was
+                amended to allow. An eyebrow stacked *above* the heading — which is literally what
+                the reference's contact page does here — is still banned, and this is the
+                established way the rest of the app takes the same move. Kept beside rather than
+                stacked even inside this narrower cell: 11rem of label leaves the heading ~583px at
+                1440, which the `clamp(2rem,5vw,3.75rem)` step fits.
+                `rule={false}` because the grid above owns the top hairline now — see there. */}
+            <SectionOpener label="Profile" rule={false}>
+            {/* `.font-display`, the app's own display step — not `.font-scene-display`. They are
+                the same face at the same weight and differ only in tracking, but the scene classes
+                are scoped to the Persuade surface, and this is an Operate one. Same reason the
+                subline below does not take `.scene-prose`: its own comment reserves that 1.8
+                leading for the landing and warns it costs a screenful of scanning on a dense
+                panel. */}
+            <h1 className="font-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground">
+              Your travel profile
+            </h1>
+            <p className="max-w-md pt-4 text-sm leading-relaxed text-muted">
+              The things that stay true between trips. We apply these to every plan so the wizard
+              only has to ask what actually changes.
+            </p>
+            </SectionOpener>
+
             <Section
               title="Who you usually travel with"
               hint="A default only — the planner still asks who's coming on each trip, since that changes."
