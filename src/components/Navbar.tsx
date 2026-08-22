@@ -270,10 +270,16 @@ export default function Navbar() {
           to divide from, so the rule was gated off and that one route rendered a bare strip while
           every sibling rendered a grid. The trailing cell holds whatever this route's single
           trailing control is — `Profile` everywhere, the menu toggle on `/` below `sm` — so it is
-          never the padded empty box the links cell used to be on `/profile`. */}
+          never the padded empty box the links cell used to be on `/profile`.
+
+          This rule is `sm:` and the trailing one is not, which is the reference's own arrangement
+          at phone width: there the bar is a wordmark and a toggle, and it rules off only the
+          toggle. Drawing both below `sm` put two hairlines either side of a middle cell that is
+          empty on `/` — three divisions in a 375px bar, two of them fencing nothing. The trailing
+          rule is the one that survives because it is the one with a control against it. */}
       <div
         className={`flex items-center px-5 sm:px-6 ${
-          isUserFacing ? "border-r border-card-border" : ""
+          isUserFacing ? "sm:border-r sm:border-card-border" : ""
         }`}
       >
         <Link

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import BackButton from "@/components/BackButton";
+import SiteFooter from "@/components/SiteFooter";
 import SectionOpener from "@/components/blue-hour/SectionOpener";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
@@ -419,6 +420,14 @@ export default function ProfileForm({
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Cancels this `<main>`'s horizontal and bottom padding, the same technique ScrollStory
+            and `/trips`' hero already use: the footer is a full-bleed band with its own gutters
+            and its own `pb-8`, so it has to reach all three edges rather than sit inside the
+            column the form occupies. */}
+        <div className="-mx-5 -mb-16 sm:-mx-6 sm:-mb-24">
+          <SiteFooter />
         </div>
       </div>
     </main>
