@@ -4,7 +4,15 @@ import Link from "next/link";
 import { devLabel } from "@/lib/devInspector";
 
 /**
- * The end of the page.
+ * The end of the page — on every scrolling, user-facing surface: the landing, `/trips` and
+ * `/profile`. It lived in `blue-hour/` while the landing was its only caller; it takes no props
+ * and knows nothing about a scene, so being there was only ever about who imported it.
+ *
+ * The two links stay plain on the route they point at, rather than picking up the
+ * `aria-current="page"` treatment the navbar's Profile link carries. A footer is a list of
+ * destinations, not a position indicator, and marking one would mean turning this into a client
+ * component for `usePathname()` — which would also drag `new Date().getFullYear()` below into
+ * hydration, where it is currently a server render with no mismatch to worry about.
  *
  * The landing used to stop on the poster CTA, which leaves a visitor who did not click it with
  * nowhere to go but back. The reference treats its footer as a section rather than a legal strip:

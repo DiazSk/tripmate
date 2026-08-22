@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowRight, Trash2 } from "lucide-react";
 import { TripSummary } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import SiteFooter from "@/components/SiteFooter";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
@@ -398,6 +399,17 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
           </ul>
         </div>
       )}
+
+      {/* Same conditional bleed as the hero above, and for the same reason: with trips saved this
+          `<main>` carries `p-5 sm:p-6` that a full-bleed band has to cancel, and in the empty state
+          it carries no padding at all so there is nothing to cancel. */}
+      <div
+        className={
+          trips.length > 0 ? "-mx-5 -mb-5 sm:-mx-6 sm:-mb-6" : ""
+        }
+      >
+        <SiteFooter />
+      </div>
 
       <ConfirmDialog
         open={pendingDelete !== null}
