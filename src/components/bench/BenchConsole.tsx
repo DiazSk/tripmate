@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { STEP_LABELS } from "@/lib/runLabels";
 import type { BenchModel } from "@/lib/bench/models";
 import type { ModelAggregate } from "@/lib/bench/runBenchmark";
 import { paretoFrontier } from "@/lib/bench/pareto";
@@ -273,6 +275,210 @@ GROUP BY model;`}
             cell stores a row with a <em>null</em> composite rather than no row, so it is absent
             from this count — which is exactly why counting rows overstates coverage and counting
             scores does not.
+          </p>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Which model to pick for each LLM-backed feature, and — more importantly — which of those
+ * picks this benchmark can actually justify.
+ *
+ * The per-feature counts, latency and cost are fetched LIVE from /api/llm-traces/perf rather
+ * than written into this file. That is deliberate: a hardcoded snapshot is how the Task 9
+ * callout above ended up claiming "nothing has been swept yet" after the sweep had run, and
+ * numbers frozen in JSX rot the moment anyone runs another call. Only the judgment column is
+ * authored here, because that is the part that changes when someone benchmarks something, not
+ * when someone uses the app.
+ */
+/** The slice of /api/llm-traces/perf's per-feature stats this panel reads. Declared locally
+ *  rather than imported: the endpoint serves the Perf Dashboard, and coupling this read-only
+ *  panel to that module's internals would make a dashboard refactor break /bench. */
+interface PerfStat {
+  avg: number | null;
+  median: number | null;
+  p95: number | null;
+}
+interface PerfFeature {
+  type: string;
+  count: number;
+  durationMs: PerfStat;
+  costUsd: PerfStat;
+}
+
+const FEATURE_GUIDANCE: Record<
+  string,
+  { evidence: string; measured: boolean; pick: string; why: string }
+> = {
+  chat: {
+    evidence: "Measured — 42 cells, Sonnet vs Haiku",
+    measured: true,
+    pick: "Haiku 4.5, with a caveat",
+    why: "The only evidenced call here. Zero rejected ops, restraint 7/7, ~3.6x cheaper at the same latency. But the 0.970 → 0.940 composite gap rests on one run per cell, so it sits inside noise, and the one real difference (weather-appropriateness) surfaced incidentally rather than from a task built to test it. Worth a confirming sweep before making it the default: the saving is ~$0.15/turn and the downside is silently worse edits.",
+  },
+  generate: {
+    evidence: "Benchmarked, but the numbers are stale",
+    measured: false,
+    pick: "Keep Sonnet 4.5",
+    why: "Aryan's sweep scored Haiku 0.842 against Sonnet 0.959 on a much harder, unconstrained task. The refine result does NOT transfer — the failure mode there was index hallucination over large free-form output, which is exactly what generation is. Those numbers predate both the format fix and the model change, so this genuinely needs re-running.",
+  },
+  critique: {
+    evidence: "Never benchmarked",
+    measured: false,
+    pick: "Benchmark this next",
+    why: "The most expensive call in the app per invocation, on the critical path, and its failures are SILENT by design — a timeout ships the trip with no quality review and nothing says so. It is plausibly the best Haiku candidate or the worst and there is no data either way: a weak critique that misses problems is worse than no critique, because it manufactures false assurance.",
+  },
+  context: {
+    evidence: "Never benchmarked",
+    measured: false,
+    pick: "Likely Haiku",
+    why: "Short, factual, low-stakes output. Most of its cost is not the work — it is the CLI's ~32k-token baseline system prompt, which every call pays regardless of model. Inference from task shape, not measurement.",
+  },
+  "place-detail": {
+    evidence: "Never benchmarked",
+    measured: false,
+    pick: "Likely Haiku",
+    why: "The shortest output of any feature and the highest call volume. Cheap per call, so the absolute saving is small, but the task shape (a few factual sentences about one place) is the least likely to need a larger model. Inference, not measurement.",
+  },
+  rebalance: {
+    evidence: "Never benchmarked (and n is tiny)",
+    measured: false,
+    pick: "Probably follows Chat Edit",
+    why: "Structurally the closest thing to a refine patch — it rewrites remaining days against a changed budget. If the chat finding holds, this should inherit it. Too few calls recorded to say anything from the data itself.",
+  },
+};
+
+function ModelGuidance() {
+  const [features, setFeatures] = useState<PerfFeature[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/llm-traces/perf")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setFeatures(d.features as PerfFeature[]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const rows = Object.keys(FEATURE_GUIDANCE).map((type) => ({
+    type,
+    guidance: FEATURE_GUIDANCE[type],
+    perf: features?.find((f) => f.type === type) ?? null,
+  }));
+
+  return (
+    <details className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
+      <summary className="cursor-pointer font-semibold text-stone-900">
+        Which model should each feature use?
+      </summary>
+
+      <div className="mt-3 space-y-4 leading-relaxed">
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900">
+          <p className="font-semibold">Read this before the table</p>
+          <p className="mt-1">
+            This benchmark can only answer the question for <strong>one</strong> of these features.
+            Everything else has no quality scoring at all — only latency and cost, which say nothing
+            about whether an answer was any good. Rows marked{" "}
+            <em>never benchmarked</em> are reasoning from task shape, not evidence. They are a
+            starting point for what to measure, not a decision you should ship on.
+          </p>
+          <p className="mt-2">
+            Every feature runs <code>claude-sonnet-4-5</code> today
+            (<code>src/lib/claude.ts</code>); only the bench harness and the judge override it.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-left text-stone-500">
+              <tr className="border-b border-stone-200">
+                <th className="py-1.5 pr-3">Feature</th>
+                <th className="py-1.5 pr-3">Calls</th>
+                <th className="py-1.5 pr-3">Median latency</th>
+                <th className="py-1.5 pr-3">Avg cost</th>
+                <th className="py-1.5 pr-3">Evidence</th>
+                <th className="py-1.5 pr-3">Suggestion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ type, guidance, perf }) => (
+                <tr key={type} className="border-b border-stone-100 align-top">
+                  <td className="py-1.5 pr-3 font-medium text-stone-900">
+                    {STEP_LABELS[type] ?? type}
+                  </td>
+                  <td className="py-1.5 pr-3">{perf ? perf.count : "—"}</td>
+                  <td className="py-1.5 pr-3">
+                    {perf?.durationMs.median == null
+                      ? "—"
+                      : `${Math.round(perf.durationMs.median / 1000)}s`}
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    {perf?.costUsd.avg == null ? "—" : `$${perf.costUsd.avg.toFixed(3)}`}
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <span
+                      className={
+                        guidance.measured ? "font-medium text-emerald-700" : "text-stone-500"
+                      }
+                    >
+                      {guidance.evidence}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3 font-medium text-stone-900">{guidance.pick}</td>
+                </tr>
+              ))}
+              <tr className="border-b border-stone-100 align-top text-stone-400">
+                <td className="py-1.5 pr-3 font-medium text-stone-600">Element Edit</td>
+                <td className="py-1.5 pr-3" colSpan={5}>
+                  Dead code — the route accepts <code>mode: &quot;element&quot;</code> but nothing in
+                  the app ever sends it, so it has zero traces. Wire it up or delete it; do not
+                  benchmark it.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="mt-1 text-xs text-stone-500">
+            Calls, latency and cost are live from <code>/api/llm-traces/perf</code> — the same
+            source <code>/backend</code>&apos;s Perf Dashboard reads, so the two always agree.
+          </p>
+          <p className="mt-1 text-xs text-red-700">
+            <strong>These counts are undercounts, and badly so for some features.</strong>{" "}
+            <code>listTracesForPerf</code> inner-joins <code>llm_runs</code>, so any call written
+            without a <code>run_id</code> is silently dropped from both this table and the Perf
+            Dashboard. Measured against raw <code>llm_traces</code>: Place Detail is 41 real calls
+            shown as 3, Context is 17 shown as 9, and <strong>Rebalance is 2 shown as none at
+            all</strong> — which is why its row is dashed rather than zero. Latency and cost per
+            call are still valid for the subset that is counted; only the volume is wrong. Use the
+            counts to rank features, never to size a bill.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {rows.map(({ type, guidance }) => (
+            <div key={type}>
+              <p className="font-medium text-stone-900">
+                {STEP_LABELS[type] ?? type} — {guidance.pick}
+              </p>
+              <p className="text-stone-700">{guidance.why}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-md border border-stone-300 bg-white p-3">
+          <p className="font-semibold text-stone-900">
+            What it costs to extend this benchmark to the rest
+          </p>
+          <p className="mt-1">
+            The harness is hardwired to two task shapes: whole-itinerary generation and a refine
+            patch. Scoring critique or context is not a matter of running more calls — each needs
+            its own scorer family, the way refine needed one. That is the real cost of answering
+            the four unmeasured rows above, and it is why they are still unmeasured.
           </p>
         </div>
       </div>
@@ -591,6 +797,7 @@ export default function BenchConsole() {
     return (
       <div className="space-y-6">
         <BenchExplainer />
+        <ModelGuidance />
         <p className="text-sm text-red-600">{error}</p>
       </div>
     );
@@ -598,6 +805,7 @@ export default function BenchConsole() {
     return (
       <div className="space-y-6">
         <BenchExplainer />
+        <ModelGuidance />
         <p className="text-sm text-stone-500">Loading benchmark…</p>
       </div>
     );
@@ -608,6 +816,7 @@ export default function BenchConsole() {
   return (
     <div className="space-y-6">
       <BenchExplainer />
+      <ModelGuidance />
 
       {/* --- controls ------------------------------------------------------------------ */}
       <section className="rounded-lg border border-stone-200 bg-white p-4">
