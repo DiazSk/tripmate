@@ -91,6 +91,152 @@ function Provenance({
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${style}`}>{label}</span>;
 }
 
+/**
+ * Orientation for a teammate who has never seen Refine mode.
+ *
+ * Rendered ABOVE the loading and error gates on purpose. It is the one thing on this page that is
+ * useful before any data arrives — and most useful when the fetch has failed and there is nothing
+ * else to look at. Collapsed by default so it costs nothing to anyone who already knows the tool.
+ *
+ * Worth having on the page at all because Refine mode is not self-explanatory: its headline
+ * number is a DELTA whose sign convention is the OPPOSITE of the Perf Dashboard's, and reading
+ * it backwards inverts the benchmark's conclusion. That belongs next to the numbers, not in a
+ * doc nobody opens.
+ */
+function BenchExplainer() {
+  return (
+    <details className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
+      <summary className="cursor-pointer font-semibold text-stone-900">
+        What is this page? — read me first
+      </summary>
+
+      <div className="mt-3 space-y-4 leading-relaxed">
+        <p>This page compares AI models on two different jobs.</p>
+
+        <ul className="ml-5 list-disc space-y-1">
+          <li>
+            <span className="font-medium text-stone-900">Generate</span> — write a whole trip
+            from scratch. This is the original benchmark.
+          </li>
+          <li>
+            <span className="font-medium text-stone-900">Refine</span> — edit a trip that
+            already exists, the way the &ldquo;Refine with AI&rdquo; chat does (&ldquo;day 2
+            feels rushed, can we start later?&rdquo;). This is new.
+          </li>
+        </ul>
+
+        <p>
+          <span className="font-medium text-stone-900">Why Refine needed its own mode.</span>{" "}
+          The generate scores grade a finished trip. A refine call does not return a trip — it
+          returns a small patch, a list of edits. So we score the trip <em>before</em> the patch
+          and <em>again after</em> applying it, and report the <strong>difference</strong>. That
+          difference is what tells you whether the model&apos;s edit helped or hurt.
+        </p>
+
+        <div>
+          <p className="font-medium text-stone-900">How to run it</p>
+          <ol className="mt-1 ml-5 list-decimal space-y-1">
+            <li>
+              Pick a trip from the list. These are frozen sample trips — same inputs every time,
+              so only the model varies.
+            </li>
+            <li>
+              Choose <span className="font-medium">Generate</span> or{" "}
+              <span className="font-medium">Refine</span> at the top.
+            </li>
+            <li>
+              In Refine, pick which edit to test. Each trip has three:
+              <ul className="mt-1 ml-5 list-disc space-y-0.5">
+                <li>
+                  <code>retime-day2</code> — &ldquo;make day 2 more relaxed, start later&rdquo;
+                </li>
+                <li>
+                  <code>add-day2</code> — &ldquo;add a stop to day 2&rdquo;
+                </li>
+                <li>
+                  <code>ask-day1-packed</code> — &ldquo;is day 1 too packed?&rdquo; — a question,{" "}
+                  <em>not</em> a request to change anything
+                </li>
+              </ul>
+            </li>
+            <li>
+              Click run. It does one cell at a time on purpose — a whole sweep in one request
+              would time out.
+            </li>
+          </ol>
+        </div>
+
+        <div>
+          <p className="font-medium text-stone-900">Reading the numbers</p>
+          <ul className="mt-1 ml-5 list-disc space-y-1.5">
+            <li>
+              <span className="font-medium">&Delta; vs base</span> — the score change from the
+              patch. <strong>Negative means the edit made the trip worse.</strong> Careful: this
+              is the opposite convention from the Perf Dashboard, where lower is better because
+              it measures latency.
+            </li>
+            <li>
+              <span className="font-medium">ops emitted / rejected</span> — how many edits the
+              model asked for, and how many were invalid (a made-up day or stop number). Rejected
+              ops are the most common way a weaker model fails here.
+            </li>
+            <li>
+              <span className="font-medium">restraint</span> — did the model correctly{" "}
+              <em>not</em> edit the plan when it was only asked a question. This is the whole
+              point of the <code>ask-day1-packed</code> task. Changing a plan someone only asked
+              about is worse than being unhelpful.
+            </li>
+            <li>
+              <span className="font-medium">guardrail delta</span> — change in the count of real
+              problems (too much travel, overlapping stops, over budget).{" "}
+              <strong>Negative is good here</strong> — fewer problems than before.
+            </li>
+            <li>
+              <span className="font-medium">measuredGroups</span> — how many of the five score
+              groups could be measured for this trip. A score built on 1 group is not comparable
+              to one built on 5, so check this before comparing two cells.
+            </li>
+          </ul>
+        </div>
+
+        <p>
+          <span className="font-medium text-stone-900">One known limit.</span> The composite
+          score caps at 1.0, so a patch that <em>improves</em> a trip and one that changes
+          nothing both read 1.0. It is built to catch a model that makes things worse, not to
+          rank two good models against each other.
+        </p>
+
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+          <p className="font-semibold text-amber-900">Still to do — Task 9, the full sweep</p>
+          <p className="mt-1 text-amber-900">
+            Nothing has been swept yet. Any numbers on this page are from one or two exploratory
+            cells. The real run is{" "}
+            <strong>7 trips &times; 3 edits &times; 3 models = 63 calls</strong>, roughly 37
+            minutes and ~2.8M input tokens, which is why it is waiting on a fresh usage limit. It
+            answers one question:{" "}
+            <strong>
+              does Haiku 4.5 degrade a refine edit compared with Sonnet 4.5, and by how much?
+            </strong>{" "}
+            If it does not, the refine path can move to the cheaper, faster model.
+          </p>
+          <p className="mt-2 text-amber-900">
+            Before trusting a sweep, check nothing got throttled:
+          </p>
+          <pre className="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-xs text-amber-950">
+{`SELECT model, status, count(*) FROM llm_traces
+WHERE type='chat' GROUP BY model, status;`}
+          </pre>
+          <p className="mt-1 text-amber-900">
+            Any <code>error</code> or <code>timeout</code> row means re-run it — a throttled cell
+            reads as a <em>missing</em> score, not a failure, because the dashboard filters to{" "}
+            <code>status=&apos;ok&apos;</code>.
+          </p>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export default function BenchConsole() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -398,14 +544,28 @@ export default function BenchConsole() {
       }));
   }, [snap, aggregates, modelLabel, modelColor]);
 
-  if (error && !snap) return <p className="text-sm text-red-600">{error}</p>;
-  if (!snap) return <p className="text-sm text-stone-500">Loading benchmark…</p>;
+  if (error && !snap)
+    return (
+      <div className="space-y-6">
+        <BenchExplainer />
+        <p className="text-sm text-red-600">{error}</p>
+      </div>
+    );
+  if (!snap)
+    return (
+      <div className="space-y-6">
+        <BenchExplainer />
+        <p className="text-sm text-stone-500">Loading benchmark…</p>
+      </div>
+    );
 
   const hasResults = snap.cells.length > 0;
   const usesJudge = aggregates.some((a) => a.meanJudgeOverall !== null);
 
   return (
     <div className="space-y-6">
+      <BenchExplainer />
+
       {/* --- controls ------------------------------------------------------------------ */}
       <section className="rounded-lg border border-stone-200 bg-white p-4">
         <div className="flex flex-wrap items-center gap-2">
