@@ -227,8 +227,8 @@ function BenchExplainer() {
             <strong>Headline:</strong> the index-hallucination failure that sank Haiku on the
             generation benchmark <em>does not reproduce here</em> — zero rejected ops for either
             model across 108 ops, and restraint held 7/7 for both. They differ on guardrail delta
-            (Sonnet −0.33, Haiku +0.05) and on weather-appropriateness of the edit. Haiku is ~3.6&times;
-            cheaper at <em>statistically the same latency</em>, so a swap would cut cost, not the
+            (Sonnet −0.33, Haiku +0.05) and on weather-appropriateness of the edit. Haiku is ~2.2&times;
+            cheaper at <em>an identical measured latency</em> (101s both), so a swap would cut cost, not the
             perceived slowness that started this work. Full write-up in{" "}
             <code>docs/itinerary-quality.md</code>.
           </p>
@@ -264,12 +264,16 @@ function BenchExplainer() {
           </ul>
           <p className="mt-2 text-amber-900">
             To check coverage — <strong>do not</strong> count <code>error</code> rows in{" "}
-            <code>llm_traces</code> to judge this. There are 30 permanent error rows from an expired
-            OAuth token that predates the sweep, and reading those as contamination would send you
-            re-running ~$15 of calls for nothing. Ask what data exists instead:
+            <code>llm_traces</code> to judge this. There are 30 permanent error rows from the FIRST attempt at this
+            sweep, which failed wholesale on an expired OAuth token before the successful re-run
+            (02:55&ndash;04:24 UTC on 2026-08-22; the real cells landed after). Reading those as
+            contamination would send you re-running ~$15 of calls for nothing. Ask what data
+            exists instead — and count distinct cells, not rows, since a re-run leaves two rows
+            for one cell:
           </p>
           <pre className="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-xs text-amber-950">
-{`SELECT model, count(*) AS scored FROM bench_results
+{`SELECT model, count(DISTINCT fixture_id || '|' || task_id) AS scored
+FROM bench_results
 WHERE task_id IS NOT NULL AND composite IS NOT NULL
 GROUP BY model;`}
           </pre>
@@ -319,7 +323,7 @@ const FEATURE_GUIDANCE: Record<
     evidence: "Measured — 42 cells, Sonnet vs Haiku",
     measured: true,
     pick: "Haiku 4.5, with a caveat",
-    why: "The only evidenced call here. Zero rejected ops, restraint 7/7, ~3.6x cheaper at the same latency. But the 0.970 → 0.940 composite gap rests on one run per cell, so it sits inside noise, and the one real difference (weather-appropriateness) surfaced incidentally rather than from a task built to test it. Worth a confirming sweep before making it the default: the saving is ~$0.15/turn and the downside is silently worse edits.",
+    why: "The only evidenced call here. Zero rejected ops, restraint 7/7, ~2.2x cheaper at an identical measured latency (101s both). But the 0.970 → 0.940 composite gap rests on one run per cell, so it sits inside noise, and the one real difference (weather-appropriateness) surfaced incidentally rather than from a task built to test it. Worth a confirming sweep before making it the default: the saving is ~$0.13/turn and the downside is silently worse edits.",
   },
   generate: {
     evidence: "Benchmarked, but the numbers are stale",
