@@ -82,6 +82,32 @@ function probe() {
       !!document.querySelector(".cesium-widget canvas") &&
       !document.querySelector(".cesium-widget-errorPanel"),
     fcpMs: Math.round(paint.find((p) => p.name === "first-contentful-paint")?.startTime ?? -1),
+    // The navbar's cell structure. It has no other coverage anywhere — nothing in `npm test`
+    // renders a component — and its one shipped bug was a per-route inconsistency: the wordmark's
+    // vertical rule was gated on there being links to divide from, so `/profile` rendered a bare
+    // strip while every sibling rendered a ruled grid. That class of defect is exactly what a
+    // per-route probe catches. `navCells` is 3 on a user-facing route and 2 on the internal
+    // dashboards and the 404; `navTrailing` counts *visible* controls in the last cell and must be
+    // 1 wherever there are 3 cells — 2 would mean a display utility silently lost to Tailwind's
+    // alphabetical emission order, which is how `hidden` on an already-`inline-flex` link fails.
+    // Still desktop-only, like everything else here: the toggle and the panel are never exercised.
+    // Scoped to `.glass-nav`, not a bare `nav`: the landing renders an unclassed, childless <nav>
+    // earlier in the DOM, so the generic selector reported 0 cells on `/`.
+    navCells: (() => {
+      const nav = document.querySelector("nav.glass-nav");
+      if (!nav) return null;
+      return [...nav.children].filter((c) => c.tagName === "DIV" && c.id !== "nav-menu").length;
+    })(),
+    navTrailing: (() => {
+      const nav = document.querySelector("nav.glass-nav");
+      const cells = nav
+        ? [...nav.children].filter((c) => c.tagName === "DIV" && c.id !== "nav-menu")
+        : [];
+      const last = cells[cells.length - 1];
+      return last
+        ? [...last.querySelectorAll("a,button")].filter((e) => e.getClientRects().length > 0).length
+        : null;
+    })(),
     errors: err.slice(0, 6),
   };
 }
@@ -117,8 +143,10 @@ for (const [name, engine] of ENGINES) {
 }
 
 const yn = (v) => (v === true ? "yes" : v === false ? "NO" : v ?? "—");
-console.log("\nengine    route         title/note                    glass  :has  webgl   cesium  FCP");
-console.log("-".repeat(104));
+console.log(
+  "\nengine    route         title/note                    glass  :has  webgl   cesium  nav   FCP"
+);
+console.log("-".repeat(110));
 for (const r of rows) {
   if (r.note) {
     console.log(`${r.engine.padEnd(9)} ${String(r.route).padEnd(13)} ${r.note}`);
@@ -127,7 +155,8 @@ for (const r of rows) {
   console.log(
     `${r.engine.padEnd(9)} ${r.route.padEnd(13)} ${String(r.title).slice(0, 28).padEnd(28)} ` +
       `${(r.glassApplied ? "yes" : "NO").padEnd(6)} ${yn(r.hasSelector).padEnd(5)} ` +
-      `${yn(r.webgl).padEnd(7)} ${yn(r.cesiumBooted).padEnd(7)} ${r.fcpMs}ms`
+      `${yn(r.webgl).padEnd(7)} ${yn(r.cesiumBooted).padEnd(7)} ` +
+      `${`${r.navCells ?? "?"}/${r.navTrailing ?? "?"}`.padEnd(5)} ${r.fcpMs}ms`
   );
   if (r.errors?.length) r.errors.forEach((e) => console.log(`${" ".repeat(10)}  ! ${e.slice(0, 88)}`));
 }

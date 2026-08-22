@@ -155,13 +155,26 @@ export default function Navbar() {
   const pathname = usePathname();
   const isHome = pathname === "/";
   const isTripDetail = pathname.startsWith("/trip/");
-  /** Whether the bar has anything to the right of the wordmark. Every link block below, and the
-   *  mobile toggle, is gated on one of these three — so on `/profile` (which deliberately carries
-   *  no outbound nav links; see the route table above, and `BackButton` is how you leave) and on
-   *  the `/backend` dashboards, the bar is the wordmark alone. The cell divider is gated on this
-   *  because a rule with nothing on its right divides nothing: it reads as an unfinished edge
-   *  rather than as a cell boundary. */
-  const hasNavLinks = isHome || pathname === "/trips" || isTripDetail;
+  const isProfile = pathname === "/profile";
+  /** Whether this route gets the full three-cell bar — wordmark │ links │ Profile — or the bare
+   *  wordmark alone. The bare case is `/backend`, `/backend/pipeline`, `/bench`, and any unmatched
+   *  URL: Next renders its built-in 404 *inside* the root layout, so this nav mounts there too.
+   *  None of those has business carrying a user-facing profile link — two are internal dashboards
+   *  over their own stone-50 ground, and the third is a dead end.
+   *
+   *  Still an explicit list of where the cells *belong*, and deliberately not `!isInternal`. The
+   *  negation reads shorter and is wrong for exactly the reason the route table below already
+   *  gives: a predicate that describes where something does *not* belong silently adopts every
+   *  route added after it — the 404 included, which would get a Profile link on a dead end. This
+   *  one only ever gains a route on purpose.
+   *
+   *  It gates both vertical rules and the trailing cell. What it no longer gates is whether there
+   *  is anything to the right of the wordmark at all: `/profile` carries no outbound links and
+   *  never will (`BackButton` is how you leave), but it does carry the Profile cell, marked as the
+   *  current page. That is the whole point of the shape. The predecessor of this constant gated the
+   *  wordmark's rule on there being links to divide from, which made `/profile` the one route
+   *  rendering a bare strip while every sibling rendered a grid — the inconsistency this fixes. */
+  const isUserFacing = isHome || pathname === "/trips" || isTripDetail || isProfile;
   // Focus goes back here when the menu closes. Without it, dismissing a full-screen panel with
   // Escape leaves focus on a node that is now `inert` — the caret vanishes and the next Tab
   // restarts from the top of the document.
@@ -227,7 +240,7 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-stretch justify-between ${
+      className={`glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-stretch ${
         menuOpen ? "is-menu-open" : ""
       }`}
     >
@@ -247,12 +260,20 @@ export default function Navbar() {
           box carrying it is that tall, and an `items-center` child stops at its own content —
           measured at 45px in a 65px bar, the same failure that left the profile split's rule
           ending halfway down the page. The cells re-centre their own content with `items-center`.
-          Deliberately two cells, not the reference's three. Its third is a distinct "Explore" CTA;
-          this bar's trailing item is `Profile`, a peer nav link, and on `/trips` it is preceded by
-          `New trip` — walling either off would imply a CTA that isn't there. */}
+
+          Three cells now, which is the reference's own count. This used to say two, and defended
+          it: the reference's third cell is a distinct "Explore" CTA, and walling off `Profile` — a
+          peer nav link, preceded on `/trips` by `New trip` — would imply a CTA that isn't there.
+          That argument mistook the rule for a CTA frame. It is the mirror of this one, and without
+          it the bar is a grid drawn down a single side. Worse, its absence was the reason *this*
+          rule had to be conditional: on `/profile`, which has no outbound links, there was nothing
+          to divide from, so the rule was gated off and that one route rendered a bare strip while
+          every sibling rendered a grid. The trailing cell holds whatever this route's single
+          trailing control is — `Profile` everywhere, the menu toggle on `/` below `sm` — so it is
+          never the padded empty box the links cell used to be on `/profile`. */}
       <div
         className={`flex items-center px-5 sm:px-6 ${
-          hasNavLinks ? "border-r border-card-border" : ""
+          isUserFacing ? "border-r border-card-border" : ""
         }`}
       >
         <Link
@@ -263,12 +284,29 @@ export default function Navbar() {
           TripMate
         </Link>
       </div>
-      <div className="flex items-center gap-4 px-5 sm:gap-6 sm:px-6">
-        {/* Section anchors + My memories, desktop: inline in the bar itself. On
-            mobile all four move into the dropdown below instead of one staying
-            pinned in the bar beside the hamburger — a bar carrying "TripMate",
-            a link, and an icon toggle for two more links was busier than the
-            96-item menu it was collapsing warranted. */}
+      {/* The links, right-aligned against the trailing rule — the reference's are hard against its
+          own third rule, and `justify-between` on the bar would centre this cell instead once it
+          became the only flexible thing between two fixed ones.
+
+          `grow`, not `flex-1`, for one edge case: `flex-1` sets `flex-basis: 0`, so this cell asks
+          for the leftover space rather than for its content's width, and near 320px `New trip` gets
+          squeezed toward min-content and wraps to two lines inside a 64px bar. `grow` starts from
+          content width and only expands. Empty on `/profile` and on the dashboards, which costs
+          nothing: with no content there is nothing for the padding to push, so both rules still
+          land against real content on their outer side.
+
+          No `gap` any more. The three route gates below are mutually exclusive — `/` vs `/trips` vs
+          `/trip/*`, and `"/trips".startsWith("/trip/")` is false — and both of this cell's former
+          trailing items (`Profile`, the toggle) now live in the trailing cell, so it holds at most
+          one child on every route and the gap had nothing left to separate. `/`'s own group keeps
+          its `gap-6`. */}
+      <div className="flex grow items-center justify-end px-5 sm:px-6">
+        {/* Section anchors + My memories, desktop: inline in the bar itself. On mobile all four
+            destinations move into the panel below instead of one staying pinned in the bar beside
+            the hamburger — a bar carrying "TripMate", a link, and an icon toggle for two more links
+            was busier than the menu it was collapsing warranted. Three of the four are here;
+            `Profile` is the fourth and comes from the trailing cell, which is also why it is the
+            one item in this bar whose presence is a breakpoint question rather than a route one. */}
         {isHome && (
           <div className="hidden items-center gap-6 sm:flex">
             {SECTION_LINKS.map((link) => (
@@ -285,9 +323,6 @@ export default function Navbar() {
             <Link href="/trips" className={navLink()}>
               My memories
             </Link>
-            <Link href="/profile" className={navLink()}>
-              Profile
-            </Link>
           </div>
         )}
         {pathname === "/trips" && (
@@ -300,57 +335,83 @@ export default function Navbar() {
             My memories
           </Link>
         )}
-        {/* Both user-facing routes that aren't `/` or `/profile` itself. Listed
-            explicitly rather than as a `!isHome` catch-all so the internal /backend
-            dashboards — which render this same nav — don't pick it up too. */}
-        {(pathname === "/trips" || isTripDetail) && (
-          <Link href="/profile" className={navLink()}>
-            Profile
-          </Link>
-        )}
-        {/* Section anchors, mobile: behind a hamburger instead of hidden outright.
-            "My memories"/"New trip" above are never hidden — they're single always-
-            visible links replacing what used to be always-visible canvas links, not
-            secondary chrome, so they don't belong behind the toggle. */}
-        {isHome && (
-          <button
-            ref={toggleRef}
-            type="button"
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-expanded={menuOpen}
-            aria-controls="nav-menu"
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            className="-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center text-foreground focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none sm:hidden"
-          >
-            {/* A custom 3-bar mark rather than swapping lucide's Menu/X icons outright —
-                those two glyphs have no shared geometry to animate between, so swapping
-                them is always an instant cut. Three bars morphing into an X is one
-                continuous shape the whole time. */}
-            <span className="relative flex h-4 w-5 flex-col justify-between">
-              <span
-                className="h-0.5 w-full rounded-full bg-foreground transition-transform"
-                style={{
-                  transitionDuration: "300ms",
-                  transitionTimingFunction: MENU_EASE,
-                  transform: menuOpen ? "translateY(7px) rotate(45deg)" : undefined,
-                }}
-              />
-              <span
-                className="h-0.5 w-full rounded-full bg-foreground transition-opacity duration-150"
-                style={{ opacity: menuOpen ? 0 : 1 }}
-              />
-              <span
-                className="h-0.5 w-full rounded-full bg-foreground transition-transform"
-                style={{
-                  transitionDuration: "300ms",
-                  transitionTimingFunction: MENU_EASE,
-                  transform: menuOpen ? "translateY(-7px) rotate(-45deg)" : undefined,
-                }}
-              />
-            </span>
-          </button>
-        )}
       </div>
+      {isUserFacing && (
+        /* The trailing cell, mirroring the wordmark's. It holds exactly one control at any width,
+           never two and never none, and on `/` which one it holds is a breakpoint question:
+           `MENU_ITEMS` already carries `Profile` into the full-screen panel, so below `sm` on `/`
+           this cell showing it too would put the same destination in the bar and behind the toggle
+           at once. Below `sm` on `/` this cell is the toggle; everywhere else, at every width, it
+           is `Profile`. */
+        <div className="flex items-center border-l border-card-border px-5 sm:px-6">
+          {/* The breakpoint rides on a wrapper, and it has to. `navLinkBase` already sets
+              `inline-flex`, and appending `hidden` to it does nothing: Tailwind emits the display
+              utilities alphabetically — `.block`, `.flex`, `.hidden`, `.inline`, `.inline-flex` —
+              so at equal specificity `.inline-flex` is the later rule and wins, and the link would
+              stay visible at every width. Measured in this app's own compiled stylesheet (`.hidden`
+              at byte 16947, `.inline-flex` at 17026), not assumed. Same trap `navLink`'s own doc
+              comment describes for `text-foreground` vs `text-accent`, in a second property, and
+              the same fix: emit exactly one utility for the property rather than two and a guess
+              about order. `hidden`/`sm:flex` on a wrapper is what `/`'s desktop group above already
+              does for this reason. */}
+          <div className={isHome ? "hidden items-center sm:flex" : "flex items-center"}>
+            {/* `aria-current="page"` and the accent colour together, never colour alone — the rule
+                `navLink` states. `"page"` and not the `"location"` the section anchors carry: those
+                mark a position within this document, this marks the document itself. It stays a
+                `Link` rather than becoming inert text, so the bar's last tab stop exists on every
+                route the bar is a grid on; a `span` here would make `/profile` the one route where
+                the trailing cell is unreachable by keyboard, which is the same per-route
+                inconsistency this cell exists to end. One accepted consequence: `hover:text-accent`
+                is a no-op on the current page, so hover degrades from two signals to one — the
+                underline survives, which is the half that was never colour-dependent. */}
+            <Link
+              href="/profile"
+              aria-current={isProfile ? "page" : undefined}
+              className={navLink(isProfile)}
+            >
+              Profile
+            </Link>
+          </div>
+          {isHome && (
+            <button
+              ref={toggleRef}
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-expanded={menuOpen}
+              aria-controls="nav-menu"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              className="-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center text-foreground focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none sm:hidden"
+            >
+              {/* A custom 3-bar mark rather than swapping lucide's Menu/X icons outright —
+                  those two glyphs have no shared geometry to animate between, so swapping
+                  them is always an instant cut. Three bars morphing into an X is one
+                  continuous shape the whole time. */}
+              <span className="relative flex h-4 w-5 flex-col justify-between">
+                <span
+                  className="h-0.5 w-full rounded-full bg-foreground transition-transform"
+                  style={{
+                    transitionDuration: "300ms",
+                    transitionTimingFunction: MENU_EASE,
+                    transform: menuOpen ? "translateY(7px) rotate(45deg)" : undefined,
+                  }}
+                />
+                <span
+                  className="h-0.5 w-full rounded-full bg-foreground transition-opacity duration-150"
+                  style={{ opacity: menuOpen ? 0 : 1 }}
+                />
+                <span
+                  className="h-0.5 w-full rounded-full bg-foreground transition-transform"
+                  style={{
+                    transitionDuration: "300ms",
+                    transitionTimingFunction: MENU_EASE,
+                    transform: menuOpen ? "translateY(-7px) rotate(-45deg)" : undefined,
+                  }}
+                />
+              </span>
+            </button>
+          )}
+        </div>
+      )}
       {isHome && (
         /**
          * The menu, full-bleed below the bar.
