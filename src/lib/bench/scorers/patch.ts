@@ -115,6 +115,10 @@ export function refineComposite(scores: RefineCellScores): number | null {
       ? null
       : Math.max(0, Math.min(1, 1 + entries.reduce((s, e) => s + e.value * e.weight, 0) / totalWeight));
 
-  const parts = [deltaScore, scores.patch.normalized].filter((p): p is number => p !== null);
+  // `patch` is null when the call failed; the early return above already covers that, but
+  // the optional chain keeps this honest if the two ever drift apart.
+  const parts = [deltaScore, scores.patch?.normalized ?? null].filter(
+    (p): p is number => p !== null
+  );
   return parts.length > 0 ? parts.reduce((s, p) => s + p, 0) / parts.length : null;
 }

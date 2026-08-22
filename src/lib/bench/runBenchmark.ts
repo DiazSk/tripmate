@@ -289,7 +289,14 @@ export async function runRefineCell(
     );
   }
 
-  const patch = scorePatch({ base, ops, task, budget: trip.budget });
+  // A failed call must NOT be scored as a patch. `ops` is `[]` after a timeout or an auth
+  // error, and an empty ops array is indistinguishable from a deliberate no-op — so
+  // `restraint` came out true for calls that never answered at all, and a dead cell counted
+  // as a model correctly declining to edit. Observed for real: three Opus `ask-day1-packed`
+  // rows with `failed: true, composite: null` were reporting `restraint: true`.
+  const patch = operational.failed
+    ? null
+    : scorePatch({ base, ops, task, budget: trip.budget });
   // scorePatch already applied `ops` internally to score the patch's own mechanics (see
   // scorers/patch.ts); this second `applyPatch` gets the resulting itinerary so it can be scored
   // by the same twelve scorers the generation path uses. Duplicating one pure ~10KB-object apply

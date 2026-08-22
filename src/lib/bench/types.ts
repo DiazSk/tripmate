@@ -331,7 +331,10 @@ export interface RefineCellScores {
    * was measurable"), not an absence, so it is a number and never null.
    */
   measuredGroups: number;
-  patch: RefinePatchScore;
+  /** Null when the call itself failed. An empty `ops` array from a timeout is indistinguishable
+   *  from a deliberate no-op, so scoring a dead call would report `restraint: true` for a model
+   *  that never answered. Consumers must skip null rather than treat it as a zero. */
+  patch: RefinePatchScore | null;
   operational: OperationalScore;
 }
 
