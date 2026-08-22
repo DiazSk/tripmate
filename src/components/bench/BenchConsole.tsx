@@ -207,29 +207,72 @@ function BenchExplainer() {
         </p>
 
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
-          <p className="font-semibold text-amber-900">Still to do — Task 9, the full sweep</p>
+          <p className="font-semibold text-amber-900">
+            Sweep status — run 2026-08-22, and what it does NOT cover
+          </p>
           <p className="mt-1 text-amber-900">
-            Nothing has been swept yet. Any numbers on this page are from one or two exploratory
-            cells. The real run is{" "}
-            <strong>7 trips &times; 3 edits &times; 3 models = 63 calls</strong>, roughly 37
-            minutes and ~2.8M input tokens, which is why it is waiting on a fresh usage limit. It
-            answers one question:{" "}
-            <strong>
-              does Haiku 4.5 degrade a refine edit compared with Sonnet 4.5, and by how much?
-            </strong>{" "}
-            If it does not, the refine path can move to the cheaper, faster model.
+            <strong>Sonnet 4.5 and Haiku 4.5 are complete: 21/21 cells each</strong> (7 trips &times;
+            3 edits). <strong>Opus 4.5 is partial — only 6 of 21 scored</strong> (4 further rows exist but
+            failed on an expired token and were never retried), dropped mid-sweep when real
+            per-call cost came in far above estimate and a usage-limit spike made the 3-model matrix
+            unaffordable in one pass. <em>Its row in the aggregate table below is not comparable to
+            the other two</em>; it is shown rather than hidden so the gap is visible.
           </p>
           <p className="mt-2 text-amber-900">
-            Before trusting a sweep, check nothing got throttled:
+            <strong>Headline:</strong> the index-hallucination failure that sank Haiku on the
+            generation benchmark <em>does not reproduce here</em> — zero rejected ops for either
+            model across 108 ops, and restraint held 7/7 for both. They differ on guardrail delta
+            (Sonnet −0.33, Haiku +0.05) and on weather-appropriateness of the edit. Haiku is ~3.6&times;
+            cheaper at <em>statistically the same latency</em>, so a swap would cut cost, not the
+            perceived slowness that started this work. Full write-up in{" "}
+            <code>docs/itinerary-quality.md</code>.
+          </p>
+          <p className="mt-2 font-semibold text-amber-900">Explicitly not tested — open for whoever picks this up</p>
+          <ul className="mt-1 ml-5 list-disc space-y-1 text-amber-900">
+            <li>
+              <strong>One run per cell.</strong> No repeats, so there is no variance estimate. The
+              0.03 composite gap between Sonnet and Haiku is within what a single run could produce
+              by chance — treat it as directional, not measured.
+            </li>
+            <li>
+              <strong>The weather gap is n=21 and no task targets it.</strong>{" "}
+              <code>delta.weatherFeasibility</code> is the one axis with a real difference (Haiku
+              −0.0198 vs Sonnet 0.0000), but it surfaced incidentally. A task written to stress
+              weather would confirm or kill it.
+            </li>
+            <li>
+              <strong>The restraint task did not discriminate.</strong> Both models scored 7/7 on{" "}
+              <code>ask-day1-packed</code>. That is a pass, not a measurement — at this sample size
+              it tells you neither model fails, not which is better.
+            </li>
+            <li>
+              <strong>Only 3 edit shapes, all single-turn.</strong> No delete-a-stop, no
+              move-between-days, no budget-constrained edit. Every cell is one message, while the
+              real Refine chat is multi-turn — nothing here tests whether a model holds context
+              across turns.
+            </li>
+            <li>
+              <strong>The blinded judge never ran on refine.</strong> It is generation-only by
+              design (<code>getBenchResultsForFixture</code> filters <code>task_id IS NULL</code>),
+              so every number here is deterministic scoring with no model-judged component.
+            </li>
+          </ul>
+          <p className="mt-2 text-amber-900">
+            To check coverage — <strong>do not</strong> count <code>error</code> rows in{" "}
+            <code>llm_traces</code> to judge this. There are 30 permanent error rows from an expired
+            OAuth token that predates the sweep, and reading those as contamination would send you
+            re-running ~$15 of calls for nothing. Ask what data exists instead:
           </p>
           <pre className="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-xs text-amber-950">
-{`SELECT model, status, count(*) FROM llm_traces
-WHERE type='chat' GROUP BY model, status;`}
+{`SELECT model, count(*) AS scored FROM bench_results
+WHERE task_id IS NOT NULL AND composite IS NOT NULL
+GROUP BY model;`}
           </pre>
           <p className="mt-1 text-amber-900">
-            Any <code>error</code> or <code>timeout</code> row means re-run it — a throttled cell
-            reads as a <em>missing</em> score, not a failure, because the dashboard filters to{" "}
-            <code>status=&apos;ok&apos;</code>.
+            <strong>21 / 21 / 6</strong> is the expected result (Sonnet / Haiku / Opus). A failed
+            cell stores a row with a <em>null</em> composite rather than no row, so it is absent
+            from this count — which is exactly why counting rows overstates coverage and counting
+            scores does not.
           </p>
         </div>
       </div>
@@ -962,7 +1005,7 @@ export default function BenchConsole() {
                 <thead className="text-left text-stone-500">
                   <tr className="border-b border-stone-200">
                     <th className="py-1.5 pr-3">Model</th>
-                    <th className="py-1.5 pr-3">Cells</th>
+                    <th className="py-1.5 pr-3">Scored cells</th>
                     <th className="py-1.5 pr-3">Composite avg</th>
                     <th className="py-1.5 pr-3">measuredGroups avg</th>
                     <th className="py-1.5 pr-3">Ops emitted / rejected</th>
@@ -985,7 +1028,11 @@ export default function BenchConsole() {
                         </tr>
                       );
                     }
+                    // Rows and SCORES differ: a failed cell stores a row with a null composite.
+                    // Counting rows while averaging over scores would overstate coverage —
+                    // Opus has 10 rows but only 6 real results.
                     const composites = cells.map((c) => c.composite).filter((v): v is number => v !== null);
+                    const failedCount = cells.length - composites.length;
                     const opsEmitted = cells.reduce((s, c) => s + c.scores.patch.opsEmitted, 0);
                     const opsRejected = cells.reduce((s, c) => s + c.scores.patch.opsRejected, 0);
                     // "Restraint" only means something on a task the fixture declares as
@@ -1013,7 +1060,12 @@ export default function BenchConsole() {
                     return (
                       <tr key={m.id} className="border-b border-stone-100">
                         <td className="py-1.5 pr-3 font-medium text-stone-900">{modelLabel(m.id)}</td>
-                        <td className="py-1.5 pr-3">{cells.length}</td>
+                        <td className="py-1.5 pr-3">
+                          {composites.length}
+                          {failedCount > 0 && (
+                            <span className="text-red-700"> (+{failedCount} failed)</span>
+                          )}
+                        </td>
                         <td className="py-1.5 pr-3">{fmtNum(compositeAvg, 3)}</td>
                         <td className="py-1.5 pr-3">{fmtNum(measuredGroupsAvg, 1)}/5</td>
                         <td className="py-1.5 pr-3">
