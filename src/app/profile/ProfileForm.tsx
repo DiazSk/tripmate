@@ -312,15 +312,33 @@ export default function ProfileForm({
         {/* The reference's contact-page split: photography one side, the form the other. Single
             column until `lg` — two columns on a phone would give the photo a strip too narrow to
             be a photograph and the pickers too little room to stay tappable.
-            `items-start` is what lets the memories column go `sticky`: a stretched grid item has
-            no free space to stick within. This page is far longer than the reference's contact
-            form, so without it the photography would scroll away in the first screenful. */}
-        <div className="mt-12 grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:gap-16">
-          <div className="lg:sticky lg:top-[calc(var(--nav-h)+2rem)]">
-            <Memories trips={recentTrips} />
+
+            The reference does not float two columns in whitespace; it draws a grid. So the split is
+            a shared hairline rather than a gap: `lg:gap-0` with symmetric `pr-10`/`pl-10` puts the
+            rule dead centre in an 80px gutter, and `border-b` closes the region underneath the
+            taller column the way the reference's own rule closes its content section above the
+            footer. `SectionOpener` already ruled the top edge, so the composition is bracketed.
+
+            The bottom padding sits on the two cells, not on the grid. On the container it is
+            outside the row, so the vertical rule stopped at the row's end and the closing rule sat
+            64px below it — two hairlines not quite meeting, which is exactly the tell that
+            separates a drawn grid from two bordered boxes. On the cells it is inside the row, so
+            the rules meet at the corner.
+
+            The columns must therefore *stretch* — a border only spans as far as its own box, and an
+            `items-start` column stops at its content, which left the rule ending halfway down the
+            page. Stretching is also the better home for the sticky: the grid item becomes as tall
+            as the form, and the `sticky` div inside it has that whole height to travel within.
+            This page is far longer than the reference's short contact form, so without sticky the
+            photography would scroll away in the first screenful. */}
+        <div className="mt-12 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:gap-0 lg:border-b lg:border-white/10">
+          <div className="lg:pr-10 lg:pb-16">
+            <div className="lg:sticky lg:top-[calc(var(--nav-h)+2rem)]">
+              <Memories trips={recentTrips} />
+            </div>
           </div>
 
-          <div className="min-w-0 divide-y divide-card-border">
+          <div className="min-w-0 divide-y divide-card-border lg:border-l lg:border-white/10 lg:pb-16 lg:pl-10">
             <Section
               title="Who you usually travel with"
               hint="A default only — the planner still asks who's coming on each trip, since that changes."
