@@ -155,6 +155,13 @@ export default function Navbar() {
   const pathname = usePathname();
   const isHome = pathname === "/";
   const isTripDetail = pathname.startsWith("/trip/");
+  /** Whether the bar has anything to the right of the wordmark. Every link block below, and the
+   *  mobile toggle, is gated on one of these three — so on `/profile` (which deliberately carries
+   *  no outbound nav links; see the route table above, and `BackButton` is how you leave) and on
+   *  the `/backend` dashboards, the bar is the wordmark alone. The cell divider is gated on this
+   *  because a rule with nothing on its right divides nothing: it reads as an unfinished edge
+   *  rather than as a cell boundary. */
+  const hasNavLinks = isHome || pathname === "/trips" || isTripDetail;
   // Focus goes back here when the menu closes. Without it, dismissing a full-screen panel with
   // Escape leaves focus on a node that is now `inert` — the caret vanishes and the next Tab
   // restarts from the top of the document.
@@ -220,7 +227,7 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-center justify-between px-5 sm:px-6 ${
+      className={`glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-stretch justify-between ${
         menuOpen ? "is-menu-open" : ""
       }`}
     >
@@ -230,14 +237,33 @@ export default function Navbar() {
           inherits `text-foreground` here and the focus colour on keyboard focus without a second
           rule. The mark is `aria-hidden`; the link's accessible name stays "TripMate" rather than
           becoming "graphic TripMate". */}
-      <Link
-        href="/"
-        className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold tracking-tight text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+      {/* The wordmark is its own cell, ruled off from the links — the reference's arrangement, and
+          the one division here that holds on every route. The rule is on this wrapper rather than
+          on the Link so the Link keeps its own compact focus ring instead of the browser drawing a
+          full-height rectangle around a 64px cell.
+
+          The bar is `items-stretch` and owns no horizontal padding; the two cells carry the
+          gutters instead. Both halves matter: a rule can only span the bar's full height if the
+          box carrying it is that tall, and an `items-center` child stops at its own content —
+          measured at 45px in a 65px bar, the same failure that left the profile split's rule
+          ending halfway down the page. The cells re-centre their own content with `items-center`.
+          Deliberately two cells, not the reference's three. Its third is a distinct "Explore" CTA;
+          this bar's trailing item is `Profile`, a peer nav link, and on `/trips` it is preceded by
+          `New trip` — walling either off would imply a CTA that isn't there. */}
+      <div
+        className={`flex items-center px-5 sm:px-6 ${
+          hasNavLinks ? "border-r border-card-border" : ""
+        }`}
       >
-        <LogoMark className="h-[1.1em] w-[1.1em]" />
-        TripMate
-      </Link>
-      <div className="flex items-center gap-4 sm:gap-6">
+        <Link
+          href="/"
+          className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold tracking-tight text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+        >
+          <LogoMark className="h-[1.1em] w-[1.1em]" />
+          TripMate
+        </Link>
+      </div>
+      <div className="flex items-center gap-4 px-5 sm:gap-6 sm:px-6">
         {/* Section anchors + My memories, desktop: inline in the bar itself. On
             mobile all four move into the dropdown below instead of one staying
             pinned in the bar beside the hamburger — a bar carrying "TripMate",
@@ -353,7 +379,7 @@ export default function Navbar() {
         <div
           id="nav-menu"
           inert={!menuOpen}
-          className={`glass-nav-menu fixed inset-x-0 top-[var(--nav-h)] bottom-0 flex flex-col border-t border-card-border px-5 pt-12 pb-8 transition-[opacity,transform] duration-300 sm:hidden ${
+          className={`glass-nav-menu fixed inset-x-0 top-[var(--nav-h)] bottom-0 flex flex-col px-5 pt-12 pb-8 transition-[opacity,transform] duration-300 sm:hidden ${
             menuOpen
               ? "translate-y-0 opacity-100"
               : "pointer-events-none -translate-y-1.5 opacity-0"
