@@ -1102,21 +1102,6 @@ body {
   --card-border: rgba(255, 255, 255, 0.12);
 }
 
-/* The traveler-profile form's panel.
-   It used to be a cobalt/teal gradient over the slate — a tint whose whole job was lifting a
-   settings form off a cold neutral canvas so it read as its own surface. The canvas is teal now,
-   so the tint was solving a problem that no longer exists and left the panel reading as a third
-   colour. It is the system's own surface over the system's own ground: same relationship the
-   reference uses everywhere, one step of lightness and a hairline.
-   Opaque, not frosted, because the globe does not boot on this route and a 56px blur of a flat
-   colour is a blur of nothing — the same argument TierPicker's price badge makes. */
-.profile-glass {
-  background: rgb(var(--surface-deep-rgb));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  --foreground: #ffffff;
-  --card-border: rgba(255, 255, 255, 0.12);
-}
 
 /* Geocoder typeahead dropdown — used under DestinationSearch, embedded both above the
    plan-step trip-input console and above ItineraryCard's day-tab row. Floats independent
