@@ -14,6 +14,7 @@ export const STEP_LABELS: Record<string, string> = {
   "place-detail": "Place Detail Enrichment",
   chat: "Chat Edit",
   "element-edit": "Element Edit",
+  "container-theme": "Container Theme",
 };
 
 /** Trace `type`s that all originate from an `llm_runs.kind === "refine"` run —
