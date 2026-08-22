@@ -935,6 +935,116 @@ export default function BenchConsole() {
         </>
       ))}
 
+      {/* --- refine aggregate, per model --------------------------------------------
+          Generation's equivalent lives just above, gated the same way. Without this, Refine
+          mode showed nothing at the top of the page at all — the drill-down below requires
+          picking one fixture and one task first, so a first-time visitor landed on an
+          apparently empty page with real results sitting two clicks away. Summarizes across
+          EVERY fixture and task a model has run, not just the selected one. */}
+      {callType === "refine" &&
+        (refineCells.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
+            No refine results yet. Pick a trip and a task below, then run a model.
+          </p>
+        ) : (
+          <section className="rounded-lg border border-stone-200 bg-white p-4">
+            <h2 className="text-sm font-medium text-stone-900">Refine aggregate, per model</h2>
+            <p className="text-xs text-stone-500">
+              Every cell this model has run, across every trip and task.{" "}
+              <strong className="text-stone-700">
+                &Delta; vs base is signed — negative means the edit made the trip worse.
+              </strong>{" "}
+              guardrail &Delta; is the opposite sign convention: negative there means fewer
+              problems, i.e. better.
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-stone-500">
+                  <tr className="border-b border-stone-200">
+                    <th className="py-1.5 pr-3">Model</th>
+                    <th className="py-1.5 pr-3">Cells</th>
+                    <th className="py-1.5 pr-3">Composite avg</th>
+                    <th className="py-1.5 pr-3">measuredGroups avg</th>
+                    <th className="py-1.5 pr-3">Ops emitted / rejected</th>
+                    <th className="py-1.5 pr-3">Restraint held</th>
+                    <th className="py-1.5 pr-3">Guardrail &Delta; avg</th>
+                    <th className="py-1.5 pr-3">Avg latency</th>
+                    <th className="py-1.5 pr-3">Avg cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snap.models.map((m) => {
+                    const cells = refineCells.filter((c) => c.model === m.id);
+                    if (cells.length === 0) {
+                      return (
+                        <tr key={m.id} className="border-b border-stone-100 text-stone-400">
+                          <td className="py-1.5 pr-3 font-medium text-stone-700">{modelLabel(m.id)}</td>
+                          <td className="py-1.5 pr-3" colSpan={8}>
+                            not run yet
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const composites = cells.map((c) => c.composite).filter((v): v is number => v !== null);
+                    const opsEmitted = cells.reduce((s, c) => s + c.scores.patch.opsEmitted, 0);
+                    const opsRejected = cells.reduce((s, c) => s + c.scores.patch.opsRejected, 0);
+                    // "Restraint" only means something on a task the fixture declares as
+                    // opsExpected:false ("is day 1 too packed?") — scoring it on every task would
+                    // count a normal, correct edit as a restraint failure.
+                    const restraintCells = cells.filter(
+                      (c) =>
+                        snap.refineTasks[c.fixtureId]?.find((t) => t.id === c.taskId)?.expect
+                          .opsExpected === false
+                    );
+                    const restraintHeld = restraintCells.filter((c) => c.scores.patch.restraint).length;
+                    const guardrailDeltas = cells.map((c) => c.scores.patch.guardrailDelta);
+                    const latencies = cells
+                      .map((c) => c.scores.operational.latencyMs)
+                      .filter((v): v is number => v !== null);
+                    const costs = cells
+                      .map((c) => c.scores.operational.costUsd)
+                      .filter((v): v is number => v !== null);
+                    const avg = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
+                    const measuredGroupsAvg = avg(cells.map((c) => c.scores.measuredGroups));
+                    const compositeAvg = avg(composites);
+                    const guardrailAvg = avg(guardrailDeltas);
+                    const latencyAvg = avg(latencies);
+                    const costAvg = avg(costs);
+                    return (
+                      <tr key={m.id} className="border-b border-stone-100">
+                        <td className="py-1.5 pr-3 font-medium text-stone-900">{modelLabel(m.id)}</td>
+                        <td className="py-1.5 pr-3">{cells.length}</td>
+                        <td className="py-1.5 pr-3">{fmtNum(compositeAvg, 3)}</td>
+                        <td className="py-1.5 pr-3">{fmtNum(measuredGroupsAvg, 1)}/5</td>
+                        <td className="py-1.5 pr-3">
+                          {opsEmitted} /{" "}
+                          <span className={opsRejected > 0 ? "text-red-700" : ""}>{opsRejected}</span>
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          {restraintCells.length === 0 ? "—" : `${restraintHeld}/${restraintCells.length}`}
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          <span
+                            className={
+                              guardrailAvg !== null && guardrailAvg > 0 ? "text-red-700" : "text-emerald-700"
+                            }
+                          >
+                            {guardrailAvg === null ? "—" : `${guardrailAvg > 0 ? "+" : ""}${guardrailAvg.toFixed(2)}`}
+                          </span>
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          {latencyAvg === null ? "—" : `${Math.round(latencyAvg / 1000)}s`}
+                        </td>
+                        <td className="py-1.5 pr-3">{costAvg === null ? "—" : `$${costAvg.toFixed(3)}`}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ))}
+
       {/* --- drill-down ----------------------------------------------------------------- */}
       <section className="rounded-lg border border-stone-200 bg-white p-4">
         <h2 className="mb-2 text-sm font-medium text-stone-900">Per-trip drill-down</h2>
