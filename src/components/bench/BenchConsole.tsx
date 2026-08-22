@@ -535,9 +535,9 @@ export default function BenchConsole() {
   // Defaults to "generate" so the page opens exactly as it always has.
   const [callType, setCallType] = useState<"generate" | "refine">("generate");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  // Seeded from the snapshot's persisted `refineCells` (see applySnapshot) and topped up with
-  // whatever this session runs itself — a fresh run-cell POST response lands here immediately,
-  // ahead of the next reload.
+  // Mirrors the snapshot's `refineCells` — the server is authoritative (see applySnapshot).
+  // Written optimistically on a run-cell POST purely to avoid a visible gap before the next
+  // snapshot lands.
   const [refineCells, setRefineCells] = useState<RefineCell[]>([]);
 
   const fetchSnapshot = useCallback(async (): Promise<Snapshot | null> => {
@@ -548,15 +548,16 @@ export default function BenchConsole() {
 
   const applySnapshot = useCallback((data: Snapshot) => {
     setSnap(data);
-    // Merge the server's persisted refine cells with whatever this session has already
-    // accumulated locally (e.g. from a run-cell POST response that landed before this reload) —
-    // keyed by (fixture, task, model) so a re-run supersedes rather than duplicates.
-    setRefineCells((prev) => {
-      const key = (c: RefineCell) => `${c.fixtureId}::${c.taskId}::${c.model}`;
-      const merged = new Map(data.refineCells.map((c) => [key(c), c]));
-      for (const c of prev) merged.set(key(c), c);
-      return [...merged.values()];
-    });
+    // The server is authoritative. Refine cells are persisted in `bench_results` and come back
+    // on every snapshot, so there is nothing local worth preserving across a load — and keeping
+    // local state on top actively broke two things: "Clear results" appeared to do nothing
+    // (deleted rows kept rendering from the stale local copy forever), and a re-run in another
+    // tab could never overwrite what this tab already held.
+    //
+    // This used to merge `prev` over `data.refineCells` to keep a POST response that landed
+    // before a reload. That case no longer exists: `runCells` awaits `load()` after every cell,
+    // so the snapshot has already caught up by the time this runs.
+    setRefineCells(data.refineCells);
     // Prefer a trip that already has results — landing on an empty drill-down when other trips
     // have output makes the page look broken on load.
     setSelectedFixture((current) => {
@@ -617,8 +618,9 @@ export default function BenchConsole() {
               `${pair.model} on ${pair.fixtureId}${pair.taskId ? ` (${pair.taskId})` : ""}: ${body.error ?? res.statusText}`
             );
           } else if (pair.taskId && body.cell) {
-            // Refine results have no GET snapshot of their own — the POST response is the only
-            // place they exist client-side, so each one lands straight into local state here.
+            // Optimistic paint only. `load()` below re-fetches the snapshot, which is
+            // authoritative and includes this cell — this just avoids a blank row for the
+            // second or so between the POST resolving and that snapshot landing.
             const cell = body.cell as RefineCell;
             setRefineCells((prev) => [
               ...prev.filter(
@@ -1288,31 +1290,38 @@ export default function BenchConsole() {
                         </tr>
                       );
                     }
-                    // Rows and SCORES differ: a failed cell stores a row with a null composite.
-                    // Counting rows while averaging over scores would overstate coverage —
-                    // Opus has 10 rows but only 6 real results.
-                    const composites = cells.map((c) => c.composite).filter((v): v is number => v !== null);
-                    const failedCount = cells.length - composites.length;
-                    const opsEmitted = cells.reduce((s, c) => s + c.scores.patch.opsEmitted, 0);
-                    const opsRejected = cells.reduce((s, c) => s + c.scores.patch.opsRejected, 0);
+                    // Rows and SCORES differ: a failed cell stores a row with a null composite
+                    // and a null `patch`. EVERY metric below must be computed over `scored`, not
+                    // over `cells` — mixing them is how the Opus row came to claim "restraint
+                    // held 3/3" when one of those three was an auth failure that never answered.
+                    // A dead call emits zero ops, which is indistinguishable from a deliberate
+                    // no-op unless failures are excluded outright.
+                    const scored = cells.filter(
+                      (c): c is RefineCell & { scores: { patch: NonNullable<RefineCell["scores"]["patch"]> } } =>
+                        c.scores.patch !== null && c.composite !== null
+                    );
+                    const composites = scored.map((c) => c.composite).filter((v): v is number => v !== null);
+                    const failedCount = cells.length - scored.length;
+                    const opsEmitted = scored.reduce((s, c) => s + c.scores.patch.opsEmitted, 0);
+                    const opsRejected = scored.reduce((s, c) => s + c.scores.patch.opsRejected, 0);
                     // "Restraint" only means something on a task the fixture declares as
                     // opsExpected:false ("is day 1 too packed?") — scoring it on every task would
                     // count a normal, correct edit as a restraint failure.
-                    const restraintCells = cells.filter(
+                    const restraintCells = scored.filter(
                       (c) =>
                         snap.refineTasks[c.fixtureId]?.find((t) => t.id === c.taskId)?.expect
                           .opsExpected === false
                     );
                     const restraintHeld = restraintCells.filter((c) => c.scores.patch.restraint).length;
-                    const guardrailDeltas = cells.map((c) => c.scores.patch.guardrailDelta);
-                    const latencies = cells
+                    const guardrailDeltas = scored.map((c) => c.scores.patch.guardrailDelta);
+                    const latencies = scored
                       .map((c) => c.scores.operational.latencyMs)
                       .filter((v): v is number => v !== null);
-                    const costs = cells
+                    const costs = scored
                       .map((c) => c.scores.operational.costUsd)
                       .filter((v): v is number => v !== null);
                     const avg = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
-                    const measuredGroupsAvg = avg(cells.map((c) => c.scores.measuredGroups));
+                    const measuredGroupsAvg = avg(scored.map((c) => c.scores.measuredGroups));
                     const compositeAvg = avg(composites);
                     const guardrailAvg = avg(guardrailDeltas);
                     const latencyAvg = avg(latencies);
@@ -1937,18 +1946,29 @@ function RefineDrillDown({
                         {fmtGroupDelta(c.scores.delta[a.key])}
                       </td>
                     ))}
+                    {/* A failed call has no patch to describe. Rendering dashes rather than
+                        zeroes matters: a dead call emits zero ops, which would otherwise read
+                        as a model that deliberately and correctly declined to edit. */}
                     <td className="py-1.5 pr-3">
-                      {c.scores.patch.opsEmitted}/{c.scores.patch.opsRejected}
+                      {c.scores.patch ? `${c.scores.patch.opsEmitted}/${c.scores.patch.opsRejected}` : "—"}
                     </td>
                     <td
                       className={`py-1.5 pr-3 font-medium ${
-                        c.scores.patch.restraint ? "text-emerald-700" : "text-red-700"
+                        !c.scores.patch
+                          ? "text-stone-400"
+                          : c.scores.patch.restraint
+                            ? "text-emerald-700"
+                            : "text-red-700"
                       }`}
                     >
-                      {c.scores.patch.restraint ? "yes" : "no"}
+                      {!c.scores.patch ? "—" : c.scores.patch.restraint ? "yes" : "no"}
                     </td>
-                    <td className={`py-1.5 pr-3 ${guardrailDeltaClass(c.scores.patch.guardrailDelta)}`}>
-                      {fmtGuardrailDelta(c.scores.patch.guardrailDelta)}
+                    <td
+                      className={`py-1.5 pr-3 ${
+                        c.scores.patch ? guardrailDeltaClass(c.scores.patch.guardrailDelta) : ""
+                      }`}
+                    >
+                      {c.scores.patch ? fmtGuardrailDelta(c.scores.patch.guardrailDelta) : "—"}
                     </td>
                     <td className="py-1.5 pr-3">{fmtMs(c.scores.operational.latencyMs)}</td>
                     <td className="py-1.5 pr-3">
@@ -1966,6 +1986,12 @@ function RefineDrillDown({
               {cells.map((c) => (
                 <div key={c.model} className="rounded border border-stone-200 p-2">
                   <p className="font-medium text-stone-800">{label(c.model)}</p>
+                  {!c.scores.patch ? (
+                    <p className="mt-1 text-stone-500">
+                      Call failed — no patch to score.{" "}
+                      {c.scores.operational.errorMessage ?? "no error recorded"}
+                    </p>
+                  ) : (
                   <p className="mt-1 text-stone-600">
                     opsEmitted {c.scores.patch.opsEmitted} · opsRejected {c.scores.patch.opsRejected}{" "}
                     · applied {fmtPct(c.scores.patch.applied)} · scope {fmtPct(c.scores.patch.scope)} ·
@@ -1976,7 +2002,8 @@ function RefineDrillDown({
                     </span>
                     )
                   </p>
-                  {c.scores.patch.rejectedReasons.length > 0 && (
+                  )}
+                  {c.scores.patch && c.scores.patch.rejectedReasons.length > 0 && (
                     <ul className="ml-4 mt-1 list-disc text-red-700">
                       {c.scores.patch.rejectedReasons.map((r, i) => (
                         <li key={i}>{r}</li>
