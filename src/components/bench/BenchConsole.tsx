@@ -63,6 +63,9 @@ interface Snapshot {
   agreement: ModelAgreement[];
   /** Keyed by fixture id — the refine tasks available for that trip. */
   refineTasks: Record<string, RefineTaskSummary[]>;
+  /** Bench-shaped calls in flight right now, from anywhere — not just this browser tab. See
+   *  PendingCallBanner: this is what makes a run started by a script or another tab visible. */
+  pending: { id: string; type: string; model: string; destination: string | null; createdAt: string }[];
 }
 
 const fmtMs = (v: number) => `${(v / 1000).toFixed(1)}s`;
@@ -447,16 +450,6 @@ function ModelGuidance() {
             Calls, latency and cost are live from <code>/api/llm-traces/perf</code> — the same
             source <code>/backend</code>&apos;s Perf Dashboard reads, so the two always agree.
           </p>
-          <p className="mt-1 text-xs text-red-700">
-            <strong>These counts are undercounts, and badly so for some features.</strong>{" "}
-            <code>listTracesForPerf</code> inner-joins <code>llm_runs</code>, so any call written
-            without a <code>run_id</code> is silently dropped from both this table and the Perf
-            Dashboard. Measured against raw <code>llm_traces</code>: Place Detail is 41 real calls
-            shown as 3, Context is 17 shown as 9, and <strong>Rebalance is 2 shown as none at
-            all</strong> — which is why its row is dashed rather than zero. Latency and cost per
-            call are still valid for the subset that is counted; only the volume is wrong. Use the
-            counts to rank features, never to size a bill.
-          </p>
         </div>
 
         <div className="space-y-3">
@@ -483,6 +476,53 @@ function ModelGuidance() {
         </div>
       </div>
     </details>
+  );
+}
+
+/**
+ * "Is anything running right now, and how long has it been going" — sourced from the DB via
+ * `snap.pending`, not from this tab's own `busy` state. That is deliberate: `busy` only ever
+ * reflects a click made in this exact tab, and stays empty for the whole duration of a sweep
+ * driven from a script or curl, which is precisely how the Task 9 sweep ran with nobody watching
+ * /bench able to see it was in progress.
+ *
+ * Ticks its own elapsed time locally rather than waiting on the next 8s poll, so "started 3s ago"
+ * doesn't sit frozen at "started 0s ago" for most of that window.
+ */
+function PendingCallBanner({ pending }: { pending: Snapshot["pending"] }) {
+  // `now` is read from state, updated inside the effect — never called directly in the render
+  // body — so the render itself stays pure per React's rules (Date.now() is impure) while the
+  // displayed elapsed time still ticks once a second.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (pending.length === 0) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [pending.length]);
+
+  if (pending.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+      <p className="font-semibold">
+        {pending.length} call{pending.length === 1 ? "" : "s"} in progress right now
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {pending.map((p) => {
+          const elapsedS = Math.max(0, Math.round((now - new Date(p.createdAt).getTime()) / 1000));
+          return (
+            <li key={p.id}>
+              <code>{p.type}</code> on <code>{p.model}</code>
+              {p.destination ? ` — ${p.destination}` : ""} — running {elapsedS}s
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-1 text-xs text-blue-700">
+        This does not depend on you having started it — it reads live from the database, so a
+        sweep run from another tab or a script shows up here too.
+      </p>
+    </div>
   );
 }
 
@@ -545,6 +585,16 @@ export default function BenchConsole() {
       cancelled = true;
     };
   }, [fetchSnapshot, applySnapshot]);
+
+  // Polls regardless of whether THIS tab is running anything — that is the whole point. A
+  // client-driven sweep already calls load() after every cell, so this is redundant for the tab
+  // that clicked the button; it is the only way a second tab, or Zaid watching while Aryan runs a
+  // sweep from a script, ever sees progress without a manual reload. 8s: fast enough that a
+  // 90-400s cell doesn't feel static, cheap enough that it's a non-issue on a dev-only page.
+  useEffect(() => {
+    const id = setInterval(() => void load(), 8000);
+    return () => clearInterval(id);
+  }, [load]);
 
   /** Cells run one request at a time — a real generation is ~90-400s, far past any batch timeout. */
   const runCells = useCallback(
@@ -817,6 +867,7 @@ export default function BenchConsole() {
     <div className="space-y-6">
       <BenchExplainer />
       <ModelGuidance />
+      <PendingCallBanner pending={snap.pending} />
 
       {/* --- controls ------------------------------------------------------------------ */}
       <section className="rounded-lg border border-stone-200 bg-white p-4">
