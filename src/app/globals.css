@@ -420,10 +420,21 @@ body {
    live 3D globe that idles anywhere from open ocean to a snowfield. A whisper of the one
    slate on top of the blur is the same Darken-Never-Lighten reasoning every other surface
    in this system already applies over unpredictable imagery; it's the minimum needed for
-   reliable contrast, not a redesign of the reference. */
+   reliable contrast, not a redesign of the reference.
+
+   The bottom rule is the reference's too, and it is what makes the bar read as a cell in a drawn
+   grid rather than as floating chrome — the same move the section openers and the profile split
+   already make. It replaces the mobile menu's own `border-t`: the menu is `top-[var(--nav-h)]` and
+   this border occupies the last pixel of that height, so the two abutted exactly and drew one
+   hairline twice.
+   Known limit, accepted rather than solved: a white hairline at 0.12 is reliable over the slate
+   and over dark terrain, and fades toward invisible over a bright map or the `/backend`
+   dashboards' stone-50 ground. That is the same tradeoff `.glass-nav`'s own tint already takes
+   over unpredictable imagery, and the bar does not depend on the rule to be legible. */
 .glass-nav {
   background: rgb(var(--surface-deep-rgb) / 0.15);
   backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--card-border);
 }
 
 /* The mobile menu panel, not the bar itself. It used to be a dropdown at 0.85 of the one
