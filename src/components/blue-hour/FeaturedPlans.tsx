@@ -147,10 +147,20 @@ export default function FeaturedPlans({
                 ))}
               </dl>
 
+              {/* Full width below `sm`, shrink-to-fit above it — the reference's own behaviour for
+                  this button, measured rather than guessed: at 375px its card CTA is 335px in a
+                  375px card (full width inside the gutters) with `justify-content: center`, and at
+                  1154px it is 153px in a 1090px card. `sm` is the right breakpoint because it is
+                  where this card's own layout changes: below it the text column is the whole card
+                  and a full-width pill reads as the card's action, at `sm` and up the column is
+                  half the card and a full-width pill would be a 300px bar under four short rows.
+                  Centred, not `justify-between` — that is what the reference computes, and it is
+                  also what the app's two other full-width pills already do (the Hero CTA at
+                  portrait, the mobile menu's). */}
               <button
                 type="button"
                 onClick={() => onPlan(toPrefill(plan, todayISO()))}
-                className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98] sm:w-fit sm:justify-start"
               >
                 Plan a trip like this
                 {/* Kept at this button's own `gap-2` rather than the reference's `1rem` — that is
