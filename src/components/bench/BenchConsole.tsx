@@ -703,7 +703,7 @@ export default function BenchConsole() {
         </ul>
       </section>
 
-      {!hasResults ? (
+      {callType === "generate" && (!hasResults ? (
         <p className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
           No results yet. Run a single trip first to sanity-check the metrics before scaling up.
         </p>
@@ -933,7 +933,7 @@ export default function BenchConsole() {
             </section>
           )}
         </>
-      )}
+      ))}
 
       {/* --- drill-down ----------------------------------------------------------------- */}
       <section className="rounded-lg border border-stone-200 bg-white p-4">
