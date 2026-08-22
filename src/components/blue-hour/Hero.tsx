@@ -184,10 +184,20 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
             else in this block sits at `z-4`, above FRONT, so the support copy stays fully legible.
             One word, set as large as the viewport allows; 13rem is past the craft floor's 6rem
             display ceiling, deliberately, because this headline *is* the viewport. It rhymes with
-            the closing "Elsewhere." */}
+            the closing "Elsewhere."
+
+            `z-2` puts it behind the FRONT steppe layer, which is the depth this composition is
+            built on — but only where the steppe's horizon actually sits below the type. On the
+            portrait crop it does not: measured at 375x812 the front layer's box starts at y=299
+            against a headline spanning 306-358, and its hillside rises on the right far enough to
+            swallow the final "e." — the one word on the page reading "Somewher". So at that one
+            breakpoint the headline joins its own subline at `z-4`, in front. The effect survives
+            everywhere it reads; legibility of the only word on the screen outranks it where it
+            does not. Not `z-4` unconditionally: the FRONT comment records crossing the type as
+            deliberate, and on the landscape crop the horizon is genuinely below it. */}
         <h1
           ref={headingRef}
-          className="hero-legible relative z-[2] font-scene-hero text-[clamp(3rem,11vw,13rem)] leading-[0.92] text-on-deep"
+          className="hero-legible relative z-[2] font-scene-hero text-[clamp(3rem,11vw,13rem)] leading-[0.92] text-on-deep [@media(max-aspect-ratio:3/5)]:z-[4]"
         >
           Somewhere.
         </h1>
