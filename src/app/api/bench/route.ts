@@ -8,6 +8,7 @@ import {
   insertRun,
   listLatestBenchResults,
   listLatestRefineResults,
+  listPendingTraces,
   updateBenchResultScores,
 } from "@/lib/db";
 import { buildCustomFixture } from "@/lib/bench/customTrip";
@@ -69,7 +70,12 @@ function snapshot() {
     .filter((c) => byId.has(c.fixtureId));
 
   const models = benchModels();
+  // Any bench-shaped call in flight right now, from anywhere — a browser click, a curl
+  // one-liner, an external script. Elapsed time is computed client-side from createdAt so
+  // a stale snapshot never claims a wrong duration.
+  const pending = listPendingTraces();
   return {
+    pending,
     fixtures: fixtures.map((f) => ({
       id: f.id,
       title: f.title,

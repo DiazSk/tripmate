@@ -310,6 +310,41 @@ export function listTraces(): TraceRow[] {
     .all() as TraceRow[];
 }
 
+export interface PendingTrace {
+  id: string;
+  type: string;
+  model: string;
+  destination: string | null;
+  createdAt: string;
+}
+
+/**
+ * Calls in flight RIGHT NOW, wherever they came from — a browser click, a curl one-liner, a
+ * script like scripts/mint-base-itineraries.mjs. `insertTrace` writes this row with status
+ * 'pending' before the CLI even spawns (`claude.ts`), so it is a live, database-backed signal
+ * rather than component state in one browser tab.
+ *
+ * That distinction is the reason this exists: `busy`/`progress` in BenchConsole only ever reflect
+ * the tab that clicked the button, are wiped by a reload, and stay empty for the entire duration
+ * of a sweep driven from outside the browser — exactly what happened when the Task 9 sweep ran
+ * from a script and nobody watching /bench in a browser had any way to see it was happening.
+ *
+ * LEFT JOIN, not inner: a call not yet part of a run (there is no run_id until the caller creates
+ * one) must still show up as pending, or the one case this exists to catch — "is anything running
+ * at all" — silently drops rows the same way `listTracesForPerf`'s inner join does.
+ */
+export function listPendingTraces(): PendingTrace[] {
+  return db
+    .prepare(
+      `SELECT t.id, t.type, t.model, r.destination as destination, t.created_at as createdAt
+       FROM llm_traces t LEFT JOIN llm_runs r ON t.run_id = r.id
+       WHERE t.status = 'pending'
+       ORDER BY t.created_at DESC
+       LIMIT 10`
+    )
+    .all() as PendingTrace[];
+}
+
 export function getTrace(id: string): TraceRow | undefined {
   return db.prepare(`SELECT * FROM llm_traces WHERE id = ?`).get(id) as
     | TraceRow
@@ -587,9 +622,12 @@ export interface TraceWithBatchTag extends TraceRow {
 
 /** Every successful trace with its run's batch tag attached, for the Perf Dashboard's
  *  aggregation. Only `status = 'ok'` rows count — a timed-out or errored call's duration
- *  and (often absent) envelope fields would skew "how long does this normally take". Only
- *  traces with a run (inner join) are included, same restriction `listGroupedTraces` already
- *  applies — a trace can't belong to a batch without a run to hang the tag off of. */
+ *  and (often absent) envelope fields would skew "how long does this normally take".
+ *  Filtering by `batchTag` legitimately requires a run to hang the tag off of, so that
+ *  path inner-joins. The unfiltered "all time" path left-joins instead — most traces
+ *  (place-detail, context, generate, and all of rebalance/container-theme) are written
+ *  without a `run_id`, and an inner join here was silently dropping them from both this
+ *  dashboard and the /bench "which model" panel. `batch_tag` comes back null for those. */
 export function listTracesForPerf(batchTag?: string): TraceWithBatchTag[] {
   if (batchTag) {
     return db
@@ -603,7 +641,7 @@ export function listTracesForPerf(batchTag?: string): TraceWithBatchTag[] {
   return db
     .prepare(
       `SELECT t.*, r.batch_tag as batch_tag
-       FROM llm_traces t JOIN llm_runs r ON t.run_id = r.id
+       FROM llm_traces t LEFT JOIN llm_runs r ON t.run_id = r.id
        WHERE t.status = 'ok'`
     )
     .all() as TraceWithBatchTag[];
