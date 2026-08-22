@@ -82,13 +82,38 @@ export default function FeaturedPlans({
         </div>
       </SectionOpener>
 
-      {/* Zero gap, shared hairlines both ways. `md:[&:nth-child(n+3)]:border-t` puts the horizontal
+      {/* Zero gap, shared hairlines both ways. `xl:[&:nth-child(n+3)]:border-t` puts the horizontal
           rule only between the two rows, never above the first or below the last.
           `auto-rows-fr` is the load-bearing part: it makes every row the same height, which is what
           lets the photograph keep one shape across all four cards. The reference does this with a
           fixed 322px — measured — but a magic number breaks the moment a title wraps to three
-          lines, where equal fractional rows just grow together. */}
-      <div className="mt-10 grid md:auto-rows-fr md:grid-cols-2">
+          lines, where equal fractional rows just grow together.
+
+          **Two-up at `xl`, not `md`, and the number is arithmetic rather than taste.** Each card
+          splits internally at `sm`, so once the outer grid is also two-up there are four columns
+          across the viewport and a text column measures `(vw - 192) / 4`. At `md` that is **144px**
+          — enough for the definition list, which is why it looked survivable, but not for the rest:
+          the title wrapped to three lines and the CTA label wrapped to two with its mark orphaned
+          beside the second. `lg` would give 208px, which fits the 200px CTA by 8px and is not a
+          margin worth shipping. `xl` gives 272px. Between `md` and `xl` the cards are one per row
+          with the internal split intact, so the text column runs 348px to 603px — wider than it
+          ever was, at the cost of a taller section. Every `md:` modifier here moved with the
+          breakpoint, because each one exists only to describe the two-up arrangement: the shared
+          borders, the internal gutters, and the equal row heights.
+
+          **One border-top rule per range, never a rule plus an override.** The horizontal hairline
+          used to be `[&:nth-child(n+2)]:border-t` for the stacked case with a
+          `[&:nth-child(2)]:border-t-0` at the two-up breakpoint to lift it off card 2, which is in
+          row 1. That override never applied: Tailwind orders by *utility*, not by variant, so
+          `border-t-0` is emitted before the plain `border-t` — measured at bytes 88175 and 88429 of
+          this app's own stylesheet — and at equal specificity (`.class:nth-child(…)`, 0-2-0) the
+          later rule wins whatever media query wraps the earlier one. Card 2 therefore carried a
+          stray rule above it at two-up the whole time, one hairline over the top-right card and
+          none over the top-left. `max-xl:` for the stacked range and `xl:` for the two-up range
+          means neither rule has to beat the other. Same lesson as the display utilities on the
+          navbar's Profile link: emit one declaration for a property per range, not two and a guess
+          about order. */}
+      <div className="mt-10 grid xl:auto-rows-fr xl:grid-cols-2">
         {planExamples.map((plan) => {
           // Resolved per render rather than hoisted: the value depends on today's date, and a module
           // constant would freeze it for the life of the server process.
@@ -96,7 +121,7 @@ export default function FeaturedPlans({
           return (
           <article
             key={plan.id}
-            className="group grid h-full gap-5 border-white/10 py-8 sm:grid-cols-2 sm:gap-6 md:px-6 md:[&:nth-child(2n)]:border-l md:[&:nth-child(n+3)]:border-t [&:nth-child(n+2)]:border-t md:[&:nth-child(2)]:border-t-0"
+            className="group grid h-full gap-5 border-white/10 py-8 sm:grid-cols-2 sm:gap-6 max-xl:[&:nth-child(n+2)]:border-t xl:px-6 xl:[&:nth-child(2n)]:border-l xl:[&:nth-child(n+3)]:border-t"
           >
             {/* `justify-between` against the row's shared height: the title sits at the top of every
                 card and the CTA at the bottom of every card, so the spec list absorbs the slack
