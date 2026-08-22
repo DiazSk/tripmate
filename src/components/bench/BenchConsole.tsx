@@ -1023,7 +1023,7 @@ export default function BenchConsole() {
                 )}
               </p>
               {fixture.notes.length > 0 && (
-                <details className="mt-1 text-[11px] text-amber-800">
+                <details className="mt-1 text-xs text-amber-800">
                   <summary className="cursor-pointer">
                     {fixture.notes.length} degraded/flagged source(s) in this trip&apos;s data
                   </summary>
@@ -1295,11 +1295,11 @@ function Callouts({ cells, label }: { cells: BenchCellWithJson[]; label: (id: st
         <div key={cell.model} className="rounded border border-stone-200 p-2">
           <p className="text-xs font-medium text-stone-800">{label(cell.model)}</p>
           {items.length === 0 ? (
-            <p className="text-[11px] text-emerald-700">Clean on all five added checks.</p>
+            <p className="text-xs text-emerald-700">Clean on all five added checks.</p>
           ) : (
             <ul className="mt-1 space-y-0.5">
               {items.map((item, i) => (
-                <li key={i} className="text-[11px] text-stone-700">
+                <li key={i} className="text-xs text-stone-700">
                   <span className={`mr-1.5 rounded px-1 text-[10px] ${STYLE[item.kind]}`}>
                     {item.kind}
                   </span>
