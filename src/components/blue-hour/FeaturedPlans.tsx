@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRef } from "react";
 
+import ButtonMark from "@/components/ButtonMark";
 import { devLabel } from "@/lib/devInspector";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { useLineReveal } from "@/lib/lineReveal";
@@ -81,13 +82,43 @@ export default function FeaturedPlans({
         </div>
       </SectionOpener>
 
-      {/* Zero gap, shared hairlines both ways. `md:[&:nth-child(n+3)]:border-t` puts the horizontal
+      {/* Zero gap, shared hairlines both ways. `xl:[&:nth-child(n+3)]:border-t` puts the horizontal
           rule only between the two rows, never above the first or below the last.
           `auto-rows-fr` is the load-bearing part: it makes every row the same height, which is what
           lets the photograph keep one shape across all four cards. The reference does this with a
           fixed 322px — measured — but a magic number breaks the moment a title wraps to three
-          lines, where equal fractional rows just grow together. */}
-      <div className="mt-10 grid md:auto-rows-fr md:grid-cols-2">
+          lines, where equal fractional rows just grow together.
+
+          **Two-up at `xl`, not `md`, and the number is arithmetic rather than taste.** Each card
+          splits internally at `sm`, so once the outer grid is also two-up there are four columns
+          across the viewport and a text column measures `(vw - 192) / 4`. At `md` that is **144px**
+          — enough for the definition list, which is why it looked survivable, but not for the rest:
+          the title wrapped to three lines and the CTA label wrapped to two with its mark orphaned
+          beside the second. `lg` would give 208px, which fits the 200px CTA by 8px and is not a
+          margin worth shipping. `xl` gives 272px. Between `md` and `xl` the cards are one per row
+          with the internal split intact, so the text column runs 348px to 603px — wider than it
+          ever was, at the cost of a taller section. Every `md:` modifier here moved with the
+          breakpoint, because each one exists only to describe the two-up arrangement: the shared
+          borders, the internal gutters, and the equal row heights.
+
+          **One border-top rule per range, never a rule plus an override.** The horizontal hairline
+          used to be an unprefixed nth-child(n+2) border-top for the stacked case, with a
+          nth-child(2) border-top-zero at the two-up breakpoint to lift it off card 2, which is in
+          row 1. That override never applied: Tailwind orders by *utility*, not by variant, so the
+          zero-width rule is emitted before the plain one — measured in this app's own stylesheet —
+          and at equal specificity (`.class:nth-child(…)`, 0-2-0) the later rule wins whatever media
+          query wraps the earlier one. Card 2 therefore carried a stray rule above it at two-up the
+          whole time, one hairline over the top-right card and none over the top-left. `max-xl:` for
+          the stacked range and `xl:` for the two-up range means neither rule has to beat the other.
+          Same lesson as the display utilities on the navbar's Profile link: emit one declaration
+          for a property per range, not two and a guess about order.
+
+          Named in prose rather than written as class tokens on purpose. **Tailwind's scanner reads
+          this comment.** Spelling the old classes out here put two real rules into the shipped
+          stylesheet that no element carries — one of them still there at the time this was
+          rewritten, top-level and unconditional. A comment explaining a class cannot be written
+          *as* that class. */}
+      <div className="mt-10 grid xl:auto-rows-fr xl:grid-cols-2">
         {planExamples.map((plan) => {
           // Resolved per render rather than hoisted: the value depends on today's date, and a module
           // constant would freeze it for the life of the server process.
@@ -95,7 +126,7 @@ export default function FeaturedPlans({
           return (
           <article
             key={plan.id}
-            className="group grid h-full gap-5 border-white/10 py-8 sm:grid-cols-2 sm:gap-6 md:px-6 md:[&:nth-child(2n)]:border-l md:[&:nth-child(n+3)]:border-t [&:nth-child(n+2)]:border-t md:[&:nth-child(2)]:border-t-0"
+            className="group grid h-full gap-5 border-white/10 py-8 sm:grid-cols-2 sm:gap-6 max-xl:[&:nth-child(n+2)]:border-t xl:px-6 xl:[&:nth-child(2n)]:border-l xl:[&:nth-child(n+3)]:border-t"
           >
             {/* `justify-between` against the row's shared height: the title sits at the top of every
                 card and the CTA at the bottom of every card, so the spec list absorbs the slack
@@ -146,28 +177,28 @@ export default function FeaturedPlans({
                 ))}
               </dl>
 
+              {/* Full width below `sm`, shrink-to-fit above it — the reference's own behaviour for
+                  this button, measured rather than guessed: at 375px its card CTA is 335px in a
+                  375px card (full width inside the gutters) with `justify-content: center`, and at
+                  1154px it is 153px in a 1090px card. `sm` is the right breakpoint because it is
+                  where this card's own layout changes: below it the text column is the whole card
+                  and a full-width pill reads as the card's action, at `sm` and up the column is
+                  half the card and a full-width pill would be a 300px bar under four short rows.
+                  Centred, not `justify-between` — that is what the reference computes, and it is
+                  also what the app's two other full-width pills already do (the Hero CTA at
+                  portrait, the mobile menu's). */}
               <button
                 type="button"
                 onClick={() => onPlan(toPrefill(plan, todayISO()))}
-                className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98] sm:w-fit sm:justify-start"
               >
                 Plan a trip like this
-                {/* The reference's button mark, matching the hero CTA. `fill="currentColor"` is what
-                    makes it work on this button in particular: unlike the hero's, this one *does*
-                    invert its text on hover (white on slate becomes dark on amber), and the mark has
-                    to follow. A hard-coded fill would have gone invisible in one state or the other.
-                    Kept at this button's own `gap-2` rather than the reference's `1rem` — that is
-                    tuned for a 20px-tall primary CTA and reads loose at this size. */}
-                <svg
-                  aria-hidden
-                  width="8"
-                  height="8"
-                  viewBox="0 0 8 8"
-                  fill="currentColor"
-                  className="shrink-0"
-                >
-                  <path d="M8 0C8 0 7.32057 2.41553 7.32057 4C7.32057 5.58447 8 8 8 8C8 8 5.58447 7.32057 4 7.32057C2.41553 7.32057 0 8 0 8C0 8 0.679427 5.58447 0.679427 4C0.679427 2.41553 0 0 0 0C0 0 2.41553 0.679426 4 0.679426C5.58447 0.679426 8 0 8 0Z" />
-                </svg>
+                {/* Kept at this button's own `gap-2` rather than the reference's `1rem` — that is
+                    tuned for a 20px-tall primary CTA and reads loose at this size. `ButtonMark`
+                    fills `currentColor`, which is what makes it work on this button in particular:
+                    unlike the hero's, this one *does* invert its text on hover (white on slate
+                    becomes dark on amber) and the mark has to follow. */}
+                <ButtonMark />
               </button>
             </div>
 

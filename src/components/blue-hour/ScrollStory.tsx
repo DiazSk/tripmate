@@ -4,7 +4,7 @@ import HowItWorks from "./HowItWorks";
 import FeaturedPlans from "./FeaturedPlans";
 import type { PlanPrefill } from "./planExamples";
 import DestinationMap from "./DestinationMap";
-import SiteFooter from "./SiteFooter";
+import SiteFooter from "@/components/SiteFooter";
 
 /**
  * The Blue Hour Expedition landing sequence. Owns composition only — trip-form state stays in

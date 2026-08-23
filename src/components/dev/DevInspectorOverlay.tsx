@@ -50,7 +50,7 @@ export default function DevInspectorOverlay() {
   if (!enabled) return null;
 
   return (
-    <div className="pointer-events-none absolute top-[calc(var(--nav-h)+0.5rem)] left-5 z-50 rounded border border-black/10 bg-white/90 px-2 py-1 text-xs font-medium text-slate-900 shadow-md sm:left-6">
+    <div className="pointer-events-none absolute top-[calc(var(--nav-h)+0.5rem)] left-5 z-50 rounded border border-black/10 bg-white/90 px-2 py-1 text-xs font-medium text-slate-900 shadow-md sm:left-6 print:hidden">
       {hovered ?? "—"}
     </div>
   );

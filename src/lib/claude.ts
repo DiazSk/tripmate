@@ -16,9 +16,11 @@ import { insertTrace, updateTrace } from "./db";
  *
  * 1. **It is the model that actually scored 0.959.** Sonnet 5 was never benchmarked on this task;
  *    picking it was an extrapolation from "same tier, one generation newer".
- * 2. **Sonnet 5 doesn't fit the timeout.** It spent 164s before its first token and 196s in total
- *    on an 8-day trip, then timed out twice at 216s on a *3-day* trip — `itineraryTimeoutMs()`
- *    can't accommodate it without making every user wait four minutes for a plan.
+ * 2. **Sonnet 5 was slower than the budget of the day.** It spent 164s before its first token
+ *    and 196s in total on an 8-day trip, then timed out twice at 216s on a *3-day* trip. This
+ *    reason has since weakened on its own: Sonnet 4.5 went on to time out at 218s the same way,
+ *    and `itineraryTimeoutMs()` is now 300s — so "it does not fit the timeout" was really "the
+ *    timeout was calibrated on Haiku". Reasons 1 and 3 are the ones still standing.
  * 3. **Its compliance broke the day shape.** It followed "about 3 stops per day" literally where
  *    Haiku had loosely ignored it, so days ended at 1pm. That prompt bug is fixed now (see
  *    travelerProfilePrompt.ts), but it is a reminder that a model change is a behaviour change and
@@ -33,14 +35,62 @@ export const DEFAULT_TIMEOUT_MS = 90_000;
  * The critique pass reasons over a whole generated itinerary, so it is far closer to a
  * generate call than to the small lookups DEFAULT_TIMEOUT_MS was sized for.
  *
- * On the shared 90s default it was failing **35% of the time** (7 of 20 calls in
- * `llm_traces`, every one of them dying at exactly 90s). Those failures were invisible:
- * the runner catches critique errors by design, so a third of trips shipped without the
- * budget/timing review and nothing said so. The successful calls run p50 58s / p90 75s, and
- * the seven that were killed were still working — so the real tail extends past 90s and the
- * old ceiling was cutting into it, not bounding it.
+ * **Third calibration of this constant, and the first two failed the same way: the percentile
+ * was computed over the calls that survived the cap.** 90s was set from "p50 58s / p90 75s",
+ * 150s from a corpus that is no longer in the table. Both looked like measurements. Neither
+ * was, and the reason is worth stating once because it is the whole trap:
+ *
+ * A killed call does not record how long it needed — it records the cap. So the successes are
+ * exactly the calls that fit, and a percentile over them **cannot exceed the cap no matter how
+ * heavy the real tail is.** "p90 = 146s" against a 150s cap is not evidence the cap holds; it
+ * is the cap describing itself. Timed-out rows are *censored observations*: we know they needed
+ * more than 150s, not how much more.
+ *
+ * Treated properly, as 17 rows of which 6 are censored at exactly 150s (`type='critique'`):
+ *
+ *     whole-sample p50   146.3s   measured
+ *     whole-sample p64.7 149.8s   measured — last point the data can see
+ *     whole-sample p75+  >150s    CENSORED, true value unknown
+ *     P(duration > 150s) ~35%     tail beyond the cap unidentified
+ *
+ * Six of the eleven successes land within 8s of the cap (142.2, 143.3, 143.9, 146.3, 147.6,
+ * 149.8) — and that last one cleared by **201ms**. A cap that most of your successes crowd
+ * against is a cut into the distribution, not a bound on it.
+ *
+ * **This is NOT a consequence of the Sonnet switch, despite matching the generate story.** Split
+ * by era, `claude-haiku-4-5` was already censored 3/11 (27%) — 150s was under-provisioned on
+ * the very model it was measured against, even though that model's *measured* p50 is only 116s.
+ * Sonnet 4.5 made it worse, 3/6 censored (50%), but did not cause it. So the fix here is not "re-measure against
+ * the current model"; it is "stop reading percentiles off censored data".
+ *
+ * 300s, matching `BASE_TIMEOUT_MS`, chosen on two grounds rather than a margin calculation:
+ *
+ *  - **Critique prompts are the bigger ones.** 9.3k-20.5k chars against generate's 7.5k-9.2k in
+ *    the same era, correlating with duration at r = 0.52 (over a truncated sample, so itself suspect). Giving critique *less* budget than
+ *    generate would assert it is the cheaper call; prompt size says the opposite. Generate needed
+ *    300s to clear a measured max of 220.8s, and critique's max is not even measured.
+ *  - **Raising the cap is also the instrument.** At 150s every slow call is censored, so the tail
+ *    can never be learned — which is precisely how this rotted twice. At 300s a call that takes
+ *    170s or 240s gets *recorded*, and the next person re-derives from durations instead of from
+ *    another pile of rows reading exactly 150000.
+ *
+ * The trade: critique is awaited on the traveller's critical path, between generate and placing,
+ * so the worst case goes from 7.5 minutes to 10. Accepted, because a spurious kill is the worse
+ * outcome on both axes — the traveller waits the full 150s *and* silently loses the budget/timing
+ * review, paying full price for nothing. A slow success at least delivers the review.
+ *
+ * Re-derive from the table rather than nudging, and split by era. Note that `status='ok'` alone
+ * is the query that caused this bug — you need the censored rows to see the tail at all:
+ *   SELECT model, status, duration_ms, length(prompt) FROM llm_traces
+ *   WHERE type='critique' ORDER BY duration_ms;
+ * Counts here are a snapshot — the table grows whenever anyone generates a trip, and these
+ * figures already shifted once between one agent measuring them and another writing them down.
+ * Trust the shape, re-derive the numbers.
+ *
+ * If kills reappear at 300s the tail is genuinely heavier than a five-minute wait can hold, and
+ * the answer is to make the pass cheaper (or move it off the critical path), not to raise this again.
  */
-export const CRITIQUE_TIMEOUT_MS = 150_000;
+export const CRITIQUE_TIMEOUT_MS = 300_000;
 
 /**
  * Where the `claude` binary lives, independent of whoever launched the dev server.
@@ -105,37 +155,50 @@ function resolveCliBin(pathEnv: string): string {
   return [...onPath, ...extensionBinaries()].find(isExecutable) ?? "claude";
 }
 
-const BASE_TIMEOUT_MS = 210_000;
+const BASE_TIMEOUT_MS = 300_000;
 const PER_DAY_TIMEOUT_MS = 2_000;
 const MAX_TIMEOUT_MS = 480_000;
 
 /**
  * How long a generate/refine call may run before it is killed.
  *
- * Recalibrated against 36 successful generate calls in `llm_traces` rather than the handful
- * of samples the previous value came from. The measured distribution:
+ * **Recalibrated because the production model changed.** The previous 210s was derived from a
+ * Haiku-4.5 corpus; `MODEL` is now `claude-sonnet-4-5`, which is slower to first token. Only the
+ * post-swap era is informative — the Aug 8-9 rows ran ~2.3k-char prompts at p50 74s and describe
+ * a regime that no longer exists. Pooling both eras is what made 210s look survivable.
  *
- *     p50 117s   p75 123s   p90 145s   max 165s
+ * Current era, 20 calls, **counting the killed ones** (see CRITIQUE_TIMEOUT_MS above for why that
+ * matters — a percentile over survivors alone cannot exceed the cap, and reading one off is how
+ * both constants in this file rotted):
  *
- * The old budget was `120s + 12s/day`, which gave a one-day trip 132s — *below* the p90. The
- * comment justifying it cited "~85-105s", but 105s turns out to be roughly the 25th
- * percentile, so the margin was measured against the fast end of the range and the slowest
- * tenth of runs could not finish by construction. Five consecutive failures each died exactly
- * at their cap (156s, 156s, 156s, 168s, 192s) with the model still working.
+ *     p50 153s   p75 189s   p90 218s*   max 221s        * = CENSORED, true value unknown
  *
- * 210s clears the observed maximum with real margin. The cost is that a genuinely wedged call
- * now hangs ~3.5 minutes before erroring, which is the right trade: a slow success is worth
- * far more than a fast failure when the alternative is regenerating from scratch.
+ * Two calls were killed at exactly 218s (a 4-day trip's old budget) with the model still writing,
+ * so 10% of the era was censored and the p90 lands on the cap itself. The tail is real and partly
+ * unmeasured: one 6-day trip *succeeded* at 220.8s, which is direct evidence the distribution
+ * reaches past the point where the short trips were being cut off.
  *
- * The per-day term is nearly gone (12s → 2s) because trip length is not what drives duration.
- * Correlation between prompt size and duration across a 6x range of prompt sizes is r = 0.132
- * — essentially none; the variance is fixed overhead (CLI start, time to first token), not
- * output size. The old term gave the most headroom to long trips while leaving short ones the
- * tightest budget, which is backwards. It is kept small and non-zero only because a 30-day
- * itinerary genuinely does emit several times more JSON.
+ * 300s is a decision about what a traveller should wait, not a margin calculation. It clears the
+ * longest measured success by ~36% and sits at a legible five minutes. The trade the old comment
+ * named is real — a wedged call hangs 5 minutes instead of 3.5 — but a spurious kill costs *more*
+ * wall-clock than a slow success, because the traveller regenerates and pays the full duration
+ * again. Raising the cap is also the instrument: at 218s every slow call was censored, so the
+ * tail could never be learned. At 300s a 240s call gets recorded instead of clipped.
  *
- * Re-derive this from the table rather than nudging it by feel:
- *   SELECT duration_ms FROM llm_traces WHERE type='generate' AND status='ok' ORDER BY 1;
+ * The per-day term stays at 2s/day and is not load-bearing. Prompt size correlates with duration
+ * at r = 0.27 across this era's 7.5k-9.2k range, and that figure is itself unstable — it read
+ * 0.09 twenty rows ago and 0.13 before that, which is what noise looks like. (The r = 0.77 you
+ * get over the full table is era confounding: the old corpus was both shorter and faster, for
+ * unrelated reasons.) Every trip measured is 3-8 days; the term is retained as a knob for the
+ * 30-day itinerary nobody has run, which genuinely does emit several times more JSON, not because
+ * the data asks for it. Raising it would be inventing a slope — that is how it got to 12s/day.
+ *
+ * Re-derive rather than nudging, and note both things the old query here got wrong: it filtered
+ * `status='ok'` (dropping exactly the rows that prove a tail exists) and it pooled the eras.
+ *   SELECT model, status, duration_ms, length(prompt), created_at FROM llm_traces
+ *   WHERE type='generate' AND duration_ms > 1000 ORDER BY duration_ms;
+ * Counts here are a snapshot of a table that grows whenever anyone generates a trip; treat them
+ * as the shape of the distribution, not as the current row count.
  */
 export function itineraryTimeoutMs(days: number): number {
   return Math.min(BASE_TIMEOUT_MS + days * PER_DAY_TIMEOUT_MS, MAX_TIMEOUT_MS);

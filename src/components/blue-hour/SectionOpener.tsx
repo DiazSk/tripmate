@@ -26,6 +26,7 @@ export default function SectionOpener({
   headingRef,
   id,
   align = "center",
+  rule = true,
 }: {
   label: string;
   /** The heading. Passed as children so each beat picks its own level and size. */
@@ -39,11 +40,18 @@ export default function SectionOpener({
    *  headings; `start` is for the generation screen, whose heading runs to 8rem and leaves the
    *  centred label floating in the middle of a very tall cell. */
   align?: "center" | "start";
+  /** Whether to draw the opener's own top hairline. Off for `/profile`, which puts this inside
+   *  one cell of a ruled two-column grid: there the rule belongs to the grid so it spans both
+   *  cells, and a second one here would rule only the right half. Off also drops the `pt-10`
+   *  that goes with it, since the cell's own padding sets the offset in that arrangement. */
+  rule?: boolean;
 }) {
   return (
     <div
       id={id}
-      className="grid gap-6 border-t border-white/10 pt-10 lg:grid-cols-[11rem_1fr] lg:gap-10"
+      className={`grid gap-6 lg:grid-cols-[11rem_1fr] lg:gap-10 ${
+        rule ? "border-t border-white/10 pt-10" : ""
+      }`}
       {...devLabel("SectionOpener")}
     >
       <p

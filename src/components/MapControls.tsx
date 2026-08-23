@@ -222,8 +222,22 @@ export default function MapControls() {
 
   // Transform is transitioned alongside the fill so a press eases in and releases back out,
   // rather than snapping between two states the way transition-colors alone did.
-  const buttonClass =
-    "flex h-11 w-11 items-center justify-center text-white/90 transition-[background-color,transform] duration-200 ease-out hover:bg-white/10 active:scale-[0.92] active:bg-white/15";
+  const buttonShape =
+    "flex h-11 w-11 items-center justify-center text-white/90 transition-[background-color,transform] duration-200 ease-out active:scale-[0.92]";
+
+  /** For the two buttons *inside* the glass pill, which paint their own fill over it. */
+  const buttonClass = `${buttonShape} hover:bg-white/10 active:bg-white/15`;
+
+  /** For the two that *are* glass — the 2D/3D toggle and the compass, each carrying
+   *  `.glass-control` themselves. They deliberately omit the `bg-*` utilities above, because on
+   *  those elements the utilities did nothing: `.glass-control` sets `background` unlayered in
+   *  `globals.css`, and unlayered author CSS outranks anything `@layer utilities` emits whatever
+   *  its specificity. Both shipped with no hover and no press state for that reason. The states
+   *  now live next to the base rule in `globals.css`, where they can actually win — and they
+   *  darken rather than lighten, per DESIGN.md's Darken-Never-Lighten Rule, since these float
+   *  over terrain that is sometimes a snowfield. The `transition` stays: it finally has a
+   *  property that moves. */
+  const glassButtonClass = buttonShape;
 
   return (
     // Hidden below `sm:` by default — that's the breakpoint where the itinerary panel goes
@@ -264,7 +278,7 @@ export default function MapControls() {
         aria-label={flat ? "Switch to 3D view" : "Switch to 2D view"}
         // text-xs, on the ramp: 13px was a one-off step, and at 44px square with a
         // two-character label the difference is a pixel nobody reads.
-        className={`glass-control pointer-events-auto hidden rounded-xl text-xs font-semibold tracking-wide sm:flex ${buttonClass}`}
+        className={`glass-control pointer-events-auto hidden rounded-xl text-xs font-semibold tracking-wide sm:flex ${glassButtonClass}`}
       >
         {flat ? "3D" : "2D"}
       </button>
@@ -298,7 +312,7 @@ export default function MapControls() {
         type="button"
         onClick={resetNorth}
         aria-label="Reset map to face north"
-        className={`glass-control pointer-events-auto rounded-full ${buttonClass}`}
+        className={`glass-control pointer-events-auto rounded-full ${glassButtonClass}`}
       >
         <span ref={needleRef} className="block will-change-transform">
           <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">

@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { getImageProps } from "next/image";
+import ButtonMark from "@/components/ButtonMark";
 import { useLineReveal } from "@/lib/lineReveal";
 
 /** The hero is two photographs, not one: a back layer that hangs from the top and a front layer
@@ -39,13 +40,24 @@ const FRONT = {
  *  viewport rendered the images at a flat 750px. Two mutually exclusive media queries cannot collide
  *  with each other, which is the only arrangement that holds.
  *
+ *  **And they have to be genuinely exclusive, which `min-`/`max-` are not.** Both prefixes are
+ *  *inclusive*, so a `min-aspect-ratio: 3/5` and a `max-aspect-ratio: 3/5` query both match at
+ *  exactly 3:5 — and there the arrangement above degenerates into precisely the sorted-group race it
+ *  was written to avoid, per property, silently. Measured at 375×625 before this was fixed: the CTA
+ *  took its portrait `width` (335px, full-bleed) while keeping landscape `position` and `z-index`
+ *  (`relative`, 4), so it floated 186px above the bottom of a hero it was supposed to be pinned to.
+ *  375×624 and 375×626 were each individually correct, which is what made it invisible. Range syntax
+ *  (`aspect-ratio<=3/5` / `aspect-ratio>3/5`) has no shared value, and it is the idiom `globals.css`
+ *  already uses for width. Portrait owns the boundary, including the two `<picture>` sources, so the
+ *  crop and the layout agree about which branch that one viewport is in.
+ *
  *  `max-w-none` is load-bearing too. Tailwind's Preflight sets `img { max-width: 100% }`, which
  *  silently clamped the widened layer straight back to 100% and left the right edge 4px short at
  *  2560. Preflight is a set of opinions that outrank what you wrote, not a neutral reset — the same
  *  lesson as The Preflight-Beats-The-UA Rule. The reference hits this too and answers it the same
  *  way, with an explicit `max-width: calc(100% + 8px)`. */
 const LAYER_WIDTH =
-  "max-w-none [@media(max-aspect-ratio:3/5)]:w-full [@media(min-aspect-ratio:3/5)]:w-[100.65%] [@media(min-aspect-ratio:3/5)]:-left-[0.17%]";
+  "max-w-none [@media(aspect-ratio<=3/5)]:w-full [@media(aspect-ratio>3/5)]:w-[100.65%] [@media(aspect-ratio>3/5)]:-left-[0.17%]";
 
 /**
  * The opening moment of the Blue Hour scroll story: a curated photo, a one-word headline,
@@ -149,7 +161,7 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
     // bottom-anchored crop put the CTA on the yurts; with the layers at natural size the centre is
     // already right — the reference's own text block measures 241px in a 639px section, landing at
     // exactly `(639-241)/2`.
-    <section className="pointer-events-auto relative flex aspect-[1440/922] flex-col items-center justify-center overflow-hidden px-5 text-center sm:px-6 [@media(max-aspect-ratio:3/5)]:aspect-[375/812]">
+    <section className="pointer-events-auto relative flex aspect-[1440/922] flex-col items-center justify-center overflow-hidden px-5 text-center sm:px-6 [@media(aspect-ratio<=3/5)]:aspect-[375/812] [@media(aspect-ratio<=3/5)]:pb-[5.375rem]">
       {/* BACK — mountains, hanging from the top edge.
           Its own sky is intact, so this is the one layer that puts bright imagery behind the type;
           the veil below is what makes that safe. Switched on aspect ratio rather than a width
@@ -157,7 +169,7 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
           0.55), and 3/5 rather than 1/1 because at full width the portrait file stands 1.37x its own
           width tall — fine on a phone, impossible on a 4:3 tablet. */}
       <picture>
-        <source media="(min-aspect-ratio: 3/5)" srcSet={backLandscape} sizes="100vw" />
+        <source media="(aspect-ratio > 3/5)" srcSet={backLandscape} sizes="100vw" />
         <source srcSet={backPortrait} sizes="100vw" />
         <img
           {...backRest}
@@ -175,17 +187,28 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
           `align-self: center` and shrink-to-fit width, changing where the headline wraps — and
           `useLineReveal` masks the line boxes it *measures*, so a wrap change is a change to the
           reveal. It is `static` with no `z-index`, which matters: it must not open a stacking
-          context, or the z values on its children could not straddle FRONT. */}
+          context, or the z values on its children could not straddle FRONT.
+ */}
       <div>
         {/* `z-2` — the sandwich. This is the one element FRONT passes in front of, so the steppe's
             horizon cuts across the bottom of the word instead of stopping beneath it. Everything
             else in this block sits at `z-4`, above FRONT, so the support copy stays fully legible.
             One word, set as large as the viewport allows; 13rem is past the craft floor's 6rem
             display ceiling, deliberately, because this headline *is* the viewport. It rhymes with
-            the closing "Elsewhere." */}
+            the closing "Elsewhere."
+
+            `z-2` puts it behind the FRONT steppe layer, which is the depth this composition is
+            built on — but only where the steppe's horizon actually sits below the type. On the
+            portrait crop it does not: measured at 375x812 the front layer's box starts at y=299
+            against a headline spanning 306-358, and its hillside rises on the right far enough to
+            swallow the final "e." — the one word on the page reading "Somewher". So at that one
+            breakpoint the headline joins its own subline at `z-4`, in front. The effect survives
+            everywhere it reads; legibility of the only word on the screen outranks it where it
+            does not. Not `z-4` unconditionally: the FRONT comment records crossing the type as
+            deliberate, and on the landscape crop the horizon is genuinely below it. */}
         <h1
           ref={headingRef}
-          className="hero-legible relative z-[2] font-scene-hero text-[clamp(3rem,11vw,13rem)] leading-[0.92] text-on-deep"
+          className="hero-legible relative z-[2] font-scene-hero text-[clamp(3rem,11vw,13rem)] leading-[0.92] text-on-deep [@media(aspect-ratio<=3/5)]:z-[4]"
         >
           Somewhere.
         </h1>
@@ -250,8 +273,58 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
 
             Type and padding are the reference's too: `0.875rem / 600 / -0.5px` tracking at 90%
             line-height, in a `1.25rem 2rem` box — 4px taller than ours was. */}
+        {/* **Docked to the floor in the portrait composition, full width between equal gutters.**
+            This is the reference's own construction, measured off its live DOM at 402px rather than
+            inferred: its `.intro__button.mobile-visible` is `position: absolute; inset: 0` with
+            `align-items: flex-end`, and the anchor inside comes out 351px wide with 26px of gutter
+            on the left, the right, and below. Equal inset on three sides — so ours takes `inset-x-5`
+            / `bottom-5`, which is that same equal inset at this project's own 20px page gutter
+            rather than importing their 25.728px into a page where nothing else uses it.
+
+            `inset-x-5` and not `inset-x-0`: an absolutely positioned element's containing block is
+            its ancestor's *padding box*, so `inset-x-0` would ignore the section's `px-5` and touch
+            the screen edge.
+
+            **The section's `pb-[4.5rem]` is what makes this safe, and it is the non-obvious half.**
+            Taking the button out of the flow shortens the centred block by its own height plus its
+            `mt-8`, so the block re-centres ~45px *lower* — the first attempt at this dropped
+            "Somewhere." below the horizon instead of being cut by it, losing the one effect the
+            two-layer sandwich exists to produce. The reference does not hit this because its text
+            block is placed by `padding-top`, not centred, so its button leaving the flow moves
+            nothing. Ours stays centred and reserves the space instead.
+
+            86px, and it is measured rather than derived — worth saying, because the derived number is
+            wrong. The button's own footprint is 73px (53px tall plus its 20px offset), which leaves
+            the headline at 346px; the block's real height is 106px, not the 118px the type metrics
+            suggest, so holding the headline at the 339px it sat at before this change needs
+            `(870 - pb - 106) / 2 = 339`. Re-measure this if the subline's copy or the type step
+            changes, rather than trusting the button's box. Padding-bottom cannot disturb the button
+            itself — the padding box's bottom edge is the section's bottom edge either way.
+
+            Both branches are media-scoped, with no bare `relative`/`mt-8` left to inherit — this
+            file's own hard-won pattern, see `LAYER_WIDTH`, where an unprefixed `w-full` beat the
+            arbitrary media variant meant to override it.
+
+            Known, and the reference's too: at 402px this hero is 870px against a visible viewport of
+            roughly 700px once Safari's chrome is showing, so the floor — and the button on it — sits
+            below the fold. Vita ships exactly that (858px hero, button 26px off its floor). It falls
+            out of the `aspect-ratio` decision above, which both projects made deliberately.
+
+            **`z-11` in the docked branch, above `.hero-dusk`, and that is the consequence of the
+            line above rather than a preference.** `.hero-dusk` is the scroll-driven wash that fades
+            this whole hero into the next beat: `rgb(var(--surface-deep-rgb))` at `z-10`, resting at
+            `opacity: 0`. Since the docked button is below the fold, *reaching* it means scrolling,
+            and scrolling is exactly what raises that wash — measured, the CTA clears the fold around
+            scrollTop 450 where the wash is at 0.353, which renders a white pill as
+            `rgb(170,181,184)`. The primary action arrived on screen already greyed out. Above the
+            wash it stays white while the scenery behind it fades, which is the right division: the
+            photograph is leaving, the button is not.
+
+            Landscape keeps `z-4`. There the button is centred and fully visible at rest with the
+            wash at zero, so fading with the composition as the hero scrolls away is correct — it is
+            leaving with everything else, not being scrolled toward. */}
         <div
-          className="hero-rise relative z-[4] mt-8 flex justify-center"
+          className="hero-rise flex justify-center [@media(aspect-ratio>3/5)]:z-[4] [@media(aspect-ratio<=3/5)]:z-[11] [@media(aspect-ratio>3/5)]:relative [@media(aspect-ratio>3/5)]:mt-8 [@media(aspect-ratio<=3/5)]:absolute [@media(aspect-ratio<=3/5)]:inset-x-5 [@media(aspect-ratio<=3/5)]:bottom-5"
           style={{ animationDelay: "300ms" }}
         >
           <button
@@ -262,30 +335,12 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
             // it typechecks, because `Hero` declares the prop as `() => void` and TypeScript
             // happily assigns a wider handler to a narrower one.
             onClick={() => onPlan()}
-            className="pointer-events-auto inline-flex items-center gap-4 rounded-full border border-transparent bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground shadow-lg shadow-black/30 transition-all duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
+            className="pointer-events-auto inline-flex items-center gap-4 rounded-full border border-transparent bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground shadow-lg shadow-black/30 transition-all duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98] [@media(aspect-ratio<=3/5)]:w-full [@media(aspect-ratio<=3/5)]:justify-center"
           >
             Plan a trip
-            {/* The reference's button mark, drawn to its own path rather than borrowed from
-                `SectionOpener`. Those are two different shapes and the reference has both: the
-                section opener sets a six-point `❋`, which `SectionMark` redraws as three crossing
-                strokes, while the button carries this four-point star with concave sides, filled.
-                Reusing the stroked one here would not have worked at this size anyway — 1.5 units
-                of stroke inside an 8px box closes the gaps between the arms and reads as a blob.
-                A filled path stays crisp.
-
-                `fill="currentColor"` rather than the reference's hard-coded `#0D2E37`, so the mark
-                tracks `text-accent-foreground` and cannot drift from the label it sits beside.
-                `gap-4` is the reference's own `1rem`. */}
-            <svg
-              aria-hidden
-              width="8"
-              height="8"
-              viewBox="0 0 8 8"
-              fill="currentColor"
-              className="shrink-0"
-            >
-              <path d="M8 0C8 0 7.32057 2.41553 7.32057 4C7.32057 5.58447 8 8 8 8C8 8 5.58447 7.32057 4 7.32057C2.41553 7.32057 0 8 0 8C0 8 0.679427 5.58447 0.679427 4C0.679427 2.41553 0 0 0 0C0 0 2.41553 0.679426 4 0.679426C5.58447 0.679426 8 0 8 0Z" />
-            </svg>
+            {/* `gap-4` is the reference's own `1rem`. The mark is `ButtonMark` — see there for why
+                it is inline and why it fills `currentColor`. */}
+            <ButtonMark />
           </button>
         </div>
       </div>
@@ -298,13 +353,13 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
           edge (measured at 1440x900 as five rows dropping to mean RGB 23 under grass at 58). 11px of
           a 2899px frame is 0.38vw at any width. The portrait file has no such margin. */}
       <picture>
-        <source media="(min-aspect-ratio: 3/5)" srcSet={frontLandscape} sizes="100vw" />
+        <source media="(aspect-ratio > 3/5)" srcSet={frontLandscape} sizes="100vw" />
         <source srcSet={frontPortrait} sizes="100vw" />
         <img
           {...frontRest}
           alt=""
           aria-hidden
-          className={`absolute bottom-0 left-0 z-[3] h-auto ${LAYER_WIDTH} [@media(min-aspect-ratio:3/5)]:-bottom-[0.4vw]`}
+          className={`absolute bottom-0 left-0 z-[3] h-auto ${LAYER_WIDTH} [@media(aspect-ratio>3/5)]:-bottom-[0.4vw]`}
         />
       </picture>
 

@@ -64,7 +64,13 @@ export default function DockedPanel({
           // Tailwind's `ring-*` utility, which composes onto `box-shadow`. Combined with
           // `outline-none` here, keyboard focus on this button was completely invisible.
           // `outline` is a separate property, so it doesn't fight the control's own shadow.
-          className="glass-control sticky top-0 z-20 -mt-1 mb-1 flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium text-white/90 transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 sm:hidden"
+          //
+          // Same trap, same class, one property over: a `hover:bg-white/10` used to sit on the
+          // line below, dead against `.glass-control`'s unlayered `background` — so the only
+          // control a phone has for hiding the map had no feedback whatsoever. Its hover lives
+          // in `globals.css` now, beside the base rule. `transition-colors` stays and is now
+          // load-bearing.
+          className="glass-control sticky top-0 z-20 -mt-1 mb-1 flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium text-white/90 transition-colors focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 sm:hidden"
         >
           <svg
             viewBox="0 0 20 20"

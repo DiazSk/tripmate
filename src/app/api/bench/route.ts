@@ -7,6 +7,8 @@ import {
   insertBenchFixture,
   insertRun,
   listLatestBenchResults,
+  listLatestRefineResults,
+  listPendingTraces,
   updateBenchResultScores,
 } from "@/lib/db";
 import { buildCustomFixture } from "@/lib/bench/customTrip";
@@ -19,8 +21,11 @@ import {
   compositeScore,
   computeModelAgreement,
   rowToCell,
+  rowToRefineCell,
   runBenchCell,
+  runRefineCell,
 } from "@/lib/bench/runBenchmark";
+import { findRefineTask, refineTasksFor } from "@/lib/bench/refineTasks";
 import { SEMANTIC_METHOD } from "@/lib/bench/scorers/text";
 import { judgeFixture, judgeModel } from "@/lib/bench/scorers/judge";
 
@@ -56,8 +61,21 @@ function snapshot() {
       json: toItineraryJson(cell.itineraryMd, byId.get(cell.fixtureId)!, cell.model),
     }));
 
+  // Kept as its own array rather than merged into `cells`: a refine row's `scores_json` is a
+  // `RefineCellScores`, not `BenchCellScores`, so mixing them back together would just move the
+  // "which kind is this" guess from the server (which knows) to the client (which would have to
+  // sniff a scorer key again, the exact workaround this fix removes).
+  const refineCells = listLatestRefineResults()
+    .map(rowToRefineCell)
+    .filter((c) => byId.has(c.fixtureId));
+
   const models = benchModels();
+  // Any bench-shaped call in flight right now, from anywhere — a browser click, a curl
+  // one-liner, an external script. Elapsed time is computed client-side from createdAt so
+  // a stale snapshot never claims a wrong duration.
+  const pending = listPendingTraces();
   return {
+    pending,
     fixtures: fixtures.map((f) => ({
       id: f.id,
       title: f.title,
@@ -82,11 +100,14 @@ function snapshot() {
     judgeModel: judgeModel(),
     semanticMethod: SEMANTIC_METHOD,
     cells,
+    refineCells,
     aggregates: aggregateByModel(cells, models.map((m) => m.id)),
     // What the aggregate is actually averaging over, so the UI can say so instead of implying
     // every trip is represented.
     panel: balancedPanel(cells, models.map((m) => m.id)),
     agreement: computeModelAgreement(cells),
+    // Keyed by fixture id so the console can render the refine-task picker without a second request.
+    refineTasks: Object.fromEntries(fixtures.map((f) => [f.id, refineTasksFor(f.id)])),
   };
 }
 
@@ -147,6 +168,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing model" }, { status: 400 });
     }
     try {
+      // Absent taskId keeps the generation path byte-identical for every existing caller.
+      if (body.taskId) {
+        const task = findRefineTask(body.fixtureId, body.taskId);
+        if (!task) return NextResponse.json({ error: "Unknown task" }, { status: 400 });
+        const cell = await runRefineCell(fixture, task, body.model);
+        return NextResponse.json({ ok: true, cell });
+      }
+
       const cell = await runBenchCell(fixture, body.model);
       return NextResponse.json({ ok: true, cell });
     } catch (err) {

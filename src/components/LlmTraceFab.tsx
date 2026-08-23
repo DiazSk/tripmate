@@ -428,7 +428,9 @@ function LlmTraceFab({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.6 }}
             transition={{ type: "spring", stiffness: 260, damping: 22 }}
-            className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-stone-900 text-white shadow-lg transition-transform hover:scale-105"
+            // `print:hidden` because this mounts as a sibling of `.app-shell`, outside the reach
+            // of the print block's chrome rule in globals.css. It printed as a black dot.
+            className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-stone-900 text-white shadow-lg transition-transform hover:scale-105 print:hidden"
             aria-label="Open LLM trace viewer"
             title="LLM trace viewer"
           >
