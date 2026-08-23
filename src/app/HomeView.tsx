@@ -256,6 +256,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [arrivalPoint, setArrivalPoint] = useState("");
   const [departureTime, setDepartureTime] = useState("");
   const [departurePoint, setDeparturePoint] = useState("");
+  // Read by skill §4e ("already booked beats anything you would recommend"), by
+  // `formatTravelerProfile` and by `trip-context.md`. All three were live while nothing
+  // collected this, so a booked hotel was being re-chosen by the model every time.
+  const [stayBooked, setStayBooked] = useState("");
   // Asked rather than inferred from `energy`. Starts null so an untouched form sends nothing at
   // all — a default-valued object would claim the traveler stated "no needs" when they were never
   // asked, and `deriveMobilityProfile` treats those two cases differently.
@@ -598,7 +602,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         arrivalPoint: arrivalPoint || null,
         departureTime: departureTime || null,
         departurePoint: departurePoint || null,
-        stayBooked: null,
+        stayBooked: stayBooked || null,
       },
       accessibility,
     };
@@ -1105,6 +1109,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                         </div>
                       </Field>
                     </div>
+                  </div>
+
+                  <div className="mt-3 space-y-2 rounded-2xl border border-white/10 bg-surface-deep/50 px-4 py-3">
+                    <label className="text-xs font-medium text-muted">Already booked or fixed</label>
+                    <input
+                      type="text"
+                      value={stayBooked}
+                      placeholder="Where you're staying, if it's booked"
+                      onChange={(e) => setStayBooked(e.target.value)}
+                      className={`${fieldInputClass} ${stayBooked ? fieldFilledTone : fieldEmptyTone}`}
+                    />
                   </div>
 
                   <div className="mt-3 space-y-2 rounded-2xl border border-white/10 bg-surface-deep/50 px-4 py-3">
