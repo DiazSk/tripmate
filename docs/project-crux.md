@@ -12,6 +12,7 @@ rolls up the timeline across all of them.
 | [`system-design.md`](./system-design.md) | Diagrams for the preference step + LLM trace viewer |
 | [`itinerary-quality.md`](./itinerary-quality.md) | Rubric audit of plan quality, and what's data-blocked |
 | [`product-readiness.md`](./product-readiness.md) | External judgment: council verdict, validation gaps, reviewer findings |
+| [`for-zaid-missing-on-ui-optimization.md`](./for-zaid-missing-on-ui-optimization.md) | Four features whose writing half is only on `dev-aryan` — each type-checks while doing nothing |
 | [`branch-comparison-globe-and-llm.md`](./branch-comparison-globe-and-llm.md) | `dev-aryan` vs `feat/ui-optimization` — the two overlapping globe/LLM implementations, and which evidence backs which |
 
 ## What it is
