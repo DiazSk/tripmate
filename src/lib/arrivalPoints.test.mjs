@@ -242,3 +242,14 @@ test("the tier only sorts airports — a station is never demoted by it", () => 
   const out = parseArrivalPoints([KYOTO_STATION], ORIGIN);
   assert.equal(out[0].tier, 0);
 });
+
+test("exposes the bare IATA code separately from the display name", () => {
+  // A flight search needs "KIX", not "Kansai (KIX)" — the string it's embedded in for display.
+  const [airport] = parseArrivalPoints([KANSAI], ORIGIN);
+  assert.equal(airport.iata, "KIX");
+});
+
+test("a rail point has no IATA code", () => {
+  const [station] = parseArrivalPoints([KYOTO_STATION], ORIGIN);
+  assert.equal(station.iata, null);
+});
