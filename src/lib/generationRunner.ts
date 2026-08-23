@@ -141,9 +141,15 @@ export async function runGeneration(
     // A failed (or null-result) geocode leaves `geoPoint` unset, and `placing` below already
     // reports `skipped` in that case — reporting `done` here would sit a green "Locating" dot
     // next to a skipped "Placing" one, implying the two are unrelated when the second is
-    // skipped *because* the first failed. `skipped` is reused rather than adding a fourth
-    // status: three already cover everything the loader renders, and a new one would touch
-    // the shared vocabulary, both consumers, and the dot rendering for no visible difference.
+    // skipped *because* the first failed.
+    //
+    // Deliberately still `skipped` and not `failed`, now that the two are distinct. Two reasons,
+    // and the first is the one that matters: geocode shares the "Reading the place" group with
+    // `context`, which reports real state either way — so nothing is laundered here. That is
+    // exactly what was NOT true of critique, which is alone in its group. Second, CLAUDE.md is
+    // explicit that a geocoding miss is non-blocking by design and must not read as "the app is
+    // broken"; surfacing it as a failure to a traveller would do that for something the plan
+    // recovers from on its own.
     onStage({ stage: "geocode", status: geoPoint ? "done" : "skipped" });
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
@@ -199,12 +205,21 @@ export async function runGeneration(
   } catch {
     // Keep the uncritiqued itinerary.
   }
-  // `skipped`, not `done`, when the pass didn't actually run. Reporting `done` either way was
-  // the reason a 35% critique failure rate went unnoticed: the trip still arrived, just
-  // without the budget/timing review, and the loader said the review had happened. `skipped`
-  // is already in the stage vocabulary (refine uses it for geocode/placing) and the strip
-  // already renders it distinctly, so honesty here needs no new UI.
-  onStage({ stage: "critique", status: critiqued ? "done" : "skipped" });
+  // `failed`, not `done` and not `skipped`, when the pass didn't actually run.
+  //
+  // `done` either way was the original bug: a 35% critique failure rate went unnoticed because
+  // the trip still arrived, just without the budget/timing review, and the loader said the
+  // review had happened. That was fixed to `skipped` — which was still wrong, and wrong in a way
+  // that looked right. The claim at the time was that `skipped` was "already in the vocabulary
+  // and the strip already renders it distinctly, so honesty here needs no new UI". The strip does
+  // not: `stepGroupState` collapses a group whose every stage was skipped to `done`, because for
+  // refine that is correct (geocode and placing genuinely never needed doing). Critique is ALONE
+  // in the "Checking it over" group, so skipping it emptied the group and the traveller was told
+  // "Checking it over — done" about a review that had timed out. Two failure modes, one value.
+  //
+  // `failed` also carries the right weight semantics: unlike a skip, this stage really did burn
+  // its budget (up to CRITIQUE_TIMEOUT_MS), so generationProgress counts it as time spent.
+  onStage({ stage: "critique", status: critiqued ? "done" : "failed" });
 
   // Attach the real forecast (not the model's free-text guess) to each day
   // by date, so the UI can render structured icon/temp/humidity data.

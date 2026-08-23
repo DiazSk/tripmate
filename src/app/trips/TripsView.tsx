@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowRight, Trash2 } from "lucide-react";
 import { TripSummary } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import SiteFooter from "@/components/SiteFooter";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
@@ -134,7 +135,23 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
   // as the same product speaking rather than a second one. Declared before the early return
   // because hooks cannot be conditional; the ref simply stays null on the empty-state branch.
   const headingRef = useRef<HTMLHeadingElement>(null);
-  useLineReveal(headingRef);
+  // `start: "top bottom"`, and this is a **visibility fix, not a timing preference.**
+  //
+  // The default `top 85%` is a scroll-*in* threshold, right for a beat the reader travels down to.
+  // This headline never travels: the hero is `min-h-dvh` with `items-end`, so the h1 is pinned to
+  // the bottom of the first viewport, permanently *below* the 85% line. `gsap.fromTo` applies its
+  // `yPercent: 100` start state immediately, GSAP's `mask: "lines"` wrapper is `overflow: clip`, and
+  // the ScrollTrigger that would undo it never fires — so the page's own `<h1>` rendered as
+  // nothing. Measured on arrival: at 1440 the h1's top is 767px against a 765px threshold, missing
+  // by **2px**; at 375 it is 709 against 690. A 40px scroll set the transform back to 0 and the
+  // words appeared, which is what made this survive — it looked like a scroll animation working,
+  // not a headline that was never there. Every other `useLineReveal` call site sits above the line
+  // on arrival and is unaffected; a sweep of all four routes at both widths found only this one.
+  //
+  // `top bottom` reads as "the moment any part of it is on screen", so for an element already in
+  // view ScrollTrigger plays on init and the reveal still animates. Fixed here rather than in the
+  // hook's default, which is correct for the four beats the reader actually scrolls to.
+  useLineReveal(headingRef, { start: "top bottom" });
 
   if (trips.length === 0) {
     return (
@@ -144,7 +161,7 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
             which is the same problem: an empty beat carrying one amber CTA. */}
         <div aria-hidden="true" className="scene-void absolute inset-0" />
         <div className="relative z-10 max-w-lg">
-          <h1 className="font-display text-4xl font-bold text-foreground sm:text-6xl">
+          <h1 className="font-display text-4xl text-foreground sm:text-6xl">
             Your memories start here
           </h1>
           <p className="mt-3 text-base text-muted">
@@ -173,8 +190,14 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
   // empty cells, not overflow.
   const tiles = trips.slice(0, 5);
   const layout = HERO_LAYOUTS[tiles.length];
-  const first = tiles[0]?.destination.split(",")[0];
-  const last = tiles[tiles.length - 1]?.destination.split(",")[0];
+  // From `trips`, not `tiles`. The count below says `trips.length`, so the range has to describe
+  // the same set — reading them off the five-tile slice made one sentence with two referents. With
+  // six saved trips it printed "6 trips remembered, from Mumbai to Paris" while a Lisbon card sat
+  // in the grid below, so the page contradicted its own opening line. `tiles` stays capped at five
+  // because that is a statement about the collage, which is decoration; this is a statement about
+  // the collection.
+  const first = trips[0]?.destination.split(",")[0];
+  const last = trips[trips.length - 1]?.destination.split(",")[0];
   return (
     <section className="pointer-events-auto relative flex min-h-dvh items-end overflow-hidden p-5 sm:p-6">
       <div className={`absolute inset-0 grid gap-0.5 bg-[rgb(var(--surface-deep-rgb))] ${layout.grid}`}>
@@ -193,9 +216,14 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
         }}
       />
       <div className="relative z-10 max-w-2xl">
+        {/* No `font-bold`: `.font-display` sets `font-weight: 600` as an unlayered rule, which
+            outranks every `@layer utilities` weight whatever its specificity, so the `font-bold`
+            that used to be here computed as 600 anyway. 600 *is* the display step DESIGN.md
+            specifies — the utility was the mistake, not the rendering, so this removes a claim the
+            markup could not back rather than changing a weight. Byte-identical render. */}
         <h1
           ref={headingRef}
-          className="font-display text-5xl leading-[0.98] font-bold text-foreground sm:text-7xl"
+          className="font-display text-5xl leading-[0.98] text-foreground sm:text-7xl"
         >
           My memories
         </h1>
@@ -286,7 +314,20 @@ function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => voi
         type="button"
         onClick={onDelete}
         aria-label={`Delete your ${trip.destination} trip`}
-        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm hover:bg-red-600 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
+        // The keyboard reveal is `.memory-card-slot:focus-within .memory-card-delete` in
+        // `globals.css`, not a utility here. A focus-visible opacity utility used to sit in this
+        // list and was dead — `.memory-card-delete{opacity:0}` is unlayered and wins — so it read
+        // as the thing making this button reachable while `:focus-within` quietly did the work.
+        // (Named in words: the scanner reads comments, and nothing carries that class now.)
+        // `before:-inset-1` rather than `h-11 w-11`: the 36px chip was measured against this
+        // photograph and a 44px disc is a heavier object to park on every card — and on a phone it
+        // is parked permanently, since `@media (hover: none)` keeps the control visible where there
+        // is no hover to enter. The pseudo-element extends the *hit* area to 44px without changing
+        // what is drawn, which satisfies the 44px target rule on the one control here that
+        // permanently destroys data. It needs no `content` because Tailwind's `before:` variant
+        // supplies `content: ""`, and the button is already `absolute`, so it is its own containing
+        // block.
+        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm before:absolute before:-inset-1 hover:bg-red-600 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
       >
         <Trash2 className="h-4 w-4" strokeWidth={2.25} />
       </button>
@@ -398,6 +439,17 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
           </ul>
         </div>
       )}
+
+      {/* Same conditional bleed as the hero above, and for the same reason: with trips saved this
+          `<main>` carries `p-5 sm:p-6` that a full-bleed band has to cancel, and in the empty state
+          it carries no padding at all so there is nothing to cancel. */}
+      <div
+        className={
+          trips.length > 0 ? "-mx-5 -mb-5 sm:-mx-6 sm:-mb-6" : ""
+        }
+      >
+        <SiteFooter />
+      </div>
 
       <ConfirmDialog
         open={pendingDelete !== null}

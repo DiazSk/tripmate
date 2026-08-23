@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/* **Markdown is documentation, not markup — stop scanning it for classes.**
+
+   Tailwind v4 auto-detects sources across the whole project, and it does not care that a file is
+   prose: any token shaped like a utility becomes a real rule in the shipped stylesheet. This repo's
+   docs convention makes that a standing leak, because `docs/frontend.md` logs every fixed bug in
+   detail and those entries *quote the classes involved* — including the broken ones that were
+   removed. Two dead rules were shipping from that log alone: `[&:nth-child(2)]:border-t-0`, an
+   override that never applied and was deleted from `FeaturedPlans` months of work ago, and a
+   superseded `max-aspect-ratio` z-index variant from the hero. Neither is on any element. Both were
+   emitted because a bug report described them accurately.
+
+   Excluding markdown rather than rewording each mention is the fix that holds: rewording is a
+   guard at every call site, and there is no reason a future entry would remember. Nothing here is
+   MDX and no `.md` renders into the app, so the only candidates this drops are ones that exist
+   *only* in prose — precisely the dead set. Anything an element actually carries still comes from
+   its own `className`. */
+@source not "../../**/*.md";
+
 /* The one measurement everything else hangs off. Tailwind's whole scale is rem, so moving
    the root moves type, padding, gaps and radii together and the composition *scales* rather
    than reflowing — which is what a fixed 16px root was costing: past ~1400px the interface
@@ -401,6 +419,28 @@ body {
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.32);
 }
 
+/* Hover and press live here, in CSS, and not as `hover:bg-white/10` at the call sites — which is
+   where they used to be, and where they did nothing. The `background` above is an *unlayered*
+   author declaration, and cascade layers rank unlayered above anything `@layer`-emitted whatever
+   its specificity, so a layered `bg-*` utility could never touch it. Four controls shipped with no
+   hover and no press feedback at all: the 2D/3D toggle, the reset-north compass, the mobile sheet's
+   collapse handle and `/trip/[id]`'s Refine button, each of them running a `transition` on a
+   property that never moved. DockedPanel documents this exact mechanism for `box-shadow` and
+   `ring-*`; this is the same trap in `background-color`.
+
+   Darker, not lighter, and that is the Darken-Never-Lighten Rule rather than a preference: these
+   pills float over a live globe that idles anywhere from open ocean to a snowfield, and the
+   `bg-white/10` the dead utilities asked for would have cut contrast exactly where the terrain is
+   brightest. 0.72 is the alpha step `.memory-card-delete` and `.fact-stack-card` already use for a
+   surface at this weight; 0.82 reads as pressed without becoming a different material. */
+.glass-control:hover {
+  background: rgb(var(--surface-deep-rgb) / 0.72);
+}
+
+.glass-control:active {
+  background: rgb(var(--surface-deep-rgb) / 0.82);
+}
+
 /* The one control that is only glass on a phone. Above `sm` "Refine with AI" sits in the dark
    panel column, where the bare `text-muted` label it has always been reads fine and a second
    glass chip would just be noise. Below `sm` the panel's top edge is transparent, so the same
@@ -413,6 +453,14 @@ body {
     border-color: transparent;
     box-shadow: none;
   }
+
+  /* It drops the glass at this width, so it has to say so on hover too — `.glass-control:hover`
+     above would otherwise be overridden by this block's own `background: none` and the control
+     would be inert again. Materialising to the base glass alpha is the tidy answer: hovering
+     restores exactly the surface this breakpoint took away. */
+  .refine-affordance:hover {
+    background: rgb(var(--surface-deep-rgb) / 0.55);
+  }
 }
 
 /* The fixed top navbar. Blur alone (no tint) is Vita Travels' own reference value, but
@@ -420,19 +468,48 @@ body {
    live 3D globe that idles anywhere from open ocean to a snowfield. A whisper of the one
    slate on top of the blur is the same Darken-Never-Lighten reasoning every other surface
    in this system already applies over unpredictable imagery; it's the minimum needed for
-   reliable contrast, not a redesign of the reference. */
+   reliable contrast, not a redesign of the reference.
+
+   The bottom rule is the reference's too, and it is what makes the bar read as a cell in a drawn
+   grid rather than as floating chrome — the same move the section openers and the profile split
+   already make. It replaces the mobile menu's own `border-t`: the menu is `top-[var(--nav-h)]` and
+   this border occupies the last pixel of that height, so the two abutted exactly and drew one
+   hairline twice.
+   Known limit, accepted rather than solved: a white hairline at 0.12 is reliable over the slate
+   and over dark terrain, and fades toward invisible over a bright map or the `/backend`
+   dashboards' stone-50 ground. That is the same tradeoff `.glass-nav`'s own tint already takes
+   over unpredictable imagery, and the bar does not depend on the rule to be legible. */
 .glass-nav {
   background: rgb(var(--surface-deep-rgb) / 0.15);
   backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--card-border);
 }
 
-/* The mobile menu panel, not the bar itself: a real tappable surface with rows on it
-   wants more of the one slate than the whisper-thin bar tint above, the same
-   more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` already take
-   over `.glass-nav`. */
+/* The mobile menu panel, not the bar itself. It used to be a dropdown at 0.85 of the one
+   slate — the more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` take over
+   `.glass-nav`. Now that it fills the viewport it goes to the top of that same step rather
+   than to a new colour: still `--surface-deep-rgb`, at alpha 1. **Raising the alpha within the
+   one slate is the move; leaving the material for `--canvas` is not**, and full opacity is
+   where that step ends.
+
+   Two things earned the last 15%. A full-screen panel has the whole page behind it, not a
+   sliver of nav — on a phone the footer photograph was legibly ghosting through the menu rows.
+   And the blur goes with it, by the same reasoning `.glass-itinerary.is-opaque` already uses on
+   the four globe-less routes: nothing shows through an opaque surface, so a 20px blur is a
+   compositing layer rendering a blur of nothing. On the phone this fires during a full-viewport
+   fade. */
 .glass-nav-menu {
-  background: rgb(var(--surface-deep-rgb) / 0.85);
-  backdrop-filter: blur(20px);
+  background: rgb(var(--surface-deep-rgb));
+}
+
+/* The bar while that panel is open. `.glass-nav` is a whisper of the slate at 0.15, which is
+   right over a live globe and wrong butting up against the solid panel below it: the header row
+   read as a visibly lighter strip across the top of one surface. The reference treats its own
+   header and menu as a single field, and so does this — the divider under the row is then the
+   panel's `border-t`, which is the only line that should be there. */
+.glass-nav.is-menu-open {
+  background: rgb(var(--surface-deep-rgb));
+  backdrop-filter: none;
 }
 
 /* Native range input for the tilt slider — no library. It's laid out horizontally and rotated
@@ -1084,21 +1161,6 @@ body {
   --card-border: rgba(255, 255, 255, 0.12);
 }
 
-/* The traveler-profile form's panel.
-   It used to be a cobalt/teal gradient over the slate — a tint whose whole job was lifting a
-   settings form off a cold neutral canvas so it read as its own surface. The canvas is teal now,
-   so the tint was solving a problem that no longer exists and left the panel reading as a third
-   colour. It is the system's own surface over the system's own ground: same relationship the
-   reference uses everywhere, one step of lightness and a hairline.
-   Opaque, not frosted, because the globe does not boot on this route and a 56px blur of a flat
-   colour is a blur of nothing — the same argument TierPicker's price badge makes. */
-.profile-glass {
-  background: rgb(var(--surface-deep-rgb));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  --foreground: #ffffff;
-  --card-border: rgba(255, 255, 255, 0.12);
-}
 
 /* Geocoder typeahead dropdown — used under DestinationSearch, embedded both above the
    plan-step trip-input console and above ItineraryCard's day-tab row. Floats independent
@@ -1202,6 +1264,15 @@ body {
     background-color 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* **This pair is what reveals the button, including for the keyboard.** The button used to also
+   carry a focus-visible opacity utility, which was dead — `opacity: 0` above is unlayered and
+   outranks any layered utility — so the reveal has always come from `:focus-within` here. The
+   utility is gone now rather than left looking load-bearing: delete this rule trusting it and the
+   control becomes permanently invisible to anyone not using a pointer.
+
+   Named in words, not written as a class token: Tailwind's scanner reads comments, and now that no
+   element carries that utility, spelling it out here would put the dead rule straight back into the
+   stylesheet. */
 .memory-card-slot:hover .memory-card-delete,
 .memory-card-slot:focus-within .memory-card-delete {
   opacity: 1;
@@ -1310,4 +1381,59 @@ body {
 
 .memory-card:hover {
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
+}
+
+/* Print. Three rules here are load-bearing and none of the three failures is visible on screen.
+
+   1. `.app-shell` is `h-dvh overflow-hidden` and `.content-overlay` is `absolute inset-0
+      overflow-y-auto` — an absolutely-positioned scroller inside a fixed-height clipped box
+      prints exactly one screenful, so a multi-day document silently loses every page after the
+      first. The root layout wraps every route in AppShell and nested layouts nest rather than
+      replace, so there is no route-level opt-out to reach for.
+
+   2. `body` sets `color: var(--foreground)`, which is #ffffff. Print drops backgrounds but never
+      colours, so without the reversal below the whole document is white on white.
+
+   3. `.content-overlay` must stay *positioned*. It was `position: static` here first, and that
+      shipped a blank 9-page PDF: `z-index` applies only to positioned elements, so going static
+      dropped its `z-index: 10` and AppShell's globe container — still `absolute inset-0 z-0`
+      with an opaque `bg-canvas` and the full height of the document — began painting over every
+      line of text. `elementsFromPoint` put it on top at all four corners of the content.
+      `relative` keeps the stacking order intact while still sizing to content and flowing in
+      normal document order.
+
+   The chrome rule is structural on purpose. It replaced a hand-listed set of four class names
+   that had already missed the globe container, which is what caused (3). AppShell's children are
+   the globe, the marker layer, this overlay, the nav, the dev inspector and the map controls —
+   only the overlay has a document in it, so everything else is chrome by definition and the list
+   never needs maintaining again. `LlmTraceFab` is *not* covered: it mounts as a sibling of
+   `.app-shell`, so it carries its own `print:hidden`.
+
+   Global rather than scoped to /trip/[id]/print: nobody prints the globe, and a scoped copy is a
+   rule the next printable surface has to rediscover. */
+@media print {
+  .app-shell {
+    display: block;
+    height: auto;
+    overflow: visible;
+    /* `bg-canvas` is the dark app ground. Chrome drops it with "Background graphics" unchecked,
+       which is the default — but tick that box and it returns as two dark columns either side of
+       the document's own `max-w-3xl` column. Cheaper to neutralise than to rely on a checkbox. */
+    background: #fff;
+  }
+
+  .app-shell > *:not(.content-overlay) {
+    display: none !important;
+  }
+
+  .content-overlay {
+    position: relative;
+    overflow: visible;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+    color-scheme: light;
+  }
 }

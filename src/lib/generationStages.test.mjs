@@ -8,8 +8,11 @@ import test from "node:test";
 import {
   STAGE_ORDER,
   STAGE_SECONDS,
+  STEP_GROUPS,
   generationProgress,
+  isStepTerminal,
   stageMeta,
+  stepGroupState,
 } from "./generationStages.ts";
 
 /** Builds a stages array from a partial map, defaulting anything unnamed to `pending`. */
@@ -51,13 +54,22 @@ test("STAGE_SECONDS covers exactly STAGE_ORDER, all positive", () => {
 });
 
 /* The whole reason the bar is weighted. If someone ever flattens these to equal values the
- * bar silently goes back to jumping to 40% and freezing for 90 seconds, which looks like a
- * hang. That regression should fail here, loudly, rather than be discovered by a user. */
-test("generate dominates the weighting — equal segments would be a lie", () => {
+ * bar silently goes back to jumping to 40% and freezing for minutes, which looks like a hang.
+ * That regression should fail here, loudly, rather than be discovered by a user.
+ *
+ * This used to assert `generate` was the single largest stage and over half the total. That
+ * stopped being true when the weights were re-derived on 2026-08-21: measured p50s are generate
+ * 145s and critique 146s, and critique is the MORE censored of the two (6 of 18 killed vs 2 of
+ * 32), so its real cost is higher still. The review step now costs at least as much as writing
+ * the plan. So the invariant worth pinning is that the two model calls TOGETHER dominate — which
+ * is what makes the bar's shape necessary — not which of them happens to be bigger. */
+test("the two model-call stages dominate — equal segments would be a lie", () => {
   const total = Object.values(STAGE_SECONDS).reduce((a, b) => a + b, 0);
+  const modelCalls = STAGE_SECONDS.generate + STAGE_SECONDS.critique;
+  assert.ok(modelCalls / total > 0.8, `model calls are only ${Math.round((modelCalls / total) * 100)}% of the total`);
   const largest = Math.max(...Object.values(STAGE_SECONDS));
-  assert.equal(STAGE_SECONDS.generate, largest);
-  assert.ok(STAGE_SECONDS.generate / total > 0.5, "generate should be over half the total");
+  const smallest = Math.min(...Object.values(STAGE_SECONDS));
+  assert.ok(largest / smallest > 10, "weights have been flattened toward equal segments");
 });
 
 test("an all-pending run returns 0, ignoring any previous value", () => {
@@ -149,4 +161,86 @@ test("previous clamps a lower computed value and 1 stays 1", () => {
   const early = at({ geocode: "done", context: "start" });
   assert.equal(generationProgress(early, 0, 0.8), 0.8);
   assert.equal(generationProgress(ALL_DONE, 10 ** 9, 1), 1);
+});
+
+/* --- The lie this file exists to prevent -------------------------------------------------------
+ *
+ * A timed-out critique used to report `skipped`. Every stage in the "Checking it over" group was
+ * then skipped, the empty-group rule collapsed that to `done`, and the loader told the traveller
+ * their plan had been quality-checked when the review never ran. These assert the distinction that
+ * fixes it, and the refine behaviour that made the empty-group rule correct in the first place. */
+
+const CHECK = STEP_GROUPS.find((g) => g.id === "check");
+const PLACE = STEP_GROUPS.find((g) => g.id === "place");
+const READ = STEP_GROUPS.find((g) => g.id === "read");
+
+test("the check group holds critique alone — which is why a skip there was invisible", () => {
+  assert.deepEqual([...CHECK.stages], ["critique"], "if this grows, re-read stepGroupState");
+});
+
+test("a FAILED critique never reports done", () => {
+  const state = stepGroupState(CHECK, at({ generate: "done", critique: "failed" }));
+  assert.equal(state, "failed", "a review that timed out must not render as done");
+});
+
+test("a failed step is terminal, so the loader can still finish", () => {
+  assert.equal(isStepTerminal("failed"), true);
+  assert.equal(isStepTerminal("done"), true);
+  assert.equal(isStepTerminal("waiting"), false);
+  assert.equal(isStepTerminal("active"), false);
+});
+
+test("refine's legitimately skipped group still reports done", () => {
+  // The empty-group rule was never the bug: refine reuses the previous itinerary's coordinates,
+  // so `placing` genuinely had nothing to do and "done" is honest there.
+  assert.equal(stepGroupState(PLACE, at({ placing: "skipped" })), "done");
+});
+
+test("a skipped geocode is hidden by its live sibling, not laundered", () => {
+  // This is why geocode was left on `skipped`: its group reports context's real state either way.
+  assert.equal(stepGroupState(READ, at({ geocode: "skipped", context: "start" })), "active");
+  assert.equal(stepGroupState(READ, at({ geocode: "skipped", context: "done" })), "done");
+});
+
+test("a group with one failed stage reports failed even when a sibling succeeded", () => {
+  assert.equal(stepGroupState(READ, at({ geocode: "failed", context: "done" })), "failed");
+});
+
+test("a running stage outranks a failed sibling — the group is still active", () => {
+  assert.equal(stepGroupState(READ, at({ geocode: "failed", context: "start" })), "active");
+});
+
+test("failed weight counts as SPENT, unlike skipped which leaves the denominator", () => {
+  const shared = { geocode: "done", context: "done", generate: "done" };
+  const failed = generationProgress(at({ ...shared, critique: "failed" }), 0, 0);
+  const pending = generationProgress(at({ ...shared, critique: "pending" }), 0, 0);
+  assert.ok(
+    failed > pending,
+    "a critique that burned its whole budget must advance the bar, not stall it"
+  );
+
+  // `failed` is credited exactly as `done` is — weight in both numerator and denominator — because
+  // the stage really ran. `skipped` removes it from both, which is a different denominator and so
+  // a different fraction. Asserting the two identities directly rather than comparing fractions,
+  // whose ordering depends on which stages are still pending and is easy to reason about wrongly.
+  const done = generationProgress(at({ ...shared, critique: "done" }), 0, 0);
+  assert.equal(failed, done, "a spent-but-failed stage advances the bar exactly like a done one");
+  const skipped = generationProgress(at({ ...shared, critique: "skipped" }), 0, 0);
+  assert.notEqual(skipped, failed, "skipped drops the weight from the denominator; failed keeps it");
+});
+
+test("a run reporting only a failure is not mistaken for a run that has not started", () => {
+  assert.ok(generationProgress(at({ critique: "failed" }), 0, 0) > 0);
+});
+
+test("STAGE_SECONDS states a wait that matches what the calls actually take", () => {
+  // Re-derived 2026-08-21 from llm_traces (censored rows included): context p50 24s at a ~47%
+  // cache-miss rate, generate p50 145s, critique p50 146s. The old values summed to 151s and
+  // promised "two and a half minutes" for what measurably takes about five.
+  const total = Object.values(STAGE_SECONDS).reduce((a, b) => a + b, 0);
+  assert.ok(total > 250, `sum is ${total}s — under 250s means someone reverted to a stale estimate`);
+  assert.equal(STAGE_SECONDS.generate, 145);
+  assert.equal(STAGE_SECONDS.critique, 150);
+  // The number the loader actually speaks, computed exactly as GenerationScreen does.
+  assert.equal(Math.round((total / 60) * 2) / 2, 5);
 });

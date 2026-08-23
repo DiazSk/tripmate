@@ -270,7 +270,7 @@ export function weekdayFromIso(iso: string | null): string | null {
   return Number.isNaN(d.getTime()) ? null : WEEKDAY_SHORT[d.getUTCDay()];
 }
 
-function emptySlots(): Record<Slot, ParsedEntry[]> {
+export function emptySlots(): Record<Slot, ParsedEntry[]> {
   return { Morning: [], Afternoon: [], Evening: [] };
 }
 

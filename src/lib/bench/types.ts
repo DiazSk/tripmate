@@ -283,3 +283,67 @@ export const RADAR_AXES = [
 ] as const;
 
 export type RadarAxis = (typeof RADAR_AXES)[number]["key"];
+
+/**
+ * What the patch itself did, as distinct from what the patched trip looks like.
+ *
+ * `applyPatch` validates positions but not payloads: `add_stop` clamps its index instead of
+ * rejecting, `replace_lodging` is unchecked, and `replace_stop` merges — so a near-empty payload
+ * applies cleanly. `rejected` alone therefore understates a bad patch, which is why
+ * `guardrailDelta` is here beside it.
+ */
+export interface RefinePatchScore {
+  opsEmitted: number;
+  opsRejected: number;
+  rejectedReasons: string[];
+  /** Fraction of emitted ops that landed. Null when none were emitted — nothing to measure. */
+  applied: number | null;
+  /** Fraction of modified days inside the task's allowed set. Null when the task allows any day. */
+  scope: number | null;
+  /** Did emitting-or-not match what the task asked for. */
+  restraint: boolean;
+  guardrailsBefore: number;
+  guardrailsAfter: number;
+  /** after − before. Negative is an improvement; positive means the patch broke something. */
+  guardrailDelta: number;
+  /** 0-1 roll-up of the four above. */
+  normalized: number | null;
+}
+
+export interface RefineCellScores {
+  before: BenchCellScores;
+  after: BenchCellScores;
+  /** after − before per weighted group. Null where either side was unmeasurable. */
+  delta: CompositeGroups;
+  /**
+   * How many of `delta`'s five groups were non-null and so contributed to `refineComposite`.
+   *
+   * `refineComposite` deliberately has no equivalent of `compositeScore`'s
+   * `MIN_GROUPS_FOR_COMPOSITE` gate: a delta answers "did this patch make the trip worse," and one
+   * group reporting a real drop is still real information, not a verdict to withhold the way a
+   * thin absolute score would be. But an ungated composite hides its own denominator — a composite
+   * built from one group reads identical to one built from five. This field is what keeps cells
+   * comparable instead of discarding that signal. `0` is a legitimate, measured value ("no group
+   * was measurable"), not an absence, so it is a number and never null.
+   */
+  measuredGroups: number;
+  /** Null when the call itself failed. An empty `ops` array from a timeout is indistinguishable
+   *  from a deliberate no-op, so scoring a dead call would report `restraint: true` for a model
+   *  that never answered. Consumers must skip null rather than treat it as a zero. */
+  patch: RefinePatchScore | null;
+  operational: OperationalScore;
+}
+
+/** One (fixture × task × model) refine run. */
+export interface RefineCell {
+  fixtureId: string;
+  taskId: string;
+  model: string;
+  runId: string | null;
+  traceId: string | null;
+  /** The model's raw JSON response, verbatim — stored so a bad patch is inspectable after the fact. */
+  rawResponse: string;
+  scores: RefineCellScores;
+  composite: number | null;
+  createdAt: string;
+}

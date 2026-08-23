@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bookmark, Compass, Sparkles, UserRound } from "lucide-react";
+import ButtonMark from "@/components/ButtonMark";
 import LogoMark from "@/components/LogoMark";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
@@ -13,16 +13,41 @@ import { useScrollContainer } from "@/lib/scrollContainer";
 const MENU_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 
 // One row shape for every item in the mobile menu, anchors and the routed link alike,
-// so the disclosure panel can render and stagger them from a single list.
+// so the panel can render and stagger them from a single list.
+//
+// The lucide icons these rows used to carry are gone. They were right for a 16px dropdown row and
+// wrong the moment the panel went full-screen and the labels went to 2.81rem: an 18px glyph beside
+// type that size stops reading as an icon and starts reading as a bullet. The reference sets these
+// as bare words with a `+` in front, and so does the footer — nothing was lost, because the label
+// was always the thing being read.
 const MENU_ITEMS = [
-  { id: "journey", label: "The Journey", icon: Compass, kind: "anchor" as const },
-  { id: "how-it-works", label: "How It Works", icon: Sparkles, kind: "anchor" as const },
-  { id: "trips", label: "My memories", icon: Bookmark, kind: "link" as const, href: "/trips" },
-  { id: "profile", label: "Profile", icon: UserRound, kind: "link" as const, href: "/profile" },
+  { id: "journey", label: "The Journey", kind: "anchor" as const },
+  { id: "how-it-works", label: "How It Works", kind: "anchor" as const },
+  { id: "trips", label: "My memories", kind: "link" as const, href: "/trips" },
+  { id: "profile", label: "Profile", kind: "link" as const, href: "/profile" },
 ];
 
+// The footer's link treatment — same 2.81rem ceiling, same weight, same -0.085em, same `+` at
+// white/45. That is the one scale this project already derived from this reference for this exact
+// job, a short list of destinations set as large as the surface allows, and the menu and the footer
+// are the two places the job comes up.
+//
+// **The clamp's floor and slope are the menu's own, and copying the footer's was wrong.** The footer
+// runs `clamp(1.75rem, 4vw, 2.81rem)`, which on a 402px phone resolves to `4vw` = 16px, loses to the
+// floor, and sets 28px — correct there, where the navigation is one block among several in a footer
+// that also carries a wordmark and two lines of small print. This panel *is* the viewport: nothing
+// competes with it, and 28px in the middle of an empty screen read as a dropdown that had merely
+// grown. Measured on the reference, its own mobile menu sits at the top of this range, not the
+// bottom. `10vw` reaches the 2.81rem ceiling by 450px and gives 40px at 402px and 32px at 320px, so
+// a phone gets the scale the surface is asking for and the ceiling still holds on a small tablet.
+//
+// The row height follows: 40px at 1.1 leading is a 44px line box, which is also what puts these
+// targets on the 44px floor rather than the 31px the footer's curve was giving them.
+//
+// `inline-flex`, not `flex`: the hit area is the words, not the panel's full width. A full-bleed row
+// means a tap on empty space to the right of "Profile" navigates, which is not what anyone aimed at.
 const menuItemBase =
-  "group flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium transition-colors hover:bg-white/8 hover:text-accent active:bg-white/12 focus-visible:bg-white/8 focus-visible:outline-none";
+  "group inline-flex items-baseline text-[clamp(2rem,10vw,2.81rem)] leading-[1.1] font-semibold tracking-[-0.085em] transition-colors duration-150 hover:text-accent focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none";
 
 /** Swapped rather than appended, for the same reason as `navLink` below. */
 const menuItem = (active = false) =>
@@ -130,7 +155,31 @@ export default function Navbar() {
   const pathname = usePathname();
   const isHome = pathname === "/";
   const isTripDetail = pathname.startsWith("/trip/");
-  const navRef = useRef<HTMLElement>(null);
+  const isProfile = pathname === "/profile";
+  /** Whether this route gets the full three-cell bar — wordmark │ links │ Profile — or the bare
+   *  wordmark alone. The bare case is `/backend`, `/backend/pipeline`, `/bench`, and any unmatched
+   *  URL: Next renders its built-in 404 *inside* the root layout, so this nav mounts there too.
+   *  None of those has business carrying a user-facing profile link — two are internal dashboards
+   *  over their own stone-50 ground, and the third is a dead end.
+   *
+   *  Still an explicit list of where the cells *belong*, and deliberately not `!isInternal`. The
+   *  negation reads shorter and is wrong for exactly the reason the route table below already
+   *  gives: a predicate that describes where something does *not* belong silently adopts every
+   *  route added after it — the 404 included, which would get a Profile link on a dead end. This
+   *  one only ever gains a route on purpose.
+   *
+   *  It gates both vertical rules and the trailing cell. What it no longer gates is whether there
+   *  is anything to the right of the wordmark at all: `/profile` carries no outbound links and
+   *  never will (`BackButton` is how you leave), but it does carry the Profile cell, marked as the
+   *  current page. That is the whole point of the shape. The predecessor of this constant gated the
+   *  wordmark's rule on there being links to divide from, which made `/profile` the one route
+   *  rendering a bare strip while every sibling rendered a grid — the inconsistency this fixes. */
+  const isUserFacing = isHome || pathname === "/trips" || isTripDetail || isProfile;
+  // Focus goes back here when the menu closes. Without it, dismissing a full-screen panel with
+  // Escape leaves focus on a node that is now `inert` — the caret vanishes and the next Tab
+  // restarts from the top of the document.
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const container = useScrollContainer();
   const [menuOpen, setMenuOpen] = useState(false);
   const activeSection = useActiveSection(SECTION_IDS, pathname === "/");
 
@@ -145,17 +194,40 @@ export default function Navbar() {
     setMenuOpen(false);
   }
 
-  // Closes on an outside tap. A 2-item menu doesn't need a full focus-trap/modal
-  // treatment, but leaving it open until the next unrelated tap lands somewhere else
-  // on the page is a worse default than just closing it.
+  // Escape closes it, and that replaced a close-on-outside-tap listener rather than joining it.
+  // The old one made sense for a dropdown: the page was still there beside the panel, and leaving
+  // the menu open until some unrelated tap landed elsewhere was a worse default than closing.
+  // Full-screen, **there is no outside** — every tap that is not the X or a row lands on the panel
+  // itself, so the listener could only ever fire on the bar it excluded. Escape is what a surface
+  // covering the viewport is expected to answer to, and the X is what a phone actually uses.
   useEffect(() => {
     if (!menuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (navRef.current && !navRef.current.contains(e.target as Node)) setMenuOpen(false);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        toggleRef.current?.focus();
+      }
     };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
+
+  /**
+   * The menu's own CTA. It closes and scrolls to the top, where the hero's "Plan a trip" is.
+   *
+   * It does not open the wizard directly, and that is a wiring fact rather than a choice about
+   * behaviour: `onPlan` is local state in `HomeView`, and this component is mounted by `AppShell`
+   * as a sibling of the content overlay, so there is nothing here to call. Reaching it needs the
+   * same lifting the section-anchor gap above describes. Scrolling is honest in the meantime —
+   * the button gets you to the thing it names in one tap.
+   */
+  function planFromMenu() {
+    setMenuOpen(false);
+    container?.current?.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+  }
 
   function scrollToSection(e: React.MouseEvent, id: string) {
     e.preventDefault();
@@ -168,8 +240,9 @@ export default function Navbar() {
 
   return (
     <nav
-      ref={navRef}
-      className="glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-center justify-between px-5 sm:px-6"
+      className={`glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-stretch ${
+        menuOpen ? "is-menu-open" : ""
+      }`}
     >
       {/* Mark then wordmark, which is the reference's own header arrangement. `gap-2.5` and
           `h-[1.1em]` size the mark off the wordmark rather than in pixels, so the two stay in
@@ -177,19 +250,69 @@ export default function Navbar() {
           inherits `text-foreground` here and the focus colour on keyboard focus without a second
           rule. The mark is `aria-hidden`; the link's accessible name stays "TripMate" rather than
           becoming "graphic TripMate". */}
-      <Link
-        href="/"
-        className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold tracking-tight text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+      {/* The wordmark is its own cell, ruled off from the links — the reference's arrangement, and
+          the one division here that holds on every route. The rule is on this wrapper rather than
+          on the Link so the Link keeps its own compact focus ring instead of the browser drawing a
+          full-height rectangle around a 64px cell.
+
+          The bar is `items-stretch` and owns no horizontal padding; the two cells carry the
+          gutters instead. Both halves matter: a rule can only span the bar's full height if the
+          box carrying it is that tall, and an `items-center` child stops at its own content —
+          measured at 45px in a 65px bar, the same failure that left the profile split's rule
+          ending halfway down the page. The cells re-centre their own content with `items-center`.
+
+          Three cells now, which is the reference's own count. This used to say two, and defended
+          it: the reference's third cell is a distinct "Explore" CTA, and walling off `Profile` — a
+          peer nav link, preceded on `/trips` by `New trip` — would imply a CTA that isn't there.
+          That argument mistook the rule for a CTA frame. It is the mirror of this one, and without
+          it the bar is a grid drawn down a single side. Worse, its absence was the reason *this*
+          rule had to be conditional: on `/profile`, which has no outbound links, there was nothing
+          to divide from, so the rule was gated off and that one route rendered a bare strip while
+          every sibling rendered a grid. The trailing cell holds whatever this route's single
+          trailing control is — `Profile` everywhere, the menu toggle on `/` below `sm` — so it is
+          never the padded empty box the links cell used to be on `/profile`.
+
+          This rule is `sm:` and the trailing one is not, which is the reference's own arrangement
+          at phone width: there the bar is a wordmark and a toggle, and it rules off only the
+          toggle. Drawing both below `sm` put two hairlines either side of a middle cell that is
+          empty on `/` — three divisions in a 375px bar, two of them fencing nothing. The trailing
+          rule is the one that survives because it is the one with a control against it. */}
+      <div
+        className={`flex items-center px-5 sm:px-6 ${
+          isUserFacing ? "sm:border-r sm:border-card-border" : ""
+        }`}
       >
-        <LogoMark className="h-[1.1em] w-[1.1em]" />
-        TripMate
-      </Link>
-      <div className="flex items-center gap-4 sm:gap-6">
-        {/* Section anchors + My memories, desktop: inline in the bar itself. On
-            mobile all four move into the dropdown below instead of one staying
-            pinned in the bar beside the hamburger — a bar carrying "TripMate",
-            a link, and an icon toggle for two more links was busier than the
-            96-item menu it was collapsing warranted. */}
+        <Link
+          href="/"
+          className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+        >
+          <LogoMark className="h-[1.1em] w-[1.1em]" />
+          TripMate
+        </Link>
+      </div>
+      {/* The links, right-aligned against the trailing rule — the reference's are hard against its
+          own third rule, and `justify-between` on the bar would centre this cell instead once it
+          became the only flexible thing between two fixed ones.
+
+          `grow`, not `flex-1`, for one edge case: `flex-1` sets `flex-basis: 0`, so this cell asks
+          for the leftover space rather than for its content's width, and near 320px `New trip` gets
+          squeezed toward min-content and wraps to two lines inside a 64px bar. `grow` starts from
+          content width and only expands. Empty on `/profile` and on the dashboards, which costs
+          nothing: with no content there is nothing for the padding to push, so both rules still
+          land against real content on their outer side.
+
+          No `gap` any more. The three route gates below are mutually exclusive — `/` vs `/trips` vs
+          `/trip/*`, and `"/trips".startsWith("/trip/")` is false — and both of this cell's former
+          trailing items (`Profile`, the toggle) now live in the trailing cell, so it holds at most
+          one child on every route and the gap had nothing left to separate. `/`'s own group keeps
+          its `gap-6`. */}
+      <div className="flex grow items-center justify-end px-5 sm:px-6">
+        {/* Section anchors + My memories, desktop: inline in the bar itself. On mobile all four
+            destinations move into the panel below instead of one staying pinned in the bar beside
+            the hamburger — a bar carrying "TripMate", a link, and an icon toggle for two more links
+            was busier than the menu it was collapsing warranted. Three of the four are here;
+            `Profile` is the fourth and comes from the trailing cell, which is also why it is the
+            one item in this bar whose presence is a breakpoint question rather than a route one. */}
         {isHome && (
           <div className="hidden items-center gap-6 sm:flex">
             {SECTION_LINKS.map((link) => (
@@ -206,9 +329,6 @@ export default function Navbar() {
             <Link href="/trips" className={navLink()}>
               My memories
             </Link>
-            <Link href="/profile" className={navLink()}>
-              Profile
-            </Link>
           </div>
         )}
         {pathname === "/trips" && (
@@ -221,106 +341,188 @@ export default function Navbar() {
             My memories
           </Link>
         )}
-        {/* Both user-facing routes that aren't `/` or `/profile` itself. Listed
-            explicitly rather than as a `!isHome` catch-all so the internal /backend
-            dashboards — which render this same nav — don't pick it up too. */}
-        {(pathname === "/trips" || isTripDetail) && (
-          <Link href="/profile" className={navLink()}>
-            Profile
-          </Link>
-        )}
-        {/* Section anchors, mobile: behind a hamburger instead of hidden outright.
-            "My memories"/"New trip" above are never hidden — they're single always-
-            visible links replacing what used to be always-visible canvas links, not
-            secondary chrome, so they don't belong behind the toggle. */}
-        {isHome && (
+      </div>
+      {isUserFacing && (
+        /* The trailing cell, mirroring the wordmark's. It holds exactly one control at any width,
+           never two and never none, and on `/` which one it holds is a breakpoint question:
+           `MENU_ITEMS` already carries `Profile` into the full-screen panel, so below `sm` on `/`
+           this cell showing it too would put the same destination in the bar and behind the toggle
+           at once. Below `sm` on `/` this cell is the toggle; everywhere else, at every width, it
+           is `Profile`. */
+        <div className="flex items-center border-l border-card-border px-5 sm:px-6">
+          {/* The breakpoint rides on a wrapper, and it has to. `navLinkBase` already sets
+              `inline-flex`, and appending `hidden` to it does nothing: Tailwind emits the display
+              utilities alphabetically — `.block`, `.flex`, `.hidden`, `.inline`, `.inline-flex` —
+              so at equal specificity `.inline-flex` is the later rule and wins, and the link would
+              stay visible at every width. Measured in this app's own compiled stylesheet (`.hidden`
+              at byte 16947, `.inline-flex` at 17026), not assumed. Same trap `navLink`'s own doc
+              comment describes for `text-foreground` vs `text-accent`, in a second property, and
+              the same fix: emit exactly one utility for the property rather than two and a guess
+              about order. `hidden`/`sm:flex` on a wrapper is what `/`'s desktop group above already
+              does for this reason. */}
+          <div className={isHome ? "hidden items-center sm:flex" : "flex items-center"}>
+            {/* `aria-current="page"` and the accent colour together, never colour alone — the rule
+                `navLink` states. `"page"` and not the `"location"` the section anchors carry: those
+                mark a position within this document, this marks the document itself. It stays a
+                `Link` rather than becoming inert text, so the bar's last tab stop exists on every
+                route the bar is a grid on; a `span` here would make `/profile` the one route where
+                the trailing cell is unreachable by keyboard, which is the same per-route
+                inconsistency this cell exists to end. One accepted consequence: `hover:text-accent`
+                is a no-op on the current page, so hover degrades from two signals to one — the
+                underline survives, which is the half that was never colour-dependent. */}
+            <Link
+              href="/profile"
+              aria-current={isProfile ? "page" : undefined}
+              className={navLink(isProfile)}
+            >
+              Profile
+            </Link>
+          </div>
+          {isHome && (
+            <button
+              ref={toggleRef}
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-expanded={menuOpen}
+              aria-controls="nav-menu"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              className="-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center text-foreground focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none sm:hidden"
+            >
+              {/* A custom 3-bar mark rather than swapping lucide's Menu/X icons outright —
+                  those two glyphs have no shared geometry to animate between, so swapping
+                  them is always an instant cut. Three bars morphing into an X is one
+                  continuous shape the whole time. */}
+              <span className="relative flex h-4 w-5 flex-col justify-between">
+                <span
+                  className="h-0.5 w-full rounded-full bg-foreground transition-transform"
+                  style={{
+                    transitionDuration: "300ms",
+                    transitionTimingFunction: MENU_EASE,
+                    transform: menuOpen ? "translateY(7px) rotate(45deg)" : undefined,
+                  }}
+                />
+                <span
+                  className="h-0.5 w-full rounded-full bg-foreground transition-opacity duration-150"
+                  style={{ opacity: menuOpen ? 0 : 1 }}
+                />
+                <span
+                  className="h-0.5 w-full rounded-full bg-foreground transition-transform"
+                  style={{
+                    transitionDuration: "300ms",
+                    transitionTimingFunction: MENU_EASE,
+                    transform: menuOpen ? "translateY(-7px) rotate(-45deg)" : undefined,
+                  }}
+                />
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+      {isHome && (
+        /**
+         * The menu, full-bleed below the bar.
+         *
+         * It was a dropdown as tall as its own content, with the CSS grid `0fr`/`1fr` trick
+         * animating its height so that closing played a transition as well as opening. That trick
+         * is retired here, not broken: once the panel *is* the viewport there is no height to
+         * animate between, and `fixed inset-x-0 top-[var(--nav-h)] bottom-0` states the geometry
+         * outright. Opacity and a 6px settle carry both directions instead, off the same
+         * `MENU_EASE` as everything else in the app.
+         *
+         * `top-[var(--nav-h)]` rather than `inset-0`: the bar stays, holding the mark, the wordmark
+         * and the toggle that is now an X — which is exactly the reference's arrangement, and means
+         * the panel needs no header of its own. `.glass-nav.is-menu-open` turns the bar solid for
+         * the duration so the two read as one field rather than a light strip over a dark one, and
+         * `border-t` here is then the single divider under the row.
+         *
+         * **`inert` when closed, doing three jobs with one attribute:** out of the tab order, out of
+         * the accessibility tree, and not hit-testable. It replaced `tabIndex={menuOpen ? 0 : -1}`
+         * threaded through every row — correct, but per-row bookkeeping that a new row could forget,
+         * and which said nothing about the panel being unreachable as a whole. `pointer-events-none`
+         * rides along rather than trusting `inert` alone to stop a tap: an invisible full-viewport
+         * surface swallowing taps meant for the page is the failure this project has already
+         * documented, and one utility is cheaper than finding out.
+         */
+        <div
+          id="nav-menu"
+          inert={!menuOpen}
+          className={`glass-nav-menu fixed inset-x-0 top-[var(--nav-h)] bottom-0 flex flex-col px-5 pt-12 pb-8 transition-[opacity,transform] duration-300 sm:hidden ${
+            menuOpen
+              ? "translate-y-0 opacity-100"
+              : "pointer-events-none -translate-y-1.5 opacity-0"
+          }`}
+          style={{ transitionTimingFunction: MENU_EASE }}
+        >
+          {/* `ul`/`li`, matching the reference's own `header-nav` markup: this is a list of
+              destinations and a screen reader should be told how many. No nested `nav` landmark —
+              the element this sits inside is already one. */}
+          <ul className="flex flex-col items-start gap-1">
+            {MENU_ITEMS.map((item, index) => {
+              const rowStyle: React.CSSProperties = {
+                opacity: menuOpen ? 1 : 0,
+                transform: menuOpen ? "translateY(0)" : "translateY(-6px)",
+                transitionDelay: `${index * 60}ms`,
+              };
+              /* The `+` is the reference's and the footer's, at white/45 so it reads as a mark
+                 rather than as part of the word, and `aria-hidden` so the accessible name stays
+                 "Profile" and not "+Profile". */
+              const plus = (
+                <span
+                  aria-hidden
+                  className="text-white/45 transition-colors duration-150 group-hover:text-accent/60"
+                >
+                  +
+                </span>
+              );
+              return (
+                <li key={item.id}>
+                  {item.kind === "anchor" ? (
+                    <a
+                      href={`#${item.id}`}
+                      onClick={(e) => scrollToSection(e, item.id)}
+                      aria-current={activeSection === item.id ? "location" : undefined}
+                      style={rowStyle}
+                      className={`${menuItem(activeSection === item.id)} transition-[opacity,transform,color] duration-300`}
+                    >
+                      {plus}
+                      {item.label}
+                    </a>
+                  ) : (
+                    <Link
+                      href={item.href}
+                      onClick={() => setMenuOpen(false)}
+                      style={rowStyle}
+                      className={`${menuItem()} transition-[opacity,transform,color] duration-300`}
+                    >
+                      {plus}
+                      {item.label}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* The floor. `mt-auto` rather than a bottom offset, so the button is pinned by the
+              panel's own `pb-8` and the gap above it is whatever is left — which is the reference's
+              arrangement, and which holds at any phone height without a magic number.
+
+              The hero's CTA classes, minus its `shadow-lg shadow-black/30`. That shadow is doing
+              real work there, lifting a white pill off a photograph; here the pill sits on a flat
+              slate field, where a shadow would be decoration with nothing to separate it from.
+              Full width is the reference's own `full-width-mobile` button variant. */}
           <button
             type="button"
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-expanded={menuOpen}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            className="-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center text-foreground focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none sm:hidden"
+            onClick={planFromMenu}
+            style={{
+              opacity: menuOpen ? 1 : 0,
+              transitionDelay: `${MENU_ITEMS.length * 60}ms`,
+            }}
+            className="mt-auto inline-flex w-full items-center justify-center gap-4 rounded-full bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground transition-[opacity,background-color] duration-300 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
           >
-            {/* A custom 3-bar mark rather than swapping lucide's Menu/X icons outright —
-                those two glyphs have no shared geometry to animate between, so swapping
-                them is always an instant cut. Three bars morphing into an X is one
-                continuous shape the whole time. */}
-            <span className="relative flex h-4 w-5 flex-col justify-between">
-              <span
-                className="h-0.5 w-full rounded-full bg-foreground transition-transform"
-                style={{
-                  transitionDuration: "300ms",
-                  transitionTimingFunction: MENU_EASE,
-                  transform: menuOpen ? "translateY(7px) rotate(45deg)" : undefined,
-                }}
-              />
-              <span
-                className="h-0.5 w-full rounded-full bg-foreground transition-opacity duration-150"
-                style={{ opacity: menuOpen ? 0 : 1 }}
-              />
-              <span
-                className="h-0.5 w-full rounded-full bg-foreground transition-transform"
-                style={{
-                  transitionDuration: "300ms",
-                  transitionTimingFunction: MENU_EASE,
-                  transform: menuOpen ? "translateY(-7px) rotate(-45deg)" : undefined,
-                }}
-              />
-            </span>
+            Plan a trip
+            <ButtonMark />
           </button>
-        )}
-      </div>
-      {isHome && (
-        // Stays mounted open or closed — only its track height animates (the CSS
-        // grid 0fr/1fr auto-height trick) — so both opening AND closing play a
-        // transition, instead of the panel just popping in and vanishing.
-        <div
-          className="absolute inset-x-0 top-full grid transition-[grid-template-rows] duration-300 sm:hidden"
-          style={{ gridTemplateRows: menuOpen ? "1fr" : "0fr", transitionTimingFunction: MENU_EASE }}
-        >
-          <div className="glass-nav-menu overflow-hidden border-t border-card-border">
-            <div className="flex flex-col gap-1 p-3">
-              {MENU_ITEMS.map((item, index) => {
-                const Icon = item.icon;
-                const rowStyle: React.CSSProperties = {
-                  opacity: menuOpen ? 1 : 0,
-                  transform: menuOpen ? "translateY(0)" : "translateY(-6px)",
-                  transitionDelay: `${index * 60}ms`,
-                };
-                return item.kind === "anchor" ? (
-                  <a
-                    key={item.id}
-                    href={`#${item.id}`}
-                    onClick={(e) => scrollToSection(e, item.id)}
-                    tabIndex={menuOpen ? 0 : -1}
-                    aria-current={activeSection === item.id ? "location" : undefined}
-                    style={rowStyle}
-                    className={`${menuItem(activeSection === item.id)} transition-[opacity,transform,background-color,color] duration-300`}
-                  >
-                    <Icon
-                      size={18}
-                      className={`transition-colors group-hover:text-accent ${
-                        activeSection === item.id ? "text-accent" : "text-muted"
-                      }`}
-                    />
-                    {item.label}
-                  </a>
-                ) : (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    onClick={() => setMenuOpen(false)}
-                    tabIndex={menuOpen ? 0 : -1}
-                    style={rowStyle}
-                    className={`${menuItem()} transition-[opacity,transform,background-color] duration-300`}
-                  >
-                    <Icon size={18} className="text-muted transition-colors group-hover:text-accent" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
         </div>
       )}
     </nav>

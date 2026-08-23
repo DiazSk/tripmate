@@ -1,4 +1,7 @@
-import { readProfile } from "@/lib/db";
+import type { Metadata } from "next";
+
+import { listTrips, readProfile } from "@/lib/db";
+import { toTripSummary } from "@/lib/tripPayload";
 import ProfileForm from "./ProfileForm";
 
 /**
@@ -12,9 +15,38 @@ import ProfileForm from "./ProfileForm";
  * visible flip of every picker. Now the first paint is already correct.
  *
  * `/api/profile` stays — the form still PUTs through it to save, and it is the write path.
+ *
+ * `listTrips()` is the second synchronous read, for the recent-trips preview in the form's photo
+ * column, and it is the same call `/trips` and `/trip/latest` already make (ordered
+ * `created_at DESC`, so "recent" needs no sort here). Sliced to three: one large photo plus a row
+ * of two thumbnails is the whole preview, and reading the rest would be reading rows to throw
+ * away. `toTripSummary` rather than the raw row, so the client half gets the app's camelCase
+ * surface and never sees `start_date`.
+ *
+ * What still streams in on the client is the per-trip photography (`usePlacePhoto` → Wikipedia),
+ * exactly as on `/trips`.
  */
+/**
+ * Same inherited-title problem `/trips` had, fixed the same way and on the same convention. Done
+ * here as well as there because it is the identical one-line defect on the sibling route, and
+ * leaving a tab that reads "Plan your trip" on the profile screen while fixing it next door would
+ * be a worse outcome than the small widening of scope.
+ */
+export const metadata: Metadata = {
+  title: "Your travel profile · TripMate",
+  description:
+    "The preferences that stay true between trips — pace, party, walking, crowds and budget.",
+};
+
 export const dynamic = "force-dynamic";
 
+const RECENT_TRIP_COUNT = 3;
+
 export default function ProfilePage() {
-  return <ProfileForm initialProfile={readProfile()} />;
+  return (
+    <ProfileForm
+      initialProfile={readProfile()}
+      recentTrips={listTrips().slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
+    />
+  );
 }
