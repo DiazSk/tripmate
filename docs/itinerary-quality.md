@@ -84,11 +84,17 @@ Two consequences worth knowing:
 
 ### Model
 
-`MODEL` moved from `claude-haiku-4-5-20251001` to `claude-sonnet-5`. The benchmark's own first
-sweep scored Haiku 4.5 at 0.842 composite against Sonnet 4.5's 0.959 and Opus 4.5's 0.952 — the
-Sonnet/Opus gap is noise at 3 runs on one fixture, the Haiku gap is not. This is one call that
-produces the whole product, so the tier matters more than the per-token rate. Bench defaults are
-now Sonnet 5 (baseline) / Haiku 4.5 (the downgrade question) / Opus 5.
+`MODEL` moved off `claude-haiku-4-5-20251001`. The benchmark's own first sweep scored Haiku 4.5 at
+0.842 composite against Sonnet 4.5's 0.959 and Opus 4.5's 0.952 — the Sonnet/Opus gap is noise at 3
+runs on one fixture, the Haiku gap is not. This is one call that produces the whole product, so the
+tier matters more than the per-token rate.
+
+**Corrected 2026-08-22:** this section used to say the move was to `claude-sonnet-5` and that bench
+defaults were Sonnet 5 / Haiku 4.5 / Opus 5. Production is and was `claude-sonnet-4-5`
+(`src/lib/claude.ts:29`) — the Sonnet 5 move was reverted (see that file's own docblock: 164s to
+first token, and two timeouts at 216s on a 3-day trip) and this section was never updated. The
+"Refine path" sweep below flagged the contradiction at the time without fixing it; it is fixed now
+rather than left for a third reader to re-discover.
 
 ### Fixtures
 
@@ -113,11 +119,9 @@ pass. 10 Opus rows are banked in `bench_results` (only 6 of them scored) but exc
 question. One Haiku cell failed on a transient malformed-JSON response and succeeded on a single
 retry; every other cell succeeded on its first attempt, with no throttling in `llm_traces`.
 
-**The current production model is `claude-sonnet-4-5`** (`src/lib/claude.ts:29`), not
-`claude-sonnet-5` as the "Model" section above states — that section is stale; the move to Sonnet
-5 was reverted (see `claude.ts`'s own docblock: Sonnet 5 took 164s to first token and timed out
-twice at 216s on a 3-day trip) and the doc was never corrected. This sweep compares against the
-model actually running in production.
+**The current production model is `claude-sonnet-4-5`** (`src/lib/claude.ts:29`). The "Model"
+section above used to claim Sonnet 5; that has since been corrected in place — see the note there.
+This sweep compares against the model actually running in production.
 
 | | Sonnet 4.5 | Haiku 4.5 |
 |---|---|---|
