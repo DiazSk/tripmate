@@ -21,6 +21,10 @@ export interface ArrivalPoint {
   distanceKm: number;
   /** Sorts before distance. 0 for an international airport, 1 for anything else. */
   tier: number;
+  /** Bare code, separate from `name` — a flight search needs "KIX", not the display string it's
+   *  embedded in. `null` for rail, and for an airport OSM never tagged (rare, given the query's
+   *  own `["iata"]` filter already requires the tag to exist). */
+  iata: string | null;
 }
 
 /** Two ranges, because the two kinds sit at different distances from the city they serve.
@@ -179,7 +183,7 @@ export function parseArrivalPoints(
     const km = distanceKm(origin, point);
     if (!existing || km < existing.distanceKm) {
       const tier = kind === "airport" && !isInternational(tags) ? 1 : 0;
-      byName.set(name, { name, kind, distanceKm: Math.round(km), tier });
+      byName.set(name, { name, kind, distanceKm: Math.round(km), tier, iata: iata || null });
     }
   }
 

@@ -12,14 +12,21 @@ import type { DayPlan, Itinerary, Stop, TransportMode } from "./types";
  *
  * Scope is narrower than the skill's on purpose. Only the checks that are decidable from data
  * already in the itinerary live here: distances and clock arithmetic, yes; whether a venue is open
- * on a Tuesday, no. The model keeps the ones that need knowledge (§12b hours), and this file never
- * guesses at them — an absent check is better than a fabricated one.
+ * on a Tuesday, no — that needs a looked-up fact, so it lives in `placeConflicts.ts`, which runs
+ * server-side during generation where the lookup happens. This file still never guesses at it: an
+ * absent check is better than a fabricated one.
+ *
+ * `realMinutes` lets the generation path substitute looked-up door-to-door durations for the
+ * straight-line estimate. UI callers omit it and behave exactly as before.
  *
  * Rules mirrored: §12a travel feasibility, §12b time overlaps only, §12c pace, §12d budget.
  * Keep this file and SKILL.md §12 in step — if a threshold moves in one, move it in the other.
  */
 
 export type GuardrailRule = "travel" | "overlap" | "pace" | "budget";
+
+/** Looked-up door-to-door minutes for one hop, or `null` when no route was found. */
+export type LegMinutesLookup = (from: Stop, to: Stop) => number | null;
 
 export interface Guardrail {
   rule: GuardrailRule;
@@ -48,7 +55,12 @@ function isBreak(stop: Stop): boolean {
 }
 
 /** §12a + §12b(timing): each consecutive hop must fit in the gap the schedule leaves for it. */
-function checkLegs(day: DayPlan, dayIndex: number, modes?: TransportMode[]): Guardrail[] {
+function checkLegs(
+  day: DayPlan,
+  dayIndex: number,
+  modes?: TransportMode[],
+  realMinutes?: LegMinutesLookup
+): Guardrail[] {
   const found: Guardrail[] = [];
 
   for (let i = 0; i < day.stops.length - 1; i++) {
@@ -60,7 +72,9 @@ function checkLegs(day: DayPlan, dayIndex: number, modes?: TransportMode[]): Gua
 
     const end = start + parseDuration(from.durationLabel ?? "");
     const gap = nextStart - end;
-    const needed = legMinutes(from, to, modes);
+    // A real duration wins where one was found; an unroutable pair falls back to the estimate
+    // rather than being skipped, so a missing route never silently drops the check.
+    const needed = realMinutes?.(from, to) ?? legMinutes(from, to, modes);
 
     if (gap < 0) {
       found.push({
@@ -122,9 +136,10 @@ function checkPace(day: DayPlan, dayIndex: number): Guardrail[] {
 export function evaluateDay(
   day: DayPlan,
   dayIndex: number,
-  modes?: TransportMode[]
+  modes?: TransportMode[],
+  realMinutes?: LegMinutesLookup
 ): Guardrail[] {
-  return [...checkLegs(day, dayIndex, modes), ...checkPace(day, dayIndex)];
+  return [...checkLegs(day, dayIndex, modes, realMinutes), ...checkPace(day, dayIndex)];
 }
 
 /** §12d: the trip's total against the stated budget. Trip-wide, so it isn't a per-day check. */
@@ -151,9 +166,11 @@ export function evaluateBudget(itinerary: Itinerary, budget: number): Guardrail[
  */
 export function evaluateItinerary(
   itinerary: Itinerary,
-  options: { budget?: number; modes?: TransportMode[] } = {}
+  options: { budget?: number; modes?: TransportMode[]; realMinutes?: LegMinutesLookup } = {}
 ): Guardrail[] {
-  const perDay = itinerary.days.flatMap((day, i) => evaluateDay(day, i, options.modes));
+  const perDay = itinerary.days.flatMap((day, i) =>
+    evaluateDay(day, i, options.modes, options.realMinutes)
+  );
   const budget = options.budget ? evaluateBudget(itinerary, options.budget) : [];
   return [...perDay, ...budget];
 }

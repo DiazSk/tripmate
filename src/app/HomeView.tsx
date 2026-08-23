@@ -10,6 +10,7 @@ import {
   CalendarCheck,
   CalendarDays,
   MapPin,
+  Plane,
   PlaneLanding,
   PlaneTakeoff,
   Wallet,
@@ -256,6 +257,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [departureTime, setDepartureTime] = useState("");
   const [departurePoint, setDeparturePoint] = useState("");
   const [arrivalPointOptions, setArrivalPointOptions] = useState<SuggestOption[]>([]);
+  // Where the traveler is flying FROM, not the arrive/depart points above (those are at the
+  // destination) — plain free text, collected here and resolved to a real airport server-side
+  // (originAirport.ts) rather than through a client-side suggestion dropdown. A dropdown was
+  // tried and dropped: it can only filter by substring match against what's already typed, and an
+  // airport's OSM name essentially never contains the city name a traveler types ("Boston" vs.
+  // "Logan International Airport") — verified live, the list was never non-empty. Unlike
+  // `arrivalPoint`, there's no browsable-before-typing state to fall back on here, since nothing
+  // is known about the origin until the traveler has already typed into the one field being
+  // filtered.
+  const [originCity, setOriginCity] = useState("");
   const [budget, setBudget] = useState(1000);
   const [tier, setTier] = useState<TierId>(initialProfile?.tier ?? "midrange");
   const [interests, setInterests] = useState<string[]>(initialProfile?.priorities ?? []);
@@ -583,6 +594,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         departureTime: departureTime || null,
         departurePoint: departurePoint || null,
         stayBooked: null,
+        originCity: originCity || null,
       },
     };
   }
@@ -1041,6 +1053,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                         for them; a traveler landing at an airport was getting a first stop
                         downtown. */}
                     <div className="flex flex-col divide-y divide-white/10 md:flex-row md:divide-x md:divide-y-0">
+                      <Field icon={Plane} label="Flying from" delay={300} optional>
+                        <SuggestInput
+                          freeText
+                          ariaLabel="City you're flying from"
+                          value={originCity}
+                          onChange={setOriginCity}
+                          options={[]}
+                          placeholder="Where you're flying from"
+                          className="flex-1"
+                          inputClassName={`${fieldInputClass} ${originCity ? fieldFilledTone : fieldEmptyTone}`}
+                        />
+                      </Field>
                       <Field icon={PlaneLanding} label="Arrive" delay={320} optional>
                         <div className="flex items-baseline gap-2">
                           <SuggestInput
