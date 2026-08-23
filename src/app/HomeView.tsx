@@ -83,7 +83,6 @@ const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), 
 const GenerationScreen = dynamic(() => import("@/components/GenerationScreen"), {
   ssr: false,
 });
-const TierPicker = dynamic(() => import("@/components/TierPicker"), { ssr: false });
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -267,8 +266,22 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // is known about the origin until the traveler has already typed into the one field being
   // filtered.
   const [originCity, setOriginCity] = useState("");
+  // What the flight will take out of the stated budget, shown before generating rather than
+  // explained afterwards on a plan the traveler already waited two minutes for. Null until the
+  // four inputs it needs are all present, or when nothing could be priced.
+  const [flightCostPreview, setFlightCostPreview] = useState<number | null>(null);
+  // True only while the (unavoidably slower) price lookup is in flight, so the caption can say
+  // "checking" instead of sitting blank — the gap that read as "the app is stuck" before this.
+  const [flightPriceLoading, setFlightPriceLoading] = useState(false);
+  // The resolved departure airport, from the SAME two calls (`/api/geocode` then
+  // `/api/arrival-points`) the arrive/depart fields already use — which is why those feel
+  // fast: neither one chains a `composio` CLI call after the Overpass lookup the way pricing
+  // does. Cached per typed city in a ref (not state — it must survive re-renders without
+  // re-triggering the effect that reads it) so editing dates or budget after already typing an
+  // origin never re-runs this step, only the price lookup that actually needs the new inputs.
+  const [resolvedOriginIata, setResolvedOriginIata] = useState<string | null>(null);
+  const originAirportCache = useRef<Map<string, string | null>>(new Map());
   const [budget, setBudget] = useState(1000);
-  const [tier, setTier] = useState<TierId>(initialProfile?.tier ?? "midrange");
   const [interests, setInterests] = useState<string[]>(initialProfile?.priorities ?? []);
   const [starredInterests, setStarredInterests] = useState<string[]>(
     initialProfile?.topPriorities ?? []
@@ -381,8 +394,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // first paint must not parse these, and it must not race them against Cesium's own dynamic
   // import either — the globe boots on mount and is orders of magnitude larger than everything
   // here put together. Entering `plan` puts every fetch at least one full step ahead of the
-  // render that needs it: the plan step renders none of them, TierPicker is a click further in,
-  // and `result` is a generation away.
+  // render that needs it: the plan step renders none of them, and `result` is a generation away.
   //
   // Plain `import()` rather than next/dynamic's `.preload()`. That method exists at runtime but
   // is absent from next's own `dynamic.d.ts`, so reaching it needs a cast to an undocumented API.
@@ -393,7 +405,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     void import("@/components/ItineraryCard");
     void import("@/components/PlaceDetailPanel");
     void import("@/components/FocusEditMode");
-    void import("@/components/TierPicker");
   }, [step]);
 
   // Drives this page's own cosmetics (dark dashboard header/nav once results exist,
@@ -429,24 +440,19 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       })()
     : undefined;
 
-  // Auto-pick tracks budget and dates live, right up until the user picks a card themselves —
-  // that live coupling is the whole point of merging the form and the tier step. A ref, not
-  // state, because flipping the flag must not re-run the effect that reads it.
-  // Starts true when a saved tier seeded the state above. This is what `pickTier` used to do
-  // from inside the profile effect, and the distinction is load-bearing: it stops the live
-  // budget/days auto-recommend below from overwriting a stated preference. Deliberate that it
-  // then stays set for the session even if the traveler enters a wildly different budget — a
-  // saved tier is a stated one, not a guess to be improved on.
-  const tierTouched = useRef(initialProfile !== null);
-  useEffect(() => {
-    if (tierTouched.current || days === null) return;
-    setTier(closestTier(budget, days));
-  }, [budget, days]);
-
-  function pickTier(next: TierId) {
-    tierTouched.current = true;
-    setTier(next);
-  }
+  // Derived, not state — there is nothing left to choose. The picker that used to override this
+  // is gone: it offered cards priced by `estimateTierTotal`, which on a long trip meant inviting
+  // someone with a $1,000 budget to select a ~$6,300 plan (its own OVER_BUDGET_MULTIPLIER guard
+  // labelled that mismatch rather than avoiding it).
+  //
+  // A `tierTouched` ref used to suppress this whenever a saved profile tier existed, on the
+  // reasoning that "a saved tier is a stated one, not a guess to be improved on". That depended on
+  // a picker existing to state it with; without one it would have frozen a returning traveler's
+  // tier for the session no matter what budget they typed. Budget always wins now.
+  //
+  // Still load-bearing downstream: this feeds `hotelClassForTier`, which is what keeps the real
+  // hotel search from returning hostels for a luxury trip.
+  const tier: TierId = days === null ? "midrange" : closestTier(budget, days);
 
   /** Presets from the pill are the common case typed in one tap: Solo is 1, Couple is 2, Family is
    *  2 and a child. Deliberately one-way — the counts never flip the pill back, because a
@@ -490,6 +496,106 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       setArrivalPointOptions([]);
     };
   }, [destinationCoords]);
+
+  // Stage 1 — resolve the departure airport, fast. Depends ONLY on `originCity`: this is the
+  // exact same two calls (`/api/geocode` then `/api/arrival-points`) the arrive/depart fields
+  // above already make, which is the actual reason those feel snappy — neither one chains a
+  // `composio` CLI call after the Overpass lookup. Cached per typed city so retyping the same
+  // value (backspace-and-retype, or coming back to an already-resolved city) never re-fetches.
+  useEffect(() => {
+    const from = originCity.trim();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    if (from) {
+      const key = from.toLowerCase();
+      const cached = originAirportCache.current.get(key);
+      if (cached !== undefined) {
+        // A cache hit is visually instant either way; the 0ms timer exists only so the
+        // setState call runs in an async callback rather than synchronously in the effect
+        // body, same as the network path below.
+        timer = setTimeout(() => {
+          if (!cancelled) setResolvedOriginIata(cached);
+        }, 0);
+      } else {
+        timer = setTimeout(async () => {
+          try {
+            const geoRes = await fetch(`/api/geocode?destination=${encodeURIComponent(from)}`);
+            if (!geoRes.ok) throw new Error("geocode failed");
+            const geo: { lat?: number; lng?: number } = await geoRes.json();
+            if (typeof geo.lat !== "number" || typeof geo.lng !== "number") {
+              throw new Error("no match");
+            }
+
+            const pointsRes = await fetch(`/api/arrival-points?lat=${geo.lat}&lon=${geo.lng}`);
+            const d: { points?: ArrivalPoint[] } = pointsRes.ok ? await pointsRes.json() : {};
+            const iata = (d.points ?? []).find((p) => p.kind === "airport")?.iata ?? null;
+
+            originAirportCache.current.set(key, iata);
+            if (!cancelled) setResolvedOriginIata(iata);
+          } catch {
+            originAirportCache.current.set(key, null);
+            if (!cancelled) setResolvedOriginIata(null);
+          }
+        }, 350); // Short: this step alone is the "fast" one, and a keystroke-fast debounce is
+        // what makes it feel like the arrive/depart suggestions rather than a separate,
+        // slower thing.
+      }
+    }
+
+    // Clears on the way out — covers an emptied field (nothing scheduled above, so this is the
+    // only thing that runs) and a mid-typing keystroke (the stale value from what was typed a
+    // moment ago must not linger while a new lookup is pending).
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      setResolvedOriginIata(null);
+    };
+  }, [originCity]);
+
+  // Stage 2 — price it, which is the step that actually needs the `composio` CLI and cannot be
+  // made fast the same way. Depends on the RESOLVED iata, not the raw origin text, so editing
+  // dates or budget after the airport is already known skips stage 1 entirely and only re-runs
+  // this — and `flightPriceLoading` is set the moment this starts, so the wait is visible rather
+  // than looking identical to "nothing is happening" for however long the CLI call takes.
+  useEffect(() => {
+    const to = destination.trim();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    if (resolvedOriginIata && to && startDate && endDate) {
+      timer = setTimeout(async () => {
+        if (cancelled) return;
+        setFlightPriceLoading(true);
+        try {
+          const qs = new URLSearchParams({
+            iata: resolvedOriginIata,
+            destination: to,
+            start: startDate,
+            end: endDate,
+            adults: String(party.adults),
+          });
+          const res = await fetch(`/api/flight-estimate?${qs}`);
+          if (!res.ok) throw new Error("lookup failed");
+          const d: { estimate?: { costUsd?: number } | null } = await res.json();
+          if (!cancelled) setFlightCostPreview(d.estimate?.costUsd ?? null);
+        } catch {
+          if (!cancelled) setFlightCostPreview(null);
+        } finally {
+          if (!cancelled) setFlightPriceLoading(false);
+        }
+      }, 150); // Short: by the time an iata is resolved, the other three inputs are usually
+      // already settled — this only exists to avoid firing mid-keystroke on `destination` or
+      // the dates.
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      setFlightCostPreview(null);
+      setFlightPriceLoading(false);
+    };
+  }, [resolvedOriginIata, destination, startDate, endDate, party.adults]);
 
   // "Airport or station" read as a demand for knowledge a first-time visitor doesn't have. Once
   // there is a list to offer, say so; until then, invite rather than ask.
@@ -830,7 +936,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       setStartDate(prefill.startDate);
       setEndDate(prefill.endDate);
       setBudget(prefill.budgetUsd);
-      setTier(closestTier(prefill.budgetUsd, tripDays(prefill.startDate, prefill.endDate)));
       setParty({ adults: prefill.adults, children: prefill.children, infants: 0 });
       setGroup(
         prefill.children > 0 ? "family_with_kids" : prefill.adults === 1 ? "solo" : "couple"
@@ -1045,6 +1150,38 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                             {days === 1 ? "day" : "days"}
                           </div>
                         )}
+                        {/* Under the budget field because this is the field it modifies: the plan
+                            is written against the budget MINUS real airfare, and without saying so
+                            here the traveler only ever discovers it by finding a smaller total
+                            than they typed, two minutes later, with nothing accounting for the
+                            gap. */}
+                        {flightPriceLoading && flightCostPreview === null && budget > 0 && (
+                          // The one thing missing before: total silence for however long the
+                          // price lookup takes, which is exactly what read as "the app is stuck".
+                          <div className="value-in mt-0.5 text-xs text-muted">
+                            Checking flight prices…
+                          </div>
+                        )}
+                        {flightCostPreview !== null && budget > 0 && (
+                          <div
+                            key={`flight-${flightCostPreview}-${budget}`}
+                            className="value-in mt-0.5 text-xs text-muted"
+                          >
+                            <span className="tabular-nums">
+                              ≈ {formatMoney(flightCostPreview)}
+                            </span>{" "}
+                            of this goes to flights
+                            {flightCostPreview < budget && (
+                              <>
+                                , leaving{" "}
+                                <span className="tabular-nums">
+                                  {formatMoney(budget - flightCostPreview)}
+                                </span>{" "}
+                                to plan with
+                              </>
+                            )}
+                          </div>
+                        )}
                       </Field>
                     </div>
 
@@ -1126,7 +1263,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                           explorerStyle,
                           energy,
                           crowds,
-                          tier,
                           topPriorities: starredInterests,
                         })}
                       </p>
@@ -1160,7 +1296,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                         </div>
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-muted">Style and budget</label>
-                          <TierPicker days={days} budget={budget} selected={tier} onSelect={pickTier} />
                         </div>
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-muted">What matters most</label>
@@ -1348,7 +1483,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     explorerStyle,
                     energy,
                     crowds,
-                    tier,
                     priorities: interests,
                     topPriorities: starredInterests,
                   }}

@@ -11,20 +11,18 @@ const base = {
   explorerStyle: "relaxed",
   energy: "low",
   crowds: "avoid",
-  tier: "midrange",
   topPriorities: ["Food", "Culture & History"],
 };
 
 test("names every value in effect, separated by middots", () => {
   const out = summarizeDurable(base);
-  assert.equal(out, "Relaxed pace · Low energy · Avoids crowds · Mid-range · Food, Culture & History");
+  assert.equal(out, "Relaxed pace · Low energy · Avoids crowds · Food, Culture & History");
 });
 
 test("each enum renders its own short label, not the picker's long one", () => {
   assert.match(summarizeDurable({ ...base, energy: "high" }), /High energy/);
   assert.match(summarizeDurable({ ...base, crowds: "love" }), /Likes crowds/);
   assert.match(summarizeDurable({ ...base, explorerStyle: "packed" }), /Packed pace/);
-  assert.match(summarizeDurable({ ...base, tier: "luxury" }), /Luxury/);
 });
 
 test("says so plainly when nothing is starred, rather than trailing an empty segment", () => {

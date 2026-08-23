@@ -11,6 +11,20 @@ export interface OriginAirport {
   distanceKm: number;
 }
 
+/** A geocode + an Overpass query, chained. Measured in this session: several seconds on its own,
+ *  and it used to re-run on EVERY flight-estimate request for the same city — including when a
+ *  traveler had only changed dates or budget after already typing their origin once. Airports
+ *  don't move; caching this step is most of the "make it snappy" fix, and a process-lifetime
+ *  cache is enough since the server restarts on every deploy anyway. `null` is cached too — a
+ *  genuine "nothing airport-like nearby" (or a geocode miss) shouldn't re-run Overpass every
+ *  keystroke either. */
+const RESOLVE_CACHE_TTL_MS = 15 * 60 * 1000;
+const resolveCache = new Map<string, { value: OriginAirport | null; expires: number }>();
+
+function cacheKey(originCity: string): string {
+  return originCity.trim().toLowerCase();
+}
+
 /**
  * Resolve free text ("Boston") to the nearest real airport, so a real flight search has a
  * `departure_id` to search against. Nothing else in this app collects where the traveler is
@@ -27,6 +41,16 @@ export interface OriginAirport {
  * `null` is a product decision this function doesn't make — C2 hasn't been designed yet.
  */
 export async function resolveOriginAirport(originCity: string): Promise<OriginAirport | null> {
+  const key = cacheKey(originCity);
+  const cached = resolveCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
+  const result = await resolveOriginAirportUncached(originCity);
+  resolveCache.set(key, { value: result, expires: Date.now() + RESOLVE_CACHE_TTL_MS });
+  return result;
+}
+
+async function resolveOriginAirportUncached(originCity: string): Promise<OriginAirport | null> {
   const geo = await geocodeDestination(originCity);
   if (!geo) return null;
 

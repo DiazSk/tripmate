@@ -3,6 +3,9 @@ import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude }
 import { geocodeDestination, getWeatherForDates, DayWeather } from "./weather";
 import { resolveNamedPlaceCoords } from "./poiDetails";
 import { fetchLodgingOptions, reconcileLodging } from "./lodging";
+import { computeEffectiveBudget, fetchFlightEstimate } from "./flights";
+import type { FlightEstimate } from "./flights";
+import { resolveOriginAirport } from "./originAirport";
 import { fetchPlaceFacts } from "./placeFacts";
 import { fetchDayTravelMinutes } from "./routeMatrix";
 import {
@@ -110,6 +113,28 @@ export async function runGeneration(
     }
   }
 
+  // Kicked off here — as soon as a possible origin exists — so it overlaps the geocode/weather/
+  // lodging/context work below rather than adding its latency on top. Gated in code on
+  // `originCity` being stated at all: a trip with no origin costs zero calls and produces
+  // `effectiveBudget === budget`, byte-identical to before this feature existed. Re-resolved for
+  // a refine turn too, so refining an itinerary that had a real flight cost applied doesn't
+  // silently drop the adjustment the original generation had.
+  const flightEstimatePromise: Promise<FlightEstimate | null> = logistics?.originCity
+    ? resolveOriginAirport(logistics.originCity)
+        .then((airport) =>
+          airport?.iata
+            ? fetchFlightEstimate({
+                departureIata: airport.iata,
+                destination,
+                outboundDate: startDate,
+                returnDate: endDate,
+                adults: resolvedFlags?.partySize ?? undefined,
+              })
+            : null
+        )
+        .catch(() => null)
+    : Promise.resolve(null);
+
   const runId = randomUUID();
   insertRun({
     id: runId,
@@ -123,6 +148,14 @@ export async function runGeneration(
   onStage({ stage: "context", status: "start" });
   const contextInsightPromise = getDestinationContextInsight(destination, startDate, endDate, runId);
   let contextInsight: string;
+  // Set inside whichever branch runs, right alongside `contextInsight` — same reasoning as
+  // `effectiveTier`: one variable, computed once, read by buildGeneratePrompt, buildRefinePrompt,
+  // AND buildCritiquePrompt identically. That uniformity is the point: critique independently
+  // restates "cost within 85-100% of budget" in its own review criteria, and a fix that only
+  // reached generate's prompt would get silently re-derived away against the original, ungrounded
+  // number — the exact failure mode the lodging backstop hit once already this session.
+  let flightEstimate: FlightEstimate | null = null;
+  let effectiveBudget: number = budget;
 
   if (isRefine) {
     // Refine reuses the previous itinerary's coordinates and tier — there is nothing to
@@ -137,11 +170,13 @@ export async function runGeneration(
     dayCount = previousItinerary.days.length;
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
+    flightEstimate = await flightEstimatePromise;
+    effectiveBudget = computeEffectiveBudget(budget, flightEstimate);
     prompt = buildRefinePrompt({
       destination,
       startDate,
       endDate,
-      budget,
+      budget: effectiveBudget,
       previousItinerary,
       feedback,
       contextInsight,
@@ -194,11 +229,13 @@ export async function runGeneration(
     onStage({ stage: "geocode", status: geoPoint ? "done" : "skipped" });
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
+    flightEstimate = await flightEstimatePromise;
+    effectiveBudget = computeEffectiveBudget(budget, flightEstimate);
     prompt = buildGeneratePrompt({
       destination,
       startDate,
       endDate,
-      budget,
+      budget: effectiveBudget,
       tier,
       weather,
       preferences,
@@ -220,7 +257,15 @@ export async function runGeneration(
   onStage({ stage: "generate", status: "done" });
   // The model returns just { days: [...] } — tier is known server-side, not part of its output.
   const { days } = parseJsonResponse<{ days: Itinerary["days"] }>(raw);
-  const itinerary: Itinerary = { tier: effectiveTier, days: normalizeDays(days) };
+  // `flightCostUsd` rides on the itinerary rather than beside it in the return value, so it
+  // persists into `trips.itinerary_json` with no schema change and reaches the client through
+  // `data.itinerary` without a single line of new plumbing. Left absent (not 0) when no flight was
+  // found, so readers can tell "no origin given" from "flights were free".
+  const itinerary: Itinerary = {
+    tier: effectiveTier,
+    days: normalizeDays(days),
+    ...(flightEstimate ? { flightCostUsd: flightEstimate.costUsd } : {}),
+  };
 
   // Look up real listings for the stops where the answer can change the plan, then check the
   // schedule against them. Selective on purpose: a call per stop put one 44-stop trip at ~91
@@ -316,7 +361,7 @@ export async function runGeneration(
   try {
     const critiquePrompt = buildCritiquePrompt({
       itinerary,
-      budget,
+      budget: effectiveBudget,
       contextInsight,
       interestTags: preferences?.tags,
       resolvedFlags,
@@ -346,7 +391,7 @@ export async function runGeneration(
   // before each one. A no-op when `lodgingOptions` is null/empty (refine, or the lookup
   // failed/found nothing) — nothing to check the name against.
   for (const day of itinerary.days) {
-    if (day.lodging) day.lodging = reconcileLodging(day.lodging, lodgingOptions, budget);
+    if (day.lodging) day.lodging = reconcileLodging(day.lodging, lodgingOptions, effectiveBudget);
   }
 
   // Re-detect against whatever critique actually returned, then annotate and pin. Re-detection

@@ -322,7 +322,11 @@ export default function ItineraryCard({
       </div>
 
       <div className="p-5 sm:p-6">
-        <BudgetBar days={itinerary.days} budget={budget} />
+        <BudgetBar
+          days={itinerary.days}
+          budget={budget}
+          flightCostUsd={itinerary.flightCostUsd}
+        />
       </div>
 
       <div className="flex items-center gap-2 px-5 pb-3 sm:px-6" {...devLabel("ItineraryCard.DayTabs")}>

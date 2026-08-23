@@ -142,10 +142,19 @@ export function evaluateDay(
   return [...checkLegs(day, dayIndex, modes, realMinutes), ...checkPace(day, dayIndex)];
 }
 
-/** §12d: the trip's total against the stated budget. Trip-wide, so it isn't a per-day check. */
+/**
+ * §12d: the trip's total against the stated budget. Trip-wide, so it isn't a per-day check.
+ *
+ * Counts `flightCostUsd` alongside the plan for two reasons. It has to agree with `BudgetBar`,
+ * which shows the same sum — two surfaces disagreeing about whether you are over budget is exactly
+ * the drift the contract docblock in itinerary.ts was written about. And it repairs a regression:
+ * once the model started planning against `budget − flights`, its output was always well inside
+ * the stated budget, so this warning could effectively no longer fire at all — the case it exists
+ * for (a trip that genuinely costs more than the traveler said) had become invisible.
+ */
 export function evaluateBudget(itinerary: Itinerary, budget: number): Guardrail[] {
   if (!budget || budget <= 0) return [];
-  const total = tripSpend(itinerary.days);
+  const total = tripSpend(itinerary.days) + (itinerary.flightCostUsd ?? 0);
   if (total <= budget) return [];
   const over = Math.round(total - budget);
   return [
