@@ -307,7 +307,13 @@ export default function TripView({
                   <button
                     type="button"
                     onClick={() => focus.open(0, "trip")}
-                    className="refine-affordance glass-control pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/10"
+                    // No `hover:bg-*` here: `.refine-affordance` and `.glass-control` both set
+                    // `background` as unlayered rules in `globals.css`, which outrank every
+                    // `@layer utilities` declaration regardless of specificity — so the utility
+                    // that used to sit here was dead, and the app's most prominent secondary
+                    // action had no hover at all. Both states are defined beside those base
+                    // rules now. `transition-colors` is what animates them.
+                    className="refine-affordance glass-control pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors"
                   >
                     Refine with AI
                   </button>

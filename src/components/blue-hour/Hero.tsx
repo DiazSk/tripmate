@@ -40,13 +40,24 @@ const FRONT = {
  *  viewport rendered the images at a flat 750px. Two mutually exclusive media queries cannot collide
  *  with each other, which is the only arrangement that holds.
  *
+ *  **And they have to be genuinely exclusive, which `min-`/`max-` are not.** Both prefixes are
+ *  *inclusive*, so a `min-aspect-ratio: 3/5` and a `max-aspect-ratio: 3/5` query both match at
+ *  exactly 3:5 — and there the arrangement above degenerates into precisely the sorted-group race it
+ *  was written to avoid, per property, silently. Measured at 375×625 before this was fixed: the CTA
+ *  took its portrait `width` (335px, full-bleed) while keeping landscape `position` and `z-index`
+ *  (`relative`, 4), so it floated 186px above the bottom of a hero it was supposed to be pinned to.
+ *  375×624 and 375×626 were each individually correct, which is what made it invisible. Range syntax
+ *  (`aspect-ratio<=3/5` / `aspect-ratio>3/5`) has no shared value, and it is the idiom `globals.css`
+ *  already uses for width. Portrait owns the boundary, including the two `<picture>` sources, so the
+ *  crop and the layout agree about which branch that one viewport is in.
+ *
  *  `max-w-none` is load-bearing too. Tailwind's Preflight sets `img { max-width: 100% }`, which
  *  silently clamped the widened layer straight back to 100% and left the right edge 4px short at
  *  2560. Preflight is a set of opinions that outrank what you wrote, not a neutral reset — the same
  *  lesson as The Preflight-Beats-The-UA Rule. The reference hits this too and answers it the same
  *  way, with an explicit `max-width: calc(100% + 8px)`. */
 const LAYER_WIDTH =
-  "max-w-none [@media(max-aspect-ratio:3/5)]:w-full [@media(min-aspect-ratio:3/5)]:w-[100.65%] [@media(min-aspect-ratio:3/5)]:-left-[0.17%]";
+  "max-w-none [@media(aspect-ratio<=3/5)]:w-full [@media(aspect-ratio>3/5)]:w-[100.65%] [@media(aspect-ratio>3/5)]:-left-[0.17%]";
 
 /**
  * The opening moment of the Blue Hour scroll story: a curated photo, a one-word headline,
@@ -150,7 +161,7 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
     // bottom-anchored crop put the CTA on the yurts; with the layers at natural size the centre is
     // already right — the reference's own text block measures 241px in a 639px section, landing at
     // exactly `(639-241)/2`.
-    <section className="pointer-events-auto relative flex aspect-[1440/922] flex-col items-center justify-center overflow-hidden px-5 text-center sm:px-6 [@media(max-aspect-ratio:3/5)]:aspect-[375/812] [@media(max-aspect-ratio:3/5)]:pb-[5.375rem]">
+    <section className="pointer-events-auto relative flex aspect-[1440/922] flex-col items-center justify-center overflow-hidden px-5 text-center sm:px-6 [@media(aspect-ratio<=3/5)]:aspect-[375/812] [@media(aspect-ratio<=3/5)]:pb-[5.375rem]">
       {/* BACK — mountains, hanging from the top edge.
           Its own sky is intact, so this is the one layer that puts bright imagery behind the type;
           the veil below is what makes that safe. Switched on aspect ratio rather than a width
@@ -158,7 +169,7 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
           0.55), and 3/5 rather than 1/1 because at full width the portrait file stands 1.37x its own
           width tall — fine on a phone, impossible on a 4:3 tablet. */}
       <picture>
-        <source media="(min-aspect-ratio: 3/5)" srcSet={backLandscape} sizes="100vw" />
+        <source media="(aspect-ratio > 3/5)" srcSet={backLandscape} sizes="100vw" />
         <source srcSet={backPortrait} sizes="100vw" />
         <img
           {...backRest}
@@ -197,7 +208,7 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
             deliberate, and on the landscape crop the horizon is genuinely below it. */}
         <h1
           ref={headingRef}
-          className="hero-legible relative z-[2] font-scene-hero text-[clamp(3rem,11vw,13rem)] leading-[0.92] text-on-deep [@media(max-aspect-ratio:3/5)]:z-[4]"
+          className="hero-legible relative z-[2] font-scene-hero text-[clamp(3rem,11vw,13rem)] leading-[0.92] text-on-deep [@media(aspect-ratio<=3/5)]:z-[4]"
         >
           Somewhere.
         </h1>
@@ -313,7 +324,7 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
             wash at zero, so fading with the composition as the hero scrolls away is correct — it is
             leaving with everything else, not being scrolled toward. */}
         <div
-          className="hero-rise flex justify-center [@media(min-aspect-ratio:3/5)]:z-[4] [@media(max-aspect-ratio:3/5)]:z-[11] [@media(min-aspect-ratio:3/5)]:relative [@media(min-aspect-ratio:3/5)]:mt-8 [@media(max-aspect-ratio:3/5)]:absolute [@media(max-aspect-ratio:3/5)]:inset-x-5 [@media(max-aspect-ratio:3/5)]:bottom-5"
+          className="hero-rise flex justify-center [@media(aspect-ratio>3/5)]:z-[4] [@media(aspect-ratio<=3/5)]:z-[11] [@media(aspect-ratio>3/5)]:relative [@media(aspect-ratio>3/5)]:mt-8 [@media(aspect-ratio<=3/5)]:absolute [@media(aspect-ratio<=3/5)]:inset-x-5 [@media(aspect-ratio<=3/5)]:bottom-5"
           style={{ animationDelay: "300ms" }}
         >
           <button
@@ -324,7 +335,7 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
             // it typechecks, because `Hero` declares the prop as `() => void` and TypeScript
             // happily assigns a wider handler to a narrower one.
             onClick={() => onPlan()}
-            className="pointer-events-auto inline-flex items-center gap-4 rounded-full border border-transparent bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground shadow-lg shadow-black/30 transition-all duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98] [@media(max-aspect-ratio:3/5)]:w-full [@media(max-aspect-ratio:3/5)]:justify-center"
+            className="pointer-events-auto inline-flex items-center gap-4 rounded-full border border-transparent bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground shadow-lg shadow-black/30 transition-all duration-200 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98] [@media(aspect-ratio<=3/5)]:w-full [@media(aspect-ratio<=3/5)]:justify-center"
           >
             Plan a trip
             {/* `gap-4` is the reference's own `1rem`. The mark is `ButtonMark` — see there for why
@@ -342,13 +353,13 @@ export default function Hero({ onPlan }: { onPlan: () => void }) {
           edge (measured at 1440x900 as five rows dropping to mean RGB 23 under grass at 58). 11px of
           a 2899px frame is 0.38vw at any width. The portrait file has no such margin. */}
       <picture>
-        <source media="(min-aspect-ratio: 3/5)" srcSet={frontLandscape} sizes="100vw" />
+        <source media="(aspect-ratio > 3/5)" srcSet={frontLandscape} sizes="100vw" />
         <source srcSet={frontPortrait} sizes="100vw" />
         <img
           {...frontRest}
           alt=""
           aria-hidden
-          className={`absolute bottom-0 left-0 z-[3] h-auto ${LAYER_WIDTH} [@media(min-aspect-ratio:3/5)]:-bottom-[0.4vw]`}
+          className={`absolute bottom-0 left-0 z-[3] h-auto ${LAYER_WIDTH} [@media(aspect-ratio>3/5)]:-bottom-[0.4vw]`}
         />
       </picture>
 

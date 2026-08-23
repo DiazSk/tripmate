@@ -145,7 +145,7 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
             which is the same problem: an empty beat carrying one amber CTA. */}
         <div aria-hidden="true" className="scene-void absolute inset-0" />
         <div className="relative z-10 max-w-lg">
-          <h1 className="font-display text-4xl font-bold text-foreground sm:text-6xl">
+          <h1 className="font-display text-4xl text-foreground sm:text-6xl">
             Your memories start here
           </h1>
           <p className="mt-3 text-base text-muted">
@@ -194,9 +194,14 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
         }}
       />
       <div className="relative z-10 max-w-2xl">
+        {/* No `font-bold`: `.font-display` sets `font-weight: 600` as an unlayered rule, which
+            outranks every `@layer utilities` weight whatever its specificity, so the `font-bold`
+            that used to be here computed as 600 anyway. 600 *is* the display step DESIGN.md
+            specifies — the utility was the mistake, not the rendering, so this removes a claim the
+            markup could not back rather than changing a weight. Byte-identical render. */}
         <h1
           ref={headingRef}
-          className="font-display text-5xl leading-[0.98] font-bold text-foreground sm:text-7xl"
+          className="font-display text-5xl leading-[0.98] text-foreground sm:text-7xl"
         >
           My memories
         </h1>
@@ -287,7 +292,12 @@ function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => voi
         type="button"
         onClick={onDelete}
         aria-label={`Delete your ${trip.destination} trip`}
-        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm hover:bg-red-600 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
+        // The keyboard reveal is `.memory-card-slot:focus-within .memory-card-delete` in
+        // `globals.css`, not a utility here. A focus-visible opacity utility used to sit in this
+        // list and was dead — `.memory-card-delete{opacity:0}` is unlayered and wins — so it read
+        // as the thing making this button reachable while `:focus-within` quietly did the work.
+        // (Named in words: the scanner reads comments, and nothing carries that class now.)
+        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm hover:bg-red-600 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
       >
         <Trash2 className="h-4 w-4" strokeWidth={2.25} />
       </button>

@@ -284,7 +284,7 @@ export default function Navbar() {
       >
         <Link
           href="/"
-          className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold tracking-tight text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+          className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
         >
           <LogoMark className="h-[1.1em] w-[1.1em]" />
           TripMate

@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/* **Markdown is documentation, not markup — stop scanning it for classes.**
+
+   Tailwind v4 auto-detects sources across the whole project, and it does not care that a file is
+   prose: any token shaped like a utility becomes a real rule in the shipped stylesheet. This repo's
+   docs convention makes that a standing leak, because `docs/frontend.md` logs every fixed bug in
+   detail and those entries *quote the classes involved* — including the broken ones that were
+   removed. Two dead rules were shipping from that log alone: `[&:nth-child(2)]:border-t-0`, an
+   override that never applied and was deleted from `FeaturedPlans` months of work ago, and a
+   superseded `max-aspect-ratio` z-index variant from the hero. Neither is on any element. Both were
+   emitted because a bug report described them accurately.
+
+   Excluding markdown rather than rewording each mention is the fix that holds: rewording is a
+   guard at every call site, and there is no reason a future entry would remember. Nothing here is
+   MDX and no `.md` renders into the app, so the only candidates this drops are ones that exist
+   *only* in prose — precisely the dead set. Anything an element actually carries still comes from
+   its own `className`. */
+@source not "../../**/*.md";
+
 /* The one measurement everything else hangs off. Tailwind's whole scale is rem, so moving
    the root moves type, padding, gaps and radii together and the composition *scales* rather
    than reflowing — which is what a fixed 16px root was costing: past ~1400px the interface
@@ -401,6 +419,28 @@ body {
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.32);
 }
 
+/* Hover and press live here, in CSS, and not as `hover:bg-white/10` at the call sites — which is
+   where they used to be, and where they did nothing. The `background` above is an *unlayered*
+   author declaration, and cascade layers rank unlayered above anything `@layer`-emitted whatever
+   its specificity, so a layered `bg-*` utility could never touch it. Four controls shipped with no
+   hover and no press feedback at all: the 2D/3D toggle, the reset-north compass, the mobile sheet's
+   collapse handle and `/trip/[id]`'s Refine button, each of them running a `transition` on a
+   property that never moved. DockedPanel documents this exact mechanism for `box-shadow` and
+   `ring-*`; this is the same trap in `background-color`.
+
+   Darker, not lighter, and that is the Darken-Never-Lighten Rule rather than a preference: these
+   pills float over a live globe that idles anywhere from open ocean to a snowfield, and the
+   `bg-white/10` the dead utilities asked for would have cut contrast exactly where the terrain is
+   brightest. 0.72 is the alpha step `.memory-card-delete` and `.fact-stack-card` already use for a
+   surface at this weight; 0.82 reads as pressed without becoming a different material. */
+.glass-control:hover {
+  background: rgb(var(--surface-deep-rgb) / 0.72);
+}
+
+.glass-control:active {
+  background: rgb(var(--surface-deep-rgb) / 0.82);
+}
+
 /* The one control that is only glass on a phone. Above `sm` "Refine with AI" sits in the dark
    panel column, where the bare `text-muted` label it has always been reads fine and a second
    glass chip would just be noise. Below `sm` the panel's top edge is transparent, so the same
@@ -412,6 +452,14 @@ body {
     backdrop-filter: none;
     border-color: transparent;
     box-shadow: none;
+  }
+
+  /* It drops the glass at this width, so it has to say so on hover too — `.glass-control:hover`
+     above would otherwise be overridden by this block's own `background: none` and the control
+     would be inert again. Materialising to the base glass alpha is the tidy answer: hovering
+     restores exactly the surface this breakpoint took away. */
+  .refine-affordance:hover {
+    background: rgb(var(--surface-deep-rgb) / 0.55);
   }
 }
 
@@ -1216,6 +1264,15 @@ body {
     background-color 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* **This pair is what reveals the button, including for the keyboard.** The button used to also
+   carry a focus-visible opacity utility, which was dead — `opacity: 0` above is unlayered and
+   outranks any layered utility — so the reveal has always come from `:focus-within` here. The
+   utility is gone now rather than left looking load-bearing: delete this rule trusting it and the
+   control becomes permanently invisible to anyone not using a pointer.
+
+   Named in words, not written as a class token: Tailwind's scanner reads comments, and now that no
+   element carries that utility, spelling it out here would put the dead rule straight back into the
+   stylesheet. */
 .memory-card-slot:hover .memory-card-delete,
 .memory-card-slot:focus-within .memory-card-delete {
   opacity: 1;
