@@ -102,17 +102,22 @@ export default function FeaturedPlans({
           borders, the internal gutters, and the equal row heights.
 
           **One border-top rule per range, never a rule plus an override.** The horizontal hairline
-          used to be `[&:nth-child(n+2)]:border-t` for the stacked case with a
-          `[&:nth-child(2)]:border-t-0` at the two-up breakpoint to lift it off card 2, which is in
-          row 1. That override never applied: Tailwind orders by *utility*, not by variant, so
-          `border-t-0` is emitted before the plain `border-t` — measured at bytes 88175 and 88429 of
-          this app's own stylesheet — and at equal specificity (`.class:nth-child(…)`, 0-2-0) the
-          later rule wins whatever media query wraps the earlier one. Card 2 therefore carried a
-          stray rule above it at two-up the whole time, one hairline over the top-right card and
-          none over the top-left. `max-xl:` for the stacked range and `xl:` for the two-up range
-          means neither rule has to beat the other. Same lesson as the display utilities on the
-          navbar's Profile link: emit one declaration for a property per range, not two and a guess
-          about order. */}
+          used to be an unprefixed nth-child(n+2) border-top for the stacked case, with a
+          nth-child(2) border-top-zero at the two-up breakpoint to lift it off card 2, which is in
+          row 1. That override never applied: Tailwind orders by *utility*, not by variant, so the
+          zero-width rule is emitted before the plain one — measured in this app's own stylesheet —
+          and at equal specificity (`.class:nth-child(…)`, 0-2-0) the later rule wins whatever media
+          query wraps the earlier one. Card 2 therefore carried a stray rule above it at two-up the
+          whole time, one hairline over the top-right card and none over the top-left. `max-xl:` for
+          the stacked range and `xl:` for the two-up range means neither rule has to beat the other.
+          Same lesson as the display utilities on the navbar's Profile link: emit one declaration
+          for a property per range, not two and a guess about order.
+
+          Named in prose rather than written as class tokens on purpose. **Tailwind's scanner reads
+          this comment.** Spelling the old classes out here put two real rules into the shipped
+          stylesheet that no element carries — one of them still there at the time this was
+          rewritten, top-level and unconditional. A comment explaining a class cannot be written
+          *as* that class. */}
       <div className="mt-10 grid xl:auto-rows-fr xl:grid-cols-2">
         {planExamples.map((plan) => {
           // Resolved per render rather than hoisted: the value depends on today's date, and a module
