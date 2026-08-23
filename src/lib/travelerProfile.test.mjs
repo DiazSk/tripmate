@@ -12,7 +12,6 @@ const valid = {
   explorerStyle: "relaxed",
   energy: "low",
   crowds: "avoid",
-  tier: "budget",
   priorities: ["Food", "Shopping"],
   topPriorities: ["Food"],
   dietary: { tags: ["Vegetarian"], note: "no shellfish" },
@@ -33,13 +32,23 @@ test("rejects an unknown value in any enum field", () => {
   assert.equal(parseProfile({ ...valid, explorerStyle: "frantic" }), null);
   assert.equal(parseProfile({ ...valid, energy: "boundless" }), null);
   assert.equal(parseProfile({ ...valid, crowds: "tolerate" }), null);
-  assert.equal(parseProfile({ ...valid, tier: "platinum" }), null);
 });
 
 test("rejects priorities that are not arrays of strings", () => {
   assert.equal(parseProfile({ ...valid, priorities: "Food" }), null);
   assert.equal(parseProfile({ ...valid, priorities: [1, 2] }), null);
   assert.equal(parseProfile({ ...valid, topPriorities: null }), null);
+});
+
+test("a stored profile that still carries a tier loads, rather than being refused", () => {
+  // `tier` used to be a validated field here, and an unknown value rejected the WHOLE profile.
+  // It was removed with the picker that set it — tier is now derived from each trip's budget. Rows
+  // written before that still have the key, and they must parse: refusing them would silently wipe
+  // a returning traveler's saved preferences the first time they loaded the page, which is exactly
+  // the failure `parseDietary` already guards against for its own field.
+  const parsed = parseProfile({ ...valid, tier: "budget" });
+  assert.ok(parsed, "an old row carrying a tier must still parse");
+  assert.equal("tier" in parsed, false, "and the key must not be carried forward");
 });
 
 test("drops unknown fields rather than storing them", () => {
