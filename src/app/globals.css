@@ -1382,3 +1382,58 @@ body {
 .memory-card:hover {
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
 }
+
+/* Print. Three rules here are load-bearing and none of the three failures is visible on screen.
+
+   1. `.app-shell` is `h-dvh overflow-hidden` and `.content-overlay` is `absolute inset-0
+      overflow-y-auto` — an absolutely-positioned scroller inside a fixed-height clipped box
+      prints exactly one screenful, so a multi-day document silently loses every page after the
+      first. The root layout wraps every route in AppShell and nested layouts nest rather than
+      replace, so there is no route-level opt-out to reach for.
+
+   2. `body` sets `color: var(--foreground)`, which is #ffffff. Print drops backgrounds but never
+      colours, so without the reversal below the whole document is white on white.
+
+   3. `.content-overlay` must stay *positioned*. It was `position: static` here first, and that
+      shipped a blank 9-page PDF: `z-index` applies only to positioned elements, so going static
+      dropped its `z-index: 10` and AppShell's globe container — still `absolute inset-0 z-0`
+      with an opaque `bg-canvas` and the full height of the document — began painting over every
+      line of text. `elementsFromPoint` put it on top at all four corners of the content.
+      `relative` keeps the stacking order intact while still sizing to content and flowing in
+      normal document order.
+
+   The chrome rule is structural on purpose. It replaced a hand-listed set of four class names
+   that had already missed the globe container, which is what caused (3). AppShell's children are
+   the globe, the marker layer, this overlay, the nav, the dev inspector and the map controls —
+   only the overlay has a document in it, so everything else is chrome by definition and the list
+   never needs maintaining again. `LlmTraceFab` is *not* covered: it mounts as a sibling of
+   `.app-shell`, so it carries its own `print:hidden`.
+
+   Global rather than scoped to /trip/[id]/print: nobody prints the globe, and a scoped copy is a
+   rule the next printable surface has to rediscover. */
+@media print {
+  .app-shell {
+    display: block;
+    height: auto;
+    overflow: visible;
+    /* `bg-canvas` is the dark app ground. Chrome drops it with "Background graphics" unchecked,
+       which is the default — but tick that box and it returns as two dark columns either side of
+       the document's own `max-w-3xl` column. Cheaper to neutralise than to rely on a checkbox. */
+    background: #fff;
+  }
+
+  .app-shell > *:not(.content-overlay) {
+    display: none !important;
+  }
+
+  .content-overlay {
+    position: relative;
+    overflow: visible;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+    color-scheme: light;
+  }
+}
