@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { listTrips, readProfile } from "@/lib/db";
 import { toTripSummary } from "@/lib/tripPayload";
 import ProfileForm from "./ProfileForm";
@@ -24,6 +26,18 @@ import ProfileForm from "./ProfileForm";
  * What still streams in on the client is the per-trip photography (`usePlacePhoto` → Wikipedia),
  * exactly as on `/trips`.
  */
+/**
+ * Same inherited-title problem `/trips` had, fixed the same way and on the same convention. Done
+ * here as well as there because it is the identical one-line defect on the sibling route, and
+ * leaving a tab that reads "Plan your trip" on the profile screen while fixing it next door would
+ * be a worse outcome than the small widening of scope.
+ */
+export const metadata: Metadata = {
+  title: "Your travel profile · TripMate",
+  description:
+    "The preferences that stay true between trips — pace, party, walking, crowds and budget.",
+};
+
 export const dynamic = "force-dynamic";
 
 const RECENT_TRIP_COUNT = 3;
