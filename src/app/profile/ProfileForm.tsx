@@ -40,9 +40,19 @@ const DEFAULTS: TravelerProfile = {
 
 const MAX_STARRED = 3;
 
+/**
+ * One labelled field row in the ruled column. `py-5` on both sides, which is what puts every
+ * hairline in a symmetric 20px well — the rhythm the whole column reads by.
+ *
+ * No `first:pt-0` / `last:pb-0`, which is what this used to carry. Neither could ever match: the
+ * divide container's first child is the `SectionOpener` and its last is the save row, so no
+ * `<section>` is `:first-child` or `:last-child` and both utilities were inert. Deleted rather than
+ * made to work, because there is nothing for them to do — the container's own `lg:pt-16`/`lg:pb-16`
+ * sets the region's outer offset, and these rows only ever have peers above and below them.
+ */
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-2 py-5 first:pt-0 last:pb-0">
+    <section className="space-y-2 py-5">
       <h2 className="font-display text-base font-semibold text-foreground">{title}</h2>
       {hint && <p className="text-sm text-muted">{hint}</p>}
       <div className="pt-1">{children}</div>
@@ -178,7 +188,12 @@ function Memories({ trips }: { trips: TripSummary[] }) {
 
       <Link
         href="/trips"
-        className="group inline-flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-foreground"
+        // `min-h-11` for the 44px target rule. Reached with height rather than by growing the
+        // type, per DESIGN.md — the link was 20px tall, the shortest control on the page. The
+        // three shared pickers below are 32px and also short of 44, but they are `HomeView`'s
+        // controls too and resizing them would redesign the trip wizard's density; that shortfall
+        // is recorded in docs/frontend.md rather than fixed from here.
+        className="group inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-foreground"
       >
         See all in My memories
         <ArrowRight
@@ -331,6 +346,18 @@ export default function ProfileForm({
                 stacked even inside this narrower cell: 11rem of label leaves the heading ~583px at
                 1440, which the `clamp(2rem,5vw,3.75rem)` step fits.
                 `rule={false}` because the grid above owns the top hairline now — see there. */}
+            {/* `pb-10`, and the number is the one asymmetry on this column that is deliberate.
+                Every `Section` is `py-5`, so each hairline sits in a symmetric 20px well; this
+                block had **no bottom padding at all**, which left the subline 1px off the rule
+                below it against 20px everywhere else — the paragraph read as if it had fallen
+                through the divider. It gets 40px rather than a matching 20 because it is the page's
+                header, not a peer field row: the boundary under it separates *groups*, and giving
+                it the same well as the gap between "Crowds" and "Budget" would flatten the header
+                into the eighth row of a list. 40px is `gap-10`, the step this grid already uses
+                between its columns, not a new number.
+                On the wrapper rather than inside `SectionOpener`, which the landing also renders —
+                the spacing belongs to this arrangement, not to the component. */}
+            <div className="pb-10">
             <SectionOpener label="Profile" rule={false}>
             {/* `.font-display`, the app's own display step — not `.font-scene-display`. They are
                 the same face at the same weight and differ only in tracking, but the scene classes
@@ -346,6 +373,7 @@ export default function ProfileForm({
               only has to ask what actually changes.
             </p>
             </SectionOpener>
+            </div>
 
             <Section
               title="Who you usually travel with"
