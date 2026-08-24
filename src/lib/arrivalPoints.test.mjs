@@ -235,10 +235,102 @@ test("aerodrome:type carries the same signal as aerodrome", () => {
     [{ lat: 35.7647, lon: 140.386, tags: { aeroway: "aerodrome", name: "Narita", iata: "NRT", "aerodrome:type": "international" } }],
     { lat: 35.6895, lon: 139.6917 } // Tokyo — Narita is 370km from Kyoto and out of range there.
   );
+  assert.equal(p.tier, 1); // tagged international, but no rank_aci corroborating it — see below
+});
+
+test("a real passenger hub outranks a general-aviation field that merely has 'international' in its paperwork", () => {
+  // The failure this guards: Seattle's Boeing Field is 9km out and Sea-Tac 18km, so distance
+  // alone puts Boeing Field first. Its `aerodrome:type` tag genuinely says "international" —
+  // verified live against OSM — because its OFFICIAL name is "King County International
+  // Airport", despite it being a general-aviation field with almost no scheduled passenger
+  // service. Tags below are the real ones fetched live for both.
+  const boeingField = {
+    lat: 47.53,
+    lon: -122.302,
+    tags: {
+      aeroway: "aerodrome",
+      name: "Boeing Field",
+      official_name: "King County International Airport",
+      iata: "BFI",
+      "aerodrome:type": "international",
+    },
+  };
+  const seaTac = {
+    lat: 47.4502,
+    lon: -122.3088,
+    tags: {
+      aeroway: "aerodrome",
+      name: "Seattle-Tacoma International Airport",
+      iata: "SEA",
+      aerodrome: "international",
+      "aerodrome:type": "international",
+      "rank_aci:2016": "28",
+    },
+  };
+  const out = parseArrivalPoints([boeingField, seaTac], { lat: 47.60621, lon: -122.33207 }); // Seattle
+  assert.deepEqual(out.map((p) => p.name), [
+    "Seattle-Tacoma International Airport (SEA)",
+    "Boeing Field (BFI)",
+  ]);
+  assert.ok(out[0].distanceKm > out[1].distanceKm, "and it won despite being further out");
+});
+
+test("rank_aci is checked by key prefix, not an exact tag name", () => {
+  // Real-world tags are year-suffixed (`rank_aci:2016`), so the check can't be an exact match.
+  const [p] = parseArrivalPoints(
+    [{ lat: 40.6413, lon: -73.7781, tags: { aeroway: "aerodrome", name: "JFK", iata: "JFK", "rank_aci:2019": "5" } }],
+    { lat: 40.7128, lon: -74.006 }
+  );
   assert.equal(p.tier, 0);
 });
 
 test("the tier only sorts airports — a station is never demoted by it", () => {
   const out = parseArrivalPoints([KYOTO_STATION], ORIGIN);
   assert.equal(out[0].tier, 0);
+});
+
+test("exposes the bare IATA code separately from the display name", () => {
+  // A flight search needs "KIX", not "Kansai (KIX)" — the string it's embedded in for display.
+  const [airport] = parseArrivalPoints([KANSAI], ORIGIN);
+  assert.equal(airport.iata, "KIX");
+});
+
+test("a rail point has no IATA code", () => {
+  const [station] = parseArrivalPoints([KYOTO_STATION], ORIGIN);
+  assert.equal(station.iata, null);
+});
+
+test("a legitimate local regional airport is not overridden by a far-off bigger one", () => {
+  // Measured live: with no cap, tier alone picked Boston Logan (79km, tagged international)
+  // over Manchester-Boston Regional (7km, no tag) for a traveler in Manchester, NH — and
+  // Detroit Metro (62km) over Toledo Express (23km) for a traveler in Toledo, OH. Neither
+  // MHT nor TOL is a data-quality trap like Boeing Field; they are real, locally-served
+  // airports that simply carry no "international"/rank_aci tag. Past MAX_TIER_OVERRIDE_KM the
+  // "better tier" airport is plausibly a different city's own airport, not a lesser
+  // alternative to the real local one.
+  const manchesterRegional = {
+    lat: 42.9326,
+    lon: -71.4357,
+    tags: { aeroway: "aerodrome", name: "Manchester-Boston Regional Airport", iata: "MHT" },
+  };
+  const bostonLogan = {
+    lat: 42.3656,
+    lon: -71.0096,
+    tags: { aeroway: "aerodrome", name: "Boston Logan International Airport", iata: "BOS", aerodrome: "international" },
+  };
+  const out = parseArrivalPoints([manchesterRegional, bostonLogan], { lat: 42.9956, lon: -71.4548 }); // Manchester, NH
+  assert.deepEqual(out.map((p) => p.iata), ["MHT", "BOS"]);
+});
+
+test("the override cap does not disturb a genuinely close pair like CDG/Le Bourget", () => {
+  // Sanity check on the boundary itself: the two real cases the tier system exists for (10km
+  // and 9km deltas) must still resolve in favor of the better tier, not distance.
+  const nearby = { lat: 0, lon: 0, tags: { aeroway: "aerodrome", name: "Regional Field", iata: "RGF" } };
+  const fartherButBetter = {
+    lat: 0.15, // ~16.7km at the equator — inside the 25km cap
+    lon: 0,
+    tags: { aeroway: "aerodrome", name: "Big Intl", iata: "BIG", aerodrome: "international" },
+  };
+  const out = parseArrivalPoints([nearby, fartherButBetter], { lat: 0, lon: 0 });
+  assert.deepEqual(out.map((p) => p.iata), ["BIG", "RGF"]);
 });

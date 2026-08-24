@@ -53,6 +53,17 @@ export interface DayPlan {
 export interface Itinerary {
   tier: TierId;
   days: DayPlan[];
+  /** Real round-trip airfare, deducted from the stated budget before the plan was written.
+   *
+   *  Lives here rather than in a DB column so it persists for free — the whole `Itinerary` is
+   *  `JSON.stringify`'d into `trips.itinerary_json`. Absent on itineraries generated before this
+   *  existed, and on any trip where no origin was given, so every reader must tolerate
+   *  `undefined` (same contract as `DayPlan.weatherDetail`/`summary`/`title`).
+   *
+   *  Deliberately NOT part of the `tripSpend` chain in itinerary.ts: this is a trip-level cost and
+   *  that chain is per-day, so folding it in would break the day-sums-to-trip arithmetic the print
+   *  page depends on. It is shown beside those figures, never inside them. */
+  flightCostUsd?: number;
 }
 
 export interface TripSummary {
@@ -83,8 +94,11 @@ export interface ItineraryPreferences {
 }
 
 export interface DestinationContext {
-  festivals: { name: string; dates: string; note: string }[];
-  safety: { note: string; severity: "low" | "medium" | "high" }[];
+  /** `sourceUrl` is null for shopping/trends (still model-recalled) and populated for
+   *  festivals/safety, which are grounded in a real fetched source — see destinationSafety.ts
+   *  and destinationFestivals.ts. */
+  festivals: { name: string; dates: string; note: string; sourceUrl: string | null }[];
+  safety: { note: string; severity: "low" | "medium" | "high"; sourceUrl: string | null }[];
   shopping: { name: string; area: string; note: string }[];
   trends: { note: string }[];
 }
@@ -168,6 +182,12 @@ export interface TripLogistics {
   departurePoint: string | null;
   /** Collected by the benchmark form only; the traveler-facing form does not write it yet. */
   stayBooked: string | null;
+  /** Free text — "Boston", "Boston (BOS)" — where the traveler is flying from, not where they
+   *  land. Unlike `arrivalPoint`/`departurePoint` this exists to be resolved: a real flight
+   *  search needs a departure airport code, which nothing in this app collects otherwise. C1 only
+   *  collects and resolves it (see `arrivalPoints.ts`'s airport-finder, reused unmodified); what a
+   *  real flight search is used FOR is a separate, not-yet-decided piece. */
+  originCity: string | null;
 }
 
 /** Normalized, enum-like flags the itinerary-planner skill branches on — never free text where
