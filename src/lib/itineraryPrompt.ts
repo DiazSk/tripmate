@@ -13,6 +13,15 @@ import { TIERS } from "./tiers";
 import type { TierId } from "./tiers";
 import { formatTravelLegs, formatTravelerProfile } from "./travelerProfilePrompt";
 import { formatDietary } from "./dietaryPrompt";
+import {
+  budgetInstruction,
+  formatLodging,
+  lodgingInstruction,
+  lodgingPricingBasis,
+} from "./lodgingPrompt";
+import type { LodgingOption } from "./lodging";
+import { formatPlaceConflicts } from "./placeConflicts";
+import type { PlaceConflict } from "./placeConflicts";
 import type { DietaryNeeds } from "./travelerProfile";
 
 const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one line: why this stop suits this traveler","note":"one line: practical detail","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}`;
@@ -121,10 +130,6 @@ const FOOD_STOP_INSTRUCTION = `For "food" stops, prefer an AREA over a specific 
 // (hostel, B&B, apartment, camp, houseboat, farmstay) and often the memorable part of
 // a trip — so pick the type from the traveler + destination first, and offer an
 // alternative rather than presenting one property as settled.
-const LODGING_INSTRUCTION = `For "lodging", choose the TYPE of stay, not just a hotel. Consider hostels/social guesthouses (solo, younger, tight budget), B&Bs/guesthouses/homestays (local and cultural interests), apartments (families, groups, longer stays), hotels (when convenience, accessibility or a late check-in matters), and stays the destination is genuinely known for — riverside or desert camps, glamping, mountain huts, houseboats, farmstays, ryokan-style inns. When the traveler's interests lean adventurous or outdoorsy, actively offer the adventurous option (e.g. a riverside camp) on the night whose location makes it natural, instead of defaulting to a city hotel — but only where such stays genuinely exist at that destination, and never when the night's weather, a remote location after dark, or a family/accessibility need makes it a bad idea. Phrase the lodging "name" as the type FIRST, then the area — "Boutique hotel in Capitol Hill", "Riverside camp near Shivpuri", "Family apartment in Fremont". Never write it the other way round ("Capitol Hill Boutique Hotel"), which reads as a specific property and invents one that may not exist; name an actual property only when it is itself the draw or needs booking far ahead. Use "note" to say in one line why this type suits this traveler plus ONE alternative of a different type or price band. Keep the same base while consecutive days share an area — switch only when the itinerary's geography actually moves. Never invent specific prices, availability, or ratings beyond the cost estimate.`;
-
-const BUDGET_INSTRUCTION = `The itinerary's total cost (lodging + stops combined) MUST come close to the full stated budget (aim for 85-100% of it), not just "under" it. If standard sightseeing and dining wouldn't use up a high budget, add premium extras appropriate to the tier (private guides, exclusive experiences, shopping, spa, upgraded transport) rather than leaving the budget unused.`;
-
 const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD (0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM") — times across a day's stops must be sequential and non-overlapping; a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category" — "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs, "other" for everything else.`;
 
 export function buildGeneratePrompt(params: {
@@ -139,6 +144,9 @@ export function buildGeneratePrompt(params: {
   resolvedFlags?: ResolvedFlags | null;
   dietary?: DietaryNeeds | null;
   logistics?: TripLogistics | null;
+  /** Real, tier-filtered properties. `null` = lookup failed, `[]` = nothing at this tier;
+   *  both fall back to the type-first instruction, so the prompt is unchanged without them. */
+  lodging?: LodgingOption[] | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -146,14 +154,14 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
+${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatLodging(params.lodging ?? null)}${formatContextBlock(params.contextInsight)}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
-Every day except the last should include a "lodging" entry representing that night's stay, priced to the style above. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
-${LODGING_INSTRUCTION}
+Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis((params.lodging ?? []).length > 0)}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
+${lodgingInstruction((params.lodging ?? []).length > 0)}
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
-${BUDGET_INSTRUCTION}
+${budgetInstruction((params.lodging ?? []).length > 0)}
 Include real, well-known places (or real, well-known areas, per the food-stop rule) for the destination with their real approximate latitude/longitude.
 For each day, also write a short, elegant 1-2 sentence "summary" capturing that day's theme and flow, with 1-2 tasteful emojis, e.g. "A relaxing mix of historic sightseeing in Asakusa followed by local dining along the river. 🏯🍜"
 
@@ -185,8 +193,8 @@ Revise the itinerary to address this feedback. Keep real, well-known places with
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
-${LODGING_INSTRUCTION}
-${BUDGET_INSTRUCTION}
+${lodgingInstruction(false)}
+${budgetInstruction(false)}
 For each day, also write (or rewrite, if the feedback changes its theme) a short, elegant 1-2 sentence "summary" with 1-2 tasteful emojis capturing that day's theme and flow.
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
@@ -221,12 +229,18 @@ The traveler overspent on an earlier day. Only $${params.remainingBudget} is lef
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
-${LODGING_INSTRUCTION}
+${lodgingInstruction(false)}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, as a JSON array of day objects in this shape:
 [{"date":"YYYY-MM-DD","weather":"short weather summary","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]`;
 }
 
+/**
+ * Shopping and trends only. Festivals and safety used to be recalled here too, but that was
+ * pure invention shown to users as fact — see destinationSafety.ts and destinationFestivals.ts,
+ * which fetch and ground those two instead. Shopping/trends stay recalled: lower-stakes and more
+ * opinion-shaped, and grounding them didn't turn up a clean data source.
+ */
 export function buildContextPrompt(params: {
   destination: string;
   startDate: string;
@@ -234,15 +248,20 @@ export function buildContextPrompt(params: {
 }): string {
   return `Give background context useful for planning a trip to ${params.destination} between ${params.startDate} and ${params.endDate}.
 
-Cover: any festivals or notable events happening in that window, general safety notes a traveler should know, notable shopping areas/districts, and any current travel trends (popular new spots, seasonal crowds, etc.). Leave a category's array empty if you don't have anything genuinely relevant — don't invent filler.
+Cover: notable shopping areas/districts, and any current travel trends (popular new spots, seasonal crowds, etc.). Leave a category's array empty if you don't have anything genuinely relevant — don't invent filler.
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
-{"festivals":[{"name":"festival name","dates":"date range or day","note":"short note"}],"safety":[{"note":"short safety note","severity":"low|medium|high"}],"shopping":[{"name":"area/market name","area":"neighborhood","note":"short note"}],"trends":[{"note":"short trend note"}]}`;
+{"shopping":[{"name":"area/market name","area":"neighborhood","note":"short note"}],"trends":[{"note":"short trend note"}]}`;
 }
 
 export function buildCritiquePrompt(params: {
   itinerary: Itinerary;
   budget: number;
+  /** Verified closures / access problems found by checking the plan against real place listings.
+   *  Empty leaves this prompt byte-identical to before they were detected. */
+  placeConflicts?: PlaceConflict[];
+  /** Travel-feasibility findings computed against real route durations, already phrased. */
+  travelFindings?: string[];
   contextInsight?: string;
   interestTags?: string[];
   resolvedFlags?: ResolvedFlags | null;
@@ -257,7 +276,7 @@ export function buildCritiquePrompt(params: {
 ${JSON.stringify(params.itinerary)}
 ${formatContextBlock(params.contextInsight)}${interestLine}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatDietary(params.dietary ?? null)}
 Review it for: (1) total cost (lodging + stops) landing within 85-100% of the budget, (2) stop times being sequential, non-overlapping, and realistically spaced (no implausibly tight back-to-back stops), (3) reasonable use of the destination context above, if any was given, (4) whether the itinerary genuinely reflects the traveler's stated interests above, if any were given — not just generic sightseeing, (5) whether each day respects the traveler profile above, if one was given — the stops-per-day target and any mobility or family constraints, (6) whether every food stop actually fits the traveler's dietary needs above, if any were given — a stop they could not eat at is a defect even if the rest of the day is good.
-
+${formatPlaceConflicts(params.placeConflicts ?? [], params.travelFindings ?? [])}
 If it already looks good, respond with exactly: {"issues":[],"revisedDays":null}
 Otherwise, respond with the specific issues found and a corrected "days" array in the same shape as the input, fixing those issues.
 

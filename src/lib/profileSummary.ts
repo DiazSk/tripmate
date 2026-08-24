@@ -1,11 +1,9 @@
 import type { CrowdPreference, EnergyLevel, ExplorerStyle } from "./types";
-import type { TierId } from "./tiers";
 
 export interface DurableSummaryInput {
   explorerStyle: ExplorerStyle;
   energy: EnergyLevel;
   crowds: CrowdPreference;
-  tier: TierId;
   topPriorities: string[];
 }
 
@@ -34,12 +32,6 @@ const CROWDS_LABEL: Record<CrowdPreference, string> = {
   avoid: "Avoids crowds",
 };
 
-const TIER_LABEL: Record<TierId, string> = {
-  budget: "Budget",
-  midrange: "Mid-range",
-  luxury: "Luxury",
-};
-
 /**
  * One line naming the remembered preferences being applied to this trip. It exists so the
  * expander is the explanation of something visible rather than a hidden control — a
@@ -55,7 +47,6 @@ export function summarizeDurable(values: DurableSummaryInput): string {
     STYLE_LABEL[values.explorerStyle],
     ENERGY_LABEL[values.energy],
     CROWDS_LABEL[values.crowds],
-    TIER_LABEL[values.tier],
     priorities,
   ].join(" · ");
 }

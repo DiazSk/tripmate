@@ -61,6 +61,10 @@ export default async function TripPrintPage({ params }: { params: Promise<{ id: 
   // two would let the day numbers fail to sum to the trip number in a document whose whole
   // purpose is to be checked line by line. This is a plan, so it reports planned cost.
   const planned = days.reduce((sum, day) => sum + dayPlanned(day), 0);
+  // Stated as its own term, deliberately outside the day sum above: the per-day figures still add
+  // up to `planned` exactly, which is what makes this document checkable line by line. Absent on
+  // trips with no origin and on rows saved before it was collected.
+  const flights = trip.itinerary.flightCostUsd ?? 0;
 
   // `pt-10 sm:pt-12` clears the fixed nav on screen, matching TripsView; `print:pt-0` drops it on
   // paper, where the print block hides the nav and the padding is only wasted margin.
@@ -74,7 +78,16 @@ export default async function TripPrintPage({ params }: { params: Promise<{ id: 
           {tier ? ` · ${tier}` : ""}
         </p>
         <p className="mt-1 text-neutral-600">
-          Planned {formatMoney(planned)} of a {formatMoney(trip.budget)} budget
+          {flights > 0 ? (
+            <>
+              Planned {formatMoney(planned)} + {formatMoney(flights)} flights ={" "}
+              {formatMoney(planned + flights)} of a {formatMoney(trip.budget)} budget
+            </>
+          ) : (
+            <>
+              Planned {formatMoney(planned)} of a {formatMoney(trip.budget)} budget
+            </>
+          )}
         </p>
         <p className="mt-3 text-sm text-neutral-500 print:hidden">
           Print or save as PDF: ⌘P / Ctrl+P

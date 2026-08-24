@@ -21,6 +21,10 @@ export interface ArrivalPoint {
   distanceKm: number;
   /** Sorts before distance. 0 for an international airport, 1 for anything else. */
   tier: number;
+  /** Bare code, separate from `name` — a flight search needs "KIX", not the display string it's
+   *  embedded in. `null` for rail, and for an airport OSM never tagged (rare, given the query's
+   *  own `["iata"]` filter already requires the tag to exist). */
+  iata: string | null;
 }
 
 /** Two ranges, because the two kinds sit at different distances from the city they serve.
@@ -116,12 +120,30 @@ function kindOf(tags: Record<string, string>): ArrivalPointKind | null {
  *  stations because those are nearer would be sorting by the wrong thing. */
 const KIND_RANK: Record<ArrivalPointKind, number> = { airport: 0, rail: 1 };
 
+/** How much farther a better-tier airport may reach before distance wins instead — see the sort
+ *  in `parseArrivalPoints` for the measured cases this separates. */
+const MAX_TIER_OVERRIDE_KM = 25;
+
 /** Distance is the wrong first sort for airports, and the failure is specific: Charles de Gaulle
  *  is 23km from central Paris while Le Bourget (business aviation) is 13km and Villacoublay
  *  (military) 15km, so ranking on distance alone dropped CDG off a three-slot list. OSM marks the
- *  distinction, so use it — international first, then everything else, then distance within each. */
-function isInternational(tags: Record<string, string>): boolean {
-  return /international/i.test(`${tags.aerodrome ?? ""} ${tags["aerodrome:type"] ?? ""}`);
+ *  distinction, so use it — international first, then everything else, then distance within each.
+ *
+ *  "International" from OSM's own `aerodrome`/`aerodrome:type` tag is necessary but not
+ *  sufficient, and the failure this time was the opposite of Le Bourget's: Seattle's Boeing
+ *  Field — a general-aviation field with almost no scheduled passenger service — carries
+ *  `aerodrome:type=international` because its *official* name is "King County International
+ *  Airport", and beat the real Sea-Tac on distance (9km vs 18km) the same way Le Bourget nearly
+ *  beat CDG. Verified live against OSM: Boeing Field has that tag and nothing else; Sea-Tac,
+ *  Heathrow and Charles de Gaulle all additionally carry a `rank_aci:*` tag — Airports Council
+ *  International's own top-world-airports-by-passenger-volume ranking, imported for genuinely
+ *  busy hubs and absent from Boeing Field and Le Bourget alike. That tag is the tie-break: a
+ *  hub with real passenger volume outranks one that merely has "international" in its paperwork.
+ */
+function airportTier(tags: Record<string, string>): number {
+  if (Object.keys(tags).some((k) => k.startsWith("rank_aci"))) return 0;
+  if (/international/i.test(`${tags.aerodrome ?? ""} ${tags["aerodrome:type"] ?? ""}`)) return 1;
+  return 2;
 }
 
 /** How far out each kind is still plausibly the place someone arrived. */
@@ -178,18 +200,36 @@ export function parseArrivalPoints(
     const existing = byName.get(name);
     const km = distanceKm(origin, point);
     if (!existing || km < existing.distanceKm) {
-      const tier = kind === "airport" && !isInternational(tags) ? 1 : 0;
-      byName.set(name, { name, kind, distanceKm: Math.round(km), tier });
+      const tier = kind === "airport" ? airportTier(tags) : 0;
+      byName.set(name, { name, kind, distanceKm: Math.round(km), tier, iata: iata || null });
     }
   }
 
   const ranked = [...byName.values()]
     // The box is square and the range is a circle, so its corners are out of range by up to 40%.
     .filter((p) => p.distanceKm <= RANGE_KM[p.kind])
-    .sort(
-      (a, b) =>
-        KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.tier - b.tier || a.distanceKm - b.distanceKm
-    );
+    .sort((a, b) => {
+      if (a.kind !== b.kind) return KIND_RANK[a.kind] - KIND_RANK[b.kind];
+      if (a.kind === "airport" && a.tier !== b.tier) {
+        // Tier is only allowed to override distance up to a point — measured live, two
+        // opposite failures: CDG (23km) correctly beats Le Bourget (13km, +10km) and Sea-Tac
+        // (18km) correctly beats Boeing Field (9km, +9km), but the SAME "prefer the better tier"
+        // rule with no cap also picked Boston Logan (79km) over Manchester-Boston Regional
+        // (7km, +72km), and Detroit Metro (62km) over Toledo Express (23km, +39km) — both
+        // legitimate, real, locally-served airports that simply carry no "international" tag or
+        // rank_aci. Past this cap the "better tier" one is plausibly a different city's own
+        // airport, not a lesser alternative to the real local hub, so distance decides instead.
+        // ponytail: a fixed km cap, not a metro-boundary lookup — a genuine same-metro pair more
+        // than this far apart still misfires. Revisit with a real "same urban area" signal if
+        // one shows up in OSM broadly; none of `aerodrome`/`aerodrome:type`/`rank_aci` carry it.
+        const better = a.tier < b.tier ? a : b;
+        const worse = a.tier < b.tier ? b : a;
+        if (better.distanceKm - worse.distanceKm <= MAX_TIER_OVERRIDE_KM) return a.tier - b.tier;
+      } else if (a.tier !== b.tier) {
+        return a.tier - b.tier;
+      }
+      return a.distanceKm - b.distanceKm;
+    });
 
   // Quotas rather than one cap, so airports cannot crowd out the station the traveler is far more
   // likely to have actually arrived at. Whatever one kind doesn't use, the other may take.

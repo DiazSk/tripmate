@@ -264,6 +264,8 @@ const SPECS: FixtureSpec[] = [
         departureTime: "11:00",
         departurePoint: null,
         stayBooked: "Hotel Ronda Sant Pere (already paid)",
+        // Same reasoning as arrivalPoint/departurePoint above: not what this fixture tests.
+        originCity: null,
       },
     },
   },

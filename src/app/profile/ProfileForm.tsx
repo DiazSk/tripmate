@@ -12,7 +12,6 @@ import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/Cho
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
 import InterestPicker from "@/components/InterestPicker";
-import TierPicker from "@/components/TierPicker";
 import DietaryPicker from "@/components/DietaryPicker";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
@@ -25,14 +24,12 @@ import type {
   GroupType,
   TripSummary,
 } from "@/lib/types";
-import type { TierId } from "@/lib/tiers";
 
 const DEFAULTS: TravelerProfile = {
   group: "solo",
   explorerStyle: "mixed",
   energy: "moderate",
   crowds: "mixed",
-  tier: "midrange",
   priorities: [],
   topPriorities: [],
   dietary: { tags: [], note: "" },
@@ -207,7 +204,7 @@ function Memories({ trips }: { trips: TripSummary[] }) {
 
 /**
  * Where the durable traveler traits are actually owned. The plan wizard asks only what
- * changes per trip, so without this page explorer style, energy, crowds, tier, priorities
+ * changes per trip, so without this page explorer style, energy, crowds, priorities
  * and dietary needs would be set once and never changeable.
  */
 export default function ProfileForm({
@@ -404,15 +401,6 @@ export default function ProfileForm({
                 options={[...CROWD_PREFERENCES]}
                 selected={profile.crowds}
                 onSelect={(v: CrowdPreference) => set("crowds", v)}
-              />
-            </Section>
-
-            <Section title="Spending style">
-              <TierPicker
-                days={null}
-                budget={0}
-                selected={profile.tier}
-                onSelect={(v: TierId) => set("tier", v)}
               />
             </Section>
 
