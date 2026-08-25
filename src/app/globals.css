@@ -236,6 +236,51 @@ body {
   display: none;
 }
 
+/* --- Day and night on the globe ----------------------------------------------------------
+
+   The world lights itself for whichever stop is selected: click a 9 PM dinner and the city goes
+   to night, step Play tour back to a 7 AM breakfast and it comes up again.
+
+   `mix-blend-mode: multiply` for every phase, with only `background-color` changing between
+   them. That is deliberate: `mix-blend-mode` is not an animatable property — it snaps — so a
+   per-phase blend mode would have made the crossfade impossible and there would be a jump cut in
+   the middle of a camera flight. Multiply is the one mode that works for all three tinted
+   phases, because all three are the same operation on daylight photography: darken it and pull
+   it toward a colour. A fully transparent multiply layer is a no-op, which is what makes `day`
+   free rather than a fourth special case.
+
+   Alphas are tuned against the route arcs, not just the ground. The arcs live inside the Cesium
+   canvas and so get multiplied too; push `night` much past this and they stop reading as lines.
+
+   The reduced-motion blanket rule above already collapses this transition to a snap, which is
+   the correct behaviour and needs no rule of its own. */
+.globe-tint {
+  mix-blend-mode: multiply;
+  background-color: transparent;
+  transition: background-color 900ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Daylight is the absence of a tint — the tiles are already daylight photography, and anything
+   added here would only be a worse version of what was photographed. No rule; `transparent`
+   above is the whole of `[data-phase="day"]`. */
+
+/* Low warm sun, barely there. Dawn is short and the difference the traveller cares about is
+   "not dark yet", so this is the lightest touch of the three. */
+.globe-tint[data-phase="dawn"] {
+  background-color: rgb(255 188 152 / 0.4);
+}
+
+/* Golden hour, and the most flattering of the four — worth being the strongest warm tint. */
+.globe-tint[data-phase="dusk"] {
+  background-color: rgb(255 146 84 / 0.52);
+}
+
+/* Deep blue rather than grey or black. Multiplying toward neutral just underexposes the photo
+   and reads as a dimmed screen; the hue shift is what makes it read as night. */
+.globe-tint[data-phase="night"] {
+  background-color: rgb(46 68 128 / 0.7);
+}
+
 /* --- The map on a phone -----------------------------------------------------------------
    Below `sm` the docked panel is full-bleed, so two things are true at once: the globe is
    invisible, and the control stack has nowhere to sit that isn't on top of the panel. That
@@ -556,6 +601,46 @@ body {
 
 .marker-title-card:focus-visible {
   outline: none;
+}
+
+/* The keyboard focus indicator, written here rather than as utilities at the call sites — the
+   same move `.glass-control` makes for hover, and for the same reason: the utilities did nothing.
+
+   Two separate failures put it here, both measured, not assumed.
+
+   `ring-*` is out because it compiles to `box-shadow` and has already silently lost in this
+   project. The landing hero's button matched `:focus-visible` while every ring slot stayed
+   `rgba(0,0,0,0)` — no indicator, in any colour. Three causes were tested and ruled out and the
+   real one was never found; see the long note in `blue-hour/Hero.tsx`. The plan wizard's submit
+   button did paint its ring, but at `ring-accent/50` it composited to rgb(132,99,46): 2.53:1
+   against the button fill and 2.60:1 against the card, failing WCAG 2.2 SC 1.4.11 on both sides.
+
+   `focus-visible:outline-accent` then failed differently and more quietly. The utility generates
+   correctly — `.focus-visible\:outline-accent:focus-visible { outline-color: var(--accent) }` is
+   in the built stylesheet — and the class was on the element, yet the computed `outline-color`
+   stayed at Chrome's default `rgba(255,255,255,0.7)` while `focus-visible:outline-2` and
+   `focus-visible:outline-offset-2` from the same class string both applied. Width and offset
+   landed; only the colour did not. Cause unresolved, and deliberately not chased further: plain
+   unlayered CSS outranks any `@layer`-emitted utility, so this rule cannot lose the same way.
+
+   Full-opacity accent offset clear of the fill, so the indicator sits against the dark panel
+   where it has real contrast rather than amber-on-amber, and stays the accent colour DESIGN.md
+   asks focus to be. */
+.focus-ring:focus-visible {
+  outline-width: 2px;
+  outline-style: solid;
+  outline-color: var(--accent);
+  outline-offset: 2px;
+  /* Longhands, not the `outline` shorthand, and the reason is worth keeping. While this rule was
+     being verified the computed colour kept falling through to `currentColor` — white on Back
+     (`text-foreground/70`), near-black on Next (`text-accent-foreground`, effectively invisible
+     against the card) — while width and offset from the same block applied. That turned out to be
+     a stale stylesheet in the dev server, not a cascade or `var()` problem: it cleared only after
+     `rm -rf .next`, and measures rgb(251,152,38) at 6.58:1 against the panel now. Two things
+     survive from it. Editing this file needs a hard restart before you trust a measurement, or
+     you will debug a rule the browser never loaded. And `currentColor` is what an incomplete
+     outline decays to, which on an accent-filled button is a silent, invisible focus indicator —
+     so the colour is stated explicitly rather than left to inherit. */
 }
 
 /* --- The day label ----------------------------------------------------------------------
@@ -1439,16 +1524,31 @@ body {
 }
 
 
-/* Geocoder typeahead dropdown — used under DestinationSearch, embedded both above the
-   plan-step trip-input console and above ItineraryCard's day-tab row. Floats independent
-   of whatever glass panel it sits over, so it stays legible regardless. */
+/* Geocoder typeahead dropdown — used under DestinationSearch, currently embedded above the
+   plan-step trip-input console (its one call site; an older ItineraryCard exploratory-search
+   use this comment used to also name has since been removed from that component). Floats
+   independent of whatever glass panel it sits over, so it stays legible regardless of
+   ancestor — which is why its own text tokens are redefined here rather than left to inherit,
+   the same move `.glass-itinerary` and `.dashboard-page` make for the same reason.
+   `--surface-deep-rgb` at 0.95, not the independently-invented near-black this used to be:
+   the intent ("look the same regardless of what's under it") only asked for near-opaque, not
+   for a colour the palette doesn't otherwise use. */
 .geo-suggest-dropdown {
-  background: rgba(10, 14, 23, 0.95);
+  background: rgb(var(--surface-deep-rgb) / 0.95);
   border: 1px solid rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(20px);
   border-radius: 12px;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
   z-index: 50;
+  --foreground: #ffffff;
+  /* Slate-400, not `.glass-itinerary`'s slate-300: that panel sits at 0.62 alpha, translucent
+     enough for bright terrain to push a lighter grey under 4.5:1, which is why it needed the
+     lighter tone. This box is 0.95 — near-opaque, the same regime `.dashboard-page`'s solid
+     background is in, and that block already uses slate-400 at this opacity tier. Measured
+     against this box's own resolved background (not assumed from the `.dashboard-page`
+     precedent): 5.6:1, clearing AA with margin, on both dropdowns that share this class — the
+     destination suggestions and the (96-row) time picker alike. */
+  --muted: #94a3b8;
 }
 
 /* App-wide "TripMate" / "My memories" header — floats directly over the globe
