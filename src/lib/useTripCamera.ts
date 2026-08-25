@@ -8,7 +8,8 @@ import { PlaceDetail, Stop } from "./types";
 export type GeocodeOutcome = "found" | "missed" | "unreachable";
 
 export function useTripCamera(destination: string, tripId?: string) {
-  const { flyToDestination, flyToPlace, showHighways, setActiveStop } = useMapCamera();
+  const { flyToDestination, flyToPlace, showHighways, setActiveStop, reframeRoute } =
+    useMapCamera();
   const [destinationCoords, setDestinationCoords] = useState<{
     lat: number;
     lon: number;
@@ -124,9 +125,16 @@ export function useTripCamera(destination: string, tripId?: string) {
 
   const closeDetail = useCallback(() => {
     setSelectedStop(null);
+    // Back to the day that is drawn, not out to the city. Flying to `destinationCoords` was the
+    // original behaviour and it put the camera 15km up over the whole destination at nadir —
+    // which passed for "back out" only while a day's framing looked roughly the same. A day now
+    // has its own heading and pitch, so that flight visibly discarded the view being returned to.
+    // The destination flight is still the fallback for the one case with no route behind the
+    // panel: a stop detail opened on the home page before a trip has been drawn.
+    if (reframeRoute()) return;
     if (destinationCoords)
       flyToDestination(destinationCoords.lat, destinationCoords.lon, destinationCoords.name);
-  }, [destinationCoords, flyToDestination]);
+  }, [reframeRoute, destinationCoords, flyToDestination]);
 
   return {
     /** Exposed for the arrive/depart pickers, which need somewhere to look up airports near.
