@@ -150,6 +150,13 @@ interface MapCameraContextValue {
    * prop on `StopList`, on `PlaceDetailPanel`, and on whatever opens a stop next.
    */
   setActiveStop: (stop: { lat: number; lng: number; name: string; time?: string }) => void;
+  /**
+   * Fly back to the framing of whatever route is currently drawn.
+   *
+   * Returns false when there is no route to go back to, so a caller can fall back to something
+   * else — the home page can have a stop detail open with no trip drawn behind it yet.
+   */
+  reframeRoute: () => boolean;
 }
 
 const MapCameraContext = createContext<MapCameraContextValue | null>(null);
@@ -259,6 +266,10 @@ const HIGHWAY_HEIGHT_M = 25;
 const PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32"><path d="M12 .8C6 .8 1.2 5.6 1.2 11.6c0 8 10.8 19.6 10.8 19.6s10.8-11.6 10.8-19.6C22.8 5.6 18 .8 12 .8z" fill="#FF3B30" stroke="#C1271F" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="11.6" r="4.2" fill="#fff"/></svg>`;
 const PIN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PIN_SVG)}`;
 
+/** Cesium is only ever reached through `await import("cesium")`, so the helpers below take the
+ *  module as a parameter rather than importing it — same contract as mapRoute's. */
+type CesiumModule = typeof import("cesium");
+
 type Flight = [
   lat: number,
   lng: number,
@@ -276,11 +287,144 @@ interface TripRouteRequest {
   panelVisible: boolean;
 }
 
+/**
+ * The days a `showTripRoute` call actually puts on screen — the focused one if it has stops in it,
+ * otherwise every day. The camera frames these, the height probe samples these, and the arc-apex
+ * reservation walks these, so the rule lives in one place rather than three.
+ */
+function drawnDaysOf(days: RouteStop[][], focusDay: number | null): RouteStop[][] {
+  return focusDay !== null && days[focusDay]?.length ? [days[focusDay]] : days;
+}
+
+/**
+ * Fly the camera to the framing for a drawn route, without touching any geometry.
+ *
+ * Lifted out of `showTripRoute` so it can be replayed. Closing a stop's detail panel used to fly
+ * out to the destination at `DESTINATION_HEIGHT_M` — a 15km nadir view of the whole city — which
+ * was survivable while a day's framing was also near-nadir and looked much the same. It stopped
+ * being survivable once a day got a heading and a pitch of its own (`routeViewHeadingDeg`,
+ * `ROUTE_FRAME_PITCH_DEG`): backing out of a stop threw away the side-on view of the day and
+ * landed somewhere that read as the map having forgotten which day was open.
+ */
+function flyToRouteFraming(
+  viewer: Viewer,
+  Cesium: CesiumModule,
+  days: RouteStop[][],
+  focusDay: number | null,
+  panelVisible: boolean,
+  routeAltitudeM: number
+) {
+      // Frame the focused day if there is one, otherwise the whole trip. Selecting a day is an
+      // explicit "show me this", so this deliberately overrides wherever the user had dragged
+      // the camera. The caller starts this before its own height sampling, since framing needs no
+      // heights and the 2s flight covers the sampling latency.
+      const drawnDays = drawnDaysOf(days, focusDay);
+      const drawnStops = drawnDays.flat();
+      const drawnPositions = drawnStops.map((st) =>
+        Cesium.Cartesian3.fromDegrees(st.lng, st.lat)
+      );
+
+      // The stops *and* the apex of every arc between them. Framing the stops alone was right
+      // while arcs bowed 180m; they now peak at a fraction of the hop's ground length, so a
+      // cross-city day arches kilometres up and the camera cut the tops off — worse at
+      // `ROUTE_FRAME_PITCH_DEG`, which trades frame height for exactly the elevation this
+      // sphere now has to contain. Grouped by day rather than run across the flat list: two
+      // consecutive days are joined in `flat` by a pair that no arc is ever drawn between, and
+      // reserving room for that phantom hop would pull the whole trip's overview back.
+      //
+      // The apex is the arc's own midpoint height (see `arcPositionsAt`), read off the previous
+      // route's altitude for the same reason the geometry is drawn at it — the real sample is
+      // seconds away and consecutive days of one trip share a city. A degenerate hop that will
+      // draw no arc at all still contributes `MIN_ARC_LIFT_M`, which is 80m of slack on a frame
+      // measured in kilometres.
+      const framePositions = [...drawnPositions];
+      for (const stops of drawnDays) {
+        for (let i = 1; i < stops.length; i++) {
+          const a = stops[i - 1];
+          const b = stops[i];
+          const span = Cesium.Cartesian3.distance(
+            Cesium.Cartesian3.fromDegrees(a.lng, a.lat),
+            Cesium.Cartesian3.fromDegrees(b.lng, b.lat)
+          );
+          framePositions.push(
+            Cesium.Cartesian3.fromDegrees(
+              (a.lng + b.lng) / 2,
+              (a.lat + b.lat) / 2,
+              routeAltitudeM + STEM_HEIGHT_M + arcLift(span)
+            )
+          );
+        }
+      }
+      const sphere = Cesium.BoundingSphere.fromPoints(framePositions);
+      const radius = Math.max(sphere.radius, MIN_ROUTE_RADIUS_M);
+      // Aim at the middle of the strip the panel leaves, not the middle of the viewport — see
+      // `frameRouteBesidePanel`. Measured off the panel's own box rather than assumed from its
+      // width classes, so Focus Mode's wider 62% split and any future width are handled without
+      // this knowing about either.
+      //
+      // Keyed on the panel actually being there, not on whether a day is focused: collapsed, the
+      // panel is a pill in a corner and aiming beside it would shove the route left of an
+      // otherwise empty screen.
+      const viewWidth = viewer.scene.canvas.clientWidth;
+      const panelLeft =
+        panelVisible && window.innerWidth >= 640
+          ? (document.querySelector(".docked-panel")?.getBoundingClientRect().left ?? viewWidth)
+          : viewWidth;
+      const { biasM, rangeM } = frameRouteBesidePanel(
+        radius,
+        viewWidth,
+        panelLeft,
+        horizontalTanHalfFov(viewer)
+      );
+      // Face the route across its long axis rather than down it — see `routeViewHeadingDeg`.
+      const headingDeg = routeViewHeadingDeg(drawnStops);
+      const heading = Cesium.Math.toRadians(headingDeg);
+
+      // The panel bias has to run along the camera's own *right*, not along world east.
+      //
+      // Those were the same vector for as long as the heading was hardcoded to north, and the
+      // bias was written as "shove the aim point east" on that basis. They stop being the same
+      // the moment the camera turns: at heading 90 world east is straight into the screen, so an
+      // east-shifted aim point would push the route away from the camera instead of sideways out
+      // from under the panel, and the framing this bias exists for would silently stop working.
+      //
+      // Screen-right in the local frame is (cos h, -sin h) over (east, north) — at h = 0 that is
+      // east, which is exactly the old behaviour, so a north-facing route is bit-identical.
+      const enu = Cesium.Transforms.eastNorthUpToFixedFrame(sphere.center);
+      const east = Cesium.Cartesian3.fromCartesian4(
+        Cesium.Matrix4.getColumn(enu, 0, new Cesium.Cartesian4())
+      );
+      const north = Cesium.Cartesian3.fromCartesian4(
+        Cesium.Matrix4.getColumn(enu, 1, new Cesium.Cartesian4())
+      );
+      const right = Cesium.Cartesian3.subtract(
+        Cesium.Cartesian3.multiplyByScalar(east, Math.cos(heading), new Cesium.Cartesian3()),
+        Cesium.Cartesian3.multiplyByScalar(north, Math.sin(heading), new Cesium.Cartesian3()),
+        new Cesium.Cartesian3()
+      );
+      const target = Cesium.Cartesian3.add(
+        sphere.center,
+        Cesium.Cartesian3.multiplyByScalar(right, biasM, new Cesium.Cartesian3()),
+        new Cesium.Cartesian3()
+      );
+      viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, radius), {
+        offset: new Cesium.HeadingPitchRange(
+          heading,
+          Cesium.Math.toRadians(ROUTE_FRAME_PITCH_DEG),
+          rangeM
+        ),
+        duration: 2.0,
+      });
+}
+
 export function MapCameraProvider({ children }: { children: ReactNode }) {
   const viewerRef = useRef<Viewer | null>(null);
   const markerRef = useRef<Entity | null>(null);
   const pendingRef = useRef<Flight | null>(null);
   const pendingRouteRef = useRef<TripRouteRequest | null>(null);
+  /** The last route asked for, kept after it is drawn rather than cleared like `pendingRouteRef`,
+   *  so `reframeRoute` can replay its framing without rebuilding any geometry. */
+  const lastRouteRef = useRef<TripRouteRequest | null>(null);
   const routeEntitiesRef = useRef<Entity[]>([]);
   /** Altitude the current route was drawn at, so new geometry lands on the arcs. */
   const routeAltitudeRef = useRef(0);
@@ -449,6 +593,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       // Published before the viewer check: the cards are plain DOM and cost nothing to mount
       // early, and they stay hidden until the per-frame loop has a viewer to project them with.
       routeStopsRef.current = flat;
+      lastRouteRef.current = { days, focusedDay: focusDay, panelVisible, soloFocus };
       setRouteStops(flat);
       // Only for days that will actually be drawn. Under `soloFocus` the others have no route
     // under them, and a "Day 4" badge hanging over bare imagery names nothing.
@@ -481,110 +626,14 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         routeGeometriesRef.current = [];
         if (flat.length === 0) return;
 
-        // Frame the focused day if there is one, otherwise the whole trip. Selecting a day is an
-        // explicit "show me this", so this deliberately overrides wherever the user had dragged
-        // the camera. Started before the height sampling below, since framing needs no heights
-        // and the 2s flight covers the sampling latency.
-        // The days actually being drawn, which is also exactly what the camera should frame and
-        // what the height sample should probe — one set, so the three cannot disagree.
-        const drawnDays =
-          focusDay !== null && days[focusDay]?.length ? [days[focusDay]] : days;
-        const drawnStops = drawnDays.flat();
-        const drawnPositions = drawnStops.map((st) =>
-          Cesium.Cartesian3.fromDegrees(st.lng, st.lat)
-        );
+        flyToRouteFraming(viewer, Cesium, days, focusDay, panelVisible, routeAltitudeRef.current);
 
-        // The stops *and* the apex of every arc between them. Framing the stops alone was right
-        // while arcs bowed 180m; they now peak at a fraction of the hop's ground length, so a
-        // cross-city day arches kilometres up and the camera cut the tops off — worse at
-        // `ROUTE_FRAME_PITCH_DEG`, which trades frame height for exactly the elevation this
-        // sphere now has to contain. Grouped by day rather than run across the flat list: two
-        // consecutive days are joined in `flat` by a pair that no arc is ever drawn between, and
-        // reserving room for that phantom hop would pull the whole trip's overview back.
-        //
-        // The apex is the arc's own midpoint height (see `arcPositionsAt`), read off the previous
-        // route's altitude for the same reason the geometry is drawn at it — the real sample is
-        // seconds away and consecutive days of one trip share a city. A degenerate hop that will
-        // draw no arc at all still contributes `MIN_ARC_LIFT_M`, which is 80m of slack on a frame
-        // measured in kilometres.
-        const framePositions = [...drawnPositions];
-        for (const stops of drawnDays) {
-          for (let i = 1; i < stops.length; i++) {
-            const a = stops[i - 1];
-            const b = stops[i];
-            const span = Cesium.Cartesian3.distance(
-              Cesium.Cartesian3.fromDegrees(a.lng, a.lat),
-              Cesium.Cartesian3.fromDegrees(b.lng, b.lat)
-            );
-            framePositions.push(
-              Cesium.Cartesian3.fromDegrees(
-                (a.lng + b.lng) / 2,
-                (a.lat + b.lat) / 2,
-                routeAltitudeRef.current + STEM_HEIGHT_M + arcLift(span)
-              )
-            );
-          }
-        }
-        const sphere = Cesium.BoundingSphere.fromPoints(framePositions);
-        const radius = Math.max(sphere.radius, MIN_ROUTE_RADIUS_M);
-        // Aim at the middle of the strip the panel leaves, not the middle of the viewport — see
-        // `frameRouteBesidePanel`. Measured off the panel's own box rather than assumed from its
-        // width classes, so Focus Mode's wider 62% split and any future width are handled without
-        // this knowing about either.
-        //
-        // Keyed on the panel actually being there, not on whether a day is focused: collapsed, the
-        // panel is a pill in a corner and aiming beside it would shove the route left of an
-        // otherwise empty screen.
-        const viewWidth = viewer.scene.canvas.clientWidth;
-        const panelLeft =
-          panelVisible && window.innerWidth >= 640
-            ? (document.querySelector(".docked-panel")?.getBoundingClientRect().left ?? viewWidth)
-            : viewWidth;
-        const { biasM, rangeM } = frameRouteBesidePanel(
-          radius,
-          viewWidth,
-          panelLeft,
-          horizontalTanHalfFov(viewer)
-        );
-        // Face the route across its long axis rather than down it — see `routeViewHeadingDeg`.
-        const headingDeg = routeViewHeadingDeg(drawnStops);
-        const heading = Cesium.Math.toRadians(headingDeg);
-
-        // The panel bias has to run along the camera's own *right*, not along world east.
-        //
-        // Those were the same vector for as long as the heading was hardcoded to north, and the
-        // bias was written as "shove the aim point east" on that basis. They stop being the same
-        // the moment the camera turns: at heading 90 world east is straight into the screen, so an
-        // east-shifted aim point would push the route away from the camera instead of sideways out
-        // from under the panel, and the framing this bias exists for would silently stop working.
-        //
-        // Screen-right in the local frame is (cos h, -sin h) over (east, north) — at h = 0 that is
-        // east, which is exactly the old behaviour, so a north-facing route is bit-identical.
-        const enu = Cesium.Transforms.eastNorthUpToFixedFrame(sphere.center);
-        const east = Cesium.Cartesian3.fromCartesian4(
-          Cesium.Matrix4.getColumn(enu, 0, new Cesium.Cartesian4())
-        );
-        const north = Cesium.Cartesian3.fromCartesian4(
-          Cesium.Matrix4.getColumn(enu, 1, new Cesium.Cartesian4())
-        );
-        const right = Cesium.Cartesian3.subtract(
-          Cesium.Cartesian3.multiplyByScalar(east, Math.cos(heading), new Cesium.Cartesian3()),
-          Cesium.Cartesian3.multiplyByScalar(north, Math.sin(heading), new Cesium.Cartesian3()),
-          new Cesium.Cartesian3()
-        );
-        const target = Cesium.Cartesian3.add(
-          sphere.center,
-          Cesium.Cartesian3.multiplyByScalar(right, biasM, new Cesium.Cartesian3()),
-          new Cesium.Cartesian3()
-        );
-        viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, radius), {
-          offset: new Cesium.HeadingPitchRange(
-            heading,
-            Cesium.Math.toRadians(ROUTE_FRAME_PITCH_DEG),
-            rangeM
-          ),
-          duration: 2.0,
-        });
+        // The same days the framing works on, because the height probe below needs their ground
+        // positions and nothing else here does. Through `drawnDaysOf` so the camera and the probe
+        // cannot disagree about which days are on screen.
+        const drawnPositions = drawnDaysOf(days, focusDay)
+          .flat()
+          .map((st) => Cesium.Cartesian3.fromDegrees(st.lng, st.lat));
 
         // Drawn immediately at the last route's altitude and corrected once the real sample lands,
         // rather than awaiting first. Height sampling takes ~1.3s alone but several seconds when
@@ -1025,6 +1074,41 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  /**
+   * Re-fly the current route's framing.
+   *
+   * Exists for the way back out of a stop: closing the detail panel used to fly to the trip's
+   * *destination*, which is a 15km nadir view of the whole city. That was fine while a day's
+   * framing looked much the same, and stopped being fine once a day got its own heading and pitch
+   * — backing out of a stop threw away the side-on view of the day and read as the map losing
+   * track of which day was open.
+   *
+   * Reframes rather than redrawing: `showTripRoute` would rebuild every entity and, worse, clear
+   * `activeIndex` and `hoveredIndex`, so going back to the itinerary would drop the selection that
+   * lights the row and holds the day/night tint.
+   */
+  const reframeRoute = useCallback(() => {
+    const request = lastRouteRef.current;
+    if (!request) return false;
+    cancelPeek();
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return false;
+    import("cesium").then((Cesium) => {
+      if (viewer.isDestroyed()) return;
+      // `routeAltitudeRef` is the real sampled altitude by now, rather than the previous route's
+      // stand-in that the first draw had to make do with — so this framing is the better of the two.
+      flyToRouteFraming(
+        viewer,
+        Cesium,
+        request.days,
+        request.focusedDay,
+        request.panelVisible,
+        routeAltitudeRef.current
+      );
+    });
+    return true;
+  }, [cancelPeek]);
+
   const resetToHome = useCallback(() => {
     cancelPeek();
     const viewer = viewerRef.current;
@@ -1044,6 +1128,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     // Otherwise the day's marker cards survive a navigation back to the landing page — the
     // globe never unmounts, so nothing else clears them.
     routeStopsRef.current = [];
+    lastRouteRef.current = null;
     setRouteStops([]);
     setRouteClusters([]);
     setFocusedDay(null);
@@ -1106,6 +1191,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       activeIndex,
       setActiveIndex,
       setActiveStop,
+      reframeRoute,
     }),
     [
       setViewer,
@@ -1124,9 +1210,10 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       setHoveredDay,
       hoveredIndex,
       activeIndex,
-      // Stable — `useCallback(…, [])` — so this never re-runs the memo. Listed only because
+      // Stable — `useCallback(…, [])` — so these never re-run the memo. Listed only because
       // eslint knows `useState` setters are stable and cannot know that about a callback.
       setActiveStop,
+      reframeRoute,
     ]
   );
 
