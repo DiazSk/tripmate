@@ -50,6 +50,7 @@ import { upcomingStopsAfter } from "@/lib/itinerary";
 import { formatMoney } from "@/lib/format";
 import type { ArrivalPoint } from "@/lib/arrivalPoints";
 import { devLabel } from "@/lib/devInspector";
+import { clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import type { AccessibilityNeeds } from "@/lib/types";
 import { readEventStream } from "@/lib/eventStream";
@@ -387,6 +388,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * and the plan is one click behind the panel's arrow.
    */
   const [planCollapsed, setPlanCollapsed] = useState(true);
+  /** 0-based days a chat turn changed while the traveler was reading a different one. Owned here
+   *  rather than in the card because the chat that produces them lives beside it, not inside it. */
+  const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
   const [stages, setStages] = useState<StageProgress[]>(
@@ -1579,6 +1583,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   scope={focus.target.scope}
                   sessionId={lastSessionId}
                   dirty={focus.dirty}
+                  onDaysModified={(days) =>
+                    setUnseenChangedDays((prev) =>
+                      markUnseenDays(days, focus.target?.dayIndex ?? activeDayIndex, prev)
+                    )
+                  }
                   onDraftChange={focus.applyDraft}
                   onCancel={focus.cancel}
                   onSave={() => {
@@ -1618,7 +1627,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   }}
                   editable
                   activeDayIndex={activeDayIndex}
-                  onActiveDayChange={setActiveDayIndex}
+                  unseenChangedDays={unseenChangedDays}
+                  onActiveDayChange={(next) => {
+                    setActiveDayIndex(next);
+                    // Looking at the day is what marks it read.
+                    setUnseenChangedDays((prev) => clearUnseenDay(prev, next));
+                  }}
                   onEditDay={handleEditDay}
                   // Same window "Refine with AI" opens, just starting on the day whose icon was
                   // clicked: one chat surface with day navigation, rather than a second

@@ -132,6 +132,13 @@ html {
   --route-day-cyan: #22d3ee;
   --route-day-magenta: #f472d0;
 
+  /* The destination's administrative outline. Map-native like route blue and bound by the same
+     rule — never in a panel, chip or button. A cool near-white rather than a hue: the boundary
+     is context for everything else on the map, and any colour of its own would compete with the
+     day ramp it sits underneath. Dashed and semi-transparent in mapCamera, so it reads as a
+     line on a chart rather than a thing standing on the ground. */
+  --city-boundary: #cfe3f5;
+
   /* --- Floating stop markers -----------------------------------------------
      "Location Title Card": no fill, no border, no blur — the opposite of every
      other glass surface in the app, deliberately. A stop's name sits directly
@@ -655,6 +662,25 @@ body {
 
 .marker-day-label:focus-visible {
   outline: none;
+}
+
+/* --- Neighbouring towns ------------------------------------------------------------------
+   The quietest layer on the map: place names around the destination, there to answer "what is
+   that over there" and nothing else. Smaller, lighter and un-tracked next to the day badges, so
+   the eye sorts the three label kinds by weight without being told. Same halo technique as the
+   others — these sit on the same arbitrary photography. */
+.marker-place-label {
+  font-family: var(--font-sans-stack);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: rgb(233 240 248 / 0.62);
+  white-space: nowrap;
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 0.9),
+    0 0 6px rgb(0 0 0 / 0.7);
+  opacity: calc(0.45 + var(--marker-depth, 1) * 0.55);
 }
 
 /* Glass chrome for the map control stack (zoom / 2D-3D / tilt / compass). Same character as

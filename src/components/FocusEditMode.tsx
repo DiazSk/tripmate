@@ -148,6 +148,7 @@ export default function FocusEditMode({
   scope,
   tripId,
   sessionId,
+  onDaysModified,
   dirty,
   saving,
   onDraftChange,
@@ -162,6 +163,8 @@ export default function FocusEditMode({
   tripId?: string | null;
   /** Passed straight through to the chat panel — see EditChatPanel. */
   sessionId?: string | null;
+  /** Also straight through: 1-based days a chat turn changed, for the host's day-tab markers. */
+  onDaysModified?: (days: number[]) => void;
   dirty: boolean;
   saving?: boolean;
   onDraftChange: (next: Itinerary) => void;
@@ -407,6 +410,7 @@ export default function FocusEditMode({
             dayIndex={scope === "day" ? dayIndex : undefined}
             tripId={tripId}
             sessionId={sessionId}
+            onDaysModified={onDaysModified}
             onBusyChange={setBusy}
             onItineraryChange={(next) => {
               // Jump the preview to the first day the turn changed, so a stop moved to another

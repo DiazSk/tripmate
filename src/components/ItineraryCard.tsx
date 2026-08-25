@@ -90,6 +90,7 @@ export default function ItineraryCard({
   activeDayIndex: controlledDayIndex,
   onActiveDayChange,
   animateReveal,
+  unseenChangedDays,
   panelCollapsed = false,
   onMinimize,
 }: {
@@ -119,6 +120,16 @@ export default function ItineraryCard({
    *  REVEAL_STEP_MS. Only ever applies to the initial day (index 0) shown on mount — switching
    *  day tabs (even mid-stagger) always shows the target day in full immediately. */
   animateReveal?: boolean;
+  /**
+   * 0-based days changed by a chat turn the traveler was not looking at, marked with a dot on
+   * the tab until they visit that day.
+   *
+   * A trip-scoped chat routinely moves things on days that are nowhere on screen — ask about day
+   * eight and the knock-on lands on days two and three. The reply says so in a line of text that
+   * then scrolls away, and nothing on the plan itself carries the news afterwards. The dot is
+   * that record, and it survives until the day is actually looked at.
+   */
+  unseenChangedDays?: number[];
   /**
    * Draw the whole trip on the globe without framing any one day — set while the plan panel is
    * collapsed and the map *is* the view.
@@ -601,6 +612,19 @@ export default function ItineraryCard({
                 }`}
               >
                 Day {i + 1}
+                {/* Amber dot: this day changed while you were reading another one. Amber because
+                    it is the interface's one attention colour — and this is on a panel chip, not
+                    on the globe, so the map/interface separation is untouched. Rendered inside
+                    the tab's clip-path, so it is inset rather than hanging off the arrow point. */}
+                {unseenChangedDays?.includes(i) && !isActive && (
+                  <span
+                    aria-hidden="true"
+                    className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle"
+                  />
+                )}
+                {unseenChangedDays?.includes(i) && !isActive && (
+                  <span className="sr-only">{" "}(changed)</span>
+                )}
               </button>
             );
           })}

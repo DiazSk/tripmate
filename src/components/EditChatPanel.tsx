@@ -59,6 +59,7 @@ export default function EditChatPanel({
   tripId,
   sessionId,
   onItineraryChange,
+  onDaysModified,
   onBusyChange,
 }: {
   trip: TripSummary;
@@ -72,10 +73,17 @@ export default function EditChatPanel({
    *  back to a fully-rebuilt prompt, so this is optional rather than required. */
   sessionId?: string | null;
   onItineraryChange: (next: Itinerary) => void;
+  /** 1-based day numbers a turn actually changed, so the host can mark the day tabs the traveler
+   *  is *not* looking at. A trip-scoped chat routinely moves things on days that are nowhere on
+   *  screen, and without this the only record is a line of text that scrolls away. */
+  onDaysModified?: (days: number[]) => void;
   /** Lets the host dim the live preview while a turn is in flight. */
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  /** True while the saved transcript is still on its way, so the empty state does not flash the
+   *  "start a conversation" copy at someone who already has one. */
+  const [loadingHistory, setLoadingHistory] = useState(!!tripId);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +107,46 @@ export default function EditChatPanel({
     setLastConversation(conversation);
     setChatSession(sessionId ?? null);
     setSyncedHash(null);
+    // A different trip is a different transcript, and the one on screen belongs to the old one.
+    // Cleared here rather than in the loading effect for the same reason the session id is:
+    // an effect would commit one render showing the previous trip's conversation.
+    setMessages([]);
+    setLoadingHistory(!!tripId);
   }
+
+  /**
+   * Restore the saved conversation when the panel opens on a trip that has one.
+   *
+   * Only the display is restored — the transcript sent *to the model* is still whatever this
+   * component has in `messages`, which after this effect is the same thing. The CLI session
+   * handle (`chat_session_id`) is what actually carries the model's memory; this carries the
+   * traveler's, which is the half that was missing: reopening the panel used to show an empty
+   * box with no record of what had been asked or what changed.
+   *
+   * Skipped without a `tripId` — the pre-save result view has no row to have saved anything to.
+   * Fail-soft: a transcript that will not load leaves an empty panel, which is exactly where
+   * this feature started, rather than blocking the chat that still works.
+   */
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+    fetch(`/api/trip-chat?tripId=${encodeURIComponent(tripId)}`)
+      .then((r) => (r.ok ? r.json() : { turns: [] }))
+      .then((data: { turns?: ChatMessage[] }) => {
+        if (cancelled) return;
+        // Options are deliberately dropped on restore: they are tappable answers to a question
+        // the model asked in a session that has since moved on, and answering one now would
+        // reply to a turn nobody is waiting on.
+        setMessages((data.turns ?? []).map((t) => ({ ...t, options: undefined })));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -141,6 +188,9 @@ export default function EditChatPanel({
       if (!res.ok) throw new Error(data.error || "Edit failed");
 
       if (data.itinerary) onItineraryChange(data.itinerary);
+      // Reported even when the list is empty — a turn that only answered a question changed no
+      // days, and the host needs to hear that rather than infer it from silence.
+      onDaysModified?.(data.daysModified ?? []);
       // Track whatever actually served this turn, not what we asked for.
       if (data.sessionId) setChatSession(data.sessionId);
       setSyncedHash(data.syncedHash ?? null);
@@ -170,7 +220,11 @@ export default function EditChatPanel({
     // now, so this component no longer positions itself.
     <div className="flex h-full min-h-0 flex-col" {...devLabel("EditChatPanel")}>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
-        {messages.length === 0 && (
+        {loadingHistory && messages.length === 0 && (
+          <p className="text-sm text-muted">Loading your conversation…</p>
+        )}
+
+        {!loadingHistory && messages.length === 0 && (
           <div className="space-y-3">
             <p className="text-sm text-muted">
               Ask for changes, or just think out loud. Everything you don&apos;t mention stays as
