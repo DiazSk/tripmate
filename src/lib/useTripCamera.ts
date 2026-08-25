@@ -76,7 +76,21 @@ export function useTripCamera(destination: string, tripId?: string) {
       // took no emphasis, and the day/night tint reverted to daylight the moment the pointer
       // left the row — so opening an 8:45pm stop from the list put the city back in daylight.
       setActiveStop(stop);
-      flyToPlace(stop.lat, stop.lng, stop.name);
+      // No label, so no red pin — the same call StopMarkerLayer already makes when a stop's card
+      // is clicked on the globe, and for the reason recorded there: the card names the place, so a
+      // pin plus a Cesium label plus a card is one place labelled three times. This path passed
+      // `stop.name` and got all three.
+      //
+      // Safe only because of the declutter promotion in StopMarkerLayer: the card *is* the label
+      // now, and before that promotion the selected stop routinely lost it to a co-located
+      // neighbour — clicking "Crawford Market" left "Private car to Crawford Market" holding the
+      // only card on screen, so removing the pin here on its own would have replaced a duplicate
+      // label with a wrong one. Don't split these two changes.
+      //
+      // Clearing rather than moving the pin is the intended behaviour of a labelless flight (see
+      // `flyTo`), and it is what a marker click has always done. A destination pin comes back on
+      // the way out: `closeDetail` flies to `destinationCoords` with its name.
+      flyToPlace(stop.lat, stop.lng);
       setDetail(null);
       setDetailError(null);
       setDetailLoading(true);

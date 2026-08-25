@@ -127,8 +127,43 @@ export default function StopMarkerLayer() {
               ? [{ kind: "stop" as const, lat: stop.lat, lng: stop.lng, name: stop.name, flatIndex }]
               : []
           );
-    return [...clusters, ...stops];
-  }, [routeStops, routeClusters, focusedDay, hoveredDay, namedDay]);
+    /**
+     * The stop being pointed at goes first of everything — ahead of the day badges too.
+     *
+     * Without this the selected stop loses its own name to whichever neighbour happens to come
+     * earlier in visit order — and it loses it *most* reliably in the case that matters, because
+     * co-located stops are normal rather than rare: a hotel is the transfer, the breakfast and
+     * the evening return, and every trip in the dev database has a day like it. Clicking "Crawford
+     * Market" flew the camera to it and left "Private car to Crawford Market" — the stop before it,
+     * on the identical coordinate — holding the only card on screen. The camera was on the right
+     * building with the wrong name over it.
+     *
+     * Ordering rather than a "never suppress the pointed-at card" exemption, because an exemption
+     * would let two cards stack pixel-for-pixel; this makes the selected one win the slot and the
+     * loser yield it, which is the same trade the scan already makes, just decided in the right
+     * direction.
+     *
+     * Ahead of the clusters is a deliberate reversal of the rule immediately above, and only for
+     * this one card. That rule exists so a day's badge is never suppressed by some stop that
+     * happened to stand where it wanted to be — a fair trade between a group label and an
+     * arbitrary member of the group. It is not a fair trade against the stop the traveller just
+     * asked to look at, and it has to be reversed here rather than left to luck, because the pin
+     * that used to name that stop is gone: `useTripCamera.selectStop` no longer passes a label to
+     * `flyToPlace`, so this card is now the *only* thing that names it. A badge that yields is
+     * also the cheaper loss of the two — `buildDayClusters` hangs it on the cluster's perimeter,
+     * away from the stops, and the placement loop below pulls it back into frame rather than
+     * dropping it, so it is a label about a group with room to move.
+     *
+     * `hoveredIndex ?? activeIndex` — the pair every other paired highlight in the app reads. Both
+     * change at human speed, so this cannot flicker the way ordering by camera distance would.
+     */
+    const pointedAt = hoveredIndex ?? activeIndex;
+    const isPointedAt = (m: Marker) => m.kind === "stop" && m.flatIndex === pointedAt;
+    const ordered = [...clusters, ...stops];
+    return pointedAt === null
+      ? ordered
+      : [...ordered.filter(isPointedAt), ...ordered.filter((m) => !isPointedAt(m))];
+  }, [routeStops, routeClusters, focusedDay, hoveredDay, namedDay, hoveredIndex, activeIndex]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
