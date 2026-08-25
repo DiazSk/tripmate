@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMapCamera } from "@/lib/mapCamera";
-import { dayPhase } from "@/lib/mapRoute";
+import { dayPhase, DayPhase } from "@/lib/mapRoute";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 /**
@@ -75,10 +75,41 @@ function installLodController(
   });
 }
 
+/**
+ * How long a phase has to stay wanted before the world commits to it, in milliseconds.
+ *
+ * Sweeping a pointer down a day's rows points at every stop it crosses, and without this the
+ * planet flicks between daylight and midnight on the way past an evening one. Same number and
+ * same reason as `PEEK_DWELL_MS` in mapCamera, which is this app's existing answer to "a hover
+ * only counts once you have rested on it".
+ *
+ * Deliberately *not* skipped for a click, even though a click is already a decision: 250ms in
+ * front of a 900ms crossfade is imperceptible, and one code path cannot disagree with itself.
+ */
+const PHASE_DWELL_MS = 250;
+
+/**
+ * Hold `wanted` until it has been wanted for `PHASE_DWELL_MS` without changing.
+ *
+ * Keyed on the resolved *phase*, not the stop index, which is what makes it free in the common
+ * case: sweeping five stops that are all afternoon wants `"day"` the whole way and commits
+ * nothing, so there is no delay to feel. Only actually crossing into dusk or night waits — and a
+ * sweep that merely passes over an evening stop cancels the timer before it fires.
+ */
+function useDwelledPhase(wanted: DayPhase): DayPhase {
+  const [phase, setPhase] = useState<DayPhase>("day");
+  useEffect(() => {
+    if (wanted === phase) return;
+    const timer = window.setTimeout(() => setPhase(wanted), PHASE_DWELL_MS);
+    return () => window.clearTimeout(timer);
+  }, [wanted, phase]);
+  return phase;
+}
+
 export default function GlobeBackground({ creditClassName }: { creditClassName?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const creditRef = useRef<HTMLDivElement>(null);
-  const { setViewer, globeWanted, ready, routeStops, activeIndex } = useMapCamera();
+  const { setViewer, globeWanted, ready, routeStops, activeIndex, hoveredIndex } = useMapCamera();
   const viewerInstanceRef = useRef<import("cesium").Viewer | null>(null);
 
   /**
@@ -446,20 +477,26 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
   }, [built]);
 
   /**
-   * How lit the world is, from the clock time of the stop currently selected.
+   * How lit the world should be: the clock time of the stop being pointed at, or failing that the
+   * one selected.
    *
-   * Selection only — `activeIndex`, never `hoveredIndex`. Hovering is a sweep: driving this from
-   * hover would strobe the whole planet between daylight and midnight as the pointer crossed a
-   * list of stops. Selection is a click or a Play-tour step, which is a decision.
+   * Hover first, matching every other paired highlight in the app — `highlightedRow` in
+   * ItineraryCard reads `hoveredIndex ?? activeIndex` too — and matching what people expect,
+   * since `showTripRoute` clears the selection on every day switch, so on a freshly opened day
+   * hover is the *only* thing pointing at anything. This drove off `activeIndex` alone for one
+   * revision, to keep a pointer sweep from strobing the planet; the dwell above is the right
+   * answer to that, and excluding hover was not.
    *
-   * Nothing selected means `undefined` means `"day"` means no tint at all, which is why the
+   * Nothing pointed at means `undefined` means `"day"` means no tint at all, which is why the
    * landing page's decorative globe is unaffected without needing to know about this.
    *
-   * Re-rendering this component on every selection costs nothing new: it already subscribes to
-   * the whole map-camera context, so it re-rendered on hover before this existed. The viewer
-   * itself is built in an effect keyed on `[built]` and is not touched by a re-render.
+   * Re-rendering this component on hover costs nothing new: it already subscribes to the whole
+   * map-camera context, so it re-rendered on hover before this existed. The viewer itself is
+   * built in an effect keyed on `[built]` and is untouched by a re-render.
    */
-  const phase = dayPhase(activeIndex === null ? undefined : routeStops[activeIndex]?.time);
+  const pointedAt = hoveredIndex ?? activeIndex;
+  const wantedPhase = dayPhase(pointedAt === null ? undefined : routeStops[pointedAt]?.time);
+  const phase = useDwelledPhase(wantedPhase);
 
   return (
     <>

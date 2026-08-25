@@ -15,11 +15,13 @@ import type { Cartesian3, Entity, Viewer } from "cesium";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { metresBetween, peekFlightSeconds, peekRangeM } from "@/lib/peekRange";
 import {
+  arcLift,
   buildDayClusters,
   buildRouteGeometry,
   dayColorToken,
   dayVisualState,
   frameRouteBesidePanel,
+  routeViewHeadingDeg,
   RouteCluster,
   RouteGeometry,
   RouteStop,
@@ -195,6 +197,22 @@ const HERO_VIEW = { lng: 8, lat: 22, height: 2_500_000, headingDeg: 5, pitchDeg:
 /** Framing floor for a day's stops, in metres — a lone stop gives a zero-radius sphere, and a
  *  tight cluster gives one small enough that the camera dives into the building mesh. */
 const MIN_ROUTE_RADIUS_M = 400;
+
+/**
+ * Camera pitch when a route is framed, in degrees.
+ *
+ * Was -60, which is 30 degrees off straight down, and at that angle a day's arcs project back
+ * onto the ground line they span: the whole point of lifting them (`ARC_LIFT_RATIO`) is that two
+ * hops over the same ground sit at different heights, and height is exactly what a near-nadir
+ * view throws away. So the overview stayed a tangle while the same route read cleanly the moment
+ * the camera came over. -45 is the compromise, and the same pose the landing-page hero uses:
+ * enough plan to see where the day goes, enough elevation to see the arches as arches.
+ *
+ * Pitching over costs frame height — a metre of altitude maps to more screen at a shallow pitch
+ * than a steep one — which is why the framing sphere below had to grow to include the arc apexes
+ * at the same time. Changing one without the other just clips the arcs off the top instead.
+ */
+const ROUTE_FRAME_PITCH_DEG = -45;
 
 /**
  * Half the camera's *horizontal* field of view, as a tangent, for turning screen pixels into
@@ -454,11 +472,45 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         // and the 2s flight covers the sampling latency.
         // The days actually being drawn, which is also exactly what the camera should frame and
         // what the height sample should probe — one set, so the three cannot disagree.
-        const drawnStops = focusDay !== null && days[focusDay]?.length ? days[focusDay] : flat;
+        const drawnDays =
+          focusDay !== null && days[focusDay]?.length ? [days[focusDay]] : days;
+        const drawnStops = drawnDays.flat();
         const drawnPositions = drawnStops.map((st) =>
           Cesium.Cartesian3.fromDegrees(st.lng, st.lat)
         );
-        const sphere = Cesium.BoundingSphere.fromPoints(drawnPositions);
+
+        // The stops *and* the apex of every arc between them. Framing the stops alone was right
+        // while arcs bowed 180m; they now peak at a fraction of the hop's ground length, so a
+        // cross-city day arches kilometres up and the camera cut the tops off — worse at
+        // `ROUTE_FRAME_PITCH_DEG`, which trades frame height for exactly the elevation this
+        // sphere now has to contain. Grouped by day rather than run across the flat list: two
+        // consecutive days are joined in `flat` by a pair that no arc is ever drawn between, and
+        // reserving room for that phantom hop would pull the whole trip's overview back.
+        //
+        // The apex is the arc's own midpoint height (see `arcPositionsAt`), read off the previous
+        // route's altitude for the same reason the geometry is drawn at it — the real sample is
+        // seconds away and consecutive days of one trip share a city. A degenerate hop that will
+        // draw no arc at all still contributes `MIN_ARC_LIFT_M`, which is 80m of slack on a frame
+        // measured in kilometres.
+        const framePositions = [...drawnPositions];
+        for (const stops of drawnDays) {
+          for (let i = 1; i < stops.length; i++) {
+            const a = stops[i - 1];
+            const b = stops[i];
+            const span = Cesium.Cartesian3.distance(
+              Cesium.Cartesian3.fromDegrees(a.lng, a.lat),
+              Cesium.Cartesian3.fromDegrees(b.lng, b.lat)
+            );
+            framePositions.push(
+              Cesium.Cartesian3.fromDegrees(
+                (a.lng + b.lng) / 2,
+                (a.lat + b.lat) / 2,
+                routeAltitudeRef.current + STEM_HEIGHT_M + arcLift(span)
+              )
+            );
+          }
+        }
+        const sphere = Cesium.BoundingSphere.fromPoints(framePositions);
         const radius = Math.max(sphere.radius, MIN_ROUTE_RADIUS_M);
         // Aim at the middle of the strip the panel leaves, not the middle of the viewport — see
         // `frameRouteBesidePanel`. Measured off the panel's own box rather than assumed from its
@@ -479,17 +531,43 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
           panelLeft,
           horizontalTanHalfFov(viewer)
         );
+        // Face the route across its long axis rather than down it — see `routeViewHeadingDeg`.
+        const headingDeg = routeViewHeadingDeg(drawnStops);
+        const heading = Cesium.Math.toRadians(headingDeg);
+
+        // The panel bias has to run along the camera's own *right*, not along world east.
+        //
+        // Those were the same vector for as long as the heading was hardcoded to north, and the
+        // bias was written as "shove the aim point east" on that basis. They stop being the same
+        // the moment the camera turns: at heading 90 world east is straight into the screen, so an
+        // east-shifted aim point would push the route away from the camera instead of sideways out
+        // from under the panel, and the framing this bias exists for would silently stop working.
+        //
+        // Screen-right in the local frame is (cos h, -sin h) over (east, north) — at h = 0 that is
+        // east, which is exactly the old behaviour, so a north-facing route is bit-identical.
         const enu = Cesium.Transforms.eastNorthUpToFixedFrame(sphere.center);
         const east = Cesium.Cartesian3.fromCartesian4(
           Cesium.Matrix4.getColumn(enu, 0, new Cesium.Cartesian4())
         );
+        const north = Cesium.Cartesian3.fromCartesian4(
+          Cesium.Matrix4.getColumn(enu, 1, new Cesium.Cartesian4())
+        );
+        const right = Cesium.Cartesian3.subtract(
+          Cesium.Cartesian3.multiplyByScalar(east, Math.cos(heading), new Cesium.Cartesian3()),
+          Cesium.Cartesian3.multiplyByScalar(north, Math.sin(heading), new Cesium.Cartesian3()),
+          new Cesium.Cartesian3()
+        );
         const target = Cesium.Cartesian3.add(
           sphere.center,
-          Cesium.Cartesian3.multiplyByScalar(east, biasM, new Cesium.Cartesian3()),
+          Cesium.Cartesian3.multiplyByScalar(right, biasM, new Cesium.Cartesian3()),
           new Cesium.Cartesian3()
         );
         viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, radius), {
-          offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-60), rangeM),
+          offset: new Cesium.HeadingPitchRange(
+            heading,
+            Cesium.Math.toRadians(ROUTE_FRAME_PITCH_DEG),
+            rangeM
+          ),
           duration: 2.0,
         });
 
