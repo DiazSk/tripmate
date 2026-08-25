@@ -258,6 +258,72 @@ const DEFAULT_TAN_HALF_FOV_X = Math.tan(Math.PI / 6);
  */
 const MAX_FIT_SCALE = 2.5;
 
+/**
+ * How much longer a route's long axis has to be than its short one before the heading below
+ * bothers turning. A compact day has no meaningful axis, and a coin-flip between two arbitrary
+ * headings is worse than always facing north — a day-tab click would spin the map for no reason.
+ */
+const MIN_ROUTE_AXIS_RATIO = 1.25;
+
+/**
+ * Which way to face a route, in compass degrees, so its stops spread *across* the frame.
+ *
+ * This was hardcoded to 0 — due north — and that is the single worst angle for the routes this
+ * app actually draws. A day threads a corridor, and looking along a corridor stacks every stop in
+ * it into one line on screen: Mumbai's trip runs almost due north-south, so eight days of arcs
+ * piled into the same few hundred pixels and no amount of lifting them (`ARC_LIFT_RATIO`) or
+ * pitching the camera over could separate them, because the separation was all in the axis the
+ * camera was pointed down. Turned side-on, the same route lays itself out left to right.
+ *
+ * The long axis comes from the principal axis of the stops — the eigenvector of their 2x2
+ * covariance — rather than the bounding box, which answers a different question: a diagonal route
+ * has a near-square box and the box would report no axis at all. Longitude is scaled by cos(lat)
+ * throughout for the same reason `buildDayClusters` does it, or the axis of a route at Reykjavik's
+ * latitude would come out rotated toward east-west.
+ *
+ * Of the two perpendicular headings, the one nearer north wins. Both frame the route identically
+ * — mirrored — so the tiebreak is free, and spending it on "stay as north-up as you can" means an
+ * east-west route keeps facing north exactly as it always did, and only the corridor case turns.
+ *
+ * Returns 0 for anything with no axis worth naming: fewer than two stops, every stop on one
+ * coordinate, or a cluster rounder than `MIN_ROUTE_AXIS_RATIO`.
+ */
+export function routeViewHeadingDeg(stops: RouteStop[]): number {
+  if (stops.length < 2) return 0;
+  const meanLat = stops.reduce((sum, s) => sum + s.lat, 0) / stops.length;
+  const meanLng = stops.reduce((sum, s) => sum + s.lng, 0) / stops.length;
+  const lonScale = Math.max(Math.cos((meanLat * Math.PI) / 180), 0.01);
+
+  let east2 = 0;
+  let north2 = 0;
+  let eastNorth = 0;
+  for (const stop of stops) {
+    const east = (stop.lng - meanLng) * lonScale;
+    const north = stop.lat - meanLat;
+    east2 += east * east;
+    north2 += north * north;
+    eastNorth += east * north;
+  }
+
+  // Eigenvalues of [[east2, eastNorth], [eastNorth, north2]]. These are variances, so the ratio
+  // of axis *lengths* is the square root of their ratio — hence squaring the threshold rather
+  // than rooting the ratio, which keeps this free of a sqrt that only feeds a comparison.
+  const mid = (east2 + north2) / 2;
+  const spread = Math.hypot((east2 - north2) / 2, eastNorth);
+  const major = mid + spread;
+  const minor = mid - spread;
+  if (!(major > 0)) return 0;
+  if (minor > 0 && major / minor < MIN_ROUTE_AXIS_RATIO ** 2) return 0;
+
+  // Angle of the major eigenvector, counter-clockwise from east. Compass bearing counts clockwise
+  // from north instead, hence the 90 - x.
+  const axisDeg = (Math.atan2(2 * eastNorth, east2 - north2) * 90) / Math.PI;
+  const axisBearing = 90 - axisDeg;
+  const candidates = [axisBearing + 90, axisBearing - 90].map((h) => ((h % 360) + 360) % 360);
+  const fromNorth = (h: number) => Math.min(h, 360 - h);
+  return fromNorth(candidates[0]) <= fromNorth(candidates[1]) ? candidates[0] : candidates[1];
+}
+
 export interface RouteFraming {
   /** Metres to shove the aim point east of the route's centre, so the route itself lands in the
    *  free strip rather than under the panel. Zero when there is no panel to clear. */
