@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMapCamera } from "@/lib/mapCamera";
+import { dayPhase } from "@/lib/mapRoute";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 /**
@@ -77,7 +78,7 @@ function installLodController(
 export default function GlobeBackground({ creditClassName }: { creditClassName?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const creditRef = useRef<HTMLDivElement>(null);
-  const { setViewer, globeWanted, ready } = useMapCamera();
+  const { setViewer, globeWanted, ready, routeStops, activeIndex } = useMapCamera();
   const viewerInstanceRef = useRef<import("cesium").Viewer | null>(null);
 
   /**
@@ -444,6 +445,22 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [built]);
 
+  /**
+   * How lit the world is, from the clock time of the stop currently selected.
+   *
+   * Selection only — `activeIndex`, never `hoveredIndex`. Hovering is a sweep: driving this from
+   * hover would strobe the whole planet between daylight and midnight as the pointer crossed a
+   * list of stops. Selection is a click or a Play-tour step, which is a decision.
+   *
+   * Nothing selected means `undefined` means `"day"` means no tint at all, which is why the
+   * landing page's decorative globe is unaffected without needing to know about this.
+   *
+   * Re-rendering this component on every selection costs nothing new: it already subscribes to
+   * the whole map-camera context, so it re-rendered on hover before this existed. The viewer
+   * itself is built in an effect keyed on `[built]` and is not touched by a re-render.
+   */
+  const phase = dayPhase(activeIndex === null ? undefined : routeStops[activeIndex]?.time);
+
   return (
     <>
       {/* `invisible` (visibility: hidden) — not `hidden` (display: none), and not unmounting.
@@ -468,6 +485,30 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       <div
         ref={containerRef}
         className={`h-full w-full ${globeWanted ? "" : "invisible"}`}
+      />
+      {/* Day-to-night, as a blend-mode sheet over the canvas rather than anything in Cesium.
+
+          Google's Photorealistic 3D Tiles are daylight photography with the shadows baked in, so
+          there is no sun to move: `scene.light` is ignored by the unlit materials they ship, and
+          the one lever that does bite — re-tinting `tileset.style`'s `color()` — re-evaluates the
+          style across every resident tile, which is not something to do 60 times a second for a
+          crossfade. A composited sheet costs one GPU blend of a layer the compositor already has,
+          and CSS gives the crossfade away for free (see `.globe-tint` in globals.css).
+
+          It has to live inside the z-0 globe container, not beside it: that keeps it above the
+          canvas and below both the marker layer at z-5 and the content overlay at z-10, so the
+          stop cards and the panel keep their real colours while the world behind them dims. The
+          route arcs *are* inside the canvas and do get dimmed with everything else, which is
+          right — they are in the world.
+
+          Follows the canvas's own `invisible`, or a navy sheet would sit over every route that
+          has no globe. */}
+      <div
+        aria-hidden="true"
+        data-phase={phase}
+        className={`globe-tint pointer-events-none absolute inset-0 ${
+          globeWanted ? "" : "invisible"
+        }`}
       />
       {/* Visually hidden per request — NOTE: Google's Photorealistic 3D Tiles terms of
           service require this attribution to stay visible when those tiles are in use

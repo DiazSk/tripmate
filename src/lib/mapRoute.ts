@@ -17,6 +17,50 @@ export interface RouteStop {
   lng: number;
   name: string;
   day: number;
+  /** The stop's approximate start time, verbatim from `Stop.time` ("9:00 AM"). Carried purely so
+   *  the globe can tint itself toward dusk or night for the stop being looked at — see
+   *  `dayPhase`. Optional for the same reason `Stop.why` is: itineraries saved before this
+   *  existed have no time on some stops, and a stop with no time simply gets daylight. */
+  time?: string;
+}
+
+/** How lit the world should be for a given stop. `day` is the tiles' own daylight photography,
+ *  untouched — the other three are tints laid over it. */
+export type DayPhase = "dawn" | "day" | "dusk" | "night";
+
+/**
+ * Which phase of the day a stop's start time falls in.
+ *
+ * Fixed clock bands, not real sunrise/sunset. Open-Meteo does return both, but they are fetched
+ * on the reconcile path and never persisted into `Itinerary` — reaching them would mean a new
+ * round trip per trip view to move a boundary by an hour, on a tint whose whole job is to say
+ * "this stop is in the evening". The boundaries: `dawn` from 05:30, `day` from 07:30, `dusk` from
+ * 17:00 — early enough that a 5pm viewpoint stop gets golden hour, which is when you would want
+ * to be at one — and `night` from 19:30, by which point it reads as night almost everywhere
+ * anyone plans a trip to.
+ *
+ * Accepts both the "9:00 AM" the model is asked for and a bare 24-hour "19:30", because a hand
+ * edit through the chat loop can produce either. Anything unparseable — or absent, on an older
+ * saved trip — is `day`, which is the no-op: no overlay, tiles as photographed.
+ */
+export function dayPhase(time: string | undefined): DayPhase {
+  const match = /(\d{1,2}):(\d{2})\s*([ap])\.?m?\.?/i.exec(time ?? "") ?? /(\d{1,2}):(\d{2})/.exec(time ?? "");
+  if (!match) return "day";
+  let hour = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hour > 23 || minutes > 59) return "day";
+  const meridiem = match[3]?.toLowerCase();
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return "day";
+    // 12 AM is hour 0 and 12 PM is hour 12 — the one case where the modulo matters.
+    hour = (hour % 12) + (meridiem === "p" ? 12 : 0);
+  }
+  const clock = hour + minutes / 60;
+  if (clock < 5.5) return "night";
+  if (clock < 7.5) return "dawn";
+  if (clock < 17) return "day";
+  if (clock < 19.5) return "dusk";
+  return "night";
 }
 
 const colorCache = new Map<string, string>();
@@ -82,9 +126,12 @@ export function dayColorToken(dayIndex: number): string {
  * Metres to lift a day's badge above the route it names, on top of the stem height every marker
  * already floats at.
  *
- * Has to clear the arcs, not just the stems: an arc peaks `MAX_ARC_LIFT_M` (180m) above stem top
- * on a long hop, so anything less would leave the label buried inside its own day's line at an
- * oblique camera angle — which is the exact failure the lift exists to avoid.
+ * This used to be sized to clear the arcs, back when one peaked 180m above stem top. It no longer
+ * can: an arc's apex is now a fraction of the hop's *ground* length (`ARC_LIFT_RATIO`), so a
+ * cross-city hop peaks a kilometre up and chasing it would hang the badge in empty sky, detached
+ * from the day it names. The badge stays near its route and the arcs pass over it — survivable
+ * because `buildDayClusters` hangs the badge off the cluster's perimeter rather than its centre,
+ * so the day's own arcs mostly aren't overhead, and because the arcs are thin and faint now.
  */
 export const DAY_LABEL_LIFT_M = 260;
 
@@ -344,21 +391,30 @@ const POOL_OUTER_RATIO = 2.1;
 const POOL_ALPHA = 0.22;
 const POOL_OUTER_ALPHA = 0.09;
 
-/** Points sampled along each arc. Enough that the curve reads as smooth at street level without
- *  turning a 30-day trip into tens of thousands of vertices. */
-const ARC_SAMPLES = 96;
+/** Points sampled along each arc. High on purpose: at `ARC_LIFT_RATIO` below, a cross-city hop is
+ *  a kilometre-tall parabola, and 96 points across one of those is visibly faceted at street
+ *  level — the curve is the whole point of the shape. 256 across a 30-day trip is ~11k vertices,
+ *  which is nothing next to the photorealistic tileset sharing the frame. */
+const ARC_SAMPLES = 256;
 /**
  * Arc apex above its endpoints, as a fraction of the segment's ground length, so a cross-city hop
- * bows and a next-door step stays nearly flat, clamped at both ends.
+ * bows high and a next-door step stays shallow, clamped at both ends.
  *
- * Shallower than it was when arcs ran ground to ground. They now span card to card at `+150m`, so
- * the same ratio put the apex a full stem-height above the cards and the route read as arcs
- * launching over the labels rather than a line drawn between them. The apex should stay inside the
- * band the cards occupy.
+ * **Height is the decluttering mechanism.** A day doubling back over its own ground — which is
+ * most days — used to draw both hops at nearly the same altitude, so they crossed and merged into
+ * one unreadable tangle. Lifted this far they separate vertically instead: the eye can follow one
+ * arc over another because they are at different heights, not just different colours.
+ *
+ * This means arcs now launch well *above* the marker cards rather than staying inside the band
+ * they occupy, which earlier revisions of this file deliberately avoided. That was the wrong call:
+ * the apex leaving frame at street range reads as a route arcing away over the city, and the arc's
+ * *ends* are what tie it to a card. Don't shrink this back to keep the apex under the labels.
  */
-const ARC_LIFT_RATIO = 0.08;
-const MIN_ARC_LIFT_M = 12;
-const MAX_ARC_LIFT_M = 180;
+const ARC_LIFT_RATIO = 0.3;
+const MIN_ARC_LIFT_M = 80;
+/** Only bites on intercity legs. A 1000km hop lifts 30km rather than 300km — high enough to read
+ *  as a flight path, low enough that the camera framing the two endpoints still contains it. */
+const MAX_ARC_LIFT_M = 30_000;
 /**
  * Segments shorter than this get no arc at all.
  *
@@ -369,22 +425,60 @@ const MAX_ARC_LIFT_M = 180;
  */
 const MIN_ARC_LENGTH_M = 5;
 
-const ARC_GLOW_WIDTH = 9;
-const ARC_GLOW_POWER = 0.2;
-const ARC_GLOW_ALPHA = 0.5;
-const ARC_DASH_WIDTH = 3;
-const ARC_DASH_LENGTH = 18;
+/**
+ * How high one hop's arc peaks above its endpoints, in metres, from its ground distance.
+ *
+ * Pulled out of `buildRouteGeometry` purely so it can be tested — the geometry builder needs a
+ * live Cesium viewer and can't be reached from a `.mjs` test, but this is the part with a rule in
+ * it. Non-finite input (a NaN coordinate reaching `EllipsoidGeodesic`) returns the floor rather
+ * than propagating NaN into a vertex, where Cesium draws nothing and logs nothing.
+ */
+export function arcLift(surfaceDistanceM: number): number {
+  if (!Number.isFinite(surfaceDistanceM)) return MIN_ARC_LIFT_M;
+  return Math.min(Math.max(surfaceDistanceM * ARC_LIFT_RATIO, MIN_ARC_LIFT_M), MAX_ARC_LIFT_M);
+}
+
+/**
+ * The halo under each arc: wide, soft and *faint*.
+ *
+ * Every number here came down. A 9px halo at alpha 0.5 and glowPower 0.2 was legible over busy
+ * photography and also the single loudest thing on screen — with a dozen days drawn at once the
+ * halos bloomed into each other and the route read as a smear of light rather than a set of
+ * lines. The halo's job is to keep a thin line from disappearing against a mid-grey rooftop, not
+ * to be seen in its own right. Legibility over photography now comes mostly from the arcs being
+ * lifted clear of the ground (`ARC_LIFT_RATIO`) rather than from brightness.
+ */
+const ARC_GLOW_WIDTH = 6;
+const ARC_GLOW_POWER = 0.12;
+const ARC_GLOW_ALPHA = 0.22;
+/**
+ * The arc's core line. Solid, not dashed.
+ *
+ * Dashes were the other half of the clutter: an 18px dash pattern along a kilometre-tall parabola
+ * breaks one continuous shape into a stipple, and a screen holding six days of stipple has no
+ * followable lines left in it. A thin solid stroke is what reads as "this connects to that".
+ *
+ * **3, not 2.** At 2 the arcs stippled themselves back into dashes wherever the scene renders
+ * below native — `resolutionScale` is `1.5 / devicePixelRatio`, so a 2x display renders the
+ * canvas at 0.75 and a 2px line lands on 1.5 buffer pixels, which an upscale with no FXAA breaks
+ * into dots. Verified against the highway lines, which share the buffer at a similar alpha and
+ * stay solid because they are wider. Don't shave this back down.
+ */
+const ARC_CORE_WIDTH = 3;
 /** One full shimmer cycle. Slow on purpose — this is meant to read as a breath along the route,
  *  not a chase light. */
 const SHIMMER_PERIOD_MS = 2600;
 /** Fraction of a cycle each successive arc lags by, which is what makes the pulse appear to
  *  travel along the day rather than every arc breathing in unison. */
 const SHIMMER_ARC_LAG = 0.16;
-const SHIMMER_ALPHA_MIN = 0.5;
-const SHIMMER_ALPHA_RANGE = 0.4;
-/** Held alpha when the visitor has asked for reduced motion — mid-range, so the dashes read at
- *  the same weight they average to when animating. */
-const SHIMMER_ALPHA_STATIC = 0.7;
+/** A narrow band, near the top. The old 0.5-0.9 swing was a pulse you watched instead of a route
+ *  you read; this is the same motion at a tenth of the amplitude — present if you look for it,
+ *  invisible if you are reading the map. */
+const SHIMMER_ALPHA_MIN = 0.78;
+const SHIMMER_ALPHA_RANGE = 0.14;
+/** Held alpha when the visitor has asked for reduced motion — mid-range, so the line reads at the
+ *  same weight it averages to when animating. */
+const SHIMMER_ALPHA_STATIC = 0.85;
 
 /**
  * One altitude for the whole day's route, just above street level.
@@ -508,15 +602,11 @@ export function buildRouteGeometry(
       Cesium.Cartographic.fromDegrees(stops[i].lng, stops[i].lat),
       ellipsoid
     );
-    const lift = Math.min(
-      Math.max(geodesic.surfaceDistance * ARC_LIFT_RATIO, MIN_ARC_LIFT_M),
-      MAX_ARC_LIFT_M
-    );
-    segments.push({ geodesic, lift, from: i - 1, to: i });
+    segments.push({ geodesic, lift: arcLift(geodesic.surfaceDistance), from: i - 1, to: i });
   }
 
   const accent = Cesium.Color.fromCssColorString(cssColor("--accent"));
-  /** Which stop is currently hovered or selected, or null. Read live by the dash shimmer's
+  /** Which stop is currently hovered or selected, or null. Read live by the core line shimmer's
    *  callback, and written by `setEmphasis` below. */
   let emphasised: number | null = null;
   /** This day's standing against the others. Read live by the shimmer callback the same way
@@ -557,8 +647,8 @@ export function buildRouteGeometry(
   const arcs = segments.map((_, index) => {
     const arcPositions = arcPositionsAt(index, altitude);
 
-    // Wide, soft, low-alpha base. This is what makes the route legible over busy photography;
-    // the dashes alone disappear against a mid-grey rooftop.
+    // Soft, low-alpha halo. Just enough to keep the thin core line off a mid-grey rooftop — see
+    // ARC_GLOW_ALPHA for why this is no longer carrying legibility on its own.
     const glow = viewer.entities.add({
       polyline: {
         positions: arcPositions,
@@ -571,18 +661,19 @@ export function buildRouteGeometry(
       },
     });
 
-    const dash = viewer.entities.add({
+    const core = viewer.entities.add({
       polyline: {
         positions: arcPositions,
-        width: ARC_DASH_WIDTH,
+        width: ARC_CORE_WIDTH,
         // NONE, not GEODESIC: these vertices already describe the curve, and asking Cesium to
         // re-trace a great circle between each adjacent pair would flatten the lift back out.
         arcType: Cesium.ArcType.NONE,
-        material: new Cesium.PolylineDashMaterialProperty({
+        // Solid. This was a PolylineDashMaterialProperty — see ARC_CORE_WIDTH for why it isn't.
+        material: new Cesium.ColorMaterialProperty(
           // Always a callback, even under reduced motion, so hover emphasis has one place to
           // take effect. Second argument false = "not constant", so Cesium re-evaluates every
           // frame; `withAlpha` into the supplied result keeps that allocation-free at ~160fps.
-          color: new Cesium.CallbackProperty((_time, result) => {
+          new Cesium.CallbackProperty((_time, result) => {
             const base = isArcEmphasised(index) ? accent : dayColor;
             if (reduceMotion) {
               return base.withAlpha(
@@ -597,19 +688,19 @@ export function buildRouteGeometry(
               (SHIMMER_ALPHA_MIN + SHIMMER_ALPHA_RANGE * wave) * stateAlpha(),
               result as import("cesium").Color
             );
-          }, false),
-          gapColor: Cesium.Color.TRANSPARENT,
-          dashLength: ARC_DASH_LENGTH,
-        }),
+          }, false)
+        ),
         // Stretches behind buildings draw dimmed rather than disappearing, so the whole day
-        // stays traceable from a low angle. Only available unclamped.
+        // stays traceable from a low angle. Only available unclamped. Matters much less now that
+        // the arcs are lifted clear of the rooftops — it still catches the run down to each
+        // card, which is the part that passes through the city.
         depthFailMaterial: new Cesium.ColorMaterialProperty(
           dayColor.withAlpha(ROUTE_OCCLUDED_ALPHA)
         ),
       },
     });
 
-    return { glow, dash };
+    return { glow, core };
   });
 
   const stemTopAt = (i: number, h: number) =>
@@ -701,13 +792,12 @@ export function buildRouteGeometry(
       stemTints[i](base);
       poolTints[i].forEach((tint) => tint(base));
     });
-    // The dashed line needs no write here — its callback reads `emphasised` directly,
-    // every frame.
+    // The core line needs no write here — its callback reads `emphasised` directly, every frame.
     arcGlowTints.forEach((tint, k) => tint(isArcEmphasised(k) ? accent : dayColor));
   };
 
   return {
-    entities: [...arcs.flatMap((a) => [a.glow, a.dash]), ...stems, ...pools.flat()],
+    entities: [...arcs.flatMap((a) => [a.glow, a.core]), ...stems, ...pools.flat()],
     setEmphasis: (index: number | null) => {
       if (index === emphasised) return;
       emphasised = index;
@@ -727,10 +817,10 @@ export function buildRouteGeometry(
       const corrected = positionsAt(h);
       // Both polylines of an arc share one freshly sampled array — they trace the same curve at
       // different widths, so re-sampling twice would only cost time.
-      arcs.forEach(({ glow, dash }, index) => {
+      arcs.forEach(({ glow, core }, index) => {
         const resampled = new Cesium.ConstantProperty(arcPositionsAt(index, h));
         glow.polyline!.positions = resampled;
-        dash.polyline!.positions = resampled;
+        core.polyline!.positions = resampled;
       });
       stems.forEach((e, i) => {
         e.polyline!.positions = new Cesium.ConstantProperty([corrected[i], stemTopAt(i, h)]);

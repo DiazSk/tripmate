@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DAY_COLOR_TOKENS,
+  arcLift,
   buildDayClusters,
   dayColorToken,
   DAY_LABEL_LIFT_M,
+  dayPhase,
   dayVisualState,
   frameRouteBesidePanel,
 } from "./mapRoute.ts";
@@ -280,3 +282,88 @@ test("hovering a dimmed day lifts only that day, and never the selection", () =>
   assert.equal(dayVisualState(1, 1, 1), "active");
 });
 
+
+test("a walk between two stops on the same block still gets a visible bow", () => {
+  // The floor is the whole reason it exists: 30m * 0.3 is 9m, which at any camera height that
+  // fits a day is a straight line.
+  assert.equal(arcLift(30), 80);
+});
+
+test("a cross-city hop peaks at a fraction of the ground it covers", () => {
+  // 5km apart is the ordinary case — two neighbourhoods of one city — and this is the number
+  // the whole redesign is about: high enough that two hops over the same ground separate.
+  assert.equal(arcLift(5000), 1500);
+});
+
+test("an intercity leg is capped rather than leaving the atmosphere", () => {
+  // 1000km at the raw ratio would be a 300km apex, which no camera framing both ends contains.
+  assert.equal(arcLift(1_000_000), 30_000);
+});
+
+test("the lift is monotonic in distance across the whole clamped range", () => {
+  const distances = [0, 10, 100, 267, 1_000, 5_000, 40_000, 99_999, 1e7];
+  const lifts = distances.map(arcLift);
+  for (let i = 1; i < lifts.length; i++) {
+    assert.ok(lifts[i] >= lifts[i - 1], `${distances[i]}m lifted less than ${distances[i - 1]}m`);
+  }
+});
+
+test("a NaN distance lifts to the floor rather than poisoning a vertex", () => {
+  // A NaN position is the failure mode this guards: Cesium draws nothing and logs nothing.
+  assert.equal(arcLift(NaN), 80);
+  assert.equal(arcLift(Infinity), 80);
+});
+
+test("the model's own time format buckets into the right phase", () => {
+  // "9:00 AM" is the shape STOP_SHAPE in itineraryPrompt.ts asks for, so it is the only one
+  // that really has to work.
+  assert.equal(dayPhase("6:30 AM"), "dawn");
+  assert.equal(dayPhase("9:00 AM"), "day");
+  assert.equal(dayPhase("4:45 PM"), "day");
+  assert.equal(dayPhase("6:00 PM"), "dusk");
+  assert.equal(dayPhase("8:30 PM"), "night");
+  assert.equal(dayPhase("2:00 AM"), "night");
+});
+
+test("each band boundary belongs to the later phase", () => {
+  // Pinned because these are the numbers the doc comment quotes, and a stop landing exactly on
+  // one is common — the model writes times on the half hour.
+  assert.equal(dayPhase("5:29 AM"), "night");
+  assert.equal(dayPhase("5:30 AM"), "dawn");
+  assert.equal(dayPhase("7:29 AM"), "dawn");
+  assert.equal(dayPhase("7:30 AM"), "day");
+  assert.equal(dayPhase("4:59 PM"), "day");
+  // 5:00 PM sharp is golden hour, not afternoon — a viewpoint stop planned for then wants the
+  // warm tint, which is the whole reason the dusk band starts this early.
+  assert.equal(dayPhase("5:00 PM"), "dusk");
+  assert.equal(dayPhase("7:29 PM"), "dusk");
+  assert.equal(dayPhase("7:30 PM"), "night");
+});
+
+test("midnight and noon land on opposite sides, which is where a %12 goes wrong", () => {
+  assert.equal(dayPhase("12:00 AM"), "night");
+  assert.equal(dayPhase("12:00 PM"), "day");
+});
+
+test("a bare 24-hour time works too, since a chat edit can produce one", () => {
+  assert.equal(dayPhase("19:30"), "night");
+  assert.equal(dayPhase("06:15"), "dawn");
+  assert.equal(dayPhase("13:00"), "day");
+});
+
+test("a missing or unreadable time gets daylight, i.e. no tint at all", () => {
+  // Older saved itineraries, and anything the model phrased instead of clocked. Daylight is the
+  // no-op: the tiles are daylight photography already.
+  assert.equal(dayPhase(undefined), "day");
+  assert.equal(dayPhase(""), "day");
+  assert.equal(dayPhase("late afternoon"), "day");
+  assert.equal(dayPhase("25:00"), "day");
+  assert.equal(dayPhase("14:99"), "day");
+  assert.equal(dayPhase("0:00 PM"), "day");
+});
+
+test("the phase reads a time embedded in a longer label", () => {
+  // Nothing validates `Stop.time`, and the model has been known to pad it.
+  assert.equal(dayPhase("around 7:00 PM"), "dusk");
+  assert.equal(dayPhase("8:00 p.m."), "night");
+});
