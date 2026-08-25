@@ -8,7 +8,7 @@ import { PlaceDetail, Stop } from "./types";
 export type GeocodeOutcome = "found" | "missed" | "unreachable";
 
 export function useTripCamera(destination: string, tripId?: string) {
-  const { flyToDestination, flyToPlace, showHighways } = useMapCamera();
+  const { flyToDestination, flyToPlace, showHighways, setActiveStop } = useMapCamera();
   const [destinationCoords, setDestinationCoords] = useState<{
     lat: number;
     lon: number;
@@ -69,6 +69,13 @@ export function useTripCamera(destination: string, tripId?: string) {
   const selectStop = useCallback(
     async (stop: Stop) => {
       setSelectedStop(stop);
+      // Mark it selected on the globe as well, which a click on the *marker* has always done
+      // (StopMarkerLayer sets the index directly) and a click on the itinerary row never did.
+      // Three things ran off that and all three were quietly missing from this path: the row
+      // stayed lit only while the pointer was on it, the stop's marker and the arcs touching it
+      // took no emphasis, and the day/night tint reverted to daylight the moment the pointer
+      // left the row — so opening an 8:45pm stop from the list put the city back in daylight.
+      setActiveStop(stop);
       flyToPlace(stop.lat, stop.lng, stop.name);
       setDetail(null);
       setDetailError(null);
@@ -98,7 +105,7 @@ export function useTripCamera(destination: string, tripId?: string) {
         setDetailLoading(false);
       }
     },
-    [flyToPlace, destination, tripId]
+    [flyToPlace, setActiveStop, destination, tripId]
   );
 
   const closeDetail = useCallback(() => {

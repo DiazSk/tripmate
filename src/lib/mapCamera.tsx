@@ -140,6 +140,16 @@ interface MapCameraContextValue {
   /** Index of the selected stop — clicked, or stepped onto by the tour. Outlives hover. */
   activeIndex: number | null;
   setActiveIndex: (index: number | null) => void;
+  /**
+   * Select a stop given the stop *object* rather than its index into `routeStops`.
+   *
+   * For the callers that legitimately do not have that index. `StopMarkerLayer` and `useStopTour`
+   * both do and should keep using `setActiveIndex` — this is for the itinerary rows and the
+   * "up next" list inside the place detail, which reach a stop through `useTripCamera.selectStop`
+   * and only ever hold an `Itinerary` stop. Threading a flat index down to both would mean a new
+   * prop on `StopList`, on `PlaceDetailPanel`, and on whatever opens a stop next.
+   */
+  setActiveStop: (stop: { lat: number; lng: number; name: string; time?: string }) => void;
 }
 
 const MapCameraContext = createContext<MapCameraContextValue | null>(null);
@@ -289,6 +299,10 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
    *  space means StopMarkerLayer, useStopTour and the peek logic needed no reworking when the
    *  globe went from one day to all of them. */
   const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
+  /** The same list, for `setActiveStop` to search without becoming a new function every time a
+   *  route is drawn — `useTripCamera.selectStop` closes over it, and that closure is handed to
+   *  every itinerary row. Same ref-beside-state pattern as `hoveredDayRef`. */
+  const routeStopsRef = useRef<RouteStop[]>([]);
   /** One label per day, at that day's centroid. */
   const [routeClusters, setRouteClusters] = useState<RouteCluster[]>([]);
   /** The day the pointer is resting on, or null. Kept in a ref *as well as* state: the draw
@@ -434,6 +448,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       const flat = days.flat();
       // Published before the viewer check: the cards are plain DOM and cost nothing to mount
       // early, and they stay hidden until the per-frame loop has a viewer to project them with.
+      routeStopsRef.current = flat;
       setRouteStops(flat);
       // Only for days that will actually be drawn. Under `soloFocus` the others have no route
     // under them, and a "Day 4" badge hanging over bare imagery names nothing.
@@ -982,6 +997,34 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       flyTo(lat, lng, PLACE_HEIGHT_M, -35, label, routeAltitudeRef.current + STEM_HEIGHT_M),
     [flyTo]
   );
+  /**
+   * Find a stop in the flat route list and select it.
+   *
+   * Matched on name, coordinate *and* time, not coordinate alone. One coordinate legitimately
+   * carries several stops — a hotel is the transfer, the breakfast and the evening return — and
+   * for the day/night tint, which reads the matched stop's clock time, picking the wrong one of
+   * those is the difference between 9am and 8:45pm. All four fields are already on `RouteStop`,
+   * so the stronger key costs nothing.
+   *
+   * A miss leaves the selection alone rather than clearing it. There is one real way to miss: the
+   * detail panel can be opened from a surface whose stop is no longer in the drawn route at all
+   * (a day switch behind it), and blanking the selection there would be a worse answer than
+   * keeping the last one.
+   */
+  const setActiveStop = useCallback(
+    (stop: { lat: number; lng: number; name: string; time?: string }) => {
+      const index = routeStopsRef.current.findIndex(
+        (s) =>
+          s.lat === stop.lat &&
+          s.lng === stop.lng &&
+          s.name === stop.name &&
+          s.time === stop.time
+      );
+      if (index >= 0) setActiveIndex(index);
+    },
+    []
+  );
+
   const resetToHome = useCallback(() => {
     cancelPeek();
     const viewer = viewerRef.current;
@@ -1000,6 +1043,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     highwayEntitiesRef.current = [];
     // Otherwise the day's marker cards survive a navigation back to the landing page — the
     // globe never unmounts, so nothing else clears them.
+    routeStopsRef.current = [];
     setRouteStops([]);
     setRouteClusters([]);
     setFocusedDay(null);
@@ -1061,6 +1105,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       setHoveredIndex,
       activeIndex,
       setActiveIndex,
+      setActiveStop,
     }),
     [
       setViewer,
@@ -1079,6 +1124,9 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       setHoveredDay,
       hoveredIndex,
       activeIndex,
+      // Stable — `useCallback(…, [])` — so this never re-runs the memo. Listed only because
+      // eslint knows `useState` setters are stable and cannot know that about a callback.
+      setActiveStop,
     ]
   );
 
