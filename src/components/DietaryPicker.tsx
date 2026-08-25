@@ -41,7 +41,8 @@ export default function DietaryPicker({
               type="button"
               aria-pressed={on}
               onClick={() => toggle(tag)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              // Same fix as ChoicePicker/GroupTypePicker: 44px floor via height, not type size.
+              className={`flex min-h-11 items-center rounded-full px-3 text-xs font-medium transition-colors ${
                 on
                   ? "bg-accent text-accent-foreground"
                   : "bg-white/10 text-foreground hover:bg-white/20"

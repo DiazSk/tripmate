@@ -10,9 +10,11 @@ import {
   CalendarCheck,
   CalendarDays,
   MapPin,
+  Minus,
   Plane,
   PlaneLanding,
   PlaneTakeoff,
+  Plus,
   Wallet,
 } from "lucide-react";
 import type { DayEditUpdates } from "@/components/DayHeader";
@@ -20,7 +22,9 @@ import FeedbackLoop from "@/components/FeedbackLoop";
 import InterestPicker from "@/components/InterestPicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
-import PartyCounter, { DEFAULT_PARTY } from "@/components/PartyCounter";
+import PartyCounter, { DEFAULT_PARTY, PartyStepButton } from "@/components/PartyCounter";
+import { PARTY_MAX_PER_BAND } from "@/lib/userAnswers";
+import DietaryPicker from "@/components/DietaryPicker";
 import SuggestInput, { TIME_OPTIONS, SuggestOption } from "@/components/SuggestInput";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import PoiCandidatePicker from "@/components/PoiCandidatePicker";
@@ -34,6 +38,7 @@ import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId, TIERS } from "@/lib/tiers";
 import {
+  AccessibilityNeeds,
   CrowdPreference,
   DestinationContext,
   EnergyLevel,
@@ -57,7 +62,6 @@ import type { StageProgress } from "@/lib/generationStages";
 import { buildDestinationFacts } from "@/lib/destinationFacts";
 import { formatDateRange } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
-import { summarizeDurable } from "@/lib/profileSummary";
 
 /* Five `next/dynamic` boundaries, the same `{ ssr: false }` idiom AppShell uses for the globe.
    None of these renders on the landing step — the landing renders `<ScrollStory>` and nothing
@@ -94,6 +98,18 @@ function isAbort(e: unknown): boolean {
   return e instanceof DOMException && e.name === "AbortError";
 }
 
+/** The same three mappings `pickGroup` applies when a traveler actively changes group type,
+ *  reused here so a persisted profile's group and its party count start in agreement — a
+ *  restored "Family with kids" used to sit next to a lone, unconfigured adult because `group`
+ *  read the saved profile while `party` always started at `DEFAULT_PARTY`. "Other" has no
+ *  mapping here for the same reason `pickGroup` gives it none: it is the one group shape with no
+ *  fixed headcount, so the party stays exactly what it already was rather than being guessed. */
+function defaultPartyForGroup(group: GroupType): PartyCounts {
+  if (group === "couple") return { adults: 2, children: 0, infants: 0 };
+  if (group === "family_with_kids") return { adults: 2, children: 1, infants: 0 };
+  return DEFAULT_PARTY;
+}
+
 /** How long the loader holds after the run settles, so the marker reaches the pin and the pin
  *  fills before the itinerary takes the screen. Long enough to read as an arrival, short
  *  enough that nobody waiting two minutes notices it as a delay. */
@@ -101,20 +117,41 @@ const ARRIVAL_HOLD_MS = 650;
 const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Step = "landing" | "plan" | "result";
-/** Only what changes per trip. Explorer style, energy, crowds, tier and priorities live on
- *  /profile and are overridable for one trip via the expander on `basics`. The two screens
- *  between `basics` and `pois` still give the Step 2a fetch time to land before `pois` —
- *  the one fetch-dependent screen — is reached. Keep `pois` last. */
-type PlanStep = "basics" | "purpose" | "group" | "pois";
-const PLAN_ORDER: PlanStep[] = ["basics", "purpose", "group", "pois"];
+/** Three questions and a review, replacing the old four ("basics" -> "purpose" -> "group" ->
+ *  "pois"). "purpose" is gone as its own screen — a single optional text input never justified a
+ *  full step — and now opens "preferences" alongside interests and explorer style, which used to
+ *  be hidden behind a collapsed "Adjust for this trip" expander here on `basics`; the critique
+ *  that flagged them as invisible was right; a click most travelers never made is not
+ *  "available". "pois" is gone as a terminal screen too: it was empty more often than not
+ *  (`OPENTRIPMAP_API_KEY` absent, or nothing nearby) and ended the flow on an apology with no
+ *  summary of what was about to be generated. Both jobs move to "review" — the POI picker
+ *  becomes one optional block on a screen that also states the whole trip back before
+ *  committing to it. `review` still gives Step 2a's fetch the same three screens of runway
+ *  `pois` used to. */
+type PlanStep = "basics" | "group" | "preferences" | "review";
+const PLAN_ORDER: PlanStep[] = ["basics", "group", "preferences", "review"];
+
+function isPlanStep(value: string | null): value is PlanStep {
+  return value === "basics" || value === "group" || value === "preferences" || value === "review";
+}
+
+// sessionStorage key for the in-progress wizard snapshot. Namespaced, not because anything else
+// in this app touches sessionStorage yet, but because the browser tab does — a bare
+// "planDraft" key is one accidental collision away from being someone else's storage bug.
+const PLAN_DRAFT_KEY = "tripmate:planDraft";
 
 // Local calendar date in ISO shape. `toISOString()` would be UTC and roll the date over a
 // day early for anyone west of Greenwich in the evening; "sv-SE" formats local time as
 // YYYY-MM-DD, which is exactly what <input type="date"> wants.
 const todayISO = () => new Date().toLocaleDateString("sv-SE");
 
+// One class, defined in globals.css, because both utility routes to a focus indicator failed
+// here under measurement — `ring-*` silently, `focus-visible:outline-accent` by dropping only its
+// colour. The rule and the evidence live next to `.glass-control`, which made the same move for
+// hover for the same reason.
+const focusRingClass = "focus-ring";
 const ghostButtonClass =
-  "rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg";
+  `rounded-full px-4 py-2 text-sm font-medium text-foreground/70 transition-colors hover:bg-tag-neutral-bg ${focusRingClass}`;
 // Shared glass-over-globe card treatment — same class the itinerary/detail
 // panels use, reused here for consistency across every step of this page.
 // `pointer-events-auto` opts back in from AppShell's `pointer-events-none` overlay, which
@@ -220,8 +257,22 @@ function openNativePicker(cell: HTMLLabelElement, target: EventTarget | null) {
   }
 }
 
-/** One Q&A screen: heading, optional subline, body. Every screen after `basics` has the same
- *  shape, so they share this instead of repeating the heading markup six times. */
+/** One Q&A screen: heading, optional subline, body. Every step uses this — `basics` included, as
+ *  of the accessibility pass. It had no heading of any level, so `document.querySelectorAll(
+ *  "h1,h2,h3")` returned nothing on the first screen of the flow and heading navigation had
+ *  nowhere to land.
+ *
+ *  This also owns focus on a step change. Each step is conditionally rendered, so advancing
+ *  unmounts one `Screen` and mounts the next, and the mount effect below is the transition. Before
+ *  it, pressing Next left `document.activeElement` on `<body>` (or on the Next button itself) with
+ *  no live region, no title change and no route change — so an assistive-technology user got no
+ *  signal at all that the screen had changed.
+ *
+ *  `tabIndex={-1}` makes the heading a programmatic focus target without adding a tab stop. There
+ *  is deliberately no visible ring: `:focus-visible` does not match on programmatic `.focus()`,
+ *  only on keyboard-initiated focus, so the heading announces without painting an outline nobody
+ *  asked for. No `aria-live` region alongside it either — moving focus already announces the new
+ *  context, and doing both makes a screen reader say the step name twice. */
 function Screen({
   name,
   title,
@@ -233,11 +284,59 @@ function Screen({
   subtitle?: string;
   children: ReactNode;
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
   return (
     <div className="value-in" style={{ animationDelay: "80ms" }} {...devLabel(`PlanStep.${name}`)}>
-      <h2 className="font-display text-xl font-semibold text-foreground">{title}</h2>
+      <h2
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-display text-xl font-semibold text-foreground outline-none"
+      >
+        {title}
+      </h2>
       {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
       <div className="mt-4">{children}</div>
+    </div>
+  );
+}
+
+/** One fact on the review screen: a label, its value, and a jump back to the step that owns it.
+ *  Every prior version of this flow ended on a question instead of a statement — the traveler
+ *  committed to a ~2-minute generation having never seen the trip stated back to them. This is
+ *  the whole fix, repeated per fact rather than built as one paragraph, so any single answer is
+ *  one click from being changed instead of a full trip back through the wizard. */
+function ReviewRow({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value: ReactNode;
+  /** Omit for a fact that isn't set on a different step — there's nowhere else for "Edit" to
+   *  send it, so the row renders without the button rather than a link that goes nowhere. */
+  onEdit?: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-2.5">
+      <div>
+        <div className="text-xs font-semibold tracking-[0.025em] text-muted uppercase">
+          {label}
+        </div>
+        <div className="mt-0.5 text-sm text-foreground">{value}</div>
+      </div>
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium text-accent underline-offset-4 hover:underline ${focusRingClass}`}
+        >
+          Edit
+        </button>
+      )}
     </div>
   );
 }
@@ -255,6 +354,25 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [arrivalPoint, setArrivalPoint] = useState("");
   const [departureTime, setDepartureTime] = useState("");
   const [departurePoint, setDeparturePoint] = useState("");
+  // Read by skill §4e ("already booked beats anything you would recommend"), by
+  // `formatTravelerProfile` and by `trip-context.md`. All three were live while nothing
+  // collected this, so a booked hotel was being re-chosen by the model every time.
+  const [stayBooked, setStayBooked] = useState("");
+  // Asked rather than inferred from `energy`. Starts null so an untouched form sends nothing at
+  // all — a default-valued object would claim the traveler stated "no needs" when they were never
+  // asked, and `deriveMobilityProfile` treats those two cases differently.
+  const [accessibility, setAccessibility] = useState<AccessibilityNeeds | null>(null);
+
+  /** Patches one accessibility field, materialising the object on first touch. */
+  function setAccess(patch: Partial<AccessibilityNeeds>) {
+    setAccessibility((prev) => ({
+      stepFreeRequired: false,
+      limitStairs: false,
+      note: "",
+      ...prev,
+      ...patch,
+    }));
+  }
   const [arrivalPointOptions, setArrivalPointOptions] = useState<SuggestOption[]>([]);
   // Where the traveler is flying FROM, not the arrive/depart points above (those are at the
   // destination) — plain free text, collected here and resolved to a real airport server-side
@@ -281,17 +399,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // origin never re-runs this step, only the price lookup that actually needs the new inputs.
   const [resolvedOriginIata, setResolvedOriginIata] = useState<string | null>(null);
   const originAirportCache = useRef<Map<string, string | null>>(new Map());
-  const [budget, setBudget] = useState(1000);
+  // Was `useState(1000)`. Every traveler used to open the wizard to a total they never typed,
+  // rendered in the same filled weight as a real value — and that number silently set the
+  // spending tier the whole plan is generated against before anyone touched the field. Starting
+  // empty means the field asks rather than answers; `budget === 0` already renders it blank
+  // (see the input below), so this is the one line that had to change.
+  const [budget, setBudget] = useState(0);
   const [interests, setInterests] = useState<string[]>(initialProfile?.priorities ?? []);
   const [starredInterests, setStarredInterests] = useState<string[]>(
     initialProfile?.topPriorities ?? []
   );
   const [destinationMissed, setDestinationMissed] = useState(false);
-
-  // The single "Adjust for this trip" block. One expander, never one per field: the whole
-  // point is that the worst case (open it every trip) is still fewer interactions than the
-  // seven screens this replaced, and per-field expanders would climb back past that.
-  const [adjustOpen, setAdjustOpen] = useState(false);
 
   // Step 2b — collected alongside the existing basics/interests/style answers, sent to
   // Step 3 as `userAnswers` once generation runs (see `generate()` below).
@@ -301,7 +419,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   );
   const [group, setGroup] = useState<GroupType>(initialProfile?.group ?? "solo");
   const [groupOther, setGroupOther] = useState("");
-  const [party, setParty] = useState<PartyCounts>(DEFAULT_PARTY);
+  const [party, setParty] = useState<PartyCounts>(
+    defaultPartyForGroup(initialProfile?.group ?? "solo")
+  );
   const [energy, setEnergy] = useState<EnergyLevel>(initialProfile?.energy ?? "moderate");
   const [crowds, setCrowds] = useState<CrowdPreference>(initialProfile?.crowds ?? "mixed");
   const [selectedPois, setSelectedPois] = useState<CandidatePoi[]>([]);
@@ -350,10 +470,23 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // the most recent generate/refine call so save() can attach it to the
   // trip, letting later place-detail calls append to that same run.
   const [lastRunId, setLastRunId] = useState<string | null>(null);
+  // The CLI session the generate call ran in. Handed to the edit chat so refinement continues
+  // that same conversation, and saved with the trip so it survives a reload. Null whenever the
+  // session is unknown or gone — every consumer treats that as "rebuild the full prompt".
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   // Plays the staggered card reveal + typewriter effect once, right after a fresh
   // generation — cleared the moment a stop is opened so backing out of the detail view
   // doesn't replay the whole entrance again.
   const [revealAnimation, setRevealAnimation] = useState(false);
+  /**
+   * Whether the plan panel is shut, which is also what puts the globe into the whole-trip
+   * overview — hence owned here rather than inside DockedPanel: `ItineraryCard` needs the same
+   * boolean to decide whether to frame the active day or the entire trip.
+   *
+   * Starts true. A finished itinerary opens on its own map, every day clustered and labelled,
+   * and the plan is one click behind the panel's arrow.
+   */
+  const [planCollapsed, setPlanCollapsed] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
   const [stages, setStages] = useState<StageProgress[]>(
@@ -388,6 +521,117 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     resetToHome();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Restores an in-progress wizard after a refresh. Mount-only, and it only ever fires on a
+  // genuine reload: `goToStep` below keeps the URL's `?step=` in sync with `planStep` via
+  // `history.pushState`, which never triggers a new mount — this effect exists for the one path
+  // that does. Bails immediately when there's nothing to restore, which is every first visit and
+  // every visit that isn't mid-wizard, so a fresh landing or a `/?step=` link with no matching
+  // sessionStorage entry (a different tab, storage cleared, a stale bookmark) falls through to
+  // the ordinary `initialProfile`-seeded defaults below untouched.
+  //
+  // A lazy `useState(() => …)` initializer per field would be the usual fix for "restore browser
+  // state before first paint, not after it" — it avoids exactly the extra render pass
+  // `react-hooks/set-state-in-effect` is warning about below. It isn't safe here: this component
+  // renders once on the server, where `sessionStorage`/`location.search` don't exist, and once on
+  // the client for hydration, which React requires to produce the *same* output as that server
+  // render. A lazy initializer reading real browser state would make the two diverge — a
+  // destination and a set of dates appearing in the hydrated DOM that were never in the
+  // server-rendered HTML — which is a hydration mismatch, not a lint warning. Restoring in an
+  // effect, one render late, is the safe side of that tradeoff: the extra render is real but
+  // small (React 18's automatic batching folds every `setState` call below into that one render,
+  // not twenty), and it only ever happens on a mid-wizard refresh, not on every visit.
+  /* eslint-disable react-hooks/set-state-in-effect -- see the note above; the lazy-initializer
+     fix this rule suggests would reintroduce a real SSR/hydration mismatch. */
+  useEffect(() => {
+    const urlStep = new URLSearchParams(window.location.search).get("step");
+    if (!isPlanStep(urlStep)) return;
+    let draft: Record<string, unknown> | null = null;
+    try {
+      draft = JSON.parse(sessionStorage.getItem(PLAN_DRAFT_KEY) ?? "null");
+    } catch {
+      draft = null;
+    }
+    if (!draft) return;
+
+    const restore = <T,>(key: string, fallback: T): T =>
+      key in draft! ? (draft![key] as T) : fallback;
+    setDestination(restore("destination", ""));
+    setStartDate(restore("startDate", ""));
+    setEndDate(restore("endDate", ""));
+    setBudget(restore("budget", 0));
+    setParty(restore("party", DEFAULT_PARTY));
+    setGroup(restore("group", "solo" as GroupType));
+    setGroupOther(restore("groupOther", ""));
+    setDietary(restore("dietary", { tags: [], note: "" } as DietaryNeeds));
+    setPurpose(restore("purpose", ""));
+    setExplorerStyle(restore("explorerStyle", "mixed" as ExplorerStyle));
+    setEnergy(restore("energy", "moderate" as EnergyLevel));
+    setCrowds(restore("crowds", "mixed" as CrowdPreference));
+    setInterests(restore("interests", [] as string[]));
+    setStarredInterests(restore("starredInterests", [] as string[]));
+    setSelectedPois(restore("selectedPois", [] as CandidatePoi[]));
+    setCustomPois(restore("customPois", [] as string[]));
+    setArrivalTime(restore("arrivalTime", ""));
+    setArrivalPoint(restore("arrivalPoint", ""));
+    setDepartureTime(restore("departureTime", ""));
+    setDeparturePoint(restore("departurePoint", ""));
+    setOriginCity(restore("originCity", ""));
+    setStayBooked(restore("stayBooked", ""));
+    setAccessibility(restore("accessibility", null as AccessibilityNeeds | null));
+    setStep("plan");
+    setPlanStep(urlStep);
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // The other half of restore-on-refresh: snapshot the answers a traveler could lose to a
+  // refresh or a closed tab, every time one of them changes, while the wizard is open. Skipped
+  // once results exist — `generate()`'s success path clears this key outright, so an empty
+  // history query string on the result screen never has a stale draft to resurrect.
+  useEffect(() => {
+    if (step !== "plan") return;
+    const draft = {
+      destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
+      explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
+      arrivalTime, arrivalPoint, departureTime, departurePoint, originCity,
+      stayBooked, accessibility,
+    };
+    try {
+      sessionStorage.setItem(PLAN_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      /* Private browsing / quota — the wizard still works, it just can't survive a refresh. */
+    }
+  }, [
+    step, destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
+    explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
+    arrivalTime, arrivalPoint, departureTime, departurePoint, originCity,
+    stayBooked, accessibility,
+  ]);
+
+  // The fix for the wizard destroying every answer on a back-swipe. Before this, leaving the
+  // plan step was the only way out — no history entry existed for any of its four (now three)
+  // sub-steps, so system Back and a phone's edge-swipe both exited the page outright. `goToStep`
+  // below pushes one entry per step forward; this walks them backward, and unlike an unmount,
+  // nothing here ever discards the component's own state — `planStep` is the only thing that
+  // changes, so every field the traveler already filled in survives the trip back through the
+  // wizard regardless of which direction closed it.
+  useEffect(() => {
+    function onPopState(event: PopStateEvent) {
+      if (step !== "plan") return;
+      const state = event.state as { tripmatePlanStep?: PlanStep } | null;
+      if (state?.tripmatePlanStep) {
+        setPlanStep(state.tripmatePlanStep);
+      } else {
+        // Walked back past the wizard's first pushed entry, to whatever was there before it —
+        // the browser has already popped that entry, so this only needs to update React state
+        // to match, not touch history again.
+        backToLanding();
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   // Warms the chunks the dynamic() boundaries at the top of this file split out, so none of them
   // ever shows its fallback. Fired on leaving the landing, which is the whole point: the landing's
@@ -453,6 +697,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // Still load-bearing downstream: this feeds `hotelClassForTier`, which is what keeps the real
   // hotel search from returning hostels for a luxury trip.
   const tier: TierId = days === null ? "midrange" : closestTier(budget, days);
+
+  // Nights, not days: the review screen states this separately because lodging is priced by
+  // night and the two numbers are never the same one — a 6-day trip books 5 nights, and nothing
+  // before the review screen ever said so.
+  const nights = days === null ? null : Math.max(days - 1, 0);
+
+  // Total headcount, used for the per-person budget line on `basics` and the party line on
+  // `review`. `party.adults` is never 0 (every path that sets it enforces a floor of 1), so this
+  // is always at least 1 and safe to divide by.
+  const totalTravelers = party.adults + party.children + party.infants;
 
   /** Presets from the pill are the common case typed in one tap: Solo is 1, Couple is 2, Family is
    *  2 and a child. Deliberately one-way — the counts never flip the pill back, because a
@@ -604,9 +858,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
   function pickGroup(next: GroupType) {
     setGroup(next);
-    if (next === "solo") setParty({ adults: 1, children: 0, infants: 0 });
-    else if (next === "couple") setParty({ adults: 2, children: 0, infants: 0 });
-    else if (next === "family_with_kids") setParty({ adults: 2, children: 1, infants: 0 });
+    // "Other" is left alone here for the same reason `defaultPartyForGroup` leaves it
+    // unmapped: it is the one shape with no fixed headcount, so overwriting it would erase
+    // whatever the traveler already dialed in on the counter below.
+    if (next !== "other") setParty(defaultPartyForGroup(next));
   }
 
   function toggleInterest(tag: string) {
@@ -665,6 +920,26 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // Required, not cosmetic: a blur-triggered flight leaves a destination pin dropped and the
     // camera parked on it, and resetToHome is the only thing that clears them.
     resetToHome();
+    // Drops the in-progress draft so a later refresh (a genuinely new visit, or planning a
+    // second trip) never resurrects an abandoned wizard. Harmless if this runs from the popstate
+    // handler, where the browser already removed the entry that would have restored it.
+    try {
+      sessionStorage.removeItem(PLAN_DRAFT_KEY);
+    } catch {
+      /* nothing to clean up if storage was never writable */
+    }
+  }
+
+  /** Pushes one history entry per forward step, so the wizard has something for the browser's
+   *  own Back — and a phone's edge-swipe — to walk instead of exiting the page outright. Every
+   *  in-wizard "Next" and every review-screen "Edit" link goes through this rather than a bare
+   *  `setPlanStep`, so the URL and the browser's history stack never fall out of sync with what
+   *  is actually on screen. */
+  function goToStep(next: PlanStep) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("step", next);
+    window.history.pushState({ tripmatePlanStep: next }, "", url);
+    setPlanStep(next);
   }
 
   /** Cross-field rules the browser's own constraint validation can't express. */
@@ -699,9 +974,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         arrivalPoint: arrivalPoint || null,
         departureTime: departureTime || null,
         departurePoint: departurePoint || null,
-        stayBooked: null,
+        stayBooked: stayBooked || null,
         originCity: originCity || null,
       },
+      accessibility,
     };
   }
 
@@ -779,9 +1055,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
     setGenerating(true);
     setError(null);
+    // Back to the map for the new trip. Without this, a traveler who opened the plan on their
+    // last result, backed out and generated again would land straight in the panel — this page
+    // never unmounts between the two, so the collapse state would otherwise carry over.
+    setPlanCollapsed(true);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     try {
-      const data = await runStreamed<{ itinerary: Itinerary; runId?: string | null }>({
+      const data = await runStreamed<{
+        itinerary: Itinerary;
+        runId?: string | null;
+        sessionId?: string | null;
+      }>({
         destination,
         startDate,
         endDate,
@@ -799,13 +1083,23 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       await settle(ARRIVAL_HOLD_MS);
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
+      setLastSessionId(data.sessionId ?? null);
       setRevealAnimation(true);
       setStep("result");
+      // The wizard's job is done — drop its draft and the `?step=` it leaves in the URL, or a
+      // refresh on this result page would find both still there and restore straight back into
+      // the wizard instead of showing what was just generated.
+      try {
+        sessionStorage.removeItem(PLAN_DRAFT_KEY);
+      } catch {
+        /* nothing to clean up if storage was never writable */
+      }
+      window.history.replaceState(null, "", window.location.pathname);
 
-      // Deliberately no profile write here. The wizard's "Adjust for this trip" values are a
-      // per-trip override, and writing them back would silently make one unusual trip the
-      // traveler's permanent default — the bug this codebase already hit twice with `tier`.
-      // /profile and the onboarding card are the only writers.
+      // Deliberately no profile write here. The preferences step's values are a per-trip
+      // override, and writing them back would silently make one unusual trip the traveler's
+      // permanent default — the bug this codebase already hit twice with `tier`. /profile and
+      // the onboarding card are the only writers.
     } catch (e) {
       // A cancel arrives here as an AbortError. It is not a failure and must not be reported
       // as one — cancelGeneration has already reset the UI.
@@ -822,7 +1116,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setError(null);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     try {
-      const data = await runStreamed<{ itinerary: Itinerary; runId?: string | null }>({
+      const data = await runStreamed<{
+        itinerary: Itinerary;
+        runId?: string | null;
+        sessionId?: string | null;
+      }>({
         destination,
         startDate,
         endDate,
@@ -834,6 +1132,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       });
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
+      setLastSessionId(data.sessionId ?? null);
     } catch (e) {
       if (!isAbort(e)) {
         setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
@@ -849,10 +1148,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    *  affected days, so there is nothing to recompute here — and nothing to persist yet, same as the
    *  inline day edits.
    *
-   *  This wiring is why the feature is reachable at all. `ItineraryCard` renders `ArrangeBoard`
-   *  itself, but `onItineraryChange` is optional and a caller that omits it gets a board whose drops
-   *  go nowhere. The handler lived in `page.tsx` until that file was split into this one, so the
-   *  merge that brought the board across would otherwise have landed it dead. */
+   *  This wiring is why the feature is reachable at all. `ItineraryCard` renders `SplitEditor`
+   *  itself, but `onItineraryChange` is optional and a caller that omits it gets an editor whose
+   *  drops, edits and deletes all go nowhere. The handler lived in `page.tsx` until that file was
+   *  split into this one, so the merge that brought the board across would otherwise have landed
+   *  it dead. Now carries every edit the split editor makes, not only drags — the name is older
+   *  than its job. */
   function handleRearrange(next: Itinerary) {
     setRevealAnimation(false);
     setItinerary(next);
@@ -882,6 +1183,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           budget,
           itinerary,
           runId: lastRunId,
+          chatSessionId: lastSessionId,
           userAnswers: currentAnswers(),
         }),
       });
@@ -943,6 +1245,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     }
     // Always the first sub-step, even fully prefilled: the card is a suggestion and the traveller
     // should see what it filled in before it prices anything.
+    try {
+      sessionStorage.removeItem(PLAN_DRAFT_KEY);
+    } catch {
+      /* nothing to clean up if storage was never writable */
+    }
+    // This one call is what makes system Back and a phone's edge-swipe walk the wizard instead
+    // of leaving the page — it's the first pushed entry, and the popstate handler's "nothing in
+    // event.state" branch is specifically "walked back past this one".
+    const url = new URL(window.location.href);
+    url.searchParams.set("step", "basics");
+    window.history.pushState({ tripmatePlanStep: "basics" as PlanStep }, "", url);
     setPlanStep("basics");
     setStep("plan");
   }
@@ -997,8 +1310,20 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               320px of dead slate either side at 1920 and 640px at 2560, next to a landing that now
               runs edge to edge. Not removed outright, unlike the photo grid: this is a form, and a
               four-cell field row spanning 1900px puts Back and Next at opposite ends of the screen
-              and stops them reading as a pair. */}
-          <div className="w-full max-w-[84rem] space-y-4">
+              and stops them reading as a pair.
+
+              That reasoning is about `basics` and only ever was: it is the one step with a
+              three-column field row to keep off the screen edges. The other three inherited the
+              width rather than asking for it, and inheriting it is what produced a 1182x36 input
+              (a 33:1 box) sitting alone in a 1232px card, and 1054px between "Adults" and the
+              stepper that changes it - `PartyCounter`'s rows are `justify-between`, so the gap is
+              whatever the container gives them. Proximity is the strongest grouping cue there is
+              and a full screen-width sweep from a label to its own control breaks it. Each step now
+              gets the width its content asks for. Measured at 1280: the label/stepper gap goes
+              1054px -> ~590px, and the lone input stops being a rule with a cursor in it. */}
+          <div
+            className={`w-full space-y-4 ${planStep === "basics" ? "max-w-[84rem]" : "max-w-3xl"}`}
+          >
             {/* Same hero-rise as the landing block, so the step reads as one move in both
                 directions rather than an instant swap forward and an animated one back. */}
             <form
@@ -1038,12 +1363,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     .then((data) => setRawFetch(data.rawFetch ?? null))
                     .catch(() => {})
                     .finally(() => setRawFetchLoading(false));
-                  setPlanStep("purpose");
+                  goToStep("group");
                   return;
                 }
                 const at = PLAN_ORDER.indexOf(planStep);
                 if (at < PLAN_ORDER.length - 1) {
-                  setPlanStep(PLAN_ORDER[at + 1]);
+                  goToStep(PLAN_ORDER[at + 1]);
                   return;
                 }
                 generate();
@@ -1051,7 +1376,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               className={`hero-rise ${cardClass}`}
             >
               {planStep === "basics" && (
-                <>
+                <Screen
+                  name="Basics"
+                  title="Where and when"
+                  subtitle="Destination, dates and what you want to spend in total."
+                >
                   {/* One instrument, not four widgets. The trough is `--surface-deep` at a lower
                       alpha than the panel around it, so it reads as recessed into the glass rather
                       than stacked on top of it, and the cells are separated by the divider between
@@ -1070,20 +1399,32 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     {...devLabel("PlanStep.Basics")}
                   >
                     <Field icon={MapPin} label="Destination" delay={80} grow="w-full">
-                      <DestinationSearch
-                        variant="bare"
-                        value={destination}
-                        onQueryChange={(v) => {
-                          setDestination(v);
-                          setDestinationMissed(false);
-                        }}
-                        onBlur={flyToTypedDestination}
-                        onPick={(s) => {
-                          lastFlownRef.current = s.name;
-                          flyToDestinationByCoords(s.lat, s.lon, s.name);
-                        }}
-                        placeholder="Kyoto, Japan"
-                      />
+                      {/* The cell keeps the full row - the divider has to span the trough and the
+                          whole cell stays clickable - but the control inside it does not. Uncapped,
+                          "Kyoto, Japan" got a 1180px box for ~90px of glyphs, and the suggestion
+                          dropdown inherited that width: `absolute inset-x-0` on a `relative w-full`
+                          wrapper, so it spanned the console and covered Start, End and Total budget,
+                          hiding all three required fields while you filled the first one. Capping
+                          here fixes the input and the dropdown together, because the dropdown is
+                          positioned against this box. 28rem holds the longest realistic
+                          `City, Country` at the fluid root's top end. */}
+                      <div className="max-w-[28rem]">
+                        <DestinationSearch
+                          variant="bare"
+                          ariaLabel="Destination"
+                          value={destination}
+                          onQueryChange={(v) => {
+                            setDestination(v);
+                            setDestinationMissed(false);
+                          }}
+                          onBlur={flyToTypedDestination}
+                          onPick={(s) => {
+                            lastFlownRef.current = s.name;
+                            flyToDestinationByCoords(s.lat, s.lon, s.name);
+                          }}
+                          placeholder="Kyoto, Japan"
+                        />
+                      </div>
                     </Field>
                     {/* Stacks vertically below `md`, where three cells in a row would each be
                         narrower than the date they have to hold. */}
@@ -1132,22 +1473,85 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                             required
                             type="number"
                             min={1}
+                            // Placeholder, not a value: budget used to start at a real 1000 with
+                            // nothing to distinguish it from a number the traveler had typed. An
+                            // empty required field with no hint of scale is its own problem, so
+                            // this teaches the shape the way "Kyoto, Japan" teaches Destination.
+                            placeholder="3000"
                             value={budget === 0 ? "" : budget}
                             onChange={(e) => setBudget(Number(e.target.value))}
                             className={`${fieldInputClass} tabular-nums ${budget === 0 ? fieldEmptyTone : fieldFilledTone}`}
                           />
                         </div>
+                        {/* Compact — one band, not the three-band PartyCounter that owns the full
+                            breakdown on "Who's going?". Party size is the largest multiplier on
+                            what the budget above buys, and it used to arrive a full screen after
+                            the number it modifies; this lets the traveler see the per-person
+                            split without leaving the field that drives it. Adjusts `adults` only
+                            — children and infants stay whatever they already are (0 unless a
+                            restored profile or "Who's going?" set them) — but the total below
+                            counts all three, so it stays honest even when this control alone
+                            can't change every band. */}
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <span className="text-xs text-muted">Travelers</span>
+                          <div className="flex items-center gap-1">
+                            <PartyStepButton
+                              icon={Minus}
+                              label="Remove one adult"
+                              atBound={party.adults <= 1}
+                              onClick={() => setParty((p) => ({ ...p, adults: p.adults - 1 }))}
+                            />
+                            <span
+                              aria-live="polite"
+                              className="w-6 text-center text-sm font-medium tabular-nums text-foreground"
+                            >
+                              {totalTravelers}
+                            </span>
+                            <PartyStepButton
+                              icon={Plus}
+                              label="Add one adult"
+                              atBound={party.adults >= PARTY_MAX_PER_BAND}
+                              onClick={() => setParty((p) => ({ ...p, adults: p.adults + 1 }))}
+                            />
+                          </div>
+                        </div>
                         {/* Until this line existed, picking two dates never told you how long the
                             trip was — the day count was computed for the tier cards and never
                             shown. Saying what the budget buys per day answers both at once, and
-                            it's the division the traveler was going to do anyway. */}
+                            it's the division the traveler was going to do anyway. Now divided
+                            across travelers too: "$500/day for 6 days" read as a per-trip figure
+                            even after a family of four was already dialled in two screens away
+                            from where it was stated. */}
                         {days !== null && budget > 0 && (
                           <div
-                            key={`${budget}-${days}`}
+                            key={`${budget}-${days}-${totalTravelers}`}
                             className="value-in mt-0.5 text-xs tabular-nums text-muted"
                           >
-                            {formatMoney(Math.round(budget / days))}/day for {days}{" "}
+                            {formatMoney(Math.round(budget / days / totalTravelers))}/day
+                            {totalTravelers > 1 ? " per person" : ""} for {days}{" "}
                             {days === 1 ? "day" : "days"}
+                          </div>
+                        )}
+                        {/* The tier itself was invisible here before this line — `tier` (below)
+                            was always derived from budget and days, but nothing on this screen
+                            ever named it, so the product's own stated differentiator (an
+                            itinerary anchored to a chosen spending tier) was set by a number the
+                            traveler typed and never confirmed. This replaces the dead "Style and
+                            budget" label that used to sit alone in the Adjust panel with
+                            nothing under it — the tier isn't a pickable preference like the
+                            fields that share that panel, so it belongs where it's derived, not
+                            behind a second click. Description text is `TIERS`' own copy, already
+                            written for the tier cards this app no longer shows. */}
+                        {days !== null && budget > 0 && (
+                          <div
+                            key={`tier-${tier}`}
+                            className="value-in mt-0.5 text-xs text-muted"
+                          >
+                            Closest match:{" "}
+                            <span className="font-medium text-foreground">
+                              {TIERS.find((t) => t.id === tier)?.name}
+                            </span>{" "}
+                            — {TIERS.find((t) => t.id === tier)?.description}
                           </div>
                         )}
                         {/* Under the budget field because this is the field it modifies: the plan
@@ -1221,7 +1625,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                             options={arrivalPointOptions}
                             placeholder={arrivalPointPlaceholder}
                             className="flex-1"
-                            inputClassName={`${fieldInputClass} ${arrivalPoint ? fieldFilledTone : fieldEmptyTone}`}
+                            // `truncate`: this cell holds a fixed 6.5rem time field plus this one,
+                            // and at the console's three-column intermediate widths (~800px) the
+                            // remainder measured ~126px — enough to clip "Anywhere you like"
+                            // mid-word with a hard edge. An ellipsis is the honest version of the
+                            // same clip: it still doesn't fit, but it says so instead of cutting a
+                            // glyph in half.
+                            inputClassName={`${fieldInputClass} truncate ${arrivalPoint ? fieldFilledTone : fieldEmptyTone}`}
                           />
                         </div>
                       </Field>
@@ -1244,70 +1654,28 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                             options={arrivalPointOptions}
                             placeholder={arrivalPointPlaceholder}
                             className="flex-1"
-                            inputClassName={`${fieldInputClass} ${departurePoint ? fieldFilledTone : fieldEmptyTone}`}
+                            // Same clipping, same fix — see the Arrive cell above.
+                            inputClassName={`${fieldInputClass} truncate ${departurePoint ? fieldFilledTone : fieldEmptyTone}`}
                           />
                         </div>
                       </Field>
                     </div>
                   </div>
 
-                  {/* The collapsed state names the remembered values rather than hiding behind
-                      a bare "Adjust" link — a traveler who cannot see these has no way to know
-                      the app applied them, and a hidden control reads as the app having
-                      forgotten. Everything durable lives in this one block: no pagination, no
-                      second expander. */}
-                  <div className="mt-3 rounded-2xl border border-white/10 bg-surface-deep/50 px-4 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs text-muted">
-                        {summarizeDurable({
-                          explorerStyle,
-                          energy,
-                          crowds,
-                          topPriorities: starredInterests,
-                        })}
-                      </p>
-                      <button
-                        type="button"
-                        aria-expanded={adjustOpen}
-                        onClick={() => setAdjustOpen((v) => !v)}
-                        className="shrink-0 text-xs font-medium text-accent underline-offset-4 hover:underline"
-                      >
-                        {adjustOpen ? "Done" : "Adjust for this trip"}
-                      </button>
-                    </div>
-
-                    {adjustOpen && (
-                      <div className="mt-4 space-y-5 border-t border-white/10 pt-4">
-                        <p className="text-xs text-muted">
-                          Changes here apply to this trip only. Your saved profile is untouched —
-                          edit it on the <Link href="/profile" className="text-accent underline-offset-4 hover:underline">profile page</Link>.
-                        </p>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted">Explorer style</label>
-                          <ExplorerStylePicker selected={explorerStyle} onSelect={setExplorerStyle} />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted">How much walking suits you</label>
-                          <ChoicePicker name="energy" options={[...ENERGY_LEVELS]} selected={energy} onSelect={setEnergy} />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted">Crowds</label>
-                          <ChoicePicker name="crowds" options={[...CROWD_PREFERENCES]} selected={crowds} onSelect={setCrowds} />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted">Style and budget</label>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted">What matters most</label>
-                          <InterestPicker
-                            selected={interests}
-                            starred={starredInterests}
-                            onToggle={toggleInterest}
-                            onToggleStar={toggleInterestStar}
-                          />
-                        </div>
-                      </div>
-                    )}
+                  {/* Read by skill §4e ("already booked beats anything you would recommend"),
+                      by `formatTravelerProfile` and by `trip-context.md` — all three already
+                      read `userAnswers.logistics.stayBooked`, which nothing in this form
+                      collected until now, so a booked hotel was being re-chosen by the model
+                      every time. */}
+                  <div className="mt-3 space-y-2 rounded-2xl border border-white/10 bg-surface-deep/50 px-4 py-3">
+                    <label className="text-xs font-medium text-muted">Already booked or fixed</label>
+                    <input
+                      type="text"
+                      value={stayBooked}
+                      placeholder="Where you're staying, if it's booked"
+                      onChange={(e) => setStayBooked(e.target.value)}
+                      className={`${fieldInputClass} ${stayBooked ? fieldFilledTone : fieldEmptyTone}`}
+                    />
                   </div>
 
                   {/* Deliberately not the red error block: an Open-Meteo miss only costs the map
@@ -1326,22 +1694,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                       </p>
                     )}
                   </div>
-                </>
-              )}
-
-              {planStep === "purpose" && (
-                <Screen
-                  name="Purpose"
-                  title="What's the occasion?"
-                  subtitle="Optional — a birthday, a first visit or a workation all change what fits."
-                >
-                  <input
-                    type="text"
-                    value={purpose}
-                    onChange={(e) => setPurpose(e.target.value)}
-                    placeholder="e.g. anniversary trip, first time in Japan, work + play"
-                    className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
-                  />
                 </Screen>
               )}
 
@@ -1368,57 +1720,246 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     <div className="border-t border-white/10 pt-3">
                       <PartyCounter value={party} onChange={setParty} />
                     </div>
+                    {/* Dietary lives here now, not just on /profile — it changes what fits at the
+                        table exactly the way the party size above changes how many chairs it
+                        needs, and neither was reachable from the wizard before this. */}
+                    <div className="border-t border-white/10 pt-3">
+                      <label className="text-xs font-medium text-muted">Dietary needs</label>
+                      <div className="mt-2">
+                        <DietaryPicker value={dietary} onChange={setDietary} />
+                      </div>
+                    </div>
                   </div>
                 </Screen>
               )}
 
-              {/* Last on purpose: the only screen that needs Step 2a's fetch, by which point the
-                  three preceding screens have given it time to land. Leaving it empty is normal —
-                  the profile above is what selects stops. */}
-              {planStep === "pois" && (
+              {/* Everything that used to hide behind a collapsed "Adjust for this trip" link on
+                  `basics` — the critique that called those invisible was right; a click most
+                  travelers never made is not "available". Occasion, which used to be its own
+                  screen for one optional text input, joins them here rather than keeping a step
+                  that asked one question and nothing else. */}
+              {planStep === "preferences" && (
                 <Screen
-                  name="Pois"
-                  title="Anywhere you already know you want to go?"
-                  subtitle="Optional — skip this and we'll choose every stop for you."
+                  name="Preferences"
+                  title="What you're after"
+                  subtitle="Occasion, pace and what to prioritise. All optional, and specific to this trip."
                 >
-                  <PoiCandidatePicker
-                    pois={rawFetch?.candidatePois.pois ?? []}
-                    loading={rawFetchLoading}
-                    available={rawFetch?.candidatePois.available ?? false}
-                    selected={selectedPois}
-                    onToggle={togglePoi}
-                    customPois={customPois}
-                    onAddCustom={addCustomPoi}
-                    onRemoveCustom={removeCustomPoi}
-                  />
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Occasion</label>
+                      <input
+                        type="text"
+                        value={purpose}
+                        onChange={(e) => setPurpose(e.target.value)}
+                        placeholder="e.g. anniversary trip, first time in Japan, work + play"
+                        aria-label="What's the occasion?"
+                        className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Explorer style</label>
+                      <ExplorerStylePicker selected={explorerStyle} onSelect={setExplorerStyle} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">How much walking suits you</label>
+                      <ChoicePicker name="energy" options={[...ENERGY_LEVELS]} selected={energy} onSelect={setEnergy} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Crowds</label>
+                      <ChoicePicker name="crowds" options={[...CROWD_PREFERENCES]} selected={crowds} onSelect={setCrowds} />
+                    </div>
+                    {/* Asked directly rather than inferred from `energy` above — "how much do you
+                        want to walk" and "can you manage stairs" are different questions, and
+                        `deriveMobilityProfile` used the first as a proxy for both until this
+                        existed, so a wheelchair user describing their energy as high got no
+                        accommodation at all. */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Getting around</label>
+                      <div className="space-y-2 rounded-2xl border border-white/10 bg-surface-deep/50 px-4 py-3">
+                        <label className="flex items-center gap-2 text-xs text-muted">
+                          <input
+                            type="checkbox"
+                            checked={accessibility?.stepFreeRequired ?? false}
+                            onChange={(e) => setAccess({ stepFreeRequired: e.target.checked })}
+                            className="accent-accent"
+                          />
+                          I need step-free routes throughout
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-muted">
+                          <input
+                            type="checkbox"
+                            checked={accessibility?.limitStairs ?? false}
+                            onChange={(e) => setAccess({ limitStairs: e.target.checked })}
+                            className="accent-accent"
+                          />
+                          Avoid stairs and steep climbs where possible
+                        </label>
+                        <input
+                          type="text"
+                          value={accessibility?.note ?? ""}
+                          placeholder="Anything else we should plan around"
+                          onChange={(e) => setAccess({ note: e.target.value })}
+                          className={`${fieldInputClass} ${accessibility?.note ? fieldFilledTone : fieldEmptyTone}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">What matters most</label>
+                      <InterestPicker
+                        selected={interests}
+                        starred={starredInterests}
+                        onToggle={toggleInterest}
+                        onToggleStar={toggleInterestStar}
+                      />
+                    </div>
+                    <p className="text-xs text-muted">
+                      These apply to this trip only. Your saved profile is untouched — edit it on
+                      the{" "}
+                      <Link
+                        href="/profile"
+                        className="text-accent underline-offset-4 hover:underline"
+                      >
+                        profile page
+                      </Link>
+                      .
+                    </p>
+                  </div>
                 </Screen>
               )}
 
+              {/* The terminal screen, and the only one meant to be read rather than answered.
+                  Every prior version of this flow ended here on a question — "anywhere you
+                  already know you want to go?" — with no summary of what was about to be
+                  generated. This states the trip back before committing to it: the derived tier
+                  was invisible in the whole flow until now, and "6 days" never told anyone it
+                  meant 5 nights of lodging, the largest line item a budget has to cover. */}
+              {planStep === "review" && (
+                <Screen
+                  name="Review"
+                  title="Review your trip"
+                  subtitle="Here's everything before we start planning."
+                >
+                  <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-surface-deep/50 px-4">
+                    <ReviewRow
+                      label="Destination"
+                      value={destination || "Not set"}
+                      onEdit={() => goToStep("basics")}
+                    />
+                    <ReviewRow
+                      label="Dates"
+                      value={
+                        startDate && endDate
+                          ? `${formatDateRange(startDate, endDate)} · ${days} ${days === 1 ? "day" : "days"}, ${nights} ${nights === 1 ? "night" : "nights"}`
+                          : "Not set"
+                      }
+                      onEdit={() => goToStep("basics")}
+                    />
+                    <ReviewRow
+                      label="Budget"
+                      value={
+                        budget > 0
+                          ? `${formatMoney(budget)} · ${TIERS.find((t) => t.id === tier)?.name}`
+                          : "Not set"
+                      }
+                      onEdit={() => goToStep("basics")}
+                    />
+                    <ReviewRow
+                      label="Travelers"
+                      value={
+                        <>
+                          {party.adults} {party.adults === 1 ? "adult" : "adults"}
+                          {party.children > 0 &&
+                            `, ${party.children} ${party.children === 1 ? "child" : "children"}`}
+                          {party.infants > 0 &&
+                            `, ${party.infants} ${party.infants === 1 ? "infant" : "infants"}`}
+                        </>
+                      }
+                      onEdit={() => goToStep("group")}
+                    />
+                    {/* No edit link on this one — unlike the facts above, it isn't set on a
+                        different step to jump back to. The picker naming it is right below. */}
+                    <ReviewRow
+                      label="Stops picked ahead of time"
+                      value={
+                        selectedPois.length + customPois.length > 0
+                          ? `${selectedPois.length + customPois.length}`
+                          : "None yet — add any below"
+                      }
+                    />
+                  </div>
+
+                  <div className="mt-5">
+                    <PoiCandidatePicker
+                      pois={rawFetch?.candidatePois.pois ?? []}
+                      loading={rawFetchLoading}
+                      available={rawFetch?.candidatePois.available ?? false}
+                      selected={selectedPois}
+                      onToggle={togglePoi}
+                      customPois={customPois}
+                      onAddCustom={addCustomPoi}
+                      onRemoveCustom={removeCustomPoi}
+                    />
+                  </div>
+
+                  {/* The one reassurance this flow never gave before committing to a ~2-minute
+                      run: that it can be stopped, and that the result isn't final. Both were
+                      already true — `GenerationScreen` takes `onCancel`, and `FeedbackLoop`
+                      exists — neither was ever said here, where a hesitating traveler needed it. */}
+                  <p className="mt-4 text-xs text-muted">
+                    Takes about two minutes. You can cancel any time, and refine the plan in plain
+                    language afterwards.
+                  </p>
+                </Screen>
+              )}
+
+              {/* `justify-end`, not the `justify-between` this was. Both controls do the same job -
+                  move the wizard - so they are one group, and `justify-between` was pinning them to
+                  opposite ends of whatever the card happened to be: 1088px apart on `basics` at
+                  1280. At that distance they stop reading as a pair and the eye has to cross the
+                  whole card to find the action, which is the exact failure the 84rem comment above
+                  was already worried about. Clustering fixes it at every width instead of at one.
+                  Next stays rightmost, so "forward" keeps the position the flow taught. */}
               <div
-                className="value-in mt-6 flex items-center justify-between border-t border-card-border pt-5"
+                className="value-in mt-6 flex items-center justify-end gap-3 border-t border-card-border pt-5"
                 style={{ animationDelay: "440ms" }}
               >
+                {/* `window.history.back()`, not a direct `setPlanStep`/`backToLanding` branch.
+                    This button, the browser's own Back, and a phone's edge-swipe all used to be
+                    three different code paths — only this one had any effect, which is exactly
+                    why the other two destroyed every answer instead of walking the wizard.
+                    Routing all three through the same `popstate` handler (above) means there is
+                    now exactly one way this can go wrong instead of three. */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const at = PLAN_ORDER.indexOf(planStep);
-                    if (at === 0) backToLanding();
-                    else setPlanStep(PLAN_ORDER[at - 1]);
-                  }}
+                  onClick={() => window.history.back()}
                   className={ghostButtonClass}
                 >
                   Back
                 </button>
-                <button
-                  type="submit"
-                  className="group inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none active:scale-[0.98]"
-                >
-                  {planStep === PLAN_ORDER[PLAN_ORDER.length - 1] ? "Generate itinerary" : "Next"}
-                  <ArrowRight
-                    className="h-4 w-4 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5"
-                    strokeWidth={2.25}
-                  />
-                </button>
+                {planStep === PLAN_ORDER[PLAN_ORDER.length - 1] ? (
+                  // The terminal button, deliberately unlike every "Next" before it: no arrow —
+                  // there's nowhere further to imply — and wider, so committing to a ~2-minute
+                  // generation doesn't sit in a pill sized and shaped like the three-times-
+                  // repeated "keep going" button that trained the traveler's muscle memory to
+                  // press it without reading it.
+                  <button
+                    type="submit"
+                    className={`rounded-full bg-accent px-8 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98] ${focusRingClass}`}
+                  >
+                    Generate itinerary
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className={`group inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98] ${focusRingClass}`}
+                  >
+                    Next
+                    <ArrowRight
+                      className="h-4 w-4 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5"
+                      strokeWidth={2.25}
+                    />
+                  </button>
+                )}
               </div>
             </form>
 
@@ -1430,7 +1971,27 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       )}
 
       {step === "result" && itinerary && (
-        <DockedPanel collapsible busy={refining} wide={!!focus.target}>
+        <DockedPanel
+          collapsible
+          busy={refining}
+          wide={!!focus.target}
+          collapsed={planCollapsed}
+          onCollapsedChange={setPlanCollapsed}
+          // What the capsule carries while the panel is shut — the trip at a glance, so
+          // "which day was I reading" survives a look at the map. Pre-save there is no trip
+          // row yet, so this reads the form's own destination, the way the arrange board does.
+          capsule={
+            destination
+              ? {
+                  title: destination,
+                  subtitle: itinerary?.days.length
+                    ? `${itinerary.days.length} ${itinerary.days.length === 1 ? "day" : "days"}`
+                    : undefined,
+                  step: itinerary?.days.length ? `Day ${activeDayIndex + 1}` : undefined,
+                }
+              : undefined
+          }
+        >
           <div className="space-y-6" {...devLabel("ResultPanel")}>
             {/* refine()/save() can fail after the card is already showing — this is the
                 only place either error would otherwise have nowhere to render. */}
@@ -1466,6 +2027,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   draft={focus.draft}
                   dayIndex={focus.target.dayIndex}
                   scope={focus.target.scope}
+                  sessionId={lastSessionId}
                   dirty={focus.dirty}
                   onDraftChange={focus.applyDraft}
                   onCancel={focus.cancel}
@@ -1508,9 +2070,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   activeDayIndex={activeDayIndex}
                   onActiveDayChange={setActiveDayIndex}
                   onEditDay={handleEditDay}
-                  onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
+                  // Same window "Refine with AI" opens, just starting on the day whose icon was
+                  // clicked: one chat surface with day navigation, rather than a second
+                  // day-locked variant that looked identical but couldn't reach other days.
+                  onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
                   onItineraryChange={handleRearrange}
+                  // The board only needs a name, a budget and the dates; pre-save there is no trip
+                  // row yet, so this is assembled from the form's own values.
+                  trip={{ id: "preview", destination, startDate, endDate, budget }}
                   animateReveal={revealAnimation}
+                  panelCollapsed={planCollapsed}
+                  onMinimize={() => setPlanCollapsed(true)}
                 />
               )}
 

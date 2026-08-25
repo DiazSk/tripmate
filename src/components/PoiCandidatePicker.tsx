@@ -71,8 +71,13 @@ export default function PoiCandidatePicker({
         </div>
       )}
 
+      {/* Was "No suggestions for this destination yet — add your own below." — an apology on
+          the review screen, right before the traveler commits to a two-minute generation, from
+          the one component whose entire job is proving the app knows the destination. Nothing
+          about the missing suggestions is provisional or worth apologising for: OpenTripMap is
+          either unconfigured or came back empty, and either way the plan still gets built. */}
       {!loading && !available && (
-        <p className="text-xs text-muted">No suggestions for this destination yet — add your own below.</p>
+        <p className="text-xs text-muted">We&apos;ll pick every stop for you — add any must-sees below.</p>
       )}
 
       {customPois.length > 0 && (
@@ -108,13 +113,17 @@ export default function PoiCandidatePicker({
             }
           }}
           placeholder="Add a spot you already know about"
+          // The visible heading above sits outside this component, so without a name of its own
+          // the field announced as an unlabelled edit box.
+          aria-label="Add a spot you already know about"
           className="flex-1 rounded-full bg-white/10 px-3.5 py-1.5 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
         />
         <button
           type="button"
           onClick={submitCustom}
           aria-label="Add spot"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-muted hover:bg-white/15"
+          // 32x32 before this — under the 44px floor the rest of the app holds to.
+          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-muted hover:bg-white/15"
         >
           <Plus className="h-4 w-4" />
         </button>

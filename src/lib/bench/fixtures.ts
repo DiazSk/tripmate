@@ -258,10 +258,8 @@ const SPECS: FixtureSpec[] = [
       accessibility: { stepFreeRequired: true, limitStairs: true, note: "manual wheelchair, no steps at all" },
       logistics: {
         arrivalTime: "13:45",
-        // Null rather than invented: this fixture was written to exercise the *times* and the
-        // booked stay. `arrivalPoint`/`departurePoint` arrived with the traveler-facing form and
-        // are required by `TripLogistics`; a fixture that quietly starts testing a rule it was not
-        // written for is worse than one that states it is not testing it.
+        // Null rather than invented: this fixture predates the arrival/departure *points*, and
+        // null is exactly what "not stated" means to every rule that reads them.
         arrivalPoint: null,
         departureTime: "11:00",
         departurePoint: null,

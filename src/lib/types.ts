@@ -79,6 +79,10 @@ export interface Trip extends TripSummary {
   /** The Step 2b answers captured when the trip was saved. Null for trips saved before this was
    *  stored — the edit loop degrades to asking rather than assuming. */
   userAnswers?: UserAnswers | null;
+  /** The `claude` CLI session this trip was generated in, so reopening it resumes the same
+   *  conversation. Null for trips saved before sessions existed, or whose session has been
+   *  replaced — the chat then rebuilds a full prompt instead. */
+  chatSessionId?: string | null;
 }
 
 export interface PlaceDetail {
@@ -199,10 +203,12 @@ export interface UserAnswers {
   group: GroupType;
   /** Free text, meaningful only when `group` is "other" — "five college friends", "work offsite". */
   groupOther?: string;
-  /** Optional on purpose: both of these are absent from rows written before the field existed, so
-   *  each reader treats absence as "not asked" rather than rejecting the row. `logistics` belongs to
-   *  the same group and is declared below, next to `accessibility`, where its docblock is. */
+  /** Optional on purpose: every one of these three is absent from rows written before the field
+   *  existed, so each reader treats absence as "not asked" rather than rejecting the row. */
   party?: PartyCounts;
+  /** What the traveler has already committed to, which outranks anything the model would pick.
+   *  Every rule that reads these degrades rather than assuming when they are absent. */
+  logistics?: TripLogistics | null;
   energy: EnergyLevel;
   crowds: CrowdPreference;
   budget: number;
@@ -220,10 +226,6 @@ export interface UserAnswers {
    *  traveler cannot eat at is the worst defect this app can produce. Both fields empty means
    *  "no restrictions", which is different from the field being absent. */
   dietary?: DietaryNeeds | null;
-  /** What the traveler has already committed to, which outranks anything the model would pick.
-   *  All optional: absent means "not stated", and every rule that reads them degrades rather
-   *  than assuming. */
-  logistics?: TripLogistics | null;
   /** Mobility needs stated directly, rather than inferred from `energy`. Absent means nothing was
    *  stated — NOT that the traveler has no needs. */
   accessibility?: AccessibilityNeeds | null;

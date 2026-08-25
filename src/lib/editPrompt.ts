@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { dayActiveSpan } from "./itinerary";
 import type { DayPlan, Itinerary, Stop } from "./types";
 
@@ -173,6 +174,93 @@ Respond with ONLY valid JSON, no markdown fences:
 {"reply":"conversational answer to their message, 1-3 sentences","options":["short tappable reply","another"],"changes":["one short line per change, in plain language"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an unavoidable adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
 
 "ops" may mix the op types shown above. "warnings" is an empty array when nothing tripped a guardrail. "options" must be an empty array unless you asked a question. Each option is what the traveler would tap to answer it — under 6 words, and directly usable as their next message.`;
+}
+
+/**
+ * A fingerprint of the plan as the model currently understands it.
+ *
+ * The chat session is only safe to resume while its idea of the itinerary still matches reality,
+ * and reality moves behind its back: Mode B element edits are a *separate* call that the chat
+ * session never sees, `applyPatch` can reject ops the model believed had landed, and the board
+ * reorders stops with no model involvement at all. Comparing this hash to the one the session was
+ * last told about is what turns "the plan drifted" from a silent wrong-stop edit into a resync.
+ *
+ * Hashes the same compacted view the prompt shows, so it changes exactly when something the model
+ * can see changes — a field the edit loop never reads must not force a needless resync.
+ */
+export function itineraryFingerprint(itinerary: Itinerary): string {
+  return createHash("sha256").update(compactItinerary(itinerary)).digest("hex").slice(0, 16);
+}
+
+/**
+ * MODE A, resumed — the same conversation the itinerary was generated in, continued.
+ *
+ * The session already carries the planning rules, the trip context and the plan itself, because
+ * the generate call ran inside it. So this sends the traveler's turn and the response contract,
+ * and nothing else.
+ *
+ * **Be clear about what that saves: bytes we compose, not tokens we send.** `--resume` replays the
+ * entire transcript to the model on every turn (measured in claude.ts), so this is not the faster
+ * path — it is the *continuous* one. Its real advantage is that the model keeps its own reasoning
+ * from the generation: why it put the temple before lunch, what it already rejected and why.
+ *
+ * The output contract is restated every turn rather than assumed. The session's last assistant
+ * message was a raw `{days:[...]}` itinerary, a different shape entirely, and drifting back into
+ * it mid-conversation would fail the parse and lose the traveler's turn.
+ */
+export function buildResumedChatPrompt(params: {
+  message: string;
+  itinerary: Itinerary;
+  dayIndex?: number;
+  /** Set when the plan changed outside this session; carries the corrected state. */
+  resync: boolean;
+}): string {
+  const scope =
+    params.dayIndex === undefined
+      ? "the whole trip"
+      : `day ${params.dayIndex + 1} of the trip (dayIndex=${params.dayIndex}) only — do not change any other day`;
+
+  // Only when the fingerprint says the model is out of date. Sending it every turn would defeat
+  // the point of resuming; never sending it lets a stale index quietly edit the wrong stop.
+  const resyncBlock = params.resync
+    ? `<plan_changed>
+The itinerary has been edited outside this conversation since your last message, so what you
+remember is out of date. This is the current plan — treat it as the only truth and ignore your
+earlier recollection of the indices:
+
+${compactItinerary(params.itinerary, params.dayIndex)}
+</plan_changed>
+
+`
+    : "";
+
+  return `${resyncBlock}<traveler_message>
+${params.message}
+</traveler_message>
+
+Continue helping the traveler refine the itinerary you planned for them. Scope: ${scope}.
+
+The planning rules, trip context and traveler profile from earlier in this conversation remain in
+force — don't ask them for anything they've already told you.
+
+${CHAT_CAPABILITIES}
+
+Only return operations when they have actually ASKED FOR A CHANGE. If they asked a question or
+invited an opinion, answer it and return an EMPTY ops array — suggest what you would change and
+offer to do it, but don't change their plan until they say yes.
+
+Check the plan your ops would PRODUCE against each §12 guardrail — travel time between consecutive
+stops, opening hours, the day's total active hours, and the trip total against the budget. Every
+check that still fails goes in "warnings", one line each, quantified where you have the number, no
+leading emoji and no "Warning:" label. Their having asked for it is not a reason to leave it out.
+
+${SHARED_RULES}
+
+Respond with ONLY valid JSON, no markdown fences — NOT the {"days":[...]} shape you used when you
+first wrote this itinerary:
+{"reply":"conversational answer, 1-3 sentences","options":["short tappable reply","another"],"changes":["one short line per change"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
+
+"options" must be an empty array unless you asked a question.`;
 }
 
 /**

@@ -11,14 +11,24 @@ import {
   ReactNode,
   RefObject,
 } from "react";
-import type { Entity, Viewer } from "cesium";
+import type { Cartesian3, Entity, Viewer } from "cesium";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
+import { metresBetween, peekFlightSeconds, peekRangeM } from "@/lib/peekRange";
 import {
+  buildDayClusters,
   buildRouteGeometry,
+  dayColorToken,
+  dayVisualState,
+  frameRouteBesidePanel,
+  RouteCluster,
   RouteGeometry,
   RouteStop,
   sampleRouteAltitude,
   STEM_HEIGHT_M,
 } from "@/lib/mapRoute";
+
+// Re-exported so the marker layer can reach the rule without importing two modules for it.
+export { dayVisualState } from "@/lib/mapRoute";
 
 interface MapCameraContextValue {
   setViewer: (viewer: Viewer | null) => void;
@@ -48,39 +58,69 @@ interface MapCameraContextValue {
    *  ponytail: make this a counter if a route ever mounts two globe surfaces at once. */
   globeWanted: boolean;
   setGlobeWanted: (wanted: boolean) => void;
-  /** The two inert setters below are retained deliberately, and they mark the seam where a deferred
-   *  piece of `dev-aryan` meets this branch. That branch models the globe as `off | static | live`,
-   *  with a still `GlobePoster` standing in whenever Cesium is not mounted; this branch instead
-   *  gates Cesium to two surfaces (see `globeWanted`) and shows flat canvas elsewhere. Ours was kept
-   *  at merge time because seven commits of measured work live in it, and `GlobePoster.tsx` was left
-   *  in the tree unreferenced against porting the idea properly later.
+  /**
+   * True while an editing surface is open, which suspends the hover peek.
    *
-   *  Until then these exist so his callers still compile:
-   *  - `setGlobeSpinning` — `HeroPoster` gates the globe's idle drift on an IntersectionObserver.
-   *    That drift was deleted in `0d32882` after being proven unreachable, and `ScrollStory` no
-   *    longer renders `HeroPoster`, but the file is kept on disk.
-   *  - `setPosterPlace` — `useTripCamera` tells the poster which destination photo to show. With no
-   *    poster rendered there is nothing to tell.
-   *
-   *  If the poster architecture is ever ported, these are the two hooks it reconnects to. */
-  setGlobeSpinning: (spinning: boolean) => void;
-  setPosterPlace: (place: string | null) => void;
+   * The peek answers "which stop is this?" while *reading* a plan. While editing one, the same
+   * pointer movement means something else entirely — dragging a stop between days, or reading a
+   * chat turn with the globe's marker cards still under the cursor — and a camera that dives at
+   * whatever the pointer brushed is moving the ground out from under the edit. Editing surfaces
+   * declare themselves with `useHoverPeekSuspended`, the same way a surface declares it wants
+   * the globe at all.
+   */
+  peekSuspended: boolean;
+  setPeekSuspended: (suspended: boolean) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   flyToPlace: (lat: number, lng: number, label?: string) => void;
   /** Wipe every trip overlay, fly back to the hero pose and resume the idle spin. The globe
    *  lives above the route boundary and never unmounts, so without this a trip's route and
    *  markers survive a navigation back to the landing page. No-ops before the viewer exists. */
   resetToHome: () => void;
-  /** Lit stems out of glow pools at each stop, a route line connecting them in order, and a
-   *  camera flight framing all of them — call again on every day-tab change. */
-  showDayRoute: (stops: RouteStop[]) => void;
+  /**
+   * Draw every day of the trip at once — lit stems out of glow pools at each stop, a route line
+   * connecting each day's stops in order, one colour per day, and a camera flight framing them.
+   *
+   * `focusDay` is the day the panel has selected, or `null` for a whole-trip overview with no day
+   * singled out. The two are exclusive: with a day focused that day is the *only* one drawn, and
+   * with `null` every day goes up at once, each in its own colour. Dimming the other days instead
+   * of dropping them was tried and does not work — at any alpha that still reads as a route, five
+   * other days' arcs cross the one being read, which is what focusing was for.
+   *
+   * Collapsing the panel passes `null`, so it returns to the overview. That is the feature: a
+   * finished trip opens on its whole shape, and picking a day is how you leave it.
+   *
+   * `panelVisible` is purely about framing: with the panel open the route is aimed left of it, and
+   * with it collapsed the same day is centred. It is a separate argument from `focusDay` because
+   * these are separate questions — which day matters, and how much screen is left to put it in.
+   *
+   * Call again on every day-tab change. Cheap to do so: it rebuilds geometry, but the height
+   * sample that dominates the cost is taken once for the whole trip.
+   */
+  showTripRoute: (
+    days: RouteStop[][],
+    focusDay: number | null,
+    panelVisible?: boolean,
+    soloFocus?: boolean
+  ) => void;
+  /** The day the pointer is resting on, or null. Brings a dimmed day most of the way back
+   *  without disturbing the selection, so Thursday can be checked without losing Tuesday.
+   *  Retints in place — no geometry is rebuilt. */
+  setHoveredDay: (day: number | null) => void;
+  hoveredDay: number | null;
   /** Draws real motorway/trunk-road geometry around a city, fetched from OSM Overpass. Fire-and-
    *  forget: failures (rate limit, network) just leave the map without highways rather than
    *  surfacing an error, since this is ambient context, not something the trip depends on. */
   showHighways: (lat: number, lng: number) => void;
   /** The stops currently drawn, for StopMarkerLayer to render an HTML card per stop. State
-   *  rather than a ref because the card list is real DOM that has to change when the day does. */
+   *  rather than a ref because the card list is real DOM that has to change when the day does.
+   *  Flattened across every day, each stop carrying its own `day`. */
   routeStops: RouteStop[];
+  /** One "Day N" label per day, at that day's centroid — the at-a-glance layer. */
+  routeClusters: RouteCluster[];
+  /** The selected day, or null when the whole trip is shown at once. Read by StopMarkerLayer to
+   *  decide whose stop names are worth showing: all of them at once is ~45 serif names over
+   *  photography, which is unreadable however they are coloured. */
+  focusedDay: number | null;
   /** Altitude the current route is drawn at. A ref, not state: the marker layer reads it once
    *  per frame to place cards on top of the stems, and that must not re-render anything. */
   routeAltitudeRef: RefObject<number>;
@@ -104,6 +144,47 @@ const MapCameraContext = createContext<MapCameraContextValue | null>(null);
 
 const DESTINATION_HEIGHT_M = 15000;
 const PLACE_HEIGHT_M = 600;
+/**
+ * The hover peek is a *relative* zoom, not a destination.
+ *
+ * How close it goes is `peekRangeM()` in `peekRange.ts` — a relative lean, tightened for stops
+ * whose neighbours are crowded around them. The rule lives there because it is arithmetic worth
+ * testing on its own; what stays here is when to fly and how.
+ *
+ * The anchor is the *pre-peek* pose, not wherever the camera is right now. Halving from the live
+ * camera compounds: hovering four rows would be 2x, 4x, 8x, 16x, and the fourth stop would be
+ * inside the pavement.
+ */
+/**
+ * How long the pointer must rest on a row before the camera moves. This one number is what makes
+ * the feature affordable: sweeping down a day of eight stops fires eight hover events, and
+ * without a dwell that is eight cancelled flights and eight bursts of tile requests for places
+ * nobody looked at. With it, a sweep costs nothing and only a stop actually paused on is fetched.
+ */
+const PEEK_DWELL_MS = 300;
+/**
+ * How long after the last scroll a hover stops being treated as scroll-induced.
+ *
+ * Dragging a list under a stationary pointer fires exactly the `pointerenter` a deliberate hover
+ * does — the rows move, the pointer does not — and wheel scrolling arrives in discrete ticks with
+ * idle gaps longer than `PEEK_DWELL_MS`, so the dwell alone let a flick down the itinerary peek at
+ * whichever row happened to be under the cursor between two ticks. Each of those is a camera
+ * flight and a burst of tile requests for a place nobody was looking at.
+ */
+const SCROLL_SETTLE_MS = 350;
+/**
+ * How long an un-hover waits before the camera leans back out.
+ *
+ * Rows do not touch — there is a gap between each pair, and the pointer is over *no* row while it
+ * crosses one. Acting on that immediately meant sliding from row 3 to row 4 pulled the camera all
+ * the way back out and then dived in again, which is the one thing the peek is supposed not to
+ * look like. A hover that lands within this window is treated as a continuation of the same run of
+ * peeks, so the camera moves sideways between the two stops and never pulls out at all.
+ *
+ * Only the *decision* is delayed, not the flight: leaving the list for good still reads as
+ * immediate, because the flight it starts dwarfs this.
+ */
+const PEEK_LEAVE_GRACE_MS = 220;
 /** Mirrors --on-deep / --surface-deep. Cesium wants plain colour strings at label-build time,
  *  so these can't be `var()` — update both here if those tokens move. */
 const LABEL_COLOR = "#f4f7fa";
@@ -114,9 +195,22 @@ const HERO_VIEW = { lng: 8, lat: 22, height: 2_500_000, headingDeg: 5, pitchDeg:
 /** Framing floor for a day's stops, in metres — a lone stop gives a zero-radius sphere, and a
  *  tight cluster gives one small enough that the camera dives into the building mesh. */
 const MIN_ROUTE_RADIUS_M = 400;
-/** Fraction of the route radius to shove the aim point east by, so the route lands left of the
- *  right-docked itinerary panel. Applied only at the panel's own `sm:` breakpoint. */
-const PANEL_BIAS_RATIO = 0.6;
+
+/**
+ * Half the camera's *horizontal* field of view, as a tangent, for turning screen pixels into
+ * metres at a given depth.
+ *
+ * Derived from `fovy` and the aspect ratio rather than read off `frustum.fov`, which is the
+ * horizontal angle only while the canvas is wider than it is tall and silently becomes the
+ * vertical one when it is not. Returns undefined in 2D, where the frustum is orthographic and has
+ * no field of view at all — `frameRouteBesidePanel` then falls back to Cesium's 60° default,
+ * which is the right kind of wrong: a slightly off-centre aim, not a thrown error.
+ */
+function horizontalTanHalfFov(viewer: Viewer): number | undefined {
+  const frustum = viewer.camera.frustum as { fovy?: number; aspectRatio?: number };
+  if (typeof frustum.fovy !== "number" || typeof frustum.aspectRatio !== "number") return undefined;
+  return Math.tan(frustum.fovy / 2) * frustum.aspectRatio;
+}
 
 // Warm gold rather than the UI's amber accent or the route's Apple blue — highways are ambient
 // city context, not the thing the app is asking you to look at, so they need their own hue that
@@ -146,15 +240,23 @@ type Flight = [
   centreHeightM?: number,
 ];
 
+/** A whole trip's worth of routes, held for replay when the request beats the viewer. */
+interface TripRouteRequest {
+  days: RouteStop[][];
+  focusedDay: number | null;
+  soloFocus: boolean;
+  panelVisible: boolean;
+}
+
 export function MapCameraProvider({ children }: { children: ReactNode }) {
   const viewerRef = useRef<Viewer | null>(null);
   const markerRef = useRef<Entity | null>(null);
   const pendingRef = useRef<Flight | null>(null);
-  const pendingRouteRef = useRef<RouteStop[] | null>(null);
+  const pendingRouteRef = useRef<TripRouteRequest | null>(null);
   const routeEntitiesRef = useRef<Entity[]>([]);
   /** Altitude the current route was drawn at, so new geometry lands on the arcs. */
   const routeAltitudeRef = useRef(0);
-  /** Bumped per showDayRoute call so a slow height sample from an older day can't win. */
+  /** Bumped per showTripRoute call so a slow height sample from an older trip can't win. */
   const routeGenerationRef = useRef(0);
   const pendingHighwaysRef = useRef<[lat: number, lng: number] | null>(null);
   const highwayEntitiesRef = useRef<Entity[]>([]);
@@ -163,11 +265,72 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   const highwayGenerationRef = useRef(0);
   const [ready, setReady] = useState(false);
   const [globeWanted, setGlobeWanted] = useState(false);
+  const [peekSuspended, setPeekSuspended] = useState(false);
+  /** Every stop of every day, flattened, each carrying its own `day`. Flat rather than nested
+   *  because `hoveredIndex`/`activeIndex` index into it and always have — keeping one index
+   *  space means StopMarkerLayer, useStopTour and the peek logic needed no reworking when the
+   *  globe went from one day to all of them. */
   const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
+  /** One label per day, at that day's centroid. */
+  const [routeClusters, setRouteClusters] = useState<RouteCluster[]>([]);
+  /** The day the pointer is resting on, or null. Kept in a ref *as well as* state: the draw
+   *  path reads it synchronously while building geometry, and a state read there would see the
+   *  value from the render that scheduled the draw rather than the current one. */
+  const hoveredDayRef = useRef<number | null>(null);
+  const [hoveredDay, setHoveredDayState] = useState<number | null>(null);
+  /** The day the panel has selected, or null while the whole trip is being shown at once.
+   *  Drives which route is drawn at full strength and which are dimmed behind it. */
+  const [focusedDay, setFocusedDay] = useState<number | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  /** The live geometry, so hover emphasis can reach it without rebuilding the route. */
-  const routeGeometryRef = useRef<RouteGeometry | null>(null);
+  /** The live geometry, one per day, so hover emphasis and dimming can reach it without
+   *  rebuilding the routes. Index is the day index; a day with no stops still takes a slot so
+   *  this stays aligned with `Itinerary.days[]`. */
+  const routeGeometriesRef = useRef<RouteGeometry[]>([]);
+  /** Where the camera was before the current run of hover peeks began, so leaving the list puts
+   *  it back. Null means no peek is in flight — and any real camera command clears it, which is
+   *  what stops an unhover from yanking the camera off a stop that was just clicked. */
+  const peekReturnRef = useRef<{
+    position: Cartesian3;
+    heading: number;
+    pitch: number;
+    roll: number;
+  } | null>(null);
+  const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Seconds the flight *in* took, replayed on the way out so the two read as one gesture. A deep
+   *  dive travelled over 1.4s and snapped back in 0.8s would look like the camera being dropped. */
+  const peekFlightRef = useRef(0.8);
+  /** The current peek effect's own `flyHome`, so the suspend guard can reach it. */
+  const flyHomeRef = useRef<(() => void) | null>(null);
+  /** Timestamp of the last scroll anywhere on the page, and of the last input that expresses hover
+   *  intent — a pointer that actually changed coordinates, or a keypress. A peek needs the intent
+   *  to be the more recent of the two; see the peek effect. */
+  const lastScrollAtRef = useRef(0);
+  const lastIntentAtRef = useRef(0);
+  /** Last seen pointer coordinates. Browsers report content moving under a still pointer during a
+   *  scroll as `pointermove`, so only a change in these counts as the pointer having moved. */
+  const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
+  /** Set by the peek effect when it has a hovered row but is holding it back as scroll-induced, so
+   *  a later pointer nudge can re-arm it. Needed because the row does not change on that nudge —
+   *  without this hook there is no state change to re-run the effect, and the peek would be lost
+   *  for as long as the pointer stayed on the row the scroll left it on. */
+  const peekRearmRef = useRef<(() => void) | null>(null);
+
+  /**
+   * Abandon any hover peek — the pending dwell timer and the saved pose both.
+   *
+   * Called by every real camera command. Without it two things go wrong: a click landing during a
+   * dwell would be followed a moment later by the peek flying somewhere else, and the next
+   * unhover would drag the camera back off the stop the user had just selected.
+   */
+  const cancelPeek = useCallback(() => {
+    if (peekTimerRef.current !== null) {
+      clearTimeout(peekTimerRef.current);
+      peekTimerRef.current = null;
+    }
+    peekReturnRef.current = null;
+    peekRearmRef.current = null;
+  }, []);
 
   const flyTo = useCallback(
     (
@@ -180,6 +343,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
        *  a stop means aiming below the street; a stop flight passes its card's height instead. */
       centreHeightM = 0
     ) => {
+      // A real flight supersedes any hover peek, including one still waiting out its dwell.
+      cancelPeek();
       const viewer = viewerRef.current;
       if (!viewer || viewer.isDestroyed()) {
         // The viewer registers only once the 3D tileset has loaded, which takes seconds — long
@@ -235,95 +400,407 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         );
       });
     },
-    []
+    [cancelPeek]
   );
 
-  const showDayRoute = useCallback((stops: RouteStop[]) => {
-    // Published before the viewer check: the cards are plain DOM and cost nothing to mount
-    // early, and they stay hidden until the per-frame loop has a viewer to project them with.
-    setRouteStops(stops);
-    // A new day means no stop is hovered or selected, and stale indices would be wrong rather
-    // than merely unhelpful — day 1 of the preview trip has 8 stops and day 2 has 7, so index 7
-    // would emphasise nothing while still reading as a selection in the panel.
-    setHoveredIndex(null);
-    setActiveIndex(null);
-    const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed()) {
-      // Same race as flyTo: the itinerary renders in a few hundred ms, the tileset takes
-      // seconds. Dropping the request here meant the route silently never drew on a cold load.
-      pendingRouteRef.current = stops;
-      return;
-    }
-    const generation = ++routeGenerationRef.current;
-    import("cesium").then(async (Cesium) => {
-      if (viewer.isDestroyed()) return;
-      for (const e of routeEntitiesRef.current) viewer.entities.remove(e);
-      routeEntitiesRef.current = [];
-      if (stops.length === 0) return;
+  const showTripRoute = useCallback(
+    (
+      days: RouteStop[][],
+      focusDay: number | null,
+      panelVisible = true,
+      soloFocus = false
+    ) => {
+      // A new route reframes the camera, so any peek's saved pose belongs to a view that is about
+      // to stop existing.
+      cancelPeek();
+      const flat = days.flat();
+      // Published before the viewer check: the cards are plain DOM and cost nothing to mount
+      // early, and they stay hidden until the per-frame loop has a viewer to project them with.
+      setRouteStops(flat);
+      // Only for days that will actually be drawn. Under `soloFocus` the others have no route
+    // under them, and a "Day 4" badge hanging over bare imagery names nothing.
+    setRouteClusters(
+      buildDayClusters(days).filter(
+        (c) => !soloFocus || focusDay === null || c.day === focusDay
+      )
+    );
+        setFocusedDay(focusDay);
+      // A rebuilt trip means the day under the pointer is gone with the old geometry; a stale
+      // hover would leave one day lit through the next selection.
+      hoveredDayRef.current = null;
+      setHoveredDayState(null);
+      // A rebuilt route means no stop is hovered or selected, and stale indices would be wrong
+      // rather than merely unhelpful — they index a flat list whose length changes with the trip.
+      setHoveredIndex(null);
+      setActiveIndex(null);
+      const viewer = viewerRef.current;
+      if (!viewer || viewer.isDestroyed()) {
+        // Same race as flyTo: the itinerary renders in a few hundred ms, the tileset takes
+        // seconds. Dropping the request here meant the route silently never drew on a cold load.
+        pendingRouteRef.current = { days, focusedDay: focusDay, panelVisible, soloFocus };
+        return;
+      }
+      const generation = ++routeGenerationRef.current;
+      import("cesium").then(async (Cesium) => {
+        if (viewer.isDestroyed()) return;
+        for (const e of routeEntitiesRef.current) viewer.entities.remove(e);
+        routeEntitiesRef.current = [];
+        routeGeometriesRef.current = [];
+        if (flat.length === 0) return;
 
-      const groundPositions = stops.map((s) => Cesium.Cartesian3.fromDegrees(s.lng, s.lat));
+        // Frame the focused day if there is one, otherwise the whole trip. Selecting a day is an
+        // explicit "show me this", so this deliberately overrides wherever the user had dragged
+        // the camera. Started before the height sampling below, since framing needs no heights
+        // and the 2s flight covers the sampling latency.
+        // The days actually being drawn, which is also exactly what the camera should frame and
+        // what the height sample should probe — one set, so the three cannot disagree.
+        const drawnStops = focusDay !== null && days[focusDay]?.length ? days[focusDay] : flat;
+        const drawnPositions = drawnStops.map((st) =>
+          Cesium.Cartesian3.fromDegrees(st.lng, st.lat)
+        );
+        const sphere = Cesium.BoundingSphere.fromPoints(drawnPositions);
+        const radius = Math.max(sphere.radius, MIN_ROUTE_RADIUS_M);
+        // Aim at the middle of the strip the panel leaves, not the middle of the viewport — see
+        // `frameRouteBesidePanel`. Measured off the panel's own box rather than assumed from its
+        // width classes, so Focus Mode's wider 62% split and any future width are handled without
+        // this knowing about either.
+        //
+        // Keyed on the panel actually being there, not on whether a day is focused: collapsed, the
+        // panel is a pill in a corner and aiming beside it would shove the route left of an
+        // otherwise empty screen.
+        const viewWidth = viewer.scene.canvas.clientWidth;
+        const panelLeft =
+          panelVisible && window.innerWidth >= 640
+            ? (document.querySelector(".docked-panel")?.getBoundingClientRect().left ?? viewWidth)
+            : viewWidth;
+        const { biasM, rangeM } = frameRouteBesidePanel(
+          radius,
+          viewWidth,
+          panelLeft,
+          horizontalTanHalfFov(viewer)
+        );
+        const enu = Cesium.Transforms.eastNorthUpToFixedFrame(sphere.center);
+        const east = Cesium.Cartesian3.fromCartesian4(
+          Cesium.Matrix4.getColumn(enu, 0, new Cesium.Cartesian4())
+        );
+        const target = Cesium.Cartesian3.add(
+          sphere.center,
+          Cesium.Cartesian3.multiplyByScalar(east, biasM, new Cesium.Cartesian3()),
+          new Cesium.Cartesian3()
+        );
+        viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, radius), {
+          offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-60), rangeM),
+          duration: 2.0,
+        });
 
-      // Frame the whole day rather than one point. Selecting a day is an explicit "show me
-      // this", so this deliberately overrides wherever the user had dragged the camera. Started
-      // before the height sampling below, since framing needs no heights and the 2s flight
-      // covers the sampling latency.
-      const sphere = Cesium.BoundingSphere.fromPoints(groundPositions);
-      const radius = Math.max(sphere.radius, MIN_ROUTE_RADIUS_M);
-      // The itinerary panel covers the right ~40% from `sm:` up, so aim east of the route's
-      // centre to push the route itself left of the panel — at heading 0, camera-right is
-      // local east. Below `sm:` the panel is full-bleed, so centred framing is correct.
-      const bias = window.innerWidth >= 640 ? radius * PANEL_BIAS_RATIO : 0;
-      const enu = Cesium.Transforms.eastNorthUpToFixedFrame(sphere.center);
-      const east = Cesium.Cartesian3.fromCartesian4(
-        Cesium.Matrix4.getColumn(enu, 0, new Cesium.Cartesian4())
-      );
-      const target = Cesium.Cartesian3.add(
-        sphere.center,
-        Cesium.Cartesian3.multiplyByScalar(east, bias, new Cesium.Cartesian3()),
-        new Cesium.Cartesian3()
-      );
-      // Growing the radius by the same bias is what keeps the westernmost stop in frame
-      // after the aim point moves east.
-      const framed = radius + bias;
-      viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, framed), {
-        offset: new Cesium.HeadingPitchRange(
-          0,
-          Cesium.Math.toRadians(-60),
-          Math.max(framed * 2.5, 800)
-        ),
-        duration: 2.0,
+        // Drawn immediately at the last route's altitude and corrected once the real sample lands,
+        // rather than awaiting first. Height sampling takes ~1.3s alone but several seconds when
+        // day-tab clicks stack the requests up, which left the map visibly empty. Consecutive days
+        // of one trip share a city, so the previous altitude is a near-perfect stand-in; the very
+        // first route falls back to 0 and visibly settles once.
+        const altitudeAtDraw = routeAltitudeRef.current;
+        // Two modes, and the difference is what is drawn at all rather than how brightly. With
+        // `focusDay === null` every day goes on the globe at once, each in its own colour — the
+        // overview a finished trip opens on. Once a day is picked in the panel it is the only
+        // day drawn: reading one day means reading one day, and leaving the rest on screen
+        // behind it is a week of arcs crossing the one being read.
+        //
+        // Holes are deliberate. `routeGeometriesRef` stays indexed *by day index* so the
+        // emphasis effect can look a day up directly; in focused mode every slot but one is
+        // empty, and `forEach`/`flatMap` skip holes rather than visiting undefined.
+        // Two readings of "select a day", and they belong to different surfaces.
+        //
+        // `soloFocus` — the itinerary panel. Picking a day there means "show me this day", and
+        // the answer is that day and nothing else: five other days' arcs crossing the one being
+        // read is not context, and dimming them to 0.25 was still enough line to obscure it.
+        //
+        // Otherwise — the split editor. Every day stays drawn and the unselected ones dim,
+        // because a cross-day drag is a decision about two days and hiding one hides half of it.
+        const geometries: RouteGeometry[] = [];
+        days.forEach((stops, day) => {
+          if (soloFocus && focusDay !== null && day !== focusDay) return;
+          const geometry = buildRouteGeometry(
+            viewer,
+            Cesium,
+            stops,
+            altitudeAtDraw,
+            dayColorToken(day)
+          );
+          geometry.setDayState(dayVisualState(day, focusDay, hoveredDayRef.current));
+          geometries[day] = geometry;
+        });
+        routeEntitiesRef.current = geometries.flatMap((g) => g.entities);
+        routeGeometriesRef.current = geometries;
+
+        // One sample across everything drawn, not one per day: `clampToHeightMostDetailed` is
+        // the expensive part (~1.3s for a single day) and the days of one trip share a city, so
+        // sampling each separately would multiply the wait by the trip length to land on
+        // near-identical answers — and any disagreement between them would step the days onto
+        // visibly different planes in the overview.
+        const altitude = await sampleRouteAltitude(viewer, Cesium, drawnPositions);
+        // A fast day-tab switch can land a newer route mid-sample; the newest request wins, and a
+        // superseded generation's entities are already gone from the collection.
+        if (generation !== routeGenerationRef.current || viewer.isDestroyed()) return;
+        routeAltitudeRef.current = altitude;
+        if (Math.abs(altitude - altitudeAtDraw) < 0.5) return;
+        geometries.forEach((geometry) => geometry.reposition(altitude));
       });
-
-      // Drawn immediately at the last route's altitude and corrected once the real sample lands,
-      // rather than awaiting first. Height sampling takes ~1.3s alone but several seconds when
-      // day-tab clicks stack the requests up, which left the map visibly empty. Consecutive days
-      // of one trip share a city, so the previous altitude is a near-perfect stand-in; the very
-      // first route falls back to 0 and visibly settles once.
-      const altitudeAtDraw = routeAltitudeRef.current;
-      const geometry = buildRouteGeometry(viewer, Cesium, stops, altitudeAtDraw);
-      routeEntitiesRef.current = geometry.entities;
-      routeGeometryRef.current = geometry;
-
-      const altitude = await sampleRouteAltitude(viewer, Cesium, groundPositions);
-      // A fast day-tab switch can land a newer route mid-sample; the newest request wins, and a
-      // superseded generation's entities are already gone from the collection.
-      if (generation !== routeGenerationRef.current || viewer.isDestroyed()) return;
-      routeAltitudeRef.current = altitude;
-      if (Math.abs(altitude - altitudeAtDraw) < 0.5) return;
-      geometry.reposition(altitude);
-    });
+    },
+    [cancelPeek]
+  );
+  const setHoveredDay = useCallback((day: number | null) => {
+    if (hoveredDayRef.current === day) return;
+    hoveredDayRef.current = day;
+    setHoveredDayState(day);
   }, []);
+
+  // Retint in place whenever the selection or the hovered day changes. No geometry is rebuilt:
+  // every day is already drawn, and which one is being read is a colour and a width, not a
+  // question of what exists.
+  useEffect(() => {
+    routeGeometriesRef.current.forEach((geometry, day) =>
+      geometry.setDayState(dayVisualState(day, focusedDay, hoveredDay))
+    );
+    // Load-bearing under `requestRenderMode`: recolouring a material moves nothing, so without a
+    // frame requested here the change is not drawn until some unrelated camera move repaints.
+    const viewer = viewerRef.current;
+    if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender();
+  }, [focusedDay, hoveredDay, routeStops]);
 
   // Hover wins over selection: while the pointer is on something, that is what the globe should
   // be pointing at. Falls back to the selected stop when the pointer leaves.
   useEffect(() => {
-    routeGeometryRef.current?.setEmphasis(hoveredIndex ?? activeIndex);
+    // `hoveredIndex` indexes the flat stop list, but emphasis is per-route, so it has to be
+    // resolved back to (which day, which stop within it). Every other day is explicitly cleared
+    // rather than left alone: without that, moving the pointer from a stop on day 2 to one on
+    // day 5 leaves day 2's stem amber and the trip shows two "you are pointing at this".
+    const emphasised = hoveredIndex ?? activeIndex;
+    const emphasisedStop = emphasised === null ? null : routeStops[emphasised];
+    const dayStart = emphasisedStop
+      ? routeStops.findIndex((st) => st.day === emphasisedStop.day)
+      : -1;
+    routeGeometriesRef.current.forEach((geometry, day) =>
+      geometry.setEmphasis(
+        emphasisedStop && day === emphasisedStop.day ? emphasised! - dayStart : null
+      )
+    );
+    // Load-bearing under `requestRenderMode`: swapping the emphasised material moves nothing, so
+    // without a frame requested here the highlight is not drawn until some unrelated camera move
+    // happens to repaint. Hovering a marker card with the camera at rest showed nothing at all.
+    const viewer = viewerRef.current;
+    if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender();
   }, [hoveredIndex, activeIndex, routeStops]);
+
+  /**
+   * Pointer-versus-scroll bookkeeping for the hover peek below.
+   *
+   * Kept in refs and installed once: these fire at wheel and pointer rates, and routing them
+   * through state would re-render every consumer of this context on every scroll frame.
+   */
+  useEffect(() => {
+    const onScroll = () => {
+      lastScrollAtRef.current = performance.now();
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      const last = pointerPosRef.current;
+      if (last && last.x === e.clientX && last.y === e.clientY) return;
+      pointerPosRef.current = { x: e.clientX, y: e.clientY };
+      lastIntentAtRef.current = performance.now();
+      // The row under the pointer did not change, so only this can revive a peek the scroll gate
+      // turned away.
+      peekRearmRef.current?.();
+    };
+    const onKeyDown = () => {
+      // Rows peek on focus as well as on hover, so tabbing onto one is intent too.
+      lastIntentAtRef.current = performance.now();
+      peekRearmRef.current?.();
+    };
+    // Capture: the itinerary scrolls inside its own container, and a scroll event on a nested
+    // element does not bubble to window.
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    window.addEventListener("wheel", onScroll, { passive: true });
+    window.addEventListener("touchmove", onScroll, { passive: true });
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("wheel", onScroll);
+      window.removeEventListener("touchmove", onScroll);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
+  /**
+   * The hover peek: resting the pointer on an itinerary row leans the camera in toward that stop,
+   * and leaving the list leans it back out.
+   *
+   * Three gates, each a cost decision rather than a nicety:
+   *
+   * - **A viewer must already exist.** Hovering must never be the thing that boots one — a
+   *   pointer crossing a list would otherwise spin up a WebGL context and a tile stream on a
+   *   surface that had declined the globe.
+   * - **PEEK_DWELL_MS of stillness first.** A sweep down the list costs nothing; only a row
+   *   actually paused on is fetched.
+   * - **The pointer, not a scroll, must be what arrived on the row.** A list scrolling under a
+   *   still pointer fires the same `pointerenter` and `pointerleave` a hover does, and wheel ticks
+   *   are spaced widely enough that the dwell elapses between them, so a single flick down the
+   *   itinerary used to peek at — and fly home from — several rows nobody looked at. Both
+   *   directions wait for `SCROLL_SETTLE_MS` of quiet *and* for real pointer movement after it.
+   * - **Not under `prefers-reduced-motion`.** This is unrequested camera movement in response to
+   *   a pointer, which is close to the definition of what that setting asks us to skip.
+   *
+   * Moving from one row to another flies *directly* between the two peek poses rather than
+   * pulling out and diving back in. It reads the same, in half the flight time and half the
+   * tiles — the pull-out frames would show an intermediate altitude nobody asked about. That is
+   * what `PEEK_LEAVE_GRACE_MS` buys: the pointer is over no row at all while it crosses the gap
+   * between two, and an un-hover acted on immediately turned every row-to-row move into a
+   * full lean-out and a fresh dive.
+   */
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!ready || !viewer || viewer.isDestroyed()) return;
+    if (prefersReducedMotion()) return;
+    // An editing surface is open. Not merely "don't start a new peek": a peek already in flight
+    // when the editor opened would otherwise leave the camera leaned in on a stop with the plan
+    // no longer on screen, so the pending dwell is dropped and the lean-out is allowed to run.
+    if (peekSuspended) {
+      if (peekReturnRef.current) flyHomeRef.current?.();
+      else cancelPeek();
+      return;
+    }
+
+    const stop = hoveredIndex === null ? null : routeStops[hoveredIndex];
+
+    // Pointer has left the list. `peekReturnRef` is null unless a peek actually happened, so an
+    // ordinary mouse-out over a map with no peek in flight is free.
+    if (!stop && !peekReturnRef.current) {
+      peekRearmRef.current = null;
+      return;
+    }
+
+    /** Lean back out to wherever the camera was before this run of peeks began. Published to a
+     *  ref so the suspend guard above — which runs before this is defined, and on a pass where
+     *  `stop` may be anything — can undo a peek that an editor just interrupted. */
+    const flyHome = () => {
+      peekTimerRef.current = null;
+      const home = peekReturnRef.current;
+      peekRearmRef.current = null;
+      if (!home) return;
+      import("cesium").then(() => {
+        if (viewer.isDestroyed()) return;
+        viewer.camera.flyTo({
+          destination: home.position,
+          orientation: { heading: home.heading, pitch: home.pitch, roll: home.roll },
+          duration: peekFlightRef.current,
+          // Forgotten on *arrival*, not on departure. Clearing it here was a real bug: a row
+          // hovered while this flight was still running found no saved pose, captured the camera
+          // mid-flight as its own "home", and the next lean-out went to that meaningless
+          // intermediate point — measured 4.5km from where the run had started. Deep dives made it
+          // easy to hit, since they take longer to fly and leave a wider window to interrupt.
+          // Guarded by identity so a newer run's pose is never the one dropped.
+          complete: () => {
+            if (peekReturnRef.current === home) peekReturnRef.current = null;
+          },
+        });
+      });
+    };
+
+    const fire = () => {
+      peekTimerRef.current = null;
+      if (!stop) return;
+      import("cesium").then((Cesium) => {
+        if (viewer.isDestroyed()) return;
+        // Captured once per run of peeks, not per row: hovering four rows in sequence should
+        // return to where the camera was before the first of them, not to the third one.
+        peekReturnRef.current ??= {
+          position: viewer.camera.position.clone(),
+          heading: viewer.camera.heading,
+          pitch: viewer.camera.pitch,
+          roll: viewer.camera.roll,
+        };
+        const home = peekReturnRef.current;
+        // Aim at the stop's floating card rather than the ground, same as a click does, so the
+        // peek centres on the thing that names the place.
+        const target = Cesium.Cartesian3.fromDegrees(
+          stop.lng,
+          stop.lat,
+          routeAltitudeRef.current + STEM_HEIGHT_M
+        );
+        // Every other stop of the *hovered stop's own day* — the pocket it sits in is what
+        // decides whether a lean is enough to tell it apart from its neighbours. Other days are
+        // excluded: they are drawn, but dimmed and unnamed, and they are not what the pointer is
+        // reading.
+        const neighbourDistancesM = routeStops.reduce<number[]>((acc, other, i) => {
+          if (i !== hoveredIndex && other.day === stop.day) acc.push(metresBetween(stop, other));
+          return acc;
+        }, []);
+        const cameraDistanceM = Cesium.Cartesian3.distance(home.position, target);
+        const range = peekRangeM(cameraDistanceM, neighbourDistancesM, home.pitch);
+        peekFlightRef.current = peekFlightSeconds(cameraDistanceM, range);
+        viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, 0), {
+          // The pre-peek heading and pitch, deliberately kept rather than snapped to the click's
+          // -35°. Re-tilting on hover is what made this read as "the camera went somewhere":
+          // holding the angle already being looked from leaves only the distance changing.
+          offset: new Cesium.HeadingPitchRange(home.heading, home.pitch, range),
+          duration: peekFlightRef.current,
+        });
+      });
+    };
+
+    /**
+     * Arm the dwell, but only once the pointer — not a scroll — is what put itself on this row.
+     *
+     * Two gates, because a scroll fakes both halves of a hover. `SCROLL_SETTLE_MS` waits for the
+     * list to come to rest, and the intent check then asks whether the pointer moved (or a key was
+     * pressed) after it did. A pointer that has not moved since the last scroll is sitting where
+     * the scroll left it, which is not a hover; that row waits, re-armed by the first real nudge.
+     */
+    flyHomeRef.current = flyHome;
+
+    const arm = () => {
+      if (peekTimerRef.current !== null) {
+        clearTimeout(peekTimerRef.current);
+        peekTimerRef.current = null;
+      }
+      const sinceScroll = performance.now() - lastScrollAtRef.current;
+      if (sinceScroll < SCROLL_SETTLE_MS) {
+        // Still scrolling — re-check when the list would have settled rather than giving up, so a
+        // sweep that ends on a row still peeks at it if the pointer then moves.
+        peekRearmRef.current = arm;
+        peekTimerRef.current = setTimeout(arm, SCROLL_SETTLE_MS - sinceScroll);
+        return;
+      }
+      if (lastIntentAtRef.current < lastScrollAtRef.current) {
+        // The pointer has not moved since the last scroll, so it is sitting where the scroll left
+        // it — whatever is or is not under it now was chosen by the list, not by the user. Hold
+        // both directions and wait for a real nudge, which is also what re-arms this.
+        peekRearmRef.current = arm;
+        return;
+      }
+      peekRearmRef.current = null;
+      // Leaving waits out the gap between two rows rather than the dwell — a hover landing inside
+      // that window supersedes this timer through the effect's cleanup, and the camera crosses
+      // from one stop to the next without ever pulling out.
+      peekTimerRef.current = setTimeout(
+        stop ? fire : flyHome,
+        stop ? PEEK_DWELL_MS : PEEK_LEAVE_GRACE_MS
+      );
+    };
+    arm();
+
+    return () => {
+      peekRearmRef.current = null;
+      if (peekTimerRef.current === null) return;
+      clearTimeout(peekTimerRef.current);
+      peekTimerRef.current = null;
+    };
+  }, [hoveredIndex, routeStops, ready, peekSuspended, cancelPeek]);
 
   const showHighways = useCallback((lat: number, lng: number) => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) {
-      // Same cold-load race as flyTo/showDayRoute: the destination flight can be requested
+      // Same cold-load race as flyTo/showTripRoute: the destination flight can be requested
       // before the tileset (and thus the viewer) registers. Replayed from setViewer below.
       pendingHighwaysRef.current = [lat, lng];
       return;
@@ -392,12 +869,18 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       // request, and both resolve to a flyToBoundingSphere where the last call cancels the first.
       const pendingRoute = pendingRouteRef.current;
       pendingRouteRef.current = null;
-      if (pendingRoute) showDayRoute(pendingRoute);
+      if (pendingRoute)
+        showTripRoute(
+          pendingRoute.days,
+          pendingRoute.focusedDay,
+          pendingRoute.panelVisible,
+          pendingRoute.soloFocus
+        );
       const pendingHighways = pendingHighwaysRef.current;
       pendingHighwaysRef.current = null;
       if (pendingHighways) showHighways(...pendingHighways);
     },
-    [flyTo, showDayRoute, showHighways]
+    [flyTo, showTripRoute, showHighways]
   );
 
   const flyToDestination = useCallback(
@@ -422,6 +905,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     [flyTo]
   );
   const resetToHome = useCallback(() => {
+    cancelPeek();
     const viewer = viewerRef.current;
     // No-op before the viewer exists, which is exactly right on a cold load of `/`: the home
     // effect fires long before the tileset registers, so GlobeBackground's own setView and spin
@@ -439,9 +923,11 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     // Otherwise the day's marker cards survive a navigation back to the landing page — the
     // globe never unmounts, so nothing else clears them.
     setRouteStops([]);
+    setRouteClusters([]);
+    setFocusedDay(null);
     setHoveredIndex(null);
     setActiveIndex(null);
-    routeGeometryRef.current = null;
+    routeGeometriesRef.current = [];
     if (markerRef.current) viewer.entities.remove(markerRef.current);
     markerRef.current = null;
     // Otherwise a request queued while the tileset was loading replays onto the empty globe.
@@ -463,7 +949,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
         duration: 2.0,
       });
     });
-  }, []);
+  }, [cancelPeek]);
 
   // Memoised because this provider is rendered from the root layout, so *any* re-render of
   // AppShell — a route change, for one — otherwise handed every `useMapCamera()` consumer a
@@ -480,14 +966,18 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       ready,
       globeWanted,
       setGlobeWanted,
-      setGlobeSpinning: noopGlobeSpinning,
-      setPosterPlace: noopPosterPlace,
+      peekSuspended,
+      setPeekSuspended,
       flyToDestination,
       flyToPlace,
       resetToHome,
-      showDayRoute,
+      showTripRoute,
       showHighways,
       routeStops,
+      routeClusters,
+      focusedDay,
+      hoveredDay,
+      setHoveredDay,
       routeAltitudeRef,
       hoveredIndex,
       setHoveredIndex,
@@ -497,13 +987,18 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     [
       setViewer,
       ready,
+      peekSuspended,
       globeWanted,
       flyToDestination,
       flyToPlace,
       resetToHome,
-      showDayRoute,
+      showTripRoute,
       showHighways,
       routeStops,
+      routeClusters,
+      focusedDay,
+      hoveredDay,
+      setHoveredDay,
       hoveredIndex,
       activeIndex,
     ]
@@ -525,10 +1020,18 @@ export function useMapCamera() {
  * The viewer is never *destroyed* — see `GlobeBackground`'s construction effect for why a swap is
  * unrecoverable — so this is a visibility gate, not a lifecycle one.
  */
-/** Module scope, not an inline arrow: a fresh function on every render would change the context
- *  value's identity and defeat the `useMemo` wrapped around it. */
-function noopGlobeSpinning(): void {}
-function noopPosterPlace(): void {}
+/**
+ * Declare that this surface is an editing one, and that the globe's hover peek should hold still
+ * while it is mounted. Mirrors `useGlobeOnScreen`: the surface that knows says so, and unmounting
+ * lifts it.
+ */
+export function useHoverPeekSuspended(suspended = true) {
+  const { setPeekSuspended } = useMapCamera();
+  useEffect(() => {
+    setPeekSuspended(suspended);
+    return () => setPeekSuspended(false);
+  }, [suspended, setPeekSuspended]);
+}
 
 export function useGlobeOnScreen(wanted: boolean) {
   const { setGlobeWanted } = useMapCamera();

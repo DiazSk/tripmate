@@ -110,7 +110,7 @@ function pivot(
  * from AppShell as a sibling of the globe, so it sits outside the `pointer-events-none` overlay.
  */
 export default function MapControls() {
-  const { viewerRef, ready } = useMapCamera();
+  const { viewerRef, ready, globeWanted } = useMapCamera();
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
   const [flat, setFlat] = useState(false);
   const needleRef = useRef<HTMLSpanElement>(null);
@@ -121,18 +121,17 @@ export default function MapControls() {
   const zoomSeqRef = useRef(0);
 
   // Cesium is dynamically imported everywhere in this app — a static import would pull it into
-  // the server bundle. Gated on `ready`, not on the route and not on `globeWanted`: these controls
-  // exist only to drive a viewer, so until one exists there is nothing to import for. This is a
-  // *second*, independent `import("cesium")`, and `ready` is the strictest available gate — it goes
-  // true only after `GlobeBackground` has built a viewer, by which point that module is already in
-  // the module cache and this resolves for free.
+  // the server bundle. That the import has resolved doubles as the readiness gate. Gated on
+  // `globeWanted` rather than run unconditionally, because this is a *second*, independent
+  // `import("cesium")`: without the gate it pulled the multi-MB bundle in on every route,
+  // including ones where `GlobeBackground` had already declined to, for a component that then has
+  // nothing to attach to (`ready` never becomes true, since no viewer gets created).
   //
-  // Two weaker gates were tried. A `/backend`-and-`/bench` path list could not express the real
-  // predicate and re-ran on `[pathname]`, so arriving at `/` from `/backend` pulled all 2.3MB for
-  // controls that stayed `null` forever. `globeWanted` fixed the predicate but still fires before
-  // any viewer exists, so it imported ahead of need.
+  // This used to read a `/backend`-and-`/bench` path list. That list could not express the real
+  // predicate — see `globeWanted` in mapCamera.tsx — and it also re-ran on `[pathname]`, so
+  // arriving at `/` from `/backend` imported all 2.3MB for controls that stayed `null` forever.
   useEffect(() => {
-    if (!ready) return;
+    if (!globeWanted) return;
     let cancelled = false;
     import("cesium").then((mod) => {
       if (!cancelled) setCesium(mod);
@@ -140,7 +139,7 @@ export default function MapControls() {
     return () => {
       cancelled = true;
     };
-  }, [ready]);
+  }, [globeWanted]);
 
   // Live readout of the camera. Compass angle and slider position are DOM properties, so they
   // get written directly rather than through state — that keeps the steady-state re-render
@@ -164,10 +163,9 @@ export default function MapControls() {
       }
       setFlat(pitch < FLAT_THRESHOLD_RAD);
     };
-    // postRender over `camera.changed`: under `requestRenderMode` a frame is only drawn when
-    // something moved, so this fires exactly when there is a new pose to read out and not once
-    // while the camera sits still — `changed` would need a `percentageChanged` threshold to
-    // approximate the same thing and would still miss a programmatic `setView`.
+    // postRender over `camera.changed`: under `requestRenderMode` a frame only happens when
+    // something asked for one, so this fires exactly as often as the camera can have moved —
+    // and `changed` would need a `percentageChanged` threshold tuned to be useful.
     viewer.scene.postRender.addEventListener(tick);
     return () => {
       if (!viewer.isDestroyed()) viewer.scene.postRender.removeEventListener(tick);
