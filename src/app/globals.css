@@ -105,10 +105,32 @@ html {
      The converse of that rule has one deliberate exception: --accent reaches
      the globe to mark the marker the user is *touching* (hover/selection) and
      its adjacent arcs. Amber on the globe means "you are pointing at this",
-     never "this is a Tuesday" — per-day accent colours were considered and
-     rejected, since only one day is ever drawn. Keep this exception narrow. */
+     never "this is a Tuesday". Keep this exception narrow. */
   --route-blue: #0a84ff;
   --route-casing: #0060df;
+
+  /* --- The day ramp ---------------------------------------------------------
+     Per-day route colours, cycling every six days (DAY_COLOR_TOKENS in
+     mapRoute.ts). These were rejected once, on the reasoning that "only the
+     active day is ever drawn, so a per-day ramp has nothing to distinguish
+     itself from". The globe now draws the whole trip at once, so it does.
+
+     Day 1 is --route-blue itself, so a single-day trip is pixel-identical to
+     what it was and the ramp costs nothing where there is nothing to separate.
+
+     Still map-native, and bound by the same rule as route blue: never in a
+     panel, chip or button. Chosen so consecutive days sit 70-170 degrees apart
+     in hue, since the only job the colour has is separating a cluster from its
+     neighbours. Nothing here enters the 0-50 degree amber/red band — that is
+     --accent ("you are pointing at this") and --map-pin-red (the destination
+     pin), and a day tinted into either would take a meaning that is spoken
+     for. Colour never identifies a day on its own: every cluster is labelled.
+     */
+  --route-day-green: #32d74b;
+  --route-day-purple: #bf5af2;
+  --route-day-rose: #ff5c8a;
+  --route-day-cyan: #22d3ee;
+  --route-day-magenta: #f472d0;
 
   /* --- Floating stop markers -----------------------------------------------
      "Location Title Card": no fill, no border, no blur — the opposite of every
@@ -123,16 +145,15 @@ html {
      recedes like a shallow depth of field instead of only shrinking. */
   --marker-transition: 400ms cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* How tall the docked panel is when a phone collapses it to a bottom sheet. Read by
-     DockedPanel for its own height and by the mobile map-control rule for where to sit
-     above it, so the two cannot drift apart. Just under half the viewport: enough sheet
-     to keep a day's stops readable, enough map to be worth revealing. */
-  --mobile-sheet-h: 45dvh;
+  /* How tall the collapsed panel's capsule is (`h-14` on the element). Read here only by the
+     mobile map-control rule, which has to sit above it — one token so the two cannot drift
+     apart, and the reason the control stack no longer needs to know what a bottom sheet was. */
+  --capsule-h: 3.5rem;
 
   /* Height of the fixed top navbar. Read by Navbar for its own height and by every
      surface that needs to clear it (page.tsx's <main>, ScrollStory's cancelling
      margins, DockedPanel's top offset) — one token so they cannot drift apart, same
-     pattern as --mobile-sheet-h above. */
+     pattern as --capsule-h above. */
   --nav-h: 4rem;
 }
 
@@ -214,9 +235,9 @@ body {
    is why the controls were simply hidden here — which left a phone able to drag the camera
    into a disoriented pose with nothing to recover it.
 
-   Both halves move together instead. DockedPanel's collapse turns the panel into a bottom
-   sheet, and only then do the controls appear, in the corner that just opened up. The sheet's
-   height is one value read by both, so the two can't drift apart.
+   Both halves move together instead. DockedPanel's collapse folds the panel into its capsule,
+   and only then do the controls appear, in the space that just opened up. The capsule's height
+   is one value read by both, so the two can't drift apart.
 
    The reduced set is deliberate: the zoom pill and the compass, because pinch already covers
    magnification and nothing but a reset covers a lost heading. The tilt slider and the 2D/3D
@@ -226,11 +247,98 @@ body {
   .app-shell:has(.docked-panel-collapsed) .map-controls {
     display: flex;
     right: 1.25rem;
-    /* The sheet's own height, plus a 0.75rem gap. The panel itself is inset-0 below `sm`
-       now (no bottom margin of its own), so there is no second inset term to add here —
-       adding one back is what put the compass under the sheet before. */
-    bottom: calc(var(--mobile-sheet-h) + 0.75rem);
+    /* Clears the collapsed capsule: its own height, the 1.25rem it sits above the bottom
+       edge, and a 0.75rem gap. Three terms because the capsule — unlike the bottom sheet this
+       replaced, which was welded to the viewport edge — floats. */
+    bottom: calc(var(--capsule-h) + 1.25rem + 0.75rem);
     left: auto;
+  }
+}
+
+/* --- The panel's capsule -----------------------------------------------------------------
+   Collapsed, the panel is a horizontal capsule carrying the trip: thumbnail, name, length and
+   the day in focus. Everything about how it *looks* is utilities on the element (see
+   DockedPanel) — it deliberately does not take `.glass-control`, whose unlayered `background`,
+   `border` and `box-shadow` would beat every one of those utilities on the cascade, which is the
+   trap documented above that left four controls with dead hovers.
+
+   What is left here is only what a utility cannot say. The body is hidden rather than unmounted,
+   at every width: the active day, the scroll position, the stop tour's interval and the reveal
+   stagger all live in that subtree, and unmounting them would reset the panel on every glance at
+   the map. `display: none` and not `opacity: 0`, so it costs no paint and leaves the accessibility
+   tree — the capsule is the whole interface while it is shut.
+
+   Hiding the *body element* rather than each child is now safe. It was not when the children were
+   direct children of the panel and the panel carried their `space-y-*`; they live inside
+   `.docked-panel-body`, which owns that spacing itself, so hiding it takes the rhythm with it and
+   restores it intact.
+
+   Below `sm` this used to be a 45dvh bottom sheet — a peek at the plan, on the reasoning that a
+   phone could not show a pill and a useful map at once. The capsule is that pill: it answers
+   "which day am I on" in 56px instead of half the viewport, and hands the rest of the screen to
+   the globe, which is the thing the collapse exists to reveal. */
+.docked-panel-collapsed .docked-panel-body {
+  display: none;
+}
+
+/* --- The itinerary's collapsing header ---------------------------------------------------
+   The card leads with a photograph of the destination, and it stays on screen: pinned to the top
+   of the panel's scroller, compressing as the plan scrolls under it and springing back on the way
+   up. `--hero-p` is written by ItineraryCard, one property per frame, 0 unscrolled to 1 fully
+   compressed; everything below is derived from it, so the whole animation is one write against
+   the compositor rather than a re-render of a card that owns a day list.
+
+   The heights are the header's own frame, and the reason they live here rather than as Tailwind
+   arbitrary values is that `--hero-max` is breakpoint-dependent and the interpolation reads it.
+
+   `padding` collapses with the height or the title block would hold the box open from the inside,
+   and the two titles cross-fade on their own ramps — the large one is gone by 45%, the compact
+   line arrives after 55%, so they never overlap. */
+/* Scroll anchoring off, and this is load-bearing rather than a tweak. The header is in flow, so
+   compressing it changes the height of content *above* the viewport — exactly the condition
+   Chrome's anchoring exists to correct, and it corrects it by pulling `scrollTop` back down by the
+   same amount. The two chase each other: measured in Chromium, scrolling to 40, 80, 120 and 160px
+   all settled back at 0 with the header at full height, and only a jump past the whole collapse
+   range (240px) stuck. Nothing in this panel needs anchoring — its content does not load in above
+   the fold — so it simply comes off. */
+.docked-panel-body {
+  overflow-anchor: none;
+}
+
+.itinerary-hero {
+  --hero-p: 0;
+  --hero-max: 14rem;
+  --hero-min: 4.5rem;
+  height: calc(var(--hero-max) - (var(--hero-max) - var(--hero-min)) * var(--hero-p));
+  padding-bottom: calc(1.25rem * (1 - var(--hero-p)));
+  padding-top: calc(1.25rem * (1 - var(--hero-p)));
+}
+
+@media (width >= 40rem) {
+  .itinerary-hero {
+    --hero-max: 18rem;
+    padding-bottom: calc(1.5rem * (1 - var(--hero-p)));
+    padding-top: calc(1.5rem * (1 - var(--hero-p)));
+  }
+}
+
+.itinerary-hero-full {
+  opacity: clamp(0, 1 - var(--hero-p) / 0.45, 1);
+  /* Sinks with the box rather than staying welded to its bottom edge, which is what makes the
+     large title read as being pushed out of frame instead of merely fading. */
+  transform: translateY(calc(0.75rem * var(--hero-p)));
+}
+
+.itinerary-hero-compact {
+  opacity: clamp(0, (var(--hero-p) - 0.55) / 0.35, 1);
+}
+
+/* The compression is a scroll-linked position, not an animation — there is nothing to hold still
+   for reduced motion, since it tracks the finger. What is dropped is the parallax-ish drift of
+   the large title, which is decoration on top of it. */
+@media (prefers-reduced-motion: reduce) {
+  .itinerary-hero-full {
+    transform: none;
   }
 }
 
@@ -352,7 +460,44 @@ body {
      anchor every frame — so transitioning it meant every frame *restarted* a 400ms fade toward a
      target that had already moved, on every card at once. The per-frame write is itself the
      animation; depth already changes smoothly because the camera does. Do not add it back. */
-  transition: color var(--marker-transition);
+  transition:
+    color var(--marker-transition),
+    text-shadow var(--marker-transition);
+}
+
+/* --- Receding the rest ------------------------------------------------------------------
+   Pointing at one stop pushes every other name back, so the one being read is the only one
+   competing for the eye. `[data-focused]` is set on the layer by StopMarkerLayer whenever any
+   stop is hovered or selected, from either the card here or its row in the panel.
+
+   Done with `color` and `text-shadow`, NOT `opacity` — deliberately, and this is the trap the
+   comment on `.marker-title-card`'s opacity is about. That opacity is computed from
+   `--marker-depth`, which the render loop rewrites on the anchor on every frame the camera
+   moves; a transition on it restarts a 400ms fade toward a target that has already moved, on
+   every card at once. `color` and `text-shadow` are written by nothing per-frame, so they can
+   carry a transition safely and the recede is smooth rather than a snap.
+
+   The halo drops with the text. Holding a full-strength black shadow under a 32%-alpha name
+   leaves a dark smudge that reads as dirt on the map rather than as a name standing back. */
+.stop-marker-layer[data-focused="true"] .marker-title-card:not([data-hovered="true"]) {
+  color: rgb(244 247 250 / 0.32);
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 0.55),
+    0 0 6px rgb(0 0 0 / 0.4);
+}
+
+/* Day labels recede on the same signal. In the overview a day label is the heading for a
+   cluster; once the traveler is reading one stop inside one day, the other days' headings are
+   the same distraction the other stop names are. */
+.stop-marker-layer[data-focused="true"] .marker-day-label {
+  color: color-mix(in oklab, var(--day-color, var(--route-blue)) 34%, transparent);
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 0.55),
+    0 0 6px rgb(0 0 0 / 0.4);
+}
+
+.stop-marker-layer[data-focused="true"] .marker-day-label::after {
+  opacity: 0.3;
 }
 
 /* A soft, edgeless vignette behind the name — not a card: no fill boundary, no border, nothing
@@ -403,6 +548,112 @@ body {
 }
 
 .marker-title-card:focus-visible {
+  outline: none;
+}
+
+/* --- The day label ----------------------------------------------------------------------
+   One per day, at that day's centroid: the layer that makes a generated trip readable before
+   anything is opened. Same rules as the Location Title Card above — no fill, no border, no
+   blur, legibility from an omnidirectional halo rather than a scrim — because it sits on the
+   same photography and has the same worst case (a bright, busy rooftop directly behind it).
+
+   Louder than a stop name on purpose, and in three ways at once rather than by size alone:
+   larger, tracked out and uppercased. It has to win the eye at a zoom level where the stop
+   names are at their 0.55 depth floor, and it is the only label drawn at all while the plan
+   panel is shut.
+
+   `--day-color` is written per-element by StopMarkerLayer from the same DAY_COLOR_TOKENS the
+   route geometry is drawn with. Colour is never the whole message here — the label says which
+   day in words, so a six-day cycle and a colour-blind reader both stay fine. */
+.marker-day-label {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.3rem;
+  font-family: var(--font-sans-stack);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  color: var(--day-color, var(--route-blue));
+  white-space: nowrap;
+  /* Heavier than the stop name's. This is coloured text rather than near-white, so it starts
+     with less contrast against the map and needs the halo to do more. */
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 1),
+    0 0 5px rgb(0 0 0 / 0.95),
+    0 0 12px rgb(0 0 0 / 0.7),
+    0 3px 16px rgb(0 0 0 / 0.55);
+  /* Shallower ramp than the stop name's `0.5 + depth * 0.5`: a day label that has faded out at
+     the far end has failed at the one job it exists for. */
+  opacity: calc(0.78 + var(--marker-depth, 1) * 0.22);
+  /* Scopes the vignette below, exactly as on .marker-title-card. */
+  isolation: isolate;
+  transition:
+    color var(--marker-transition),
+    text-shadow var(--marker-transition);
+}
+
+.marker-day-label::before {
+  content: "";
+  position: absolute;
+  inset: -0.55em -0.7em;
+  background: radial-gradient(ellipse 62% 85% at 50% 42%, rgb(0 0 0 / 0.45), transparent 72%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* A standing rule in the day's own colour, always drawn rather than revealed on hover — this
+   is a heading for the cluster underneath it, not an interaction state. The stop name's
+   ::after is the opposite case and stays amber, since there it means "you are pointing at
+   this". */
+.marker-day-label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--day-color, var(--route-blue));
+  opacity: 0.85;
+  transition: opacity var(--marker-transition);
+}
+
+/* The badge follows its day's standing on the globe, so a dimmed day's label steps back with the
+   route it names instead of staying bright over something that has receded. Opacity here is safe
+   — unlike `.marker-title-card`'s, which is computed from the per-frame `--marker-depth`; this is
+   a second, independent multiplier that only changes on a click or a hover.
+
+   The numbers are DAY_STATE_ALPHA in mapRoute.ts. They are restated rather than shared because a
+   custom property written per-element from JS would mean a React inline style on a node whose
+   `transform` the render loop already owns — the exact collision `.marker-anchor` documents. */
+.marker-day-label[data-day-state="baseline"] {
+  opacity: calc(0.78 + var(--marker-depth, 1) * 0.22);
+}
+
+.marker-day-label[data-day-state="active"] {
+  opacity: 1;
+}
+
+.marker-day-label[data-day-state="dimmed"] {
+  opacity: 0.25;
+}
+
+.marker-day-label[data-day-state="hover"] {
+  opacity: 0.7;
+}
+
+.marker-day-label:hover,
+.marker-day-label:focus-visible {
+  color: var(--on-deep);
+}
+
+.marker-day-label:hover::after,
+.marker-day-label:focus-visible::after {
+  opacity: 1;
+}
+
+.marker-day-label:focus-visible {
   outline: none;
 }
 

@@ -224,12 +224,34 @@ These two are map affordances that must read against arbitrary satellite imagery
 **The one exception, in the other direction.** `{colors.accent}` is allowed onto the globe, and only
 to mark the stop the user is *touching*: the hovered or selected stem, its glow pool, and the arcs
 either side of it. Amber on the globe means "you are pointing at this" — never "this is a Tuesday".
+Keep this exception to interaction state, or the separation between map and interface erodes one
+reasonable-looking case at a time.
 
-Per-day accent colours were considered for the arcs and rejected. Only the active day is ever
-drawn, so a per-day ramp has nothing to distinguish itself from; it would have meant a new
-five-colour palette earning its keep on a single day's route, and `Stop` carries no day identity
-anyway (the day is just the index in `Itinerary.days[]`). Keep this exception to interaction state,
-or the separation between map and interface erodes one reasonable-looking case at a time.
+- **The day ramp** (`{colors.route-blue}`, then `#32D74B`, `#BF5AF2`, `#FF5C8A`, `#22D3EE`,
+  `#F472D0`): one colour per day, cycling every six. Map-native like route blue and bound by the
+  same rule — never in a panel, chip or button.
+
+Per-day colours were rejected once, and the reason they were rejected is worth keeping: *"only the
+active day is ever drawn, so a per-day ramp has nothing to distinguish itself from."* That was
+true, and it stopped being true when the globe began drawing the whole trip at once — a finished
+itinerary now opens on its own map with every day clustered, coloured and labelled, and the plan
+panel collapsed behind a single arrow. A ramp that had nothing to separate now has five other days
+to separate from.
+
+Three constraints came out of the original rejection and all three still hold. Day 1 **is**
+`{colors.route-blue}`, so a one-day trip is pixel-identical to what it always was and the ramp
+costs nothing where there is nothing to distinguish. Nothing in the ramp enters the 0-50° amber/red
+band, because `{colors.accent}` and `{colors.map-pin-red}` already mean something there. And
+`Stop` still carries **no** day identity — the day is still just the index in `Itinerary.days[]`,
+attached at the `RouteStop` boundary in `mapRoute.ts` and nowhere else.
+
+Colour never identifies a day on its own. Every cluster carries a `Day N` label in that day's
+colour, which is what makes a six-day cycle and a colour-blind reader both fine — the colour
+groups, the label names.
+
+The ramp is only ever on screen in the overview: selecting a day draws that day alone. So the
+colours separate clusters from each other and do nothing else — they never have to hold a
+distinction against a background of other days.
 
 ### Named Rules
 

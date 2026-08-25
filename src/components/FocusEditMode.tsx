@@ -16,6 +16,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { useHoverPeekSuspended } from "@/lib/mapCamera";
 import EditChatPanel from "./EditChatPanel";
 import DayTimeline, { ChangedStops } from "./DayTimeline";
 import { Itinerary, Stop, TripSummary, UserAnswers } from "@/lib/types";
@@ -146,6 +147,7 @@ export default function FocusEditMode({
   dayIndex,
   scope,
   tripId,
+  sessionId,
   dirty,
   saving,
   onDraftChange,
@@ -158,12 +160,19 @@ export default function FocusEditMode({
   dayIndex: number;
   scope: "day" | "trip";
   tripId?: string | null;
+  /** Passed straight through to the chat panel — see EditChatPanel. */
+  sessionId?: string | null;
   dirty: boolean;
   saving?: boolean;
   onDraftChange: (next: Itinerary) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
+  // The globe's hover peek answers "which stop is this?" while reading a plan. While editing one
+  // it is noise at best: the pointer is here to drag stops and read chat turns, and a camera that
+  // dives at whatever a marker card happened to be under is moving the ground mid-edit.
+  useHoverPeekSuspended();
+
   const [changed, setChanged] = useState<ChangedStops>(new Set());
   // Which day the preview is showing. Starts on the day the user opened, then follows the edit:
   // in trip scope a turn may change a day other than the one on screen. Day scope never moves it,
@@ -397,6 +406,7 @@ export default function FocusEditMode({
             itinerary={draft}
             dayIndex={scope === "day" ? dayIndex : undefined}
             tripId={tripId}
+            sessionId={sessionId}
             onBusyChange={setBusy}
             onItineraryChange={(next) => {
               // Jump the preview to the first day the turn changed, so a stop moved to another

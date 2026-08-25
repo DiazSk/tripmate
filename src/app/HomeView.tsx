@@ -370,10 +370,23 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // the most recent generate/refine call so save() can attach it to the
   // trip, letting later place-detail calls append to that same run.
   const [lastRunId, setLastRunId] = useState<string | null>(null);
+  // The CLI session the generate call ran in. Handed to the edit chat so refinement continues
+  // that same conversation, and saved with the trip so it survives a reload. Null whenever the
+  // session is unknown or gone — every consumer treats that as "rebuild the full prompt".
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   // Plays the staggered card reveal + typewriter effect once, right after a fresh
   // generation — cleared the moment a stop is opened so backing out of the detail view
   // doesn't replay the whole entrance again.
   const [revealAnimation, setRevealAnimation] = useState(false);
+  /**
+   * Whether the plan panel is shut, which is also what puts the globe into the whole-trip
+   * overview — hence owned here rather than inside DockedPanel: `ItineraryCard` needs the same
+   * boolean to decide whether to frame the active day or the entire trip.
+   *
+   * Starts true. A finished itinerary opens on its own map, every day clustered and labelled,
+   * and the plan is one click behind the panel's arrow.
+   */
+  const [planCollapsed, setPlanCollapsed] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
   const [stages, setStages] = useState<StageProgress[]>(
@@ -800,9 +813,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
     setGenerating(true);
     setError(null);
+    // Back to the map for the new trip. Without this, a traveler who opened the plan on their
+    // last result, backed out and generated again would land straight in the panel — this page
+    // never unmounts between the two, so the collapse state would otherwise carry over.
+    setPlanCollapsed(true);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     try {
-      const data = await runStreamed<{ itinerary: Itinerary; runId?: string | null }>({
+      const data = await runStreamed<{
+        itinerary: Itinerary;
+        runId?: string | null;
+        sessionId?: string | null;
+      }>({
         destination,
         startDate,
         endDate,
@@ -820,6 +841,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       await settle(ARRIVAL_HOLD_MS);
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
+      setLastSessionId(data.sessionId ?? null);
       setRevealAnimation(true);
       setStep("result");
 
@@ -843,7 +865,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setError(null);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     try {
-      const data = await runStreamed<{ itinerary: Itinerary; runId?: string | null }>({
+      const data = await runStreamed<{
+        itinerary: Itinerary;
+        runId?: string | null;
+        sessionId?: string | null;
+      }>({
         destination,
         startDate,
         endDate,
@@ -855,6 +881,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       });
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
+      setLastSessionId(data.sessionId ?? null);
     } catch (e) {
       if (!isAbort(e)) {
         setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
@@ -870,10 +897,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    *  affected days, so there is nothing to recompute here — and nothing to persist yet, same as the
    *  inline day edits.
    *
-   *  This wiring is why the feature is reachable at all. `ItineraryCard` renders `ArrangeBoard`
-   *  itself, but `onItineraryChange` is optional and a caller that omits it gets a board whose drops
-   *  go nowhere. The handler lived in `page.tsx` until that file was split into this one, so the
-   *  merge that brought the board across would otherwise have landed it dead. */
+   *  This wiring is why the feature is reachable at all. `ItineraryCard` renders `SplitEditor`
+   *  itself, but `onItineraryChange` is optional and a caller that omits it gets an editor whose
+   *  drops, edits and deletes all go nowhere. The handler lived in `page.tsx` until that file was
+   *  split into this one, so the merge that brought the board across would otherwise have landed
+   *  it dead. Now carries every edit the split editor makes, not only drags — the name is older
+   *  than its job. */
   function handleRearrange(next: Itinerary) {
     setRevealAnimation(false);
     setItinerary(next);
@@ -903,6 +932,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           budget,
           itinerary,
           runId: lastRunId,
+          chatSessionId: lastSessionId,
           userAnswers: currentAnswers(),
         }),
       });
@@ -1491,7 +1521,27 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       )}
 
       {step === "result" && itinerary && (
-        <DockedPanel collapsible busy={refining} wide={!!focus.target}>
+        <DockedPanel
+          collapsible
+          busy={refining}
+          wide={!!focus.target}
+          collapsed={planCollapsed}
+          onCollapsedChange={setPlanCollapsed}
+          // What the capsule carries while the panel is shut — the trip at a glance, so
+          // "which day was I reading" survives a look at the map. Pre-save there is no trip
+          // row yet, so this reads the form's own destination, the way the arrange board does.
+          capsule={
+            destination
+              ? {
+                  title: destination,
+                  subtitle: itinerary?.days.length
+                    ? `${itinerary.days.length} ${itinerary.days.length === 1 ? "day" : "days"}`
+                    : undefined,
+                  step: itinerary?.days.length ? `Day ${activeDayIndex + 1}` : undefined,
+                }
+              : undefined
+          }
+        >
           <div className="space-y-6" {...devLabel("ResultPanel")}>
             {/* refine()/save() can fail after the card is already showing — this is the
                 only place either error would otherwise have nowhere to render. */}
@@ -1527,6 +1577,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   draft={focus.draft}
                   dayIndex={focus.target.dayIndex}
                   scope={focus.target.scope}
+                  sessionId={lastSessionId}
                   dirty={focus.dirty}
                   onDraftChange={focus.applyDraft}
                   onCancel={focus.cancel}
@@ -1578,6 +1629,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   // row yet, so this is assembled from the form's own values.
                   trip={{ id: "preview", destination, startDate, endDate, budget }}
                   animateReveal={revealAnimation}
+                  panelCollapsed={planCollapsed}
+                  onMinimize={() => setPlanCollapsed(true)}
                 />
               )}
 

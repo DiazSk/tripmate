@@ -68,7 +68,7 @@ export interface GenerationParams {
 export async function runGeneration(
   params: GenerationParams,
   onStage: (event: StageEvent) => void
-): Promise<{ itinerary: Itinerary; traceId: string; runId: string }> {
+): Promise<{ itinerary: Itinerary; traceId: string; runId: string; sessionId?: string }> {
   const {
     destination,
     startDate,
@@ -248,11 +248,16 @@ export async function runGeneration(
   }
 
   onStage({ stage: "generate", status: "start" });
-  const { result: raw, traceId } = await runClaude(
+  // Persisted so the edit chat can resume THIS conversation rather than opening a fresh one —
+  // the session the traveller goes on to refine through is the one that wrote their plan.
+  // Only the generate call gets a session: critique/place-detail/context are internal passes the
+  // traveller never talks to, and threading them through the same session would bury their chat
+  // turns under machine traffic. See SessionOption in claude.ts for what this does not buy.
+  const { result: raw, traceId, sessionId } = await runClaude(
     prompt,
     isRefine ? "refine" : "generate",
     itineraryTimeoutMs(dayCount),
-    { runId }
+    { runId, session: { persist: true } }
   );
   onStage({ stage: "generate", status: "done" });
   // The model returns just { days: [...] } — tier is known server-side, not part of its output.
@@ -463,7 +468,7 @@ export async function runGeneration(
     onStage({ stage: "placing", status: "skipped" });
   }
 
-  return { itinerary, traceId, runId };
+  return { itinerary, traceId, runId, sessionId };
 }
 
 /** Key a leg by rounded coordinates. Rounding matters: the model emits lat/lng at varying
