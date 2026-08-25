@@ -8,7 +8,7 @@ import { PlaceDetail, Stop } from "./types";
 export type GeocodeOutcome = "found" | "missed" | "unreachable";
 
 export function useTripCamera(destination: string, tripId?: string) {
-  const { flyToDestination, flyToPlace, showHighways } = useMapCamera();
+  const { flyToDestination, flyToPlace, showHighways, showCityContext } = useMapCamera();
   const [destinationCoords, setDestinationCoords] = useState<{
     lat: number;
     lon: number;
@@ -49,10 +49,14 @@ export function useTripCamera(destination: string, tripId?: string) {
       // destination turns out to be, not tied to whether the camera itself flies there (a
       // saved trip with stops already frames its own day route and skips the flight).
       showHighways(geo.lat, geo.lon);
+      // Same independence as the highways, and for the same reason: the outline and the towns
+      // around it are ambient context for wherever the destination turns out to be, not tied to
+      // whether the camera flies there.
+      showCityContext(geo.lat, geo.lon, geo.name);
       if (fly) flyToDestination(geo.lat, geo.lon, geo.name);
       return "found";
     },
-    [flyToDestination, showHighways]
+    [flyToDestination, showHighways, showCityContext]
   );
 
   /** Same as flyToDestinationByName, but for callers (e.g. an autocomplete suggestion) that
@@ -61,9 +65,10 @@ export function useTripCamera(destination: string, tripId?: string) {
     (lat: number, lon: number, name: string) => {
       setDestinationCoords({ lat, lon, name });
       showHighways(lat, lon);
+      showCityContext(lat, lon, name);
       flyToDestination(lat, lon, name);
     },
-    [flyToDestination, showHighways]
+    [flyToDestination, showHighways, showCityContext]
   );
 
   const selectStop = useCallback(

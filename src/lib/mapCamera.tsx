@@ -17,6 +17,7 @@ import { metresBetween, peekFlightSeconds, peekRangeM } from "@/lib/peekRange";
 import {
   buildDayClusters,
   buildRouteGeometry,
+  cssColor,
   dayColorToken,
   dayVisualState,
   frameRouteBesidePanel,
@@ -111,6 +112,11 @@ interface MapCameraContextValue {
    *  forget: failures (rate limit, network) just leave the map without highways rather than
    *  surfacing an error, since this is ambient context, not something the trip depends on. */
   showHighways: (lat: number, lng: number) => void;
+  /** Draws the destination's administrative outline and collects the names of nearby towns.
+   *  Fire-and-forget; failures leave the map without them. */
+  showCityContext: (lat: number, lng: number, name?: string) => void;
+  /** Towns around the destination, for StopMarkerLayer to label. */
+  nearbyPlaces: NearbyPlaceMarker[];
   /** The stops currently drawn, for StopMarkerLayer to render an HTML card per stop. State
    *  rather than a ref because the card list is real DOM that has to change when the day does.
    *  Flattened across every day, each stop carrying its own `day`. */
@@ -195,6 +201,9 @@ const HERO_VIEW = { lng: 8, lat: 22, height: 2_500_000, headingDeg: 5, pitchDeg:
 /** Framing floor for a day's stops, in metres — a lone stop gives a zero-radius sphere, and a
  *  tight cluster gives one small enough that the camera dives into the building mesh. */
 const MIN_ROUTE_RADIUS_M = 400;
+/** Same reasoning as HIGHWAY_HEIGHT_M: a fixed height above the *ellipsoid*, which is routinely
+ *  below the real tile surface — the depth-fail material is what keeps the line visible there. */
+const CITY_BOUNDARY_HEIGHT_M = 40;
 
 /**
  * Half the camera's *horizontal* field of view, as a tangent, for turning screen pixels into
@@ -240,6 +249,14 @@ type Flight = [
   centreHeightM?: number,
 ];
 
+/** A named town near the destination, for the marker layer to label. */
+export interface NearbyPlaceMarker {
+  name: string;
+  lat: number;
+  lng: number;
+  kind: string;
+}
+
 /** A whole trip's worth of routes, held for replay when the request beats the viewer. */
 interface TripRouteRequest {
   days: RouteStop[][];
@@ -263,6 +280,14 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   /** Bumped per showHighways call so a slow, superseded fetch (e.g. re-picking a destination
    *  before the previous city's highways landed) can't draw over the newer city's roads. */
   const highwayGenerationRef = useRef(0);
+  const cityEntitiesRef = useRef<Entity[]>([]);
+  /** Bumped per showCityContext call, so a slow answer for a city the traveler has already
+   *  moved on from cannot draw over the one they are looking at now. */
+  const cityGenerationRef = useRef(0);
+  /** The destination already asked for, so two callers (and React's development double-invoke)
+   *  cannot fire the same Overpass query twice and have the throttled one win. */
+  const cityKeyRef = useRef<string | null>(null);
+  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlaceMarker[]>([]);
   const [ready, setReady] = useState(false);
   const [globeWanted, setGlobeWanted] = useState(false);
   const [peekSuspended, setPeekSuspended] = useState(false);
@@ -797,6 +822,101 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     };
   }, [hoveredIndex, routeStops, ready, peekSuspended, cancelPeek]);
 
+  /**
+   * The destination's own administrative outline, plus the names of the towns around it.
+   *
+   * A pin says where a city is and nothing about how far it reaches, so a stop 12km out could be
+   * a tram ride or a different town and the map cannot tell you which. The outline answers that,
+   * and the neighbour names answer the other half — what the places just past the line are
+   * called.
+   *
+   * Fire-and-forget and fail-soft, exactly like `showHighways`: this is orientation, and a city
+   * with no mapped relation or an Overpass outage should cost the map a polygon rather than cost
+   * the traveler their destination.
+   */
+  const showCityContext = useCallback((lat: number, lng: number, name?: string) => {
+    // One request per destination, ever.
+    //
+    // This is called from two entry points and React re-invokes effects in development, so the
+    // same city was being asked for twice within a frame. Overpass throttles by IP and answered
+    // the second with an empty result — which, being the newer generation, won, while the good
+    // answer was discarded by the guard below. The outline never drew, and nothing anywhere
+    // reported an error, because an empty result is a legitimate answer for a city with no
+    // mapped relation.
+    const key = `${lat.toFixed(4)},${lng.toFixed(4)},${name ?? ""}`;
+    if (cityKeyRef.current === key) return;
+    cityKeyRef.current = key;
+
+    const generation = ++cityGenerationRef.current;
+    (async () => {
+      let data: { boundary: { segments: { lat: number; lng: number }[][] } | null; nearby: NearbyPlaceMarker[] };
+      try {
+        const query = new URLSearchParams({ lat: String(lat), lng: String(lng) });
+        if (name) query.set("name", name);
+        const res = await fetch(`/api/city-context?${query}`);
+        if (!res.ok) {
+          cityKeyRef.current = null;
+          return;
+        }
+        data = await res.json();
+      } catch {
+        cityKeyRef.current = null;
+        return;
+      }
+      if (generation !== cityGenerationRef.current) return;
+      // An empty answer is "we learned nothing", not "there is nothing" — Overpass returns one
+      // for a throttled request exactly as it does for a city with no relation. Overwriting a
+      // drawn outline with it would let a rate-limit erase a correct result.
+      if (data.nearby?.length) setNearbyPlaces(data.nearby);
+      // Read AFTER the fetch, never before it.
+      //
+      // On a cold load this is called from the destination flight, which happens long before the
+      // Cesium viewer registers — capturing the ref up front therefore captured `null` every
+      // time, and the outline was silently dropped while the fetch it had just paid for sat
+      // there complete. `showHighways` survives the same race only because it queues into
+      // `pendingHighwaysRef`; the Overpass round-trip here is seconds long, which is more than
+      // enough for the viewer to arrive, so re-reading is all this needs.
+      const viewer = viewerRef.current;
+      if (!viewer || viewer.isDestroyed() || !data.boundary) {
+        // Let the next attempt try again rather than caching the failure forever.
+        cityKeyRef.current = null;
+        return;
+      }
+      const Cesium = await import("cesium");
+      if (generation !== cityGenerationRef.current || viewer.isDestroyed()) return;
+      for (const e of cityEntitiesRef.current) viewer.entities.remove(e);
+      // Outline only, never a fill. A translucent polygon over photorealistic terrain hides the
+      // city it is describing, which is the one thing this must not do.
+      cityEntitiesRef.current = data.boundary.segments.map((segment) =>
+        viewer.entities.add({
+          polyline: {
+            positions: segment.map((p) =>
+              Cesium.Cartesian3.fromDegrees(p.lng, p.lat, CITY_BOUNDARY_HEIGHT_M)
+            ),
+            width: 2,
+            arcType: Cesium.ArcType.GEODESIC,
+            material: new Cesium.ColorMaterialProperty(
+              Cesium.Color.fromCssColorString(cssColor("--city-boundary")).withAlpha(0.85)
+            ),
+            // Full strength on depth-fail, which is the *normal* case rather than the exception.
+            // `CITY_BOUNDARY_HEIGHT_M` is a height above the ellipsoid and the real tile surface
+            // is routinely tens of metres higher, so this line is below the visible ground almost
+            // everywhere — exactly the situation `showHighways` documents. A dimmed depth-fail
+            // material therefore isn't "the occluded parts are subtler", it is the whole line at
+            // that alpha, which is why the first attempt drew nothing anybody could see.
+            //
+            // Solid rather than dashed for the same reason: a dash material has no depth-fail
+            // equivalent, so the pattern would be lost on every stretch that matters.
+            depthFailMaterial: new Cesium.ColorMaterialProperty(
+              Cesium.Color.fromCssColorString(cssColor("--city-boundary")).withAlpha(0.85)
+            ),
+          },
+        })
+      );
+      viewer.scene.requestRender();
+    })();
+  }, []);
+
   const showHighways = useCallback((lat: number, lng: number) => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) {
@@ -973,6 +1093,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       resetToHome,
       showTripRoute,
       showHighways,
+      showCityContext,
+      nearbyPlaces,
       routeStops,
       routeClusters,
       focusedDay,
@@ -994,6 +1116,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       resetToHome,
       showTripRoute,
       showHighways,
+      showCityContext,
+      nearbyPlaces,
       routeStops,
       routeClusters,
       focusedDay,

@@ -170,6 +170,70 @@ export function insertTrip(
  * a resume whose session file has vanished falls back to a fresh session, and that new id is the
  * one the next turn has to continue from.
  */
+/**
+ * The edit conversation itself, one row per turn.
+ *
+ * Separate from `trips.chat_session_id`, which is only the *handle* the CLI resumes by. That
+ * handle brings the model's memory back; it brings nothing back for the traveler, who reopens
+ * the panel to an empty box with no record of what they asked for or what changed. The session
+ * can also be replaced mid-trip (a vanished session file falls back to a fresh id), and the
+ * transcript should survive that — so it is stored here rather than trusted to the CLI.
+ *
+ * Only for saved trips. The pre-save result view on `/` has no trip row to hang a conversation
+ * on, so its chat stays in memory for that session and is gone on reload — the same bargain
+ * every other unsaved edit on that page already makes.
+ */
+export interface ChatTurnRow {
+  id: number;
+  trip_id: string;
+  role: "user" | "assistant";
+  content: string;
+  /** The assistant's structured extras (changes, warnings, daysModified, …) as JSON. Null on a
+   *  user turn. Stored whole rather than as columns because it is display material the panel
+   *  already knows how to render, and splitting it would freeze its shape into the schema. */
+  meta_json: string | null;
+  created_at: string;
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS trip_chat_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trip_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    meta_json TEXT,
+    created_at TEXT NOT NULL
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_chat_turns_trip ON trip_chat_turns (trip_id, id)`);
+
+/** Append one turn. `id` is the ordering — `created_at` is an ISO string and two turns in the
+ *  same millisecond would tie, which for a transcript reorders the conversation. */
+export function appendChatTurn(turn: {
+  tripId: string;
+  role: "user" | "assistant";
+  content: string;
+  meta?: unknown;
+}): void {
+  db.prepare(
+    `INSERT INTO trip_chat_turns (trip_id, role, content, meta_json, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(
+    turn.tripId,
+    turn.role,
+    turn.content,
+    turn.meta === undefined ? null : JSON.stringify(turn.meta),
+    new Date().toISOString()
+  );
+}
+
+/** The whole conversation, oldest first. */
+export function listChatTurns(tripId: string): ChatTurnRow[] {
+  return db
+    .prepare(`SELECT * FROM trip_chat_turns WHERE trip_id = ? ORDER BY id ASC`)
+    .all(tripId) as ChatTurnRow[];
+}
+
 export function setTripChatSession(id: string, sessionId: string | null): void {
   db.prepare(`UPDATE trips SET chat_session_id = ? WHERE id = ?`).run(sessionId, id);
 }

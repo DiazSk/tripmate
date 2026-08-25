@@ -7,7 +7,7 @@ import {
   runClaude,
   type SessionOption,
 } from "@/lib/claude";
-import { getTrip, insertRun, setTripChatSession } from "@/lib/db";
+import { appendChatTurn, getTrip, insertRun, setTripChatSession } from "@/lib/db";
 import { buildEditContext } from "@/lib/editContext";
 import {
   buildChatEditPrompt,
@@ -200,6 +200,35 @@ export async function POST(req: NextRequest) {
     // a dead session for every future turn.
     if (mode === "chat" && tripId && servedBy && servedBy !== stored?.chat_session_id) {
       setTripChatSession(tripId, servedBy);
+    }
+
+    // Persist the turn pair, but only for a saved trip and only in chat mode. An element edit is
+    // a one-shot instruction from a stop's own control, not part of the conversation, and
+    // threading it into the transcript would put words in the traveler's mouth they never typed.
+    // Best-effort: a transcript that fails to write must not fail the edit that already
+    // succeeded, which is the same fail-soft bargain every other side-effect here makes.
+    if (tripId && mode === "chat") {
+      try {
+        const turns = (body as { messages?: { role: string; content: string }[] }).messages ?? [];
+        const latest = turns[turns.length - 1];
+        if (latest?.role === "user") {
+          appendChatTurn({ tripId, role: "user", content: latest.content });
+        }
+        appendChatTurn({
+          tripId,
+          role: "assistant",
+          content: parsed.reply ?? "",
+          meta: {
+            changes: parsed.changes ?? [],
+            warnings: parsed.warnings ?? [],
+            daysModified: daysModified(ops, rejected),
+            knockOn: parsed.knockOn ?? null,
+            rejected: rejected.map((r) => r.reason),
+          },
+        });
+      } catch (err) {
+        console.error("[trip-edit] transcript write failed", err);
+      }
     }
 
     return NextResponse.json({

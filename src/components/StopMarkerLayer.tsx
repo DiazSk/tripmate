@@ -51,6 +51,7 @@ const SCALE_MAX = 1;
  *  of them owns a piece of screen. */
 type Marker =
   | { kind: "stop"; lat: number; lng: number; name: string; flatIndex: number }
+  | { kind: "place"; lat: number; lng: number; name: string }
   | {
       kind: "cluster";
       lat: number;
@@ -78,6 +79,7 @@ export default function StopMarkerLayer() {
     focusedDay,
     hoveredDay,
     setHoveredDay,
+    nearbyPlaces,
     routeAltitudeRef,
     flyToPlace,
     hoveredIndex,
@@ -127,8 +129,21 @@ export default function StopMarkerLayer() {
               ? [{ kind: "stop" as const, lat: stop.lat, lng: stop.lng, name: stop.name, flatIndex }]
               : []
           );
-    return [...clusters, ...stops];
-  }, [routeStops, routeClusters, focusedDay, hoveredDay, namedDay]);
+    // Neighbouring towns, last in the array and therefore last in the declutter scan: they are
+    // the least important thing on screen and must never suppress a day badge or a stop name.
+    // Dropped entirely once a day is being read — at that point the traveler is looking at one
+    // afternoon, and the names of towns 30km away are noise.
+    const places: Marker[] =
+      namedDay === null
+        ? nearbyPlaces.map((p) => ({
+            kind: "place" as const,
+            lat: p.lat,
+            lng: p.lng,
+            name: p.name,
+          }))
+        : [];
+    return [...clusters, ...stops, ...places];
+  }, [routeStops, routeClusters, focusedDay, hoveredDay, namedDay, nearbyPlaces]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -186,7 +201,9 @@ export default function StopMarkerLayer() {
               // rather than off to one side, so height is the only thing separating it from the
               // pins and arcs underneath — and it has to clear the arcs, which peak well above
               // the stems. See DAY_LABEL_LIFT_M.
-              altitude + STEM_HEIGHT_M + (marker.kind === "cluster" ? DAY_LABEL_LIFT_M : 0),
+              marker.kind === "place"
+                ? altitude
+                : altitude + STEM_HEIGHT_M + (marker.kind === "cluster" ? DAY_LABEL_LIFT_M : 0),
               ellipsoid,
               anchors[i]
             );
@@ -352,7 +369,13 @@ export default function StopMarkerLayer() {
     >
       {markers.map((marker, i) => (
         <div
-          key={marker.kind === "cluster" ? `day-${marker.day}` : `stop-${marker.flatIndex}`}
+          key={
+            marker.kind === "cluster"
+              ? `day-${marker.day}`
+              : marker.kind === "place"
+                ? `place-${marker.name}-${marker.lat}`
+                : `stop-${marker.flatIndex}`
+          }
           ref={(el) => {
             nodeRefs.current[i] = el;
           }}
@@ -364,7 +387,11 @@ export default function StopMarkerLayer() {
           // `.marker-anchor` starts hidden in CSS instead, and only the render loop writes it.
           className="marker-anchor"
         >
-          {marker.kind === "cluster" ? (
+          {marker.kind === "place" ? (
+            // Not a button: a neighbouring town is context, not a destination in this trip, and
+            // making it clickable would offer an action there is nothing behind.
+            <span className="marker-place-label">{marker.name}</span>
+          ) : marker.kind === "cluster" ? (
             <button
               type="button"
               tabIndex={-1}
