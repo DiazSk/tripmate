@@ -97,7 +97,9 @@ export default function SplitEditor({
   const routeDays = useMemo(
     () =>
       itinerary.days.map((d, i) =>
-        d.stops.map((st) => ({ lat: st.lat, lng: st.lng, name: st.name, day: i }))
+        // `time` rides along only so the globe can light itself for the stop being looked at
+        // (dayPhase in mapRoute) — the geometry does not read it.
+        d.stops.map((st) => ({ lat: st.lat, lng: st.lng, name: st.name, day: i, time: st.time }))
       ),
     [itinerary.days]
   );

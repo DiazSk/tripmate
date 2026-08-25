@@ -229,6 +229,51 @@ body {
   display: none;
 }
 
+/* --- Day and night on the globe ----------------------------------------------------------
+
+   The world lights itself for whichever stop is selected: click a 9 PM dinner and the city goes
+   to night, step Play tour back to a 7 AM breakfast and it comes up again.
+
+   `mix-blend-mode: multiply` for every phase, with only `background-color` changing between
+   them. That is deliberate: `mix-blend-mode` is not an animatable property — it snaps — so a
+   per-phase blend mode would have made the crossfade impossible and there would be a jump cut in
+   the middle of a camera flight. Multiply is the one mode that works for all three tinted
+   phases, because all three are the same operation on daylight photography: darken it and pull
+   it toward a colour. A fully transparent multiply layer is a no-op, which is what makes `day`
+   free rather than a fourth special case.
+
+   Alphas are tuned against the route arcs, not just the ground. The arcs live inside the Cesium
+   canvas and so get multiplied too; push `night` much past this and they stop reading as lines.
+
+   The reduced-motion blanket rule above already collapses this transition to a snap, which is
+   the correct behaviour and needs no rule of its own. */
+.globe-tint {
+  mix-blend-mode: multiply;
+  background-color: transparent;
+  transition: background-color 900ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Daylight is the absence of a tint — the tiles are already daylight photography, and anything
+   added here would only be a worse version of what was photographed. No rule; `transparent`
+   above is the whole of `[data-phase="day"]`. */
+
+/* Low warm sun, barely there. Dawn is short and the difference the traveller cares about is
+   "not dark yet", so this is the lightest touch of the three. */
+.globe-tint[data-phase="dawn"] {
+  background-color: rgb(255 188 152 / 0.4);
+}
+
+/* Golden hour, and the most flattering of the four — worth being the strongest warm tint. */
+.globe-tint[data-phase="dusk"] {
+  background-color: rgb(255 146 84 / 0.52);
+}
+
+/* Deep blue rather than grey or black. Multiplying toward neutral just underexposes the photo
+   and reads as a dimmed screen; the hue shift is what makes it read as night. */
+.globe-tint[data-phase="night"] {
+  background-color: rgb(46 68 128 / 0.7);
+}
+
 /* --- The map on a phone -----------------------------------------------------------------
    Below `sm` the docked panel is full-bleed, so two things are true at once: the globe is
    invisible, and the control stack has nowhere to sit that isn't on top of the panel. That
