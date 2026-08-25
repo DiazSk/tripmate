@@ -46,6 +46,10 @@ export default function TripView({
   // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
   // state there would reset the view to Day 1 on the way back.
   const [activeDayIndex, setActiveDayIndex] = useState(0);
+  /** Shut on arrival, same as the result view: a saved trip opens on its own clustered map and
+   *  the plan is one click away. Owned here because `ItineraryCard` reads it too — see the
+   *  `panelCollapsed` prop. */
+  const [planCollapsed, setPlanCollapsed] = useState(true);
   // Step 7 edit session. Unlike the pre-save view, every accepted edit here is persisted.
   const focus = useFocusEdit(itinerary);
   const [savingFocus, setSavingFocus] = useState(false);
@@ -212,7 +216,25 @@ export default function TripView({
     <main className="dashboard-page min-h-full">
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
-      <DockedPanel collapsible wide={!!focus.target}>
+      <DockedPanel
+        collapsible
+        wide={!!focus.target}
+        collapsed={planCollapsed}
+        onCollapsedChange={setPlanCollapsed}
+        // What the capsule carries while the panel is shut — the trip at a glance, so
+        // "which day was I reading" survives a look at the map.
+        capsule={
+          trip
+            ? {
+                title: trip.destination,
+                subtitle: itinerary?.days.length
+                  ? `${itinerary.days.length} ${itinerary.days.length === 1 ? "day" : "days"}`
+                  : undefined,
+                step: itinerary?.days.length ? `Day ${activeDayIndex + 1}` : undefined,
+              }
+            : undefined
+        }
+      >
         <div className="space-y-4" {...devLabel("ResultPanel")}>
           {error && <ErrorNote>{error}</ErrorNote>}
           {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
@@ -269,6 +291,7 @@ export default function TripView({
               dayIndex={focus.target.dayIndex}
               scope={focus.target.scope}
               tripId={trip.id}
+              sessionId={trip.chatSessionId ?? null}
               dirty={focus.dirty}
               saving={savingFocus}
               onDraftChange={focus.applyDraft}
@@ -339,6 +362,8 @@ export default function TripView({
                   onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
                   onItineraryChange={handleRearrange}
                   trip={trip}
+                  panelCollapsed={planCollapsed}
+                  onMinimize={() => setPlanCollapsed(true)}
                 />
               )}
 

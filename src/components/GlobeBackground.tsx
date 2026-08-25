@@ -41,6 +41,23 @@ const MAX_RENDER_PIXEL_RATIO = 1.5;
  * comparisons — cheaper than the bookkeeping to fire it less often. Only the *transition*
  * writes to the tileset, so a steady camera costs nothing and tile traversal isn't disturbed.
  */
+/**
+ * How long the photorealistic tileset gets to put *something* on screen before the flat imagery
+ * Earth takes over.
+ *
+ * Generous, because this is a fallback for an outage and not a performance budget: the tileset
+ * normally has its first coarse tiles up in well under a second, and a slow connection that is
+ * merely slow will beat this comfortably. The cost of being wrong in the impatient direction is a
+ * flat OSM Earth under a photographic one that was about to arrive.
+ */
+const PHOTOREALISTIC_WATCHDOG_MS = 8000;
+/** Failed tile requests tolerated before falling back — but only while nothing has arrived
+ *  lately. Some failures are routine at the edges of a pan and must not cost the good Earth. */
+const TILE_FAILURES_BEFORE_FALLBACK = 6;
+/** How stale the last successful tile has to be for failures to count as an outage rather than
+ *  the ordinary attrition of a pan. Comfortably longer than a slow tile takes to arrive. */
+const TILE_STALE_MS = 10_000;
+
 function installLodController(
   viewer: import("cesium").Viewer,
   tileset: import("cesium").Cesium3DTileset
@@ -68,8 +85,8 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
    *
    * One-way because **a viewer swap is unrecoverable.** `viewer.destroy()` takes the camera pose,
    * the 512MB tile cache and every `viewer.entities` — route arcs, stems, glow pools, the
-   * destination pin — and nothing replays them: `showDayRoute` is a `useCallback(…, [])` whose
-   * only caller (ItineraryCard's effect, deps `[day, showDayRoute]`) sees neither dep change on a
+   * destination pin — and nothing replays them: `showTripRoute` is a `useCallback(…, [])` whose
+   * only caller (ItineraryCard's effect, deps `[day, …, showTripRoute]`) sees no dep change on a
    * swap, and `setViewer`'s pending queues were consumed and nulled on the first registration.
    * So the globe is built at most once per mount of this component, and torn down only when this
    * component genuinely unmounts — which it never does, since AppShell renders it from the root
@@ -108,6 +125,7 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
   useEffect(() => {
     let viewer: import("cesium").Viewer | undefined;
     let cancelled = false;
+    const watchdogRef: { current: number | undefined } = { current: undefined };
 
     (async () => {
       if (!built || !containerRef.current) return;
@@ -117,6 +135,9 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
 
       const token = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
       if (token) Cesium.Ion.defaultAccessToken = token;
+
+      let tileFailures = 0;
+      let lastTileLoadAt = 0;
 
       viewer = new Cesium.Viewer(containerRef.current, {
         // Google's terms require the attribution stay visible, so it's redirected to our
@@ -189,6 +210,28 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
       const dpr = window.devicePixelRatio || 1;
       viewer.useBrowserRecommendedResolution = false;
       viewer.resolutionScale = Math.min(dpr, MAX_RENDER_PIXEL_RATIO) / dpr;
+
+      /**
+       * The flat-imagery Earth: Cesium's own ellipsoid with OpenStreetMap on it.
+       *
+       * The floor under every way the photorealistic tileset can fail to put an Earth on screen.
+       * It is idempotent because it is now reachable from three places — no Ion token, a tileset
+       * that throws while being built, and a tileset that builds but never delivers a tile.
+       */
+      let flatImageryShown = false;
+      const showFlatImagery = () => {
+        if (flatImageryShown || !viewer || viewer.isDestroyed()) return;
+        flatImageryShown = true;
+        // Photorealistic tiles hide the globe (they *are* the ground); showing it again is what
+        // makes this a fallback rather than a second layer nobody sees.
+        viewer.scene.globe.show = true;
+        viewer.imageryLayers.addImageryProvider(
+          new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })
+        );
+        // Load-bearing under `requestRenderMode`: nothing about this moved the camera, so without
+        // an explicit request the swap is not drawn until something else happens to repaint.
+        viewer.scene.requestRender();
+      };
 
       let usingPhotorealistic = false;
       if (token) {
@@ -311,15 +354,48 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
           viewer.scene.globe.show = false;
           usingPhotorealistic = true;
           installLodController(viewer, tileset);
+
+          /**
+           * Watch the tileset actually deliver an Earth, not just construct one.
+           *
+           * The `try` above only covers *building* the tileset, which is one fetch — the root
+           * tile. Everything after it was unguarded, and that gap is a blank page rather than a
+           * degraded one: `globe.show = false` above hands the entire job of drawing the planet to
+           * these tiles, so if they stop arriving the route arcs, stems and day labels are left
+           * hanging over white. Reproduced by letting the root through and failing its children:
+           * a trip page with a full itinerary drawn on nothing at all.
+           *
+           * Both directions of failure are covered, because they look different to the tileset:
+           * requests that error (`tileFailed`, e.g. Google returning 502s or a quota refusal), and
+           * requests that never resolve at all — a hang, a blocked host, a captive portal — which
+           * fire no event and are only visible as time passing with nothing ready.
+           *
+ * The test in both cases is "has a tile arrived lately", not "did something fail". Failures
+           * at the edge of a pan are routine and must never cost a good Earth its photography; and
+           * the freshness half is what covers an outage that starts *mid-session*, where plenty of
+           * tiles loaded an hour ago but the city just flown to cannot fetch one.
+           *
+           * `tileLoad`/`tileFailed` rather than `tileset.statistics`, which reads the same but is
+           * not in Cesium's public typings.
+           */
+          tileset.tileLoad.addEventListener(() => {
+            lastTileLoadAt = performance.now();
+          });
+          watchdogRef.current = window.setTimeout(() => {
+            if (lastTileLoadAt === 0) showFlatImagery();
+          }, PHOTOREALISTIC_WATCHDOG_MS);
+          tileset.tileFailed.addEventListener(() => {
+            tileFailures += 1;
+            const nothingRecent = performance.now() - lastTileLoadAt > TILE_STALE_MS;
+            if (tileFailures >= TILE_FAILURES_BEFORE_FALLBACK && nothingRecent) showFlatImagery();
+          });
+          // The tileset is deliberately left in the scene either way: if Google recovers, its
+          // tiles draw over the flat imagery and the Earth simply becomes photographic again.
         } catch {
           usingPhotorealistic = false;
         }
       }
-      if (!usingPhotorealistic) {
-        viewer.imageryLayers.addImageryProvider(
-          new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })
-        );
-      }
+      if (!usingPhotorealistic) showFlatImagery();
 
       // Hero framing: horizon roughly at frame centre, so the curve sits around
       // 45-50% down the screen (space above for the header/card, Earth below). At
@@ -360,6 +436,7 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
 
     return () => {
       cancelled = true;
+      if (watchdogRef.current !== undefined) window.clearTimeout(watchdogRef.current);
       viewerInstanceRef.current = null;
       setViewer(null);
       viewer?.destroy();

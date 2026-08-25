@@ -125,6 +125,12 @@ addColumnIfMissing("llm_runs", "batch_tag", "TEXT");
 // Refine cells are keyed by (fixture, model, task); NULL is a generation cell. Nullable rather
 // than defaulted so every row written before refine existed still reads as a generation row.
 addColumnIfMissing("bench_results", "task_id", "TEXT");
+// The `claude` CLI session that generated this trip, so the edit chat can resume the same
+// conversation instead of opening a fresh one. Nullable and always optional: the session is a
+// JSONL file on whichever machine ran the generation, so it can be absent (trip generated before
+// this existed), stale, or gone (another device, a cleaned home dir) — every reader must be able
+// to fall back to a fully-rebuilt prompt. See SessionOption in claude.ts.
+addColumnIfMissing("trips", "chat_session_id", "TEXT");
 
 export interface TripRow {
   id: string;
@@ -135,23 +141,37 @@ export interface TripRow {
   itinerary_json: string;
   run_id: string | null;
   user_answers_json: string | null;
+  chat_session_id: string | null;
   created_at: string;
 }
 
 export function insertTrip(
-  trip: Omit<TripRow, "created_at" | "run_id" | "user_answers_json"> & {
+  trip: Omit<TripRow, "created_at" | "run_id" | "user_answers_json" | "chat_session_id"> & {
     run_id?: string | null;
     user_answers_json?: string | null;
+    chat_session_id?: string | null;
   }
 ): TripRow {
   const created_at = new Date().toISOString();
   const run_id = trip.run_id ?? null;
   const user_answers_json = trip.user_answers_json ?? null;
+  const chat_session_id = trip.chat_session_id ?? null;
   db.prepare(
-    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, created_at)
-     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @created_at)`
-  ).run({ ...trip, run_id, user_answers_json, created_at });
-  return { ...trip, run_id, user_answers_json, created_at };
+    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, created_at)
+     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @created_at)`
+  ).run({ ...trip, run_id, user_answers_json, chat_session_id, created_at });
+  return { ...trip, run_id, user_answers_json, chat_session_id, created_at };
+}
+
+/**
+ * Remembers which CLI session is carrying this trip's edit conversation.
+ *
+ * Written on every chat turn rather than once, because the id can legitimately change mid-trip:
+ * a resume whose session file has vanished falls back to a fresh session, and that new id is the
+ * one the next turn has to continue from.
+ */
+export function setTripChatSession(id: string, sessionId: string | null): void {
+  db.prepare(`UPDATE trips SET chat_session_id = ? WHERE id = ?`).run(sessionId, id);
 }
 
 /** Exactly the columns `listTrips` selects — deliberately narrower than `TripRow`, which

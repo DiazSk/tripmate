@@ -29,7 +29,9 @@ export default function GroupTypePicker({
             type="button"
             onClick={() => onSelect(g.id)}
             aria-pressed={isActive}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none ${
+            // 44px floor, reached with height rather than by growing the type — same fix as
+            // ChoicePicker, which this component predates and duplicates.
+            className={`flex min-h-11 items-center rounded-full px-3.5 text-sm font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none ${
               isActive ? "bg-accent text-accent-foreground" : "bg-white/10 text-muted hover:bg-white/15"
             }`}
           >

@@ -22,6 +22,8 @@ colors:
   tile-foreground: "#e3e9f1"
   route-blue: "#0A84FF"
   map-pin-red: "#FF3B30"
+  marker-title: "rgb(244 247 250 / 0.88)"
+  marker-title-receded: "rgb(244 247 250 / 0.32)"
   shadow-control: "rgba(0, 0, 0, 0.32)"
   shadow-panel: "rgba(0, 0, 0, 0.37)"
   shadow-thumb: "rgba(0, 0, 0, 0.4)"
@@ -85,6 +87,11 @@ typography:
     fontSize: "0.75rem"
     fontWeight: 600
     letterSpacing: "-0.045em"
+  markerDayLabel:
+    fontSize: "0.8125rem"
+    fontWeight: 700
+    letterSpacing: "0.14em"
+    note: "Per-day heading drawn on the globe at each day's centroid, uppercase. A step of its own rather than label above — it has to win the eye against arbitrary satellite imagery, not a glass panel."
   index:
     fontSize: "0.62rem"
     fontWeight: 600
@@ -218,8 +225,9 @@ A cool near-black slate carrying the entire surface layer, one warm amber for an
 ### Tertiary (map-native, outside the brand palette)
 - **Route Blue** (`{colors.route-blue}`, with `#0060DF` casing): the day's arcs, the stop stems and their glow pools.
 - **Pin Red** (`{colors.map-pin-red}`, with `#C1271F` stroke): the destination teardrop pin and the compass needle.
+- **Marker Title** (`{colors.marker-title}`, receded to `{colors.marker-title-receded}` when a different stop is focused): the stop title card's own text, floating directly on the globe with no fill, border or blur behind it — an off-white rather than pure white. See The Day on the Globe, above.
 
-These two are map affordances that must read against arbitrary satellite imagery at any brightness. They are not part of the interface palette and must never appear in a panel, chip or button.
+These three are map affordances that must read against arbitrary satellite imagery at any brightness. They are not part of the interface palette and must never appear in a panel, chip or button.
 
 **The one exception, in the other direction.** `{colors.accent}` is allowed onto the globe, and only
 to mark the stop the user is *touching*: the hovered or selected stem, its glow pool, and the arcs
@@ -328,6 +336,7 @@ is preserved in the `.blue-hour-scene` entry, which is the rule it was arguing a
 - **Body** (system sans, 400, 0.875rem, relaxed leading): panel copy, stop names and notes, day summaries (italic). The hero subline is the one deliberate exception at `text-base` / `sm:text-lg`, capped at `max-w-xl` — the poster above it is 134px at a laptop width and 202px at 1920, so dropping to 14px is a cliff rather than a scale step, and that line carries the mechanism the rest of the page only implies.
 - **Field** (system sans, 500, 1rem): a value the user has typed or picked, in the trip form's console cells. 16px rather than the body step is a hard requirement, not a preference — below 16px iOS Safari zooms the viewport on focus.
 - **Label** (system sans, 600, 0.75rem, tracking 0.025em, uppercase): field group labels inside the place-detail panel ("Best time to visit", "Tips", "Next up"). Uppercase labels belong *inside* a panel, beneath a heading, describing the field that follows.
+- **Marker Day Label** (`.marker-day-label`; system sans, 700, 0.8125rem, tracking 0.14em, uppercase): the per-day heading drawn directly on the globe at each day's centroid — see The Day on the Globe, above. A step of its own rather than the 0.75rem Label above: it has to win the eye at a zoom level where stop names have already faded toward their depth floor, and it reads against arbitrary satellite imagery rather than inside a glass panel.
 - **Numeric** (`tabular-nums`): every cost, total, budget figure and temperature, without exception.
 
 ### Named Rules
@@ -370,7 +379,9 @@ A page picks one shape and keeps it. The docked panel is not a container you put
 
 **The docked panel is one component.** `DockedPanel` owns that geometry — `top-[calc(var(--nav-h)+1.25rem)] right-5 bottom-5 left-5` full-bleed below `sm`, `top-[calc(var(--nav-h)+1.5rem)] right-6 bottom-6 w-[40%] min-w-[360px] max-w-[520px]` above it — and both surfaces that dock content use it. Gutters match the pages' own `p-5 sm:p-6` rhythm; they were hand-written per page at 24px against a 20px page padding.
 
-**The map on a phone.** Below `sm` the full-bleed panel covers the globe completely, so two things were true at once: the day drawn on the globe was invisible on a phone, and the control stack had nowhere to sit that wasn't on top of the panel — which is why it was simply hidden, leaving a phone able to drag the camera into a disoriented pose with nothing to recover it. Both halves move together instead. `DockedPanel collapsible` renders a sticky 44px grabber below `sm` that shrinks the panel to a `--mobile-sheet-h` (45dvh) bottom sheet, and `.app-shell:has(.docked-panel-collapsed) .map-controls` brings the stack back in the corner that just opened up. One token drives the sheet's height and the stack's offset from it, so they cannot drift. The phone set is reduced to the zoom pill and the compass: pinch already covers magnification, nothing but a reset covers a lost heading, and neither a 20px slider thumb nor a camera-angle toggle belongs on a touch surface.
+**The map on a phone.** Below `sm` the full-bleed panel covers the globe completely, so two things were true at once: the day drawn on the globe was invisible on a phone, and the control stack had nowhere to sit that wasn't on top of the panel — which is why it was simply hidden, leaving a phone able to drag the camera into a disoriented pose with nothing to recover it.
+
+Both halves move together instead, but the panel no longer shrinks to a bottom sheet. `DockedPanel collapsible` folds into a capsule — the same top-right corner the open panel occupies at every width, not just below `sm` — showing the trip's thumbnail, name, length and the day in focus; a click anywhere on it reopens the panel. It replaced a 40px glass arrow that hid the panel and, shut, simply *was* the panel: a control that said nothing about the trip it had just swallowed, so the only way to remember which day you were reading was to open it and look. Below `sm`, collapsing also reveals the control stack — `.app-shell:has(.docked-panel-collapsed) .map-controls`, sized off `--capsule-h` (`3.5rem`) — since it otherwise has nowhere to sit that isn't on top of the panel. The phone set is reduced to the zoom pill and the compass: pinch already covers magnification, nothing but a reset covers a lost heading, and neither a 20px slider thumb nor a camera-angle toggle belongs on a touch surface.
 
 **Map chrome.** `MapControls` is fixed bottom-left (`bottom-10 left-6`), hidden below `sm`, and suppressed entirely when the current surface carries `.map-chrome-hidden` — a page-level opt-out for any surface where the globe is scenery rather than a map being read. Three shapes qualify so far: a form over a decorative globe (the landing and plan steps, and `/profile`), a gallery that occludes it outright (`/trips`, whose hero covers the globe on arrival and whose grid draws no route or markers over it afterwards), and the internal `/backend` dashboards. The test is whether there is anything on the globe to navigate *to* — not whether the globe is visible. `/profile` failed that test conspicuously: a zoom pill, a 2D/3D toggle, a tilt slider and a compass sat over a settings form, all of them pointing at a globe with no route, no markers and nothing to find.
 
@@ -818,7 +829,7 @@ One thing the reference measurement did settle: vita-travel.webflow.io has **no*
 
 ## Navigation (App-Wide)
 
-A single fixed, frosted `Navbar` — replacing the old plain-text top-left wordmark — spans the full width on every route and stays through the entire scroll (`z-20`, `h-[var(--nav-h)]`, `.glass-nav`: blur with a whisper of the one slate, since unlike a curated reference photo this nav sits over an arbitrary live 3D globe that idles anywhere from open ocean to a snowfield). `--nav-h` (`4rem`) is read wherever something needs to clear the bar — `<main>`'s top padding, `ScrollStory`'s cancelling margins, `DockedPanel`'s top offset — so none of them can drift out of sync with the bar's own height, the same one-token pattern `--mobile-sheet-h` already established.
+A single fixed, frosted `Navbar` — replacing the old plain-text top-left wordmark — spans the full width on every route and stays through the entire scroll (`z-20`, `h-[var(--nav-h)]`, `.glass-nav`: blur with a whisper of the one slate, since unlike a curated reference photo this nav sits over an arbitrary live 3D globe that idles anywhere from open ocean to a snowfield). `--nav-h` (`4rem`) is read wherever something needs to clear the bar — `<main>`'s top padding, `ScrollStory`'s cancelling margins, `DockedPanel`'s top offset — so none of them can drift out of sync with the bar's own height, the same one-token pattern `--capsule-h` already established.
 
 **The bar is a ruled grid, not a padded strip.** A bottom hairline under the whole bar, and a vertical one closing the wordmark off from the links — the reference's own header arrangement, and the same drawn-grid logic the section openers and the profile split already use. Three things make it work and each has failed once:
 

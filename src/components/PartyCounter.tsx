@@ -48,8 +48,13 @@ export default function PartyCounter({
   value: PartyCounts;
   onChange: (next: PartyCounts) => void;
 }) {
+  // `max-w-sm` is capped here rather than at the call site: the rows are `justify-between`, so
+  // without a ceiling the gap between a band's name and the stepper that changes it is whatever the
+  // container happens to be - 1054px inside the plan wizard's old full-width card. A counter is
+  // intrinsically a narrow control and should carry its own measure, so the label and the buttons
+  // that act on it stay adjacent wherever it is dropped.
   return (
-    <div className="space-y-1" {...devLabel("PartyCounter")}>
+    <div className="max-w-sm space-y-1" {...devLabel("PartyCounter")}>
       {BANDS.map(({ key, label, one, sub, min }) => {
         const count = value[key];
         const set = (next: number) => onChange({ ...value, [key]: next });
@@ -65,7 +70,7 @@ export default function PartyCounter({
               {sub && <span className="ml-2 text-xs text-muted">{sub}</span>}
             </span>
             <div className="flex items-center gap-1">
-              <Step
+              <PartyStepButton
                 icon={Minus}
                 label={`Remove one ${one}`}
                 atBound={count <= min}
@@ -78,7 +83,7 @@ export default function PartyCounter({
               >
                 {count}
               </span>
-              <Step
+              <PartyStepButton
                 icon={Plus}
                 label={`Add one ${one}`}
                 atBound={count >= PARTY_MAX_PER_BAND}
@@ -92,7 +97,11 @@ export default function PartyCounter({
   );
 }
 
-function Step({
+// Exported (not the local, unexported `Step` this used to be) so the plan wizard's compact
+// single-band travelers control on step 1 can reuse the identical button rather than
+// reimplementing it — the wizard's own `Step` is already the name of a different type (the
+// three-way "landing" | "plan" | "result" step), so this is named for what it is instead.
+export function PartyStepButton({
   icon: Icon,
   label,
   atBound,
@@ -109,7 +118,10 @@ function Step({
       onClick={atBound ? undefined : onClick}
       aria-disabled={atBound}
       aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-foreground transition-colors duration-150 hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none aria-disabled:cursor-not-allowed aria-disabled:bg-white/5 aria-disabled:text-white/30 aria-disabled:hover:bg-white/5"
+      // 28x28 before this, six of them per screen (three bands x two directions) — the
+      // audit's mobile scan. `min-h-11 min-w-11` reaches the floor with the box, the icon
+      // stays h-3.5 w-3.5 so the visual weight of the row doesn't change, only the hit area.
+      className="flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white/10 text-foreground transition-colors duration-150 hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none aria-disabled:cursor-not-allowed aria-disabled:bg-white/5 aria-disabled:text-white/30 aria-disabled:hover:bg-white/5"
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />
     </button>

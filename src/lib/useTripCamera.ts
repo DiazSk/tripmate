@@ -8,7 +8,7 @@ import { PlaceDetail, Stop } from "./types";
 export type GeocodeOutcome = "found" | "missed" | "unreachable";
 
 export function useTripCamera(destination: string, tripId?: string) {
-  const { flyToDestination, flyToPlace, showHighways, setPosterPlace } = useMapCamera();
+  const { flyToDestination, flyToPlace, showHighways } = useMapCamera();
   const [destinationCoords, setDestinationCoords] = useState<{
     lat: number;
     lon: number;
@@ -45,11 +45,6 @@ export function useTripCamera(destination: string, tripId?: string) {
       }
       if (!geo) return "missed";
       setDestinationCoords(geo);
-      // What the static backdrop shows while the globe is down. Set from the resolved name
-      // rather than the raw input so a typo'd "kyotoo" doesn't become a poster lookup, and set
-      // independently of `fly` — a saved trip never flies here (it frames its own route) and is
-      // exactly the case the city poster exists for.
-      setPosterPlace(geo.name);
       // Independent of `fly`: highways are ambient map context for wherever the trip's
       // destination turns out to be, not tied to whether the camera itself flies there (a
       // saved trip with stops already frames its own day route and skips the flight).
@@ -57,7 +52,7 @@ export function useTripCamera(destination: string, tripId?: string) {
       if (fly) flyToDestination(geo.lat, geo.lon, geo.name);
       return "found";
     },
-    [flyToDestination, showHighways, setPosterPlace]
+    [flyToDestination, showHighways]
   );
 
   /** Same as flyToDestinationByName, but for callers (e.g. an autocomplete suggestion) that
@@ -65,11 +60,10 @@ export function useTripCamera(destination: string, tripId?: string) {
   const flyToDestinationByCoords = useCallback(
     (lat: number, lon: number, name: string) => {
       setDestinationCoords({ lat, lon, name });
-      setPosterPlace(name);
       showHighways(lat, lon);
       flyToDestination(lat, lon, name);
     },
-    [flyToDestination, showHighways, setPosterPlace]
+    [flyToDestination, showHighways]
   );
 
   const selectStop = useCallback(

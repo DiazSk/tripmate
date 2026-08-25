@@ -1,3 +1,6 @@
+// `import type` on everything that is only a type: Node erases those, which is the difference
+// between this module being reachable from a `.test.mjs` and not (see CLAUDE.md). `TIERS` and
+// the two formatters are real values and keep ordinary imports.
 import type { DayWeather } from "./weather";
 import type {
   DestinationContext,

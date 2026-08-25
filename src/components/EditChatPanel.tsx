@@ -57,6 +57,7 @@ export default function EditChatPanel({
   itinerary,
   dayIndex,
   tripId,
+  sessionId,
   onItineraryChange,
   onBusyChange,
 }: {
@@ -66,6 +67,10 @@ export default function EditChatPanel({
   /** Undefined = whole trip. Set = that day only. */
   dayIndex?: number;
   tripId?: string | null;
+  /** The CLI session the itinerary was generated in, so this chat continues that same
+   *  conversation. Undefined on a trip generated before sessions existed — the route then falls
+   *  back to a fully-rebuilt prompt, so this is optional rather than required. */
+  sessionId?: string | null;
   onItineraryChange: (next: Itinerary) => void;
   /** Lets the host dim the live preview while a turn is in flight. */
   onBusyChange?: (busy: boolean) => void;
@@ -75,6 +80,26 @@ export default function EditChatPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // The live session id, which can differ from the prop: if the generation session has expired,
+  // the route opens a new one and returns it, and every later turn must continue from THAT.
+  const [chatSession, setChatSession] = useState<string | null>(sessionId ?? null);
+  // The plan fingerprint the session was last told about. Null forces a resync on the next turn
+  // — which is exactly what we want after a rejected op, and on the very first turn.
+  const [syncedHash, setSyncedHash] = useState<string | null>(null);
+
+  // A different trip is a different conversation. Without this the panel would carry a stale
+  // session across a remount and resume someone else's trip.
+  //
+  // Adjusted during render rather than in an effect, which is React's documented pattern for
+  // "reset state when a prop changes": an effect would commit one render in which the session id
+  // and the trip disagree, and a message sent in that window resumes the previous trip's chat.
+  const conversation = `${tripId ?? ""}:${sessionId ?? ""}`;
+  const [lastConversation, setLastConversation] = useState(conversation);
+  if (lastConversation !== conversation) {
+    setLastConversation(conversation);
+    setChatSession(sessionId ?? null);
+    setSyncedHash(null);
+  }
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -105,6 +130,8 @@ export default function EditChatPanel({
           userAnswers,
           dayIndex,
           tripId,
+          sessionId: chatSession,
+          syncedHash,
           // Only role/content go back — the change metadata is display-side and would just be
           // noise in the transcript the model reads.
           messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -114,6 +141,9 @@ export default function EditChatPanel({
       if (!res.ok) throw new Error(data.error || "Edit failed");
 
       if (data.itinerary) onItineraryChange(data.itinerary);
+      // Track whatever actually served this turn, not what we asked for.
+      if (data.sessionId) setChatSession(data.sessionId);
+      setSyncedHash(data.syncedHash ?? null);
       setMessages((prev) => [
         ...prev,
         {

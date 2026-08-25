@@ -25,7 +25,10 @@ export default function ChoicePicker<T extends string>({
             type="button"
             onClick={() => onSelect(o.id)}
             aria-pressed={isActive}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none ${
+            // `min-h-11` reaches the 44px target the same way every other pill in this app
+            // does: with height, not by growing the type. These pills measured 32px tall on
+            // mobile, under the project's own floor.
+            className={`flex min-h-11 items-center rounded-full px-3.5 text-sm font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none ${
               isActive ? "bg-accent text-accent-foreground" : "bg-white/10 text-muted hover:bg-white/15"
             }`}
           >

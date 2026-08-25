@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteTrip, getTrip, updateTripItinerary } from "@/lib/db";
 import { toTripDetail } from "@/lib/tripPayload";
+// Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
+// use of `normalizeDays` moved into `toTripDetail`, but this did not.
 import { tripEndDate } from "@/lib/tripDays";
 
 export async function GET(

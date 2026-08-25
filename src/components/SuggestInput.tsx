@@ -117,7 +117,12 @@ export default function SuggestInput({
     setTyped(null);
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  // Bound to the root, not the input. `max-h-60 overflow-y-auto` over 96 time options makes the
+  // list a scrollable region, and Chrome gives scrollable regions a tab stop so they can be
+  // scrolled by keyboard — so Tab moves focus off the input and onto the list, where an
+  // input-bound Escape never fired. Both time fields were keyboard traps: the only exit was a
+  // mouse click elsewhere. Input key events bubble to the root, so this still fires once.
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Enter") {
       // Always swallowed, open or closed: this sits inside the plan form.
       e.preventDefault();
@@ -141,7 +146,12 @@ export default function SuggestInput({
   }
 
   return (
-    <div ref={rootRef} className={`relative ${className}`} {...devLabel("SuggestInput")}>
+    <div
+      ref={rootRef}
+      onKeyDown={onKeyDown}
+      className={`relative ${className}`}
+      {...devLabel("SuggestInput")}
+    >
       <input
         type="text"
         role="combobox"
@@ -161,7 +171,6 @@ export default function SuggestInput({
           setOpen(true);
           if (freeText) onChange(e.target.value);
         }}
-        onKeyDown={onKeyDown}
         // Guarded by relatedTarget, which is what makes an onBlur safe here: closing on a bare
         // blur kills the click that was selecting an option. Needed because tabbing away fires no
         // document mousedown, and a list left open after focus has gone is its own bug.
