@@ -129,10 +129,47 @@ export default function StopMarkerLayer() {
               ? [{ kind: "stop" as const, lat: stop.lat, lng: stop.lng, name: stop.name, flatIndex }]
               : []
           );
-    // Neighbouring towns, last in the array and therefore last in the declutter scan: they are
-    // the least important thing on screen and must never suppress a day badge or a stop name.
-    // Dropped entirely once a day is being read — at that point the traveler is looking at one
-    // afternoon, and the names of towns 30km away are noise.
+    /**
+     * The stop being pointed at goes first of everything — ahead of the day badges too.
+     *
+     * Without this the selected stop loses its own name to whichever neighbour happens to come
+     * earlier in visit order — and it loses it *most* reliably in the case that matters, because
+     * co-located stops are normal rather than rare: a hotel is the transfer, the breakfast and
+     * the evening return, and every trip in the dev database has a day like it. Clicking "Crawford
+     * Market" flew the camera to it and left "Private car to Crawford Market" — the stop before it,
+     * on the identical coordinate — holding the only card on screen. The camera was on the right
+     * building with the wrong name over it.
+     *
+     * Ordering rather than a "never suppress the pointed-at card" exemption, because an exemption
+     * would let two cards stack pixel-for-pixel; this makes the selected one win the slot and the
+     * loser yield it, which is the same trade the scan already makes, just decided in the right
+     * direction.
+     *
+     * Ahead of the clusters is a deliberate reversal of the rule immediately above, and only for
+     * this one card. That rule exists so a day's badge is never suppressed by some stop that
+     * happened to stand where it wanted to be — a fair trade between a group label and an
+     * arbitrary member of the group. It is not a fair trade against the stop the traveller just
+     * asked to look at, and it has to be reversed here rather than left to luck, because the pin
+     * that used to name that stop is gone: `useTripCamera.selectStop` no longer passes a label to
+     * `flyToPlace`, so this card is now the *only* thing that names it. A badge that yields is
+     * also the cheaper loss of the two: the placement loop below pulls a badge back into frame
+     * rather than dropping it, so it is a label about a group with room to move.
+     *
+     * `hoveredIndex ?? activeIndex` — the pair every other paired highlight in the app reads. Both
+     * change at human speed, so this cannot flicker the way ordering by camera distance would.
+     */
+    const pointedAt = hoveredIndex ?? activeIndex;
+    const isPointedAt = (m: Marker) => m.kind === "stop" && m.flatIndex === pointedAt;
+    const ordered = [...clusters, ...stops];
+    const prioritised =
+      pointedAt === null
+        ? ordered
+        : [...ordered.filter(isPointedAt), ...ordered.filter((m) => !isPointedAt(m))];
+
+    // Neighbouring towns go last of everything, and therefore last in the declutter scan: they
+    // are the least important thing on screen and must never cost a day badge or a stop its
+    // name. Dropped entirely once a day is being read — at that point the traveller is looking
+    // at one afternoon, and the names of towns 30km away are noise.
     const places: Marker[] =
       namedDay === null
         ? nearbyPlaces.map((p) => ({
@@ -142,8 +179,17 @@ export default function StopMarkerLayer() {
             name: p.name,
           }))
         : [];
-    return [...clusters, ...stops, ...places];
-  }, [routeStops, routeClusters, focusedDay, hoveredDay, namedDay, nearbyPlaces]);
+    return [...prioritised, ...places];
+  }, [
+    routeStops,
+    routeClusters,
+    focusedDay,
+    hoveredDay,
+    namedDay,
+    hoveredIndex,
+    activeIndex,
+    nearbyPlaces,
+  ]);
 
   useEffect(() => {
     const viewer = viewerRef.current;

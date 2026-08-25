@@ -8,7 +8,14 @@ import { PlaceDetail, Stop } from "./types";
 export type GeocodeOutcome = "found" | "missed" | "unreachable";
 
 export function useTripCamera(destination: string, tripId?: string) {
-  const { flyToDestination, flyToPlace, showHighways, showCityContext } = useMapCamera();
+  const {
+    flyToDestination,
+    flyToPlace,
+    showHighways,
+    showCityContext,
+    setActiveStop,
+    reframeRoute,
+  } = useMapCamera();
   const [destinationCoords, setDestinationCoords] = useState<{
     lat: number;
     lon: number;
@@ -74,7 +81,28 @@ export function useTripCamera(destination: string, tripId?: string) {
   const selectStop = useCallback(
     async (stop: Stop) => {
       setSelectedStop(stop);
-      flyToPlace(stop.lat, stop.lng, stop.name);
+      // Mark it selected on the globe as well, which a click on the *marker* has always done
+      // (StopMarkerLayer sets the index directly) and a click on the itinerary row never did.
+      // Three things ran off that and all three were quietly missing from this path: the row
+      // stayed lit only while the pointer was on it, the stop's marker and the arcs touching it
+      // took no emphasis, and the day/night tint reverted to daylight the moment the pointer
+      // left the row — so opening an 8:45pm stop from the list put the city back in daylight.
+      setActiveStop(stop);
+      // No label, so no red pin — the same call StopMarkerLayer already makes when a stop's card
+      // is clicked on the globe, and for the reason recorded there: the card names the place, so a
+      // pin plus a Cesium label plus a card is one place labelled three times. This path passed
+      // `stop.name` and got all three.
+      //
+      // Safe only because of the declutter promotion in StopMarkerLayer: the card *is* the label
+      // now, and before that promotion the selected stop routinely lost it to a co-located
+      // neighbour — clicking "Crawford Market" left "Private car to Crawford Market" holding the
+      // only card on screen, so removing the pin here on its own would have replaced a duplicate
+      // label with a wrong one. Don't split these two changes.
+      //
+      // Clearing rather than moving the pin is the intended behaviour of a labelless flight (see
+      // `flyTo`), and it is what a marker click has always done. A destination pin comes back on
+      // the way out: `closeDetail` flies to `destinationCoords` with its name.
+      flyToPlace(stop.lat, stop.lng);
       setDetail(null);
       setDetailError(null);
       setDetailLoading(true);
@@ -103,14 +131,21 @@ export function useTripCamera(destination: string, tripId?: string) {
         setDetailLoading(false);
       }
     },
-    [flyToPlace, destination, tripId]
+    [flyToPlace, setActiveStop, destination, tripId]
   );
 
   const closeDetail = useCallback(() => {
     setSelectedStop(null);
+    // Back to the day that is drawn, not out to the city. Flying to `destinationCoords` was the
+    // original behaviour and it put the camera 15km up over the whole destination at nadir —
+    // which passed for "back out" only while a day's framing looked roughly the same. A day now
+    // has its own heading and pitch, so that flight visibly discarded the view being returned to.
+    // The destination flight is still the fallback for the one case with no route behind the
+    // panel: a stop detail opened on the home page before a trip has been drawn.
+    if (reframeRoute()) return;
     if (destinationCoords)
       flyToDestination(destinationCoords.lat, destinationCoords.lon, destinationCoords.name);
-  }, [destinationCoords, flyToDestination]);
+  }, [reframeRoute, destinationCoords, flyToDestination]);
 
   return {
     /** Exposed for the arrive/depart pickers, which need somewhere to look up airports near.

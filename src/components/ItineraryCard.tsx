@@ -165,7 +165,9 @@ export default function ItineraryCard({
   const routeDays = useMemo(
     () =>
       itinerary.days.map((d, i) =>
-        d.stops.map((st) => ({ lat: st.lat, lng: st.lng, name: st.name, day: i }))
+        // `time` rides along only so the globe can light itself for the stop being looked at
+        // (dayPhase in mapRoute) — the geometry does not read it.
+        d.stops.map((st) => ({ lat: st.lat, lng: st.lng, name: st.name, day: i, time: st.time }))
       ),
     [itinerary.days]
   );
@@ -175,14 +177,18 @@ export default function ItineraryCard({
     () => routeDays.slice(0, dayIndex).reduce((n, d) => n + d.length, 0),
     [routeDays, dayIndex]
   );
-  /** The map's flat highlight index expressed as a row of *this* day, or null when what is
-   *  highlighted belongs to another day — which is now possible, since every day is on screen. */
-  const highlightedRow = (() => {
-    const flat = hoveredIndex ?? activeIndex;
+  /** A flat map index expressed as a row of *this* day, or null when it belongs to another day —
+   *  which is now possible, since every day is on screen. */
+  const rowOfThisDay = (flat: number | null) => {
     if (flat === null) return null;
     const row = flat - dayOffset;
     return row >= 0 && row < (routeDays[dayIndex]?.length ?? 0) ? row : null;
-  })();
+  };
+  /** Which row lights up: hover wins over selection, since hover is the more recent intent. */
+  const highlightedRow = rowOfThisDay(hoveredIndex ?? activeIndex);
+  /** Which row the list scrolls to. Selection only, deliberately — see the scroll effect in
+   *  StopList for why hover must not move the list. */
+  const activeRow = rowOfThisDay(activeIndex);
   /** Read by the one-shot stagger interval, which must not re-run when the panel opens — the
    *  stagger is mounted once and a dep on `panelCollapsed` would restart it on every collapse. */
   const panelCollapsedRef = useRef(panelCollapsed);
@@ -814,6 +820,9 @@ export default function ItineraryCard({
             // marker. Both surfaces read and write the same context index, so neither
             // knows the other exists.
             highlightedIndex={highlightedRow}
+            // Separate from the highlight so Play tour and a globe click pull the list along
+            // with the camera, without a pointer sweep down the rows doing the same.
+            activeIndex={activeRow}
             onHoverStop={(index) => setHoveredIndex(index === null ? null : dayOffset + index)}
             revealAnimation={revealingStops}
           />
