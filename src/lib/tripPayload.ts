@@ -36,5 +36,6 @@ export function toTripDetail(row: TripRow): Trip {
     ...toTripSummary(row),
     itinerary: { ...stored, days: normalizeDays(stored.days) },
     userAnswers: row.user_answers_json ? JSON.parse(row.user_answers_json) : null,
+    chatSessionId: row.chat_session_id,
   };
 }

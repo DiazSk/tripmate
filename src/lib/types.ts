@@ -79,6 +79,10 @@ export interface Trip extends TripSummary {
   /** The Step 2b answers captured when the trip was saved. Null for trips saved before this was
    *  stored — the edit loop degrades to asking rather than assuming. */
   userAnswers?: UserAnswers | null;
+  /** The `claude` CLI session this trip was generated in, so reopening it resumes the same
+   *  conversation. Null for trips saved before sessions existed, or whose session has been
+   *  replaced — the chat then rebuilds a full prompt instead. */
+  chatSessionId?: string | null;
 }
 
 export interface PlaceDetail {

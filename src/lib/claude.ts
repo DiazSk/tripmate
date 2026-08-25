@@ -204,6 +204,44 @@ export function itineraryTimeoutMs(days: number): number {
   return Math.min(BASE_TIMEOUT_MS + days * PER_DAY_TIMEOUT_MS, MAX_TIMEOUT_MS);
 }
 
+/**
+ * Opt-in CLI session persistence. Omit it and every call stays one-shot, which is the default
+ * for good reason — see below.
+ *
+ * `persist: true` drops `--no-session-persistence` so the CLI writes a session file and the
+ * returned `sessionId` can be resumed. `resume: <id>` continues that conversation; the two are
+ * mutually exclusive and `resume` already implies persistence.
+ *
+ * **This does not reduce tokens or latency, and the temptation to assume it does is the whole
+ * reason this comment exists.** Measured on this machine, 2026-08-24:
+ *
+ *   turn 1  18,100-char prompt into a fresh session   ->  13,332 input tokens
+ *   turn 2  `--resume <id>`, a 36-character question  ->  13,475 input tokens
+ *
+ * A six-word follow-up cost *more* than the turn that established the context. The model holds
+ * no state between calls; `--resume` makes the CLI replay the whole transcript from a local
+ * JSONL under `~/.claude/projects/<slugified-cwd>/<session-id>.jsonl`. Proof that the memory is
+ * that file and nothing else: `sed`-ing a fact inside it changed the answer on the next resume
+ * of the same session id, with nothing uploaded.
+ *
+ * Nor does caching rescue it — two calls sharing an identical 13k prefix both reported
+ * `cache_read_input_tokens: 0`, because `-p` sends the prompt as a single cache block that any
+ * edit invalidates.
+ *
+ * And prompt size is not what costs the time anyway: across the `type='chat'` traces, prompt
+ * chars vs. duration is r = +0.062 (a 33,658-char call finished in 11.0s; a 20,921-char one took
+ * 139.5s). Latency here is thinking time.
+ *
+ * So reach for this when you want *conversational continuity* — one Claude session per trip that
+ * the traveller refines through the UI chat — not when you want it faster. Callers that resume
+ * must also handle the session file being gone (another machine, a cleaned home dir, a trip
+ * opened tomorrow) by falling back to a fully-rebuilt prompt.
+ */
+export interface SessionOption {
+  persist?: boolean;
+  resume?: string;
+}
+
 export interface ClaudeResult {
   result: string;
   traceId: string;
@@ -212,6 +250,15 @@ export interface ClaudeResult {
   model: string;
   /** Wall-clock time of the child process, the same number written to the trace row. */
   durationMs: number;
+  /**
+   * The CLI session this call ran in — present only when `meta.session` asked for persistence.
+   *
+   * Undefined in the default one-shot mode, where `--no-session-persistence` means no session
+   * file is ever written and there is nothing to resume. Persist this to continue the same
+   * conversation on a later call. See `meta.session` on runClaude() for what resuming does and
+   * does not buy you.
+   */
+  sessionId?: string;
 }
 
 export type ClaudeCallType =
@@ -257,7 +304,12 @@ export function runClaude(
   prompt: string,
   type: ClaudeCallType,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
-  meta?: { runId?: string; effort?: "low" | "medium" | "high"; model?: string }
+  meta?: {
+    runId?: string;
+    effort?: "low" | "medium" | "high";
+    model?: string;
+    session?: SessionOption;
+  }
 ): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
     const { CLAUDECODE: _drop, ...env } = process.env;
@@ -268,6 +320,15 @@ export function runClaude(
     const model = meta?.model ?? MODEL;
     const traceId = insertTrace({ type, prompt, model, runId: meta?.runId });
     const startedAt = Date.now();
+
+    // Default stays one-shot. `--resume` implies persistence (the turn is appended to the
+    // session file), so the two flags are mutually exclusive — passing both makes the CLI
+    // resume a conversation and then refuse to record the reply, silently losing the turn.
+    const sessionArgs = meta?.session?.resume
+      ? ["--resume", meta.session.resume]
+      : meta?.session?.persist
+        ? []
+        : ["--no-session-persistence"];
 
     const child = spawn(
       cliBin,
@@ -280,7 +341,7 @@ export function runClaude(
         "json",
         "--tools",
         "",
-        "--no-session-persistence",
+        ...sessionArgs,
         "--setting-sources",
         "",
         // Measured on real edit calls: ~96% of generated tokens are internal reasoning that never
@@ -362,7 +423,13 @@ export function runClaude(
           return;
         }
         updateTrace(traceId, { status: "ok", rawResponse: stdout, durationMs });
-        resolve({ result: envelope.result as string, traceId, model, durationMs });
+        resolve({
+          result: envelope.result as string,
+          traceId,
+          model,
+          durationMs,
+          sessionId: envelope.session_id as string | undefined,
+        });
       } catch {
         updateTrace(traceId, {
           status: "error",
