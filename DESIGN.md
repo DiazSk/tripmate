@@ -549,6 +549,121 @@ It is also the one place per-route utility links live now: the wordmark (`href="
 - **The icon is one continuous shape, not a cut.** Lucide's `Menu` and `X` glyphs share no geometry, so swapping between them is always an instant cut regardless of how the surrounding panel animates. A custom 3-bar mark — top and bottom bars translate and rotate into an X, the middle bar fades — morphs continuously instead, on the same `cubic-bezier(0.16, 1, 0.3, 1)` the rest of the app's motion already uses.
 - **The panel stays mounted and animates its own height.** Instead of conditionally rendering the dropdown (which pops in and simply vanishes on close, animating only one direction), the panel is always in the DOM and its wrapper's `grid-template-rows` transitions between `0fr` and `1fr` — the CSS grid auto-height trick — so both opening and closing play. Rows inside it fade and slide in with a 60ms-per-row stagger, and `tabIndex={-1}` on every link while collapsed keeps a visually hidden menu out of the keyboard tab order. The panel itself is `.glass-nav-menu`, a higher-alpha step of the one slate than the bar's own whisper-thin tint — the same more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` already take over `.glass-nav`, because a real tappable surface with rows on it wants more of the material than a bar does.
 
+## The Trip Line (Downloadable Itinerary Export)
+
+A third, fully scoped world — additive, like Blue Hour Expedition below, but narrower still. It
+governs exactly one artifact: the `.html` file `renderItineraryHtml()` (`src/lib/export/itineraryHtml.ts`)
+produces and `GET /api/trips/[id]/export` serves, downloaded from `ItineraryCard`'s "Download"
+control. Everything else in this document is unchanged by this work — none of the app's CSS
+custom properties (`--surface-deep-rgb`, `--accent`, `--canvas`, etc.) were touched, no shared
+class reaches into this file, and no route's rendered output changed. The export's entire stylesheet
+lives inside one exported template string; it never enters `globals.css` and never shares a token
+name with the rest of this document. Ground truth here is the shipped file's own CSS, byte-diffed
+against its approved comp (`.impeccable/comps/comp-b-linemap.html`) at finish review and found
+faithful with zero uncited drift.
+
+**Why this world is light.** Every other surface in this app is dark because it floats over a live,
+always-on globe — darkness is what lets frosted glass read as glass over that scene. A downloaded
+file has no globe behind it and nothing to be glass *over*; the app's central material justification
+doesn't apply, so this world inverts the base identity deliberately, onto a cool off-white ground
+(`--paper: #F5F7F7`) with near-black ink (`--ink: #0B2A32`) rather than the app's paper-white-on-slate.
+It is not a lighter version of the cockpit; it is a different, self-consistent world built for a
+static, printable, single-column document read on a phone with no live rendering underneath it.
+
+**The thesis: a day is a route, not a list.** The export refuses the itinerary-app default of
+stacked day cards and instead draws the whole trip, and each day inside it, as a transit map: an
+8px rounded trunk line (`--trunk`, in `--deep: #0d2e37`) that every station and stop sits on top of.
+
+#### Colors
+- **Paper** (`--paper: #F5F7F7`): the page ground, and the resting colour of every `<details>` day row.
+- **Card** (`--card: #fff`): station/stop node fill at rest, and the weather badge and stay-card backing.
+- **Ink** (`--ink: #0B2A32`): body text and stop names.
+- **Deep** (`--deep: #0d2e37`): the trunk line at every scale — the trip-wide line and each day's own
+  route line share this exact colour and weight, never two different "line" colours.
+- **Muted** (`--muted: #5B7178`): dates, metadata, captions — the export's only secondary text tone.
+- **Hairline** (`--hair: rgba(11,42,50,.14)`): day-row dividers, pill borders.
+- **Accent** (`--accent: #fb9826`) / **Accent Ink** (`--accent-ink: #A85C05`): the one warm colour,
+  reserved for exactly the same job the app's amber does — marking the thing currently active — but
+  re-authored as its own hex rather than referencing `{colors.accent}` (`#ffb340`), because this
+  file cannot read the app's CSS variables and does not try to. It marks the open day's number
+  badge, the current/selected stop's node and name, and the trip line's active station.
+
+#### Named Rules
+**The Reserved-Accent Rule, re-authored.** Amber marks only the open day and the active stop — never
+a category, a leg mode, or decoration — carrying the app's One Accent Rule into a world with no
+shared tokens to enforce it, so the same discipline has to be restated in its own palette rather
+than inherited.
+
+**The Single-Trunk Rule.** One line grammar, `--deep` at `--trunk` (8px) with a `999px` radius,
+draws both the trip-wide line (`.tl::before`) and every day's own route line (`.route::before`).
+The day index and the day body are the same device at two scales, not two different metaphors.
+
+### Typography
+
+**Display / Body Font:** Archivo (self-hosted as a base64 `woff2` data URI via `exportFont.ts`,
+falling back to `ui-sans-serif, system-ui, sans-serif` if the font file is missing at build time) —
+the *only* family in this document. Unlike the rest of the app, there is no serif/sans pairing here;
+Source Serif 4 does not appear. A downloaded, single-column document reads as one voice at varying
+weight, not as a heading face plus a body face.
+
+#### Hierarchy
+- **Destination headline** (900, `clamp(3.2rem, 17vw, 5rem)`, line-height .88, tracking `-.078em`):
+  the one large moment, set directly on the cool paper ground beneath the cover photo.
+- **Stop name** (700, `1.0625rem`, tracking `-.055em`): the transit-map station label.
+- **Body** (400, `.9375rem`, line-height 1.6, tracking `-.04em`): day summaries, stop notes/why text.
+  The tight tracking runs through the entire document, headline to caption — not just the display step.
+- **Label / caption** (600–700, `.6875rem`–`.8125rem`, tracking `-.03em` to `-.05em`): dates, meta,
+  leg pills, the save note.
+
+#### Named Rules
+**The One-Face Rule.** Archivo alone, at whatever weight the role needs. This world does not borrow
+the app's Source Serif 4 / Archivo split — one downloaded document doesn't need a second voice.
+
+### Layout
+
+Single column, no breakpoints. `.mast` (destination headline, dates, budget) sits above `.tripline`,
+a horizontally-scrollable strip with one station per day (`.tl`), which sits above `.days` — a stack
+of native `<details class="day">` elements, one per day, each opening onto its own vertical `.route`
+list of stops and legs. Section rhythm is `22px` side padding throughout; day rows separate with a
+`1px` hairline, never a card boundary.
+
+### Elevation & Depth
+
+Flat by default — no blur, no translucency, no glass anywhere in this world; that material belongs
+to the live-globe app, not to a static downloaded file. The only "lift" is a soft, non-directional
+amber halo (`box-shadow: 0 0 0 5px rgba(251,152,38,.22)`) marking the active station or stop, and a
+plain bordered card (`.stay`, 1px hairline, 14px radius) for the lodging block. Depth otherwise comes
+from the drawn trunk line and its nodes, not from shadow.
+
+### Shapes
+
+Circles for every node (17px stop/station dots, 30px day-number badges), full pill radius (`999px`)
+for the weather badge and leg labels, 14px radius for the one card (`.stay`). No clip-path, no
+angled cuts — the metro-map grammar is drawn with lines and circles, not silhouette.
+
+### Components
+
+#### The Trip Line (signature)
+One row per day (`.st`), each a 17px circle (plain node) or a same-sized circular thumbnail sitting
+on the shared 8px trunk, with the day number beneath it and a short date label under that. The
+per-day thumbnail — the one thing the approved comp doesn't itself show — mirrors the plain node's
+exact size, border and "on" (active) treatment rather than introducing a second node style, so a day
+with a photo and a day without one still read as the same device.
+
+#### Day Accordion
+Native `<details>`/`<summary>`, no JS-built disclosure widget: a circular day-number badge (30px,
+turns amber + espresso-ink border when open), title, date/stop-count/cost line, and a chevron that
+rotates 90° on open. The route, weather badge, summary, lodging card and day total render inside.
+
+#### The Day's Route
+An ordered list (`.route`) of stops on their own vertical trunk, each stop a 16px circular node
+(amber-filled and haloed when active, muted/filled-deep when checked off) with time at left and
+name/meta/why/note at right. Between stops, a leg renders as a pill riding the line — an inline SVG
+icon, minutes, and distance — the same device a metro map uses to label a section between stations.
+
+#### Weather Badge / Leg Pill
+Fully round, white-cell pills with a 1px hairline border, an inline SVG icon, and muted caption text.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -578,6 +693,9 @@ It is also the one place per-route utility links live now: the wordmark (`href="
   - `.console-sheen` — the trip-form card's one ambient loop: a single slow diagonal light sweep across its own glass, 7s ease-in-out infinite. Not a fourth entrance timing — it never stops — and scoped to this one panel; see The One Ambient Loop Rule (Blue Hour Expedition, above) for why a form step gets an ambient loop of its own.
 - **Do** leave the reduced-motion blanket rule alone. The three gates above cover keyframe *animations*; the `@media (prefers-reduced-motion: reduce)` block near the top of globals.css is what covers every Tailwind `transition-*` in the app, and without it the focus wipe, the tier scale and the arrow nudge all still ran. Durations go to `0.01ms`, not `none`, so `transitionend`/`animationend` still fire. The globe is exempt by nature — it's a WebGL render loop, not CSS.
 - **Do** key an element on its own value (`key={priceLabel}`) when a figure has to acknowledge a change. React reuses the DOM node otherwise and a CSS animation only plays on mount, so the number would swap silently — and tier prices now change mid-keystroke.
+- **Do** keep this world's stylesheet entirely inside `itineraryHtml.ts`'s own template string — it must never reach `globals.css`, and no app component may reference `.tripline`/`.route`/etc.
+- **Do** re-author the reserved-accent convention in this world's own hex rather than trying to share the app's CSS variables — the exported file has no access to them.
+- **Do** draw the trip-wide line and every day's route line with the same trunk grammar (colour, weight, radius) at whatever scale the context needs.
 
 ### Don't:
 - **Don't** put a scrim, panel, gradient or blur behind the landing headline. Nothing sits between the type and the globe. All darkening happens inside `.hero-legible`'s three-layer text-shadow, which hugs the glyphs: a 1px/3px hard edge at 0.9, a 3px/14px local pool at 0.75, and a 6px/44px halo at 0.5 that reads as depth rather than as a box. The known and accepted cost: text-shadow does not count toward a WCAG ratio, so over worst-case bright daytime terrain the subline's computed ratio can fall below 4.5:1. A radial scrim was built and measured (headline 6.3:1, subline 5.4:1, ghost CTA 6.4:1 against pure white) and then removed by explicit decision. Reinstating that scrim is the fix if the ratio ever has to be measurable — it is not a question to reopen otherwise.
@@ -599,9 +717,12 @@ It is also the one place per-route utility links live now: the wordmark (`href="
 - **Don't** show a tile, heading, chip or label for a value that isn't there. The day-spend band drops any category that cost nothing and always shows Total; an empty note, an empty tips array and a day with no stops each render nothing or say so in words. `Food $0 · Entry $0 · Transit $0 · Stay $0 · Total $160` was the shape of getting this wrong.
 - **Don't** signal a state with colour alone. Over budget carries the word "over" and the amount, because the bar clamps at 100% and 300% over looked identical to exactly on budget.
 - **Don't** ship a development tool to a visitor. The LLM trace viewer is mounted only when `NODE_ENV === "development"`; it is a `z-50` FAB on every route that opens raw prompts and raw model responses, drawn in the light stone palette this system replaced.
+- **Don't** add blur, translucency, or a card-on-page treatment to the export. This world is flat by design; glass belongs to the live-globe app.
+- **Don't** promote this world's palette or type stack into the shared frontmatter tokens above. It is deliberately unregistered there — a separate, single-file world, not a new global token set.
 
 ## History
 
+- **"The Trip Line" (downloadable itinerary export)** (additive, not superseding): a third, fully scoped world governing exactly one artifact — the `.html` file `renderItineraryHtml()` produces (linked from `ItineraryCard`'s Download control, served by `GET /api/trips/[id]/export`). Transit-diagram grammar (a shared trunk line, circular stop/station nodes, native `<details>` day accordions) on a cool off-white ground, inverting the app's dark-cockpit default because a downloaded file has no globe behind it to justify darkness. The reserved-accent convention carries over in spirit — amber marks only the open day and the active stop — but is re-authored in its own hex (`#fb9826`/`#A85C05`) since the exported file shares no CSS variables with the app. Confirmed faithful to its approved comp by byte-diff at finish review. Like Blue Hour Expedition, this did not replace anything: no app CSS custom property was touched, no shared class was introduced, and every existing route's rendered output is unchanged. See **The Trip Line** above for the full system.
 - **Overspend banner: real glass backing** (component-level, visual only): `TripView.tsx`'s "Day N ran $X over plan. Rebalance?" banner nearly disappeared over a busy live map — it had shipped with the trip-form's `border-red-500/30 bg-red-500/10 text-red-400` error-block classes, which read fine over that step's decorative, soft-focus globe but not over `/trip/[id]`'s real, arbitrary aerial imagery. Fixed by giving it `.glass-itinerary`'s actual slate backing (see the Alert Red entry, above), a `TriangleAlert` icon, and a split headline/question instead of one run-on sentence. No change to `handleRebalance`, `handleActualCostChange`, or either button's handlers — visual only.
 - **Stop marker: "Location Title Card"** (component-level, additive): replaced the glass-chip stop-name card (`.glass-marker`) with a card-less treatment — italic display serif directly on the globe, legible via a text-shadow rather than a scrim, a thin `--accent` rule that draws in on hover/selection, and a depth-of-field effect (`--marker-depth`, reusing the existing distance-scale value) that softens distant names. Chosen after several sci-fi HUD/targeting-reticle directions were mocked and explicitly rejected as reading like generic "AI dashboard" styling rather than this app's own restrained cinematic register (the same register Blue Hour already established). Scoped to `.marker-title-card`/`.marker-anchor` only — the stem, glow pool and arcs in `mapRoute.ts`, and the `postRender` reprojection/decluttering/scale math in `StopMarkerLayer.tsx`, are unchanged. See **The Day on the Globe**, above.
 - **"The Blue Hour Expedition"** (additive, not superseding): a scoped alternate identity (`.blue-hour-scene`) layered over the pre-generation flow only — the landing scroll story and the merged trip-form/tier-picker step. Replaces what used to be a single static poster viewport with a four-beat scroll sequence (curated photo hero → image row → mechanism copy → the "Plan a trip" reveal, withheld until the very end) and consolidates four scattered per-page "My memories"/"New trip" links into one persistent, route-aware `Navbar`. Unlike every other entry in this History section, this did not replace the base "Lit Cockpit" system — the result view, `/trips`, and `/trip/[id]` are unchanged and provably so (their `--accent`, `--surface-deep-rgb` etc. never repaint). See **The Blue Hour Expedition** above for the full system.
