@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveTitle, WIKI_HEADERS } from "@/lib/wikiTitle";
+import { fetchSummary, resolveTitle } from "@/lib/wikiTitle";
 
 export async function GET(req: NextRequest) {
   const name = req.nextUrl.searchParams.get("name");
@@ -14,15 +14,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ thumbnailUrl: null, imageUrl: null, extract: null });
     }
 
-    const summaryRes = await fetch(
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-      { headers: WIKI_HEADERS }
-    );
-    if (!summaryRes.ok) {
-      throw new Error(`wikipedia summary ${summaryRes.status}`);
-    }
-
-    const data = await summaryRes.json();
+    const data = await fetchSummary(title);
     return NextResponse.json({
       thumbnailUrl: data.thumbnail?.source ?? null,
       imageUrl: data.originalimage?.source ?? data.thumbnail?.source ?? null,

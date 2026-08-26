@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteTrip, getTrip, updateTripItinerary } from "@/lib/db";
-import { normalizeDays } from "@/lib/itinerary";
+import { toTripDetail } from "@/lib/tripPayload";
 
 export async function GET(
   _req: NextRequest,
@@ -18,17 +18,7 @@ export async function GET(
   // Rows written before this boundary existed can carry an unrecognised
   // category or a string cost; normalizing on read means an old trip renders
   // the same as a new one, and it self-heals on disk at the next PATCH.
-  const stored = JSON.parse(trip.itinerary_json);
-
-  return NextResponse.json({
-    id: trip.id,
-    destination: trip.destination,
-    startDate: trip.start_date,
-    endDate: trip.end_date,
-    budget: trip.budget,
-    itinerary: { ...stored, days: normalizeDays(stored.days) },
-    userAnswers: trip.user_answers_json ? JSON.parse(trip.user_answers_json) : null,
-  });
+  return NextResponse.json(toTripDetail(trip));
 }
 
 export async function PATCH(
