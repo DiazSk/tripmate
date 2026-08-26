@@ -152,3 +152,25 @@ test("no flight cost means no flight line", () => {
   const html = renderItineraryHtml(trip(), noAssets);
   assert.ok(!html.includes("booked separately"));
 });
+
+test("the runtime is inline and self-contained", () => {
+  const html = renderItineraryHtml(trip(), noAssets);
+  assert.ok(html.includes("<script>"), "a runtime must be present");
+  assert.doesNotMatch(html, /<script[^>]+src=/, "never an external script");
+});
+
+test("days and stops carry the attributes the runtime keys on", () => {
+  const html = renderItineraryHtml(trip(), noAssets);
+  assert.ok(html.includes('data-date="2026-08-20"'), "days are addressable by date");
+  assert.ok(html.includes('data-stop="0:0"'), "stops are addressable by day and index");
+  assert.ok(html.includes('data-trip="t1"'), "storage is namespaced per trip");
+});
+
+test("the runtime compares calendar dates as strings, never by parsing them", () => {
+  // The repo's standing date trap: new Date("2026-08-20") is UTC midnight, and local accessors
+  // roll it back a day west of Greenwich. Building today's key from local parts and comparing
+  // strings sidesteps parsing entirely.
+  const html = renderItineraryHtml(trip(), noAssets);
+  assert.doesNotMatch(html, /new Date\(\s*[a-zA-Z_$][\w$]*\.dataset/, "must not parse a day's date");
+  assert.ok(html.includes("getFullYear()"), "today's key is built from local parts");
+});
