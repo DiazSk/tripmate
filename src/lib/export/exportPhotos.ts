@@ -1,4 +1,4 @@
-import { resolveTitle, WIKI_HEADERS, WIKI_TIMEOUT_MS } from "../wikiTitle";
+import { fetchSummary, resolveTitle, WIKI_HEADERS, WIKI_TIMEOUT_MS, type Summary } from "../wikiTitle";
 import type { Trip } from "../types";
 import type { ExportPhotos } from "./itineraryHtml";
 
@@ -7,28 +7,27 @@ export const MAX_IMAGE_BYTES = 400_000;
 /** Whole-file ceiling on inlined imagery. A trip long enough to exceed it loses day thumbs from
  *  the tail; the cover is fetched first and is never the thing dropped. */
 export const MAX_TOTAL_BYTES = 1_200_000;
+/** Wall-clock cap on the whole photo walk. A trip with many stops can trigger dozens of
+ *  sequential Wikipedia round-trips; without a deadline a single slow/rate-limited run blocks
+ *  the export instead of just shipping fewer photos. */
+const PHOTO_WALK_DEADLINE_MS = 15_000;
 
 export function withinBudget(bytes: number, spent: number): boolean {
   return bytes <= MAX_IMAGE_BYTES && spent + bytes <= MAX_TOTAL_BYTES;
 }
 
-interface Summary {
-  thumbnail?: { source?: string };
-  originalimage?: { source?: string };
+interface Budget {
+  spent: number;
+  deadline: number;
 }
 
 async function summaryFor(name: string): Promise<Summary | null> {
   const title = await resolveTitle(name);
   if (!title) return null;
-  const res = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-    { headers: WIKI_HEADERS, signal: AbortSignal.timeout(WIKI_TIMEOUT_MS) }
-  );
-  if (!res.ok) throw new Error(`wikipedia summary ${res.status}`);
-  return (await res.json()) as Summary;
+  return fetchSummary(title);
 }
 
-async function toDataUri(url: string, budget: { spent: number }): Promise<string | null> {
+async function toDataUri(url: string, budget: Budget): Promise<string | null> {
   const res = await fetch(url, { headers: WIKI_HEADERS, signal: AbortSignal.timeout(WIKI_TIMEOUT_MS) });
   if (!res.ok) return null;
   const type = res.headers.get("content-type") ?? "image/jpeg";
@@ -47,7 +46,8 @@ async function toDataUri(url: string, budget: { spent: number }): Promise<string
  * Never hand-build a `/thumb/.../<w>px-` URL.
  */
 function filePathUrl(originalUrl: string, width: number): string | null {
-  const file = originalUrl.split("/").pop();
+  const parts = originalUrl.split("?")[0].split("/");
+  const file = parts.includes("thumb") ? parts[parts.length - 2] : parts.pop();
   if (!file) return null;
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${file}?width=${width}`;
 }
@@ -58,7 +58,7 @@ function filePathUrl(originalUrl: string, width: number): string | null {
  * a per-stop photo grid was rejected — its holes were visible and these are not.
  */
 export async function collectExportPhotos(trip: Trip): Promise<ExportPhotos> {
-  const budget = { spent: 0 };
+  const budget: Budget = { spent: 0, deadline: Date.now() + PHOTO_WALK_DEADLINE_MS };
   const days = trip.itinerary.days;
 
   let cover: string | null = null;
@@ -68,16 +68,22 @@ export async function collectExportPhotos(trip: Trip): Promise<ExportPhotos> {
     const url = original ? filePathUrl(original, 1080) : null;
     cover = (url && (await toDataUri(url, budget))) || null;
     if (!cover && s?.thumbnail?.source) cover = await toDataUri(s.thumbnail.source, budget);
-  } catch {
+  } catch (err) {
+    console.warn("export cover photo lookup failed", err);
     cover = null;
   }
 
   const dayPhotos: (string | null)[] = [];
   for (const day of days) {
     let thumb: string | null = null;
+    if (Date.now() > budget.deadline) {
+      dayPhotos.push(thumb);
+      continue;
+    }
     // The first stop whose name Wikipedia actually recognises. Generic stops ("Lunch in Altstadt
     // neighborhood") correctly resolve to nothing, so this walks past them.
     for (const stop of day.stops) {
+      if (Date.now() > budget.deadline) break;
       try {
         const s = await summaryFor(stop.name);
         const src = s?.thumbnail?.source;
@@ -85,8 +91,9 @@ export async function collectExportPhotos(trip: Trip): Promise<ExportPhotos> {
           thumb = await toDataUri(src, budget);
           if (thumb) break;
         }
-      } catch {
+      } catch (err) {
         // Upstream hiccup on one stop must not cost the day its photo — try the next stop.
+        console.warn(`export day photo lookup failed for "${stop.name}"`, err);
       }
     }
     dayPhotos.push(thumb);

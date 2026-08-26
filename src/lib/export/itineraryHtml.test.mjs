@@ -57,6 +57,8 @@ test("the document is a complete standalone page", () => {
   // No external subresources: the file must render in airplane mode.
   assert.doesNotMatch(html, /<link[^>]+href="https?:/);
   assert.doesNotMatch(html, /<script[^>]+src=/);
+  // Blanket check: no absolute URL anywhere in the document, not just in <link>/<script src>.
+  assert.doesNotMatch(html, /https?:\/\//, "no absolute URL may reach the artifact");
 });
 
 test("every stop appears", () => {
@@ -90,6 +92,23 @@ test("a stop with no time or durationLabel renders without throwing", () => {
   assert.ok(html.includes("$25"), "cost still renders");
   assert.doesNotMatch(html, /·\s*\$25/, "no stray leading separator when durationLabel is absent");
   assert.doesNotMatch(html, /\$25\s*·/, "no stray trailing separator when nothing follows cost");
+});
+
+test("a lodging with no note renders without throwing and without a dangling separator", () => {
+  // Same class of bug as the legacy stop above: older saved trips can have `lodging.note`
+  // absent even though the type declares it required.
+  const legacy = trip();
+  legacy.itinerary.days[0].lodging = { name: "Boutique hotel", cost: 350, note: undefined };
+  const html = renderItineraryHtml(legacy, noAssets);
+  assert.ok(html.includes("Boutique hotel"));
+  assert.doesNotMatch(html, /\$350\s*·\s*<\/span>/, "no stray trailing separator when note is absent");
+});
+
+test("a day with no weather set renders without throwing", () => {
+  const legacy = trip();
+  legacy.itinerary.days[0].weather = undefined;
+  const html = renderItineraryHtml(legacy, noAssets);
+  assert.ok(html.includes("Kunsthaus Zurich"));
 });
 
 test("day figures sum to the trip figure", () => {

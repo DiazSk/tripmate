@@ -159,6 +159,9 @@ const RUNTIME = `<script>
     }
   }
 
+  var st = document.querySelector('.st[data-date="' + today + '"]');
+  if (st) st.classList.add("on");
+
   var trip = document.body.dataset.trip;
   var key = "tripmate:" + trip + ":done";
   var done = {};
@@ -273,7 +276,7 @@ function renderDay(day: DayPlan, index: number): string {
         ${STAY_ICON}
         <span>
           <b>${escapeHtml(day.lodging.name)}</b>
-          <span>${costLabel(day.lodging.cost)} · ${escapeHtml(day.lodging.note)}</span>
+          <span>${[costLabel(day.lodging.cost), day.lodging.note ? escapeHtml(day.lodging.note) : null].filter(Boolean).join(" · ")}</span>
         </span>
       </div>`
     : "";
@@ -346,7 +349,7 @@ ${cover}
 
 <div class="mast">
   <h1>${escapeHtml(cityName)}</h1>
-  <p class="dates">${formatDateRange(trip.startDate, trip.endDate)} · ${days.length} day${days.length === 1 ? "" : "s"} · ${pluralStops(totalStops)}</p>
+  <p class="dates">${escapeHtml(formatDateRange(trip.startDate, trip.endDate))} · ${days.length} day${days.length === 1 ? "" : "s"} · ${pluralStops(totalStops)}</p>
   <p class="budget"><b>${costLabel(tripTotal)}</b> planned of a ${formatMoney(trip.budget)} budget</p>
   ${flightLine}
 </div>

@@ -19,7 +19,7 @@ const HTML_ESCAPES: Record<string, string> = {
  * reading one function instead of auditing every call site.
  */
 export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+  return String(value ?? "").replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
 /** Pictographs, dingbats, and the variation selector that trails them. The model decorates day

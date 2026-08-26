@@ -64,3 +64,23 @@ export async function resolveTitle(name: string): Promise<string | null> {
   }
   return null;
 }
+
+/** Superset of what each caller reads off a page summary: `exportPhotos.ts` wants the
+ *  thumbnail/original image, `place-photo/route.ts` additionally wants `extract`. */
+export interface Summary {
+  thumbnail?: { source?: string };
+  originalimage?: { source?: string };
+  extract?: string;
+}
+
+/** The one place that calls Wikipedia's summary endpoint. Previously duplicated in
+ *  `exportPhotos.ts` (with a timeout) and `place-photo/route.ts` (without one) — the
+ *  timeout is not optional, it's what keeps an undici fetch from sitting for ~5 minutes. */
+export async function fetchSummary(title: string): Promise<Summary> {
+  const res = await fetch(
+    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+    { headers: WIKI_HEADERS, signal: AbortSignal.timeout(WIKI_TIMEOUT_MS) }
+  );
+  if (!res.ok) throw new Error(`wikipedia summary ${res.status}`);
+  return (await res.json()) as Summary;
+}
