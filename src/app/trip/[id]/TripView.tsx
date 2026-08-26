@@ -291,6 +291,7 @@ export default function TripView({
                   itinerary={itinerary}
                   budget={trip.budget}
                   destination={trip.destination}
+                  trip={trip}
                   onSelectStop={selectStop}
                   editable
                   onLodgingActualCostChange={(dayIndex, value) =>
