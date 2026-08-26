@@ -74,6 +74,24 @@ test("a stop name that is model output cannot execute", () => {
   assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
 });
 
+test("a stop with no time or durationLabel renders without throwing", () => {
+  // Real saved trips predating these two fields exist (a stop from before `time`/`durationLabel`
+  // were added) — `normalizeDays` backfills cost/category/tags but never these, so the renderer
+  // must tolerate both being absent rather than crash on `escapeHtml(undefined)`.
+  const legacy = trip();
+  legacy.itinerary.days[0].stops[0] = stop({
+    name: "Legacy Stop",
+    cost: 25,
+    time: undefined,
+    durationLabel: undefined,
+  });
+  const html = renderItineraryHtml(legacy, noAssets);
+  assert.ok(html.includes("Legacy Stop"));
+  assert.ok(html.includes("$25"), "cost still renders");
+  assert.doesNotMatch(html, /·\s*\$25/, "no stray leading separator when durationLabel is absent");
+  assert.doesNotMatch(html, /\$25\s*·/, "no stray trailing separator when nothing follows cost");
+});
+
 test("day figures sum to the trip figure", () => {
   // The invariant the print page is built on, carried over: a document meant to be checked line
   // by line must not have day totals that fail to add up to its own header.

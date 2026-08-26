@@ -220,11 +220,14 @@ function pluralStops(count: number): string {
 function renderStop(stop: Stop, dayIndex: number, stopIndex: number): string {
   const why = stop.why ? `<p class="swhy">${escapeHtml(stop.why)}</p>` : "";
   const note = stop.note ? `<p class="snote">${escapeHtml(stop.note)}</p>` : "";
+  const meta = [stop.durationLabel ? escapeHtml(stop.durationLabel) : null, costLabel(stop.cost)]
+    .filter(Boolean)
+    .join(" · ");
   return `<li class="stop" data-stop="${dayIndex}:${stopIndex}">
-          <span class="time">${escapeHtml(stop.time)}</span>
+          <span class="time">${stop.time ? escapeHtml(stop.time) : ""}</span>
           <span>
             <span class="sname">${escapeHtml(stop.name)}</span>
-            <span class="smeta">${escapeHtml(stop.durationLabel)} · ${costLabel(stop.cost)}</span>
+            <span class="smeta">${meta}</span>
             ${why}
             ${note}
           </span>
