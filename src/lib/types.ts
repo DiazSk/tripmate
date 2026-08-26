@@ -52,6 +52,17 @@ export interface DayPlan {
 export interface Itinerary {
   tier: TierId;
   days: DayPlan[];
+  /** Real round-trip airfare, deducted from the stated budget before the plan was written.
+   *
+   *  Lives here rather than in a DB column so it persists for free — the whole `Itinerary` is
+   *  `JSON.stringify`'d into `trips.itinerary_json`. Absent on itineraries generated before this
+   *  existed, and on any trip where no origin was given, so every reader must tolerate
+   *  `undefined` (same contract as `DayPlan.weatherDetail`/`summary`/`title`).
+   *
+   *  Deliberately NOT part of the `tripSpend` chain in itinerary.ts: this is a trip-level cost and
+   *  that chain is per-day, so folding it in would break the day-sums-to-trip arithmetic the print
+   *  page depends on. It is shown beside those figures, never inside them. */
+  flightCostUsd?: number;
 }
 
 export interface TripSummary {

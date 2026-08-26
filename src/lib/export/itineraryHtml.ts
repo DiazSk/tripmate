@@ -255,9 +255,7 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
   const cityName = trip.destination.split(",")[0].trim();
   const totalStops = days.reduce((sum, d) => sum + d.stops.length, 0);
   const tripTotal = days.reduce((sum, d) => sum + dayPlanned(d), 0);
-  // `Itinerary` doesn't declare `flightCostUsd` on this branch yet — read it defensively so this
-  // renders correctly the day that field lands, without widening the shared type from here.
-  const flightCostUsd = (trip.itinerary as { flightCostUsd?: number }).flightCostUsd;
+  const flightCostUsd = trip.itinerary.flightCostUsd;
 
   const fontFace = assets.fontDataUri
     ? `@font-face{font-family:Archivo;src:url(${assets.fontDataUri}) format('woff2');font-weight:100 900;font-display:swap}\n`
