@@ -107,8 +107,11 @@ export default function ItineraryCard({
    *  "Arrange days" button). Re-timing happens locally in `moveStop`, so a drop resolves in the
    *  same frame — no model call. The host gets a complete itinerary back to persist. */
   onItineraryChange?: (next: Itinerary) => void;
-  /** Needed by the arrange board for the trip's name and budget. Optional so read-only callers
-   *  (which pass no `onItineraryChange` either) needn't supply it. */
+  /** Needed by the arrange board for the trip's name and budget, and by the Download control for
+   *  a real database id to link to. Optional so read-only callers (which pass no `onItineraryChange`
+   *  either) needn't supply it — the Download control stays absent whenever it's missing, since
+   *  that means either the pre-save result view or the "preview" fixture, neither of which has a
+   *  real `/api/trips/:id/export` to link to. */
   trip?: TripSummary;
   /** Optional controlled day selection. The host owns it when this page unmounts the card to
    *  show something else (a stop's detail panel) — otherwise the day would reset to 1 on the
@@ -550,9 +553,23 @@ export default function ItineraryCard({
           <span className="mb-1 inline-block w-fit -rotate-2 rounded bg-accent px-2 py-1 text-xs font-bold tracking-wide text-accent-foreground uppercase">
             Day {dayIndex + 1} of {dayCount}
           </span>
-          <h1 className="font-display text-2xl font-semibold italic">
-            {cityName(destination)}: {dayCount} day{dayCount > 1 ? "s" : ""}
-          </h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="font-display text-2xl font-semibold italic">
+              {cityName(destination)}: {dayCount} day{dayCount > 1 ? "s" : ""}
+            </h1>
+            {trip?.id && trip.id !== "preview" && (
+              <a
+                href={`/api/trips/${trip.id}/export`}
+                download
+                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16" />
+                </svg>
+                Download
+              </a>
+            )}
+          </div>
           <p className="text-sm opacity-90">{tier ? `${tier.name} · ${tier.description}` : ""}</p>
         </div>
       </div>

@@ -57,6 +57,15 @@ stop labelled `Day N · Stop M`, with a fixed set of review questions at the end
 send it to someone. The numbering exists so a reviewer can say "day 2, stop 3 is wrong" instead of
 "the afternoons felt off".
 
+## Taking a plan with you
+
+A saved trip also has a Download control (`/api/trips/<id>/export`) that produces one self-contained
+`.html` file, drawn as a transit line rather than a list — meant for the traveler, not a reviewer, and
+built to render identically offline. Photos and the Archivo font subset are inlined as base64 data
+URIs; `public/fonts/archivo-latin-var.woff2` (the latin subset of Archivo Variable, taken from Google
+Fonts, OFL) is committed for exactly this — the app itself loads Archivo through `next/font/google`,
+which leaves nothing readable on disk for the export to reuse.
+
 ## Commands
 
 ```bash
