@@ -1,5 +1,5 @@
 import { formatMoney } from "../format";
-import { travelLegBetween } from "../travelTime";
+import { buildTravelLegs } from "../travelTime";
 import type { Stop, TransportMode } from "../types";
 
 const HTML_ESCAPES: Record<string, string> = {
@@ -46,8 +46,8 @@ export interface ExportLeg {
 /**
  * The hops between one day's stops, `null` where there is nothing worth drawing.
  *
- * Two details that bite. First, `travelLegBetween` takes `{ lat, lon }` while `Stop` carries
- * `lng` — the rename is the whole reason this adapter exists. Second, it floors `minutes` at 1,
+ * Two details that bite. First, `Stop` carries `lng` while `buildTravelLegs` expects `lon`
+ * — the rename is the whole reason this adapter exists. Second, it floors `minutes` at 1,
  * so a pair of stops sharing a coordinate reports "1 min walk" rather than nothing; real
  * itineraries do this constantly (a hotel that appears twice, a summit whose three stops share
  * one point). Suppression therefore keys on the rounded distance, not on minutes.
@@ -55,11 +55,18 @@ export interface ExportLeg {
 export function dayLegs(stops: Stop[]): (ExportLeg | null)[] {
   const legs: (ExportLeg | null)[] = [];
   for (let i = 0; i < stops.length - 1; i++) {
-    const leg = travelLegBetween(
-      { lat: stops[i].lat, lon: stops[i].lng },
-      { lat: stops[i + 1].lat, lon: stops[i + 1].lng }
-    );
-    legs.push(leg.distanceKm === 0 ? null : leg);
+    const pois = [
+      { name: stops[i].name, lat: stops[i].lat, lon: stops[i].lng },
+      { name: stops[i + 1].name, lat: stops[i + 1].lat, lon: stops[i + 1].lng },
+    ];
+    const travelLegs = buildTravelLegs(pois, ["walk", "transit"]);
+    const travelLeg = travelLegs[0];
+    const exportLeg: ExportLeg = {
+      mode: travelLeg.mode,
+      distanceKm: travelLeg.distanceKm,
+      minutes: travelLeg.minutes,
+    };
+    legs.push(exportLeg.distanceKm === 0 ? null : exportLeg);
   }
   return legs;
 }
