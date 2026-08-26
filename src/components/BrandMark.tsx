@@ -22,7 +22,7 @@ export default function BrandMark() {
   return (
     <Link
       href="/"
-      className="hero-rise hero-legible pointer-events-auto absolute top-5 left-5 z-20 font-display text-xl font-semibold tracking-tight text-on-deep sm:top-6 sm:left-6"
+      className="hero-rise hero-legible pointer-events-auto absolute top-5 left-5 z-20 font-display text-xl font-semibold text-on-deep sm:top-6 sm:left-6"
     >
       TripMate
     </Link>

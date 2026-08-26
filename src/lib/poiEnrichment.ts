@@ -48,6 +48,7 @@ export async function enrichSelectedPois(reconciled: ReconciledTrip): Promise<Po
       closedDays: closedDaysFromOpeningHours(openingHours),
       visitMinutes: estimateVisitMinutes(poi.kinds),
       visitMinutesEstimated: true,
+      wheelchair: tags?.wheelchair ?? null,
       partial: lat === null || openingHours === null,
     };
   });

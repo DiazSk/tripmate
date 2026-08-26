@@ -1,19 +1,14 @@
 /** Result shapes for every scorer. One file so the API route, the DB row and the UI agree. */
 
 /**
- * Booked flights/stay, as the benchmark reads them.
+ * Booked flights/stay. This used to be a local duplicate, declared here because `UserAnswers` had
+ * no `logistics` field and the traveler-facing form didn't collect one. It does now, so the
+ * benchmark reads the same shape the app writes.
  *
- * Declared here rather than imported from `UserAnswers` because this branch's `UserAnswers` has no
- * `logistics` field — the traveler-facing "what's already booked" work isn't merged. The benchmark
- * form still collects these, and `usableSlot()` still honours them (skill 4c-bis: a booked arrival
- * makes the early part of day 1 unusable). Reading it structurally means the rule is a no-op when
- * the field is absent and starts working the moment that feature lands, with no change here.
+ * `usableSlot()` still reads it structurally off `userAnswers`, which keeps the rule a no-op for
+ * every fixture and stored trip written before the field existed.
  */
-export interface BenchLogistics {
-  arrivalTime: string | null;
-  departureTime: string | null;
-  stayBooked: string | null;
-}
+export type { TripLogistics } from "../types";
 
 export type ScorerKind = "deterministic" | "lexical" | "operational" | "model-judged";
 
@@ -188,6 +183,10 @@ export interface BudgetScore {
   excludes: string[];
   /** Always true: the pipeline carries no prices, so this rests on a configurable estimate table. */
   estimateBased: boolean;
+  /** How much of the trip's total is the traveler's target. §5 asks for 85-100% of the budget, so
+   *  a plan that lands at 40% is a miss in the other direction — one the estimate table could
+   *  never see, since it priced stops rather than reading them. Null when not measurable. */
+  budgetUsedFraction: number | null;
   normalized: number | null;
 }
 
@@ -284,3 +283,67 @@ export const RADAR_AXES = [
 ] as const;
 
 export type RadarAxis = (typeof RADAR_AXES)[number]["key"];
+
+/**
+ * What the patch itself did, as distinct from what the patched trip looks like.
+ *
+ * `applyPatch` validates positions but not payloads: `add_stop` clamps its index instead of
+ * rejecting, `replace_lodging` is unchecked, and `replace_stop` merges — so a near-empty payload
+ * applies cleanly. `rejected` alone therefore understates a bad patch, which is why
+ * `guardrailDelta` is here beside it.
+ */
+export interface RefinePatchScore {
+  opsEmitted: number;
+  opsRejected: number;
+  rejectedReasons: string[];
+  /** Fraction of emitted ops that landed. Null when none were emitted — nothing to measure. */
+  applied: number | null;
+  /** Fraction of modified days inside the task's allowed set. Null when the task allows any day. */
+  scope: number | null;
+  /** Did emitting-or-not match what the task asked for. */
+  restraint: boolean;
+  guardrailsBefore: number;
+  guardrailsAfter: number;
+  /** after − before. Negative is an improvement; positive means the patch broke something. */
+  guardrailDelta: number;
+  /** 0-1 roll-up of the four above. */
+  normalized: number | null;
+}
+
+export interface RefineCellScores {
+  before: BenchCellScores;
+  after: BenchCellScores;
+  /** after − before per weighted group. Null where either side was unmeasurable. */
+  delta: CompositeGroups;
+  /**
+   * How many of `delta`'s five groups were non-null and so contributed to `refineComposite`.
+   *
+   * `refineComposite` deliberately has no equivalent of `compositeScore`'s
+   * `MIN_GROUPS_FOR_COMPOSITE` gate: a delta answers "did this patch make the trip worse," and one
+   * group reporting a real drop is still real information, not a verdict to withhold the way a
+   * thin absolute score would be. But an ungated composite hides its own denominator — a composite
+   * built from one group reads identical to one built from five. This field is what keeps cells
+   * comparable instead of discarding that signal. `0` is a legitimate, measured value ("no group
+   * was measurable"), not an absence, so it is a number and never null.
+   */
+  measuredGroups: number;
+  /** Null when the call itself failed. An empty `ops` array from a timeout is indistinguishable
+   *  from a deliberate no-op, so scoring a dead call would report `restraint: true` for a model
+   *  that never answered. Consumers must skip null rather than treat it as a zero. */
+  patch: RefinePatchScore | null;
+  operational: OperationalScore;
+}
+
+/** One (fixture × task × model) refine run. */
+export interface RefineCell {
+  fixtureId: string;
+  taskId: string;
+  model: string;
+  runId: string | null;
+  traceId: string | null;
+  /** The model's raw JSON response, verbatim — stored so a bad patch is inspectable after the fact. */
+  rawResponse: string;
+  scores: RefineCellScores;
+  composite: number | null;
+  createdAt: string;
+}

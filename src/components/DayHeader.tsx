@@ -164,6 +164,8 @@ export default function DayHeader({
   animateReveal,
   editable,
   onEditDay,
+  isEditing: controlledEditing,
+  onEditingChange,
 }: {
   day: DayPlan;
   dayIndex: number;
@@ -173,8 +175,23 @@ export default function DayHeader({
   animateReveal?: boolean;
   editable?: boolean;
   onEditDay?: (dayIndex: number, updates: DayEditUpdates) => void;
+  /** Edit mode, owned by the parent when supplied.
+   *
+   *  It is controlled because the same flag decides whether the card's stop list shows its drag
+   *  handles — editing a day and rearranging it are one intent. Keeping a private copy here as
+   *  well meant two sources of truth for one piece of state, and the handles could disagree with
+   *  the form about whether the day was being edited. Falls back to local state when the parent
+   *  doesn't care. */
+  isEditing?: boolean;
+  onEditingChange?: (editing: boolean) => void;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [localEditing, setLocalEditing] = useState(false);
+  const isEditing = controlledEditing ?? localEditing;
+
+  const setEditing = (editing: boolean) => {
+    setLocalEditing(editing);
+    onEditingChange?.(editing);
+  };
 
   if (isEditing) {
     return (
@@ -182,9 +199,9 @@ export default function DayHeader({
         day={day}
         onSave={(updates) => {
           onEditDay?.(dayIndex, updates);
-          setIsEditing(false);
+          setEditing(false);
         }}
-        onCancel={() => setIsEditing(false)}
+        onCancel={() => setEditing(false)}
       />
     );
   }
@@ -205,9 +222,9 @@ export default function DayHeader({
         {editable && onEditDay && (
           <button
             type="button"
-            onClick={() => setIsEditing(true)}
+            onClick={() => setEditing(true)}
             aria-label="Edit day"
-            title="Edit day"
+            title="Edit this day and rearrange its stops"
             className="rounded-md p-1 text-muted transition-colors hover:bg-white/10 hover:text-foreground"
           >
             <Pencil className="h-3.5 w-3.5" />

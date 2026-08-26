@@ -33,6 +33,12 @@ export interface GeoSuggestion {
   countryCode: string | null;
 }
 
+/** Wall-clock cap on each outbound call. Without a signal, undici lets a hung upstream sit for
+ *  ~5 minutes and the request that triggered it hangs with it — the literal "the page is stuck"
+ *  failure. An abort throws, which is the same shape as any other network failure here, so it
+ *  lands on the fail-soft paths that already exist rather than adding a new error surface. */
+const FETCH_TIMEOUT_MS = 8_000;
+
 const FORECAST_HORIZON_DAYS = 16;
 
 export async function geocodeDestination(name: string): Promise<GeoResult | null> {
@@ -40,7 +46,7 @@ export async function geocodeDestination(name: string): Promise<GeoResult | null
   url.searchParams.set("name", name);
   url.searchParams.set("count", "1");
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) return null;
   const data = await res.json();
   const first = data?.results?.[0];
@@ -62,7 +68,7 @@ export async function suggestDestinations(query: string, count = 6): Promise<Geo
   url.searchParams.set("name", query);
   url.searchParams.set("count", String(count));
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) return [];
   const data = await res.json();
   const results = data?.results;
@@ -163,7 +169,7 @@ async function fetchDaily(
   );
   url.searchParams.set("timezone", "auto");
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`weather API returned ${res.status}`);
   const data = await res.json();
   const timezone: string | null = data.timezone ?? null;
@@ -209,7 +215,7 @@ async function fetchHourlyHumidity(
     url.searchParams.set("hourly", "relative_humidity_2m");
     url.searchParams.set("timezone", "auto");
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) return {};
     const data = await res.json();
     const times: string[] = data?.hourly?.time ?? [];

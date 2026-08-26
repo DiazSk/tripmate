@@ -41,7 +41,8 @@ export default function DietaryPicker({
               type="button"
               aria-pressed={on}
               onClick={() => toggle(tag)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              // Same fix as ChoicePicker/GroupTypePicker: 44px floor via height, not type size.
+              className={`flex min-h-11 items-center rounded-full px-3 text-xs font-medium transition-colors ${
                 on
                   ? "bg-accent text-accent-foreground"
                   : "bg-white/10 text-foreground hover:bg-white/20"
@@ -57,7 +58,7 @@ export default function DietaryPicker({
         value={value.note}
         onChange={(e) => onChange({ ...value, note: e.target.value })}
         placeholder="Anything else — e.g. no shellfish, low salt"
-        className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+        className="w-full rounded-full bg-white/10 px-3.5 py-2 text-sm text-foreground placeholder:text-muted focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
       />
     </div>
   );

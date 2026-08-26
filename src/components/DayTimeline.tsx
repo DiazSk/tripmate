@@ -1,15 +1,64 @@
 "use client";
 
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
+
 import { DayPlan, Stop } from "@/lib/types";
+import { stopDragId } from "@/lib/dragDrop";
 import { devLabel } from "@/lib/devInspector";
 
 /** Stops that appeared/changed on the last AI turn, so the preview shows *what moved* rather than
  *  silently redrawing. Keyed by name because indices shift when a stop is inserted or removed. */
 export type ChangedStops = Set<string>;
 
-function TimelineRow({ stop, changed, isLast }: { stop: Stop; changed: boolean; isLast: boolean }) {
+function TimelineRow({
+  stop,
+  dayIndex,
+  index,
+  changed,
+  isLast,
+  draggable,
+}: {
+  stop: Stop;
+  dayIndex: number;
+  index: number;
+  changed: boolean;
+  isLast: boolean;
+  /** Adds the grip and enrolls the row in the enclosing SortableContext. */
+  draggable?: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: stopDragId(dayIndex, index), disabled: !draggable });
+
   return (
-    <li className="relative flex gap-3 pb-4 last:pb-0">
+    <li
+      ref={draggable ? setNodeRef : undefined}
+      style={draggable ? { transform: CSS.Transform.toString(transform), transition } : undefined}
+      className={`relative flex gap-3 pb-4 last:pb-0 ${isDragging ? "z-20 opacity-40" : ""}`}
+    >
+      {/* Same handle-not-row decision as StopList: the preview is read at least as often as it is
+          rearranged, and a row that moves whenever it is touched is hostile to reading. */}
+      {draggable && (
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label={`Reorder ${stop.name}`}
+          title="Drag to reorder"
+          className="-ml-1 mt-1 flex h-6 w-4 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted/40 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:cursor-grabbing"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+      )}
       {/* Rail: a dot per stop with the connector drawn behind it, so the column reads as one
           continuous line rather than a stack of separate cards. */}
       <div className="relative flex w-4 shrink-0 justify-center pt-1.5">
@@ -55,11 +104,15 @@ export default function DayTimeline({
   dayIndex,
   changed,
   busy,
+  draggable,
 }: {
   day: DayPlan;
   dayIndex: number;
   changed: ChangedStops;
   busy?: boolean;
+  /** Turns on the grip handles. The DndContext and the drop logic live in FocusEditMode, which
+   *  owns the draft these rows are rearranging. */
+  draggable?: boolean;
 }) {
   return (
     <div
@@ -80,14 +133,23 @@ export default function DayTimeline({
         <p className="text-sm text-muted">No stops on this day yet.</p>
       ) : (
         <ol>
-          {day.stops.map((stop, i) => (
-            <TimelineRow
-              key={`${stop.name}-${i}`}
-              stop={stop}
-              changed={changed.has(stop.name)}
-              isLast={i === day.stops.length - 1}
-            />
-          ))}
+          <SortableContext
+            items={day.stops.map((_, i) => stopDragId(dayIndex, i))}
+            strategy={verticalListSortingStrategy}
+            disabled={!draggable}
+          >
+            {day.stops.map((stop, i) => (
+              <TimelineRow
+                key={`${stop.name}-${i}`}
+                stop={stop}
+                dayIndex={dayIndex}
+                index={i}
+                draggable={draggable}
+                changed={changed.has(stop.name)}
+                isLast={i === day.stops.length - 1}
+              />
+            ))}
+          </SortableContext>
         </ol>
       )}
 

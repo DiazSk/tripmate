@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteTrip, getTrip, updateTripItinerary } from "@/lib/db";
 import { toTripDetail } from "@/lib/tripPayload";
+// Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
+// use of `normalizeDays` moved into `toTripDetail`, but this did not.
+import { tripEndDate } from "@/lib/tripDays";
 
 export async function GET(
   _req: NextRequest,
@@ -12,12 +15,9 @@ export async function GET(
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
-  // The only route that reads `trips.itinerary_json`, so it's the one place a
-  // parse boundary pays for every writer at once — the original generate, a
-  // refine, a rebalance, and anything trip-edit patches back through PATCH.
-  // Rows written before this boundary existed can carry an unrecognised
-  // category or a string cost; normalizing on read means an old trip renders
-  // the same as a new one, and it self-heals on disk at the next PATCH.
+  // The parse-and-normalize boundary lives in `toTripDetail` now, because the server page for
+  // this route reads the same row directly and the two must not drift. See its comment for why
+  // normalizing on read is load-bearing.
   return NextResponse.json(toTripDetail(trip));
 }
 
@@ -36,8 +36,15 @@ export async function PATCH(
     return NextResponse.json({ error: "Missing itinerary" }, { status: 400 });
   }
 
-  updateTripItinerary(id, JSON.stringify(itinerary));
-  return NextResponse.json({ ok: true });
+  // Derived here rather than trusted from the client: the trip's length is a property of the
+  // itinerary being saved, and the days are consecutive dates from the (immutable) start date. So
+  // the end date is computable, and computing it means an edit that added or removed a day can't
+  // leave `trips.end_date` disagreeing with the plan stored beside it.
+  const days = Array.isArray(itinerary.days) ? itinerary.days : [];
+  const endDate = days.length ? tripEndDate(trip.start_date, days.length) : undefined;
+
+  updateTripItinerary(id, JSON.stringify(itinerary), endDate);
+  return NextResponse.json({ ok: true, endDate: endDate ?? trip.end_date, days: days.length });
 }
 
 export async function DELETE(

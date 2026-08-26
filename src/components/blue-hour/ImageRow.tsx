@@ -2,22 +2,26 @@
 
 import { useEffect, useRef } from "react";
 import Image from "next/image";
-import { gsap, ScrollTrigger, prefersReducedMotion } from "@/lib/gsap";
+import { gsap } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
 import { sceneBeats } from "./sceneBeats";
+import SectionOpener from "./SectionOpener";
 
 // Rotates through the two net-new scene hues so a beat without a photo yet still
 // reads as part of one graded sequence rather than four identical blocks.
 const PLACEHOLDER_GRADIENTS = [
-  "linear-gradient(160deg, var(--color-scene-cobalt), var(--color-scene-teal))",
-  "linear-gradient(160deg, var(--color-scene-teal), var(--color-scene-cobalt))",
+  "linear-gradient(160deg, rgb(var(--surface-deep-rgb)), var(--canvas))",
+  "linear-gradient(160deg, var(--canvas), rgb(var(--surface-deep-rgb)))",
 ];
 
 /**
  * The "images together" row — Vita Travels' own pattern for a set of related
  * photos: side by side, sharp/compact, a one-line caption above each, never a
- * paragraph on the image. Keeps TripMate's own rounded-2xl card language rather
- * than Vita's sharp 0px corners (see plan addendum for why). Replaces the earlier
+ * paragraph on the image. These four are square-cornered, unlike every other card
+ * in the app: the 16px radius belongs to glass floating over the globe, and these
+ * are content sitting on a solid band. Rounding them made four photographs read as
+ * four UI cards. Replaces the earlier
  * per-beat full-viewport "Framed Card" sections — four full-screen stops was the
  * reason the landing didn't hit hard; this is one compact moment instead.
  */
@@ -63,36 +67,71 @@ export default function ImageRow() {
       id="journey"
       // scroll-mt: Navbar's anchor links call scrollIntoView({block:"start"}), which
       // would otherwise land this section's top edge flush under the fixed nav.
-      className="scene-band pointer-events-auto scroll-mt-[var(--nav-h)] overflow-hidden px-5 py-16 sm:px-6 sm:py-24"
+      className="pointer-events-auto scroll-mt-[var(--nav-h)] overflow-hidden px-5 py-16 sm:px-6 sm:py-24"
     >
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
+      <SectionOpener label="Journey">
+        <h2 className="font-scene-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground">
+          What a plan actually knows
+        </h2>
+      </SectionOpener>
+
+      {/* One ruled grid, not four tiles.
+          This was `gap-4 md:gap-6` with `border border-card-border` on each photo frame, which
+          gave four separately-boxed cards floating on the band. The reference runs zero gap and
+          lets adjacent cells share one hairline, which is most of why theirs reads as an editorial
+          grid and ours read as stickers. Same token, same 1px, different reading.
+          The dividers are on the cells rather than the container so they land *between* items and
+          never on the outer edge: `-mr-px` would be the alternative and it fights `overflow-hidden`.
+
+          **One column below `sm`, and the shared hairline turns horizontal with it.** Two columns
+          on a phone gave each cell ~171px, which is not a column, it is a gutter with words in it:
+          every `detail` wrapped to five lines two or three words wide. The premise of the section
+          survives the stack — adjacent cells still share exactly one rule — it is just that on a
+          phone "adjacent" means above and below rather than left and right. */}
+      <div className="mt-10 grid sm:grid-cols-2 md:grid-cols-4">
       {sceneBeats.map((beat, index) => (
         // `group` drives the whole hover treatment: the frost clears, the photo eases up
         // in scale, the description rises out of the bottom edge. Pure CSS transitions
         // rather than more GSAP — nothing here is scroll-linked, and a hover state should
         // not depend on a JS animation loop. Every property references the single
         // `--scene-hover` clock so they start and land on the same frame.
-        <div key={beat.id} className="image-row-item group">
-          {/* Label + stat together, so the area above the card is a complete "what /
-              how much" pairing rather than a single word standing alone — the same
-              two-line shape Vita Travels uses ("Introvert Retreats / 78+ Countries").
-              min-h reserves room for a 2-line stat regardless of how many lines this
-              particular one actually wraps to — without it, a card whose stat happened
-              to fit on one line sat next to one whose stat wrapped to two, and the grid
-              row's photos (each mt-3 below its own text block) started at different
-              heights. line-clamp-2 is the matching upper bound, so a future longer stat
-              can't blow past the reserved space and reintroduce the same drift. */}
-          <div className="min-h-14 [transition:var(--scene-hover)] [transition-property:transform] group-hover:-translate-y-1">
-            <p className="font-scene-body text-sm font-medium text-foreground">{beat.label}</p>
-            <p className="font-scene-body mt-0.5 line-clamp-2 text-xs text-muted">{beat.stat}</p>
+        <div
+          key={beat.id}
+          className="image-row-item group border-white/10 px-4 py-4 [&:nth-child(n+2)]:border-t sm:[&:nth-child(n+2)]:border-t-0 sm:[&:not(:nth-child(2n+1))]:border-l md:px-5 md:[&:not(:nth-child(4n+1))]:border-l"
+        >
+          {/* Label + stat on a hairline — Vita Travels' own card head ("Introvert Retreats"
+              left, "/ 78+ Countries" right, rule beneath). The rule is what makes the pair
+              read as a caption belonging to the photograph below it rather than as two loose
+              lines of text floating above it.
+              The split to one line is `lg` and up only, because this copy is not Vita's: their
+              stats are three words, ours run to "Lodging, food, and transit — itemized", which
+              needs roughly 200px beside an 80px label. That fits in a card at 1024px and wider
+              and wraps into a mess below it, so narrow viewports keep the stacked shape.
+              min-h-14 reserves room for a 2-line stat, at every width including `lg`. It used to be
+              dropped at `lg` on the reasoning that the row is one line by definition up there —
+              which stopped being true once the cards gained their own padding: "One 20-minute
+              window, every evening" wraps beside "The Blue Hour", and that one card's rule and
+              photo then sat lower than the other three. In a grid whose whole premise is shared
+              rules, a row that does not align is the failure. The cost is a little air under the
+              single-line heads; alignment is worth more. line-clamp-2 is the matching upper bound. */}
+          <div className="min-h-14 border-b border-white/10 pb-2 [transition:var(--scene-hover)] [transition-property:transform] group-hover:-translate-y-1 lg:flex lg:items-baseline lg:justify-between lg:gap-4">
+            <p className="text-sm font-medium text-foreground">{beat.label}</p>
+            {/* The leading slash is the reference's, and it does more than it looks like: it
+                marks the right-hand run as metadata about the left rather than a second label. */}
+            <p className="mt-0.5 line-clamp-2 text-xs text-muted lg:mt-0 lg:text-right">
+              <span aria-hidden>/ </span>
+              {beat.stat}
+            </p>
           </div>
-          <div className="relative mt-3 aspect-[3/4] transform-gpu overflow-hidden rounded-2xl border border-card-border [transition:var(--scene-hover)] [transition-property:box-shadow] group-hover:shadow-2xl group-hover:shadow-black/40">
+          {/* 11:12 rather than 3:4 — near-square, matching the reference's own 0.92. At 3:4 four
+              portraits side by side ran taller than the viewport once the row went full-bleed. */}
+          <div className="relative mt-3 aspect-[11/12] transform-gpu overflow-hidden [transition:var(--scene-hover)] [transition-property:box-shadow] group-hover:shadow-2xl group-hover:shadow-black/40">
             {beat.photo ? (
               <Image
                 src={beat.photo.src}
                 alt={beat.photo.alt}
                 fill
-                sizes="(min-width: 768px) 25vw, 50vw"
+                sizes="(min-width: 768px) 25vw, (min-width: 640px) 50vw, 100vw"
                 className="object-cover [transition:var(--scene-hover)] [transition-property:transform] group-hover:scale-[1.08]"
               />
             ) : (
@@ -101,17 +140,23 @@ export default function ImageRow() {
                 style={{ background: PLACEHOLDER_GRADIENTS[index % PLACEHOLDER_GRADIENTS.length] }}
               />
             )}
-            {/* Resting frost sheet — clears on hover. */}
+            {/* A flat tint, not a blur any more — see `.scene-frost`. Clears on hover; touch
+                never shows it. */}
             <div className="scene-frost pointer-events-none absolute inset-0" />
             {/* …and reappears as frost gathered on the inside edges. */}
-            <div className="scene-frost-edge pointer-events-none absolute inset-0 rounded-2xl" />
+            <div className="scene-frost-edge pointer-events-none absolute inset-0" />
             <div className="scene-photo-sheen pointer-events-none absolute inset-0" />
-            {/* The description lives in the card now, hidden until hover. Its scrim is
-                part of the same element, so the photo is unobstructed at rest. */}
-            <p className="scene-card-detail font-scene-body pointer-events-none absolute inset-x-0 bottom-0 p-4 pt-10 text-xs leading-relaxed text-on-deep">
-              {beat.detail}
-            </p>
           </div>
+
+          {/* A caption under the photograph, not a layer over it.
+              This was absolutely positioned inside the frame and revealed on hover, which meant
+              its one line of substance did not exist on touch, in a screenshot, or for anyone who
+              never hovered. Making it always-visible fixed that and broke something else: at 390px
+              the frame is small and this copy runs to seven lines, so it covered the photograph
+              entirely. Below the frame it is legible at every width and the image is never
+              obstructed — which is also what the reference does, where no card sets type over its
+              own photo. */}
+          <p className="mt-3 text-xs leading-relaxed text-muted">{beat.detail}</p>
         </div>
       ))}
       </div>

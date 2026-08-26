@@ -1,5 +1,9 @@
 import type { PoiOsmTags } from "./types";
 
+/** Longer than the other upstreams because Overpass queues under load. NOTE the `[timeout:N]`
+ *  inside each query is an instruction to *Overpass* about its own execution budget, not a cap on
+ *  how long this process waits for an answer — only the abort signal is that. */
+const OVERPASS_TIMEOUT_MS = 45_000;
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 /** POIs are matched by name near their own known coordinates, so this only has to absorb the
  *  drift between OpenTripMap's centroid and OSM's — not city-scale search like roads.ts. */
@@ -10,6 +14,16 @@ interface OverpassPoiElement {
   lon?: number;
   center?: { lat: number; lon: number };
   tags?: Record<string, string>;
+}
+
+/** OSM's `wheelchair` values in the wild include `designated`, `partial` and `limited?`. Only the
+ *  three documented values are trusted; anything else reads as unknown rather than being coerced
+ *  into a guess, since a wrong "yes" here sends someone to a place they can't get into. */
+function parseWheelchair(raw: string | undefined): "yes" | "limited" | "no" | null {
+  if (raw === "yes" || raw === "designated") return "yes";
+  if (raw === "limited") return "limited";
+  if (raw === "no") return "no";
+  return null;
 }
 
 function escapeForOverpass(name: string): string {
@@ -46,6 +60,7 @@ export async function fetchPoiOsmTags(
       // Same header set as roads.ts — Overpass's front-end 406s a bare fetch() without Accept.
       headers: { "Content-Type": "text/plain", Accept: "*/*", "User-Agent": "TripMate/1.0" },
       body: query,
+      signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -60,6 +75,7 @@ export async function fetchPoiOsmTags(
         openingHours: el.tags?.opening_hours ?? null,
         lat: point?.lat ?? null,
         lon: point?.lon ?? null,
+        wheelchair: parseWheelchair(el.tags?.wheelchair),
       };
     }
     return byName;
@@ -153,6 +169,7 @@ export async function resolveNamedPlaceCoords(
       method: "POST",
       headers: { "Content-Type": "text/plain", Accept: "*/*", "User-Agent": "TripMate/1.0" },
       body: `[out:json][timeout:40];(${clauses});out center tags;`,
+      signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
     });
     if (!res.ok) return {};
     const data = await res.json();

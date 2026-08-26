@@ -41,6 +41,31 @@ function pickMode(distanceKm: number, availableModes: TransportMode[]): Transpor
   return availableModes[0] ?? "walk";
 }
 
+/** Modes to assume when nothing has told us what the destination actually offers. Walk + transit
+ *  is the city default; `drive` is only ever picked when transit is explicitly absent. */
+export const DEFAULT_MODES: TransportMode[] = ["walk", "transit"];
+
+/**
+ * One leg between two points — the single place the tuned constants above are applied.
+ *
+ * Extracted from `buildTravelLegs` so the drag-and-drop re-scheduler can price a consecutive
+ * hop without either recomputing the whole pairwise matrix or re-declaring the speeds and
+ * circuity factor next to it (two copies of a tuned constant is one copy too many).
+ */
+export function travelLegBetween(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number },
+  availableModes: TransportMode[] = DEFAULT_MODES
+): { mode: TransportMode; distanceKm: number; minutes: number } {
+  const distanceKm = haversineKm(a, b) * ROUTE_CIRCUITY_FACTOR;
+  const mode = pickMode(distanceKm, availableModes);
+  return {
+    mode,
+    distanceKm: Math.round(distanceKm * 10) / 10,
+    minutes: Math.max(Math.round((distanceKm / SPEED_KMH[mode]) * 60), 1),
+  };
+}
+
 /** Pairwise legs between every POI, for the clustering/sequencing later steps do. Pure local
  *  math — no network call, so it has no failure mode and needs no fail-soft path. */
 export function buildTravelLegs(
@@ -50,16 +75,8 @@ export function buildTravelLegs(
   const legs: TravelLeg[] = [];
   for (let i = 0; i < pois.length; i++) {
     for (let j = i + 1; j < pois.length; j++) {
-      const distanceKm = haversineKm(pois[i], pois[j]) * ROUTE_CIRCUITY_FACTOR;
-      const mode = pickMode(distanceKm, availableModes);
-      legs.push({
-        from: pois[i].name,
-        to: pois[j].name,
-        mode,
-        distanceKm: Math.round(distanceKm * 10) / 10,
-        minutes: Math.max(Math.round((distanceKm / SPEED_KMH[mode]) * 60), 1),
-        estimated: true,
-      });
+      const leg = travelLegBetween(pois[i], pois[j], availableModes);
+      legs.push({ from: pois[i].name, to: pois[j].name, estimated: true, ...leg });
     }
   }
   return legs;

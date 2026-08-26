@@ -2,6 +2,7 @@ import type { DayWeather } from "./weather";
 import type { TierId } from "./tiers";
 import type { Holiday } from "./holidays";
 import type { CandidatePoi } from "./pois";
+import type { DietaryNeeds } from "./travelerProfile";
 
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
@@ -78,6 +79,10 @@ export interface Trip extends TripSummary {
   /** The Step 2b answers captured when the trip was saved. Null for trips saved before this was
    *  stored — the edit loop degrades to asking rather than assuming. */
   userAnswers?: UserAnswers | null;
+  /** The `claude` CLI session this trip was generated in, so reopening it resumes the same
+   *  conversation. Null for trips saved before sessions existed, or whose session has been
+   *  replaced — the chat then rebuilds a full prompt instead. */
+  chatSessionId?: string | null;
 }
 
 export interface PlaceDetail {
@@ -93,8 +98,11 @@ export interface ItineraryPreferences {
 }
 
 export interface DestinationContext {
-  festivals: { name: string; dates: string; note: string }[];
-  safety: { note: string; severity: "low" | "medium" | "high" }[];
+  /** `sourceUrl` is null for shopping/trends (still model-recalled) and populated for
+   *  festivals/safety, which are grounded in a real fetched source — see destinationSafety.ts
+   *  and destinationFestivals.ts. */
+  festivals: { name: string; dates: string; note: string; sourceUrl: string | null }[];
+  safety: { note: string; severity: "low" | "medium" | "high"; sourceUrl: string | null }[];
   shopping: { name: string; area: string; note: string }[];
   trends: { note: string }[];
 }
@@ -136,15 +144,55 @@ export interface RawFetch {
 // --- Step 2b: user_answers -------------------------------------------------------------------
 
 export type ExplorerStyle = "packed" | "relaxed" | "offbeat" | "mixed";
-export type GroupType = "solo" | "couple" | "family_with_kids";
+export type GroupType = "solo" | "couple" | "family_with_kids" | "other";
 export type Pace = "slow" | "moderate" | "fast";
 
 /** Who the traveler is, rather than where they've already decided to go. These drive stop
  *  selection: the model reasons from the profile outward to places, instead of being handed a
- *  list of names. Age is deliberately not collected — `energy` is the planning-relevant signal
- *  ("will happily walk all day" vs "wants a bench every hour") and it's answerable directly. */
+ *  list of names. Adult age is still deliberately not collected — `energy` is the
+ *  planning-relevant signal there ("will happily walk all day" vs "wants a bench every hour") and
+ *  it's answerable directly. Children are the exception (see `PartyCounts`): a stroller and a nap
+ *  window are constraints no adult-facing energy answer can express. */
 export type EnergyLevel = "high" | "moderate" | "low";
 export type CrowdPreference = "love" | "mixed" | "avoid";
+
+/** Age bands, not exact ages — the bands are what map onto a planning rule (stroller access, nap
+ *  windows, ride height limits), and asking for a precise age would imply a precision that changes
+ *  nothing. Mirrors how flight booking collects a party, which is where travelers have met it. */
+export interface PartyCounts {
+  /** At least 1. */
+  adults: number;
+  /** Aged 2-11. */
+  children: number;
+  /** Under 2. */
+  infants: number;
+}
+
+/** What the traveler has already booked around the trip. Every field is nullable and the whole
+ *  object is optional: this is the one part of the form nobody is required to fill in, and a rule
+ *  that reads it must no-op rather than guess (see `usableSlot` in the benchmark scorers).
+ *
+ *  Deliberately times, not dates. `startDate`/`endDate` stay the trip's only date range — a second
+ *  one would give the app two competing notions of trip length, and tier pricing, the day count and
+ *  the weather window all read the first. */
+export interface TripLogistics {
+  /** "HH:MM", local, on `startDate`. */
+  arrivalTime: string | null;
+  /** Free text — "Kansai Intl (KIX)", "Kyoto Station". Deliberately not geocoded: it is a fact for
+   *  the prompt, and a lookup would add a fetch that can fail for no planning gain. */
+  arrivalPoint: string | null;
+  /** "HH:MM", local, on `endDate`. */
+  departureTime: string | null;
+  departurePoint: string | null;
+  /** Collected by the benchmark form only; the traveler-facing form does not write it yet. */
+  stayBooked: string | null;
+  /** Free text — "Boston", "Boston (BOS)" — where the traveler is flying from, not where they
+   *  land. Unlike `arrivalPoint`/`departurePoint` this exists to be resolved: a real flight
+   *  search needs a departure airport code, which nothing in this app collects otherwise. C1 only
+   *  collects and resolves it (see `arrivalPoints.ts`'s airport-finder, reused unmodified); what a
+   *  real flight search is used FOR is a separate, not-yet-decided piece. */
+  originCity: string | null;
+}
 
 /** Normalized, enum-like flags the itinerary-planner skill branches on — never free text where
  *  a fixed choice is expected. Pace and the other resolved flags are derived in code from these
@@ -153,6 +201,14 @@ export interface UserAnswers {
   purpose: string;
   explorerStyle: ExplorerStyle;
   group: GroupType;
+  /** Free text, meaningful only when `group` is "other" — "five college friends", "work offsite". */
+  groupOther?: string;
+  /** Optional on purpose: every one of these three is absent from rows written before the field
+   *  existed, so each reader treats absence as "not asked" rather than rejecting the row. */
+  party?: PartyCounts;
+  /** What the traveler has already committed to, which outranks anything the model would pick.
+   *  Every rule that reads these degrades rather than assuming when they are absent. */
+  logistics?: TripLogistics | null;
   energy: EnergyLevel;
   crowds: CrowdPreference;
   budget: number;
@@ -165,6 +221,46 @@ export interface UserAnswers {
    *  traveler profile above; these just pin anything already decided on. */
   selectedPois: CandidatePoi[];
   customPois: string[];
+  /** Carried per-trip even though it lives on the profile: the legacy prompt has had this since
+   *  `formatDietary` shipped, and the staged pipeline dropped it silently — a food stop the
+   *  traveler cannot eat at is the worst defect this app can produce. Both fields empty means
+   *  "no restrictions", which is different from the field being absent. */
+  dietary?: DietaryNeeds | null;
+  /** Mobility needs stated directly, rather than inferred from `energy`. Absent means nothing was
+   *  stated — NOT that the traveler has no needs. */
+  accessibility?: AccessibilityNeeds | null;
+}
+
+/**
+ * Fixed commitments the plan has to bend around: a booked bed, and the two clock times that bound
+ * the first and last usable day. Stated by the traveler, never guessed; `null` per field means
+ * "not stated".
+ *
+ * These field names are not new — `src/lib/bench/customTrip.ts` has been assigning exactly this
+ * shape to `userAnswers.logistics` since the harness landed, against a field `UserAnswers` never
+ * actually declared (a latent type error). Declaring it here with the bench's own names fixes that
+ * rather than adding a second, differently-named copy.
+ */
+export interface TripLogistics {
+  /** Local "HH:MM" on the first day. */
+  arrivalTime: string | null;
+  /** Local "HH:MM" on the last day. */
+  departureTime: string | null;
+  /** Free text, e.g. "Hotel Granvia Kyoto" or "Airbnb in Gion". */
+  stayBooked: string | null;
+}
+
+/** Asked directly rather than derived: `energy` answers "how much do you want to walk", which is
+ *  a different question from "can you manage stairs". `deriveMobilityProfile` used `energy` as a
+ *  proxy for both, and a wheelchair user who describes their energy as high got no accommodation
+ *  at all. */
+export interface AccessibilityNeeds {
+  /** Step-free routes required throughout — the hard constraint, not a preference. */
+  stepFreeRequired: boolean;
+  /** Stairs and steep climbs are manageable but should be avoided where an alternative exists. */
+  limitStairs: boolean;
+  /** Anything the two flags above don't cover. */
+  note: string;
 }
 
 // --- Step 2b → 3: derived flags ---------------------------------------------------------------
@@ -188,6 +284,13 @@ export interface FamilyRules {
   kidFriendlyBias: boolean;
   noLateNight: boolean;
   shortTravelLegs: boolean;
+  /** Infants: step-free routes and somewhere to park a pushchair. */
+  strollerAccess: boolean;
+  /** Infants: leave a usable gap in the middle of the day rather than packing it. */
+  napWindow: boolean;
+  /** The binding constraint — an infant's day and an eleven-year-old's are not the same day.
+   *  Null when the rules fired on the group type alone, with no counts given. */
+  youngestBand: "infant" | "child" | null;
 }
 
 /** Computed from `UserAnswers` in code (never asked, never model-generated) and written into
@@ -201,8 +304,15 @@ export interface ResolvedFlags {
   crowdBias: CrowdBias;
   /** Starred tags first (primary drivers), then the rest as tie-breakers. */
   prioritiesRanked: { primary: string[]; tiebreakers: string[] };
-  /** Only present for group === "family_with_kids". */
+  /** Present whenever the party actually includes children, whatever group type was picked. */
   familyRules: FamilyRules | null;
+  /** Total heads, for lodging capacity and table sizing. Null when no party was given. */
+  partySize: number | null;
+  /** The group in words — the traveler's own description when they picked "other", the pill's
+   *  label otherwise. `formatTravelerProfile` only ever receives resolved flags, so without this
+   *  the legacy prompt carried no group at all: "solo" and "couple" never reached the model, and
+   *  the free-text "other" description would have been collected and discarded. */
+  groupLabel: string;
 }
 
 // --- Step 3: join / barrier ------------------------------------------------------------------
@@ -245,6 +355,9 @@ export interface PoiOsmTags {
   openingHours: string | null;
   lat: number | null;
   lon: number | null;
+  /** OSM `wheelchair=yes|limited|no`. Already present in the tags Overpass returns — it was being
+   *  discarded, which left `minimize_stairs` as a rule with no fact to act on. */
+  wheelchair: "yes" | "limited" | "no" | null;
 }
 
 export interface TravelLeg {
@@ -266,6 +379,9 @@ export interface EnrichedPoi {
   closedDays: string[] | null;
   visitMinutes: number;
   visitMinutesEstimated: boolean;
+  /** Null/absent means OSM has no `wheelchair` tag for this place — genuinely unknown, not "no".
+   *  Optional because every construction site predating the field is still a valid POI. */
+  wheelchair?: "yes" | "limited" | "no" | null;
   /** True when nothing could be resolved for this POI — it still ships, with unknown fields. */
   partial: boolean;
 }

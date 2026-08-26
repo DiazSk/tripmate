@@ -59,7 +59,10 @@ export default function InterestPicker({
                 type="button"
                 onClick={() => onToggle(tag)}
                 aria-pressed={isActive}
-                className={`rounded-full py-1.5 pl-3.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none ${
+                // `min-h-11`, not `py-1.5`: this chip measured 32px tall, and with a nested star
+                // button immediately beside it — the audit's "coin flip under a thumb" — height
+                // was the one axis both controls could gain without the two colliding.
+                className={`flex min-h-11 items-center rounded-full pl-3.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none ${
                   isActive ? "" : "pr-3.5"
                 }`}
               >
@@ -72,7 +75,11 @@ export default function InterestPicker({
                   disabled={!canStar}
                   aria-pressed={isStarred}
                   aria-label={isStarred ? `Unstar ${tag}` : `Star ${tag} as a top priority`}
-                  className="rounded-full py-1.5 pr-3 pl-1.5 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none"
+                  // 26x32 before this, next to a 32px-tall chip toggle it shares an edge with —
+                  // measured as the picker's worst mobile target. `min-w-11` alongside the tag
+                  // button's `min-h-11` gives each control its own full-size hit area rather than
+                  // splitting one cramped strip between two different actions.
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-full pr-3 pl-1.5 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:outline-none"
                 >
                   <Star
                     className="h-3.5 w-3.5"

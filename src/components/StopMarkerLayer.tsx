@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useMapCamera } from "@/lib/mapCamera";
-import { STEM_HEIGHT_M } from "@/lib/mapRoute";
+import { CSSProperties, useEffect, useMemo, useRef } from "react";
+import { dayVisualState, useMapCamera } from "@/lib/mapCamera";
+import { DAY_LABEL_LIFT_M, DayVisualState, STEM_HEIGHT_M } from "@/lib/mapRoute";
 
 /**
  * Minimum screen-space gap between two cards before the later one gives up its name.
@@ -45,11 +45,39 @@ const SCALE_MAX = 1;
  * `overflow-y-auto`, and a marker layer inside it would scroll away from the globe it is pinned
  * to on any page whose content overflows.
  */
+/** One thing to place on screen this frame: either a stop's name or a day's cluster label. Both
+ *  project identically, so they share one anchor array, one declutter scan and one loop —
+ *  running a second postRender listener for the labels would let the two disagree about which
+ *  of them owns a piece of screen. */
+type Marker =
+  | { kind: "stop"; lat: number; lng: number; name: string; flatIndex: number }
+  | {
+      kind: "cluster";
+      lat: number;
+      lng: number;
+      label: string;
+      colorToken: string;
+      day: number;
+      state: DayVisualState;
+    };
+
+/**
+ * How far a day badge is kept from the viewport edge, in CSS pixels.
+ *
+ * Generous at the top because the card is drawn a full card-height *above* its anchor
+ * (`translate(-50%, -100%)`), so an anchor sitting at y = 10 puts the label itself off-screen.
+ */
+const CLUSTER_EDGE_MARGIN_PX = 56;
+
 export default function StopMarkerLayer() {
   const {
     viewerRef,
     ready,
     routeStops,
+    routeClusters,
+    focusedDay,
+    hoveredDay,
+    setHoveredDay,
     routeAltitudeRef,
     flyToPlace,
     hoveredIndex,
@@ -59,43 +87,141 @@ export default function StopMarkerLayer() {
   } = useMapCamera();
   const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  /** Which day, if any, gets its stops named: the panel's selection, or the day the pointer is
+   *  resting on. */
+  const namedDay = focusedDay ?? hoveredDay;
+
+  /**
+   * Everything to place, clusters first.
+   *
+   * Order is load-bearing: the declutter scan below is first-come-first-served in array order, so
+   * putting the day labels ahead of the stop names is what guarantees a label is never suppressed
+   * by a stop standing where it wanted to be.
+   *
+   * **Every day keeps its label, in every state.** That used to be impossible — the badge sat on
+   * the cluster's centroid, which is exactly where its own pins are, so a labelled day and a
+   * named day could not both be legible and the label had to be dropped whenever its stops were
+   * showing. `buildDayClusters` now hangs it out on the circumcircle instead, naming the group
+   * from outside it, so there is nothing left to trade off.
+   *
+   * Stop names are still only ever emitted for one day. All of them at once is ~45 names over
+   * photography, which no amount of colour makes readable, and the declutterer would spend the
+   * frame arbitrating between days rather than within one.
+   */
+  const markers = useMemo<Marker[]>(() => {
+    const clusters: Marker[] = routeClusters.map((c) => ({
+      kind: "cluster",
+      // The perimeter point, not the centre — see buildDayClusters.
+      lat: c.labelLat,
+      lng: c.labelLng,
+      label: c.label,
+      colorToken: c.colorToken,
+      day: c.day,
+      state: dayVisualState(c.day, focusedDay, hoveredDay),
+    }));
+    const stops: Marker[] =
+      namedDay === null
+        ? []
+        : routeStops.flatMap((stop, flatIndex) =>
+            stop.day === namedDay
+              ? [{ kind: "stop" as const, lat: stop.lat, lng: stop.lng, name: stop.name, flatIndex }]
+              : []
+          );
+    /**
+     * The stop being pointed at goes first of everything — ahead of the day badges too.
+     *
+     * Without this the selected stop loses its own name to whichever neighbour happens to come
+     * earlier in visit order — and it loses it *most* reliably in the case that matters, because
+     * co-located stops are normal rather than rare: a hotel is the transfer, the breakfast and
+     * the evening return, and every trip in the dev database has a day like it. Clicking "Crawford
+     * Market" flew the camera to it and left "Private car to Crawford Market" — the stop before it,
+     * on the identical coordinate — holding the only card on screen. The camera was on the right
+     * building with the wrong name over it.
+     *
+     * Ordering rather than a "never suppress the pointed-at card" exemption, because an exemption
+     * would let two cards stack pixel-for-pixel; this makes the selected one win the slot and the
+     * loser yield it, which is the same trade the scan already makes, just decided in the right
+     * direction.
+     *
+     * Ahead of the clusters is a deliberate reversal of the rule immediately above, and only for
+     * this one card. That rule exists so a day's badge is never suppressed by some stop that
+     * happened to stand where it wanted to be — a fair trade between a group label and an
+     * arbitrary member of the group. It is not a fair trade against the stop the traveller just
+     * asked to look at, and it has to be reversed here rather than left to luck, because the pin
+     * that used to name that stop is gone: `useTripCamera.selectStop` no longer passes a label to
+     * `flyToPlace`, so this card is now the *only* thing that names it. A badge that yields is
+     * also the cheaper loss of the two — `buildDayClusters` hangs it on the cluster's perimeter,
+     * away from the stops, and the placement loop below pulls it back into frame rather than
+     * dropping it, so it is a label about a group with room to move.
+     *
+     * `hoveredIndex ?? activeIndex` — the pair every other paired highlight in the app reads. Both
+     * change at human speed, so this cannot flicker the way ordering by camera distance would.
+     */
+    const pointedAt = hoveredIndex ?? activeIndex;
+    const isPointedAt = (m: Marker) => m.kind === "stop" && m.flatIndex === pointedAt;
+    const ordered = [...clusters, ...stops];
+    return pointedAt === null
+      ? ordered
+      : [...ordered.filter(isPointedAt), ...ordered.filter((m) => !isPointedAt(m))];
+  }, [routeStops, routeClusters, focusedDay, hoveredDay, namedDay, hoveredIndex, activeIndex]);
+
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed() || routeStops.length === 0) return;
+    if (!viewer || viewer.isDestroyed() || markers.length === 0) return;
 
     let cancelled = false;
     let listener: (() => void) | null = null;
+    let resizeObserver: ResizeObserver | null = null;
 
     import("cesium").then((Cesium) => {
       if (cancelled || viewer.isDestroyed()) return;
       const scene = viewer.scene;
       const ellipsoid = scene.globe.ellipsoid;
 
-      // Everything below is preallocated and reused. This runs on `postRender`, which in this app
-      // ticks at ~160fps, and MapControls' readout established the house rule: per-frame work
-      // writes straight to the DOM and allocates nothing. A `new Cartesian3()` per stop per frame
-      // is ~1,300 short-lived objects a second for one day of eight stops.
+      // Everything below is preallocated and reused. This runs on `postRender`, and MapControls'
+      // readout established the house rule: per-frame work writes straight to the DOM and
+      // allocates nothing. A `new Cartesian3()` per stop per frame is ~500 short-lived objects a
+      // second for one day of eight stops. The scene now renders on demand and caps at 60fps
+      // (see GlobeBackground), so this fires only on frames where the camera actually moved —
+      // but it still has to be allocation-free, because those are exactly the frames under load.
       const windowPos = new Cesium.Cartesian2();
       const surfaceNormal = new Cesium.Cartesian3();
       const toCamera = new Cesium.Cartesian3();
-      const anchors = routeStops.map(() => new Cesium.Cartesian3());
+      const anchors = markers.map(() => new Cesium.Cartesian3());
       // Flat [x0, y0, x1, y1, …] of cards already given a slot this frame, for the separation
       // check — a flat array of numbers so the check costs no objects either.
-      const placed = new Float64Array(routeStops.length * 2);
+      const placed = new Float64Array(markers.length * 2);
 
       // The anchor sits at the *top* of the stem, and the card is then shifted up by its own
       // height in CSS. Recomputed only when the route's altitude changes — which happens once,
       // when the height sample lands — rather than every frame.
       let anchoredAt = Number.NaN;
 
+      // CSS pixels, to match worldToWindowCoordinates. Cached and refreshed on resize rather
+      // than read inside the loop: `clientWidth` is a layout read, and the previous frame wrote
+      // `transform` and `--marker-depth` to these same nodes, so reading it at the top of the
+      // next frame forced a synchronous style-recalc/layout flush — once per frame, on a tree
+      // carrying several large backdrop-filter surfaces. These numbers only change on resize.
+      let viewWidth = scene.canvas.clientWidth;
+      let viewHeight = scene.canvas.clientHeight;
+      resizeObserver = new ResizeObserver(() => {
+        viewWidth = scene.canvas.clientWidth;
+        viewHeight = scene.canvas.clientHeight;
+      });
+      resizeObserver.observe(scene.canvas);
+
       listener = () => {
         const altitude = routeAltitudeRef.current;
         if (altitude !== anchoredAt) {
-          routeStops.forEach((stop, i) => {
+          markers.forEach((marker, i) => {
             Cesium.Cartesian3.fromDegrees(
-              stop.lng,
-              stop.lat,
-              altitude + STEM_HEIGHT_M,
+              marker.lng,
+              marker.lat,
+              // A day badge floats higher than a stop name. It is anchored *on* the route now
+              // rather than off to one side, so height is the only thing separating it from the
+              // pins and arcs underneath — and it has to clear the arcs, which peak well above
+              // the stems. See DAY_LABEL_LIFT_M.
+              altitude + STEM_HEIGHT_M + (marker.kind === "cluster" ? DAY_LABEL_LIFT_M : 0),
               ellipsoid,
               anchors[i]
             );
@@ -104,14 +230,9 @@ export default function StopMarkerLayer() {
         }
 
         const cameraPosition = scene.camera.positionWC;
-        // CSS pixels, to match worldToWindowCoordinates. Read once per frame rather than per
-        // stop — these are layout reads, and the whole point is to touch layout as little as
-        // possible from inside a render callback.
-        const viewWidth = scene.canvas.clientWidth;
-        const viewHeight = scene.canvas.clientHeight;
         let placedCount = 0;
 
-        for (let i = 0; i < routeStops.length; i++) {
+        for (let i = 0; i < markers.length; i++) {
           const node = nodeRefs.current[i];
           if (!node) continue;
           const anchor = anchors[i];
@@ -139,6 +260,23 @@ export default function StopMarkerLayer() {
           if (!projected) {
             node.style.visibility = "hidden";
             continue;
+          }
+
+          // A day badge is pulled back into frame rather than dropped. It names a *group*, not a
+          // point, so a few pixels of drift costs nothing — while letting it leave the screen
+          // costs the day its label entirely, which is exactly what hanging it out on the
+          // circumradius made likely: the ring pushes labels away from the trip's centre, and
+          // the camera is usually framed on that centre. A stop name gets no such treatment,
+          // because it is a claim about one building and must stay on its own stem.
+          if (markers[i].kind === "cluster") {
+            projected.x = Math.min(
+              Math.max(projected.x, CLUSTER_EDGE_MARGIN_PX),
+              viewWidth - CLUSTER_EDGE_MARGIN_PX
+            );
+            projected.y = Math.min(
+              Math.max(projected.y, CLUSTER_EDGE_MARGIN_PX),
+              viewHeight - CLUSTER_EDGE_MARGIN_PX
+            );
           }
 
           // Reject anything projected off-screen. The layer's `overflow-hidden` already clips
@@ -189,11 +327,17 @@ export default function StopMarkerLayer() {
           placed[placedCount * 2 + 1] = projected.y;
           placedCount++;
 
-          // `transform`, `visibility` and this custom property — all three composited/inherited,
-          // so no layout is triggered. `translate(-50%, -100%)` puts the card's bottom edge on
+          // `transform`, `visibility` and this custom property. `--marker-depth` feeds `opacity`
+          // on the title card, so each write invalidates style for that subtree — but the
+          // resulting change is compositor-only, and the card no longer *transitions* it (when it
+          // did, every frame restarted a 400ms fade on every card at once). It also used to drive
+          // a `filter: blur()`, which gave every card its own render surface to re-raster on
+          // every one of these writes; that is gone. See the comments in globals.css before
+          // putting either back.
+          // `translate(-50%, -100%)` puts the card's bottom edge on
           // the stem tip; the anchor's `transform-origin: bottom center` keeps it there through
           // the scale. `--marker-depth` is the same already-computed `scale` (0.55-1), handed to
-          // the title card below via CSS inheritance so it can drive opacity/blur for the
+          // the title card below via CSS inheritance so it can drive opacity for the
           // rack-focus effect — not a second distance calculation.
           node.style.setProperty("--marker-depth", scale.toFixed(3));
           node.style.transform = `translate3d(${projected.x.toFixed(1)}px, ${projected.y.toFixed(
@@ -208,13 +352,14 @@ export default function StopMarkerLayer() {
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
       if (listener && !viewer.isDestroyed()) {
         viewer.scene.postRender.removeEventListener(listener);
       }
     };
-  }, [routeStops, viewerRef, routeAltitudeRef, ready]);
+  }, [markers, viewerRef, routeAltitudeRef, ready]);
 
-  if (routeStops.length === 0) return null;
+  if (markers.length === 0) return null;
 
   // z-[5]: above the globe, *below* the content overlay at z-10. Sitting above it was the obvious
   // choice and the wrong one — a stop near the right edge then drew its card on top of the
@@ -232,11 +377,17 @@ export default function StopMarkerLayer() {
     // thing.
     <div
       aria-hidden="true"
+      // Set while any stop is pointed at, from either side — a marker card here or a row in the
+      // panel, since both write the same context index. Everything that is *not* the pointed-at
+      // card then recedes (see `.stop-marker-layer[data-focused]` in globals.css), so the name
+      // being read is the only one competing for the eye. One attribute on the container rather
+      // than a per-card prop: the rule is about the set, not about any one card.
+      data-focused={(hoveredIndex ?? activeIndex) !== null ? "true" : undefined}
       className="stop-marker-layer pointer-events-none absolute inset-0 z-[5] overflow-hidden"
     >
-      {routeStops.map((stop, i) => (
+      {markers.map((marker, i) => (
         <div
-          key={i}
+          key={marker.kind === "cluster" ? `day-${marker.day}` : `stop-${marker.flatIndex}`}
           ref={(el) => {
             nodeRefs.current[i] = el;
           }}
@@ -248,30 +399,62 @@ export default function StopMarkerLayer() {
           // `.marker-anchor` starts hidden in CSS instead, and only the render loop writes it.
           className="marker-anchor"
         >
-          <button
-            type="button"
-            tabIndex={-1}
-            // The layer is pointer-events-none so the globe stays draggable through the gaps
-            // between cards; each card opts back in. See DESIGN.md's Pointer-Events Opt-In Rule.
-            className="marker-title-card pointer-events-auto"
-            // Drives the lift/glow via CSS, and is also what the itinerary panel sets remotely
-            // when the pointer is on its matching row — one attribute, both directions.
-            data-hovered={hoveredIndex === i || activeIndex === i ? "true" : undefined}
-            onMouseEnter={() => setHoveredIndex(i)}
-            onMouseLeave={() => setHoveredIndex(null)}
-            // Pointer events rather than mouse events would fire on touch too, where there is
-            // no hover to speak of and a tap would leave the card stuck lit.
-            onFocus={() => setHoveredIndex(i)}
-            onBlur={() => setHoveredIndex(null)}
-            // No label passed, so this flies the camera without dropping the red search pin —
-            // the card already names the place, and a pin plus a card is one label too many.
-            onClick={() => {
-              setActiveIndex(i);
-              flyToPlace(stop.lat, stop.lng);
-            }}
-          >
-            {stop.name}
-          </button>
+          {marker.kind === "cluster" ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              className="marker-day-label pointer-events-auto"
+              // The day's own colour, so the label and the route it names are obviously the
+              // same thing. This is the one place a --route-day-* token leaves the globe
+              // geometry, and it is still on the globe — never in a panel, chip or button.
+              style={{ "--day-color": `var(${marker.colorToken})` } as CSSProperties}
+              // The badge carries its day's standing, so a dimmed day's label recedes with the
+              // route it names rather than staying bright over a route that has stepped back.
+              data-day-state={marker.state}
+              // Hovering a badge lifts that day out of the dim without touching the selection —
+              // check Thursday, keep Tuesday. The same handler reveals its stop names.
+              onMouseEnter={() => setHoveredDay(marker.day)}
+              onMouseLeave={() => setHoveredDay(null)}
+              onFocus={() => setHoveredDay(marker.day)}
+              onBlur={() => setHoveredDay(null)}
+              // Frames the day without touching the panel's selection. Reading a cluster on the
+              // map and choosing which day the *plan* is showing are different intents, and
+              // conflating them meant a stray click on the globe rewrote the panel under the
+              // traveler.
+              onClick={() => flyToPlace(marker.lat, marker.lng)}
+            >
+              {marker.label}
+            </button>
+          ) : (
+            <button
+              type="button"
+              tabIndex={-1}
+              // The layer is pointer-events-none so the globe stays draggable through the gaps
+              // between cards; each card opts back in. See DESIGN.md's Pointer-Events Opt-In Rule.
+              className="marker-title-card pointer-events-auto"
+              // Drives the lift/glow via CSS, and is also what the itinerary panel sets remotely
+              // when the pointer is on its matching row — one attribute, both directions.
+              data-hovered={
+                hoveredIndex === marker.flatIndex || activeIndex === marker.flatIndex
+                  ? "true"
+                  : undefined
+              }
+              onMouseEnter={() => setHoveredIndex(marker.flatIndex)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              // Pointer events rather than mouse events would fire on touch too, where there is
+              // no hover to speak of and a tap would leave the card stuck lit.
+              onFocus={() => setHoveredIndex(marker.flatIndex)}
+              onBlur={() => setHoveredIndex(null)}
+              // No label passed, so this flies the camera without dropping the red search pin —
+              // the card already names the place, and a pin plus a card is one label too many.
+              onClick={() => {
+                setActiveIndex(marker.flatIndex);
+                flyToPlace(marker.lat, marker.lng);
+              }}
+            >
+              {marker.name}
+            </button>
+          )}
         </div>
       ))}
     </div>

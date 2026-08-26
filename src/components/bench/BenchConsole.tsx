@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { STEP_LABELS } from "@/lib/runLabels";
 import type { BenchModel } from "@/lib/bench/models";
 import type { ModelAggregate } from "@/lib/bench/runBenchmark";
 import { paretoFrontier } from "@/lib/bench/pareto";
 import { RADAR_AXES, VIOLATION_TYPES } from "@/lib/bench/types";
-import type { BenchCell, ModelAgreement } from "@/lib/bench/types";
+import type { BenchCell, ModelAgreement, RefineCell } from "@/lib/bench/types";
 import { GroupedBars, ParetoScatter, RadarChart, SimpleBars, StackedBars, seriesColor } from "./charts";
 import BenchTripForm from "./BenchTripForm";
 import ItineraryOutput from "./ItineraryOutput";
@@ -35,6 +37,15 @@ interface FixtureSummary {
 /** Cells arrive with both output forms attached — see the API's snapshot(). */
 type BenchCellWithJson = BenchCell & { json: BenchItineraryJson };
 
+/** Mirrors `RefineTask` (src/lib/bench/refineTasks.ts) as it comes back over JSON. */
+interface RefineTaskSummary {
+  id: string;
+  message: string;
+  dayIndex?: number;
+  covers: string;
+  expect: { opsExpected: boolean; allowedDays?: number[] };
+}
+
 interface Snapshot {
   fixtures: FixtureSummary[];
   models: BenchModel[];
@@ -42,10 +53,19 @@ interface Snapshot {
   judgeModel: string;
   semanticMethod: string;
   cells: BenchCellWithJson[];
+  /** Persisted refine cells (server knows which rows are refine vs. generation — see
+   *  listLatestRefineResults in src/lib/db.ts). Session-run refine cells arrive over each
+   *  run-cell POST response too; both are merged in applySnapshot below. */
+  refineCells: RefineCell[];
   aggregates: ModelAggregate[];
   /** Which trips the aggregate averages over, and which are excluded as incomplete. */
   panel: { included: string[]; excluded: string[] };
   agreement: ModelAgreement[];
+  /** Keyed by fixture id — the refine tasks available for that trip. */
+  refineTasks: Record<string, RefineTaskSummary[]>;
+  /** Bench-shaped calls in flight right now, from anywhere — not just this browser tab. See
+   *  PendingCallBanner: this is what makes a run started by a script or another tab visible. */
+  pending: { id: string; type: string; model: string; destination: string | null; createdAt: string }[];
 }
 
 const fmtMs = (v: number) => `${(v / 1000).toFixed(1)}s`;
@@ -76,20 +96,472 @@ function Provenance({
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${style}`}>{label}</span>;
 }
 
+/**
+ * Orientation for a teammate who has never seen Refine mode.
+ *
+ * Rendered ABOVE the loading and error gates on purpose. It is the one thing on this page that is
+ * useful before any data arrives — and most useful when the fetch has failed and there is nothing
+ * else to look at. Collapsed by default so it costs nothing to anyone who already knows the tool.
+ *
+ * Worth having on the page at all because Refine mode is not self-explanatory: its headline
+ * number is a DELTA whose sign convention is the OPPOSITE of the Perf Dashboard's, and reading
+ * it backwards inverts the benchmark's conclusion. That belongs next to the numbers, not in a
+ * doc nobody opens.
+ */
+function BenchExplainer() {
+  return (
+    <details className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
+      <summary className="cursor-pointer font-semibold text-stone-900">
+        What is this page? — read me first
+      </summary>
+
+      <div className="mt-3 space-y-4 leading-relaxed">
+        <p>This page compares AI models on two different jobs.</p>
+
+        <ul className="ml-5 list-disc space-y-1">
+          <li>
+            <span className="font-medium text-stone-900">Generate</span> — write a whole trip
+            from scratch. This is the original benchmark.
+          </li>
+          <li>
+            <span className="font-medium text-stone-900">Refine</span> — edit a trip that
+            already exists, the way the &ldquo;Refine with AI&rdquo; chat does (&ldquo;day 2
+            feels rushed, can we start later?&rdquo;). This is new.
+          </li>
+        </ul>
+
+        <p>
+          <span className="font-medium text-stone-900">Why Refine needed its own mode.</span>{" "}
+          The generate scores grade a finished trip. A refine call does not return a trip — it
+          returns a small patch, a list of edits. So we score the trip <em>before</em> the patch
+          and <em>again after</em> applying it, and report the <strong>difference</strong>. That
+          difference is what tells you whether the model&apos;s edit helped or hurt.
+        </p>
+
+        <div>
+          <p className="font-medium text-stone-900">How to run it</p>
+          <ol className="mt-1 ml-5 list-decimal space-y-1">
+            <li>
+              Pick a trip from the list. These are frozen sample trips — same inputs every time,
+              so only the model varies.
+            </li>
+            <li>
+              Choose <span className="font-medium">Generate</span> or{" "}
+              <span className="font-medium">Refine</span> at the top.
+            </li>
+            <li>
+              In Refine, pick which edit to test. Each trip has three:
+              <ul className="mt-1 ml-5 list-disc space-y-0.5">
+                <li>
+                  <code>retime-day2</code> — &ldquo;make day 2 more relaxed, start later&rdquo;
+                </li>
+                <li>
+                  <code>add-day2</code> — &ldquo;add a stop to day 2&rdquo;
+                </li>
+                <li>
+                  <code>ask-day1-packed</code> — &ldquo;is day 1 too packed?&rdquo; — a question,{" "}
+                  <em>not</em> a request to change anything
+                </li>
+              </ul>
+            </li>
+            <li>
+              Click run. It does one cell at a time on purpose — a whole sweep in one request
+              would time out.
+            </li>
+          </ol>
+        </div>
+
+        <div>
+          <p className="font-medium text-stone-900">Reading the numbers</p>
+          <ul className="mt-1 ml-5 list-disc space-y-1.5">
+            <li>
+              <span className="font-medium">&Delta; vs base</span> — the score change from the
+              patch. <strong>Negative means the edit made the trip worse.</strong> Careful: this
+              is the opposite convention from the Perf Dashboard, where lower is better because
+              it measures latency.
+            </li>
+            <li>
+              <span className="font-medium">ops emitted / rejected</span> — how many edits the
+              model asked for, and how many were invalid (a made-up day or stop number). Rejected
+              ops are the most common way a weaker model fails here.
+            </li>
+            <li>
+              <span className="font-medium">restraint</span> — did the model correctly{" "}
+              <em>not</em> edit the plan when it was only asked a question. This is the whole
+              point of the <code>ask-day1-packed</code> task. Changing a plan someone only asked
+              about is worse than being unhelpful.
+            </li>
+            <li>
+              <span className="font-medium">guardrail delta</span> — change in the count of real
+              problems (too much travel, overlapping stops, over budget).{" "}
+              <strong>Negative is good here</strong> — fewer problems than before.
+            </li>
+            <li>
+              <span className="font-medium">measuredGroups</span> — how many of the five score
+              groups could be measured for this trip. A score built on 1 group is not comparable
+              to one built on 5, so check this before comparing two cells.
+            </li>
+          </ul>
+        </div>
+
+        <p>
+          <span className="font-medium text-stone-900">One known limit.</span> The composite
+          score caps at 1.0, so a patch that <em>improves</em> a trip and one that changes
+          nothing both read 1.0. It is built to catch a model that makes things worse, not to
+          rank two good models against each other.
+        </p>
+
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+          <p className="font-semibold text-amber-900">
+            Sweep status — run 2026-08-22, and what it does NOT cover
+          </p>
+          <p className="mt-1 text-amber-900">
+            <strong>Sonnet 4.5 and Haiku 4.5 are complete: 21/21 cells each</strong> (7 trips &times;
+            3 edits). <strong>Opus 4.5 is partial — only 6 of 21 scored</strong> (4 further rows exist but
+            failed on an expired token and were never retried), dropped mid-sweep when real
+            per-call cost came in far above estimate and a usage-limit spike made the 3-model matrix
+            unaffordable in one pass. <em>Its row in the aggregate table below is not comparable to
+            the other two</em>; it is shown rather than hidden so the gap is visible.
+          </p>
+          <p className="mt-2 text-amber-900">
+            <strong>Headline:</strong> the index-hallucination failure that sank Haiku on the
+            generation benchmark <em>does not reproduce here</em> — zero rejected ops for either
+            model across 108 ops, and restraint held 7/7 for both. They differ on guardrail delta
+            (Sonnet −0.33, Haiku +0.05) and on weather-appropriateness of the edit. Haiku is ~2.2&times;
+            cheaper at <em>an identical measured latency</em> (101s both), so a swap would cut cost, not the
+            perceived slowness that started this work. Full write-up in{" "}
+            <code>docs/itinerary-quality.md</code>.
+          </p>
+          <p className="mt-2 font-semibold text-amber-900">Explicitly not tested — open for whoever picks this up</p>
+          <ul className="mt-1 ml-5 list-disc space-y-1 text-amber-900">
+            <li>
+              <strong>One run per cell.</strong> No repeats, so there is no variance estimate. The
+              0.03 composite gap between Sonnet and Haiku is within what a single run could produce
+              by chance — treat it as directional, not measured.
+            </li>
+            <li>
+              <strong>The weather gap is n=21 and no task targets it.</strong>{" "}
+              <code>delta.weatherFeasibility</code> is the one axis with a real difference (Haiku
+              −0.0198 vs Sonnet 0.0000), but it surfaced incidentally. A task written to stress
+              weather would confirm or kill it.
+            </li>
+            <li>
+              <strong>The restraint task did not discriminate.</strong> Both models scored 7/7 on{" "}
+              <code>ask-day1-packed</code>. That is a pass, not a measurement — at this sample size
+              it tells you neither model fails, not which is better.
+            </li>
+            <li>
+              <strong>Only 3 edit shapes, all single-turn.</strong> No delete-a-stop, no
+              move-between-days, no budget-constrained edit. Every cell is one message, while the
+              real Refine chat is multi-turn — nothing here tests whether a model holds context
+              across turns.
+            </li>
+            <li>
+              <strong>The blinded judge never ran on refine.</strong> It is generation-only by
+              design (<code>getBenchResultsForFixture</code> filters <code>task_id IS NULL</code>),
+              so every number here is deterministic scoring with no model-judged component.
+            </li>
+          </ul>
+          <p className="mt-2 text-amber-900">
+            To check coverage — <strong>do not</strong> count <code>error</code> rows in{" "}
+            <code>llm_traces</code> to judge this. There are 30 permanent error rows from the FIRST attempt at this
+            sweep, which failed wholesale on an expired OAuth token before the successful re-run
+            (02:55&ndash;04:24 UTC on 2026-08-22; the real cells landed after). Reading those as
+            contamination would send you re-running ~$15 of calls for nothing. Ask what data
+            exists instead — and count distinct cells, not rows, since a re-run leaves two rows
+            for one cell:
+          </p>
+          <pre className="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-xs text-amber-950">
+{`SELECT model, count(DISTINCT fixture_id || '|' || task_id) AS scored
+FROM bench_results
+WHERE task_id IS NOT NULL AND composite IS NOT NULL
+GROUP BY model;`}
+          </pre>
+          <p className="mt-1 text-amber-900">
+            <strong>21 / 21 / 6</strong> is the expected result (Sonnet / Haiku / Opus). A failed
+            cell stores a row with a <em>null</em> composite rather than no row, so it is absent
+            from this count — which is exactly why counting rows overstates coverage and counting
+            scores does not.
+          </p>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Which model to pick for each LLM-backed feature, and — more importantly — which of those
+ * picks this benchmark can actually justify.
+ *
+ * The per-feature counts, latency and cost are fetched LIVE from /api/llm-traces/perf rather
+ * than written into this file. That is deliberate: a hardcoded snapshot is how the Task 9
+ * callout above ended up claiming "nothing has been swept yet" after the sweep had run, and
+ * numbers frozen in JSX rot the moment anyone runs another call. Only the judgment column is
+ * authored here, because that is the part that changes when someone benchmarks something, not
+ * when someone uses the app.
+ */
+/** The slice of /api/llm-traces/perf's per-feature stats this panel reads. Declared locally
+ *  rather than imported: the endpoint serves the Perf Dashboard, and coupling this read-only
+ *  panel to that module's internals would make a dashboard refactor break /bench. */
+interface PerfStat {
+  avg: number | null;
+  median: number | null;
+  p95: number | null;
+}
+interface PerfFeature {
+  type: string;
+  count: number;
+  durationMs: PerfStat;
+  costUsd: PerfStat;
+}
+
+const FEATURE_GUIDANCE: Record<
+  string,
+  { evidence: string; measured: boolean; pick: string; why: string }
+> = {
+  chat: {
+    evidence: "Measured — 42 cells, Sonnet vs Haiku",
+    measured: true,
+    pick: "Haiku 4.5, with a caveat",
+    why: "The only evidenced call here. Zero rejected ops, restraint 7/7, ~2.2x cheaper at an identical measured latency (101s both). But the 0.970 → 0.940 composite gap rests on one run per cell, so it sits inside noise, and the one real difference (weather-appropriateness) surfaced incidentally rather than from a task built to test it. Worth a confirming sweep before making it the default: the saving is ~$0.13/turn and the downside is silently worse edits.",
+  },
+  generate: {
+    evidence: "Benchmarked, but the numbers are stale",
+    measured: false,
+    pick: "Keep Sonnet 4.5",
+    why: "Aryan's sweep scored Haiku 0.842 against Sonnet 0.959 on a much harder, unconstrained task. The refine result does NOT transfer — the failure mode there was index hallucination over large free-form output, which is exactly what generation is. Those numbers predate both the format fix and the model change, so this genuinely needs re-running.",
+  },
+  critique: {
+    evidence: "Never benchmarked",
+    measured: false,
+    pick: "Benchmark this next",
+    why: "The most expensive call in the app per invocation, on the critical path, and its failures are SILENT by design — a timeout ships the trip with no quality review and nothing says so. It is plausibly the best Haiku candidate or the worst and there is no data either way: a weak critique that misses problems is worse than no critique, because it manufactures false assurance.",
+  },
+  context: {
+    evidence: "Never benchmarked",
+    measured: false,
+    pick: "Likely Haiku",
+    why: "Short, factual, low-stakes output. Most of its cost is not the work — it is the CLI's ~32k-token baseline system prompt, which every call pays regardless of model. Inference from task shape, not measurement.",
+  },
+  "place-detail": {
+    evidence: "Never benchmarked",
+    measured: false,
+    pick: "Likely Haiku",
+    why: "The shortest output of any feature and the highest call volume. Cheap per call, so the absolute saving is small, but the task shape (a few factual sentences about one place) is the least likely to need a larger model. Inference, not measurement.",
+  },
+  rebalance: {
+    evidence: "Never benchmarked (and n is tiny)",
+    measured: false,
+    pick: "Probably follows Chat Edit",
+    why: "Structurally the closest thing to a refine patch — it rewrites remaining days against a changed budget. If the chat finding holds, this should inherit it. Too few calls recorded to say anything from the data itself.",
+  },
+};
+
+function ModelGuidance() {
+  const [features, setFeatures] = useState<PerfFeature[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/llm-traces/perf")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setFeatures(d.features as PerfFeature[]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const rows = Object.keys(FEATURE_GUIDANCE).map((type) => ({
+    type,
+    guidance: FEATURE_GUIDANCE[type],
+    perf: features?.find((f) => f.type === type) ?? null,
+  }));
+
+  return (
+    <details className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
+      <summary className="cursor-pointer font-semibold text-stone-900">
+        Which model should each feature use?
+      </summary>
+
+      <div className="mt-3 space-y-4 leading-relaxed">
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900">
+          <p className="font-semibold">Read this before the table</p>
+          <p className="mt-1">
+            This benchmark can only answer the question for <strong>one</strong> of these features.
+            Everything else has no quality scoring at all — only latency and cost, which say nothing
+            about whether an answer was any good. Rows marked{" "}
+            <em>never benchmarked</em> are reasoning from task shape, not evidence. They are a
+            starting point for what to measure, not a decision you should ship on.
+          </p>
+          <p className="mt-2">
+            Every feature runs <code>claude-sonnet-4-5</code> today
+            (<code>src/lib/claude.ts</code>); only the bench harness and the judge override it.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-left text-stone-500">
+              <tr className="border-b border-stone-200">
+                <th className="py-1.5 pr-3">Feature</th>
+                <th className="py-1.5 pr-3">Calls</th>
+                <th className="py-1.5 pr-3">Median latency</th>
+                <th className="py-1.5 pr-3">Avg cost</th>
+                <th className="py-1.5 pr-3">Evidence</th>
+                <th className="py-1.5 pr-3">Suggestion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ type, guidance, perf }) => (
+                <tr key={type} className="border-b border-stone-100 align-top">
+                  <td className="py-1.5 pr-3 font-medium text-stone-900">
+                    {STEP_LABELS[type] ?? type}
+                  </td>
+                  <td className="py-1.5 pr-3">{perf ? perf.count : "—"}</td>
+                  <td className="py-1.5 pr-3">
+                    {perf?.durationMs.median == null
+                      ? "—"
+                      : `${Math.round(perf.durationMs.median / 1000)}s`}
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    {perf?.costUsd.avg == null ? "—" : `$${perf.costUsd.avg.toFixed(3)}`}
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <span
+                      className={
+                        guidance.measured ? "font-medium text-emerald-700" : "text-stone-500"
+                      }
+                    >
+                      {guidance.evidence}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3 font-medium text-stone-900">{guidance.pick}</td>
+                </tr>
+              ))}
+              <tr className="border-b border-stone-100 align-top text-stone-400">
+                <td className="py-1.5 pr-3 font-medium text-stone-600">Element Edit</td>
+                <td className="py-1.5 pr-3" colSpan={5}>
+                  Dead code — the route accepts <code>mode: &quot;element&quot;</code> but nothing in
+                  the app ever sends it, so it has zero traces. Wire it up or delete it; do not
+                  benchmark it.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="mt-1 text-xs text-stone-500">
+            Calls, latency and cost are live from <code>/api/llm-traces/perf</code> — the same
+            source <code>/backend</code>&apos;s Perf Dashboard reads, so the two always agree.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {rows.map(({ type, guidance }) => (
+            <div key={type}>
+              <p className="font-medium text-stone-900">
+                {STEP_LABELS[type] ?? type} — {guidance.pick}
+              </p>
+              <p className="text-stone-700">{guidance.why}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-md border border-stone-300 bg-white p-3">
+          <p className="font-semibold text-stone-900">
+            What it costs to extend this benchmark to the rest
+          </p>
+          <p className="mt-1">
+            The harness is hardwired to two task shapes: whole-itinerary generation and a refine
+            patch. Scoring critique or context is not a matter of running more calls — each needs
+            its own scorer family, the way refine needed one. That is the real cost of answering
+            the four unmeasured rows above, and it is why they are still unmeasured.
+          </p>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+/**
+ * "Is anything running right now, and how long has it been going" — sourced from the DB via
+ * `snap.pending`, not from this tab's own `busy` state. That is deliberate: `busy` only ever
+ * reflects a click made in this exact tab, and stays empty for the whole duration of a sweep
+ * driven from a script or curl, which is precisely how the Task 9 sweep ran with nobody watching
+ * /bench able to see it was in progress.
+ *
+ * Ticks its own elapsed time locally rather than waiting on the next 8s poll, so "started 3s ago"
+ * doesn't sit frozen at "started 0s ago" for most of that window.
+ */
+function PendingCallBanner({ pending }: { pending: Snapshot["pending"] }) {
+  // `now` is read from state, updated inside the effect — never called directly in the render
+  // body — so the render itself stays pure per React's rules (Date.now() is impure) while the
+  // displayed elapsed time still ticks once a second.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (pending.length === 0) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [pending.length]);
+
+  if (pending.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+      <p className="font-semibold">
+        {pending.length} call{pending.length === 1 ? "" : "s"} in progress right now
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {pending.map((p) => {
+          const elapsedS = Math.max(0, Math.round((now - new Date(p.createdAt).getTime()) / 1000));
+          return (
+            <li key={p.id}>
+              <code>{p.type}</code> on <code>{p.model}</code>
+              {p.destination ? ` — ${p.destination}` : ""} — running {elapsedS}s
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-1 text-xs text-blue-700">
+        This does not depend on you having started it — it reads live from the database, so a
+        sweep run from another tab or a script shows up here too.
+      </p>
+    </div>
+  );
+}
+
 export default function BenchConsole() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
+  // Defaults to "generate" so the page opens exactly as it always has.
+  const [callType, setCallType] = useState<"generate" | "refine">("generate");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Mirrors the snapshot's `refineCells` — the server is authoritative (see applySnapshot).
+  // Written optimistically on a run-cell POST purely to avoid a visible gap before the next
+  // snapshot lands.
+  const [refineCells, setRefineCells] = useState<RefineCell[]>([]);
 
   const fetchSnapshot = useCallback(async (): Promise<Snapshot | null> => {
     const res = await fetch("/api/bench");
-    return res.ok ? ((await res.json()) as Snapshot) : null;
+    if (!res.ok) return null;
+    return (await res.json()) as Snapshot;
   }, []);
 
   const applySnapshot = useCallback((data: Snapshot) => {
     setSnap(data);
+    // The server is authoritative. Refine cells are persisted in `bench_results` and come back
+    // on every snapshot, so there is nothing local worth preserving across a load — and keeping
+    // local state on top actively broke two things: "Clear results" appeared to do nothing
+    // (deleted rows kept rendering from the stale local copy forever), and a re-run in another
+    // tab could never overwrite what this tab already held.
+    //
+    // This used to merge `prev` over `data.refineCells` to keep a POST response that landed
+    // before a reload. That case no longer exists: `runCells` awaits `load()` after every cell,
+    // so the snapshot has already caught up by the time this runs.
+    setRefineCells(data.refineCells);
     // Prefer a trip that already has results — landing on an empty drill-down when other trips
     // have output makes the page look broken on load.
     setSelectedFixture((current) => {
@@ -119,9 +591,19 @@ export default function BenchConsole() {
     };
   }, [fetchSnapshot, applySnapshot]);
 
+  // Polls regardless of whether THIS tab is running anything — that is the whole point. A
+  // client-driven sweep already calls load() after every cell, so this is redundant for the tab
+  // that clicked the button; it is the only way a second tab, or Zaid watching while Aryan runs a
+  // sweep from a script, ever sees progress without a manual reload. 8s: fast enough that a
+  // 90-400s cell doesn't feel static, cheap enough that it's a non-issue on a dev-only page.
+  useEffect(() => {
+    const id = setInterval(() => void load(), 8000);
+    return () => clearInterval(id);
+  }, [load]);
+
   /** Cells run one request at a time — a real generation is ~90-400s, far past any batch timeout. */
   const runCells = useCallback(
-    async (pairs: { fixtureId: string; model: string }[], label: string) => {
+    async (pairs: { fixtureId: string; model: string; taskId?: string }[], label: string) => {
       setBusy(label);
       setError(null);
       setProgress({ done: 0, total: pairs.length });
@@ -130,11 +612,26 @@ export default function BenchConsole() {
           const res = await fetch("/api/bench", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            // `taskId` omitted entirely when absent (JSON.stringify drops `undefined`), so the
+            // generation path's request body is byte-identical to before this task.
             body: JSON.stringify({ action: "run-cell", ...pair }),
           });
+          const body = await res.json().catch(() => ({}));
           if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            setError(`${pair.model} on ${pair.fixtureId}: ${body.error ?? res.statusText}`);
+            setError(
+              `${pair.model} on ${pair.fixtureId}${pair.taskId ? ` (${pair.taskId})` : ""}: ${body.error ?? res.statusText}`
+            );
+          } else if (pair.taskId && body.cell) {
+            // Optimistic paint only. `load()` below re-fetches the snapshot, which is
+            // authoritative and includes this cell — this just avoids a blank row for the
+            // second or so between the POST resolving and that snapshot landing.
+            const cell = body.cell as RefineCell;
+            setRefineCells((prev) => [
+              ...prev.filter(
+                (c) => !(c.fixtureId === cell.fixtureId && c.taskId === cell.taskId && c.model === cell.model)
+              ),
+              cell,
+            ]);
           }
         } catch (err) {
           setError(err instanceof Error ? err.message : "request failed");
@@ -150,6 +647,17 @@ export default function BenchConsole() {
 
   const runFullSweep = () => {
     if (!snap) return;
+    if (callType === "refine") {
+      void runCells(
+        snap.fixtures.flatMap((f) =>
+          (snap.refineTasks[f.id] ?? []).flatMap((t) =>
+            snap.models.map((m) => ({ fixtureId: f.id, model: m.id, taskId: t.id }))
+          )
+        ),
+        "full refine sweep"
+      );
+      return;
+    }
     void runCells(
       snap.fixtures.flatMap((f) => snap.models.map((m) => ({ fixtureId: f.id, model: m.id }))),
       "full sweep"
@@ -158,6 +666,18 @@ export default function BenchConsole() {
 
   const runOneTrip = () => {
     if (!snap || !selectedFixture) return;
+    if (callType === "refine") {
+      const tasks = selectedTaskId
+        ? (snap.refineTasks[selectedFixture] ?? []).filter((t) => t.id === selectedTaskId)
+        : snap.refineTasks[selectedFixture] ?? [];
+      void runCells(
+        tasks.flatMap((t) =>
+          snap.models.map((m) => ({ fixtureId: selectedFixture, model: m.id, taskId: t.id }))
+        ),
+        "one trip (refine)"
+      );
+      return;
+    }
     void runCells(
       snap.models.map((m) => ({ fixtureId: selectedFixture, model: m.id })),
       "one trip"
@@ -281,6 +801,35 @@ export default function BenchConsole() {
     return snap.models.filter((m) => !have.has(m.id));
   }, [snap, selectedFixture, fixtureCells]);
 
+  /** Refine tasks for the currently selected trip — the picker's source list. */
+  const refineTasksForFixture = useMemo(() => {
+    if (!snap || !selectedFixture) return [];
+    return snap.refineTasks[selectedFixture] ?? [];
+  }, [snap, selectedFixture]);
+
+  /** Falls back to the fixture's first task rather than needing an effect to re-sync on switch. */
+  const selectedTask = useMemo(
+    () => refineTasksForFixture.find((t) => t.id === selectedTaskId) ?? refineTasksForFixture[0] ?? null,
+    [refineTasksForFixture, selectedTaskId]
+  );
+
+  /** Locally accumulated refine cells for the selected (fixture, task), in configured model order. */
+  const taskCells = useMemo(() => {
+    if (!snap || !selectedFixture || !selectedTask) return [];
+    const order = new Map(snap.models.map((m, i) => [m.id, i]));
+    return refineCells
+      .filter((c) => c.fixtureId === selectedFixture && c.taskId === selectedTask.id)
+      .sort((a, b) => (order.get(a.model) ?? 99) - (order.get(b.model) ?? 99));
+  }, [snap, refineCells, selectedFixture, selectedTask]);
+
+  const totalRefineCells = useMemo(() => {
+    if (!snap) return 0;
+    return snap.fixtures.reduce(
+      (sum, f) => sum + (snap.refineTasks[f.id]?.length ?? 0) * snap.models.length,
+      0
+    );
+  }, [snap]);
+
   const scatterPoints = useMemo(() => {
     if (!snap) return [];
     const raw = aggregates.map((a) => ({
@@ -300,34 +849,77 @@ export default function BenchConsole() {
       }));
   }, [snap, aggregates, modelLabel, modelColor]);
 
-  if (error && !snap) return <p className="text-sm text-red-600">{error}</p>;
-  if (!snap) return <p className="text-sm text-stone-500">Loading benchmark…</p>;
+  if (error && !snap)
+    return (
+      <div className="space-y-6">
+        <BenchExplainer />
+        <ModelGuidance />
+        <p className="text-sm text-red-600">{error}</p>
+      </div>
+    );
+  if (!snap)
+    return (
+      <div className="space-y-6">
+        <BenchExplainer />
+        <ModelGuidance />
+        <p className="text-sm text-stone-500">Loading benchmark…</p>
+      </div>
+    );
 
   const hasResults = snap.cells.length > 0;
   const usesJudge = aggregates.some((a) => a.meanJudgeOverall !== null);
 
   return (
     <div className="space-y-6">
+      <BenchExplainer />
+      <ModelGuidance />
+      <PendingCallBanner pending={snap.pending} />
+
       {/* --- controls ------------------------------------------------------------------ */}
       <section className="rounded-lg border border-stone-200 bg-white p-4">
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center rounded-md border border-stone-300 p-0.5 text-sm">
+            <button
+              onClick={() => setCallType("generate")}
+              className={`rounded px-2 py-1 ${
+                callType === "generate" ? "bg-stone-900 text-white" : "text-stone-600"
+              }`}
+            >
+              Generate
+            </button>
+            <button
+              onClick={() => setCallType("refine")}
+              className={`rounded px-2 py-1 ${
+                callType === "refine" ? "bg-stone-900 text-white" : "text-stone-600"
+              }`}
+            >
+              Refine
+            </button>
+          </div>
           <button
             onClick={runFullSweep}
-            disabled={busy !== null}
+            disabled={busy !== null || (callType === "refine" && totalRefineCells === 0)}
             className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
           >
-            Run full sweep ({snap.fixtures.length} trips × {snap.models.length} models)
+            {callType === "refine"
+              ? `Run full refine sweep (${snap.fixtures.length} trips × tasks × ${snap.models.length} models = ${totalRefineCells} cells)`
+              : `Run full sweep (${snap.fixtures.length} trips × ${snap.models.length} models)`}
           </button>
           <button
             onClick={runOneTrip}
-            disabled={busy !== null || !selectedFixture}
+            disabled={
+              busy !== null ||
+              !selectedFixture ||
+              (callType === "refine" && refineTasksForFixture.length === 0)
+            }
             className="rounded-md border border-stone-300 px-3 py-1.5 text-sm disabled:opacity-40"
           >
             Run selected trip only
           </button>
           <button
             onClick={runJudge}
-            disabled={busy !== null || fixtureCells.length === 0}
+            disabled={busy !== null || fixtureCells.length === 0 || callType === "refine"}
+            title={callType === "refine" ? "The judge grades generations only" : undefined}
             className="rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-900 disabled:opacity-40"
           >
             Run blinded judge on selected trip
@@ -420,7 +1012,7 @@ export default function BenchConsole() {
         </ul>
       </section>
 
-      {!hasResults ? (
+      {callType === "generate" && (!hasResults ? (
         <p className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
           No results yet. Run a single trip first to sanity-check the metrics before scaling up.
         </p>
@@ -650,7 +1242,133 @@ export default function BenchConsole() {
             </section>
           )}
         </>
-      )}
+      ))}
+
+      {/* --- refine aggregate, per model --------------------------------------------
+          Generation's equivalent lives just above, gated the same way. Without this, Refine
+          mode showed nothing at the top of the page at all — the drill-down below requires
+          picking one fixture and one task first, so a first-time visitor landed on an
+          apparently empty page with real results sitting two clicks away. Summarizes across
+          EVERY fixture and task a model has run, not just the selected one. */}
+      {callType === "refine" &&
+        (refineCells.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
+            No refine results yet. Pick a trip and a task below, then run a model.
+          </p>
+        ) : (
+          <section className="rounded-lg border border-stone-200 bg-white p-4">
+            <h2 className="text-sm font-medium text-stone-900">Refine aggregate, per model</h2>
+            <p className="text-xs text-stone-500">
+              Every cell this model has run, across every trip and task.{" "}
+              <strong className="text-stone-700">
+                &Delta; vs base is signed — negative means the edit made the trip worse.
+              </strong>{" "}
+              guardrail &Delta; is the opposite sign convention: negative there means fewer
+              problems, i.e. better.
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-stone-500">
+                  <tr className="border-b border-stone-200">
+                    <th className="py-1.5 pr-3">Model</th>
+                    <th className="py-1.5 pr-3">Scored cells</th>
+                    <th className="py-1.5 pr-3">Composite avg</th>
+                    <th className="py-1.5 pr-3">measuredGroups avg</th>
+                    <th className="py-1.5 pr-3">Ops emitted / rejected</th>
+                    <th className="py-1.5 pr-3">Restraint held</th>
+                    <th className="py-1.5 pr-3">Guardrail &Delta; avg</th>
+                    <th className="py-1.5 pr-3">Avg latency</th>
+                    <th className="py-1.5 pr-3">Avg cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snap.models.map((m) => {
+                    const cells = refineCells.filter((c) => c.model === m.id);
+                    if (cells.length === 0) {
+                      return (
+                        <tr key={m.id} className="border-b border-stone-100 text-stone-400">
+                          <td className="py-1.5 pr-3 font-medium text-stone-700">{modelLabel(m.id)}</td>
+                          <td className="py-1.5 pr-3" colSpan={8}>
+                            not run yet
+                          </td>
+                        </tr>
+                      );
+                    }
+                    // Rows and SCORES differ: a failed cell stores a row with a null composite
+                    // and a null `patch`. EVERY metric below must be computed over `scored`, not
+                    // over `cells` — mixing them is how the Opus row came to claim "restraint
+                    // held 3/3" when one of those three was an auth failure that never answered.
+                    // A dead call emits zero ops, which is indistinguishable from a deliberate
+                    // no-op unless failures are excluded outright.
+                    const scored = cells.filter(
+                      (c): c is RefineCell & { scores: { patch: NonNullable<RefineCell["scores"]["patch"]> } } =>
+                        c.scores.patch !== null && c.composite !== null
+                    );
+                    const composites = scored.map((c) => c.composite).filter((v): v is number => v !== null);
+                    const failedCount = cells.length - scored.length;
+                    const opsEmitted = scored.reduce((s, c) => s + c.scores.patch.opsEmitted, 0);
+                    const opsRejected = scored.reduce((s, c) => s + c.scores.patch.opsRejected, 0);
+                    // "Restraint" only means something on a task the fixture declares as
+                    // opsExpected:false ("is day 1 too packed?") — scoring it on every task would
+                    // count a normal, correct edit as a restraint failure.
+                    const restraintCells = scored.filter(
+                      (c) =>
+                        snap.refineTasks[c.fixtureId]?.find((t) => t.id === c.taskId)?.expect
+                          .opsExpected === false
+                    );
+                    const restraintHeld = restraintCells.filter((c) => c.scores.patch.restraint).length;
+                    const guardrailDeltas = scored.map((c) => c.scores.patch.guardrailDelta);
+                    const latencies = scored
+                      .map((c) => c.scores.operational.latencyMs)
+                      .filter((v): v is number => v !== null);
+                    const costs = scored
+                      .map((c) => c.scores.operational.costUsd)
+                      .filter((v): v is number => v !== null);
+                    const avg = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
+                    const measuredGroupsAvg = avg(scored.map((c) => c.scores.measuredGroups));
+                    const compositeAvg = avg(composites);
+                    const guardrailAvg = avg(guardrailDeltas);
+                    const latencyAvg = avg(latencies);
+                    const costAvg = avg(costs);
+                    return (
+                      <tr key={m.id} className="border-b border-stone-100">
+                        <td className="py-1.5 pr-3 font-medium text-stone-900">{modelLabel(m.id)}</td>
+                        <td className="py-1.5 pr-3">
+                          {composites.length}
+                          {failedCount > 0 && (
+                            <span className="text-red-700"> (+{failedCount} failed)</span>
+                          )}
+                        </td>
+                        <td className="py-1.5 pr-3">{fmtNum(compositeAvg, 3)}</td>
+                        <td className="py-1.5 pr-3">{fmtNum(measuredGroupsAvg, 1)}/5</td>
+                        <td className="py-1.5 pr-3">
+                          {opsEmitted} /{" "}
+                          <span className={opsRejected > 0 ? "text-red-700" : ""}>{opsRejected}</span>
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          {restraintCells.length === 0 ? "—" : `${restraintHeld}/${restraintCells.length}`}
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          <span
+                            className={
+                              guardrailAvg !== null && guardrailAvg > 0 ? "text-red-700" : "text-emerald-700"
+                            }
+                          >
+                            {guardrailAvg === null ? "—" : `${guardrailAvg > 0 ? "+" : ""}${guardrailAvg.toFixed(2)}`}
+                          </span>
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          {latencyAvg === null ? "—" : `${Math.round(latencyAvg / 1000)}s`}
+                        </td>
+                        <td className="py-1.5 pr-3">{costAvg === null ? "—" : `$${costAvg.toFixed(3)}`}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ))}
 
       {/* --- drill-down ----------------------------------------------------------------- */}
       <section className="rounded-lg border border-stone-200 bg-white p-4">
@@ -690,6 +1408,30 @@ export default function BenchConsole() {
           })}
         </div>
 
+        {callType === "refine" && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {refineTasksForFixture.length === 0 ? (
+              <p className="text-xs text-stone-400">No refine tasks defined for this trip.</p>
+            ) : (
+              refineTasksForFixture.map((t) => {
+                const active = selectedTask?.id === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedTaskId(t.id)}
+                    title={t.covers}
+                    className={`rounded border px-2 py-1 text-xs ${
+                      active ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 text-stone-600"
+                    }`}
+                  >
+                    {t.id}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
+
         {(() => {
           const fixture = snap.fixtures.find((f) => f.id === selectedFixture);
           if (!fixture) return null;
@@ -716,7 +1458,7 @@ export default function BenchConsole() {
                 )}
               </p>
               {fixture.notes.length > 0 && (
-                <details className="mt-1 text-[11px] text-amber-800">
+                <details className="mt-1 text-xs text-amber-800">
                   <summary className="cursor-pointer">
                     {fixture.notes.length} degraded/flagged source(s) in this trip&apos;s data
                   </summary>
@@ -731,7 +1473,7 @@ export default function BenchConsole() {
           );
         })()}
 
-        {missingModels.length > 0 && (
+        {callType === "generate" && missingModels.length > 0 && (
           <div className="mb-3 rounded border border-dashed border-stone-300 bg-stone-50 p-3">
             <p className="text-xs text-stone-600">
               {fixtureCells.length === 0
@@ -771,7 +1513,7 @@ export default function BenchConsole() {
           </div>
         )}
 
-        {fixtureCells.length === 0 ? null : (
+        {callType === "generate" && fixtureCells.length > 0 && (
           <>
             <div className="mb-4 overflow-x-auto">
               <table className="w-full text-xs">
@@ -888,6 +1630,23 @@ export default function BenchConsole() {
             <OutputColumns cells={fixtureCells} label={modelLabel} color={modelColor} />
           </>
         )}
+
+        {callType === "refine" && selectedFixture && selectedTask && (
+          <RefineDrillDown
+            models={snap.models}
+            fixtureId={selectedFixture}
+            task={selectedTask}
+            cells={taskCells}
+            busy={busy}
+            label={modelLabel}
+            onRunOne={(model) =>
+              void runCells(
+                [{ fixtureId: selectedFixture, model, taskId: selectedTask.id }],
+                `${modelLabel(model)} · ${selectedTask.id}`
+              )
+            }
+          />
+        )}
       </section>
     </div>
   );
@@ -971,11 +1730,11 @@ function Callouts({ cells, label }: { cells: BenchCellWithJson[]; label: (id: st
         <div key={cell.model} className="rounded border border-stone-200 p-2">
           <p className="text-xs font-medium text-stone-800">{label(cell.model)}</p>
           {items.length === 0 ? (
-            <p className="text-[11px] text-emerald-700">Clean on all five added checks.</p>
+            <p className="text-xs text-emerald-700">Clean on all five added checks.</p>
           ) : (
             <ul className="mt-1 space-y-0.5">
               {items.map((item, i) => (
-                <li key={i} className="text-[11px] text-stone-700">
+                <li key={i} className="text-xs text-stone-700">
                   <span className={`mr-1.5 rounded px-1 text-[10px] ${STYLE[item.kind]}`}>
                     {item.kind}
                   </span>
@@ -1043,6 +1802,234 @@ function OutputColumns({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// --- refine mode --------------------------------------------------------------------------------
+
+/**
+ * Composite-group delta: `after - before` per weighted group, so NEGATIVE MEANS THE PATCH MADE THE
+ * TRIP WORSE. This is the opposite of `PerfDashboard`'s convention elsewhere in this codebase
+ * (lower latency is good, so it greens negatives) — carrying that habit here would invert what the
+ * benchmark says, so colour and label are made explicit at every use.
+ */
+function fmtGroupDelta(v: number | null): string {
+  if (v === null) return "—";
+  return `${v > 0 ? "+" : ""}${v.toFixed(3)}`;
+}
+function groupDeltaClass(v: number | null): string {
+  if (v === null) return "text-stone-400";
+  if (v < 0) return "text-red-700 font-semibold";
+  if (v > 0) return "text-emerald-700 font-semibold";
+  return "text-stone-600";
+}
+
+/**
+ * Guardrail-violation delta: `after - before` violation count, so negative is the IMPROVEMENT here
+ * — the opposite sign convention from the composite-group deltas rendered right beside it.
+ */
+function fmtGuardrailDelta(v: number): string {
+  return `${v > 0 ? "+" : ""}${v}`;
+}
+function guardrailDeltaClass(v: number): string {
+  if (v < 0) return "text-emerald-700 font-semibold";
+  if (v > 0) return "text-red-700 font-semibold";
+  return "text-stone-600";
+}
+
+/**
+ * The refine sweep's per-task table: every model's patch against the fixture's frozen
+ * `baseItinerary`, scored as a delta rather than an absolute (`RefineCellScores` in
+ * src/lib/bench/types.ts). Cells only ever arrive through direct POST responses — there is no
+ * persisted snapshot of refine results the way generation cells have one — so an empty `cells`
+ * array means nothing has been run this session, not that nothing exists.
+ */
+function RefineDrillDown({
+  models,
+  fixtureId,
+  task,
+  cells,
+  busy,
+  label,
+  onRunOne,
+}: {
+  models: BenchModel[];
+  fixtureId: string;
+  task: RefineTaskSummary;
+  cells: RefineCell[];
+  busy: string | null;
+  label: (id: string) => string;
+  onRunOne: (model: string) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-3 rounded border border-stone-200 bg-stone-50 p-2 text-xs text-stone-600">
+        <p>
+          <span className="font-medium text-stone-800">Traveler says:</span> &ldquo;{task.message}
+          &rdquo;{task.dayIndex !== undefined && ` (day ${task.dayIndex + 1} focused)`}
+        </p>
+        <p className="mt-1">
+          {task.covers} · expects{" "}
+          <strong>{task.expect.opsExpected ? "an edit" : "an answer, no edit"}</strong>
+          {task.expect.allowedDays &&
+            ` · allowed days: ${task.expect.allowedDays.map((d) => d + 1).join(", ")}`}
+        </p>
+      </div>
+
+      <div className="mb-3 flex flex-wrap gap-2">
+        {models.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => onRunOne(m.id)}
+            disabled={busy !== null}
+            className="rounded-md border border-stone-300 px-2 py-1.5 text-xs disabled:opacity-40"
+          >
+            Run {m.label} on this task
+          </button>
+        ))}
+      </div>
+
+      {cells.length === 0 ? (
+        <p className="rounded border border-dashed border-stone-300 p-4 text-center text-xs text-stone-500">
+          No refine results yet for {fixtureId} · {task.id}. Run a model above.
+        </p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-stone-500">
+            <strong className="text-stone-700">Δ vs base (negative = worse).</strong> Each delta
+            below is <code>after − before</code> for that weighted group — the opposite sign
+            convention from <code>PerfDashboard</code>&apos;s latency colouring elsewhere in this
+            app, where lower is good. <strong className="text-stone-700">Measured</strong> counts
+            how many of the five groups were non-null: <code>refineComposite</code> is deliberately
+            ungated, so a composite built from one group looks identical to one built from five
+            unless this column is read alongside it.
+          </p>
+          <div className="mb-4 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left text-stone-500">
+                <tr className="border-b border-stone-200">
+                  <th className="py-1.5 pr-3">Model</th>
+                  <th className="py-1.5 pr-3">Composite</th>
+                  <th
+                    className="py-1.5 pr-3"
+                    title="How many of the five delta groups were measurable — refineComposite has no minimum, so this is what makes cells comparable"
+                  >
+                    Measured
+                  </th>
+                  {RADAR_AXES.map((a) => (
+                    <th key={a.key} className="py-1.5 pr-3" title="Δ vs base (negative = worse)">
+                      Δ {a.label}
+                    </th>
+                  ))}
+                  <th className="py-1.5 pr-3">Ops emit/rej</th>
+                  <th className="py-1.5 pr-3" title="Did emitting-or-not match what the task asked for">
+                    Restraint
+                  </th>
+                  <th
+                    className="py-1.5 pr-3"
+                    title="Guardrail violations after − before; negative is the improvement here (opposite sign from the Δ columns)"
+                  >
+                    Guardrail Δ
+                  </th>
+                  <th className="py-1.5 pr-3">Latency</th>
+                  <th className="py-1.5 pr-3">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cells.map((c) => (
+                  <tr key={c.model} className="border-b border-stone-100">
+                    <td className="py-1.5 pr-3 font-medium text-stone-900">{label(c.model)}</td>
+                    <td className="py-1.5 pr-3 font-medium">{fmtNum(c.composite, 3)}</td>
+                    <td className="py-1.5 pr-3">{c.scores.measuredGroups}/5</td>
+                    {RADAR_AXES.map((a) => (
+                      <td
+                        key={a.key}
+                        className={`py-1.5 pr-3 ${groupDeltaClass(c.scores.delta[a.key])}`}
+                      >
+                        {fmtGroupDelta(c.scores.delta[a.key])}
+                      </td>
+                    ))}
+                    {/* A failed call has no patch to describe. Rendering dashes rather than
+                        zeroes matters: a dead call emits zero ops, which would otherwise read
+                        as a model that deliberately and correctly declined to edit. */}
+                    <td className="py-1.5 pr-3">
+                      {c.scores.patch ? `${c.scores.patch.opsEmitted}/${c.scores.patch.opsRejected}` : "—"}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 font-medium ${
+                        !c.scores.patch
+                          ? "text-stone-400"
+                          : c.scores.patch.restraint
+                            ? "text-emerald-700"
+                            : "text-red-700"
+                      }`}
+                    >
+                      {!c.scores.patch ? "—" : c.scores.patch.restraint ? "yes" : "no"}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 ${
+                        c.scores.patch ? guardrailDeltaClass(c.scores.patch.guardrailDelta) : ""
+                      }`}
+                    >
+                      {c.scores.patch ? fmtGuardrailDelta(c.scores.patch.guardrailDelta) : "—"}
+                    </td>
+                    <td className="py-1.5 pr-3">{fmtMs(c.scores.operational.latencyMs)}</td>
+                    <td className="py-1.5 pr-3">
+                      {c.scores.operational.costUsd === null ? "—" : fmtUsd(c.scores.operational.costUsd)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <details className="text-xs">
+            <summary className="cursor-pointer text-stone-600">Patch detail per model</summary>
+            <div className="mt-2 space-y-3">
+              {cells.map((c) => (
+                <div key={c.model} className="rounded border border-stone-200 p-2">
+                  <p className="font-medium text-stone-800">{label(c.model)}</p>
+                  {!c.scores.patch ? (
+                    <p className="mt-1 text-stone-500">
+                      Call failed — no patch to score.{" "}
+                      {c.scores.operational.errorMessage ?? "no error recorded"}
+                    </p>
+                  ) : (
+                  <p className="mt-1 text-stone-600">
+                    opsEmitted {c.scores.patch.opsEmitted} · opsRejected {c.scores.patch.opsRejected}{" "}
+                    · applied {fmtPct(c.scores.patch.applied)} · scope {fmtPct(c.scores.patch.scope)} ·
+                    restraint {c.scores.patch.restraint ? "yes" : "no"} · guardrails{" "}
+                    {c.scores.patch.guardrailsBefore} → {c.scores.patch.guardrailsAfter} (
+                    <span className={guardrailDeltaClass(c.scores.patch.guardrailDelta)}>
+                      {fmtGuardrailDelta(c.scores.patch.guardrailDelta)}
+                    </span>
+                    )
+                  </p>
+                  )}
+                  {c.scores.patch && c.scores.patch.rejectedReasons.length > 0 && (
+                    <ul className="ml-4 mt-1 list-disc text-red-700">
+                      {c.scores.patch.rejectedReasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {c.scores.operational.failed ? (
+                    <p className="mt-1 text-red-700">{c.scores.operational.errorMessage}</p>
+                  ) : (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-stone-500">Raw model response</summary>
+                      <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-stone-50 p-2 text-stone-700">
+                        {c.rawResponse}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        </>
+      )}
     </div>
   );
 }

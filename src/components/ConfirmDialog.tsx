@@ -70,12 +70,18 @@ export default function ConfirmDialog({
         {title}
       </h2>
       <div className="mt-2 text-sm text-muted">{body}</div>
+      {/* `min-h-11` + `inline-flex items-center` on both buttons, replacing `py-2`. They were 37px
+          tall, and one of them permanently deletes a trip — the app's own rule is 44px reached with
+          height rather than by growing type, and a destructive confirm is the last control that
+          should be hard to hit. `py-2` is dropped rather than kept alongside: a min-height plus
+          padding would just be two sources for one dimension. `inline-flex` because `min-height` on
+          a plain button leaves the label at the top of the taller box. */}
       <div className="mt-5 flex justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
           disabled={pending}
-          className="rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/10 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+          className="inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium text-muted transition-colors hover:bg-white/10 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
         >
           Cancel
         </button>
@@ -86,7 +92,7 @@ export default function ConfirmDialog({
           type="button"
           onClick={onConfirm}
           disabled={pending}
-          className="rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
+          className="inline-flex min-h-11 items-center rounded-full bg-red-600 px-4 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
         >
           {pending ? "Deleting…" : confirmLabel}
         </button>

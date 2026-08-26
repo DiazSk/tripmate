@@ -23,6 +23,7 @@ const GROUPS: { value: CustomTripInput["group"]; label: string }[] = [
   { value: "solo", label: "Solo" },
   { value: "couple", label: "Couple" },
   { value: "family_with_kids", label: "Family with kids" },
+  { value: "other", label: "Other" },
 ];
 const STYLES: { value: CustomTripInput["explorerStyle"]; label: string }[] = [
   { value: "packed", label: "Packed" },
@@ -105,7 +106,9 @@ export default function BenchTripForm({
   const [starred, setStarred] = useState<string[]>(["Culture & History", "Food"]);
   const [customPois, setCustomPois] = useState("");
   const [arrivalTime, setArrivalTime] = useState("");
+  const [arrivalPoint, setArrivalPoint] = useState("");
   const [departureTime, setDepartureTime] = useState("");
+  const [departurePoint, setDeparturePoint] = useState("");
   const [stayBooked, setStayBooked] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<{ field: string; detail: string }[]>([]);
@@ -149,7 +152,9 @@ export default function BenchTripForm({
         .map((s) => s.trim())
         .filter(Boolean),
       arrivalTime: arrivalTime || null,
+      arrivalPoint: arrivalPoint.trim() || null,
       departureTime: departureTime || null,
+      departurePoint: departurePoint.trim() || null,
       stayBooked: stayBooked.trim() || null,
     });
 
@@ -271,10 +276,12 @@ export default function BenchTripForm({
           <div>
             <label className={LABEL} htmlFor="bench-arrival">Arrival time (day 1)</label>
             <input id="bench-arrival" type="time" className={FIELD} value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} />
+            <input aria-label="Arrival point" className={FIELD} value={arrivalPoint} onChange={(e) => setArrivalPoint(e.target.value)} placeholder="Kansai Intl (KIX)" />
           </div>
           <div>
             <label className={LABEL} htmlFor="bench-departure">Departure time (last day)</label>
             <input id="bench-departure" type="time" className={FIELD} value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} />
+            <input aria-label="Departure point" className={FIELD} value={departurePoint} onChange={(e) => setDeparturePoint(e.target.value)} placeholder="Kansai Intl (KIX)" />
           </div>
           <div>
             <label className={LABEL} htmlFor="bench-stay">Stay already booked</label>

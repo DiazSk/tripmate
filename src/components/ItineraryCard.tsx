@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Sparkles } from "lucide-react";
-import { DayPlan, Itinerary, Stop, StopCategory, TripSummary } from "@/lib/types";
+import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
 import { useStopTour } from "@/lib/useStopTour";
 import { daySpendByCategory } from "@/lib/itinerary";
+import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
+import SplitEditor from "./SplitEditor";
 import { formatMoney } from "@/lib/format";
 import BudgetBar from "./BudgetBar";
 import DayHeader, { DayEditUpdates } from "./DayHeader";
@@ -18,6 +20,16 @@ import { devLabel } from "@/lib/devInspector";
 
 /** Ms between each stop's reveal during the post-generation stagger. */
 const REVEAL_STEP_MS = 400;
+/**
+ * The header photo's frame, in rem, mirrored from `.itinerary-hero` in globals.css.
+ *
+ * Duplicated deliberately, and only these two numbers: the collapse has to be measured in the same
+ * units the scroller reports, and a custom property reads back unresolved (`"18rem"`, not `"288px"`)
+ * unless it is registered with `@property`. Parsing them out of the computed style is the same
+ * duplication with an extra step and a silent failure mode if the unit ever changes.
+ */
+const HERO_MAX_REM = { base: 14, sm: 18 };
+const HERO_MIN_REM = 4.5;
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -29,13 +41,6 @@ import {
   PlayIcon,
   TransitIcon,
 } from "./icons";
-
-const CATEGORY_ICON: Record<StopCategory, typeof FoodIcon> = {
-  food: FoodIcon,
-  entry: EntryIcon,
-  transit: TransitIcon,
-  other: PinIcon,
-};
 
 function cityName(destination: string): string {
   return destination.split(",")[0].trim();
@@ -51,32 +56,6 @@ function BlurredPhotoLayer({ photo, tint }: { photo: string; tint: string }) {
       />
       <div aria-hidden="true" className="absolute inset-0" style={{ background: tint }} />
     </>
-  );
-}
-
-/** Desktop-only column beside the stop list. The category tile is the base layer and
- *  never unmounts; the photo resolves over it on `.value-in`, matching StopList's own
- *  StopAvatar so neither jumps whenever its Wikipedia lookup happens to land. */
-function StackedPhoto({ name, category }: { name: string; category: StopCategory }) {
-  const photo = usePlacePhoto(name);
-  const [failed, setFailed] = useState(false);
-  const Icon = CATEGORY_ICON[category] ?? PinIcon;
-
-  return (
-    <div className="relative h-24 w-full">
-      <div className="flex h-24 w-full items-center justify-center rounded-xl bg-tag-neutral-bg text-accent">
-        <Icon className="h-6 w-6" />
-      </div>
-      {photo && !failed && (
-        // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small/lazy, not worth next/image config
-        <img
-          src={photo}
-          alt=""
-          onError={() => setFailed(true)}
-          className="value-in absolute inset-0 h-24 w-full rounded-xl object-cover shadow-sm"
-        />
-      )}
-    </div>
   );
 }
 
@@ -106,10 +85,13 @@ export default function ItineraryCard({
   onLodgingActualCostChange,
   onEditDay,
   onChatDay,
+  onItineraryChange,
+  trip,
   activeDayIndex: controlledDayIndex,
   onActiveDayChange,
   animateReveal,
-  trip,
+  panelCollapsed = false,
+  onMinimize,
 }: {
   itinerary: Itinerary;
   budget: number;
@@ -120,6 +102,16 @@ export default function ItineraryCard({
   onEditDay?: (dayIndex: number, updates: DayEditUpdates) => void;
   /** Mode A — open the chat scoped to this day. */
   onChatDay?: (dayIndex: number) => void;
+  /** Enables hand-rearranging on the full-page board (opened from a day's pencil, or the
+   *  "Arrange days" button). Re-timing happens locally in `moveStop`, so a drop resolves in the
+   *  same frame — no model call. The host gets a complete itinerary back to persist. */
+  onItineraryChange?: (next: Itinerary) => void;
+  /** Needed by the arrange board for the trip's name and budget, and by the Download control for
+   *  a real database id to link to. Optional so read-only callers (which pass no `onItineraryChange`
+   *  either) needn't supply it — the Download control stays absent whenever it's missing, since
+   *  that means either the pre-save result view or the "preview" fixture, neither of which has a
+   *  real `/api/trips/:id/export` to link to. */
+  trip?: TripSummary;
   /** Optional controlled day selection. The host owns it when this page unmounts the card to
    *  show something else (a stop's detail panel) — otherwise the day would reset to 1 on the
    *  way back, since remounting reinitialises local state. Uncontrolled when omitted. */
@@ -130,9 +122,22 @@ export default function ItineraryCard({
    *  REVEAL_STEP_MS. Only ever applies to the initial day (index 0) shown on mount — switching
    *  day tabs (even mid-stagger) always shows the target day in full immediately. */
   animateReveal?: boolean;
-  /** Only present once the trip has a saved row — absent for the pre-save result view and
-   *  for the "preview" fixture, both of which have no `/api/trips/:id/export` to link to. */
-  trip?: TripSummary;
+  /**
+   * Draw the whole trip on the globe without framing any one day — set while the plan panel is
+   * collapsed and the map *is* the view.
+   *
+   * The card takes this rather than reading the panel itself because it is the only thing that
+   * knows the itinerary, and therefore the only thing that can hand the globe every day at once.
+   * Flipping it re-runs the route effect, which is what makes closing the panel pull back to the
+   * whole trip and opening it drop onto the active day again.
+   *
+   * It is handed to `showTripRoute` twice, for two different questions: as the focus (collapsed
+   * means no day is singled out) and as `panelVisible` (whether there is a panel to aim beside).
+   */
+  panelCollapsed?: boolean;
+  /** Shuts the panel to its capsule. Given, the header image grows a grab line along its top
+   *  edge — the handle belongs on the picture rather than on a bar of chrome above it. */
+  onMinimize?: () => void;
 }) {
   const [uncontrolledDayIndex, setUncontrolledDayIndex] = useState(0);
   const activeDayIndex = controlledDayIndex ?? uncontrolledDayIndex;
@@ -144,8 +149,43 @@ export default function ItineraryCard({
   const headerPhoto = usePlacePhoto(destination, "full");
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
-  const { showDayRoute, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
+  const { showTripRoute, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
+
+  /** Every day's stops in the shape the globe wants, carrying the day index the colour ramp and
+   *  the cluster labels are keyed on. Memoised because it is a dependency of the route effect —
+   *  rebuilding the array each render would redraw the whole trip on every keystroke. */
+  const routeDays = useMemo(
+    () =>
+      itinerary.days.map((d, i) =>
+        // `time` rides along only so the globe can light itself for the stop being looked at
+        // (dayPhase in mapRoute) — the geometry does not read it.
+        d.stops.map((st) => ({ lat: st.lat, lng: st.lng, name: st.name, day: i, time: st.time }))
+      ),
+    [itinerary.days]
+  );
+  /** Where this day's stops start in the flat list the map indexes hover/selection by. The panel
+   *  numbers its rows from 0 within the day, so every index crossing this boundary is shifted. */
+  const dayOffset = useMemo(
+    () => routeDays.slice(0, dayIndex).reduce((n, d) => n + d.length, 0),
+    [routeDays, dayIndex]
+  );
+  /** A flat map index expressed as a row of *this* day, or null when it belongs to another day —
+   *  which is now possible, since every day is on screen. */
+  const rowOfThisDay = (flat: number | null) => {
+    if (flat === null) return null;
+    const row = flat - dayOffset;
+    return row >= 0 && row < (routeDays[dayIndex]?.length ?? 0) ? row : null;
+  };
+  /** Which row lights up: hover wins over selection, since hover is the more recent intent. */
+  const highlightedRow = rowOfThisDay(hoveredIndex ?? activeIndex);
+  /** Which row the list scrolls to. Selection only, deliberately — see the scroll effect in
+   *  StopList for why hover must not move the list. */
+  const activeRow = rowOfThisDay(activeIndex);
+  /** Read by the one-shot stagger interval, which must not re-run when the panel opens — the
+   *  stagger is mounted once and a dep on `panelCollapsed` would restart it on every collapse. */
+  const panelCollapsedRef = useRef(panelCollapsed);
   const { playing: touring, toggle: toggleTour, stop: stopTour } = useStopTour();
+  const heroRef = useRef<HTMLDivElement>(null);
   const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const dayTabStripRef = useRef<HTMLDivElement>(null);
   const [revealedCount, setRevealedCount] = useState(animateReveal ? 0 : Infinity);
@@ -155,13 +195,130 @@ export default function ItineraryCard({
   // must defer to the stagger effect below instead of instantly revealing everything.
   const skipNextInstantRevealRef = useRef(!!animateReveal);
 
+  /** The full-page arrange board, opened by a day's edit (pencil) control.
+   *
+   * Rearranging used to happen in this list, which meant a cross-day move had to be performed
+   * against a day the traveller couldn't see: drag onto a day *tab*, hold until it opened, then
+   * drop. The board shows every day at once instead, so both ends of a move are visible for the
+   * whole gesture — and this list goes back to being purely for reading. */
+  const [boardOpen, setBoardOpen] = useState(false);
+  /** Whether this card is an editing surface at all (the host gave us a way to commit changes). */
+  const canRearrange = !!onItineraryChange;
+
+  /**
+   * The itinerary as it first arrived — straight from generation, or straight from the database.
+   *
+   * Captured once, via `useState`'s initial value rather than a ref: it is what every later
+   * version is compared against, so it must not follow the prop — and a ref cannot be read
+   * during render, which is exactly where this comparison belongs. Identity is the whole test,
+   * which works because every edit path
+   * here builds a new object (`moveStop`, `updateStop`, the refine's `revisedDays`) rather than
+   * mutating in place — the same property `onItineraryChange`'s callers already depend on.
+   */
+  const [asGenerated] = useState(itinerary);
+  /** True once the plan on screen is no longer the one that was handed over. */
+  const edited = itinerary !== asGenerated;
+
+  /**
+   * Guardrails, recomputed from the itinerary itself rather than remembered from the last drop —
+   * so they describe the plan on screen whoever last changed it.
+   *
+   * **Held back until something is actually changed.** A freshly generated plan is the model's
+   * own work, already run past the critique pass, and opening it under a row of warnings reads
+   * as "we made you something broken" — the traveler has done nothing yet and has no way to act
+   * on them. They are feedback on *your* edit: move a stop somewhere it cannot be reached in
+   * time and the warning is the answer to what you just did. The findings themselves are
+   * unchanged; only when they surface is.
+   */
+  const findings = useMemo(
+    () => (canRearrange && edited ? evaluateItinerary(itinerary, { budget }) : []),
+    [canRearrange, edited, itinerary, budget]
+  );
+
   useEffect(() => {
     activeDayRef.current = dayIndex;
   }, [dayIndex]);
 
+  /**
+   * The collapsing header: the photo compresses as the plan scrolls under it and springs back on
+   * the way up, staying pinned the whole time.
+   *
+   * Written as one CSS custom property per frame rather than React state, and that is the point —
+   * a `useState` here would re-render this card, its day list and every consumer of the map camera
+   * context on every scroll frame. `--hero-p` (0 unscrolled, 1 fully compressed) drives the
+   * height and both titles' opacity from `.itinerary-hero` in globals.css, so the whole animation
+   * is one property write against the compositor.
+   *
+   * The scroller is found rather than passed: this card sits inside `DockedPanel`'s body on the
+   * result view and the trip page, but it is also rendered on the print page, where there is no
+   * scroller at all and the header simply stays at full height. Walking up to the nearest
+   * `overflow-y: auto` ancestor keeps the card from having to know which of those it is in.
+   */
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero || !headerPhoto) return;
+    let scroller: HTMLElement | null = null;
+    for (let el = hero.parentElement; el; el = el.parentElement) {
+      const overflowY = getComputedStyle(el).overflowY;
+      if (overflowY === "auto" || overflowY === "scroll") {
+        scroller = el;
+        break;
+      }
+    }
+    if (!scroller) return;
+
+    let frame = 0;
+    /**
+     * One pixel of scroll gives up one pixel of header, which is what keeps the two in step.
+     *
+     * A shorter range was tried and is wrong in a way that is invisible until you scroll: the
+     * header is in flow, so shrinking it also lifts everything below it. Collapse faster than the
+     * scroll and the plan rushes up to meet a header that is still eating itself.
+     */
+    const collapseRange = () => {
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const max = window.innerWidth >= 640 ? HERO_MAX_REM.sm : HERO_MAX_REM.base;
+      return (max - HERO_MIN_REM) * rem;
+    };
+    let range = collapseRange();
+    const apply = () => {
+      frame = 0;
+      const progress = Math.min(1, Math.max(0, scroller.scrollTop / range));
+      hero.style.setProperty("--hero-p", progress.toFixed(3));
+    };
+    const onResize = () => {
+      range = collapseRange();
+      apply();
+    };
+    const onScroll = () => {
+      // Coalesced to one write per frame: a trackpad fires scroll events far faster than the
+      // compositor paints, and each of these touches style on an element with a photo in it.
+      if (frame === 0) frame = requestAnimationFrame(apply);
+    };
+    apply();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      if (frame !== 0) cancelAnimationFrame(frame);
+    };
+    // `dayIndex` is in here because switching days scrolls the body back to the top in the effect
+    // below; re-running re-reads that scrollTop rather than leaving a stale compressed header.
+  }, [headerPhoto, dayIndex]);
+
+  useEffect(() => {
+    panelCollapsedRef.current = panelCollapsed;
+  }, [panelCollapsed]);
+
   // Glowing pins + connecting arc for whichever day is active, redrawn on every day-tab
   // switch — including switching away from day 1 mid-stagger, which is how leaving the
   // animation early works: the new day just shows in full immediately.
+  //
+  // With the panel shut there is no active day to speak of: `null` is what puts the globe into
+  // the whole-trip overview, every day drawn in its own colour with a label on each cluster.
+  // Passing `dayIndex` unconditionally here is the same as never collapsing at all — the day
+  // stays focused, the other days stay off the map, and the overview can never be reached.
   useEffect(() => {
     if (!day) return;
     if (skipNextInstantRevealRef.current) {
@@ -169,8 +326,11 @@ export default function ItineraryCard({
       return;
     }
     setRevealedCount(day.stops.length);
-    showDayRoute(day.stops.map((s) => ({ lat: s.lat, lng: s.lng, name: s.name })));
-  }, [day, showDayRoute]);
+    // `soloFocus` — picking a day in this panel means "show me this day", so the globe draws
+    // that day alone. Collapsed, the focus is null and every day is up as the trip overview.
+    // The split editor passes this false: editing needs the other days on screen.
+    showTripRoute(routeDays, panelCollapsed ? null : dayIndex, !panelCollapsed, true);
+  }, [day, dayIndex, routeDays, panelCollapsed, showTripRoute]);
 
   // Staggered reveal, played once on mount when animateReveal is true: every REVEAL_STEP_MS,
   // one more stop card mounts (with its own slide-down + typewriter, see StopRow) and its map
@@ -187,7 +347,16 @@ export default function ItineraryCard({
       }
       i += 1;
       setRevealedCount(i);
-      showDayRoute(stops.slice(0, i).map((s) => ({ lat: s.lat, lng: s.lng, name: s.name })));
+      // Skipped while the plan panel is collapsed. The stagger is a *panel* animation — cards
+      // sliding in one by one — and with the panel shut the only thing it would do is undraw
+      // and redraw day 1 a stop at a time on a map that already shows it whole. The reveal
+      // still advances, so opening the panel finds it played out.
+      if (!panelCollapsedRef.current) {
+        showTripRoute(
+          routeDays.map((d, k) => (k === 0 ? d.slice(0, i) : d)),
+          0
+        );
+      }
       if (i >= stops.length) clearInterval(id);
     }, REVEAL_STEP_MS);
     return () => clearInterval(id);
@@ -213,12 +382,22 @@ export default function ItineraryCard({
   // itself — on mount it pushed the panel down ~100px and hid the surface's own top row.
   // Setting `scrollLeft` on the one element that should move touches nothing else, and
   // centring reads better than "nearest" on a many-day row.
+  //
+  // Measured from bounding rects rather than `tab.offsetLeft`. `offsetLeft` is relative to the
+  // nearest *positioned* ancestor, and wrapping each tab in a `relative` drop zone made that
+  // wrapper the offset parent — so every tab reported ~0 and the strip scrolled to the start
+  // instead of to the active day. On a 7-day trip that left days 5-7 permanently off-screen: the
+  // arrows moved the selection but the strip never followed. Rects are independent of layout
+  // ancestry, so this can't be re-broken by wrapping the tabs in something else.
   useEffect(() => {
     const strip = dayTabStripRef.current;
     const tab = dayTabRefs.current[dayIndex];
     if (!strip || !tab) return;
+    const stripBox = strip.getBoundingClientRect();
+    const tabBox = tab.getBoundingClientRect();
+    const offsetWithinStrip = tabBox.left - stripBox.left + strip.scrollLeft;
     strip.scrollTo({
-      left: tab.offsetLeft - (strip.clientWidth - tab.clientWidth) / 2,
+      left: offsetWithinStrip - (strip.clientWidth - tabBox.width) / 2,
       behavior: "smooth",
     });
   }, [dayIndex]);
@@ -235,10 +414,11 @@ export default function ItineraryCard({
 
   // Scoped to day 1 only — see the `animateReveal` prop doc above.
   const revealingStops = !!animateReveal && dayIndex === 0;
+  // The shown day's findings, plus trip-wide ones (budget), which belong on whatever day is up.
+  const dayFindings: Guardrail[] = findings.filter(
+    (f) => f.dayIndex === dayIndex || f.dayIndex === null
+  );
   const { tiles, total } = dayBreakdown(day);
-  // Clamped to revealedCount so the column doesn't show three photos beside zero or one
-  // revealed stop mid-stagger.
-  const photoStops = day.stops.slice(0, Math.min(3, revealedCount));
   const tier = TIERS.find((t) => t.id === itinerary.tier);
   const dayCount = itinerary.days.length;
 
@@ -268,9 +448,30 @@ export default function ItineraryCard({
   const arrowStyle = { background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.15)" };
 
   return (
-    <div className="glass-itinerary overflow-hidden rounded-none sm:rounded-2xl" {...devLabel("ItineraryCard")}>
+    <div
+      // `overflow-clip`, not `overflow-hidden`: both clip the photo to the rounded corners, but
+      // `hidden` makes this element a scroll container, and a `position: sticky` child sticks to
+      // its nearest scrollport — which would be this box, which never scrolls, so the header
+      // simply would not stick. `clip` creates no scrollport, so the header sticks to the panel
+      // body it actually scrolls in.
+      className="glass-itinerary overflow-clip rounded-none sm:rounded-2xl"
+      {...devLabel("ItineraryCard")}
+    >
+      {/* The min-height is the photo's frame, so it only exists when there is a photo. The
+          header photo is a best-effort Wikipedia lookup that legitimately misses, and an
+          unconditional 14/18rem left a 288px slab of flat slate above the day badge with the
+          title marooned at its bottom edge — a reserved space for a value that isn't there,
+          which is the one thing this system says not to render. Without the photo the band
+          sizes to the title and the panel simply starts higher. */}
       <div
-        className="relative flex min-h-[14rem] flex-col justify-end overflow-hidden p-5 text-on-deep sm:min-h-[18rem] sm:p-6"
+        ref={heroRef}
+        className={`relative flex flex-col justify-end p-5 text-on-deep sm:p-6 ${
+          headerPhoto
+            ? // Sticky, and sized by `--hero-p` — see `.itinerary-hero` in globals.css and the
+              // scroll effect above. `z-20` keeps it over the day tabs sliding under it.
+              "itinerary-hero sticky top-0 z-20 overflow-hidden"
+            : ""
+        }`}
         style={{ backgroundColor: "var(--surface-deep)" }}
         {...devLabel("ItineraryCard.Header")}
       >
@@ -298,7 +499,44 @@ export default function ItineraryCard({
               "linear-gradient(to top, rgb(var(--surface-deep-rgb) / 0.95), rgb(var(--surface-deep-rgb) / 0.5) 38%, transparent 70%)",
           }}
         />
-        <div className="relative z-10 flex flex-col gap-1">
+        {headerPhoto && onMinimize && (
+          // The handle, on the photograph rather than on a bar above it. Centred at the top edge
+          // where a sheet's grab indicator belongs; the 40px-tall button around it is the hit
+          // target, and the 32x4 line is the part that reads as "this pulls away".
+          <button
+            type="button"
+            onClick={onMinimize}
+            aria-label="Show the map"
+            className="group absolute inset-x-0 top-0 z-30 flex h-10 cursor-pointer items-start justify-center pt-2 focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
+          >
+            {/* Over photography whose brightness is unknown ahead of time — a white line alone
+                vanishes against a bright sky or a gold roof — so it carries its own shadow rather
+                than relying on the scrim, which is bottom-up and reaches nothing up here. */}
+            <span
+              className="h-1 w-8 rounded-full bg-white/70 transition-colors group-hover:bg-white group-focus-visible:bg-white"
+              style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.55)" }}
+            />
+          </button>
+        )}
+        {headerPhoto && (
+          // The compact title, which is what the header *becomes*. It arrives as the large one
+          // leaves — the same trade an iOS large title makes — so the collapsed strip still says
+          // where you are and which day you are on, in one line the height of the photo it sits on.
+          <div
+            aria-hidden="true"
+            className="itinerary-hero-compact pointer-events-none absolute inset-x-0 bottom-0 z-20 flex h-full items-center gap-2 px-5 sm:px-6"
+          >
+            <span className="truncate text-sm font-semibold text-on-deep">
+              {cityName(destination)}
+            </span>
+            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent-foreground uppercase">
+              Day {dayIndex + 1}
+            </span>
+          </div>
+        )}
+        <div
+          className={`relative z-10 flex flex-col gap-1 ${headerPhoto ? "itinerary-hero-full" : ""}`}
+        >
           {/* The active day, not the trip's day count — a "where am I right now" stamp, so
               it moves with dayIndex rather than staying fixed. */}
           <span className="mb-1 inline-block w-fit -rotate-2 rounded bg-accent px-2 py-1 text-xs font-bold tracking-wide text-accent-foreground uppercase">
@@ -326,7 +564,11 @@ export default function ItineraryCard({
       </div>
 
       <div className="p-5 sm:p-6">
-        <BudgetBar days={itinerary.days} budget={budget} />
+        <BudgetBar
+          days={itinerary.days}
+          budget={budget}
+          flightCostUsd={itinerary.flightCostUsd}
+        />
       </div>
 
       <div className="flex items-center gap-2 px-5 pb-3 sm:px-6" {...devLabel("ItineraryCard.DayTabs")}>
@@ -413,20 +655,84 @@ export default function ItineraryCard({
               animateReveal={animateReveal}
               editable={editable}
               onEditDay={onEditDay}
+              // The pencil opens the full-page board rather than an inline form: renaming a day
+              // and rearranging it are the same job, and the board can do both with every day in
+              // view. `isEditing` stays false so the inline rename form never takes over the
+              // header — the board owns that now.
+              isEditing={false}
+              onEditingChange={(editing) => {
+                if (editing && canRearrange) setBoardOpen(true);
+              }}
             />
           </div>
           {/* Mode A, day-scoped. Sits beside the day header because that is the day's own
-              edit affordance — the whole-trip equivalent lives with the save/refine actions. */}
+              edit affordance — the whole-trip equivalent lives with the save/refine actions.
+
+              An icon alone did not say what it did, so the label unfurls on hover and on
+              keyboard focus. Three decisions in here are load-bearing:
+
+              The 28px wrapper holds the collapsed footprint and the button is absolutely
+              positioned inside it, anchored `right-0`. So the pill grows *leftward* out of the
+              icon, the icon itself never moves out from under the cursor, and the DayHeader
+              sibling — `min-w-0 flex-1`, i.e. free to be squeezed — is not reflowed on every
+              frame of the expansion. Growing it in flow instead would rewrap the day title
+              while the label slid out.
+
+              `max-width`, and the `grid-cols-[0fr]` -> `[1fr]` trick was tried here first and
+              does not work. `fr` is a fraction of *free* space, so it needs a definite
+              container size to resolve against; this button is absolutely positioned and
+              shrink-to-fit, so its width depends on the grid whose track depends on its width,
+              and the browser breaks that circularity by resolving the track to its minimum.
+              Measured: `grid-template-columns` computed to `6px` — the label's padding and
+              nothing else — in *both* states, so the label never appeared at all. `max-width`
+              is indifferent to container definiteness, which is what makes it the right tool
+              inside a shrink-to-fit box. Its one cost is that the transition visually finishes
+              once max-width passes the text's natural width — measured at 77px in both engines,
+              against an 88px ceiling, so the motion lands at about 88% of the 300ms. The
+              remaining 11px of slack is deliberate and is not worth reclaiming: tightening the
+              ceiling to the measured width buys an imperceptible 12% of timing and risks
+              clipping the label outright on any system whose fallback face sets wider than
+              Archivo before the webfont lands.
+
+              The 6px gap is `mr` on the label, not `gap` on the button, so one transition
+              drives both and they cannot drift apart. It has to be margin and not padding:
+              `overflow: hidden` clips *content*, and a padding box cannot shrink below its own
+              padding, so `pr-1.5` on a `max-w-0` span left 6px of dead width behind — the
+              collapsed button measured 34px instead of 28px.
+
+              The expanded chip is opaque slate, not the `bg-white/10` wash this button used to
+              take, and that is a legibility fix rather than a style choice. DayHeader is
+              `justify-between` with `WeatherBadge` pinned right, so the 83px the label needs is
+              exactly the space the weather chip occupies — measured overlap, 75px. Expanding in
+              flow instead is worse, not better: DayHeader is `flex-wrap`, so squeezing it wraps
+              the badge onto a second line and the whole row jumps taller. So the pill covers the
+              badge for as long as the pointer is on it, and it has to do that opaquely, over a
+              `.glass-itinerary` backdrop that is 0.62 slate over a live and often bright map.
+              The control shadow and a hairline ring lift it off the chip underneath — without
+              them its left edge cut the weather text mid-glyph with no separation, which read as
+              a clipping bug rather than as one object in front of another. `ring` rather than
+              `border` because a border would widen the collapsed 28px footprint.
+
+              The label is not a second accessible name: `aria-label` leads with the same words
+              it renders, so the accessible name contains the visible one (WCAG Label in Name)
+              while still carrying the day. The old `title` is gone — a native tooltip repeating
+              a label that is now visible on hover is noise, and it would have faded in on top
+              of the expanded pill a second later. Reduced motion needs nothing here; the
+              blanket rule in globals.css collapses both transitions to 0.01ms. */}
           {onChatDay && (
-            <button
-              type="button"
-              onClick={() => onChatDay(dayIndex)}
-              aria-label={`Refine day ${dayIndex + 1} with AI`}
-              title="Refine this day with AI"
-              className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-white/10 hover:text-foreground"
-            >
-              <Sparkles className="h-4 w-4" />
-            </button>
+            <div className="relative h-7 w-7 shrink-0">
+              <button
+                type="button"
+                onClick={() => onChatDay(dayIndex)}
+                aria-label={`Refine with AI — day ${dayIndex + 1}`}
+                className="group absolute top-0 right-0 flex items-center rounded-md p-1.5 text-muted shadow-none transition-[background-color,color,box-shadow] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-[rgb(var(--surface-deep-rgb))] hover:text-foreground hover:shadow-[0_4px_16px_rgba(0,0,0,0.32)] hover:ring-1 hover:ring-card-border focus-visible:bg-[rgb(var(--surface-deep-rgb))] focus-visible:text-foreground focus-visible:shadow-[0_4px_16px_rgba(0,0,0,0.32)] focus-visible:ring-1 focus-visible:ring-card-border"
+              >
+                <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium transition-[max-width,margin-right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:mr-1.5 group-hover:max-w-[5.5rem] group-focus-visible:mr-1.5 group-focus-visible:max-w-[5.5rem]">
+                  Refine with AI
+                </span>
+                <Sparkles className="h-4 w-4 shrink-0" />
+              </button>
+            </div>
           )}
         </div>
 
@@ -493,41 +799,60 @@ export default function ItineraryCard({
           </div>
         )}
 
-        {/* Photo column sits beside the stop list only, so it starts level with the first
-            stop rather than alongside the lodging row above it. */}
-        <div className="flex gap-4">
-          <div className="min-w-0 flex-1">
-            {day.stops.length === 0 ? (
-              <p className="text-sm text-muted">
-                No stops planned for this day — it&rsquo;s yours to fill.
-              </p>
-            ) : (
-              <StopList
-                stops={day.stops}
-                revealedCount={revealedCount}
-                onSelect={selectStop}
-                // Bidirectional highlight: a row lights up when its marker card on the globe
-                // is hovered or stepped onto by the tour, and hovering a row lights its
-                // marker. Both surfaces read and write the same context index, so neither
-                // knows the other exists.
-                highlightedIndex={hoveredIndex ?? activeIndex}
-                onHoverStop={(index) => setHoveredIndex(index)}
-                revealAnimation={revealingStops}
-              />
-            )}
-          </div>
+        {day.stops.length === 0 ? (
+          <p className="text-sm text-muted">
+            No stops planned for this day — it&rsquo;s yours to fill.
+          </p>
+        ) : (
+          <StopList
+            stops={day.stops}
+            revealedCount={revealedCount}
+            onSelect={selectStop}
+            // Bidirectional highlight: a row lights up when its marker card on the globe
+            // is hovered or stepped onto by the tour, and hovering a row lights its
+            // marker. Both surfaces read and write the same context index, so neither
+            // knows the other exists.
+            highlightedIndex={highlightedRow}
+            // Separate from the highlight so Play tour and a globe click pull the list along
+            // with the camera, without a pointer sweep down the rows doing the same.
+            activeIndex={activeRow}
+            onHoverStop={(index) => setHoveredIndex(index === null ? null : dayOffset + index)}
+            revealAnimation={revealingStops}
+          />
+        )}
 
-          {/* Desktop only by design: at `sm` the docked panel is 360px wide, and a 112px
-              photo column off that leaves the stop names nowhere to wrap. */}
-          {photoStops.length > 0 && (
-            <div className="hidden w-28 shrink-0 flex-col gap-2 lg:flex">
-              {photoStops.map((stop, i) => (
-                <StackedPhoto key={i} name={stop.name} category={stop.category} />
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Findings for the day on screen, plus the trip-wide budget one. Computed locally, so
+            they appear the instant a drop lands rather than after a model round trip. */}
+        {dayFindings.length > 0 && (
+          <ul className="mt-4 space-y-1.5">
+            {dayFindings.map((finding, i) => (
+              <li
+                key={i}
+                className="flex gap-1.5 rounded-lg bg-amber-400/10 px-2.5 py-2 text-xs text-amber-200"
+              >
+                <span aria-hidden="true">⚠️</span>
+                <span>{finding.message}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {canRearrange && itinerary.days.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted/70">
+              Editing keeps the map beside you, so a move between days is a decision you can see.
+            </p>
+            <button
+              type="button"
+              onClick={() => setBoardOpen(true)}
+              className="shrink-0 rounded-full border border-card-border bg-white/10 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-white/20"
+            >
+              Edit itinerary
+            </button>
+          </div>
+        )}
       </div>
+
 
       {/* The band's ground is constant. It used to branch on whether the header photo had
           resolved yet, so the tiles' background/border/text changed a second after paint;
@@ -550,10 +875,18 @@ export default function ItineraryCard({
               last row instead of orphaning it at half width. */}
           {tiles.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
+              {/* No `backdrop-blur` on these tiles, and up to five of them are on screen at once.
+                  There is nothing left to blur: this band's own ground is `--surface-deep` at
+                  0.7, over BlurredPhotoLayer's already-blurred header photo, inside
+                  `.glass-itinerary`'s 56px pass. Blurring an already-flat backdrop through a 25%
+                  black fill is visually identical to the fill alone, for five extra render
+                  surfaces on the panel that gets scrolled most. `bg-black/25` stays — a blur does
+                  not darken; `bg-black/30` is the knob if the row reads busy over an unusually
+                  high-contrast photo. */}
               {tiles.map((tile) => (
                 <div
                   key={tile.label}
-                  className="flex min-w-24 max-w-48 flex-1 flex-col items-center rounded-xl border border-white/20 bg-black/25 p-3 text-center text-on-deep backdrop-blur-md"
+                  className="flex min-w-24 max-w-48 flex-1 flex-col items-center rounded-xl border border-white/20 bg-black/25 p-3 text-center text-on-deep"
                 >
                   <tile.Icon className="h-4 w-4" />
                   <div className="mt-1 text-xs opacity-90">{tile.label}</div>
@@ -583,6 +916,20 @@ export default function ItineraryCard({
           </div>
         </div>
       </div>
+
+      {/* Rendered from here so the card owns the state that opens it, but portalled to the body
+          inside SplitEditor — a fixed panel cannot live inside a `backdrop-filter` ancestor,
+          which contains `position: fixed` and would trap it in this 520px column.
+          `ArrangeBoard`, the full-screen board this replaced, is still on disk with no importers
+          — kept for one release in case the split proves wrong, and safe to delete after. */}
+      {boardOpen && trip && onItineraryChange && (
+        <SplitEditor
+          trip={trip}
+          itinerary={itinerary}
+          onItineraryChange={onItineraryChange}
+          onClose={() => setBoardOpen(false)}
+        />
+      )}
     </div>
   );
 }

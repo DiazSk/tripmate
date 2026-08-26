@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import type { Cartesian3, Viewer } from "cesium";
 import { useMapCamera } from "@/lib/mapCamera";
-import { isGlobeHiddenRoute } from "@/lib/globeVisibility";
 
 type CesiumModule = typeof import("cesium");
 
@@ -112,8 +110,7 @@ function pivot(
  * from AppShell as a sibling of the globe, so it sits outside the `pointer-events-none` overlay.
  */
 export default function MapControls() {
-  const { viewerRef, ready } = useMapCamera();
-  const pathname = usePathname();
+  const { viewerRef, ready, globeWanted } = useMapCamera();
   const [Cesium, setCesium] = useState<CesiumModule | null>(null);
   const [flat, setFlat] = useState(false);
   const needleRef = useRef<HTMLSpanElement>(null);
@@ -124,13 +121,17 @@ export default function MapControls() {
   const zoomSeqRef = useRef(0);
 
   // Cesium is dynamically imported everywhere in this app — a static import would pull it into
-  // the server bundle. That the import has resolved doubles as the readiness gate. Skipped
-  // entirely on globe-hidden routes (e.g. /backend): this used to run unconditionally on every
-  // route, pulling in the multi-MB Cesium bundle even where `GlobeBackground` itself had already
-  // skipped it — there is nothing here for these controls to ever attach to on that route anyway
-  // (`ready` never becomes true, since no viewer gets created).
+  // the server bundle. That the import has resolved doubles as the readiness gate. Gated on
+  // `globeWanted` rather than run unconditionally, because this is a *second*, independent
+  // `import("cesium")`: without the gate it pulled the multi-MB bundle in on every route,
+  // including ones where `GlobeBackground` had already declined to, for a component that then has
+  // nothing to attach to (`ready` never becomes true, since no viewer gets created).
+  //
+  // This used to read a `/backend`-and-`/bench` path list. That list could not express the real
+  // predicate — see `globeWanted` in mapCamera.tsx — and it also re-ran on `[pathname]`, so
+  // arriving at `/` from `/backend` imported all 2.3MB for controls that stayed `null` forever.
   useEffect(() => {
-    if (isGlobeHiddenRoute(pathname)) return;
+    if (!globeWanted) return;
     let cancelled = false;
     import("cesium").then((mod) => {
       if (!cancelled) setCesium(mod);
@@ -138,7 +139,7 @@ export default function MapControls() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [globeWanted]);
 
   // Live readout of the camera. Compass angle and slider position are DOM properties, so they
   // get written directly rather than through state — that keeps the steady-state re-render
@@ -162,8 +163,9 @@ export default function MapControls() {
       }
       setFlat(pitch < FLAT_THRESHOLD_RAD);
     };
-    // postRender over `camera.changed`: the globe's auto-rotate loop moves the camera every
-    // frame, so `changed` fires continuously anyway and offers no throttle of its own.
+    // postRender over `camera.changed`: under `requestRenderMode` a frame only happens when
+    // something asked for one, so this fires exactly as often as the camera can have moved —
+    // and `changed` would need a `percentageChanged` threshold tuned to be useful.
     viewer.scene.postRender.addEventListener(tick);
     return () => {
       if (!viewer.isDestroyed()) viewer.scene.postRender.removeEventListener(tick);
@@ -172,11 +174,9 @@ export default function MapControls() {
 
   if (!Cesium || !ready) return null;
 
-  /** Every control implies "I'm driving now", so the idle auto-rotation stops for good. */
   function withViewer(fn: (viewer: Viewer, cesium: CesiumModule) => void) {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed() || !Cesium) return;
-    (viewer as Viewer & { stopAutoRotate?: () => void }).stopAutoRotate?.();
     fn(viewer, Cesium);
   }
 
@@ -222,8 +222,22 @@ export default function MapControls() {
 
   // Transform is transitioned alongside the fill so a press eases in and releases back out,
   // rather than snapping between two states the way transition-colors alone did.
-  const buttonClass =
-    "flex h-11 w-11 items-center justify-center text-white/90 transition-[background-color,transform] duration-200 ease-out hover:bg-white/10 active:scale-[0.92] active:bg-white/15";
+  const buttonShape =
+    "flex h-11 w-11 items-center justify-center text-white/90 transition-[background-color,transform] duration-200 ease-out active:scale-[0.92]";
+
+  /** For the two buttons *inside* the glass pill, which paint their own fill over it. */
+  const buttonClass = `${buttonShape} hover:bg-white/10 active:bg-white/15`;
+
+  /** For the two that *are* glass — the 2D/3D toggle and the compass, each carrying
+   *  `.glass-control` themselves. They deliberately omit the `bg-*` utilities above, because on
+   *  those elements the utilities did nothing: `.glass-control` sets `background` unlayered in
+   *  `globals.css`, and unlayered author CSS outranks anything `@layer utilities` emits whatever
+   *  its specificity. Both shipped with no hover and no press state for that reason. The states
+   *  now live next to the base rule in `globals.css`, where they can actually win — and they
+   *  darken rather than lighten, per DESIGN.md's Darken-Never-Lighten Rule, since these float
+   *  over terrain that is sometimes a snowfield. The `transition` stays: it finally has a
+   *  property that moves. */
+  const glassButtonClass = buttonShape;
 
   return (
     // Hidden below `sm:` by default — that's the breakpoint where the itinerary panel goes
@@ -264,7 +278,7 @@ export default function MapControls() {
         aria-label={flat ? "Switch to 3D view" : "Switch to 2D view"}
         // text-xs, on the ramp: 13px was a one-off step, and at 44px square with a
         // two-character label the difference is a pixel nobody reads.
-        className={`glass-control pointer-events-auto hidden rounded-xl text-xs font-semibold tracking-wide sm:flex ${buttonClass}`}
+        className={`glass-control pointer-events-auto hidden rounded-xl text-xs font-semibold tracking-wide sm:flex ${glassButtonClass}`}
       >
         {flat ? "3D" : "2D"}
       </button>
@@ -298,7 +312,7 @@ export default function MapControls() {
         type="button"
         onClick={resetNorth}
         aria-label="Reset map to face north"
-        className={`glass-control pointer-events-auto rounded-full ${buttonClass}`}
+        className={`glass-control pointer-events-auto rounded-full ${glassButtonClass}`}
       >
         <span ref={needleRef} className="block will-change-transform">
           <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">

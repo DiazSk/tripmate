@@ -1,5 +1,5 @@
 import { tripDays } from "./tiers";
-import { DateContext } from "./types";
+import type { DateContext } from "./types";
 
 // `new Date("2026-09-19")` is parsed as UTC midnight, so every read below uses the UTC accessors.
 // Reading them in local time rolls the date back a day anywhere west of Greenwich — which showed

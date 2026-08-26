@@ -1,5 +1,6 @@
-import { Itinerary, TripSummary, UserAnswers } from "./types";
+import type { Itinerary, TripSummary, UserAnswers } from "./types";
 import { TIERS } from "./tiers";
+import { sanitizeAnswers } from "./userAnswers";
 
 /**
  * The frozen anchor for an edit session.
@@ -16,8 +17,11 @@ import { TIERS } from "./tiers";
 export function buildEditContext(
   trip: TripSummary,
   itinerary: Itinerary,
-  answers?: UserAnswers | null
+  rawAnswers?: UserAnswers | null
 ): string {
+  // Stored `user_answers_json` predates the sanitizing, and a raw POST to /api/trips can write
+  // whatever it likes into it — same normalize-at-the-barrier rule as `reconcileTrip`.
+  const answers = rawAnswers ? sanitizeAnswers(rawAnswers) : rawAnswers;
   const tier = TIERS.find((t) => t.id === itinerary.tier);
 
   const dayLines = itinerary.days.map((d, i) => {
@@ -48,7 +52,19 @@ priorities: ${answers.topPriorities?.length ? answers.topPriorities.join(" > ") 
       }
 energy: ${answers.energy ?? "unknown"} (walking/stairs tolerance)
 crowds: ${answers.crowds ?? "unknown"}
-group: ${answers.group ?? "unknown"}
+group: ${answers.group ?? "unknown"}${answers.group === "other" && answers.groupOther?.trim() ? ` (${answers.groupOther.trim()})` : ""}${
+        answers.party
+          ? `\nparty: ${answers.party.adults} adults, ${answers.party.children} children (2-11), ${answers.party.infants} infants (under 2)`
+          : ""
+      }${
+        answers.logistics?.arrivalTime || answers.logistics?.arrivalPoint
+          ? `\narrival (day 1): ${answers.logistics.arrivalTime ?? "time unknown"}${answers.logistics.arrivalPoint ? ` at ${answers.logistics.arrivalPoint}` : ""}`
+          : ""
+      }${
+        answers.logistics?.departureTime || answers.logistics?.departurePoint
+          ? `\ndeparture (last day): ${answers.logistics.departureTime ?? "time unknown"}${answers.logistics.departurePoint ? ` from ${answers.logistics.departurePoint}` : ""}`
+          : ""
+      }
 explorer_style: ${answers.explorerStyle ?? "unknown"}${answers.purpose?.trim() ? `\npurpose: ${answers.purpose.trim()}` : ""}`
     : "";
 
