@@ -1,5 +1,4 @@
 import type { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType } from "./types";
-import type { TierId } from "./tiers";
 
 /** The single implicit local user. Replaced by a real auth subject id if and when
  *  authentication lands — see FUTURE-INTEGRATION.md. */
@@ -16,25 +15,27 @@ export interface DietaryNeeds {
 /**
  * What stays true between trips. Purpose, dates, budget amount and POIs are
  * deliberately absent: a business trip and an anniversary are the same person,
- * and the budget is a function of the trip, not of the traveler. `tier` is kept
- * because the spending *style* is a preference even though the amount is not.
+ * and the budget is a function of the trip, not of the traveler.
+ *
+ * `tier` used to live here too, on the reasoning that spending *style* is a preference even
+ * though the amount is not. It was removed with the picker that set it: tier is now derived from
+ * the trip's own budget by `closestTier`, so a stored style could only ever contradict the number
+ * the traveler just typed. Old rows keep the key; nothing reads it.
  */
 export interface TravelerProfile {
   group: GroupType;
   explorerStyle: ExplorerStyle;
   energy: EnergyLevel;
   crowds: CrowdPreference;
-  tier: TierId;
   priorities: string[];
   topPriorities: string[];
   dietary: DietaryNeeds;
 }
 
-const GROUPS: GroupType[] = ["solo", "couple", "family_with_kids"];
+const GROUPS: GroupType[] = ["solo", "couple", "family_with_kids", "other"];
 const STYLES: ExplorerStyle[] = ["packed", "relaxed", "offbeat", "mixed"];
 const ENERGIES: EnergyLevel[] = ["high", "moderate", "low"];
 const CROWDS: CrowdPreference[] = ["love", "mixed", "avoid"];
-const TIER_IDS: TierId[] = ["budget", "midrange", "luxury"];
 
 /**
  * Returns the default for an absent `dietary` rather than rejecting the profile: rows
@@ -84,7 +85,6 @@ export function parseProfile(value: unknown): TravelerProfile | null {
     !STYLES.includes(v.explorerStyle as ExplorerStyle) ||
     !ENERGIES.includes(v.energy as EnergyLevel) ||
     !CROWDS.includes(v.crowds as CrowdPreference) ||
-    !TIER_IDS.includes(v.tier as TierId) ||
     priorities === null ||
     topPriorities === null
   ) {
@@ -96,7 +96,6 @@ export function parseProfile(value: unknown): TravelerProfile | null {
     explorerStyle: v.explorerStyle as ExplorerStyle,
     energy: v.energy as EnergyLevel,
     crowds: v.crowds as CrowdPreference,
-    tier: v.tier as TierId,
     priorities,
     topPriorities,
     dietary,

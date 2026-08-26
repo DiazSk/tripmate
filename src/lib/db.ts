@@ -122,6 +122,15 @@ addColumnIfMissing("trips", "user_answers_json", "TEXT");
 // benchmark invocation so the Perf Dashboard can diff two labeled batches.
 // Organic/manual usage keeps this null and shows up under "All time".
 addColumnIfMissing("llm_runs", "batch_tag", "TEXT");
+// Refine cells are keyed by (fixture, model, task); NULL is a generation cell. Nullable rather
+// than defaulted so every row written before refine existed still reads as a generation row.
+addColumnIfMissing("bench_results", "task_id", "TEXT");
+// The `claude` CLI session that generated this trip, so the edit chat can resume the same
+// conversation instead of opening a fresh one. Nullable and always optional: the session is a
+// JSONL file on whichever machine ran the generation, so it can be absent (trip generated before
+// this existed), stale, or gone (another device, a cleaned home dir) — every reader must be able
+// to fall back to a fully-rebuilt prompt. See SessionOption in claude.ts.
+addColumnIfMissing("trips", "chat_session_id", "TEXT");
 
 export interface TripRow {
   id: string;
@@ -132,32 +141,56 @@ export interface TripRow {
   itinerary_json: string;
   run_id: string | null;
   user_answers_json: string | null;
+  chat_session_id: string | null;
   created_at: string;
 }
 
 export function insertTrip(
-  trip: Omit<TripRow, "created_at" | "run_id" | "user_answers_json"> & {
+  trip: Omit<TripRow, "created_at" | "run_id" | "user_answers_json" | "chat_session_id"> & {
     run_id?: string | null;
     user_answers_json?: string | null;
+    chat_session_id?: string | null;
   }
 ): TripRow {
   const created_at = new Date().toISOString();
   const run_id = trip.run_id ?? null;
   const user_answers_json = trip.user_answers_json ?? null;
+  const chat_session_id = trip.chat_session_id ?? null;
   db.prepare(
-    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, created_at)
-     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @created_at)`
-  ).run({ ...trip, run_id, user_answers_json, created_at });
-  return { ...trip, run_id, user_answers_json, created_at };
+    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, created_at)
+     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @created_at)`
+  ).run({ ...trip, run_id, user_answers_json, chat_session_id, created_at });
+  return { ...trip, run_id, user_answers_json, chat_session_id, created_at };
 }
 
-export function listTrips(): TripRow[] {
+/**
+ * Remembers which CLI session is carrying this trip's edit conversation.
+ *
+ * Written on every chat turn rather than once, because the id can legitimately change mid-trip:
+ * a resume whose session file has vanished falls back to a fresh session, and that new id is the
+ * one the next turn has to continue from.
+ */
+export function setTripChatSession(id: string, sessionId: string | null): void {
+  db.prepare(`UPDATE trips SET chat_session_id = ? WHERE id = ?`).run(sessionId, id);
+}
+
+/** Exactly the columns `listTrips` selects — deliberately narrower than `TripRow`, which
+ *  describes the whole table. The old signature claimed `TripRow` while the query returned
+ *  neither `run_id` nor `user_answers_json`, so the type was quietly lying about three fields. */
+export type TripListRow = Pick<
+  TripRow,
+  "id" | "destination" | "start_date" | "end_date" | "budget" | "created_at"
+>;
+
+export function listTrips(): TripListRow[] {
   return db
     .prepare(
-      `SELECT id, destination, start_date, end_date, budget, itinerary_json, created_at
+      // No `itinerary_json`: it was being selected and then dropped by every caller, which meant
+      // reading every stored itinerary off disk to render a list of destinations and dates.
+      `SELECT id, destination, start_date, end_date, budget, created_at
        FROM trips ORDER BY created_at DESC`
     )
-    .all() as TripRow[];
+    .all() as TripListRow[];
 }
 
 export function getTrip(id: string): TripRow | undefined {
@@ -166,7 +199,26 @@ export function getTrip(id: string): TripRow | undefined {
     | undefined;
 }
 
-export function updateTripItinerary(id: string, itineraryJson: string): void {
+/**
+ * Writes the itinerary, and the trip's end date with it when the edit changed the trip's length.
+ *
+ * The two have to move together: `trips.end_date` is what the trip list and every date range in the
+ * UI read, so an itinerary that grew a day while the row still claimed the old end date would show
+ * a 4-day plan filed under a 3-day trip. One statement, so they can't diverge halfway.
+ */
+export function updateTripItinerary(
+  id: string,
+  itineraryJson: string,
+  endDate?: string
+): void {
+  if (endDate) {
+    db.prepare(`UPDATE trips SET itinerary_json = ?, end_date = ? WHERE id = ?`).run(
+      itineraryJson,
+      endDate,
+      id
+    );
+    return;
+  }
   db.prepare(`UPDATE trips SET itinerary_json = ? WHERE id = ?`).run(itineraryJson, id);
 }
 
@@ -278,6 +330,41 @@ export function listTraces(): TraceRow[] {
     .all() as TraceRow[];
 }
 
+export interface PendingTrace {
+  id: string;
+  type: string;
+  model: string;
+  destination: string | null;
+  createdAt: string;
+}
+
+/**
+ * Calls in flight RIGHT NOW, wherever they came from — a browser click, a curl one-liner, a
+ * script like scripts/mint-base-itineraries.mjs. `insertTrace` writes this row with status
+ * 'pending' before the CLI even spawns (`claude.ts`), so it is a live, database-backed signal
+ * rather than component state in one browser tab.
+ *
+ * That distinction is the reason this exists: `busy`/`progress` in BenchConsole only ever reflect
+ * the tab that clicked the button, are wiped by a reload, and stay empty for the entire duration
+ * of a sweep driven from outside the browser — exactly what happened when the Task 9 sweep ran
+ * from a script and nobody watching /bench in a browser had any way to see it was happening.
+ *
+ * LEFT JOIN, not inner: a call not yet part of a run (there is no run_id until the caller creates
+ * one) must still show up as pending, or the one case this exists to catch — "is anything running
+ * at all" — silently drops rows the same way `listTracesForPerf`'s inner join does.
+ */
+export function listPendingTraces(): PendingTrace[] {
+  return db
+    .prepare(
+      `SELECT t.id, t.type, t.model, r.destination as destination, t.created_at as createdAt
+       FROM llm_traces t LEFT JOIN llm_runs r ON t.run_id = r.id
+       WHERE t.status = 'pending'
+       ORDER BY t.created_at DESC
+       LIMIT 10`
+    )
+    .all() as PendingTrace[];
+}
+
 export function getTrace(id: string): TraceRow | undefined {
   return db.prepare(`SELECT * FROM llm_traces WHERE id = ?`).get(id) as
     | TraceRow
@@ -352,6 +439,7 @@ export interface BenchResultRow {
   itinerary_md: string;
   scores_json: string;
   composite: number | null;
+  task_id: string | null;
   created_at: string;
 }
 
@@ -360,21 +448,51 @@ export function insertBenchResult(row: Omit<BenchResultRow, "id" | "created_at">
   const created_at = new Date().toISOString();
   db.prepare(
     `INSERT INTO bench_results
-       (id, fixture_id, model, run_id, trace_id, itinerary_md, scores_json, composite, created_at)
-     VALUES (@id, @fixture_id, @model, @run_id, @trace_id, @itinerary_md, @scores_json, @composite, @created_at)`
+       (id, fixture_id, model, run_id, trace_id, itinerary_md, scores_json, composite, task_id, created_at)
+     VALUES (@id, @fixture_id, @model, @run_id, @trace_id, @itinerary_md, @scores_json, @composite, @task_id, @created_at)`
   ).run({ ...row, id, created_at });
   return { ...row, id, created_at };
 }
 
-/** Most recent row per (fixture, model) pair. */
+/**
+ * Most recent row per (fixture, model) among GENERATION cells only. Refine rows (`task_id` set)
+ * are excluded outright rather than merely de-duplicated: they carry an incompatible
+ * `scores_json` shape (`RefineCellScores`, not `BenchCellScores`) and their `itinerary_md` holds
+ * the model's raw JSON patch, not markdown — mixing them into this list is what let a refine row
+ * get rendered as a generation cell before this fix. See `listLatestRefineResults` for the
+ * counterpart. The grouping no longer needs `COALESCE(task_id, '')` once `task_id IS NULL` is
+ * filtered — every remaining row's `task_id` is NULL — so it's dropped here for that reason,
+ * while it stays in `listLatestRefineResults` because that grouping still needs to partition by
+ * the (non-null) task.
+ */
 export function listLatestBenchResults(): BenchResultRow[] {
   return db
     .prepare(
       `SELECT * FROM bench_results
-       WHERE rowid IN (
-         SELECT MAX(rowid) FROM bench_results GROUP BY fixture_id, model
+       WHERE task_id IS NULL AND rowid IN (
+         SELECT MAX(rowid) FROM bench_results
+         WHERE task_id IS NULL
+         GROUP BY fixture_id, model
        )
        ORDER BY fixture_id, model`
+    )
+    .all() as BenchResultRow[];
+}
+
+/** Most recent row per (fixture, model, task) among REFINE cells only — the `task_id IS NOT NULL`
+ *  counterpart to `listLatestBenchResults`. `COALESCE(task_id, '')` is harmless here (task_id is
+ *  never null in this filtered set) but kept so the grouping expression stays correct if that
+ *  invariant ever loosens. */
+export function listLatestRefineResults(): BenchResultRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM bench_results
+       WHERE task_id IS NOT NULL AND rowid IN (
+         SELECT MAX(rowid) FROM bench_results
+         WHERE task_id IS NOT NULL
+         GROUP BY fixture_id, model, COALESCE(task_id, '')
+       )
+       ORDER BY fixture_id, model, COALESCE(task_id, '')`
     )
     .all() as BenchResultRow[];
 }
@@ -391,12 +509,19 @@ export function updateBenchResultScores(id: string, scoresJson: string, composit
   );
 }
 
+/**
+ * Feeds the blinded judge, which grades generations only. Without the task_id IS NULL
+ * filter, MAX(rowid) per (fixture, model) would pick up a refine cell's row once those
+ * exist — and a refine row's itinerary_md holds the model's raw JSON patch, not markdown,
+ * which is non-empty and so would slip past the caller's `.trim()` guard and get graded
+ * as an itinerary.
+ */
 export function getBenchResultsForFixture(fixtureId: string): BenchResultRow[] {
   return db
     .prepare(
       `SELECT * FROM bench_results
-       WHERE fixture_id = ? AND rowid IN (
-         SELECT MAX(rowid) FROM bench_results GROUP BY fixture_id, model
+       WHERE fixture_id = ? AND task_id IS NULL AND rowid IN (
+         SELECT MAX(rowid) FROM bench_results WHERE task_id IS NULL GROUP BY fixture_id, model
        )
        ORDER BY model`
     )
@@ -517,9 +642,12 @@ export interface TraceWithBatchTag extends TraceRow {
 
 /** Every successful trace with its run's batch tag attached, for the Perf Dashboard's
  *  aggregation. Only `status = 'ok'` rows count — a timed-out or errored call's duration
- *  and (often absent) envelope fields would skew "how long does this normally take". Only
- *  traces with a run (inner join) are included, same restriction `listGroupedTraces` already
- *  applies — a trace can't belong to a batch without a run to hang the tag off of. */
+ *  and (often absent) envelope fields would skew "how long does this normally take".
+ *  Filtering by `batchTag` legitimately requires a run to hang the tag off of, so that
+ *  path inner-joins. The unfiltered "all time" path left-joins instead — most traces
+ *  (place-detail, context, generate, and all of rebalance/container-theme) are written
+ *  without a `run_id`, and an inner join here was silently dropping them from both this
+ *  dashboard and the /bench "which model" panel. `batch_tag` comes back null for those. */
 export function listTracesForPerf(batchTag?: string): TraceWithBatchTag[] {
   if (batchTag) {
     return db
@@ -533,7 +661,7 @@ export function listTracesForPerf(batchTag?: string): TraceWithBatchTag[] {
   return db
     .prepare(
       `SELECT t.*, r.batch_tag as batch_tag
-       FROM llm_traces t JOIN llm_runs r ON t.run_id = r.id
+       FROM llm_traces t LEFT JOIN llm_runs r ON t.run_id = r.id
        WHERE t.status = 'ok'`
     )
     .all() as TraceWithBatchTag[];

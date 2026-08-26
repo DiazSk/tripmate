@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import FocusEditMode from "@/components/FocusEditMode";
@@ -11,6 +11,7 @@ import DockedPanel from "@/components/DockedPanel";
 import ErrorNote from "@/components/ErrorNote";
 import { Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
+import { useGlobeOnScreen } from "@/lib/mapCamera";
 import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
 import { formatMoney } from "@/lib/format";
 import { devLabel } from "@/lib/devInspector";
@@ -29,19 +30,26 @@ const hasStops = (itinerary?: Itinerary | null) =>
 
 
 export default function TripView({
-  params,
+  id,
+  initialTrip,
 }: {
-  params: Promise<{ id: string }>;
+  id: string;
+  /** Read server-side by this route's page component. Null only for `/trip/preview`, whose
+   *  fixture is not in the database and is loaded below instead. */
+  initialTrip: Trip | null;
 }) {
-  const { id } = use(params);
-  const [trip, setTrip] = useState<Trip | null>(null);
-  const [itinerary, setItinerary] = useState<Itinerary | null>(null);
+  const [trip, setTrip] = useState<Trip | null>(initialTrip);
+  const [itinerary, setItinerary] = useState<Itinerary | null>(initialTrip?.itinerary ?? null);
   const [error, setError] = useState<string | null>(null);
   const [dismissedDays, setDismissedDays] = useState<Set<number>>(new Set());
   const [rebalancingDay, setRebalancingDay] = useState<number | null>(null);
   // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
   // state there would reset the view to Day 1 on the way back.
   const [activeDayIndex, setActiveDayIndex] = useState(0);
+  /** Shut on arrival, same as the result view: a saved trip opens on its own clustered map and
+   *  the plan is one click away. Owned here because `ItineraryCard` reads it too — see the
+   *  `panelCollapsed` prop. */
+  const [planCollapsed, setPlanCollapsed] = useState(true);
   // Step 7 edit session. Unlike the pre-save view, every accepted edit here is persisted.
   const focus = useFocusEdit(itinerary);
   const [savingFocus, setSavingFocus] = useState(false);
@@ -56,10 +64,19 @@ export default function TripView({
     detailError,
   } = useTripCamera(trip?.destination ?? "", trip?.id);
 
+  // This route is the globe, for its whole life. `not-found.tsx` and `/trip/latest`'s empty-DB
+  // card are separate components that never mount this one — which is exactly why the gate is a
+  // mounted-component declaration rather than a `/trip/` path prefix.
+  useGlobeOnScreen(true);
+
+  // The trip itself already arrived as a prop; this effect only has to move the camera. The
+  // `/api/trips/[id]` fetch that used to live here was a second read of a row the server had
+  // just read to render this very component.
   useEffect(() => {
     if (id === "preview") {
       // Kept out of this route's client bundle: the fixture lives in its own module,
-      // loaded with a dynamic import so real trips don't pay for it.
+      // loaded with a dynamic import so real trips don't pay for it. It is also the one
+      // trip with no database row, which is why it cannot arrive as a prop.
       import("@/lib/previewTrip").then(({ PREVIEW_TRIP }) => {
         setError(null);
         setTrip(PREVIEW_TRIP);
@@ -68,16 +85,9 @@ export default function TripView({
       });
       return;
     }
-    fetch(`/api/trips/${id}`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to load trip");
-        setError(null);
-        setTrip(data);
-        setItinerary(data.itinerary);
-        await flyToDestinationByName(data.destination, !hasStops(data.itinerary));
-      })
-      .catch((e) => setError(errorMessage(e, "We couldn't load this trip.")));
+    if (initialTrip) {
+      flyToDestinationByName(initialTrip.destination, !hasStops(initialTrip.itinerary));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -89,6 +99,15 @@ export default function TripView({
       body: JSON.stringify({ itinerary: updated }),
     });
     if (!res.ok) throw new Error("That amount didn't save. Check your connection and re-enter it.");
+
+    // An edit can now change the trip's LENGTH (the chat can add or remove days), which moves the
+    // end date. The route recomputes it from the saved itinerary, so take its answer rather than
+    // deriving a second one here — otherwise the header keeps showing the old date range until a
+    // reload.
+    const saved = await res.json().catch(() => null);
+    if (saved?.endDate) {
+      setTrip((prev) => (prev && prev.endDate !== saved.endDate ? { ...prev, endDate: saved.endDate } : prev));
+    }
   }
 
   function handleActualCostChange(
@@ -112,6 +131,15 @@ export default function TripView({
       next.delete(dayIndex);
       return next;
     });
+  }
+
+  /** A hand-rearranged itinerary from the card's drag-and-drop. `moveStop` has already re-timed
+   *  every day it touched, so this only has to commit it — and it saves immediately rather than
+   *  waiting for a Save button, matching how the actual-cost inputs on this page already behave. */
+  function handleRearrange(next: Itinerary) {
+    setItinerary(next);
+    setError(null);
+    persist(next).catch((e) => setError(errorMessage(e, "That change didn't save.")));
   }
 
   function handleEditDay(dayIndex: number, updates: DayEditUpdates) {
@@ -188,7 +216,25 @@ export default function TripView({
     <main className="dashboard-page min-h-full">
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
-      <DockedPanel collapsible wide={!!focus.target}>
+      <DockedPanel
+        collapsible
+        wide={!!focus.target}
+        collapsed={planCollapsed}
+        onCollapsedChange={setPlanCollapsed}
+        // What the capsule carries while the panel is shut — the trip at a glance, so
+        // "which day was I reading" survives a look at the map.
+        capsule={
+          trip
+            ? {
+                title: trip.destination,
+                subtitle: itinerary?.days.length
+                  ? `${itinerary.days.length} ${itinerary.days.length === 1 ? "day" : "days"}`
+                  : undefined,
+                step: itinerary?.days.length ? `Day ${activeDayIndex + 1}` : undefined,
+              }
+            : undefined
+        }
+      >
         <div className="space-y-4" {...devLabel("ResultPanel")}>
           {error && <ErrorNote>{error}</ErrorNote>}
           {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
@@ -245,6 +291,7 @@ export default function TripView({
               dayIndex={focus.target.dayIndex}
               scope={focus.target.scope}
               tripId={trip.id}
+              sessionId={trip.chatSessionId ?? null}
               dirty={focus.dirty}
               saving={savingFocus}
               onDraftChange={focus.applyDraft}
@@ -273,13 +320,23 @@ export default function TripView({
             <div className={selectedStop ? "hidden" : "space-y-4"}>
               {/* Above the card, not below it: at the foot of the panel this sat under the
                   floating trace/terminal button in the same bottom-right corner, and a
-                  30-day trip buried it behind a full scroll of the itinerary. */}
+                  30-day trip buried it behind a full scroll of the itinerary.
+
+                  `px-5` below `sm`: the panel is full-bleed there, and this row — unlike its
+                  `.glass-itinerary` sibling, which insets its own inner box — has nothing to
+                  inset it, so the label sat hard against the screen edge. */}
               {trip && itinerary && (
-                <div className="flex justify-end">
+                <div className="flex justify-end px-5 sm:px-0">
                   <button
                     type="button"
                     onClick={() => focus.open(0, "trip")}
-                    className="pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/10"
+                    // No `hover:bg-*` here: `.refine-affordance` and `.glass-control` both set
+                    // `background` as unlayered rules in `globals.css`, which outrank every
+                    // `@layer utilities` declaration regardless of specificity — so the utility
+                    // that used to sit here was dead, and the app's most prominent secondary
+                    // action had no hover at all. Both states are defined beside those base
+                    // rules now. `transition-colors` is what animates them.
+                    className="refine-affordance glass-control pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors"
                   >
                     Refine with AI
                   </button>
@@ -291,7 +348,6 @@ export default function TripView({
                   itinerary={itinerary}
                   budget={trip.budget}
                   destination={trip.destination}
-                  trip={trip}
                   onSelectStop={selectStop}
                   editable
                   onLodgingActualCostChange={(dayIndex, value) =>
@@ -300,7 +356,14 @@ export default function TripView({
                   activeDayIndex={activeDayIndex}
                   onActiveDayChange={setActiveDayIndex}
                   onEditDay={handleEditDay}
-                  onChatDay={(dayIndex) => focus.open(dayIndex, "day")}
+                  // Same window "Refine with AI" opens, just starting on the day whose icon was
+                  // clicked: one chat surface with day navigation, rather than a second
+                  // day-locked variant that looked identical but couldn't reach other days.
+                  onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
+                  onItineraryChange={handleRearrange}
+                  trip={trip}
+                  panelCollapsed={planCollapsed}
+                  onMinimize={() => setPlanCollapsed(true)}
                 />
               )}
 

@@ -21,6 +21,8 @@ const StopMarkerLayer = dynamic(() => import("@/components/StopMarkerLayer"), { 
  * a separate opaque content pane.
  */
 export default function AppShell({ children }: { children: ReactNode }) {
+  // Handed to ScrollContainerContext below. Nothing animates it — scrolling here is native and
+  // compositor-owned, which is the whole point; see globals.css's `.content-overlay`.
   const scrollRef = useRef<HTMLDivElement>(null);
   return (
     // `reducedMotion="user"` makes every framer-motion component honour
@@ -41,9 +43,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {/* `pointer-events-none` is what makes the globe draggable: this container spans the
               whole viewport, so without it every pointer event lands here and the Cesium canvas
               at z-0 never sees one. Each real content box opts back in with `pointer-events-auto`.
-              `overflow-y-auto` stays — the home page's pre-result steps are normal-flow children
-              and overflow on short viewports, and scroll chaining from those children up to this
-              ancestor is unaffected by pointer-events. */}
+
+              It also takes this element out of hit-testing, which is how a scroller stops being
+              scrollable — for a wheel as much as for a finger. The canvas is this element's
+              *sibling*, so a gesture that lands on it walks an ancestor chain containing nothing
+              scrollable and reaches Cesium, which zooms. `.content-overlay` in globals.css hands
+              pointer events back on every route that scrolls *this* element rather than a
+              DockedPanel; see that rule for the full account and for what it costs. */}
           {/* Sits at z-5, under the content overlay below — the markers are part of the world
               behind the glass, so a panel covers them rather than the other way round. Still a
               sibling rather than a child of that overlay, and for a sharper reason than the
@@ -53,7 +59,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <StopMarkerLayer />
           <div
             ref={scrollRef}
-            className="pointer-events-none absolute inset-0 z-10 overflow-y-auto"
+            className="content-overlay pointer-events-none absolute inset-0 z-10 overflow-y-auto"
           >
             {/* Exposes this element as the real scroll container — window never scrolls
                 here (.app-shell is h-dvh overflow-hidden) — so the Blue Hour scroll story's

@@ -11,7 +11,7 @@ import type {
   UserAnswers,
 } from "../types";
 import type { BenchFixture } from "./fixtures";
-import type { BenchLogistics } from "./types";
+import type { TripLogistics } from "./types";
 
 /**
  * Builds a benchmark fixture from a trip the developer typed in, by running the app's REAL
@@ -48,8 +48,11 @@ export interface CustomTripInput {
   /** Optional anchors the traveler typed themselves; these carry no coordinates. */
   customPois?: string[];
   arrivalTime?: string | null;
+  arrivalPoint?: string | null;
   departureTime?: string | null;
+  departurePoint?: string | null;
   stayBooked?: string | null;
+  originCity?: string | null;
 }
 
 export interface CustomTripResult {
@@ -74,12 +77,20 @@ export async function buildCustomFixture(input: CustomTripInput): Promise<Custom
   const matched = new Set(selectedPois.map((p) => p.name.toLowerCase()));
   const unmatchedAnchors = (input.anchorNames ?? []).filter((n) => !matched.has(n.toLowerCase()));
 
-  const logistics: BenchLogistics | undefined =
-    input.arrivalTime || input.departureTime || input.stayBooked
+  const logistics: TripLogistics | undefined =
+    input.arrivalTime ||
+    input.arrivalPoint ||
+    input.departureTime ||
+    input.departurePoint ||
+    input.stayBooked ||
+    input.originCity
       ? {
           arrivalTime: input.arrivalTime || null,
+          arrivalPoint: input.arrivalPoint || null,
           departureTime: input.departureTime || null,
+          departurePoint: input.departurePoint || null,
           stayBooked: input.stayBooked || null,
+          originCity: input.originCity || null,
         }
       : undefined;
 

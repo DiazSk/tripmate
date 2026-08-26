@@ -2,9 +2,7 @@
 
 import { ComponentType, ReactNode } from "react";
 import { ArrowRight, CalendarCheck, CalendarDays, MapPin, Wallet } from "lucide-react";
-import TierPicker from "@/components/TierPicker";
 import ErrorNote from "@/components/ErrorNote";
-import { TierId } from "@/lib/tiers";
 import { GeocodeOutcome } from "@/lib/useTripCamera";
 import { formatMoney } from "@/lib/format";
 
@@ -127,8 +125,6 @@ export default function TripFormConsole({
   budget,
   onBudgetChange,
   days,
-  tier,
-  onPickTier,
   onBack,
   onSubmit,
   error,
@@ -145,15 +141,19 @@ export default function TripFormConsole({
   budget: number;
   onBudgetChange: (value: number) => void;
   days: number | null;
-  tier: TierId;
-  onPickTier: (tier: TierId) => void;
   onBack: () => void;
   onSubmit: () => void;
   error: string | null;
 }) {
   return (
     <div className="flex flex-1 items-center justify-center">
-      <div className="w-full max-w-5xl space-y-4">
+      {/* 84rem, not the 64rem this was. A rem cap is the right shape here because the root is
+          fluid - the ceiling scales with the design rather than pinning it - but 64rem still left
+          320px of dead slate either side at 1920 and 640px at 2560, next to a landing that now
+          runs edge to edge. Not removed outright, unlike the photo grid: this is a form, and a
+          four-cell field row spanning 1900px puts Back and Next at opposite ends of the screen
+          and stops them reading as a pair. */}
+      <div className="w-full max-w-[84rem] space-y-4">
         {/* Same hero-rise as the landing block, so the step reads as one move in both
             directions rather than an instant swap forward and an animated one back. */}
         <form
@@ -269,22 +269,6 @@ export default function TripFormConsole({
                   : "Couldn't reach the map service. We'll still plan it."}
               </p>
             )}
-          </div>
-
-          <div className="value-in mt-6" style={{ animationDelay: "320ms" }}>
-            <h2 id="style-heading" className="font-scene-display text-xl font-semibold text-foreground">
-              Choose your style
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              {days === null
-                ? "These are per-day rates. Add your dates and they become trip totals."
-                : `Rough estimates for ${days} ${days === 1 ? "day" : "days"}${
-                    destination ? ` in ${destination}` : ""
-                  }. Pick the one closest to the trip you want.`}
-            </p>
-            <div className="mt-4">
-              <TierPicker days={days} budget={budget} selected={tier} onSelect={onPickTier} />
-            </div>
           </div>
 
           <div

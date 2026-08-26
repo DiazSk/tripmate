@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import { Stop, StopCategory } from "@/lib/types";
@@ -134,6 +134,7 @@ export default function StopList({
   onSelect,
   revealAnimation,
   highlightedIndex,
+  activeIndex,
   onHoverStop,
 }: {
   stops: Stop[];
@@ -142,10 +143,92 @@ export default function StopList({
   revealAnimation?: boolean;
   /** Index of the stop currently hovered or selected on the globe, or null. */
   highlightedIndex?: number | null;
+  /** Index of the *selected* stop — clicked on the globe, or stepped onto by Play tour. Scrolled
+   *  to; see the effect below for why this is separate from `highlightedIndex`. */
+  activeIndex?: number | null;
   onHoverStop?: (index: number | null) => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Follow the selected stop, so Play tour reads as one gesture instead of two.
+   *
+   * The tour already lit the matching row — it has called `setActiveIndex` since it was written —
+   * but nothing moved the list, so on a day of eight stops the camera flew to stop 6 while the
+   * panel still showed stops 1-3 and you had to scroll to find out where you were. A globe click
+   * on an off-screen stop had the same problem.
+   *
+   * **Driven by `activeIndex`, never `highlightedIndex`.** Hover is the other half of that value,
+   * and scrolling on hover would fight the person doing the scrolling: sweeping the pointer down
+   * the list hovers each row it crosses, so the list would yank itself under the cursor, hover a
+   * different row, and yank again.
+   *
+   * **Not `scrollIntoView`.** That call scrolls every scrollable ancestor, and the comment on the
+   * day-tab strip in ItineraryCard records what that did here: even with `block: "nearest"` it
+   * shoved the docked panel itself down ~100px. Writing `scrollTop` on the one scroller that
+   * should move touches nothing else. The scroller is found by walking up rather than passed in
+   * for the same reason the collapsing header does it — this list also renders on the print page,
+   * where there is no scroller at all and this simply no-ops.
+   *
+   * **The target is re-measured every frame, not computed once.** ItineraryCard's header is
+   * sticky and *shrinks* as the panel scrolls (`--hero-p`), so the row's own position is a
+   * function of the scroll offset: a `scrollTo({behavior: "smooth"})` toward a target measured
+   * before the jump overshoots by the whole height the header gives up on the way. Measured, that
+   * put the tour's last stop clean off the bottom of the panel — the list scrolled past the row it
+   * was chasing and landed on the spend summary. Easing toward a freshly measured target each
+   * frame converges regardless, and would survive any other layout shift above the row too.
+   */
+  useEffect(() => {
+    if (activeIndex == null) return;
+    const row = listRef.current?.children[activeIndex];
+    if (!(row instanceof HTMLElement)) return;
+    let scroller: HTMLElement | null = null;
+    for (let el = row.parentElement; el; el = el.parentElement) {
+      const overflowY = getComputedStyle(el).overflowY;
+      if (overflowY === "auto" || overflowY === "scroll") {
+        scroller = el;
+        break;
+      }
+    }
+    if (!scroller) return;
+    const target = scroller;
+
+    /** How far the scroller is from having this row centred, right now. Measured from bounding
+     *  rects rather than `offsetTop`, which is relative to the nearest *positioned* ancestor —
+     *  and every row here is `relative`, so `offsetTop` reports an offset within the row itself.
+     *  Same trap the day-tab strip fell into. */
+    const remaining = () => {
+      const rowBox = row.getBoundingClientRect();
+      const scrollerBox = target.getBoundingClientRect();
+      return rowBox.top - scrollerBox.top - (target.clientHeight - rowBox.height) / 2;
+    };
+
+    // The blanket reduced-motion rule in globals.css only reaches CSS transitions and
+    // `scroll-behavior`; this is a `scrollTop` write loop, so it has to check for itself — the
+    // same reason mapRoute's shimmer does.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      target.scrollTop += remaining();
+      return;
+    }
+
+    // Exponential ease-out: a fifth of the remaining distance per frame, which is ~95% of the way
+    // there in a quarter of a second. The deadline is a backstop for the one case the loop can't
+    // settle on its own — the row is at the end of the list and centring it would need to scroll
+    // past the bottom, so `remaining()` never reaches zero.
+    const deadline = performance.now() + 700;
+    let frame = 0;
+    const tick = () => {
+      const delta = remaining();
+      if (Math.abs(delta) < 1 || performance.now() > deadline) return;
+      target.scrollTop += delta * 0.2;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [activeIndex]);
+
   return (
-    <div className="space-y-4" {...devLabel("ItineraryCard.StopList")}>
+    <div ref={listRef} className="space-y-4" {...devLabel("ItineraryCard.StopList")}>
       {stops.slice(0, revealedCount).map((stop, i, visible) => (
         <StopRow
           key={i}

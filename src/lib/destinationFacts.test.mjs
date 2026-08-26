@@ -141,10 +141,16 @@ test("output is deterministic across calls", () => {
   assert.deepEqual(buildDestinationFacts(fixture()), buildDestinationFacts(fixture()));
 });
 
-test("no more than two facts come from the weather family", () => {
+test("weather cannot flood the feed, even with the wider cap", () => {
+  // Was "no more than two". PER_FAMILY went 2 -> 5 so the wait can run ~150s without looping, and
+  // the guarantee that matters is unchanged: a seven-day forecast must not become the whole feed.
   const facts = buildDestinationFacts(fixture(), 50);
   const weatherish = facts.filter((f) => /°C|chance of rain|Humidity/.test(f));
-  assert.ok(weatherish.length <= 2, `weather flooded the feed: ${JSON.stringify(weatherish)}`);
+  assert.ok(weatherish.length <= 5, `weather exceeded its family cap: ${JSON.stringify(weatherish)}`);
+  assert.ok(
+    weatherish.length < facts.length / 2,
+    `weather was more than half the feed: ${weatherish.length} of ${facts.length}`
+  );
 });
 
 test("the first three facts come from three different families", () => {
@@ -220,15 +226,40 @@ test("a holiday whose local name matches renders without empty parentheses", () 
   assert.doesNotMatch(holiday, /\(\s*\)/);
 });
 
-test("wikipedia facts are one sentence and carry attribution", () => {
+test("every wikipedia sentence carries its own attribution, one sentence each", () => {
   const facts = buildDestinationFacts({
     ...fixture(),
     wikiExtract:
       "Kyoto is a city in Japan. It was the capital for over a thousand years. Many temples remain.",
   });
-  const wiki = facts.find((f) => /Wikipedia$/.test(f));
-  assert.ok(wiki, "expected a wikipedia fact");
-  assert.ok(!/thousand years/.test(wiki), "should stop at the first sentence");
+  const wiki = facts.filter((f) => /Wikipedia$/.test(f));
+  assert.equal(wiki.length, 3, "all three sentences should surface, not just the first");
+  // CC BY-SA: every quoted line carries the credit, not just the first of a run.
+  for (const f of wiki) assert.match(f, / — Wikipedia$/);
+  // One sentence per fact — the split is what keeps them glanceable.
+  for (const f of wiki) {
+    const body = f.replace(/ — Wikipedia$/, "");
+    assert.equal(body.split(". ").length, 1, `expected one sentence, got: ${body}`);
+  }
+  assert.ok(
+    facts.indexOf(wiki[0]) < facts.indexOf(wiki[1]),
+    "document order should survive ranking"
+  );
+});
+
+test("a long opening sentence no longer suppresses the rest of the extract", () => {
+  // The real failure this fixes: Kyoto's live opening sentence is 146 characters, so with
+  // attribution it clears MAX_LEN and the old first-sentence-only reader returned nothing at
+  // all — the richest extracts produced zero facts while thin ones produced theirs.
+  const long = `Kyoto, officially Kyoto City, is the capital city of Kyoto Prefecture in the Kansai region of Japan's largest and most populous island of Honshu.`;
+  assert.ok(long.length > 120, "fixture must actually exceed MAX_LEN");
+  const facts = buildDestinationFacts({
+    ...fixture(),
+    wikiExtract: `${long} More than half of the prefecture's population resides in the city.`,
+  });
+  const wiki = facts.filter((f) => /Wikipedia$/.test(f));
+  assert.equal(wiki.length, 1, "the short second sentence should still surface");
+  assert.match(wiki[0], /^More than half/);
 });
 
 test("an over-long wikipedia sentence is dropped rather than truncated", () => {
@@ -249,17 +280,55 @@ test("formatLocalTime handles midnight, noon and malformed input", () => {
   assert.equal(formatLocalTime("2026-08-14T99:00"), null);
 });
 
-test("destination context supplies festival and shopping facts", () => {
+test("every festival and shopping area surfaces, not just the first", () => {
   const facts = buildDestinationFacts({
     ...fixture(),
     context: {
-      festivals: [{ name: "Jidai Matsuri", dates: "October 22", note: "" }],
+      festivals: [
+        { name: "Jidai Matsuri", dates: "October 22", note: "" },
+        { name: "Kurama Fire Festival", dates: "October 22", note: "" },
+      ],
       safety: [{ note: "Pickpockets in crowds", severity: "medium" }],
-      shopping: [{ name: "Nishiki Market", area: "central Kyoto", note: "" }],
-      trends: [{ note: "ignored" }],
+      shopping: [
+        { name: "Nishiki Market", area: "central Kyoto", note: "" },
+        { name: "Teramachi", area: "Nakagyo", note: "" },
+      ],
+      trends: [],
     },
   }, 50);
   assert.ok(facts.some((f) => /Jidai Matsuri/.test(f)));
-  // Safety and trends are deliberately never surfaced.
-  assert.ok(!facts.some((f) => /Pickpockets|ignored/.test(f)));
+  assert.ok(facts.some((f) => /Kurama Fire Festival/.test(f)), "only festivals[0] surfaced");
+  assert.ok(facts.some((f) => /Nishiki Market/.test(f)));
+  assert.ok(facts.some((f) => /Teramachi/.test(f)), "only shopping[0] surfaced");
+});
+
+test("trends surface; safety notes still do not", () => {
+  // Trends are "popular new spots, seasonal crowds" — the right register for a waiting screen.
+  // Safety stays out by decision, not omission: "pickpockets in crowds" is useful inside a plan
+  // and a sour thing to read while waiting for a holiday to be written. The model still gets it.
+  const facts = buildDestinationFacts({
+    ...fixture(),
+    context: {
+      festivals: [],
+      safety: [{ note: "Pickpockets in crowds", severity: "medium" }],
+      shopping: [],
+      trends: [{ note: "Higashiyama gets very busy at sunset" }],
+    },
+  }, 50);
+  assert.ok(facts.some((f) => /Higashiyama gets very busy at sunset/.test(f)));
+  assert.ok(!facts.some((f) => /Pickpockets/.test(f)), "a safety note reached the feed");
+});
+
+test("candidate places past the first three are named too", () => {
+  const base = fixture();
+  const pois = Array.from({ length: 9 }, (_, i) => ({
+    name: `Place ${i + 1}`, lat: 35 + i / 100, lon: 135, category: "sight",
+  }));
+  const facts = buildDestinationFacts(
+    { ...base, rawFetch: { ...base.rawFetch, candidatePois: { available: true, pois } } },
+    50
+  );
+  // Twelve fetched places used to produce exactly one line naming three of them.
+  assert.ok(facts.some((f) => /Place 1, Place 2 and Place 3/.test(f)));
+  assert.ok(facts.some((f) => /Place 4, Place 5 and Place 6/.test(f)), "only the first trio surfaced");
 });

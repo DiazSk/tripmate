@@ -38,23 +38,39 @@ import { COMPOSITE_WEIGHTS } from "./types.ts";
 
 const KYOTO = getFixture("kyoto-couple-mixed");
 
-const WELL_FORMED = `### 2026-09-19 (Sat) — Southern shrines at first light
+const WELL_FORMED = `## Day 1 — 2026-09-19
 
-**Morning**
-- Fushimi Inari Taisha — 07:00–09:30 (~2.5h)
-  → 20 min transit to next stop
-- Kiyomizu-dera — 10:00–11:30 (~1.5h)
-  → 10 min walk to next stop
+*Southern shrines at first light, then a slow drift north through the old lanes. \u26e9\ufe0f\ud83c\udf62*
 
-**Afternoon**
-- Nishiki Market — 13:00–14:00 (~1h)
-  → 15 min walk to next stop
+**Weather:** Warm and clear, 21-29C
 
-**Evening**
-- Dinner around Pontocho Alley — 19:00–20:30 — riverside kaiseki and yakitori counters (e.g. small izakaya)
+**Lodging:** Machiya guesthouse in Gion — $210 — central to the day's cluster and quiet after dark
 
-**Stay near:** Gion — central to the day's cluster and quiet after dark
-**Note:** Respect for the Aged Day may mean bigger crowds.
+- **07:00 AM — Fushimi Inari Taisha** (entry, 2.5 hours, $0, 34.9671/135.7727)
+  why: Dawn on the torii path is the one hour it is genuinely quiet.
+  note: 20 min transit from the guesthouse; go before 08:00 to beat the tour buses.
+- **10:00 AM — Kiyomizu-dera** (entry, 1.5 hours, $5, 34.9949/135.7850)
+  why: Hillside veranda pairs with the morning's shrine without repeating it.
+  note: 20 min transit from the last stop, then a short uphill walk.
+- **01:00 PM — Nishiki Market** (food, 1 hour, $25, 35.0050/135.7648)
+  why: Covered arcade lunch that suits a food-led day.
+  note: 10 min walk from the last stop; stalls thin out after 17:00.
+- **07:00 PM — Dinner around Pontocho Alley** (food, 1.5 hours, $60, 35.0044/135.7707)
+  why: Riverside lanes are the evening the traveler came for.
+  note: 15 min walk from the last stop; kaiseki and yakitori counters, e.g. small izakaya.
+
+## Day 2 — 2026-09-20
+
+*A northern loop at an easier pace, ending on the water. \ud83c\udf3f*
+
+**Weather:** Mild with a chance of showers, 22-30C
+
+- **09:00 AM — Kinkaku-ji** (entry, 45 minutes, $5, 35.0394/135.7292)
+  why: Arriving at opening is the only way to see the pavilion uncrowded.
+  note: 25 min transit from the guesthouse; go straight to the pond side.
+- **12:30 PM — Lunch around Demachiyanagi** (food, 1 hour, $20, 35.0300/135.7720)
+  why: Riverside canteens suit a slower second day.
+  note: 20 min transit from the last stop; several counters along the arcade.
 `;
 
 // --- parser ------------------------------------------------------------------------------------
@@ -93,24 +109,41 @@ test("parseTransport reads mode and minutes, normalizing to the app's vocabulary
 
 test("parseItinerary reads the skill's format end to end", () => {
   const parsed = parseItinerary(WELL_FORMED);
-  assert.equal(parsed.days.length, 1);
+  assert.equal(parsed.days.length, 2);
   const day = parsed.days[0];
   assert.equal(day.date, "2026-09-19");
-  assert.equal(day.dayOfWeek, "Sat");
-  assert.equal(day.theme, "Southern shrines at first light");
-  assert.equal(day.stayNear.startsWith("Gion"), true);
-  assert.ok(day.note.includes("Respect for the Aged"));
+  assert.equal(day.dayOfWeek, "Sat", "§11's heading has no weekday, so it comes from the date");
+  assert.ok(day.theme.startsWith("Southern shrines"));
+  assert.ok(day.weather.includes("21-29C"));
+  assert.equal(day.lodging.costUsd, 210);
+  assert.ok(day.stayNear.startsWith("Machiya guesthouse"));
   assert.equal(dayEntries(day).length, 4);
-  assert.equal(day.entriesBySlot.Morning[0].name, "Fushimi Inari Taisha");
-  assert.equal(day.entriesBySlot.Morning[0].transport.minutes, 20);
+
+  // Slots are derived from each start time now, not read from a heading.
+  assert.equal(day.entriesBySlot.Morning.length, 2);
+  assert.equal(day.entriesBySlot.Afternoon.length, 1);
+  assert.equal(day.entriesBySlot.Evening.length, 1);
+
+  const first = day.entriesBySlot.Morning[0];
+  assert.equal(first.name, "Fushimi Inari Taisha");
+  assert.equal(first.category, "entry");
+  assert.equal(first.costUsd, 0, "a stated 0 is a real cost, not a missing one");
+  assert.equal(first.durationMin, 150);
+  assert.equal(first.window.startMin, 7 * 60);
+  assert.ok(first.why.startsWith("Dawn on the torii"));
+  assert.equal(first.lat, 34.9671);
+  // §3c puts the leg in the note, so that's where the transport comes from.
+  assert.equal(first.transport.mode, "transit");
+  assert.equal(first.transport.minutes, 20);
+  assert.equal(first.areaLevel, false);
   assert.equal(day.entriesBySlot.Evening[0].areaLevel, true, "an 'around <area>' meal is area-level");
-  assert.equal(day.entriesBySlot.Morning[0].areaLevel, false);
+  assert.equal(parsed.days[1].lodging, null, "§11 omits the Lodging line on the last day");
 });
 
 test("parseItinerary flags a code fence and still parses the body", () => {
   const parsed = parseItinerary("```markdown\n" + WELL_FORMED + "\n```");
   assert.equal(parsed.hadCodeFence, true);
-  assert.equal(parsed.days.length, 1);
+  assert.equal(parsed.days.length, 2);
 });
 
 // --- opening hours ------------------------------------------------------------------------------
@@ -144,23 +177,24 @@ test("nameMatches tolerates the ways models rewrite a place name", () => {
 // --- scorers -------------------------------------------------------------------------------------
 
 test("scoreFormat passes a well-formed day and names what a broken one is missing", () => {
-  const oneDayFixture = {
+  const twoDayFixture = {
     ...KYOTO,
     reconciled: {
       ...KYOTO.reconciled,
       rawFetch: {
         ...KYOTO.reconciled.rawFetch,
-        dateContext: { ...KYOTO.reconciled.rawFetch.dateContext, tripDays: 1 },
+        dateContext: { ...KYOTO.reconciled.rawFetch.dateContext, tripDays: 2 },
       },
     },
   };
-  const good = scoreFormat(parseItinerary(WELL_FORMED), oneDayFixture);
+  const good = scoreFormat(parseItinerary(WELL_FORMED), twoDayFixture);
   assert.equal(good.pass, true, JSON.stringify(good.missingFields));
 
-  const noEvening = WELL_FORMED.replace(/\*\*Evening\*\*[\s\S]*?\n\n/, "");
-  const bad = scoreFormat(parseItinerary(noEvening), oneDayFixture);
+  // Drop one stop's cost — the single field that made the §5 budget rule unmeasurable before §11.
+  const noCost = WELL_FORMED.replace("(food, 1 hour, $25, 35.0050/135.7648)", "(food, 1 hour, 35.0050/135.7648)");
+  const bad = scoreFormat(parseItinerary(noCost), twoDayFixture);
   assert.equal(bad.pass, false);
-  assert.ok(bad.missingFields.includes("all usable slot blocks present"));
+  assert.ok(bad.missingFields.includes("every stop has a cost"));
   assert.ok(bad.normalized > 0 && bad.normalized < 1, "a near-miss is not scored as a total failure");
 });
 
@@ -264,30 +298,36 @@ test("scoreConstraints catches a closed-day booking and reports its reason", () 
   assert.ok(score.details.some((d) => d.detail.includes("Nijo Castle")));
 });
 
-test("scoreConstraints exempts Evening entries from the daylight rule", () => {
+test("scoreConstraints exempts stops that do not depend on daylight", () => {
   // Day 1 sunset is 17:56, so a 19:00 evening entry is after dark — and allowed by skill §5.
-  const evening = `### 2026-09-19 (Sat) — x
+  const evening = `## Day 1 — 2026-09-19
 
-**Morning**
-- Fushimi Inari Taisha — 07:00–08:00 (~1h)
+*x*
 
-**Afternoon**
-- Kiyomizu-dera — 13:00–14:00 (~1h)
+**Weather:** clear
 
-**Evening**
-- Nishiki Market — 19:00–20:30 (~1.5h)
-
-**Stay near:** somewhere — why
+- **07:00 AM — Fushimi Inari Taisha** (entry, 1 hour, $0, 34.9671/135.7727)
+  why: dawn on the torii path
+  note: 10 min walk from the guesthouse
+- **01:00 PM — Kiyomizu-dera** (entry, 1 hour, $5, 34.9949/135.7850)
+  why: hillside veranda
+  note: 20 min transit from the last stop
+- **07:00 PM — Dinner around Pontocho** (food, 1.5 hours, $50, 35.0044/135.7707)
+  why: riverside lanes after dark
+  note: 15 min walk from the last stop
 `;
   const score = scoreConstraints(parseItinerary(evening), KYOTO);
-  assert.equal(score.byType.daylight, 0);
+  assert.equal(score.byType.daylight, 0, "a dinner after sunset does not need daylight");
 
-  const afternoonAfterDark = evening.replace(
-    "- Kiyomizu-dera — 13:00–14:00 (~1h)",
-    "- Kiyomizu-dera — 19:30–20:30 (~1h)"
+  // Same 19:30 hour, but an outdoor temple rather than a meal — that one does breach §10. The old
+  // version of this test varied the slot heading; slots are derived from the clock now, so what
+  // has to vary is the kind of stop.
+  const templeAfterDark = evening.replace(
+    "- **01:00 PM — Kiyomizu-dera** (entry, 1 hour, $5, 34.9949/135.7850)",
+    "- **07:30 PM — Kiyomizu-dera** (entry, 1 hour, $5, 34.9949/135.7850)"
   );
-  const late = scoreConstraints(parseItinerary(afternoonAfterDark), KYOTO);
-  assert.equal(late.byType.daylight, 1, "the same time in the Afternoon slot does breach it");
+  const late = scoreConstraints(parseItinerary(templeAfterDark), KYOTO);
+  assert.equal(late.byType.daylight, 1, "an outdoor temple after sunset does breach it");
 });
 
 test("scoreCoverage measures starred priorities and pinned anchors separately", () => {
@@ -300,7 +340,7 @@ test("scoreCoverage measures starred priorities and pinned anchors separately", 
 
 test("scoreGeoCoherence reports its own denominator", () => {
   const score = scoreGeoCoherence(parseItinerary(WELL_FORMED), KYOTO);
-  assert.equal(score.totalLegs, 3, "4 entries make 3 consecutive pairs");
+  assert.equal(score.totalLegs, 4, "4 entries on day 1 and 2 on day 2 make 3 + 1 pairs");
   assert.ok(score.matchedLegs > 0 && score.matchedLegs <= score.totalLegs);
   assert.ok(score.tripMeanMinutes > 0);
   assert.ok(score.normalized >= 0 && score.normalized <= 1);
@@ -381,17 +421,19 @@ test("compositeScore refuses to score a cell with too few measurable groups", ()
 
 // --- structured output ---------------------------------------------------------------------------
 
-test("toItineraryJson mirrors the readable plan and never invents money", () => {
+test("toItineraryJson mirrors the readable plan and carries the model's own costs", () => {
   const json = toItineraryJson(WELL_FORMED, KYOTO, "test-model");
 
   assert.equal(json.model, "test-model");
-  assert.equal(json.days.length, 1);
-  assert.equal(countStops(json), 4);
+  assert.equal(json.days.length, 2);
+  assert.equal(countStops(json), 6);
 
   const day = json.days[0];
   assert.equal(day.date, "2026-09-19");
   assert.equal(day.dayOfWeek, "Sat");
-  assert.ok(day.stayNear.startsWith("Gion"));
+  assert.ok(day.stayNear.startsWith("Machiya guesthouse"));
+  assert.equal(day.lodging.costUsd, 210);
+  assert.equal(json.days[1].lodging, null, "§11 omits lodging on the last day");
 
   // Weather comes from the trip bundle, not the model's prose — the fixture's day-1 forecast.
   assert.equal(day.weather.tempMaxC, 29);
@@ -401,22 +443,26 @@ test("toItineraryJson mirrors the readable plan and never invents money", () => 
   const first = day.stops[0];
   assert.equal(first.name, "Fushimi Inari Taisha");
   assert.equal(first.slot, "Morning");
-  assert.equal(first.time, "07:00-09:30");
+  assert.equal(first.startTime, "07:00");
   assert.equal(first.durationMinutes, 150);
   assert.equal(first.transportToNext.mode, "transit");
   assert.equal(first.transportToNext.minutes, 20);
-  assert.equal(first.category, "entry", "a matched context POI is an entry");
+  assert.equal(first.category, "entry", "§11's own category field, not the lexical guess");
+  assert.equal(first.costUsd, 0, "a stated 0 survives as 0, not as null");
   assert.equal(first.matchedPoi, "Fushimi Inari Taisha");
   assert.ok(typeof first.lat === "number", "coordinates come from the matched POI");
 
   const dinner = day.stops.at(-1);
   assert.equal(dinner.areaLevel, true);
   assert.equal(dinner.category, "food");
-  assert.equal(dinner.lat, null, "an area-level slot is not matched to a POI");
+  assert.equal(dinner.costUsd, 60);
+  assert.ok(typeof dinner.lat === "number", "an unmatched area falls back to the model's own pair");
 
-  // Absent, not zero.
-  assert.ok(json.omittedFields.some((f) => f.startsWith("stop.cost")));
-  for (const stop of day.stops) assert.equal("cost" in stop, false);
+  // A stop that states no cost stays null rather than becoming 0.
+  const noCost = WELL_FORMED.replace("(entry, 2.5 hours, $0, 34.9671/135.7727)", "(entry, 2.5 hours, 34.9671/135.7727)");
+  assert.equal(toItineraryJson(noCost, KYOTO, "m").days[0].stops[0].costUsd, null);
+
+  assert.equal(json.omittedFields.some((f) => f.startsWith("stop.cost")), false, "costs are carried now");
 });
 
 test("toItineraryJson normalizes 12h clocks into the structured payload", () => {
@@ -469,40 +515,20 @@ test("with no booked logistics every slot is expected", () => {
   }
 });
 
-test("scoreFormat does not penalise an empty morning the arrival time made unusable", () => {
-  const arriveLate = `### 2026-09-19 (Sat) — Arrival
+test("usableSlot reads a booked arrival as consuming the morning it lands in", () => {
+  // §11 has no slot blocks, so format_adherence no longer scores slot coverage — but the arrival
+  // and departure boundaries this encodes still govern feasibility and skill §4c-bis, so the helper
+  // stays covered. A 14:30 arrival plus the 90-minute transfer buffer eats day 1's morning.
+  const arriving = withLogistics("14:30", null);
+  assert.equal(usableSlot("Morning", 0, 3, arriving), false);
+  assert.equal(usableSlot("Evening", 0, 3, arriving), true);
+  assert.equal(usableSlot("Morning", 1, 3, arriving), true, "only day 1 is affected");
 
-**Afternoon**
-- Kiyomizu-dera — 16:00–17:00 (~1h)
-  → 10 min walk to next stop
+  const leaving = withLogistics(null, "10:00");
+  assert.equal(usableSlot("Afternoon", 2, 3, leaving), false, "a 10:00 departure ends the last day");
+  assert.equal(usableSlot("Morning", 2, 3, leaving), true);
 
-**Evening**
-- Dinner around Gion — 19:00–20:30 — izakaya lanes
-
-**Stay near:** Gion — near the arrival transfer
-`;
-  const oneDay = (fixture) => ({
-    ...fixture,
-    reconciled: {
-      ...fixture.reconciled,
-      rawFetch: {
-        ...fixture.reconciled.rawFetch,
-        dateContext: { ...fixture.reconciled.rawFetch.dateContext, tripDays: 1 },
-      },
-    },
-  });
-
-  const booked = scoreFormat(parseItinerary(arriveLate), oneDay(withLogistics("14:30", null)));
-  assert.ok(
-    !booked.missingFields.includes("all usable slot blocks present"),
-    "a 14:30 arrival makes the morning unusable — skill 4c-bis"
-  );
-
-  const unbooked = scoreFormat(parseItinerary(arriveLate), oneDay(KYOTO));
-  assert.ok(
-    unbooked.missingFields.includes("all usable slot blocks present"),
-    "with no booked flight the same empty morning IS an omission"
-  );
+  assert.equal(usableSlot("Morning", 0, 3, KYOTO), true, "no booking means every slot is usable");
 });
 
 // --- balanced panel --------------------------------------------------------------------------------
@@ -679,19 +705,21 @@ test("scoreDowntime flags a wall-to-wall day and passes one with slack", () => {
 });
 
 test("scoreMealProximity flags a meal that is a detour", () => {
-  const md = `### 2026-09-19 (Sat) — x
+  const md = `## Day 1 — 2026-09-19
 
-**Morning**
-- Kinkaku-ji — 09:00–10:00 (~1h)
-  → 45 min transit to next stop
+*x*
 
-**Afternoon**
-- Lunch around Higashiyama — 12:30–13:30 — teahouses
+**Weather:** clear
 
-**Evening**
-- Dinner around Gion — 19:00–20:00 — izakaya
-
-**Stay near:** somewhere — why
+- **09:00 AM — Kinkaku-ji** (entry, 1 hour, $5, 35.0394/135.7292)
+  why: golden pavilion at opening
+  note: 15 min transit from the guesthouse
+- **12:30 PM — Lunch around Higashiyama** (food, 1 hour, $20, 34.9980/135.7820)
+  why: teahouse lanes
+  note: 45 min transit from the last stop — right across the city
+- **07:00 PM — Dinner around Gion** (food, 1 hour, $45, 35.0037/135.7752)
+  why: izakaya lanes
+  note: 10 min walk from the last stop
 `;
   const s = scoreMealProximity(parseItinerary(md), KYOTO);
   assert.ok(s.mealSlots >= 2);
@@ -775,17 +803,32 @@ test("classifyExposure reads kinds first, then words, and admits ignorance", () 
   assert.notEqual(classifyExposure(entry("Walk to the gallery"), KYOTO), "outdoor");
 });
 
-test("scoreBudget is within budget on a small plan and proportional when over", () => {
-  const cheap = scoreBudget(parseItinerary(WELL_FORMED), KYOTO); // $2600 budget, 4 stops
+test("scoreBudget reads stated costs, and penalises underspend as well as overspend", () => {
+  // §11 puts a $cost on every stop and on the lodging line, so this is the model's own arithmetic
+  // rather than the estimate table. WELL_FORMED totals $90 of stops + $210 lodging = $300.
+  const cheap = scoreBudget(parseItinerary(WELL_FORMED), KYOTO); // $2600 budget
+  assert.equal(cheap.estimateBased, false, "stated costs beat the estimate table");
+  assert.equal(cheap.estimatedUsd, 325, "$115 of stops across both days + $210 lodging");
   assert.equal(cheap.withinBudget, true);
-  assert.equal(cheap.normalized, 1);
-  assert.equal(cheap.estimateBased, true, "must always declare itself an estimate");
+  assert.ok(cheap.budgetUsedFraction < 0.2);
+  assert.ok(
+    cheap.normalized > 0 && cheap.normalized < 1,
+    "§5 asks for 85-100% of the budget, so spending a tenth of it is a miss too"
+  );
 
-  const tiny = { ...KYOTO, reconciled: { ...KYOTO.reconciled, userAnswers: { ...KYOTO.reconciled.userAnswers, budget: 10 } } };
+  const tiny = { ...KYOTO, reconciled: { ...KYOTO.reconciled, userAnswers: { ...KYOTO.reconciled.userAnswers, budget: 100 } } };
   const over = scoreBudget(parseItinerary(WELL_FORMED), tiny);
   assert.equal(over.withinBudget, false);
   assert.ok(over.normalized > 0 && over.normalized < 1, "over-budget is proportional, not zero");
-  assert.ok(over.excludes.includes("lodging"));
+
+  const onTarget = { ...KYOTO, reconciled: { ...KYOTO.reconciled, userAnswers: { ...KYOTO.reconciled.userAnswers, budget: 350 } } };
+  assert.equal(scoreBudget(parseItinerary(WELL_FORMED), onTarget).normalized, 1, "$325 of $350 is in band");
+
+  // No costs in the output at all — the estimate table is still the fallback.
+  const stripped = WELL_FORMED.replace(/\$\d+, /g, "").replace(/ — \$210 —/, " —");
+  const estimated = scoreBudget(parseItinerary(stripped), KYOTO);
+  assert.equal(estimated.estimateBased, true);
+  assert.ok(estimated.excludes.includes("lodging"));
 });
 
 test("scoreVibe rewards stops carrying the traveler's tags", () => {

@@ -8,18 +8,55 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev      # next dev (Turbopack)
-npm run build
+npm run build    # next build, then verify-build.mjs (see below)
 npm run lint     # eslint (no path arg needed)
 npx tsc --noEmit -p tsconfig.json   # typecheck — not wired to a script
+node scripts/browser-matrix.mjs     # cross-engine boot check against a running server
 ```
+
+**`npm run build` fails the build if any emitted chunk cannot be parsed.** That second step is
+not ceremony. `next build` reported success for months while shipping a Cesium chunk no browser
+could parse: `@spz-loader/core` embeds its WASM decoder as a string of raw bytes, and SWC's
+minifier re-encoded it as a template literal, where a NUL byte followed by a digit is an illegal
+escape. Production served a 200 and rendered the whole interface **with no globe at all** — in
+Chromium, Firefox and WebKit alike. `next dev` never showed it because dev does not minify, and
+neither `tsc`, `eslint` nor `node --test` can see a bundler's output. `shims/spz-loader-core.ts`
+is the fix (aliased in `next.config.ts`); `scripts/verify-build.mjs` is the guard.
 
 **Node ≥ 22 is mandatory.** `better-sqlite3`'s native binding silently kills the dev server on Node 20 the moment any DB-touching route is hit. `.nvmrc` pins 22 — run `nvm use` if the shell drifts.
 
-**The test suite is deliberately minimal.** `npm test` runs `node --test 'src/**/*.test.mjs'` — no framework, no build step (Node strips the TypeScript, so the `.mjs` tests import `.ts` directly). It covers only pure, deterministic logic that has already broken once: `src/lib/itinerary.test.mjs` and `src/lib/perfAggregate.test.mjs`. Nothing renders, no route is booted, no DB is opened.
+**The test suite is deliberately narrow, not small.** `npm test` runs
+`node --import ./scripts/ts-resolve.mjs --test "src/**/*.test.mjs"` — 17 files, ~220 tests, no
+framework and no build step. It covers only pure, deterministic logic, most of it logic that has
+already broken once. Nothing renders, no route is booted, no DB is opened.
 
 So passing tests prove far less here than in a normally-covered repo. Verification still means: `npm test`, `tsc --noEmit`, `eslint`, **and** exercising routes against a running dev server with `curl`. Don't claim a change is verified on typecheck alone.
 
-**A `.test.mjs` can only import a `.ts` module whose own imports are all `import type`.** Node erases those, so nothing is resolved at runtime — which is why `itinerary.ts` and `perfAggregate.ts` are testable. A module importing a *value* (`import { TIERS } from "./tiers"`), or importing a type without the `type` keyword, fails with `ERR_MODULE_NOT_FOUND`: Node's ESM loader needs the file extension that the rest of the codebase correctly omits for the bundler. `itineraryPrompt.ts` is in that state today. Put logic you want covered in a module with type-only imports rather than adding extensions piecemeal.
+**A `.test.mjs` can import any `.ts` module, value imports included.** `scripts/ts-resolve.mjs`
+registers an ESM resolve hook that retries an extensionless relative specifier as `.ts`, then
+`/index.ts`, then `.tsx` — so `import { TIERS } from "./tiers"` inside a module under test resolves
+fine. `src/lib/tripDays.test.mjs` imports `applyPatch` from `itineraryPatch.ts`, which value-imports
+`./tripDays`; `src/lib/bench/bench.test.mjs` reaches `runBenchmark.ts`, which pulls in `../db` and
+`better-sqlite3`. Write the test where the logic lives.
+
+The hook is registered by `--import` in the `test` script only, so the dev server and the build never
+load it. Import specifiers **inside a `.test.mjs` itself** still need the explicit `.ts` extension —
+the hook fires on the failed resolve of a relative import, and the test files all write `./foo.ts`
+directly.
+
+**What the hook does NOT fix: a type imported without the `type` keyword.** Node erases
+`import type { X }`, but a plain `import { X }` stays in the emitted module, so if `X` is an
+`interface` or `type` the loader throws at instantiation:
+
+```
+SyntaxError: The requested module './types' does not provide an export named 'CritiqueResult'
+```
+
+That is `src/lib/generationRunner.ts` today (line 11 pulls `CritiqueResult` into a value import
+block), which is why `runGeneration()` cannot be reached from a `.mjs` script at all — a script that
+needs it has to go through `/api/itinerary` over HTTP against a running dev server, the way
+`scripts/perf-bench.mjs` does. Path resolution is solved; import *kind* is not. Move the type into an
+`import type` block if you need a module to be script-reachable.
 
 The glob in the `test` script needs **double** quotes. Single quotes reach Node literally on Windows and it matches nothing — the suite reported success while running zero tests.
 
@@ -66,6 +103,14 @@ SQLite via `better-sqlite3`, single file `tripmate.db` at repo root. `src/lib/db
 
 - **Calendar dates are parsed as UTC midnight.** `new Date("2026-09-19")` formatted with local accessors rolls back a day anywhere west of Greenwich. Use `getUTC*()` / `timeZone: "UTC"` for anything date-only — this has already caused a wrong day-of-week to reach generated output.
 - **`AGENTS.md` is rewritten by `next dev`.** Deleting it from a diff just recreates the uncommitted change; commit it with your work.
+- **Don't compare `created_at` against SQLite's `datetime()`.** Every timestamp in this DB is written
+  as `new Date().toISOString()` — `2026-08-21T21:41:26.123Z`, with a `T` and a `Z`. SQLite's
+  `datetime('now','-10 minutes')` returns `2026-08-21 21:26:50`, space-separated. Compared as
+  strings, `T` (0x54) beats `' '` (0x20), so `created_at > datetime('now', …)` silently matches
+  **every row whose date is today**, whatever its time — it looks like a working filter and returns
+  far too much. Build the cutoff as an ISO string instead
+  (`node -e "console.log(new Date(Date.now()-15*60000).toISOString())"`) so both sides share a
+  format. `tagRunsCreatedBetween()` is safe because it compares ISO to ISO.
 - Geocoding misses are **deliberately non-blocking** (an Open-Meteo outage shouldn't read as "the app is broken"). Don't convert them into hard validation errors — see the comments in `src/app/page.tsx` and `src/app/api/itinerary/route.ts`.
 
 ## Docs convention

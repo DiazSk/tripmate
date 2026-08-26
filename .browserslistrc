@@ -1,0 +1,51 @@
+# Explicit support floor. Without this file Next uses `defaults`, which resolved to Safari 18.5+
+# / Firefox 140+ on the machine that last built — a floor that silently moves every time someone
+# runs `npm install` and refreshes caniuse-lite. That is a support policy decided by a lockfile.
+#
+# Every line below is set by something the app actually ships, not by taste. Raising a floor is
+# fine; lowering one means checking the feature that set it.
+#
+#   Safari / iOS 16.4  — Cesium calls `instanceof OffscreenCanvas` unguarded
+#                        (@cesium/engine Scene/Material.js:994 and :1269, no `typeof` check and no
+#                        fallback anywhere in the package). Below 16.4 that is a ReferenceError
+#                        during widget construction, so the globe does not start at all. This is
+#                        the single highest floor in the project and none of it is our code.
+#                        `AbortSignal.timeout` (16.0) would otherwise have set it — it ships to
+#                        the browser via DestinationSearch.tsx and is a crash, not a degrade.
+#
+#   Firefox 121        — the `:has()` selector, which hides the map control stack
+#                        (globals.css `.app-shell:has(.map-chrome-hidden)`). Firefox shipped
+#                        `:has()` late; below 121 the controls stay visible over a globe nobody
+#                        is reading. Cosmetic, but it is the highest Firefox floor we have.
+#
+#   Chrome / Edge 108  — `dvh` units (AppShell's `h-dvh`, the Blue Hour `min-h-dvh` beats).
+#                        `:has()` (105) and `AbortSignal.timeout` (103) sit just under it.
+#
+# Deliberately NOT lowered to chase coverage: every feature above is load-bearing and none has a
+# polyfill we would want. Cesium + WebGL2 + a photorealistic tileset is not an experience an old
+# browser was going to have.
+#
+# One feature inside this range is NOT universally available and is used anyway, as a degrade:
+#
+#   animation-timeline / scroll()  — Chrome 115, Firefox 144, Safari 26.0. So Chrome 108-114,
+#                        Firefox 121-143 and Safari/iOS 16.4-18.7 are all in support and all get
+#                        no scroll-driven animation. Two things ride it: `.hero-cue`'s fade (which
+#                        simply never fades) and `.hero-dusk`'s wash (which never appears, so the
+#                        hero-to-ImageRow seam is a hard cut). Both are behind `@supports`, so the
+#                        resting state is the unobscured composition rather than a broken one.
+#                        This was previously masked above `lg` by a GSAP pin doing the same wash;
+#                        that pin is deleted, so the degrade now reaches those browsers' desktop
+#                        widths too. Taken knowingly — see DESIGN.md's The Story's One Exit.
+#
+# Check what this resolves to:  npx browserslist
+# Check what it costs:          npx browserslist --coverage
+
+Chrome >= 108
+ChromeAndroid >= 108
+Edge >= 108
+Firefox >= 121
+FirefoxAndroid >= 121
+Safari >= 16.4
+iOS >= 16.4
+Samsung >= 21
+not dead

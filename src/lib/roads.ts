@@ -3,6 +3,11 @@ export interface HighwaySegment {
 }
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+/** Longer than the other upstreams because Overpass queues under load. NOTE the `[timeout:N]`
+ *  inside each query is an instruction to *Overpass* about its own execution budget, not a cap on
+ *  how long this process waits for an answer — only the abort signal is that. */
+const OVERPASS_TIMEOUT_MS = 30_000;
+
 /** Roughly matches the framing of a destination-level camera flight (DESTINATION_HEIGHT_M in
  *  mapCamera.tsx) — wide enough to cover the city and its immediate surroundings. */
 const SEARCH_RADIUS_M = 30_000;
@@ -23,6 +28,9 @@ export async function fetchMajorHighways(lat: number, lng: number): Promise<High
     // default, and the server treats that as "no acceptable representation" rather than "any".
     headers: { "Content-Type": "text/plain", Accept: "*/*", "User-Agent": "TripMate/1.0" },
     body: query,
+    // Longer than the others: Overpass queues under load. The `[timeout:25]` in the query is
+    // an instruction to *Overpass*, not a cap on how long we wait for it to answer.
+    signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`Overpass API returned ${res.status}`);
   const data = await res.json();

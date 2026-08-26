@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo, Source_Serif_4, Playfair_Display, Manrope } from "next/font/google";
+import { Archivo } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
 import "./globals.css";
@@ -12,40 +12,27 @@ import "./globals.css";
  */
 const SHOW_LLM_TRACES = process.env.NODE_ENV === "development";
 
-const sourceSerif = Source_Serif_4({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
-
-// The landing headline only — everything else keeps Source Serif 4 or the system sans.
-// `axes: ["wdth"]` is load-bearing: Archivo's width axis is what makes it *wide* rather
-// than merely bold, and without the axis loaded `font-stretch: 125%` in .font-hero is a
-// silent no-op (browsers don't synthesise width).
+/**
+ * One face for the entire product — display, body, UI, the landing poster, all of it.
+ *
+ * It was three (Source Serif 4, Archivo, Manrope), and before that five. The cut to one is the
+ * central move of the Vita-derived system: every bit of expression now comes from scale, weight
+ * and negative tracking rather than from a second family. Three webfonts became one, which is
+ * also the cheapest performance win on the page.
+ *
+ * What this deliberately gives up: Source Serif 4's italic was the app's voice on `/trip/[id]`
+ * and `/trips`, and DESIGN.md defended it as the thing that separated "a real plan to look at"
+ * from the marketing surface. That distinction is gone on purpose — landing and app now speak
+ * once. Reversible in one commit if the itinerary views read worse for it.
+ *
+ * No `axes: ["wdth"]` any more. The width axis existed solely for `font-stretch: 125%` on the
+ * poster, and widening a heavy grotesk was the single strongest template tell on the page.
+ * Loading the axis with nothing using it would ship bytes for a property no rule sets.
+ */
 const archivo = Archivo({
-  variable: "--font-hero",
+  variable: "--font-sans-stack",
   subsets: ["latin"],
-  axes: ["wdth"],
-});
-
-// Blue Hour Expedition scene fonts — additive, scoped to `.blue-hour-scene` via
-// globals.css's `.font-scene-*` classes. Loading is global (a `.variable` class only
-// defines a CSS custom property on <html>) but usage stays scoped, so Source Serif 4
-// and Archivo remain untouched everywhere outside the redesigned landing/plan flow.
-const playfairDisplay = Playfair_Display({
-  variable: "--font-scene-display",
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  style: ["italic", "normal"],
-});
-
-// Bricolage Grotesque was the poster face and is gone: the poster needed both weight and
-// width pushed to their limits, and Bricolage's width axis stops at 100%. Archivo (loaded
-// above) reaches 900 weight and 125% width, so `.font-scene-hero` uses `--font-hero`.
-const manrope = Manrope({
-  variable: "--font-scene-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700", "900"],
 });
 
 export const metadata: Metadata = {
@@ -57,7 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${sourceSerif.variable} ${archivo.variable} ${playfairDisplay.variable} ${manrope.variable} h-full antialiased`}
+      className={`${archivo.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {SHOW_LLM_TRACES ? (
@@ -67,10 +54,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         ) : (
           <AppShell>{children}</AppShell>
         )}
-      {/* impeccable-live-start */}
-<script src="http://localhost:8400/live.js?token=f341fc43-efb4-4e49-9d34-7b25f203cc5d"></script>
-{/* impeccable-live-end */}
-</body>
+      </body>
     </html>
   );
 }

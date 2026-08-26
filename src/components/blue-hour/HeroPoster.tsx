@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { gsap, ScrollTrigger, prefersReducedMotion } from "@/lib/gsap";
+// `ScrollTrigger` is not imported by name: `@/lib/gsap` registers it as an import side effect, and
+// this file only names it in a comment.
+import { gsap } from "@/lib/gsap";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
 
 /**
@@ -13,7 +16,6 @@ import { useScrollContainer } from "@/lib/scrollContainer";
 export default function HeroPoster({ onPlan }: { onPlan: () => void }) {
   const container = useScrollContainer();
   const sectionRef = useRef<HTMLElement>(null);
-
   useEffect(() => {
     if (!sectionRef.current || prefersReducedMotion()) return;
     // A mask wipe, not a fade: each line is uncovered bottom-to-top. This used to be the

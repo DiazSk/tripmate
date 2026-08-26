@@ -25,19 +25,32 @@ export default function DevInspectorOverlay() {
 
   useEffect(() => {
     if (!enabled) return;
-    function handleMove(e: MouseEvent) {
-      const target = e.target as Element | null;
-      const tagged = target?.closest(`[${DEV_NAME_ATTR}]`);
+    // Coalesced to one `closest()` walk per frame. Unthrottled, this ran an ancestor walk to
+    // the document root plus a setState on every `mousemove` — 120-1000Hz on a high-polling
+    // mouse — on top of a page that is already sharing its frame budget with the globe. The
+    // badge only has to be right once per painted frame, so the last target of the frame wins.
+    let pendingTarget: Element | null = null;
+    let frame = 0;
+    function flush() {
+      frame = 0;
+      const tagged = pendingTarget?.closest(`[${DEV_NAME_ATTR}]`);
       setHovered(tagged?.getAttribute(DEV_NAME_ATTR) ?? null);
     }
-    document.addEventListener("mousemove", handleMove);
-    return () => document.removeEventListener("mousemove", handleMove);
+    function handleMove(e: MouseEvent) {
+      pendingTarget = e.target as Element | null;
+      if (!frame) frame = requestAnimationFrame(flush);
+    }
+    document.addEventListener("mousemove", handleMove, { passive: true });
+    return () => {
+      document.removeEventListener("mousemove", handleMove);
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, [enabled]);
 
   if (!enabled) return null;
 
   return (
-    <div className="pointer-events-none absolute top-[calc(var(--nav-h)+0.5rem)] left-5 z-50 rounded border border-black/10 bg-white/90 px-2 py-1 text-xs font-medium text-slate-900 shadow-md sm:left-6">
+    <div className="pointer-events-none absolute top-[calc(var(--nav-h)+0.5rem)] left-5 z-50 rounded border border-black/10 bg-white/90 px-2 py-1 text-xs font-medium text-slate-900 shadow-md sm:left-6 print:hidden">
       {hovered ?? "—"}
     </div>
   );
