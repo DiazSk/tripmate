@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   description: "AI-planned itineraries with real weather, budget tracking, and maps.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
