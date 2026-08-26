@@ -60,6 +60,7 @@ h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.88;letter-spac
 .tl{position:relative;display:flex;min-width:max-content;padding-top:26px}
 .tl::before{content:"";position:absolute;left:14px;right:14px;top:32px;height:var(--trunk);
   background:var(--deep);border-radius:999px}
+.savenote{margin:0 22px 6px;font-size:.75rem;font-weight:500;color:var(--muted)}
 .st{position:relative;width:76px;flex:none;display:flex;flex-direction:column;align-items:center}
 .st i{width:17px;height:17px;border-radius:50%;background:var(--card);
   border:4px solid var(--deep);position:relative;z-index:1;margin-top:1.5px}
@@ -104,6 +105,9 @@ h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.88;letter-spac
   background:var(--card);border:4px solid var(--deep);transform:translateX(-50%);z-index:1}
 .stop.on::before{background:var(--accent);border-color:var(--accent-ink);
   box-shadow:0 0 0 5px rgba(251,152,38,.2)}
+.stop[data-stop]{cursor:pointer}
+.stop.done .sname{opacity:.55}
+.stop.done::before{background:var(--deep)}
 .sname{font-size:1.0625rem;font-weight:700;letter-spacing:-.055em;line-height:1.24}
 .smeta{margin-top:4px;font-size:.8125rem;font-weight:500;color:var(--muted)}
 .swhy{margin-top:8px;font-size:.875rem;color:var(--ink);opacity:.82;line-height:1.55}
@@ -131,6 +135,49 @@ h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.88;letter-spac
 .sname,.smeta,.dtitle,.ddate,.stop>span:last-child,.st b,.st span{display:block}
 .leg .legpill{justify-self:start}
 `;
+
+/**
+ * The whole client. It does two things and neither is load-bearing: without it the file is still
+ * a complete, readable itinerary, because days are native <details> and check-off is additive.
+ *
+ * Dates are compared as strings. `new Date("2026-08-20")` parses as UTC midnight and formatting
+ * it with local accessors rolls it back a day anywhere west of Greenwich — the trap that has
+ * already put a wrong weekday into generated output. Building today's key from local parts and
+ * doing a string compare never constructs a Date from the data at all.
+ */
+const RUNTIME = `<script>
+(function(){
+  var pad = function(n){ return n < 10 ? "0" + n : "" + n; };
+  var now = new Date();
+  var today = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
+
+  var days = document.querySelectorAll("details.day");
+  for (var i = 0; i < days.length; i++) {
+    if (days[i].dataset.date === today) {
+      days[i].open = true;
+      days[i].scrollIntoView({ block: "start" });
+    }
+  }
+
+  var trip = document.body.dataset.trip;
+  var key = "tripmate:" + trip + ":done";
+  var done = {};
+  try { done = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) { done = {}; }
+
+  var stops = document.querySelectorAll("[data-stop]");
+  for (var j = 0; j < stops.length; j++) {
+    (function (el) {
+      var id = el.dataset.stop;
+      if (done[id]) el.classList.add("done");
+      el.addEventListener("click", function () {
+        if (done[id]) { delete done[id]; el.classList.remove("done"); }
+        else { done[id] = 1; el.classList.add("done"); }
+        try { localStorage.setItem(key, JSON.stringify(done)); } catch (e) {}
+      });
+    })(stops[j]);
+  }
+})();
+</script>`;
 
 const WEATHER_ICON =
   '<svg viewBox="0 0 24 24"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6 1.8A3.6 3.6 0 0 0 6.5 19z"/><path d="M9 21.5 8 23M13 21.5 12 23"/></svg>';
@@ -170,10 +217,10 @@ function pluralStops(count: number): string {
   return `${count} stop${count === 1 ? "" : "s"}`;
 }
 
-function renderStop(stop: Stop): string {
+function renderStop(stop: Stop, dayIndex: number, stopIndex: number): string {
   const why = stop.why ? `<p class="swhy">${escapeHtml(stop.why)}</p>` : "";
   const note = stop.note ? `<p class="snote">${escapeHtml(stop.note)}</p>` : "";
-  return `<li class="stop">
+  return `<li class="stop" data-stop="${dayIndex}:${stopIndex}">
           <span class="time">${escapeHtml(stop.time)}</span>
           <span>
             <span class="sname">${escapeHtml(stop.name)}</span>
@@ -195,11 +242,11 @@ function renderLeg(leg: { mode: string; minutes: number; distanceKm: number }): 
         </li>`;
 }
 
-function renderRoute(stops: Stop[]): string {
+function renderRoute(stops: Stop[], dayIndex: number): string {
   const legs = dayLegs(stops);
   const parts: string[] = [];
   stops.forEach((stop, i) => {
-    parts.push(renderStop(stop));
+    parts.push(renderStop(stop, dayIndex, i));
     const leg = legs[i];
     if (leg) parts.push(renderLeg(leg));
   });
@@ -242,7 +289,7 @@ function renderDay(day: DayPlan, index: number): string {
       </span>
       ${summary}
 
-      ${renderRoute(day.stops)}
+      ${renderRoute(day.stops, index)}
 
       ${lodging}
 
@@ -289,7 +336,7 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
 ${fontFace}${CSS}
 </style>
 </head>
-<body>
+<body data-trip="${escapeHtml(trip.id)}">
 ${DIRECTION_CONTRACT}
 
 ${cover}
@@ -306,6 +353,7 @@ ${cover}
     ${tripline}
   </div>
 </nav>
+<p class="savenote">Ticking a stop is saved on this phone only — it doesn't reach the app.</p>
 
 <section class="days">
 
@@ -313,7 +361,7 @@ ${cover}
 
 </section>
 
-<script>__RUNTIME__</script>
+${RUNTIME}
 </body>
 </html>`;
 }
