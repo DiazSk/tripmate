@@ -86,7 +86,8 @@ test("day figures sum to the trip figure", () => {
 
 test("emoji never reach the page", () => {
   const html = renderItineraryHtml(trip(), noAssets);
-  assert.doesNotMatch(html, /\u{1F300}-\u{1FAFF}/u);
+  assert.doesNotMatch(html, /[\u{1F300}-\u{1FAFF}]/u);
+  assert.ok(!html.includes("🏛️"));
   assert.ok(html.includes("Museums and markets."));
 });
 

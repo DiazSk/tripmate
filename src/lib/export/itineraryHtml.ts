@@ -209,7 +209,8 @@ function renderRoute(stops: Stop[]): string {
 }
 
 function renderStation(day: DayPlan, index: number, thumb: string | null): string {
-  const node = thumb ? `<img src="${escapeHtml(thumb)}">` : "<i></i>";
+  // Decorative: the day number and date label right beside it already carry the meaning.
+  const node = thumb ? `<img src="${escapeHtml(thumb)}" alt="">` : "<i></i>";
   return `<div class="st" data-date="${escapeHtml(day.date)}">${node}<b>${index + 1}</b><span>${escapeHtml(stationLabel(day.date))}</span></div>`;
 }
 
@@ -263,7 +264,7 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
 
   const cover = assets.photos.cover
     ? `<header class="cover">
-  <img src="${escapeHtml(assets.photos.cover)}">
+  <img src="${escapeHtml(assets.photos.cover)}" alt="${escapeHtml(cityName)}">
 </header>`
     : "";
 
@@ -295,7 +296,7 @@ ${cover}
 
 <div class="mast">
   <h1>${escapeHtml(cityName)}</h1>
-  <p class="dates">${formatDateRange(trip.startDate, trip.endDate)} · ${days.length} days · ${totalStops} stops</p>
+  <p class="dates">${formatDateRange(trip.startDate, trip.endDate)} · ${days.length} day${days.length === 1 ? "" : "s"} · ${pluralStops(totalStops)}</p>
   <p class="budget"><b>${costLabel(tripTotal)}</b> planned of a ${formatMoney(trip.budget)} budget</p>
   ${flightLine}
 </div>
