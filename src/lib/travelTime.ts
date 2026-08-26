@@ -64,3 +64,19 @@ export function buildTravelLegs(
   }
   return legs;
 }
+
+/** Single leg between two coordinates, for the export renderer which builds legs
+ *  on the fly from a day's stops. */
+export function travelLegBetween(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number }
+): Omit<TravelLeg, "from" | "to"> {
+  const distanceKm = haversineKm(a, b) * ROUTE_CIRCUITY_FACTOR;
+  const mode = pickMode(distanceKm, ["walk", "transit"]);
+  return {
+    mode,
+    distanceKm: Math.round(distanceKm * 10) / 10,
+    minutes: Math.max(Math.round((distanceKm / SPEED_KMH[mode]) * 60), 1),
+    estimated: true,
+  };
+}
