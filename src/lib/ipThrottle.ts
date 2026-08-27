@@ -15,6 +15,11 @@ function clientIp(req: { headers: { get(name: string): string | null } }): strin
 }
 
 export function isThrottled(req: { headers: { get(name: string): string | null } }): boolean {
+  // Only the deployed/API-transport environment has a real per-IP signal (a proxy sets
+  // x-forwarded-for) and only it needs protecting. Local CLI-transport dev has no such header —
+  // every request lands in one shared "unknown" bucket — so gate on transport the same way
+  // spendCap.ts no-ops when unconfigured, rather than let a normal local session trip this.
+  if (process.env.LLM_TRANSPORT !== "api") return false;
   const ip = clientIp(req);
   const now = Date.now();
   const recent = (recentByIp.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);

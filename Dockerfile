@@ -6,6 +6,9 @@
 FROM node:22-bookworm-slim
 WORKDIR /app
 COPY package.json package-lock.json ./
+# postinstall (below, via `npm ci`) runs scripts/copy-cesium-assets.mjs — it has to exist
+# before npm ci fires, not just before the app build.
+COPY scripts ./scripts
 RUN npm ci
 COPY . .
 RUN npm run build
