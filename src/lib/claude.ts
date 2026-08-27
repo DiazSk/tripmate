@@ -2,7 +2,9 @@ import { spawn } from "child_process";
 import { accessSync, constants, readdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import { insertTrace, updateTrace } from "./db";
+import Anthropic from "@anthropic-ai/sdk";
+import { appendLlmSessionTurns, createLlmSession, getLlmSession, insertTrace, updateTrace } from "./db";
+import { computeCostUsd } from "./modelPricing";
 
 /**
  * The production model for every call in the app.
@@ -274,36 +276,15 @@ export type ClaudeCallType =
   | "judge";
 
 /**
- * Runs a one-shot prompt through the `claude` CLI (Haiku, no tools) instead
- * of a metered LLM API. Two non-obvious requirements found while wiring this up:
- * - CLAUDECODE must be unset in the child's env, or the CLI refuses to launch
- *   nested inside another Claude Code session.
- * - Must use `spawn`, not `execFile`: execFile reliably hangs forever on this
- *   binary (reproduced consistently), spawn does not. Root cause not chased
- *   further since spawn just works.
- * - The CLI installer places the binary in `~/.local/bin`, which shell
- *   profiles (e.g. .zshrc) add to PATH — but non-login/non-interactive
- *   process launchers (dev server started from an IDE, a task runner, etc.)
- *   often don't source that profile, so PATH lookup for "claude" fails with
- *   ENOENT even though the binary is installed. Force it onto PATH here
- *   instead of trusting the inherited environment.
- *
- * Every call is logged to the llm_traces table (prompt + raw response, on
- * every outcome including errors/timeouts) so it can be inspected via the
- * LLM trace FAB (src/components/LlmTraceFab.tsx) — this is the single choke
- * point all itinerary generation goes through, so it's the natural place to
- * log from. `meta.runId`, when passed, groups this call with sibling calls
- * (context/generate/critique/place-detail) from the same pipeline execution
- * — see llm_runs in src/lib/db.ts.
- *
- * `meta.model` overrides which model serves the call. It exists for the dev-only benchmark
- * harness (src/lib/bench), which holds prompt/skill/context constant and varies only this —
- * every production caller omits it and gets `MODEL` exactly as before.
+ * The `claude` CLI subprocess transport — unchanged from before the API transport existed. Every
+ * doc comment above (spawn-vs-execFile, CLAUDECODE stripping, PATH resolution, resolveCliBin) and
+ * every non-obvious behavior it describes still applies exactly as written. Kept in permanent
+ * service for local development — see the `LLM_TRANSPORT` dispatcher below.
  */
-export function runClaude(
+function runClaudeViaCli(
   prompt: string,
   type: ClaudeCallType,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  timeoutMs: number,
   meta?: {
     runId?: string;
     effort?: "low" | "medium" | "high";
@@ -441,6 +422,184 @@ export function runClaude(
       }
     });
   });
+}
+
+const anthropic = new Anthropic();
+const API_MAX_TOKENS = 16_000;
+
+/**
+ * Maps this app's `effort`/call-type vocabulary onto the Messages API's `thinking` param.
+ *
+ * Sonnet 4.5 has no `effort` parameter at all (that's a Sonnet-5+/Opus-4.5+ knob) — the only
+ * thinking control available is `thinking.budget_tokens`, and *omitting* `thinking` entirely
+ * means no extended thinking runs, which the CLI could never do (see its own `--effort` comment
+ * above: "there is no way to turn thinking off").
+ *
+ * `effort: "low"` calls (chat, element-edit, the bench harness) map to no-thinking outright — a
+ * genuine improvement over the CLI floor. The big structured-output calls that ran under the
+ * CLI's always-on thinking (generate/refine/rebalance/critique — the model's 0.959 benchmark
+ * score was measured under that regime) get a modest fixed budget to approximate it; this is a
+ * ported starting point, not a measured constant. Small lookups (place-detail/context/judge) get
+ * no thinking either.
+ */
+export function thinkingFor(
+  type: ClaudeCallType,
+  effort?: "low" | "medium" | "high"
+): Anthropic.Messages.ThinkingConfigParam | undefined {
+  if (effort) return undefined;
+  const alwaysOnUnderCli: ClaudeCallType[] = ["generate", "refine", "rebalance", "critique"];
+  if (alwaysOnUnderCli.includes(type)) {
+    return { type: "enabled", budget_tokens: 4096 };
+  }
+  return undefined;
+}
+
+/**
+ * The direct Anthropic Messages API transport. Used only when `LLM_TRANSPORT=api` (see the
+ * dispatcher below) — there is no `claude` CLI binary or logged-in session on a deployed
+ * container, so this exists to make a public deploy possible without touching local dev.
+ *
+ * Session continuity has no server-side primitive in the Messages API (unlike the CLI's local
+ * JSONL replay) — `llm_sessions` (src/lib/db.ts) stores the growing message array ourselves and
+ * replays it in full on resume, which is the same trick the CLI's file already does.
+ */
+function runClaudeViaApi(
+  prompt: string,
+  type: ClaudeCallType,
+  timeoutMs: number,
+  meta?: {
+    runId?: string;
+    effort?: "low" | "medium" | "high";
+    model?: string;
+    session?: SessionOption;
+  }
+): Promise<ClaudeResult> {
+  return (async () => {
+    const model = meta?.model ?? MODEL;
+    const traceId = insertTrace({ type, prompt, model, runId: meta?.runId });
+    const startedAt = Date.now();
+
+    let priorMessages: Anthropic.Messages.MessageParam[] = [];
+    if (meta?.session?.resume) {
+      const stored = getLlmSession(meta.session.resume) as
+        | Anthropic.Messages.MessageParam[]
+        | undefined;
+      if (!stored) {
+        updateTrace(traceId, {
+          status: "error",
+          durationMs: Date.now() - startedAt,
+          errorMessage: `llm session ${meta.session.resume} not found`,
+        });
+        throw new Error(`llm session ${meta.session.resume} not found`);
+      }
+      priorMessages = stored;
+    }
+    const messages: Anthropic.Messages.MessageParam[] = [
+      ...priorMessages,
+      { role: "user", content: prompt },
+    ];
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await anthropic.messages.create(
+        {
+          model,
+          max_tokens: API_MAX_TOKENS,
+          messages,
+          thinking: thinkingFor(type, meta?.effort),
+        },
+        { signal: controller.signal }
+      );
+      clearTimeout(timer);
+      const durationMs = Date.now() - startedAt;
+
+      const textBlock = response.content.find(
+        (block): block is Anthropic.Messages.TextBlock => block.type === "text"
+      );
+      if (!textBlock) {
+        updateTrace(traceId, {
+          status: "error",
+          rawResponse: JSON.stringify(response),
+          durationMs,
+          errorMessage: "no text block in response",
+        });
+        throw new Error("claude API response contained no text block");
+      }
+
+      const costUsd = computeCostUsd(model, {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cacheReadInputTokens: response.usage.cache_read_input_tokens,
+        cacheCreationInputTokens: response.usage.cache_creation_input_tokens,
+      });
+
+      let sessionId: string | undefined;
+      const newTurns: Anthropic.Messages.MessageParam[] = [
+        { role: "user", content: prompt },
+        { role: "assistant", content: response.content },
+      ];
+      if (meta?.session?.resume) {
+        appendLlmSessionTurns(meta.session.resume, newTurns);
+        sessionId = meta.session.resume;
+      } else if (meta?.session?.persist) {
+        sessionId = createLlmSession(newTurns);
+      }
+
+      updateTrace(traceId, {
+        status: "ok",
+        rawResponse: JSON.stringify(response),
+        durationMs,
+        costUsd: costUsd ?? undefined,
+      });
+
+      return { result: textBlock.text, traceId, model, durationMs, sessionId };
+    } catch (err) {
+      clearTimeout(timer);
+      const durationMs = Date.now() - startedAt;
+      if (controller.signal.aborted) {
+        updateTrace(traceId, { status: "timeout", durationMs });
+        throw new Error(`claude API call timed out after ${timeoutMs}ms`);
+      }
+      const hint =
+        err instanceof Anthropic.AuthenticationError
+          ? " — ANTHROPIC_API_KEY is missing or invalid. Check Railway's environment variables."
+          : "";
+      const message = err instanceof Error ? err.message : String(err);
+      updateTrace(traceId, { status: "error", durationMs, errorMessage: message + hint });
+      throw new Error(`claude API call failed: ${message}${hint}`);
+    }
+  })();
+}
+
+/**
+ * Dispatches to one of two transports based on `LLM_TRANSPORT` (default `"cli"`):
+ * `runClaudeViaCli()` (the local subprocess, free under the existing CLI subscription — serves
+ * local dev unchanged) or `runClaudeViaApi()` (a direct Anthropic API call, used only where
+ * `LLM_TRANSPORT=api` is set — Railway's deployed environment, which has no CLI binary at all).
+ * This is a deliberate, permanent dual-path design, not a migration in progress. See
+ * docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md.
+ *
+ * Every call is logged to `llm_traces` regardless of transport (prompt + raw response, on every
+ * outcome including errors/timeouts) — see the LLM trace FAB (src/components/LlmTraceFab.tsx).
+ * `meta.runId`, when passed, groups this call with sibling calls from the same pipeline execution.
+ * `meta.model` overrides which model serves the call, for the dev-only benchmark harness.
+ */
+export function runClaude(
+  prompt: string,
+  type: ClaudeCallType,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  meta?: {
+    runId?: string;
+    effort?: "low" | "medium" | "high";
+    model?: string;
+    session?: SessionOption;
+  }
+): Promise<ClaudeResult> {
+  return (process.env.LLM_TRANSPORT ?? "cli") === "api"
+    ? runClaudeViaApi(prompt, type, timeoutMs, meta)
+    : runClaudeViaCli(prompt, type, timeoutMs, meta);
 }
 
 /** Strips markdown code fences the model sometimes wraps JSON in, then parses it. */
