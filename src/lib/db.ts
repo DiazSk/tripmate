@@ -3,7 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { LOCAL_OWNER, parseProfile, type TravelerProfile } from "./travelerProfile";
 
-const db = new Database(path.join(process.cwd(), "tripmate.db"));
+const db = new Database(process.env.DB_PATH ?? path.join(process.cwd(), "tripmate.db"));
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS trips (
@@ -27,6 +27,18 @@ db.exec(`
     duration_ms INTEGER,
     status TEXT NOT NULL,
     error_message TEXT,
+    created_at TEXT NOT NULL
+  )
+`);
+
+// One row per persisted API-transport chat/edit session — the LLM_TRANSPORT=api counterpart to
+// the CLI's local JSONL session file. `messages` is a JSON array of Anthropic message turns (both
+// user and assistant), replayed in full on every resume. See claude.ts's runClaudeViaApi and
+// docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS llm_sessions (
+    id TEXT PRIMARY KEY,
+    messages TEXT NOT NULL,
     created_at TEXT NOT NULL
   )
 `);
@@ -131,6 +143,11 @@ addColumnIfMissing("bench_results", "task_id", "TEXT");
 // this existed), stale, or gone (another device, a cleaned home dir) — every reader must be able
 // to fall back to a fully-rebuilt prompt. See SessionOption in claude.ts.
 addColumnIfMissing("trips", "chat_session_id", "TEXT");
+// Populated only by runClaudeViaApi() — the Messages API reports no cost itself, so this is
+// computed from its usage block via modelPricing.ts at write time. NULL forever on
+// LLM_TRANSPORT=cli traces, which keep deriving cost from the CLI envelope on read instead
+// (see runs.ts/perfAggregate.ts) — both are permanent, not a migration in progress.
+addColumnIfMissing("llm_traces", "cost_usd", "REAL");
 
 export interface TripRow {
   id: string;
@@ -271,6 +288,7 @@ export interface TraceRow {
   status: string;
   error_message: string | null;
   run_id: string | null;
+  cost_usd: number | null;
   created_at: string;
 }
 
@@ -303,6 +321,7 @@ export function updateTrace(
     rawResponse?: string;
     durationMs?: number;
     errorMessage?: string;
+    costUsd?: number;
   }
 ): void {
   db.prepare(
@@ -310,7 +329,8 @@ export function updateTrace(
      SET status = @status,
          raw_response = COALESCE(@rawResponse, raw_response),
          duration_ms = @durationMs,
-         error_message = @errorMessage
+         error_message = @errorMessage,
+         cost_usd = COALESCE(@costUsd, cost_usd)
      WHERE id = @id`
   ).run({
     id,
@@ -318,6 +338,7 @@ export function updateTrace(
     rawResponse: fields.rawResponse ?? null,
     durationMs: fields.durationMs ?? null,
     errorMessage: fields.errorMessage ?? null,
+    costUsd: fields.costUsd ?? null,
   });
 }
 
@@ -687,4 +708,38 @@ export function tagRunsCreatedBetween(label: string, fromIso: string, toIso: str
     )
     .run({ label, fromIso, toIso });
   return result.changes;
+}
+
+export function createLlmSession(messages: unknown[]): string {
+  const id = randomUUID();
+  db.prepare(
+    `INSERT INTO llm_sessions (id, messages, created_at) VALUES (@id, @messages, @createdAt)`
+  ).run({ id, messages: JSON.stringify(messages), createdAt: new Date().toISOString() });
+  return id;
+}
+
+export function getLlmSession(id: string): unknown[] | undefined {
+  const row = db.prepare(`SELECT messages FROM llm_sessions WHERE id = ?`).get(id) as
+    | { messages: string }
+    | undefined;
+  if (!row) return undefined;
+  return JSON.parse(row.messages) as unknown[];
+}
+
+export function appendLlmSessionTurns(id: string, newTurns: unknown[]): void {
+  const existing = getLlmSession(id) ?? [];
+  db.prepare(`UPDATE llm_sessions SET messages = ? WHERE id = ?`).run(
+    JSON.stringify([...existing, ...newTurns]),
+    id
+  );
+}
+
+/** Sum of `cost_usd` for traces created at or after `isoCutoff`. Built from a caller-supplied ISO
+ *  string, never SQLite's `datetime('now', ...)` — see the CLAUDE.md gotcha on comparing ISO
+ *  ("...T...Z") timestamps against SQLite's space-separated `datetime()` output. */
+export function getSpendSince(isoCutoff: string): number {
+  const row = db
+    .prepare(`SELECT COALESCE(SUM(cost_usd), 0) as total FROM llm_traces WHERE created_at >= ?`)
+    .get(isoCutoff) as { total: number };
+  return row.total;
 }
