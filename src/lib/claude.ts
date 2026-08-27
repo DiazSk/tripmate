@@ -311,8 +311,14 @@ function runClaudeViaCli(
         ? []
         : ["--no-session-persistence"];
 
+    // turbopackIgnore: cliBin is resolved at runtime (resolveCliBin), so Turbopack's static
+    // file-tracer can't determine what this touches and defensively traces the whole project
+    // as a dependency of every route that imports this file — which is what makes a production
+    // build's page-data collection step for /api/bench fail under constrained build environments
+    // (first surfaced running a real container build; reproduces identically on a pre-existing,
+    // untouched version of this exact call, so it predates this file's CLI/API transport split).
     const child = spawn(
-      cliBin,
+      /* turbopackIgnore: true */ cliBin,
       [
         "-p",
         prompt,
