@@ -145,15 +145,12 @@ export async function POST(req: NextRequest) {
 
   // Do not add `export const runtime = "edge"` — the Edge runtime is deprecated in Next 16;
   // the Node default is the only non-deprecated choice and it supports streaming.
+  let keepalive: ReturnType<typeof setInterval> | undefined;
   const stream = new ReadableStream({
     async start(controller) {
       controller.enqueue(PADDING_FRAME);
       let clientGone = false;
       const safeEnqueue = (event: string, data: unknown) => {
-        // Once the client is gone the controller rejects every write. Nothing here is
-        // recoverable and nothing is waiting on it, so each terminal write is best-effort.
-        // Logged once, not on every subsequent call — an abandoned generation still fires
-        // up to four more stage events, and none of them are new information after the first.
         if (clientGone) return;
         try {
           controller.enqueue(sseFrame(event, data));
@@ -162,6 +159,20 @@ export async function POST(req: NextRequest) {
           console.error(`[itinerary] ${event} emit failed`, err);
         }
       };
+      // The generate wait (60-150s) and critique wait (10-30s) are otherwise silent on the
+      // wire, which a platform proxy's idle-connection timeout (nginx ~60s, an ALB ~60s,
+      // Cloudflare ~100s — see docs/backend.md) would kill mid-wait. A `:`-prefixed line is a
+      // comment frame the client (eventStream.ts) already skips unconditionally, so this needs
+      // no client change.
+      keepalive = setInterval(() => {
+        if (clientGone) return;
+        try {
+          controller.enqueue(new TextEncoder().encode(":\n\n"));
+        } catch (err) {
+          clientGone = true;
+          console.error("[itinerary] keepalive emit failed", err);
+        }
+      }, 20_000);
       const onStage = (event: StageEvent) => safeEnqueue("stage", event);
       try {
         const result = await runGeneration(params, onStage);
@@ -170,6 +181,7 @@ export async function POST(req: NextRequest) {
         console.error("[itinerary]", err);
         safeEnqueue("error", { error: GENERATION_ERROR });
       } finally {
+        clearInterval(keepalive);
         try {
           controller.close();
         } catch {
@@ -182,6 +194,7 @@ export async function POST(req: NextRequest) {
       // The client navigated away or aborted the fetch; Next/undici already tears this
       // stream down for us. runGeneration has no cancellation token, so an in-flight Claude
       // call simply finishes and its result is discarded — nothing further to clean up here.
+      clearInterval(keepalive);
     },
   });
 
