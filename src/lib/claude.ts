@@ -370,7 +370,8 @@ function runClaudeViaCli(
           ? ` — no runnable claude CLI was found (tried '${cliBin}'). If ~/.local/bin/claude is a` +
             ` symlink into a VS Code extension directory that an update has since deleted, repoint` +
             ` it at the current one; otherwise set CLAUDE_CLI_PATH to the binary's absolute path` +
-            ` and restart the server.`
+            ` and restart the server; or, if this is a deployed container with no claude CLI` +
+            ` installed at all, set LLM_TRANSPORT=api instead.`
           : "";
       updateTrace(traceId, {
         status: "error",
@@ -534,6 +535,12 @@ function runClaudeViaApi(
         cacheReadInputTokens: response.usage.cache_read_input_tokens,
         cacheCreationInputTokens: response.usage.cache_creation_input_tokens,
       });
+      // A null cost means `model` has no entry in DEFAULT_PRICES — this call's spend is then
+      // invisible to getSpendSince() (cost_usd stays NULL), so the daily cap silently stops
+      // covering it. No trace row field for this today; a warn is the only signal.
+      if (costUsd === null) {
+        console.warn(`[claude] no price entry for model "${model}" — spend cap cannot see this call's cost`);
+      }
 
       let sessionId: string | undefined;
       const newTurns: Anthropic.Messages.MessageParam[] = [
@@ -562,11 +569,15 @@ function runClaudeViaApi(
         updateTrace(traceId, { status: "timeout", durationMs });
         throw new Error(`claude API call timed out after ${timeoutMs}ms`);
       }
+      const message = err instanceof Error ? err.message : String(err);
+      // AuthenticationError is a real 401 (an invalid/rejected key). A simply-*missing* key never
+      // reaches the API at all — the SDK throws a plain Error client-side ("Could not resolve
+      // authentication method...") — so match that message too, or the hint only fires for the
+      // less common case.
       const hint =
-        err instanceof Anthropic.AuthenticationError
+        err instanceof Anthropic.AuthenticationError || /authentication method/i.test(message)
           ? " — ANTHROPIC_API_KEY is missing or invalid. Check Railway's environment variables."
           : "";
-      const message = err instanceof Error ? err.message : String(err);
       updateTrace(traceId, { status: "error", durationMs, errorMessage: message + hint });
       throw new Error(`claude API call failed: ${message}${hint}`);
     }
