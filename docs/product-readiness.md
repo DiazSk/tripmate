@@ -92,6 +92,11 @@ listed deferrals are not oversights.
 in-app feedback widget, payments, the B2B API tier and white-label, and the seven data-blocked
 rubric gaps at `itinerary-quality.md:165-179`. Every one of these is downstream of a G1 result.
 
+**Update, 2026-08-25:** deploy is no longer deferred — a public Railway link is needed for a
+LinkedIn demo, a different trigger than this round's validation sequencing. Not a reversal of the
+judgment above: hosted Postgres/Turso, auth/multi-tenancy, and the B2B pitch are all still
+deferred. See `docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md`.
+
 ## What a generation costs — 2026-08-23 (Claude)
 
 Closes G5. Measured off the 237 rows already in `llm_traces`, grouped into runs by `run_id`, with

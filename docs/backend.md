@@ -36,6 +36,8 @@ Covers `src/app/api/**`, `src/lib/db.ts`, `src/lib/weather.ts`. See
 | `travelLegBetween()` extracted from `buildTravelLegs` | Active | 2026-08-18 | Claude | The re-scheduler needs one consecutive hop priced, not the whole O(n²) pairwise matrix. Extracted rather than re-derived so the tuned speeds and circuity factor keep exactly one home |
 | `tripDays.ts` — add/remove whole trip days, dates re-flowed | Active | 2026-08-19 | Claude | Holds the invariant the rest of the app assumes: a trip's days are consecutive UTC calendar dates from `startDate`, so `endDate` is derived, never stored independently of the plan. All arithmetic is UTC (`Date.parse(iso + "T00:00:00Z")`, `setUTCDate`) — the local-accessor version of this has already put a wrong day-of-week into generated output once. `PATCH /api/trips/[id]` recomputes `end_date` from the itinerary it is given, and `updateTripItinerary` writes both in one statement so they cannot diverge halfway |
 | `GET /api/trips/[id]/export` — downloadable self-contained HTML itinerary | Active | 2026-08-25 | Claude | Renders the trip as one offline-readable `.html` file (`Content-Disposition: attachment`) instead of a printed-feeling PDF: a transit-line diagram where each day is a station and each stop-to-stop hop carries a real walk/tram leg computed by `buildTravelLegs` (`travelTime.ts`) — the export can never disagree with the app about distances, since it reuses the exact same unchanged function. `force-dynamic` because the itinerary is edited in place and a cached export would hand the traveler a stale plan. Photos (`exportPhotos.ts`) and the Archivo font subset (`exportFont.ts`, vendored under `public/fonts/` since `next/font/google` leaves nothing readable on disk) are both inlined as base64 data URIs and fetched fail-soft — a photo miss or font-load failure degrades the artifact, never breaks it. `src/lib/tripPayload.ts` was extracted alongside this route so the snake_case→camelCase trip mapping has one home instead of a third inline copy — `GET /api/trips/[id]` now calls it too, rather than duplicating the mapping inline. `src/lib/wikiTitle.ts` (the Wikipedia title-matching logic `/api/place-photo` already had) was extracted the same way, for the same reason. Extraction lives in [frontend.md](./frontend.md)'s Download control row |
+| SSE keepalive comment frame every 20s (`POST /api/itinerary?stream=1`) | Active | 2026-08-25 | Claude | Closes the idle-timeout gap this doc used to flag as "not built now" — a public Railway deploy makes it load-bearing. `:`-prefixed lines are already skipped by the client parser (`eventStream.ts`), so no client change |
+| `runClaude()` gains a second transport: direct Anthropic API calls | Active | 2026-08-25 | Claude | `LLM_TRANSPORT=api` routes through `runClaudeViaApi()` instead of the CLI subprocess; default stays `cli` so local dev is unaffected. See CLAUDE.md and the design spec for the full picture |
 
 ## Enhancements
 
@@ -46,19 +48,9 @@ Covers `src/app/api/**`, `src/lib/db.ts`, `src/lib/weather.ts`. See
 
 ## Deployment prerequisites
 
-- **SSE idle-timeout gap (`POST /api/itinerary?stream=1`):** the stream goes quiet for
-  60–150s between `generate: start`/`done` and again for 10–30s during critique.
-  `X-Accel-Buffering: no` stops proxy buffering but does nothing for idle-connection
-  timeouts — nginx `proxy_read_timeout` (60s default), an AWS ALB (60s idle timeout), and
-  Cloudflare (~100s) would all kill the connection mid-wait, and the client would report
-  "The planner didn't finish" after a full wait despite the server having succeeded.
-  Not built now: the app only runs against a local `claude` subprocess and a local SQLite
-  file, so there is no proxy or CDN in front of it yet, and a keepalive for a deployment
-  that doesn't exist is exactly the speculative work this feature's spec ruled out. If a
-  non-localhost deployment happens, add a `setInterval` in the stream's `start()` that
-  enqueues a `:\n\n` comment frame every ~20s, cleared in `finally` and `cancel()` — the
-  client parser (`eventStream.ts`) already skips lines starting with `:`, so no client
-  change is needed.
+- **SSE idle-timeout gap (`POST /api/itinerary?stream=1`) — resolved 2026-08-25.** Implemented the
+  keepalive this section used to defer: a `setInterval` in the stream's `start()` enqueues a
+  `:\n\n` comment frame every 20s, cleared in `finally` and `cancel()`. See the Features table.
 
 ## Bugs
 

@@ -78,6 +78,35 @@ Four non-obvious constraints are already handled there; don't "fix" them back:
 - `~/.local/bin` is forced onto `PATH`, since non-login process launchers don't source the shell profile.
 - `--setting-sources ""` and `--tools ""` mean the CLI loads **no** settings sources and has **no** Skill tool. Skills in `.claude/skills/` therefore *cannot* auto-load; `src/lib/skill.ts` reads `SKILL.md` off disk and injects the body into the prompt instead.
 
+### Two transports, one interface
+
+`runClaude()` is a dispatcher, not the implementation. It routes to one of two functions based on
+`LLM_TRANSPORT` (default `"cli"`):
+
+- `runClaudeViaCli()` — the subprocess described above, unchanged. Serves local development for
+  free under the existing CLI subscription; no `ANTHROPIC_API_KEY` needed.
+- `runClaudeViaApi()` — calls the Anthropic Messages API directly via `@anthropic-ai/sdk`. Used
+  only where `LLM_TRANSPORT=api` is set (Railway's deployed environment), since there's no `claude`
+  CLI binary or logged-in session on a container.
+
+This is a deliberate, permanent dual-path design, not a migration in progress — both stay in
+service. Consequences worth knowing:
+
+- **Session continuity works differently per transport but never crosses transports.** The CLI
+  replays a local JSONL transcript on `--resume`; the API path replays a message array stored in
+  the `llm_sessions` table (`src/lib/db.ts`). Because `LLM_TRANSPORT` is a whole-process setting,
+  a session is only ever resumed under the transport that created it.
+- **`llm_traces.raw_response` holds two envelope shapes side by side, forever.** A CLI-transport
+  row has the CLI's `modelUsage`/`total_cost_usd` shape; an API-transport row has the Messages
+  API's `usage` shape and a separately-populated `cost_usd` column (the Messages API reports no
+  cost at all — see `src/lib/modelPricing.ts`). `src/lib/runs.ts` and `src/lib/perfAggregate.ts`
+  branch on which shape they're reading; don't "simplify" that branch away.
+- `src/lib/skill.ts` is unaffected either way — it only ever produced a prompt-text string to
+  splice into the messages/prompt, independent of how the call is transported.
+
+See `docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md` for the full design and
+why (LinkedIn demo needed a public deploy link, which the CLI-only mechanism blocked).
+
 ### Two generation paths coexist
 
 1. **Legacy single-shot:** `POST /api/itinerary` → `buildGeneratePrompt()` in `src/lib/itineraryPrompt.ts` → strict-JSON `Itinerary` (`{ tier, days[] }`), saved to `trips.itinerary_json`. This is what the current UI uses.
