@@ -15,17 +15,36 @@ import type { RunDetail, RunStatus, RunStep, RunStepUsage, RunSummary } from "./
  *  (they all run on `MODEL`), and the only thing that makes the benchmark harness's non-default
  *  models report tokens instead of nulls. Some CLI versions key it by a resolved id rather than
  *  the alias passed in, so a single-entry `modelUsage` falls back to that entry. */
-export function parseUsage(rawResponse: string | null, model: string = MODEL): RunStepUsage {
+export function parseUsage(
+  rawResponse: string | null,
+  model: string = MODEL,
+  storedCostUsd?: number | null
+): RunStepUsage {
   if (!rawResponse) return { inputTokens: null, outputTokens: null, costUsd: null };
   try {
     const envelope = JSON.parse(rawResponse);
+    const num = (v: unknown) => (typeof v === "number" ? v : null);
+
+    // Messages API response (LLM_TRANSPORT=api) — no `modelUsage`, has a top-level `usage`.
+    // This branch is permanent, not a migration step: the CLI keeps running for local dev, so
+    // both shapes coexist in llm_traces forever.
+    if (!("modelUsage" in envelope) && "usage" in envelope) {
+      return {
+        inputTokens: num(envelope.usage?.input_tokens),
+        outputTokens: num(envelope.usage?.output_tokens),
+        costUsd: storedCostUsd ?? null,
+        cacheReadInputTokens: num(envelope.usage?.cache_read_input_tokens),
+        cacheCreationInputTokens: num(envelope.usage?.cache_creation_input_tokens),
+      };
+    }
+
+    // CLI envelope (LLM_TRANSPORT=cli, the default) — unchanged from before this migration.
     const byModel = envelope.modelUsage ?? {};
     const keys = Object.keys(byModel);
     const modelUsage =
       byModel[model] ??
       byModel[keys.find((k) => k.startsWith(model) || model.startsWith(k)) ?? ""] ??
       (keys.length === 1 ? byModel[keys[0]] : undefined);
-    const num = (v: unknown) => (typeof v === "number" ? v : null);
     return {
       inputTokens: num(modelUsage?.inputTokens),
       outputTokens: num(modelUsage?.outputTokens),
@@ -33,7 +52,7 @@ export function parseUsage(rawResponse: string | null, model: string = MODEL): R
       // small housekeeping call on Haiku alongside the requested model, so the total attributes
       // spend to a model that never saw the prompt. Identical to the total on a single-model
       // envelope, which is every production trace.
-      costUsd: num(modelUsage?.costUSD) ?? num(envelope.total_cost_usd),
+      costUsd: storedCostUsd ?? num(modelUsage?.costUSD) ?? num(envelope.total_cost_usd),
       cacheReadInputTokens: num(modelUsage?.cacheReadInputTokens),
       cacheCreationInputTokens: num(modelUsage?.cacheCreationInputTokens),
     };
@@ -53,7 +72,7 @@ export function toRunStep(trace: TraceRow): RunStep {
     prompt: trace.prompt,
     rawResponse: trace.raw_response,
     errorMessage: trace.error_message,
-    usage: parseUsage(trace.raw_response, trace.model),
+    usage: parseUsage(trace.raw_response, trace.model, trace.cost_usd),
   };
 }
 

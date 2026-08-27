@@ -85,3 +85,34 @@ test("parseCliMetrics reads tokens regardless of which model key is present", ()
   assert.equal(metrics.inputTokens, 100);
   assert.equal(metrics.outputTokens, 50);
 });
+
+test("parseCliMetrics recognizes a Messages API envelope and returns null for CLI-only fields", () => {
+  const apiEnvelope = JSON.stringify({
+    usage: {
+      input_tokens: 120,
+      output_tokens: 80,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 500,
+    },
+  });
+  const metrics = parseCliMetrics(apiEnvelope);
+  assert.equal(metrics.inputTokens, 120);
+  assert.equal(metrics.outputTokens, 80);
+  assert.equal(metrics.costUsd, null);
+  assert.equal(metrics.ttftMs, null);
+  assert.equal(metrics.timeToRequestMs, null);
+  assert.equal(metrics.apiDurationMs, null);
+});
+
+test("aggregatePerfStats prefers a trace's own cost_usd column over the envelope for cost stats", () => {
+  const traces = [
+    {
+      type: "generate",
+      durationMs: 1000,
+      rawResponse: JSON.stringify({ usage: { input_tokens: 10, output_tokens: 10 } }),
+      costUsd: 0.5,
+    },
+  ];
+  const [generate] = aggregatePerfStats(traces);
+  assert.equal(generate.costUsd.avg, 0.5);
+});
