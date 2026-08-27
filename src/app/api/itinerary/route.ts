@@ -8,6 +8,8 @@ import { MAX_TRIP_DAYS, tripDays } from "@/lib/tiers";
 import { DayPlan } from "@/lib/types";
 import { GenerationParams, runGeneration } from "@/lib/generationRunner";
 import { StageEvent } from "@/lib/generationStages";
+import { isThrottled } from "@/lib/ipThrottle";
+import { isOverDailyCap } from "@/lib/spendCap";
 
 const GENERATION_ERROR = "The planner didn't finish. Try generating again.";
 
@@ -23,6 +25,18 @@ function sseFrame(event: string, data: unknown): Uint8Array {
 }
 
 export async function POST(req: NextRequest) {
+  if (isThrottled(req)) {
+    return NextResponse.json(
+      { error: "Too many requests — slow down and try again shortly." },
+      { status: 429 }
+    );
+  }
+  if (isOverDailyCap()) {
+    return NextResponse.json(
+      { error: "Demo budget for today has been used up — try again tomorrow." },
+      { status: 503 }
+    );
+  }
   const body = await req.json();
   const {
     destination,
