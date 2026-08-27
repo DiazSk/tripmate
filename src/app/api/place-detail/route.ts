@@ -3,9 +3,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseJsonResponse, runClaude } from "@/lib/claude";
 import { buildPlaceDetailPrompt } from "@/lib/itineraryPrompt";
 import { getTrip, insertRun } from "@/lib/db";
+import { isThrottled } from "@/lib/ipThrottle";
+import { isOverDailyCap } from "@/lib/spendCap";
 import { PlaceDetail } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
+  if (isThrottled(req)) {
+    return NextResponse.json(
+      { error: "Too many requests — slow down and try again shortly." },
+      { status: 429 }
+    );
+  }
+  if (isOverDailyCap()) {
+    return NextResponse.json(
+      { error: "Demo budget for today has been used up — try again tomorrow." },
+      { status: 503 }
+    );
+  }
   const { name, destination, lat, lng, tripId } = await req.json();
 
   if (!name || !destination || typeof lat !== "number" || typeof lng !== "number") {
