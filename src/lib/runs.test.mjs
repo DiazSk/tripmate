@@ -32,4 +32,21 @@ test("parseUsage returns all-null on missing rawResponse", () => {
   const usage = parseUsage(null);
   assert.equal(usage.inputTokens, null);
   assert.equal(usage.costUsd, null);
+  assert.equal(usage.transport, "unknown");
+});
+
+test("parseUsage tags a CLI envelope as transport 'cli'", () => {
+  const raw = JSON.stringify({
+    modelUsage: { "claude-sonnet-4-5": { inputTokens: 100, outputTokens: 50 } },
+  });
+  assert.equal(parseUsage(raw, "claude-sonnet-4-5").transport, "cli");
+});
+
+test("parseUsage tags a Messages API envelope as transport 'api'", () => {
+  const raw = JSON.stringify({ usage: { input_tokens: 1, output_tokens: 1 } });
+  assert.equal(parseUsage(raw, "claude-sonnet-4-5").transport, "api");
+});
+
+test("parseUsage tags a malformed envelope as transport 'unknown'", () => {
+  assert.equal(parseUsage("not json").transport, "unknown");
 });

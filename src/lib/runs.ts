@@ -20,7 +20,7 @@ export function parseUsage(
   model: string = MODEL,
   storedCostUsd?: number | null
 ): RunStepUsage {
-  if (!rawResponse) return { inputTokens: null, outputTokens: null, costUsd: null };
+  if (!rawResponse) return { inputTokens: null, outputTokens: null, costUsd: null, transport: "unknown" };
   try {
     const envelope = JSON.parse(rawResponse);
     const num = (v: unknown) => (typeof v === "number" ? v : null);
@@ -35,6 +35,7 @@ export function parseUsage(
         costUsd: storedCostUsd ?? null,
         cacheReadInputTokens: num(envelope.usage?.cache_read_input_tokens),
         cacheCreationInputTokens: num(envelope.usage?.cache_creation_input_tokens),
+        transport: "api",
       };
     }
 
@@ -55,9 +56,10 @@ export function parseUsage(
       costUsd: storedCostUsd ?? num(modelUsage?.costUSD) ?? num(envelope.total_cost_usd),
       cacheReadInputTokens: num(modelUsage?.cacheReadInputTokens),
       cacheCreationInputTokens: num(modelUsage?.cacheCreationInputTokens),
+      transport: "cli",
     };
   } catch {
-    return { inputTokens: null, outputTokens: null, costUsd: null };
+    return { inputTokens: null, outputTokens: null, costUsd: null, transport: "unknown" };
   }
 }
 

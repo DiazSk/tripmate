@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, GitCompare, Terminal, X } from "lucide-react";
 import TraceStatusBadge from "@/components/TraceStatusBadge";
+import TransportBadge from "@/components/TransportBadge";
 import RunCompareModal from "@/components/RunCompareModal";
 import RunPipelineDiagram from "@/components/RunPipelineDiagram";
 import { RunDetail, RunStep, RunSummary, TraceSummary } from "@/lib/types";
@@ -210,6 +211,7 @@ function StepDetail({ step, onBack }: { step: RunStep; onBack: () => void }) {
           <span>·</span>
           <span>{formatMs(step.durationMs)}</span>
           <TraceStatusBadge status={step.status} />
+          <TransportBadge transport={step.usage.transport} />
         </div>
 
         <div className="flex flex-wrap gap-3 text-xs text-stone-600">
