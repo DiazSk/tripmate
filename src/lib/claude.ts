@@ -432,7 +432,42 @@ function runClaudeViaCli(
 }
 
 const anthropic = new Anthropic();
-const API_MAX_TOKENS = 16_000;
+
+/**
+ * Output-token ceiling for every API-transport call. Exported so `claude.test.mjs` can pin the
+ * two bounds below, which are otherwise a magic number nobody could re-derive.
+ *
+ * **This is a ceiling, not a budget: unused headroom is free.** You are billed for
+ * `usage.output_tokens` actually produced, so there is no cost or latency argument for setting
+ * this tightly — and deliberately no per-trip-day scaling of the kind `itineraryTimeoutMs()`
+ * uses, because scaling a free ceiling buys nothing but a branch.
+ *
+ * Two bounds fix the value, and it sits between them:
+ *
+ *  - **Floor — the largest generation actually observed.** `claude-sonnet-4-5` has emitted up to
+ *    **17,789** output tokens for one generate call (Haiku 4.5, far more verbose, reached 27,849;
+ *    Opus 4.5 peaked at 15,759). The previous value of 16,000 sat *below* the production model's
+ *    own observed maximum: measured against history, **5.7% of Sonnet generate calls (2 of 35)
+ *    would have been truncated**, and 72% of Haiku's. Truncation is the worst-shaped failure
+ *    available here — the response is cut mid-JSON so `parseJsonResponse` throws in the route,
+ *    the traveller is told "The planner didn't finish", and you are billed for every token of the
+ *    truncated output anyway.
+ *  - **Hard ceiling — 21,333, imposed by the SDK.** `calculateNonstreamingTimeout` throws
+ *    `AnthropicError("Streaming is required for operations that may take longer than 10 minutes")`
+ *    when `(60min * max_tokens) / 128000 > 10min`. That guard runs whenever no explicit `timeout`
+ *    is passed, and the call below passes only an AbortSignal, so it is live for us. Note this is
+ *    a *request-time throw*, not a slow request: every API-transport call would fail instantly.
+ *
+ * 21,000 clears the observed Sonnet maximum by ~18% and leaves 333 tokens under the SDK's limit.
+ *
+ * **What this does NOT fix.** Every generation measured so far was a 2-8 day trip, while
+ * `MAX_TRIP_DAYS` is 30 — a long trip could plausibly exceed even this, and Haiku already does.
+ * Raising the number further is not available; the ceiling above is the wall. The real fix for
+ * that case is streaming (which lifts the 10-minute constraint entirely), deliberately deferred.
+ * Until then, a `stop_reason: "max_tokens"` response is detected and reported explicitly below
+ * rather than being left to surface as an unexplained JSON parse failure.
+ */
+export const API_MAX_TOKENS = 21_000;
 
 /**
  * Maps this app's `effort`/call-type vocabulary onto the Messages API's `thinking` param.
@@ -521,6 +556,28 @@ function runClaudeViaApi(
       );
       clearTimeout(timer);
       const durationMs = Date.now() - startedAt;
+
+      // Truncation is diagnosed HERE, where the cause is still knowable, because by the time it
+      // reaches the caller it no longer looks like truncation: the text comes back cut mid-JSON,
+      // `parseJsonResponse` throws a generic syntax error in the route, and the trace reads `ok`
+      // — a real outcome recorded as a success, which is exactly the shape of the two failure
+      // modes this file has already been burned by (timeouts logged as generic errors, the
+      // dangling-symlink ENOENT). See API_MAX_TOKENS for why this can still happen at 21,000.
+      if (response.stop_reason === "max_tokens") {
+        const detail =
+          `hit the ${API_MAX_TOKENS}-token output ceiling (used ${response.usage.output_tokens})` +
+          ` — the response is truncated, not malformed. Trips long enough to need more than this` +
+          ` require the streaming transport; raising API_MAX_TOKENS is not an option, it is` +
+          ` already just under the SDK's non-streaming limit.`;
+        updateTrace(traceId, {
+          status: "error",
+          rawResponse: JSON.stringify(response),
+          durationMs,
+          errorMessage: `truncated at max_tokens: ${detail}`,
+        });
+        console.warn(`[claude] ${type} call ${detail}`);
+        throw new Error(`claude API response truncated: ${detail}`);
+      }
 
       const textBlock = response.content.find(
         (block): block is Anthropic.Messages.TextBlock => block.type === "text"
