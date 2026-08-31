@@ -14,6 +14,7 @@ import {
 } from "@/lib/mapRoute";
 import {
   CameraPose,
+  CameraState,
   CITY_BOUNDARY_HEIGHT_M,
   drawnDaysOf,
   FlyToPointOptions,
@@ -452,6 +453,43 @@ export class CesiumRenderer implements MapRenderer {
       },
       duration: durationS,
     });
+  }
+
+  cameraState(): CameraState | null {
+    const { viewer, Cesium } = this;
+    if (!this.isAlive()) return null;
+    // The point under the middle of the screen, which is what the other engine will centre on.
+    // `pickCentre` walks its own fallback chain, so this answers even when the boresight is aimed
+    // at sky and there is no tile to hit.
+    const centre = this.pickCentre();
+    const carto = Cesium.Cartographic.fromCartesian(centre);
+    return {
+      lat: Cesium.Math.toDegrees(carto.latitude),
+      lng: Cesium.Math.toDegrees(carto.longitude),
+      rangeM: Cesium.Cartesian3.distance(viewer.camera.positionWC, centre),
+      headingRad: viewer.camera.heading,
+      pitchDeg: Cesium.Math.toDegrees(viewer.camera.pitch),
+    };
+  }
+
+  restoreCamera(state: CameraState) {
+    const { viewer, Cesium } = this;
+    if (!this.isAlive()) return;
+    // `duration: 0` rather than `setView`: `flyToBoundingSphere` is what every other framing in
+    // this file goes through, so a zero-length flight lands on exactly the pose the others would
+    // have flown to. `setView` places the camera *at* the destination, which is the trap
+    // `flyToPoint` documents.
+    viewer.camera.flyToBoundingSphere(
+      new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(state.lng, state.lat), 0),
+      {
+        offset: new Cesium.HeadingPitchRange(
+          state.headingRad,
+          Cesium.Math.toRadians(state.pitchDeg),
+          state.rangeM
+        ),
+        duration: 0,
+      }
+    );
   }
 
   capturePose(): CameraPose | null {

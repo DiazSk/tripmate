@@ -4,7 +4,7 @@ import StagedPipelineConsole from "@/components/backend/StagedPipelineConsole";
 /**
  * Dev-only test harness for the staged trip pipeline. Server component purely so the
  * environment check runs before anything renders — matching the `NODE_ENV === "development"`
- * gate already used by devInspector/DevInspectorOverlay. In production this is a 404, not a
+ * gate already used by `devLabel` in devInspector.ts. In production this is a 404, not a
  * hidden-but-reachable page.
  */
 export default function PipelineHarnessPage() {
