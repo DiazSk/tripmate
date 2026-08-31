@@ -1718,11 +1718,17 @@ body {
    TierPicker's price badge already make from the other side — and it is not free: each one is a
    render surface, and on `/trips` there was one per saved trip.
 
-   Four call sites, all of them routes or steps where `globeWanted` is false and the canvas is
-   `visibility: hidden`: `/trips`' memory cards, the plan step's form card, and the two dead-end
-   cards (`/trip/latest` with an empty database, and `/trip/[id]`'s not-found). `.glass-itinerary`
-   itself is deliberately untouched — `/` result, `/trip/[id]` and the generation loader still sit
-   over a real aerial map and still need the real thing.
+   Three call sites, all of them routes where `globeWanted` is false, the canvas is
+   `visibility: hidden`, AND nothing else is painted behind the card: `/trips`' memory cards and
+   the two dead-end cards (`/trip/latest` with an empty database, and `/trip/[id]`'s not-found).
+   `.glass-itinerary` itself is deliberately untouched — `/` result, `/trip/[id]` and the
+   generation loader still sit over a real aerial map and still need the real thing.
+
+   The plan step's form card used to be the fourth and no longer is. `SceneBackdrop` paints a
+   photograph behind the whole wizard, so there is something for the frost to sample; taking the
+   opacity off is what lets that photograph read through the glass at all. Note the condition that
+   matters is "is anything painted behind this", not "is the globe on" — those were the same
+   question until that backdrop existed.
 
    Written at two classes rather than one so it cannot lose a source-order coin toss: a bare
    `.is-opaque` is specificity (0,1,0), the same as `.glass-itinerary`, and would only win by
