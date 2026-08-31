@@ -2,7 +2,6 @@ import { randomUUID } from "crypto";
 import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "./claude";
 import { geocodeDestination, getWeatherForDates, DayWeather } from "./weather";
 import { resolveNamedPlaceCoords } from "./poiDetails";
-import { fetchLodgingOptions, reconcileLodging } from "./lodging";
 import { fetchPlaceFacts } from "./placeFacts";
 import { fetchDayTravelMinutes } from "./routeMatrix";
 import {
@@ -22,7 +21,6 @@ import {
   pinAdmissionCosts,
   selectStopsToEnrich,
 } from "./placeConflicts";
-import type { LodgingOption } from "./lodging";
 import { getDestinationContextInsight } from "./destinationContext";
 import { insertRun } from "./db";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
@@ -85,9 +83,6 @@ export async function runGeneration(
   let dayCount: number;
   let weather: DayWeather[] = [];
   let geoPoint: { lat: number; lon: number } | null = null;
-  // Stays null for refine (no search runs there) and for a failed/empty lookup — both are
-  // no-ops for `reconcileLodging` below, so nothing else needs to branch on isRefine for this.
-  let lodgingOptions: LodgingOption[] | null = null;
   const isRefine = Boolean(previousItinerary && feedback);
 
   // The wizard has always sent these; the route simply never read them, so six
@@ -157,18 +152,6 @@ export async function runGeneration(
     }
     effectiveTier = tier;
     dayCount = tripDays(startDate, endDate);
-    // Started here and awaited just before the prompt is built, so its ~6s overlaps the
-    // geocode/weather/context work below instead of stacking on top of it. The hotel search
-    // takes a text query, so unlike the weather it does not depend on the geocode's result.
-    // `.catch` keeps a surprise rejection on the fail-soft path: no lodging data degrades to
-    // the type-first instruction, it never fails the generation.
-    const lodgingPromise = fetchLodgingOptions({
-      destination,
-      checkIn: startDate,
-      checkOut: endDate,
-      tier,
-      adults: resolvedFlags?.partySize ?? undefined,
-    }).catch(() => null);
     onStage({ stage: "geocode", status: "start" });
     try {
       const geo = await geocodeDestination(destination);
@@ -206,7 +189,6 @@ export async function runGeneration(
       resolvedFlags,
       dietary,
       logistics,
-      lodging: (lodgingOptions = await lodgingPromise),
     });
   }
 
@@ -342,19 +324,6 @@ export async function runGeneration(
     critiqued = true;
   } catch {
     // Keep the uncritiqued itinerary.
-  }
-
-  // Deterministic backstop, run AFTER critique rather than before it. It has to be: critique's
-  // own prompt independently re-derives the 85-100% budget target with zero knowledge of the
-  // real lodging list, the pricing basis, or the overshoot escape, and can replace
-  // `itinerary.days` wholesale via `revisedDays` — verified live, this is exactly how the
-  // invented-hotel defect reappeared after generate's own output had already been corrected.
-  // Running the check here, on whatever `itinerary.days` ends up being, is the one point both
-  // paths (revised or not) converge on — the fix belongs where the callers join, not duplicated
-  // before each one. A no-op when `lodgingOptions` is null/empty (refine, or the lookup
-  // failed/found nothing) — nothing to check the name against.
-  for (const day of itinerary.days) {
-    if (day.lodging) day.lodging = reconcileLodging(day.lodging, lodgingOptions, budget);
   }
 
   // Re-detect against whatever critique actually returned, then annotate and pin. Re-detection
