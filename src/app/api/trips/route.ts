@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { insertTrip, linkGenerationToTrip, listTrips, purgeStaleDrafts } from "@/lib/db";
 import { toTripSummary } from "@/lib/tripPayload";
+import { currentOwnerId } from "@/lib/ownerRequest";
 import type { TripStatus } from "@/lib/types";
 
 /** `?status=draft` for the unsaved plans, anything else for the kept ones. Narrowed rather than
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("[trips] draft sweep failed", err);
   }
-  return NextResponse.json({ trips: listTrips(status).map(toTripSummary) });
+  return NextResponse.json({ trips: listTrips(status, await currentOwnerId()).map(toTripSummary) });
 }
 
 export async function POST(req: NextRequest) {
@@ -35,6 +36,9 @@ export async function POST(req: NextRequest) {
 
   const trip = insertTrip({
     id: randomUUID(),
+    // Stamped from the cookie so this plan comes back to the browser that made it, and to no
+    // other. A cookieless caller falls back to the legacy bucket — see owner.ts.
+    owner_id: await currentOwnerId(),
     destination,
     start_date: startDate,
     end_date: endDate,
