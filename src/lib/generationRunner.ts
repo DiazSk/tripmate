@@ -1,9 +1,8 @@
 import { randomUUID } from "crypto";
 import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "./claude";
 import { geocodeDestination, getWeatherForDates, DayWeather } from "./weather";
-import { resolveNamedPlaceCoords } from "./poiDetails";
-import { fetchPlaceFacts } from "./placeFacts";
-import { fetchDayTravelMinutes } from "./routeMatrix";
+import { fetchPoiOsmTags, resolveNamedPlaceCoords } from "./poiDetails";
+import { buildPlaceFacts } from "./placeFacts";
 import {
   dietaryNote,
   fetchDietaryVenues,
@@ -233,46 +232,25 @@ export async function runGeneration(
         }
       }
     }
-    const fetched = await Promise.all(
-      names
-        .filter((name) => coordsByName.has(name))
-        .map(async (name) => {
-          const { lat, lng } = coordsByName.get(name)!;
-          return [name, await fetchPlaceFacts(name, lat, lng)] as const;
-        })
-    );
-    for (const [name, facts] of fetched) {
-      if (facts) placeFacts.set(normalizeStopName(name), facts);
-    }
+    // One batched Overpass call for every stop needing enrichment — matches poiEnrichment.ts's
+    // shape — rather than one POST per stop, which used to fire N concurrent requests at a
+    // public instance this repo already documents as flaky under load.
+    const toFetch = names
+      .filter((name) => coordsByName.has(name))
+      .map((name) => ({ name, ...coordsByName.get(name)! }))
+      .map(({ name, lat, lng }) => ({ name, lat, lon: lng }));
+    const tagsByName = await fetchPoiOsmTags(toFetch);
+    if (tagsByName) {
+      for (const { name } of toFetch) {
+        const facts = buildPlaceFacts(tagsByName[name]);
+        if (facts) placeFacts.set(normalizeStopName(name), facts);
+      }
+    } // network/HTTP failure (tagsByName === null) — every requested stop stays unenriched
   } catch (err) {
     // Fail-soft: no facts means no annotations and no pinned costs, never a failed generation.
     console.error("[itinerary] place-facts lookup failed", err);
   }
   const placeConflicts = detectConflicts(itinerary.days, placeFacts, { stepFreeRequired, crowdBias });
-
-  // Real door-to-door durations, one matrix call per day — the whole N×N comes back in a single
-  // call (~3s), so this is per-day, not per-leg. Keyed by coordinate pair rather than by stop
-  // position: critique may reorder the day, and a leg that no longer exists must fall back to the
-  // estimate rather than reporting a stale number.
-  const realLegMinutes = new Map<string, number>();
-  try {
-    await Promise.all(
-      itinerary.days.map(async (day) => {
-        const points = (day.stops ?? [])
-          .filter((s) => typeof s.lat === "number" && typeof s.lng === "number")
-          .map((s) => ({ lat: s.lat, lon: s.lng }));
-        const legs = await fetchDayTravelMinutes(points, "walk");
-        for (const leg of legs.values()) {
-          const from = points[leg.fromIndex];
-          const to = points[leg.toIndex];
-          if (from && to) realLegMinutes.set(legKey(from, to), leg.minutes);
-        }
-      })
-    );
-  } catch (err) {
-    // Fail-soft: no real durations means the existing straight-line estimate still applies.
-    console.error("[itinerary] route-matrix lookup failed", err);
-  }
 
   // §3d is a hard constraint, but only once something was stated — a traveler with no
   // restrictions costs zero calls here and gets a byte-identical plan. The model currently asserts
@@ -302,13 +280,11 @@ export async function runGeneration(
     }
   }
 
-  // Reuses the §12a/§12b arithmetic and phrasing in guardrails.ts rather than restating it,
-  // substituting looked-up minutes where a route was found.
-  const travelFindings = evaluateItinerary(itinerary, {
-    realMinutes: (from, to) =>
-      realLegMinutes.get(legKey({ lat: from.lat, lon: from.lng }, { lat: to.lat, lon: to.lng })) ??
-      null,
-  })
+  // Reuses the §12a/§12b arithmetic and phrasing in guardrails.ts rather than restating it.
+  // No real door-to-door durations are available (the OSRM route-matrix path was removed — it
+  // was unreachable dead code, since this app never requests drive mode and OSRM's demo instance
+  // cannot serve real walking data), so this always runs on the haversine estimate.
+  const travelFindings = evaluateItinerary(itinerary)
     .filter((g) => g.rule === "travel")
     .map((g) => g.message)
     .concat(dietaryFindings);
@@ -413,9 +389,3 @@ export async function runGeneration(
   return { itinerary, traceId, runId, sessionId };
 }
 
-/** Key a leg by rounded coordinates. Rounding matters: the model emits lat/lng at varying
- *  precision, and keying on raw floats would miss pairs that are the same place. */
-function legKey(a: { lat: number; lon: number }, b: { lat: number; lon: number }): string {
-  const r = (n: number) => n.toFixed(4);
-  return `${r(a.lat)},${r(a.lon)}->${r(b.lat)},${r(b.lon)}`;
-}

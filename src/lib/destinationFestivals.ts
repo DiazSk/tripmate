@@ -50,7 +50,7 @@ function distilBraveResults(raw: unknown, limit = MAX_RESULTS_FOR_EXTRACTION): B
  * structurally impossible rather than merely discouraged by a prompt instruction.
  */
 export function hasExtractableContent(raw: unknown): boolean {
-  return distilBraveResults(raw).some((r) => r.title && r.description);
+  return distilBraveResults(raw).some((r) => r.title?.trim() && r.description?.trim());
 }
 
 /**
@@ -59,7 +59,7 @@ export function hasExtractableContent(raw: unknown): boolean {
  * changes. Each usable result becomes one numbered line, doubling as its own citation entry.
  */
 function buildTextAndCitations(results: BraveResult[]): { text: string; citations: WebCitation[] } {
-  const usable = results.filter((r) => r.title && r.description);
+  const usable = results.filter((r) => r.title?.trim() && r.description?.trim());
   return {
     text: usable.map((r, i) => `[${i + 1}] ${r.title}: ${r.description}`).join("\n"),
     citations: usable.map((r) => ({ title: r.title, url: r.url })),
@@ -123,7 +123,7 @@ export async function fetchFestivals(
     const url = new URL(BRAVE_SEARCH_URL);
     url.searchParams.set("q", `festivals events in ${destination} ${monthYearLabel(startDate)}`);
     const res = await fetch(url, {
-      headers: { "X-Subscription-Token": apiKey },
+      headers: { "X-Subscription-Token": apiKey, Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;

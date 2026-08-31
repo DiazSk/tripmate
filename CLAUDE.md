@@ -122,7 +122,7 @@ External fetches degrade rather than throw. Two idioms to match:
 
 ### Data sources (most free; three need keys)
 
-Open-Meteo (geocoding, forecast, historical fallback beyond a 16-day horizon, sunrise/sunset, timezone), Nager.Date (public holidays), Overpass/OSM (highway geometry *and* POI opening hours), OpenTripMap (candidate POIs, needs `OPENTRIPMAP_API_KEY`; absent key degrades to no suggestions rather than erroring), Yelp Fusion (dietary-matched venue examples via `src/lib/dietaryVenues.ts`, needs `YELP_API_KEY`; absent key degrades to no venue examples rather than erroring), Brave Search (destination festivals/events via `src/lib/destinationFestivals.ts`, needs `BRAVE_API_KEY`; absent key degrades to no festival suggestions rather than erroring).
+Open-Meteo (geocoding, forecast, historical fallback beyond a 16-day horizon, sunrise/sunset, timezone), Nager.Date (public holidays), Overpass/OSM (highway geometry *and* POI opening hours), GDELT (destination safety coverage via `src/lib/destinationSafety.ts`, no key needed), OpenTripMap (candidate POIs, needs `OPENTRIPMAP_API_KEY`; absent key degrades to no suggestions rather than erroring), Yelp Fusion (dietary-matched venue examples via `src/lib/dietaryVenues.ts`, needs `YELP_API_KEY`; absent key degrades to no venue examples rather than erroring), Brave Search (destination festivals/events via `src/lib/destinationFestivals.ts`, needs `BRAVE_API_KEY`; absent key degrades to no festival suggestions rather than erroring).
 
 ### Storage
 
