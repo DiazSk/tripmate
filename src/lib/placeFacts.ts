@@ -9,20 +9,18 @@ import { closedDaysFromOpeningHours, fetchPoiOsmTags } from "./poiDetails";
  *  `crowdByDay` are therefore permanently `null`/`false`/`[]` — there is no free source for any of
  *  them — and are kept in the shape only because `placeConflicts.ts` still reads them defensively. */
 export interface PlaceFacts {
-  /** Lowercase weekday → the day's hours as published ("9 AM–6 PM", "Closed", or a multi-range
-   *  string like "9–11 AM, 12–3 PM, 5–8 PM"). Deliberately kept as the published text rather than
-   *  parsed into times — see `placeConflicts.ts` for why. */
+  /** Lowercase weekday → "Closed", from OSM's `opening_hours` tag via `closedDaysFromOpeningHours`.
+   *  Can only ever hold confirmed-closed days; every other weekday is simply absent, meaning
+   *  "presumed open, hours unknown" — never a clock-time string like "9 AM–6 PM". */
   hoursByDay: Record<string, string> | null;
   admissionUsd: number | null;
   accessibility: string[];
-  /** Google's own "Getting tickets in advance recommended" signal — §14c asks the plan to flag
-   *  what needs booking ahead, and this is the only non-invented source for it. */
+  /** Always `false` — no free data source exists for a "book ahead" signal. */
   bookAhead: boolean;
   rating: number | null;
   /** The listing's own title, kept so the caller can reject a confident mismatch. */
   title: string | null;
-  /** Lowercase weekday → hourly busyness (0-100, Google's own scale), from `popular_times`.
-   *  Rides along in the SAME response `hoursByDay`/`admissionUsd` come from — no extra call. */
+  /** Always `null` — no free source exists for crowd/popular-times data. */
   crowdByDay: Record<string, { time: string; busyness: number | null }[]> | null;
 }
 
