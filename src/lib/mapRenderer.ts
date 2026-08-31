@@ -28,6 +28,26 @@ export interface MapRenderer {
   readonly engine: MapEngine;
 
   /**
+   * Whether resting the pointer on a stop should lean the camera in toward it.
+   *
+   * A **surface policy**, declared here rather than branched on `engine` at the call site — the
+   * same shape as `showSearchResults`, and for the same reason: `mapCamera.tsx` is written against
+   * this interface and stops being interchangeable the moment it starts asking which engine is
+   * live.
+   *
+   * False on the vector map. There, a hover is how you *read* — names surface by distance, the
+   * route is a line you follow with your eye, and a camera that dives at whatever the pointer
+   * crossed takes the ground away mid-sentence. On the photorealistic tiles it earns its cost:
+   * the whole reason to be in Satellite is to look closely at a place, and leaning in is the
+   * gesture that does it, with `peekRangeM`'s rings deciding how far by how crowded that stop's
+   * own corner of the day is.
+   *
+   * The *highlight* is unaffected on both — hovering still lights the stop and its itinerary row.
+   * Only the camera holds still.
+   */
+  readonly hoverPeek: boolean;
+
+  /**
    * False once the underlying map has been torn down. Every method is safe to call on a dead
    * renderer — they no-op — but callers holding an `await` across a teardown should check, the
    * same way the Cesium code checked `viewer.isDestroyed()`.

@@ -584,6 +584,13 @@ export function MapCameraProvider({
     const renderer = rendererRef.current;
     if (!ready || !renderer?.isAlive()) return;
     if (prefersReducedMotion()) return;
+    // The surface says whether it leans in at all — see `MapRenderer.hoverPeek`. `cancelPeek`
+    // rather than a bare return, so toggling from Satellite to Map mid-dwell drops the pending
+    // flight instead of leaving a timer armed against a camera that has stopped answering.
+    if (!renderer.hoverPeek) {
+      cancelPeek();
+      return;
+    }
     // An editing surface is open. Not merely "don't start a new peek": a peek already in flight
     // when the editor opened would otherwise leave the camera leaned in on a stop with the plan
     // no longer on screen, so the pending dwell is dropped and the lean-out is allowed to run.
