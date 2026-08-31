@@ -1,74 +1,81 @@
 /* Run: node --test src/lib/routeMatrix.test.mjs
  *
- * Two cases carry real weight. Durations arrive as protobuf second strings ("1305s"), so a naive
- * Number() yields NaN and every leg silently becomes untimed. And `condition` must be honoured:
- * an unroutable pair still appears in the response, and reading its "0s" as a real duration would
- * claim two places are adjacent when no route between them was found — a plan that under-books
- * travel strands the traveler mid-day, which is why the existing estimator is deliberately
- * conservative. */
+ * OSRM's Table endpoint returns dense `durations`/`distances` matrices in seconds/meters — no
+ * per-element status field, no protobuf-string parsing needed. An unroutable pair is `null` in
+ * both matrices at `[i][j]`, and reading it as `0` would claim two places are adjacent when no
+ * route between them was found — a plan that under-books travel strands the traveler mid-day,
+ * which is why the existing estimator is deliberately conservative.
+ */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { distilRouteMatrix, MAX_MATRIX_STOPS } from "./routeMatrix.ts";
+import { distilRouteMatrix, MAX_MATRIX_STOPS, probeTransitAvailable } from "./routeMatrix.ts";
 
-/** Verified live against a 3×3 Paris matrix. */
+/** Verified live: `curl "https://router.project-osrm.org/table/v1/driving/2.3522,48.8566;2.3376,48.8606;2.3444,48.8738?annotations=duration,distance"`
+ *  against the same 3-point Paris triangle used by the old fixture. `walking`, `foot`, and
+ *  `cycling` all returned this exact same payload byte-for-byte — the public demo only hosts the
+ *  driving profile — which is why the app now requests `driving` for every routable mode. */
 const response = {
-  elements: [
-    { condition: "ROUTE_EXISTS", originIndex: 0, destinationIndex: 0, duration: "0s" },
-    { condition: "ROUTE_EXISTS", originIndex: 2, destinationIndex: 1, duration: "1305s", distanceMeters: 1597 },
-    { condition: "ROUTE_EXISTS", originIndex: 1, destinationIndex: 2, duration: "1294s", distanceMeters: 1583 },
+  code: "Ok",
+  durations: [
+    [0, 205.9, 439.3],
+    [406.3, 0, 350.8],
+    [492.1, 527.5, 0],
+  ],
+  distances: [
+    [0, 1140, 2510.2],
+    [2287.6, 0, 2021.2],
+    [2768.3, 3054.3, 0],
   ],
 };
 
-test("parses a protobuf second string into minutes", () => {
+test("reads a dense duration matrix into minutes", () => {
   const legs = distilRouteMatrix(response);
-  const leg = legs.find((l) => l.fromIndex === 2 && l.toIndex === 1);
-  assert.equal(leg.minutes, 22); // 1305s
-  assert.equal(leg.distanceMeters, 1597);
+  const leg = legs.find((l) => l.fromIndex === 0 && l.toIndex === 1);
+  assert.equal(leg.minutes, 3); // 205.9s
+  assert.equal(leg.distanceMeters, 1140);
 });
 
 test("drops the self-pairs the matrix always includes", () => {
-  assert.equal(distilRouteMatrix(response).some((l) => l.fromIndex === l.toIndex), false);
-  assert.equal(distilRouteMatrix(response).length, 2);
+  const legs = distilRouteMatrix(response);
+  assert.equal(legs.some((l) => l.fromIndex === l.toIndex), false);
+  assert.equal(legs.length, 6); // 3x3 minus the 3 diagonal self-pairs
 });
 
 test("ignores a pair with no route rather than reading it as zero minutes", () => {
   const unroutable = {
-    elements: [{ condition: "ROUTE_NOT_FOUND", originIndex: 0, destinationIndex: 1, duration: "0s" }],
-  };
-  assert.deepEqual(distilRouteMatrix(unroutable), []);
-});
-
-test("skips an element whose duration is not a parseable second string", () => {
-  const weird = {
-    elements: [
-      { condition: "ROUTE_EXISTS", originIndex: 0, destinationIndex: 1, duration: 1305 },
-      { condition: "ROUTE_EXISTS", originIndex: 0, destinationIndex: 2, duration: "abc" },
-      { condition: "ROUTE_EXISTS", originIndex: 0, destinationIndex: 3, duration: "60s" },
+    code: "Ok",
+    durations: [
+      [0, null],
+      [406.3, 0],
+    ],
+    distances: [
+      [0, null],
+      [2287.6, 0],
     ],
   };
-  const legs = distilRouteMatrix(weird);
+  const legs = distilRouteMatrix(unroutable);
   assert.equal(legs.length, 1);
-  assert.equal(legs[0].minutes, 1);
+  assert.equal(legs[0].fromIndex, 1);
+  assert.equal(legs[0].toIndex, 0);
 });
 
-test("tolerates a rejected request without throwing", () => {
-  // A 12x12 really does come back as an HTTP 400 payload rather than elements.
+test("tolerates a rejected or malformed request without throwing", () => {
   assert.deepEqual(distilRouteMatrix(null), []);
-  assert.deepEqual(distilRouteMatrix({ http_error: "400 Client Error" }), []);
-  assert.deepEqual(distilRouteMatrix({ elements: "nope" }), []);
+  assert.deepEqual(distilRouteMatrix({ code: "InvalidQuery" }), []);
+  assert.deepEqual(distilRouteMatrix({ code: "Ok", durations: "nope" }), []);
 });
 
-test("keeps the cap under Google's hard TRANSIT element limit", () => {
-  // origins x destinations must be <= 100 for TRANSIT, and this cap squares.
-  assert.ok(MAX_MATRIX_STOPS * MAX_MATRIX_STOPS <= 100);
+test("falls back to null distance when the distances matrix is missing or short", () => {
+  const noDistances = { code: "Ok", durations: [[0, 60], [60, 0]] };
+  const legs = distilRouteMatrix(noDistances);
+  assert.equal(legs.length, 2);
+  assert.equal(legs[0].distanceMeters, null);
 });
 
-test("the transit margin distinguishes a real network from a walking fallback", () => {
-  // Google silently answers a TRANSIT request with the walking route where no transit exists:
-  // probed in rural Val d'Orcia both modes returned the identical 3301s, while Paris returned
-  // 1599s by transit against 4322s on foot. A probe trusting `condition` alone therefore returns
-  // true everywhere. These are the two real observations the threshold has to separate.
-  const ratio = (transit, walk) => transit / walk;
-  assert.ok(ratio(1599, 4322) <= 0.8, "Paris transit should count as real");
-  assert.ok(ratio(3301, 3301) > 0.8, "an identical duration is a walking fallback, not transit");
+test("keeps the stop cap sane for a shared public demo server", () => {
+  assert.ok(MAX_MATRIX_STOPS > 0 && MAX_MATRIX_STOPS <= 10);
+});
+
+test("probeTransitAvailable is unconditionally false — no free transit data source exists", async () => {
+  assert.equal(await probeTransitAvailable(), false);
 });

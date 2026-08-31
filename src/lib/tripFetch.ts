@@ -33,7 +33,7 @@ export async function fetchRawTrip(params: {
     geo ? getWeatherWithMeta(geo.lat, geo.lon, startDate, endDate) : Promise.resolve(null),
     geo?.countryCode ? getPublicHolidays(geo.countryCode, startDate, endDate) : Promise.resolve(null),
     geo ? getCandidatePois(geo.lat, geo.lon) : Promise.resolve(null),
-    geo ? probeTransitAvailable(geo.lat, geo.lon) : Promise.resolve(false),
+    probeTransitAvailable(),
   ]);
 
   const weather = weatherResult.status === "fulfilled" ? weatherResult.value : null;
