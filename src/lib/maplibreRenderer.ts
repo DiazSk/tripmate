@@ -19,6 +19,7 @@ import {
   STEM_HEIGHT_M,
 } from "@/lib/mapRoute";
 import { metresBetween } from "@/lib/peekRange";
+import { createArcTubeLayer, type ArcTube } from "@/lib/maplibreArcLayer";
 import {
   CameraPose,
   CameraState,
@@ -96,36 +97,27 @@ const ROUTE_GLOW_WIDTH_PX = 14;
 const ACTIVE_CORE_WIDTH_SCALE = 1.22;
 const ACTIVE_GLOW_WIDTH_SCALE = 1.55;
 
-const ARC_SOURCE_ID = "tripmate-arcs";
+const ARC_LAYER_ID = "tripmate-arcs";
 /**
- * How tall any one slab of the arc ribbon is allowed to be, in metres.
+ * Points sampled along each arc's centreline.
  *
- * This, not a segment count, is what sets the resolution — and it is the difference between an arc
- * and a row of blocks. A `fill-extrusion` prism is axis-aligned: it cannot be tilted to follow a
- * slope, so a segment spanning a steep stretch of the curve becomes a *tall box*. The curve is at
- * its steepest right where it leaves each stop, so a fixed segment count gave a smooth apex and
- * chunky ends — visibly a staircase of cubes at the start of every long hop.
- *
- * Sizing the segments off the height they climb instead makes them dense where the curve is steep
- * and sparse where it is flat, which is where the geometry is worth spending. A 200m hop lifts 80m
- * and needs ~13 slabs; a 4km hop lifts 1.2km and takes ~190.
+ * A free choice now, which it was not before. While the arcs were `fill-extrusion` prisms this was
+ * pinned to the height each slab climbed — a prism cannot tilt, so a steep stretch became a tall
+ * box and the only cure was more, shorter boxes. The tube is swept geometry: 48 samples is smooth
+ * at any framing, and the cost is 48 rings of 8 vertices rather than 190 extruded quads.
  */
-const ARC_STEP_M = 20;
-const ARC_MIN_SEGMENTS = 14;
-const ARC_MAX_SEGMENTS = 200;
+const ARC_SAMPLES = 48;
 /**
- * Half-width of the arc ribbon in metres, as a fraction of the hop's own ground length.
+ * Tube radius in metres, as a fraction of the hop's own ground length.
  *
- * World-space rather than screen-space, and that is a real difference from Cesium: `fill-extrusion`
- * has no pixel-width mode, so the ribbon grows and shrinks with the camera instead of holding a
- * constant 16px. Scaling it off the hop keeps a cross-city arc from reading as a thread while a
- * two-block hop stays a ribbon rather than a runway.
+ * World-space rather than screen-space, and that is the one real difference from Cesium left in
+ * the arcs: its ribbon holds a constant 16px whatever the camera does, and a tube built out of
+ * world geometry grows and shrinks with it. Scaling off the hop keeps a cross-city arc from
+ * reading as a thread while a two-block hop stays a tube rather than a pipeline.
  */
-const ARC_HALF_WIDTH_RATIO = 0.008;
-const ARC_MIN_HALF_WIDTH_M = 10;
-const ARC_MAX_HALF_WIDTH_M = 120;
-/** Vertical thickness of a slab. Must exceed `ARC_STEP_M` or consecutive slabs leave gaps. */
-const ARC_THICKNESS_M = 24;
+const ARC_RADIUS_RATIO = 0.006;
+const ARC_MIN_RADIUS_M = 8;
+const ARC_MAX_RADIUS_M = 90;
 
 /**
  * Cesium's day/night phases are a CSS blend sheet over the canvas and stay that way, so nothing
@@ -142,12 +134,6 @@ interface MapLibrePose {
   /** MapLibre's own convention: 0 is nadir. */
   pitch: number;
 }
-
-type ArcProps = {
-  color: string;
-  base: number;
-  height: number;
-};
 
 type RouteProps = {
   kind: "route" | "stop";
@@ -397,7 +383,7 @@ function addTripLayers(map: MapLibreMap) {
   const isRoute: FilterSpecification = ["==", ["get", "kind"], "route"];
   const isStop: FilterSpecification = ["==", ["get", "kind"], "stop"];
 
-  for (const id of [ROUTE_SOURCE_ID, ARC_SOURCE_ID, STEM_SOURCE_ID, HIGHWAY_SOURCE_ID, CITY_SOURCE_ID]) {
+  for (const id of [ROUTE_SOURCE_ID, STEM_SOURCE_ID, HIGHWAY_SOURCE_ID, CITY_SOURCE_ID]) {
     if (!map.getSource(id)) map.addSource(id, { type: "geojson", data: emptyCollection() });
   }
 
@@ -454,29 +440,10 @@ function addTripLayers(map: MapLibreMap) {
     layout: { "line-cap": "round", "line-join": "round" },
   });
 
-  // **The parabolic arc**, and the reason it is an extrusion rather than a line.
-  //
-  // Cesium lifts each hop onto a raised great circle so two trips over the same ground read as
-  // separate, and so the shape of a day is legible as a shape. MapLibre has no elevated-line
-  // primitive at all — there is no `line-z-offset`, and `line-*` geometry is draped on the terrain
-  // — so the arc is built out of `fill-extrusion` prisms instead: one thin horizontal slab per
-  // segment, each floating at that segment's height on the same `base + lift · sin(πt)` profile
-  // `buildRouteGeometry` uses, so both engines draw the same curve from the same `arcLift()`.
-  //
-  // Alpha is baked into `fill-extrusion-color` rather than set through
-  // `fill-extrusion-opacity`, which is not data-driven — so a per-day state alpha could not reach
-  // it any other way.
-  map.addLayer({
-    id: ARC_SOURCE_ID,
-    type: "fill-extrusion",
-    source: ARC_SOURCE_ID,
-    paint: {
-      "fill-extrusion-color": ["get", "color"],
-      "fill-extrusion-base": ["get", "base"],
-      "fill-extrusion-height": ["get", "height"],
-      "fill-extrusion-opacity": 1,
-    },
-  });
+  // **The parabolic arcs**, as real translucent tubes — see `maplibreArcLayer.ts` for why this is
+  // a custom WebGL layer and not a style layer. Added last of the trip layers so it draws over the
+  // ground track and the stop dots, the way a raised ribbon should.
+  map.addLayer(createArcTubeLayer(ARC_LAYER_ID));
 
   // The ground pool under each stop, and its bright centre — Cesium's two nested ellipses.
   map.addLayer({
@@ -593,7 +560,7 @@ export class MapLibreRenderer implements MapRenderer {
     this.days = [];
     this.emphasis = null;
     this.setData(ROUTE_SOURCE_ID, emptyCollection());
-    this.setData(ARC_SOURCE_ID, emptyCollection());
+    this.arcLayer()?.setArcs([]);
     this.setData(STEM_SOURCE_ID, emptyCollection());
   }
 
@@ -628,7 +595,7 @@ export class MapLibreRenderer implements MapRenderer {
     const accent = cssColor("--accent");
     const routeFeatures: Feature<LineString | Point, RouteProps>[] = [];
     const stemFeatures: Feature<Polygon, { color: string; height: number }>[] = [];
-    const arcFeatures: Feature<Polygon, ArcProps>[] = [];
+    const arcs: ArcTube[] = [];
 
     this.days.forEach((stops, day) => {
       if (this.soloFocus && this.focusDay !== null && day !== this.focusDay) return;
@@ -664,15 +631,15 @@ export class MapLibreRenderer implements MapRenderer {
           const touchesEmphasis =
             this.emphasis?.day === day &&
             (this.emphasis.index === i - 1 || this.emphasis.index === i);
-          arcFeatures.push(
-            ...buildArcRibbon(
-              stops[i - 1],
-              stops[i],
-              touchesEmphasis ? accent : color,
-              touchesEmphasis ? 1 : alpha,
-              active
-            )
+          const arc = buildArcTube(
+            stops[i - 1],
+            stops[i],
+            touchesEmphasis ? accent : color,
+            touchesEmphasis ? 1 : alpha,
+            active,
+            (lat, lng) => this.groundElevationM(lat, lng)
           );
+          if (arc) arcs.push(arc);
         }
       }
 
@@ -708,7 +675,7 @@ export class MapLibreRenderer implements MapRenderer {
     });
 
     this.setData(ROUTE_SOURCE_ID, { type: "FeatureCollection", features: routeFeatures });
-    this.setData(ARC_SOURCE_ID, { type: "FeatureCollection", features: arcFeatures });
+    this.arcLayer()?.setArcs(arcs);
     this.setData(STEM_SOURCE_ID, { type: "FeatureCollection", features: stemFeatures });
   }
 
@@ -766,6 +733,30 @@ export class MapLibreRenderer implements MapRenderer {
     this.setData(HIGHWAY_SOURCE_ID, emptyCollection());
     this.setData(CITY_SOURCE_ID, emptyCollection());
     this.setPin(null);
+  }
+
+  /** The custom tube layer, once the style has it. Looked up rather than held, because a style
+   *  reload would replace the instance under us. */
+  private arcLayer(): { setArcs: (arcs: ArcTube[]) => void } | null {
+    if (!this.isAlive()) return null;
+    const layer = this.map.getLayer(ARC_LAYER_ID) as unknown as
+      | { implementation?: { setArcs?: (arcs: ArcTube[]) => void } }
+      | undefined;
+    const impl = layer?.implementation;
+    return impl?.setArcs ? (impl as { setArcs: (arcs: ArcTube[]) => void }) : null;
+  }
+
+  /**
+   * Ground height under a point, in metres above sea level.
+   *
+   * The arcs are drawn at absolute altitude, so a trip through a hill town needs the hill or the
+   * whole ribbon sinks into it. Null before the DEM tiles covering that point have loaded, which is
+   * the ordinary case for the first draw — zero is the right answer then, and the next redraw (a
+   * day change, a hover) picks up the real elevation.
+   */
+  private groundElevationM(lat: number, lng: number): number {
+    if (!this.isAlive() || !this.map.getTerrain()) return 0;
+    return this.map.queryTerrainElevation([lng, lat]) ?? 0;
   }
 
   private setData(id: string, data: FeatureCollection) {
@@ -1199,77 +1190,55 @@ export class MapLibreRenderer implements MapRenderer {
  * against a few metres of rise), so consecutive ones overlap and the chain reads as one continuous
  * ribbon rather than a staircase.
  */
-function buildArcRibbon(
+function buildArcTube(
   from: RouteStop,
   to: RouteStop,
   color: string,
   alpha: number,
-  active: boolean
-): Feature<Polygon, ArcProps>[] {
+  active: boolean,
+  groundAt: (lat: number, lng: number) => number
+): ArcTube | null {
   const distanceM = metresBetween(from, to);
   // Same floor Cesium uses to skip degenerate hops: two stops at one address get no arc, only the
   // stems that already mark them.
-  if (!(distanceM > 5)) return [];
+  if (!(distanceM > 5)) return null;
   const lift = arcLift(distanceM);
-  const halfWidth =
-    Math.min(
-      Math.max(distanceM * ARC_HALF_WIDTH_RATIO, ARC_MIN_HALF_WIDTH_M),
-      ARC_MAX_HALF_WIDTH_M
-    ) * (active ? 1.35 : 1);
-  const fill = withAlpha(color, alpha);
+  const radiusM =
+    Math.min(Math.max(distanceM * ARC_RADIUS_RATIO, ARC_MIN_RADIUS_M), ARC_MAX_RADIUS_M) *
+    (active ? 1.35 : 1);
 
-  // Segment count from the curve's own steepness. `d/dt [lift·sin(πt)]` peaks at `lift·π` (at the
-  // ends), so this many segments keeps every slab under `ARC_STEP_M` tall.
-  const segments = Math.min(
-    ARC_MAX_SEGMENTS,
-    Math.max(ARC_MIN_SEGMENTS, Math.ceil((lift * Math.PI) / ARC_STEP_M))
-  );
+  // The ground at each end, so the arc springs from the terrain rather than from sea level. Lerped
+  // across the hop rather than sampled per point: `queryTerrainElevation` is a DEM lookup per call
+  // and 48 of them per arc is real work for a correction measured in metres.
+  const groundFrom = groundAt(from.lat, from.lng);
+  const groundTo = groundAt(to.lat, to.lng);
 
-  // Bearing of the hop, so each slab can be laid perpendicular to it.
-  const midLat = (from.lat + to.lat) / 2;
-  const eastM = (to.lng - from.lng) * 111_320 * Math.cos((midLat * Math.PI) / 180);
-  const northM = (to.lat - from.lat) * 111_320;
-  const length = Math.hypot(eastM, northM) || 1;
-  // Unit vector across the hop.
-  const acrossE = -northM / length;
-  const acrossN = eastM / length;
-
-  const heightAt = (t: number) => STEM_HEIGHT_M + lift * Math.sin(t * Math.PI);
-  const pointAt = (t: number) => ({
-    lat: from.lat + (to.lat - from.lat) * t,
-    lng: from.lng + (to.lng - from.lng) * t,
+  const points = Array.from({ length: ARC_SAMPLES + 1 }, (_, i) => {
+    const t = i / ARC_SAMPLES;
+    return {
+      lat: from.lat + (to.lat - from.lat) * t,
+      lng: from.lng + (to.lng - from.lng) * t,
+      // Character for character the profile `buildRouteGeometry` uses, so a trip drawn on either
+      // engine arches by the same amount from the same `arcLift()`.
+      heightM: groundFrom + (groundTo - groundFrom) * t + STEM_HEIGHT_M + lift * Math.sin(t * Math.PI),
+    };
   });
 
-  const features: Feature<Polygon, ArcProps>[] = [];
-  for (let i = 0; i < segments; i++) {
-    const t0 = i / segments;
-    const t1 = (i + 1) / segments;
-    const a = pointAt(t0);
-    const b = pointAt(t1);
-    // Centred on the segment's own mid-height and given a constant thickness, rather than stretched
-    // to span `[min, max]`. With the step bounded above, the two are within a few metres of each
-    // other — and a constant thickness is what makes the chain read as a ribbon of even weight
-    // instead of one that fattens toward the stops.
-    const mid = (heightAt(t0) + heightAt(t1)) / 2;
-    const top = mid + ARC_THICKNESS_M / 2;
-    const bottom = Math.max(0, mid - ARC_THICKNESS_M / 2);
-    const corner = (p: { lat: number; lng: number }, sign: 1 | -1) =>
-      offsetMetres(p.lat, p.lng, acrossE * halfWidth * sign, acrossN * halfWidth * sign);
-    const ring: [number, number][] = [corner(a, 1), corner(b, 1), corner(b, -1), corner(a, -1)];
-    ring.push(ring[0]);
-    features.push({
-      type: "Feature",
-      properties: { color: fill, base: bottom, height: top },
-      geometry: { type: "Polygon", coordinates: [ring] },
-    });
-  }
-  return features;
+  return { points, radiusM, color: hexToRgb(color), alpha };
+}
+
+/** `#rrggbb` to linear-ish 0..1 RGB for the tube shader. */
+function hexToRgb(hex: string): [number, number, number] {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return [1, 1, 1];
+  const value = parseInt(match[1], 16);
+  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255];
 }
 
 /**
  * Cubic in-out, the same shape Cesium's `EasingFunction.CUBIC_IN_OUT` traces.
  *
- * Written out rather than reached for from a library: it is four lines, and having both engines
+ * Written out rather than reached for from a library: it is two lines, and having both engines
  * ease a stop flight on visibly different curves is exactly the kind of drift the `MapRenderer`
  * boundary exists to prevent.
  */
@@ -1277,16 +1246,6 @@ function cubicInOut(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-/** `#rrggbb` plus an alpha, as the `rgba()` string a data-driven paint property will accept. */
-function withAlpha(hex: string, alpha: number): string {
-  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!match) return hex;
-  const value = parseInt(match[1], 16);
-  const r = (value >> 16) & 255;
-  const g = (value >> 8) & 255;
-  const b = value & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
-}
 
 /** A closed ring of `STEM_SIDES` points around a stop, for the extruded stem footprint. */
 function circleRing(lat: number, lng: number, radiusM: number): [number, number][] {

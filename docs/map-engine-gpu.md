@@ -116,12 +116,17 @@ Deliberate, and none of it is above the `MapRenderer` boundary:
 
 - **Photorealistic imagery.** The whole point of the exercise. Buildings are OpenMapTiles
   `fill-extrusion` prisms, not photogrammetry.
-- **Arched routes.** Cesium lifts each hop onto a raised great circle so two trips over the same
-  ground read as separate. MapLibre drapes lines on the terrain. `frameRoute` correspondingly stops
-  reserving frame height for arc apexes.
-- **The glass-ribbon shader.** `glassRibbon.ts` is a Cesium fabric material with a cylindrical body
-  and a specular streak; MapLibre's line shader is not user-extensible. The vector path uses a
-  blurred wide line under a solid narrow one, which reads similarly at a fraction of the cost.
+- ~~**Arched routes**~~ and ~~**the glass-ribbon shader**~~ — both now reproduced. MapLibre draws
+  the arcs as real translucent tubes from a **custom WebGL layer** (`maplibreArcLayer.ts`) on the
+  same `base + lift·sin(πt)` profile and the same `arcLift()` Cesium uses, shaded the way
+  `glassRibbon.ts` shades its ribbon: cylindrical falloff, a specular streak along the top, and a
+  brightening rim. Two earlier attempts using style layers are worth not repeating — MapLibre has
+  no elevated-line primitive (no `line-z-offset`, every `line-*` layer is draped), and
+  `fill-extrusion` prisms are axis-aligned so a segment across a steep stretch becomes a tall box,
+  which read as a staircase of cubes exactly where the curve leaves each stop.
+  The one difference left: Cesium's ribbon holds a constant 16px whatever the camera does, and a
+  tube built from world geometry grows and shrinks with it, so the radius is scaled off the hop's
+  own length instead.
 - **Route altitude.** Cesium samples the *rendered* tile surface (`clampToHeightMostDetailed`,
   ~1.3 s) so its geometry floats just above the roofs. MapLibre drapes on terrain and reports
   altitude 0, which is the correct answer for it — the marker layer then lifts cards by
