@@ -21,6 +21,7 @@ import {
 import { metresBetween } from "@/lib/peekRange";
 import {
   CameraPose,
+  CameraState,
   drawnDaysOf,
   FlyToPointOptions,
   FrameRouteOptions,
@@ -904,6 +905,35 @@ export class MapLibreRenderer implements MapRenderer {
       pitch: toMapLibrePitch(HERO_VIEW.pitchDeg),
       duration: durationS * 1000,
       essential: true,
+    });
+  }
+
+  cameraState(): CameraState | null {
+    if (!this.isAlive()) return null;
+    const centre = this.map.getCenter();
+    return {
+      lat: centre.lat,
+      lng: centre.lng,
+      rangeM: this.centreRangeM(),
+      headingRad: (this.map.getBearing() * Math.PI) / 180,
+      pitchDeg: (toCesiumPitchRad(this.map.getPitch()) * 180) / Math.PI,
+    };
+  }
+
+  restoreCamera(state: CameraState) {
+    if (!this.isAlive()) return;
+    this.map.jumpTo({
+      center: [state.lng, state.lat],
+      zoom: this.rangeToZoom(
+        Math.max(MIN_RANGE_M, Math.min(MAX_RANGE_M, state.rangeM)),
+        state.lat
+      ),
+      bearing: (state.headingRad * 180) / Math.PI,
+      pitch: toMapLibrePitch(state.pitchDeg),
+      // Cleared, for the same reason `frameRoute` clears it: padding persists across camera
+      // commands, and a stop flight's right-padding still in force here would slide the restored
+      // view sideways — which is precisely the drift this handoff exists to avoid.
+      padding: { top: 0, bottom: 0, left: 0, right: 0 },
     });
   }
 

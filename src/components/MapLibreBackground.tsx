@@ -29,11 +29,23 @@ import { dayPhase } from "@/lib/mapRoute";
  *   carries a `data-phase` and the tiles underneath are untouched.
  */
 export default function MapLibreBackground({
+  active = true,
   creditClassName = "",
 }: {
+  /**
+   * Whether this is the engine currently drawing the world.
+   *
+   * Both backgrounds are mounted at all times (see `AppShell`), and this is what keeps the
+   * inactive one from building a map, streaming a tile or painting a frame. Combined with
+   * `globeWanted` rather than replacing it: a surface still has to *want* a map at all before
+   * either engine is worth constructing.
+   */
+  active?: boolean;
   creditClassName?: string;
 }) {
-  const { setRenderer, globeWanted, routeStops, activeIndex, hoveredIndex } = useMapCamera();
+  const { setRenderer, globeWanted: mapWanted, routeStops, activeIndex, hoveredIndex } =
+    useMapCamera();
+  const globeWanted = mapWanted && active;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   /** The in-flight construction, held so a second effect run adopts it — see the effect below. */

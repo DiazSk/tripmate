@@ -20,7 +20,7 @@ import {
   RouteStop,
   STEM_HEIGHT_M,
 } from "@/lib/mapRoute";
-import type { CameraPose, MapRenderer } from "@/lib/mapRenderer";
+import type { CameraPose, CameraState, MapRenderer } from "@/lib/mapRenderer";
 import type { MapEngine } from "@/lib/mapEngine";
 
 // Re-exported so the marker layer can reach the rule without importing two modules for it.
@@ -41,9 +41,21 @@ interface MapCameraContextValue {
    *  than wrapped in per-action context methods — camera math is better kept next to the control
    *  it belongs to, and the ref is what keeps a per-frame loop out of React's render path. */
   rendererRef: RefObject<MapRenderer | null>;
-  /** Which engine is drawing, for the rare consumer that legitimately has to know — the dev
-   *  overlay's engine switch, and the GPU probe. Not for branching behaviour. */
+  /** Which engine is drawing. Read by the Map/Satellite toggle and by the GPU probe; not for
+   *  branching behaviour anywhere else — that is what `MapRenderer` is for. */
   engine: MapEngine;
+  /**
+   * Swap the engine drawing the world, keeping the view.
+   *
+   * The outgoing engine's `cameraState()` is captured here and applied to the incoming one the
+   * moment it registers, so Satellite arrives looking at the same street Map was on rather than at
+   * whatever pose it was last left in. The trip's geometry, the highways, the city outline and the
+   * search pin are replayed onto it too — none of that is refetched.
+   *
+   * Switching to an engine that has never been built waits on it (Cesium's tileset takes seconds);
+   * switching back to one that has is immediate, because neither map is ever destroyed.
+   */
+  setEngine: (engine: MapEngine) => void;
   /** False until the map exists — Cesium's 3D tileset takes seconds, and MapLibre's style is a
    *  network round-trip — so map chrome must not render (and reach for `rendererRef.current`)
    *  before then. */
@@ -252,14 +264,38 @@ interface TripRouteRequest {
 
 export function MapCameraProvider({
   engine,
+  onEngineChange,
   children,
 }: {
-  /** Resolved once by `AppShell` and passed down, so every consumer sees the same answer and
-   *  nothing re-reads `localStorage` on a render. */
+  /** The engine currently drawing. Owned by `AppShell` because it also decides which background
+   *  component to render; the provider adds the camera handoff around changing it. */
   engine: MapEngine;
+  onEngineChange: (engine: MapEngine) => void;
   children: ReactNode;
 }) {
   const rendererRef = useRef<MapRenderer | null>(null);
+  /** Every engine that has been built this session, by name.
+   *
+   *  Neither map is destroyed on a toggle — the reasoning `GlobeBackground`'s construction effect
+   *  gives for never swapping a viewer applies just as much to swapping *between* two — so the
+   *  second toggle onto an engine is instant and costs no tiles. This is where the inactive one
+   *  waits. */
+  const renderersRef = useRef<Partial<Record<MapEngine, MapRenderer>>>({});
+  /** The view the outgoing engine was showing, waiting for the incoming one to arrive. */
+  const handoffRef = useRef<CameraState | null>(null);
+  /** The active engine, readable synchronously from callbacks that must not close over a stale
+   *  render's value — `setRenderer` in particular, which fires from an async construction. */
+  const engineRef = useRef<MapEngine>(engine);
+  /** What the pointer is on, in the (day, index-within-day) space `applyEmphasis` takes. Mirrored
+   *  into a ref so a replay onto a freshly-built engine can restore it without the effect below
+   *  having to re-run. */
+  const emphasisRef = useRef<{ day: number; index: number } | null>(null);
+  /** The last overlays drawn, kept so the incoming engine can be given them without refetching.
+   *  Overpass answers take seconds and are throttled by IP; paying for them again on every toggle
+   *  would make the toggle the most expensive control in the app. */
+  const lastHighwaysRef = useRef<{ points: { lat: number; lng: number }[] }[] | null>(null);
+  const lastCityRef = useRef<{ lat: number; lng: number }[][] | null>(null);
+  const lastPinRef = useRef<{ lat: number; lng: number; label?: string } | null>(null);
   const pendingRef = useRef<Flight | null>(null);
   const pendingRouteRef = useRef<TripRouteRequest | null>(null);
   /** The last route asked for, kept after it is drawn rather than cleared like `pendingRouteRef`,
@@ -366,8 +402,9 @@ export function MapCameraProvider({
         return;
       }
       // One marker at a time: the pin always sits wherever the camera last flew, so a labelless
-      // flight (the global reset) just clears it.
-      renderer.setPin(label ? { lat, lng, label } : null);
+      // flight (the global reset) just clears it. Cached so an engine swap can put it back.
+      lastPinRef.current = label ? { lat, lng, label } : null;
+      renderer.setPin(lastPinRef.current);
       renderer.flyToPoint({ lat, lng, rangeM: height, pitchDeg, centreHeightM });
     },
     [cancelPeek]
@@ -458,11 +495,13 @@ export function MapCameraProvider({
     const emphasised = hoveredIndex ?? activeIndex;
     const emphasisedStop = emphasised === null ? null : routeStops[emphasised];
     if (!emphasisedStop) {
+      emphasisRef.current = null;
       rendererRef.current?.applyEmphasis(null, null);
       return;
     }
     const dayStart = routeStops.findIndex((st) => st.day === emphasisedStop.day);
-    rendererRef.current?.applyEmphasis(emphasisedStop.day, emphasised! - dayStart);
+    emphasisRef.current = { day: emphasisedStop.day, index: emphasised! - dayStart };
+    rendererRef.current?.applyEmphasis(emphasisRef.current.day, emphasisRef.current.index);
   }, [hoveredIndex, activeIndex, routeStops]);
 
   /**
@@ -720,6 +759,7 @@ export function MapCameraProvider({
         cityKeyRef.current = null;
         return;
       }
+      lastCityRef.current = data.boundary.segments;
       renderer.drawCityBoundary(data.boundary.segments);
     })();
   }, []);
@@ -745,18 +785,75 @@ export function MapCameraProvider({
         return; // Ambient context, not core to the trip — a miss here just leaves them off.
       }
       if (generation !== highwayGenerationRef.current) return;
+      lastHighwaysRef.current = segments;
       rendererRef.current?.drawHighways(segments);
     })();
   }, []);
 
-  const setRenderer = useCallback(
+  /**
+   * Hand a renderer everything the trip has already put on the map.
+   *
+   * The toggle's whole job, really. Geometry is rebuilt from `lastRouteRef` and the overlays from
+   * their own caches — nothing is refetched, and nothing flies: the camera is restored separately
+   * and this must not fight it. `drawRoute` never moves the camera on either engine (that is
+   * `frameRoute`'s job, and `showTripRoute` calls them as two steps), which is what makes the
+   * separation possible.
+   */
+  const replayOverlays = useCallback((renderer: MapRenderer) => {
+    if (lastPinRef.current) renderer.setPin(lastPinRef.current);
+    if (lastHighwaysRef.current) renderer.drawHighways(lastHighwaysRef.current);
+    if (lastCityRef.current) renderer.drawCityBoundary(lastCityRef.current);
+    const route = lastRouteRef.current;
+    if (!route) return;
+    const generation = ++routeGenerationRef.current;
+    void renderer
+      .drawRoute({
+        days: route.days,
+        focusDay: route.focusedDay,
+        soloFocus: route.soloFocus,
+        altitudeHintM: routeAltitudeRef.current,
+        stateFor: (day) => dayVisualState(day, route.focusedDay, hoveredDayRef.current),
+      })
+      .then((altitude) => {
+        if (generation !== routeGenerationRef.current) return;
+        routeAltitudeRef.current = altitude;
+        // The retint and emphasis effects key on state that did not change across the swap, so
+        // they will not re-run — the new geometry has to be told what is selected and what the
+        // pointer is on, or a toggle silently drops the highlight.
+        renderer.applyDayStates((day) =>
+          dayVisualState(day, route.focusedDay, hoveredDayRef.current)
+        );
+        const emphasised = emphasisRef.current;
+        renderer.applyEmphasis(emphasised?.day ?? null, emphasised?.index ?? null);
+      });
+  }, []);
+
+  /**
+   * Make `engine`'s renderer the live one.
+   *
+   * Called from two directions — a toggle whose target engine is already built, and a background
+   * finishing construction — because those are the same event seen from either side, and the
+   * restore-and-replay must happen exactly once whichever arrives second.
+   */
+  const activate = useCallback(
     (renderer: MapRenderer | null) => {
       rendererRef.current = renderer;
-      if (!renderer) {
-        setReady(false);
+      setReady(!!renderer);
+      if (!renderer) return;
+
+      // The view the outgoing engine was showing. Restored before the geometry is replayed so the
+      // first frame the traveler sees is already in the right place rather than over Africa.
+      const handoff = handoffRef.current;
+      handoffRef.current = null;
+      if (handoff) {
+        renderer.restoreCamera(handoff);
+        replayOverlays(renderer);
         return;
       }
-      setReady(true);
+
+      // First build of the session: no view to inherit, so the queued requests are what place the
+      // camera. Cesium's tileset takes seconds and a trip page has usually asked to fly long
+      // before that; dropping those requests is what used to leave the route silently undrawn.
       const pending = pendingRef.current;
       pendingRef.current = null;
       if (pending) flyTo(...pending);
@@ -775,8 +872,51 @@ export function MapCameraProvider({
       pendingHighwaysRef.current = null;
       if (pendingHighways) showHighways(...pendingHighways);
     },
-    [flyTo, showTripRoute, showHighways]
+    [flyTo, showTripRoute, showHighways, replayOverlays]
   );
+
+  const setRenderer = useCallback(
+    (renderer: MapRenderer | null) => {
+      if (!renderer) {
+        // A background tearing down. Only the *active* engine's teardown blanks the live slot —
+        // the other one going away is invisible from here.
+        return;
+      }
+      renderersRef.current[renderer.engine] = renderer;
+      // Built, but the traveler has since toggled away from it. It waits in the registry; the
+      // engine effect below will pick it up if they toggle back.
+      if (renderer.engine !== engineRef.current) return;
+      activate(renderer);
+    },
+    [activate]
+  );
+
+  /**
+   * Swap engines, keeping the view.
+   *
+   * The capture has to happen *here*, synchronously, and not in the effect that reacts to the
+   * change: by the time an effect runs, React has already re-rendered and the outgoing background
+   * may have hidden its canvas, and a hidden canvas is a camera nobody can read.
+   */
+  const setEngine = useCallback(
+    (next: MapEngine) => {
+      if (next === engineRef.current) return;
+      handoffRef.current = rendererRef.current?.cameraState() ?? null;
+      cancelPeek();
+      onEngineChange(next);
+    },
+    [cancelPeek, onEngineChange]
+  );
+
+  // React to the engine actually changing — including the case where the target was built earlier
+  // in the session and is sitting in the registry, which fires no `setRenderer` of its own.
+  useEffect(() => {
+    engineRef.current = engine;
+    activate(renderersRef.current[engine] ?? null);
+    // `activate` is stable enough for this to be keyed on the engine alone: re-running it on a
+    // callback identity change would re-restore a handoff that has already been consumed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine]);
 
   const flyToDestination = useCallback(
     (lat: number, lng: number, label?: string) => flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
@@ -869,6 +1009,10 @@ export function MapCameraProvider({
     // never unmounts, so nothing else clears them.
     routeStopsRef.current = [];
     lastRouteRef.current = null;
+    lastHighwaysRef.current = null;
+    lastCityRef.current = null;
+    lastPinRef.current = null;
+    emphasisRef.current = null;
     setRouteStops([]);
     setRouteClusters([]);
     setFocusedDay(null);
@@ -895,6 +1039,7 @@ export function MapCameraProvider({
       setRenderer,
       rendererRef,
       engine,
+      setEngine,
       ready,
       globeWanted,
       setGlobeWanted,
@@ -923,6 +1068,7 @@ export function MapCameraProvider({
     [
       setRenderer,
       engine,
+      setEngine,
       ready,
       peekSuspended,
       globeWanted,

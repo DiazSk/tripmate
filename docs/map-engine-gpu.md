@@ -11,18 +11,39 @@ removed.
 
 ## Switching
 
-Most specific wins:
+**In the app: the Map / Satellite toggle**, top-left under the wordmark (`MapEngineToggle`). Map is
+MapLibre, Satellite is Cesium — the labels name the *view*, not the engine, because that is what the
+traveler is choosing.
 
-1. `?map=cesium` or `?map=maplibre` on any URL. Sticky — it writes to `localStorage`, so the choice
-   survives client-side navigation. **Caveat:** `/trip/latest` answers with a 307 and the redirect
-   drops the query string, so put the parameter on a real trip URL or set the storage key directly.
-2. `localStorage.tripmateMapEngine`.
+The switch **keeps the view and the trip**. The outgoing engine's `cameraState()` — the point under
+the middle of the screen, the range to it, the heading and the pitch — is captured synchronously on
+the click and applied to the incoming engine the moment it registers, and the route geometry,
+highways, city outline and search pin are replayed from the provider's own caches. Nothing is
+refetched: Overpass answers take seconds and are throttled by IP, so paying for them again would
+make the toggle the most expensive control in the app. Measured on a 2-day Lisbon trip: the screen
+centre moves **127 m** across the swap (≈22px at that zoom), the heading is preserved exactly
+(-16° → 344°), and 360 Cesium entities are drawn without a single new request.
+
+That residual 127 m is the honest cost of the boundary. MapLibre's centre is a point on the terrain;
+Cesium's is a pick against the *rendered photogrammetry surface*, which at a 45° pitch over a hill
+is not the same point. There is no framing that makes a globe and a mercator map agree exactly.
+
+**Neither map is destroyed on a toggle.** Both stay mounted with their canvases hidden and their
+render loops stopped, so the second switch onto an engine is instant and its tile cache is still
+warm. That is the same argument `GlobeBackground`'s construction effect makes for never swapping a
+viewer — it just applies to swapping *between* two as well. The cost is that after one round trip
+you are holding both a Cesium viewer and a MapLibre map; both idle at zero draw calls, so this
+shows up as memory rather than as GPU work.
+
+**Without clicking anything**, the engine at load resolves most-specific-first:
+
+1. `?map=cesium` or `?map=maplibre` on any URL. Sticky — it writes to `localStorage`. **Caveat:**
+   `/trip/latest` answers with a 307 and the redirect drops the query string, so put the parameter
+   on a real trip URL or set the storage key directly.
+2. `localStorage.tripmateMapEngine` — which is also what the toggle writes, so a preference carries
+   to the next page load.
 3. `NEXT_PUBLIC_MAP_ENGINE=cesium` in `.env.local` — the build default.
 4. Falls back to `maplibre`.
-
-Read once, at provider mount (`AppShell`). Changing it mid-session needs a reload, deliberately:
-the map is built once and never swapped, for the reasons `GlobeBackground`'s construction effect
-documents at length.
 
 ## The measurement
 

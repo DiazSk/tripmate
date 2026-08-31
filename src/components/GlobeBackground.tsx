@@ -107,10 +107,37 @@ function useDwelledPhase(wanted: DayPhase): DayPhase {
   return phase;
 }
 
-export default function GlobeBackground({ creditClassName }: { creditClassName?: string }) {
+export default function GlobeBackground({
+  active = true,
+  creditClassName,
+}: {
+  /**
+   * Whether this is the engine currently drawing the world.
+   *
+   * Both backgrounds are mounted at all times (see `AppShell`), and this is what keeps the
+   * inactive one from building a viewer, streaming a tile or painting a frame. Combined with
+   * `globeWanted` rather than replacing it: a surface still has to *want* a map at all before
+   * either engine is worth constructing — the whole reason `globeWanted` exists is that a live
+   * WebGL2 context and 33 `/cesium/` asset requests are not free on a settings form.
+   *
+   * It feeds the one-way `built` latch below, so switching *away* from Cesium hides the canvas
+   * and stops the render loop but never destroys the viewer. Switching back is then instant and
+   * the tile cache is still warm.
+   */
+  active?: boolean;
+  creditClassName?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const creditRef = useRef<HTMLDivElement>(null);
-  const { setRenderer, globeWanted, ready, routeStops, activeIndex, hoveredIndex } = useMapCamera();
+  const {
+    setRenderer,
+    globeWanted: mapWanted,
+    ready,
+    routeStops,
+    activeIndex,
+    hoveredIndex,
+  } = useMapCamera();
+  const globeWanted = mapWanted && active;
   const viewerInstanceRef = useRef<import("cesium").Viewer | null>(null);
 
   /**

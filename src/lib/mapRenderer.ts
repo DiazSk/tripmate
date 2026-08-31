@@ -102,6 +102,28 @@ export interface MapRenderer {
   flyHome(durationS?: number): void;
 
   /**
+   * The view, in terms neither engine owns — the point under the middle of the screen, how far the
+   * camera is from it, and which way it is facing.
+   *
+   * This is the handoff. Toggling between Map and Satellite swaps one renderer for the other, and
+   * without it the new engine would arrive at whatever pose it was last left in — usually the hero
+   * view over Africa — throwing away the place the traveler was actually looking at. Read from the
+   * outgoing engine, applied to the incoming one.
+   *
+   * Null before there is a camera to read.
+   */
+  cameraState(): CameraState | null;
+
+  /**
+   * Put the camera exactly where `cameraState` said, with no flight and no framing correction.
+   *
+   * Deliberately not `flyToPoint`: that centres its target in the strip the itinerary panel leaves,
+   * which is right for "show me this stop" and wrong here — the point being restored *is* the
+   * screen centre already, so biasing it again would slide the view sideways on every toggle.
+   */
+  restoreCamera(state: CameraState): void;
+
+  /**
    * Snapshot the camera, for the hover peek to lean back out to.
    *
    * Opaque: only this renderer can read it back. Null when there is no camera yet.
@@ -166,6 +188,25 @@ export interface MapRenderer {
 
 /** Opaque camera snapshot. Only the renderer that produced it can read it. */
 export type CameraPose = object;
+
+/**
+ * A camera pose both engines can read and write — see `MapRenderer.cameraState`.
+ *
+ * Distinct from `CameraPose`, which is opaque and engine-private: that one exists so the hover
+ * peek can return to a pose bit-for-bit, this one exists so a *different* engine can arrive at the
+ * same view. Expressed as an aim point plus a range rather than a camera position, because that is
+ * the only description of a view that survives the trip between a globe and a mercator map.
+ */
+export interface CameraState {
+  /** The point under the middle of the screen. */
+  lat: number;
+  lng: number;
+  /** Camera-to-that-point distance, in metres. */
+  rangeM: number;
+  headingRad: number;
+  /** Cesium convention: negative is down. */
+  pitchDeg: number;
+}
 
 export interface ScreenPoint {
   x: number;
