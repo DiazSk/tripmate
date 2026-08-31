@@ -120,9 +120,9 @@ External fetches degrade rather than throw. Two idioms to match:
 - Clients return `null` for "the fetch failed" vs `[]`/`{}` for "fetched fine, nothing found" — the caller needs to tell those apart (see `src/lib/holidays.ts`, `poiDetails.ts`).
 - Bundles carry per-field `available`/`estimated` flags rather than relying on empty arrays (`RawFetch`, `ReconciledTrip.notes`). `src/lib/reconcile.ts` centralizes every partial-failure rule — put new ones there, not scattered at call sites.
 
-### Data sources (all free; one needs a key)
+### Data sources (most free; two need keys)
 
-Open-Meteo (geocoding, forecast, historical fallback beyond a 16-day horizon, sunrise/sunset, timezone), Nager.Date (public holidays), Overpass/OSM (highway geometry *and* POI opening hours), OpenTripMap (candidate POIs — **the only one needing `OPENTRIPMAP_API_KEY`** in `.env.local`; absent key degrades to no suggestions rather than erroring).
+Open-Meteo (geocoding, forecast, historical fallback beyond a 16-day horizon, sunrise/sunset, timezone), Nager.Date (public holidays), Overpass/OSM (highway geometry *and* POI opening hours), OpenTripMap (candidate POIs, needs `OPENTRIPMAP_API_KEY`; absent key degrades to no suggestions rather than erroring), Yelp Fusion (dietary-matched venue examples via `src/lib/dietaryVenues.ts`, needs `YELP_API_KEY`; absent key degrades to no venue examples rather than erroring).
 
 ### Storage
 
