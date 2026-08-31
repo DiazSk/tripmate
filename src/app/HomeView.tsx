@@ -11,7 +11,6 @@ import {
   CalendarDays,
   MapPin,
   Minus,
-  Plane,
   PlaneLanding,
   PlaneTakeoff,
   Plus,
@@ -374,31 +373,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     }));
   }
   const [arrivalPointOptions, setArrivalPointOptions] = useState<SuggestOption[]>([]);
-  // Where the traveler is flying FROM, not the arrive/depart points above (those are at the
-  // destination) — plain free text, collected here and resolved to a real airport server-side
-  // (originAirport.ts) rather than through a client-side suggestion dropdown. A dropdown was
-  // tried and dropped: it can only filter by substring match against what's already typed, and an
-  // airport's OSM name essentially never contains the city name a traveler types ("Boston" vs.
-  // "Logan International Airport") — verified live, the list was never non-empty. Unlike
-  // `arrivalPoint`, there's no browsable-before-typing state to fall back on here, since nothing
-  // is known about the origin until the traveler has already typed into the one field being
-  // filtered.
-  const [originCity, setOriginCity] = useState("");
-  // What the flight will take out of the stated budget, shown before generating rather than
-  // explained afterwards on a plan the traveler already waited two minutes for. Null until the
-  // four inputs it needs are all present, or when nothing could be priced.
-  const [flightCostPreview, setFlightCostPreview] = useState<number | null>(null);
-  // True only while the (unavoidably slower) price lookup is in flight, so the caption can say
-  // "checking" instead of sitting blank — the gap that read as "the app is stuck" before this.
-  const [flightPriceLoading, setFlightPriceLoading] = useState(false);
-  // The resolved departure airport, from the SAME two calls (`/api/geocode` then
-  // `/api/arrival-points`) the arrive/depart fields already use — which is why those feel
-  // fast: neither one chains a `composio` CLI call after the Overpass lookup the way pricing
-  // does. Cached per typed city in a ref (not state — it must survive re-renders without
-  // re-triggering the effect that reads it) so editing dates or budget after already typing an
-  // origin never re-runs this step, only the price lookup that actually needs the new inputs.
-  const [resolvedOriginIata, setResolvedOriginIata] = useState<string | null>(null);
-  const originAirportCache = useRef<Map<string, string | null>>(new Map());
   // Was `useState(1000)`. Every traveler used to open the wizard to a total they never typed,
   // rendered in the same filled weight as a real value — and that number silently set the
   // spending tier the whole plan is generated against before anyone touched the field. Starting
@@ -578,7 +552,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setArrivalPoint(restore("arrivalPoint", ""));
     setDepartureTime(restore("departureTime", ""));
     setDeparturePoint(restore("departurePoint", ""));
-    setOriginCity(restore("originCity", ""));
     setStayBooked(restore("stayBooked", ""));
     setAccessibility(restore("accessibility", null as AccessibilityNeeds | null));
     setStep("plan");
@@ -595,7 +568,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     const draft = {
       destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
       explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
-      arrivalTime, arrivalPoint, departureTime, departurePoint, originCity,
+      arrivalTime, arrivalPoint, departureTime, departurePoint,
       stayBooked, accessibility,
     };
     try {
@@ -606,7 +579,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   }, [
     step, destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
     explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
-    arrivalTime, arrivalPoint, departureTime, departurePoint, originCity,
+    arrivalTime, arrivalPoint, departureTime, departurePoint,
     stayBooked, accessibility,
   ]);
 
@@ -753,106 +726,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     };
   }, [destinationCoords]);
 
-  // Stage 1 — resolve the departure airport, fast. Depends ONLY on `originCity`: this is the
-  // exact same two calls (`/api/geocode` then `/api/arrival-points`) the arrive/depart fields
-  // above already make, which is the actual reason those feel snappy — neither one chains a
-  // `composio` CLI call after the Overpass lookup. Cached per typed city so retyping the same
-  // value (backspace-and-retype, or coming back to an already-resolved city) never re-fetches.
-  useEffect(() => {
-    const from = originCity.trim();
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    if (from) {
-      const key = from.toLowerCase();
-      const cached = originAirportCache.current.get(key);
-      if (cached !== undefined) {
-        // A cache hit is visually instant either way; the 0ms timer exists only so the
-        // setState call runs in an async callback rather than synchronously in the effect
-        // body, same as the network path below.
-        timer = setTimeout(() => {
-          if (!cancelled) setResolvedOriginIata(cached);
-        }, 0);
-      } else {
-        timer = setTimeout(async () => {
-          try {
-            const geoRes = await fetch(`/api/geocode?destination=${encodeURIComponent(from)}`);
-            if (!geoRes.ok) throw new Error("geocode failed");
-            const geo: { lat?: number; lng?: number } = await geoRes.json();
-            if (typeof geo.lat !== "number" || typeof geo.lng !== "number") {
-              throw new Error("no match");
-            }
-
-            const pointsRes = await fetch(`/api/arrival-points?lat=${geo.lat}&lon=${geo.lng}`);
-            const d: { points?: ArrivalPoint[] } = pointsRes.ok ? await pointsRes.json() : {};
-            const iata = (d.points ?? []).find((p) => p.kind === "airport")?.iata ?? null;
-
-            originAirportCache.current.set(key, iata);
-            if (!cancelled) setResolvedOriginIata(iata);
-          } catch {
-            originAirportCache.current.set(key, null);
-            if (!cancelled) setResolvedOriginIata(null);
-          }
-        }, 350); // Short: this step alone is the "fast" one, and a keystroke-fast debounce is
-        // what makes it feel like the arrive/depart suggestions rather than a separate,
-        // slower thing.
-      }
-    }
-
-    // Clears on the way out — covers an emptied field (nothing scheduled above, so this is the
-    // only thing that runs) and a mid-typing keystroke (the stale value from what was typed a
-    // moment ago must not linger while a new lookup is pending).
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-      setResolvedOriginIata(null);
-    };
-  }, [originCity]);
-
-  // Stage 2 — price it, which is the step that actually needs the `composio` CLI and cannot be
-  // made fast the same way. Depends on the RESOLVED iata, not the raw origin text, so editing
-  // dates or budget after the airport is already known skips stage 1 entirely and only re-runs
-  // this — and `flightPriceLoading` is set the moment this starts, so the wait is visible rather
-  // than looking identical to "nothing is happening" for however long the CLI call takes.
-  useEffect(() => {
-    const to = destination.trim();
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    if (resolvedOriginIata && to && startDate && endDate) {
-      timer = setTimeout(async () => {
-        if (cancelled) return;
-        setFlightPriceLoading(true);
-        try {
-          const qs = new URLSearchParams({
-            iata: resolvedOriginIata,
-            destination: to,
-            start: startDate,
-            end: endDate,
-            adults: String(party.adults),
-          });
-          const res = await fetch(`/api/flight-estimate?${qs}`);
-          if (!res.ok) throw new Error("lookup failed");
-          const d: { estimate?: { costUsd?: number } | null } = await res.json();
-          if (!cancelled) setFlightCostPreview(d.estimate?.costUsd ?? null);
-        } catch {
-          if (!cancelled) setFlightCostPreview(null);
-        } finally {
-          if (!cancelled) setFlightPriceLoading(false);
-        }
-      }, 150); // Short: by the time an iata is resolved, the other three inputs are usually
-      // already settled — this only exists to avoid firing mid-keystroke on `destination` or
-      // the dates.
-    }
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-      setFlightCostPreview(null);
-      setFlightPriceLoading(false);
-    };
-  }, [resolvedOriginIata, destination, startDate, endDate, party.adults]);
-
   // "Airport or station" read as a demand for knowledge a first-time visitor doesn't have. Once
   // there is a list to offer, say so; until then, invite rather than ask.
   const arrivalPointPlaceholder =
@@ -977,7 +850,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         departureTime: departureTime || null,
         departurePoint: departurePoint || null,
         stayBooked: stayBooked || null,
-        originCity: originCity || null,
       },
       accessibility,
     };
@@ -1608,38 +1480,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                             — {TIERS.find((t) => t.id === tier)?.description}
                           </div>
                         )}
-                        {/* Under the budget field because this is the field it modifies: the plan
-                            is written against the budget MINUS real airfare, and without saying so
-                            here the traveler only ever discovers it by finding a smaller total
-                            than they typed, two minutes later, with nothing accounting for the
-                            gap. */}
-                        {flightPriceLoading && flightCostPreview === null && budget > 0 && (
-                          // The one thing missing before: total silence for however long the
-                          // price lookup takes, which is exactly what read as "the app is stuck".
-                          <div className="value-in mt-0.5 text-xs text-muted">
-                            Checking flight prices…
-                          </div>
-                        )}
-                        {flightCostPreview !== null && budget > 0 && (
-                          <div
-                            key={`flight-${flightCostPreview}-${budget}`}
-                            className="value-in mt-0.5 text-xs text-muted"
-                          >
-                            <span className="tabular-nums">
-                              ≈ {formatMoney(flightCostPreview)}
-                            </span>{" "}
-                            of this goes to flights
-                            {flightCostPreview < budget && (
-                              <>
-                                , leaving{" "}
-                                <span className="tabular-nums">
-                                  {formatMoney(budget - flightCostPreview)}
-                                </span>{" "}
-                                to plan with
-                              </>
-                            )}
-                          </div>
-                        )}
                       </Field>
                     </div>
 
@@ -1648,18 +1488,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                         for them; a traveler landing at an airport was getting a first stop
                         downtown. */}
                     <div className="flex flex-col divide-y divide-white/10 md:flex-row md:divide-x md:divide-y-0">
-                      <Field icon={Plane} label="Flying from" delay={300} optional>
-                        <SuggestInput
-                          freeText
-                          ariaLabel="City you're flying from"
-                          value={originCity}
-                          onChange={setOriginCity}
-                          options={[]}
-                          placeholder="Where you're flying from"
-                          className="flex-1"
-                          inputClassName={`${fieldInputClass} ${originCity ? fieldFilledTone : fieldEmptyTone}`}
-                        />
-                      </Field>
                       <Field icon={PlaneLanding} label="Arrive" delay={320} optional>
                         <div className="flex items-baseline gap-2">
                           <SuggestInput

@@ -177,19 +177,6 @@ test("the direction contract survives into the markup", () => {
   assert.ok(html.includes("e57fcfdf"), "seed key");
 });
 
-test("a flight cost is stated beside the trip total, not folded into it", () => {
-  const t = trip();
-  t.itinerary.flightCostUsd = 600;
-  const html = renderItineraryHtml(t, noAssets);
-  assert.ok(html.includes("$600"), "the flight cost appears on its own");
-  assert.ok(html.includes("$490"), "the trip total is unchanged by the flight cost");
-});
-
-test("no flight cost means no flight line", () => {
-  const html = renderItineraryHtml(trip(), noAssets);
-  assert.ok(!html.includes("booked separately"));
-});
-
 test("the runtime is inline and self-contained", () => {
   const html = renderItineraryHtml(trip(), noAssets);
   assert.ok(html.includes("<script>"), "a runtime must be present");

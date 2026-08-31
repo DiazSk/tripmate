@@ -185,17 +185,6 @@ test("free text reaching the prompt is length-capped", () => {
   assert.equal(clean.arrivalPoint.length, 120);
 });
 
-test("originCity is trimmed and carried through like the other free-text fields", () => {
-  const clean = sanitizeLogistics({ originCity: "  Boston  " });
-  assert.equal(clean.originCity, "Boston");
-});
-
-test("an object with only originCity set does not collapse to null", () => {
-  // The all-empty-collapses-to-null test above never included originCity, which was silently
-  // fine only because it was absent (undefined) on every case, not because the field is exempt.
-  assert.notEqual(sanitizeLogistics({ originCity: "Boston" }), null);
-});
-
 test("the traveler's own words describe the group when they gave any", () => {
   assert.equal(deriveGroupLabel("other", "five college friends"), "five college friends");
   assert.equal(deriveGroupLabel("solo", undefined), "solo traveler");

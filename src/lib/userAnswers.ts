@@ -104,7 +104,6 @@ export function sanitizeLogistics(
     departureTime: sanitizeClock(logistics.departureTime),
     departurePoint: sanitizeFreeText(logistics.departurePoint),
     stayBooked: sanitizeFreeText(logistics.stayBooked),
-    originCity: sanitizeFreeText(logistics.originCity),
   };
   return Object.values(clean).some((v) => v !== null) ? clean : null;
 }
