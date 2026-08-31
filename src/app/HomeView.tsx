@@ -85,6 +85,9 @@ import { usePlacePhoto } from "@/lib/usePlacePhoto";
 const ItineraryCard = dynamic(() => import("@/components/ItineraryCard"), { ssr: false });
 const FocusEditMode = dynamic(() => import("@/components/FocusEditMode"), { ssr: false });
 const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), { ssr: false });
+// Behind its own boundary like every other blue-hour piece: it is only ever on stage during the
+// plan step, and its two crops should not be fetched by a traveller who never opens the form.
+const SceneBackdrop = dynamic(() => import("@/components/blue-hour/SceneBackdrop"), { ssr: false });
 const GenerationScreen = dynamic(() => import("@/components/GenerationScreen"), {
   ssr: false,
 });
@@ -157,10 +160,13 @@ const ghostButtonClass =
 // panels use, reused here for consistency across every step of this page.
 // `pointer-events-auto` opts back in from AppShell's `pointer-events-none` overlay, which
 // exists so the Cesium canvas underneath stays draggable. Every interactive box needs it.
-// `is-opaque`: the plan step runs with `globeWanted` false, so there is nothing behind this
-// card to frost. It never coexists with a visible globe — submitting unmounts it and boots
-// the globe in the same beat. See `.glass-itinerary.is-opaque`.
-const cardClass = "glass-itinerary is-opaque pointer-events-auto rounded-2xl p-5 sm:p-6";
+// It carried `.is-opaque` until `SceneBackdrop` existed, and the reasoning was sound at the time:
+// the plan step runs with `globeWanted` false, and a 56px blur of flat `--canvas` is a blur of
+// nothing that still costs a render surface. There is a photograph behind the wizard now, so the
+// frost has something to sample and the premise is gone — taking the opacity off is what lets the
+// image read through the glass at all. The test is "is anything painted behind this card", which
+// was indistinguishable from "is the globe on" right up until it wasn't.
+const cardClass = "glass-itinerary pointer-events-auto rounded-2xl p-5 sm:p-6";
 
 // `text-base`, not the 14px body step: 16px is what stops iOS Safari zooming the viewport on
 // focus, and it's already a step the system uses (the hero subline).
@@ -1331,6 +1337,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         step === "landing" ? "blue-hour-scene" : ""
       }`}
     >
+      {/* The photograph the form stands on, from the moment the traveller opens it until their
+          plan appears. Not rendered while generating: GenerationScreen is a full-bleed opaque
+          layer that paints this same image itself, so a second copy underneath would be two
+          decodes of one file to show one picture. */}
+      {step === "plan" && !generating && !refining && <SceneBackdrop />}
+
       {/* Gated here rather than left to the component's own `if (!active) return null`. It is
           behind a dynamic() boundary now, and an unconditionally-rendered dynamic component
           fetches its chunk on first render — i.e. on the landing, which is the one thing the
