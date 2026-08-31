@@ -3,6 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { LOCAL_OWNER, parseProfile, type TravelerProfile } from "./travelerProfile";
 import { staleDraftCutoff } from "./drafts";
+import { LEGACY_OWNER, readableOwners } from "./owner";
 import type { TripStatus } from "./types";
 
 const db = new Database(process.env.DB_PATH ?? path.join(process.cwd(), "tripmate.db"));
@@ -155,6 +156,14 @@ addColumnIfMissing("trips", "status", "TEXT");
 // to coalesce. Deliberately not `WHERE status IS NULL OR status = ''`; nothing writes an empty
 // string, and widening it would catch a value some future writer meant.
 db.exec(`UPDATE trips SET status = 'saved' WHERE status IS NULL`);
+// Which browser wrote this trip — see src/lib/owner.ts. Nullable rather than defaulted, then
+// backfilled to the legacy bucket below, for the same reason `status` was: the rows that predate
+// the column cannot be attributed to anyone, and guessing would be worse than saying so.
+addColumnIfMissing("trips", "owner_id", "TEXT");
+// One statement at import, a no-op after the first boot — `insertTrip` has written the column
+// since it existed. Rows holding LEGACY_OWNER stay readable by every browser; see LEGACY_OWNER.
+db.exec(`UPDATE trips SET owner_id = '${LEGACY_OWNER}' WHERE owner_id IS NULL`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_trips_owner_status ON trips (owner_id, status, created_at)`);
 // Populated only by runClaudeViaApi() — the Messages API reports no cost itself, so this is
 // computed from its usage block via modelPricing.ts at write time. NULL forever on
 // LLM_TRANSPORT=cli traces, which keep deriving cost from the CLI envelope on read instead
@@ -174,13 +183,16 @@ export interface TripRow {
   /** See `TripStatus`. Typed as non-null because the column is backfilled at import and written
    *  on every insert, so no row can be read without one. */
   status: TripStatus;
+  /** The browser that wrote it, or `LEGACY_OWNER` for rows that predate ownership. Non-null for
+   *  the same reason as `status` — backfilled at import, written on every insert. */
+  owner_id: string;
   created_at: string;
 }
 
 export function insertTrip(
   trip: Omit<
     TripRow,
-    "created_at" | "run_id" | "user_answers_json" | "chat_session_id" | "status"
+    "created_at" | "run_id" | "user_answers_json" | "chat_session_id" | "status" | "owner_id"
   > & {
     run_id?: string | null;
     user_answers_json?: string | null;
@@ -188,6 +200,10 @@ export function insertTrip(
     /** Defaults to `"saved"`, so a caller that predates drafts keeps inserting kept trips. The
      *  auto-draft written after a generation is the one caller that passes `"draft"`. */
     status?: TripStatus;
+    /** Defaults to the legacy bucket, so a caller with no cookie (curl, the perf scripts, the
+     *  bench harness) writes a row every browser can still see — exactly what it saw before
+     *  ownership existed. Browser traffic always supplies a real one via the proxy. */
+    owner_id?: string;
   }
 ): TripRow {
   const created_at = new Date().toISOString();
@@ -195,11 +211,12 @@ export function insertTrip(
   const user_answers_json = trip.user_answers_json ?? null;
   const chat_session_id = trip.chat_session_id ?? null;
   const status: TripStatus = trip.status ?? "saved";
+  const owner_id = trip.owner_id ?? LEGACY_OWNER;
   db.prepare(
-    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, status, created_at)
-     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @status, @created_at)`
-  ).run({ ...trip, run_id, user_answers_json, chat_session_id, status, created_at });
-  return { ...trip, run_id, user_answers_json, chat_session_id, status, created_at };
+    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, status, owner_id, created_at)
+     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @status, @owner_id, @created_at)`
+  ).run({ ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, created_at });
+  return { ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, created_at };
 }
 
 /**
@@ -296,15 +313,31 @@ export type TripListRow = Pick<
  * unfiltered list would put a plan somebody abandoned mid-wizard into the hero collage and into
  * the dev entry point. Drafts are read deliberately, by passing `"draft"`.
  */
-export function listTrips(status: TripStatus = "saved"): TripListRow[] {
+/**
+ * The caller's trips of one status, newest first.
+ *
+ * Scoped to `ownerId` plus the legacy bucket — see `readableOwners`. `ownerId` defaults to the
+ * legacy bucket so every existing caller that never passed one keeps returning exactly what it
+ * returned before, which is what makes this column additive rather than a behaviour change.
+ *
+ * The `IN` list is expanded into placeholders rather than interpolated: it is one or two values
+ * decided entirely server-side, but a query built by concatenation is a habit that outlives the
+ * one safe call site it was written for.
+ */
+export function listTrips(
+  status: TripStatus = "saved",
+  ownerId: string = LEGACY_OWNER
+): TripListRow[] {
+  const owners = readableOwners(ownerId);
   return db
     .prepare(
       // No `itinerary_json`: it was being selected and then dropped by every caller, which meant
       // reading every stored itinerary off disk to render a list of destinations and dates.
       `SELECT id, destination, start_date, end_date, budget, status, created_at
-       FROM trips WHERE status = ? ORDER BY created_at DESC`
+       FROM trips WHERE status = ? AND owner_id IN (${owners.map(() => "?").join(",")})
+       ORDER BY created_at DESC`
     )
-    .all(status) as TripListRow[];
+    .all(status, ...owners) as TripListRow[];
 }
 
 /**
@@ -375,8 +408,22 @@ export function updateTripItinerary(
  * produced it, and the trace viewer keeps working either way since it reads `destination`
  * and `kind` off the run rather than resolving the trip.
  */
-export function deleteTrip(id: string): void {
-  db.prepare(`DELETE FROM trips WHERE id = ?`).run(id);
+/**
+ * Delete one trip, if it belongs to the caller.
+ *
+ * Scoped where `getTrip` deliberately is not. Reading a trip by its id is how a shared link works
+ * and the id is unguessable; *destroying* one is the operation where being wrong is unrecoverable,
+ * so it is the one that checks. Returns whether a row actually went, so a caller can tell "deleted"
+ * from "not yours" instead of reporting success either way.
+ */
+export function deleteTrip(id: string, ownerId: string = LEGACY_OWNER): boolean {
+  const owners = readableOwners(ownerId);
+  const result = db
+    .prepare(
+      `DELETE FROM trips WHERE id = ? AND owner_id IN (${owners.map(() => "?").join(",")})`
+    )
+    .run(id, ...owners);
+  return result.changes > 0;
 }
 
 /** The two frozen Step 5/6 artifacts, keyed by the run that produced them. Kept out of `trips`

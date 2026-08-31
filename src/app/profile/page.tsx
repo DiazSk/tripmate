@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { listTrips, readProfile } from "@/lib/db";
+import { currentOwnerId } from "@/lib/ownerRequest";
 import { toTripSummary } from "@/lib/tripPayload";
 import ProfileForm from "./ProfileForm";
 
@@ -42,11 +43,11 @@ export const dynamic = "force-dynamic";
 
 const RECENT_TRIP_COUNT = 3;
 
-export default function ProfilePage() {
+export default async function ProfilePage() {
   return (
     <ProfileForm
       initialProfile={readProfile()}
-      recentTrips={listTrips().slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
+      recentTrips={listTrips("saved", await currentOwnerId()).slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
     />
   );
 }

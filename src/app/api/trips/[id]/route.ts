@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteTrip, getTrip, updateTripItinerary } from "@/lib/db";
+import { currentOwnerId } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
 // Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
 // use of `normalizeDays` moved into `toTripDetail`, but this did not.
@@ -60,6 +61,10 @@ export async function DELETE(
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
-  deleteTrip(id);
+  // Scoped, unlike the GET beside it: reading a trip by an unguessable id is how a shared link
+  // works, but destroying one is the operation where being wrong cannot be undone.
+  if (!deleteTrip(id, await currentOwnerId())) {
+    return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }
