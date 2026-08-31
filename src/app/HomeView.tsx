@@ -490,6 +490,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [planCollapsed, setPlanCollapsed] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
+  const [notifyOnDone, setNotifyOnDone] = useState(false);
+  const [notifyBlocked, setNotifyBlocked] = useState(false);
   const [stages, setStages] = useState<StageProgress[]>(
     STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const }))
   );
@@ -986,6 +988,56 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   }
 
   /**
+   * Fires when generation finishes while the tab is backgrounded. The title flash needs no
+   * permission and always runs; the Notification is gated on `permitted` (granted at opt-in,
+   * see handleNotifyToggle) since firing an unpermitted one throws.
+   */
+  function notifyGenerationDone(ok: boolean, permitted: boolean) {
+    if (typeof document === "undefined" || !document.hidden) return;
+
+    const original = document.title;
+    document.title = ok ? "✅ Itinerary ready!" : "⚠️ Generation failed";
+    const restoreTitle = () => {
+      if (!document.hidden) {
+        document.title = original;
+        document.removeEventListener("visibilitychange", restoreTitle);
+      }
+    };
+    document.addEventListener("visibilitychange", restoreTitle);
+
+    if (permitted && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      const n = new Notification(
+        ok ? "Your itinerary is ready!" : "Itinerary generation failed",
+        { body: ok ? "Click to view your trip." : "Something went wrong — tap to try again." }
+      );
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    }
+  }
+
+  // The permission prompt only fires from here — a real click — never proactively.
+  async function handleNotifyToggle(checked: boolean) {
+    if (!checked) {
+      setNotifyOnDone(false);
+      setNotifyBlocked(false);
+      return;
+    }
+    if (typeof Notification === "undefined") {
+      setNotifyOnDone(false);
+      setNotifyBlocked(true);
+      return;
+    }
+    const permission =
+      Notification.permission === "default"
+        ? await Notification.requestPermission()
+        : Notification.permission;
+    setNotifyOnDone(permission === "granted");
+    setNotifyBlocked(permission !== "granted");
+  }
+
+  /**
    * Posts to /api/itinerary with `?stream=1` and updates `stages` as real progress frames
    * arrive via readEventStream. Falls back to the plain (non-streaming) POST if the stream
    * never opens at all — a network error or non-200 status before any bytes arrive. Once
@@ -1090,6 +1142,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       setLastSessionId(data.sessionId ?? null);
       setRevealAnimation(true);
       setStep("result");
+      notifyGenerationDone(true, notifyOnDone);
       // The wizard's job is done — drop its draft and the `?step=` it leaves in the URL, or a
       // refresh on this result page would find both still there and restore straight back into
       // the wizard instead of showing what was just generated.
@@ -1109,6 +1162,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // as one — cancelGeneration has already reset the UI.
       if (!isAbort(e)) {
         setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
+        notifyGenerationDone(false, notifyOnDone);
       }
     } finally {
       setGenerating(false);
@@ -1913,6 +1967,21 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     Takes about two minutes. You can cancel any time, and refine the plan in plain
                     language afterwards.
                   </p>
+                  <label className="mt-2 flex items-center gap-2 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={notifyOnDone}
+                      onChange={(e) => void handleNotifyToggle(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-card-border"
+                    />
+                    Notify me when it&apos;s ready
+                  </label>
+                  {notifyBlocked && (
+                    <p className="mt-1 text-xs text-muted">
+                      Notifications are blocked in your browser — we&apos;ll still flash the tab
+                      title when it&apos;s done.
+                    </p>
+                  )}
                 </Screen>
               )}
 

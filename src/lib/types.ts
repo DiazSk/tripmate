@@ -442,6 +442,10 @@ export interface RunStepUsage {
   cacheReadInputTokens?: number | null;
   /** Prompt tokens written to cache this call. Billed at ~1.25x input. */
   cacheCreationInputTokens?: number | null;
+  /** Which of the two permanent transports served this call — read off the envelope shape
+   *  itself (see `parseUsage` in `runs.ts`), not stored anywhere, since a trace row never
+   *  records which transport wrote it. `"unknown"` only for a missing/malformed envelope. */
+  transport: "cli" | "api" | "unknown";
 }
 
 export interface RunStep extends TraceDetail {
