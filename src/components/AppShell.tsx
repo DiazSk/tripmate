@@ -1,14 +1,18 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ReactNode, useRef } from "react";
+import { ReactNode, useRef, useState } from "react";
 import { MotionConfig } from "framer-motion";
 import { MapCameraProvider } from "@/lib/mapCamera";
+import { resolveMapEngine } from "@/lib/mapEngine";
 import Navbar from "@/components/Navbar";
 import DevInspectorOverlay from "@/components/dev/DevInspectorOverlay";
 import { ScrollContainerContext } from "@/lib/scrollContainer";
 
 const GlobeBackground = dynamic(() => import("@/components/GlobeBackground"), {
+  ssr: false,
+});
+const MapLibreBackground = dynamic(() => import("@/components/MapLibreBackground"), {
   ssr: false,
 });
 const MapControls = dynamic(() => import("@/components/MapControls"), { ssr: false });
@@ -24,6 +28,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
   // Handed to ScrollContainerContext below. Nothing animates it — scrolling here is native and
   // compositor-owned, which is the whole point; see globals.css's `.content-overlay`.
   const scrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * Which engine draws the world — see `src/lib/mapEngine.ts`.
+   *
+   * Resolved once, in a lazy initialiser rather than an effect, so the decision is made before
+   * the first paint and no background component ever mounts and then gets replaced. It reads
+   * `localStorage` and `location.search`, so it cannot run during SSR; `resolveMapEngine` returns
+   * the build default there and the lazy `useState` means that value is never rendered on the
+   * client anyway, because `useState` initialisers do not re-run.
+   *
+   * The two backgrounds are mutually exclusive and each is `dynamic(ssr: false)`, so the engine
+   * that is not selected costs nothing — its chunk is never requested. That is the same reasoning
+   * `globeWanted` uses to keep Cesium off `/profile`, applied one level up.
+   */
+  const [mapEngine] = useState(resolveMapEngine);
   return (
     // `reducedMotion="user"` makes every framer-motion component honour
     // `prefers-reduced-motion` automatically (jumping straight to its end state)
@@ -32,13 +50,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
     // entirely since Framer's own animations aren't caught by globals.css's
     // CSS-only `prefers-reduced-motion: reduce` blanket rule.
     <MotionConfig reducedMotion="user">
-      <MapCameraProvider>
+      <MapCameraProvider engine={mapEngine}>
         <div className="app-shell relative flex h-dvh flex-col overflow-hidden bg-canvas md:flex-row">
           <div className="absolute inset-0 z-0 bg-canvas">
-            {/* GlobeBackground must stay mounted across route changes — Next.js already
-                keeps AppShell itself stable across navigations since it's rendered from the
-                root layout, so this just needs to never be conditionally unmounted here. */}
-            <GlobeBackground creditClassName="fixed bottom-1 left-3" />
+            {/* The background must stay mounted across route changes — Next.js already keeps
+                AppShell itself stable across navigations since it's rendered from the root
+                layout, so this just needs to never be conditionally unmounted here. The engine
+                branch is not a conditional unmount: `mapEngine` is resolved once and never
+                changes for the life of the session. */}
+            {mapEngine === "cesium" ? (
+              <GlobeBackground creditClassName="fixed bottom-1 left-3" />
+            ) : (
+              <MapLibreBackground creditClassName="fixed bottom-1 left-3" />
+            )}
           </div>
           {/* `pointer-events-none` is what makes the globe draggable: this container spans the
               whole viewport, so without it every pointer event lands here and the Cesium canvas

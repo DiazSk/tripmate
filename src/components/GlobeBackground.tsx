@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMapCamera } from "@/lib/mapCamera";
+import { CesiumRenderer } from "@/lib/cesiumRenderer";
 import { dayPhase, DayPhase } from "@/lib/mapRoute";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
@@ -109,7 +110,7 @@ function useDwelledPhase(wanted: DayPhase): DayPhase {
 export default function GlobeBackground({ creditClassName }: { creditClassName?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const creditRef = useRef<HTMLDivElement>(null);
-  const { setViewer, globeWanted, ready, routeStops, activeIndex, hoveredIndex } = useMapCamera();
+  const { setRenderer, globeWanted, ready, routeStops, activeIndex, hoveredIndex } = useMapCamera();
   const viewerInstanceRef = useRef<import("cesium").Viewer | null>(null);
 
   /**
@@ -119,7 +120,7 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
    * the 512MB tile cache and every `viewer.entities` — route arcs, stems, glow pools, the
    * destination pin — and nothing replays them: `showTripRoute` is a `useCallback(…, [])` whose
    * only caller (ItineraryCard's effect, deps `[day, …, showTripRoute]`) sees no dep change on a
-   * swap, and `setViewer`'s pending queues were consumed and nulled on the first registration.
+   * swap, and `setRenderer`'s pending queues were consumed and nulled on the first registration.
    * So the globe is built at most once per mount of this component, and torn down only when this
    * component genuinely unmounts — which it never does, since AppShell renders it from the root
    * layout.
@@ -147,7 +148,7 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
     // it renders on demand, and arriving back from a hidden route is a demand nothing else
     // signals. One frame is all it needs; the idle logic takes it from there.
     if (globeWanted) viewer.scene.requestRender();
-    // `ready` is in the deps and is not decoration: it flips exactly when `setViewer` lands, so
+    // `ready` is in the deps and is not decoration: it flips exactly when `setRenderer` lands, so
     // this re-runs the moment the viewer registers and applies whatever the gate says *then*.
     // Without it, a gate that closed mid-construction — a generation cancelled during the ~5s
     // import — would leave Cesium's own constructor default of a live render loop running on a
@@ -463,14 +464,17 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
         w.__tripmateCesium = Cesium;
       }
 
-      setViewer(viewer);
+      // The viewer never leaves this file. What the rest of the app gets is a `MapRenderer`
+      // over it — see `src/lib/mapRenderer.ts` for why that boundary exists and
+      // `src/lib/mapEngine.ts` for what the alternative is.
+      setRenderer(new CesiumRenderer(viewer, Cesium));
     })();
 
     return () => {
       cancelled = true;
       if (watchdogRef.current !== undefined) window.clearTimeout(watchdogRef.current);
       viewerInstanceRef.current = null;
-      setViewer(null);
+      setRenderer(null);
       viewer?.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -28,7 +28,7 @@ import { dayDropId, dropCollision, parseDragId, stopDragId } from "@/lib/dragDro
 import { evaluateItinerary } from "@/lib/guardrails";
 import { insertionIndexByTime, moveStop } from "@/lib/schedule";
 import { formatItineraryDate } from "@/lib/itinerary";
-import { useMapCamera } from "@/lib/mapCamera";
+import { useHoverPeekSuspended, useMapCamera } from "@/lib/mapCamera";
 import { addDay, deleteStop, insertStop, updateStop } from "@/lib/itineraryEdits";
 import { devLabel } from "@/lib/devInspector";
 
@@ -80,8 +80,14 @@ export default function SplitEditor({
   const [searching, setSearching] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
-  const { showTripRoute, viewerRef, flyToPlace, hoveredIndex, setHoveredIndex, activeIndex } =
+  const { showTripRoute, rendererRef, flyToPlace, hoveredIndex, setHoveredIndex, activeIndex } =
     useMapCamera();
+
+  // Same reason Focus Mode does it: hovering a row here means "highlight this one on the globe",
+  // not "fly to it". Reading down a day's stops with the pointer was diving the camera at every
+  // row it crossed, which moves the ground out from under an edit in progress. Clicking a row
+  // still frames the stop — that is `onFocusStop`.
+  useHoverPeekSuspended();
 
   const sensors = useSensors(
     // 6px, so a click on a card's own controls is not read as the start of a drag.
@@ -137,41 +143,19 @@ export default function SplitEditor({
     }
   }, []);
 
-  // A click on the globe becomes "what is standing here" — see /api/nearby-pois for why this
+  // A click on the map becomes "what is standing here" — see /api/nearby-pois for why this
   // offers real named places rather than reverse-geocoding an address. Installed only while the
-  // mode is armed, so the globe keeps its ordinary click-to-fly behaviour the rest of the time.
+  // mode is armed, so the map keeps its ordinary click-to-fly behaviour the rest of the time.
+  //
+  // The pick itself belongs to the engine: Cesium walks a `pickPosition` → `pickEllipsoid` chain
+  // because the first needs a depth texture and the second still answers over open water, and
+  // MapLibre just reads the click's own `lngLat`. Both hand back the same two numbers.
   useEffect(() => {
     if (!pickingOnMap) return;
-    const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed()) return;
-    let handler: { destroy: () => void } | null = null;
-    let cancelled = false;
-
-    import("cesium").then((Cesium) => {
-      if (cancelled || viewer.isDestroyed()) return;
-      const h = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-      h.setInputAction((movement: { position: import("cesium").Cartesian2 }) => {
-        const scene = viewer.scene;
-        // Same fallback chain MapControls uses: `pickPosition` needs a depth texture and returns
-        // undefined without one, and `pickEllipsoid` still answers over open water where there
-        // is no tile to hit.
-        const cartesian =
-          (scene.pickPositionSupported ? scene.pickPosition(movement.position) : undefined) ??
-          viewer.camera.pickEllipsoid(movement.position, scene.globe.ellipsoid);
-        if (!cartesian) return;
-        const carto = Cesium.Cartographic.fromCartesian(cartesian);
-        const lat = Cesium.Math.toDegrees(carto.latitude);
-        const lng = Cesium.Math.toDegrees(carto.longitude);
-        void loadNearby(lat, lng);
-      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-      handler = h;
-    });
-
-    return () => {
-      cancelled = true;
-      handler?.destroy();
-    };
-  }, [pickingOnMap, viewerRef, loadNearby]);
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive()) return;
+    return renderer.onMapClick((lat, lng) => void loadNearby(lat, lng));
+  }, [pickingOnMap, rendererRef, loadNearby]);
 
 
   /** The day a new stop lands in. "All Days" has no active day, so it goes to the first. */
@@ -233,15 +217,27 @@ export default function SplitEditor({
       role="dialog"
       aria-modal="false"
       aria-label="Edit itinerary"
-      // Not `inset-0`. The left 55% is left alone so the globe stays visible *and* clickable —
-      // clicking a pin is one of this editor's inputs, and a full-screen overlay would eat it.
-      className="fixed inset-y-0 right-0 z-[70] flex w-[45%] min-w-[380px] flex-col border-l border-card-border bg-[color:var(--surface-deep,#0f172a)]/97 backdrop-blur-xl"
+      // Same window the refine chat opens in: `DockedPanel`'s open geometry at its `wide` width,
+      // in `.glass-itinerary`, rounded and inset from the nav — copied rather than imported
+      // because this is still its own separate surface (it portals out of the panel, see below)
+      // and only the *look* is shared. Not `inset-0` either way: the strip the panel leaves is
+      // left alone so the globe stays visible *and* clickable — clicking a pin is one of this
+      // editor's inputs, and a full-screen overlay would eat it.
+      className="glass-itinerary fixed z-[70] flex flex-col overflow-hidden rounded-2xl top-[calc(var(--nav-h)+1.25rem)] right-0 left-0 h-[calc(100dvh-var(--nav-h)-1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:h-[calc(100dvh-var(--nav-h)-3rem)] sm:w-[62%] sm:max-w-[880px]"
       {...devLabel("SplitEditor")}
     >
-      <header className="flex items-center justify-between gap-3 border-b border-card-border px-5 py-3">
+      {/* Same header the chat window wears — title, a line of context under it, one accent
+          action on the right — so the two surfaces read as the same window doing two jobs. */}
+      <header className="flex items-center justify-between gap-3 border-b border-card-border px-4 py-3">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-foreground">Edit itinerary</h2>
-          <p className="truncate text-xs text-muted">{trip.destination}</p>
+          <h2 className="truncate font-display text-base font-semibold text-foreground">
+            Edit itinerary
+            <span className="font-normal text-muted">
+              {" "}
+              — {itinerary.days.length} day{itinerary.days.length > 1 ? "s" : ""}
+            </span>
+          </h2>
+          <p className="mt-0.5 truncate text-xs text-muted">{trip.destination}</p>
         </div>
         <button
           type="button"
@@ -255,7 +251,7 @@ export default function SplitEditor({
 
       {/* Day tabs. "All Days" first because it is the state the map opens in, and the one that
           makes a cross-day move possible without switching tabs mid-drag. */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-card-border px-5 py-2.5">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-card-border px-4 py-2.5">
         <DayPill active={activeDay === null} onClick={() => setActiveDay(null)}>
           All Days
         </DayPill>
@@ -314,7 +310,7 @@ export default function SplitEditor({
         onDragCancel={() => setDragging(null)}
         onDragEnd={onDragEnd}
       >
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {visibleDays.map((dayIndex) => (
             <DaySection
               key={dayIndex}
@@ -361,7 +357,7 @@ export default function SplitEditor({
       </DndContext>
 
       {findings.some((f) => f.dayIndex === null) && (
-        <div className="border-t border-card-border px-5 py-2">
+        <div className="border-t border-card-border px-4 py-2">
           {findings
             .filter((f) => f.dayIndex === null)
             .map((f, i) => (
@@ -414,16 +410,17 @@ function DayPill({
   );
 }
 
-/** Mirrors `dayColorToken` in mapRoute.ts. Imported as a value there would pull the whole route
+/** Mirrors `dayColorToken` in mapRoute.ts — the *core* of each `DayPalette`, since this is a 8px
+ *  dot and a glow would be invisible on it. Importing that as a value would pull the whole route
  *  module (and its Cesium types) into this tree for one string, so the cycle length is restated
- *  here — the tokens themselves still live only in globals.css. */
+ *  here; the tokens themselves still live only in globals.css. Keep the order in step with
+ *  `DAY_PALETTES` or the panel's dots and the globe's ribbons drift apart. */
 const DAY_TOKENS = [
-  "--route-blue",
-  "--route-day-green",
-  "--route-day-purple",
-  "--route-day-rose",
-  "--route-day-cyan",
-  "--route-day-magenta",
+  "--route-neon-cyan",
+  "--route-neon-magenta",
+  "--route-neon-amber",
+  "--route-neon-lime",
+  "--route-neon-violet",
 ];
 const dayColorTokenFor = (day: number) => DAY_TOKENS[day % DAY_TOKENS.length];
 
@@ -447,7 +444,7 @@ function AddStopBar({
   error: string | null;
 }) {
   return (
-    <div className="border-b border-card-border px-5 py-2.5">
+    <div className="border-b border-card-border px-4 py-2.5">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
@@ -494,7 +491,7 @@ function NearbyPicker({
   onDismiss: () => void;
 }) {
   return (
-    <div className="border-b border-card-border bg-white/5 px-5 py-2.5">
+    <div className="border-b border-card-border bg-white/5 px-4 py-2.5">
       <div className="mb-1.5 flex items-center justify-between">
         <p className="text-xs font-medium text-foreground">What&rsquo;s here</p>
         <button type="button" onClick={onDismiss} className="text-xs text-muted hover:text-foreground">

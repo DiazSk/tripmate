@@ -10,6 +10,7 @@ import SiteFooter from "@/components/SiteFooter";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
+import { DRAFT_TTL_DAYS } from "@/lib/drafts";
 import { useLineReveal } from "@/lib/lineReveal";
 
 /** One tile of the hero collage. A photo miss or slow lookup must not open a hole in the
@@ -236,7 +237,18 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
   );
 }
 
-function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => void }) {
+function MemoryCard({
+  trip,
+  onDelete,
+  draft = false,
+}: {
+  trip: TripSummary;
+  onDelete: () => void;
+  /** Marks the tile as an unsaved plan and re-words its one destructive control. Same card
+   *  otherwise — a draft is a whole itinerary, not a lesser preview of one, and giving it its own
+   *  smaller component would have been a second thing to keep in step with this one. */
+  draft?: boolean;
+}) {
   const photo = usePlacePhoto(trip.destination, "full");
   return (
     // The delete button is a *sibling* of the card, never a child: the whole card is one <a>,
@@ -293,6 +305,15 @@ function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => voi
         {/* The dashed postage stamp that used to sit here went with the paper. It was the one
             purely representational element in the app — a drawn object standing for a physical
             thing this surface is no longer pretending to be. */}
+        {/* Opposite corner from the delete control, in the slot the stamp used to hold. Dark glass
+            rather than the amber accent: this is a statement of fact about the row, not the thing
+            on the card worth pointing at, and it sits on an arbitrary photograph — so it darkens
+            (the Darken-Never-Lighten Rule) like every other chip on this surface. */}
+        {draft && (
+          <span className="absolute top-3 right-3 rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-white uppercase backdrop-blur-sm">
+            Draft
+          </span>
+        )}
       </div>
       <div className="flex items-baseline justify-between gap-2 px-1.5 pt-2.5 pb-1">
         <h2 className="font-display text-base font-semibold text-foreground">
@@ -313,7 +334,9 @@ function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => voi
       <button
         type="button"
         onClick={onDelete}
-        aria-label={`Delete your ${trip.destination} trip`}
+        aria-label={
+          draft ? `Discard your ${trip.destination} draft` : `Delete your ${trip.destination} trip`
+        }
         // The keyboard reveal is `.memory-card-slot:focus-within .memory-card-delete` in
         // `globals.css`, not a utility here. A focus-visible opacity utility used to sit in this
         // list and was dead — `.memory-card-delete{opacity:0}` is unlayered and wins — so it read
@@ -335,13 +358,40 @@ function MemoryCard({ trip, onDelete }: { trip: TripSummary; onDelete: () => voi
   );
 }
 
-export default function TripsView({ initialTrips }: { initialTrips: TripSummary[] }) {
+/**
+ * The two collections this page holds, and the tab strip that switches between them.
+ *
+ * Kept as one page rather than a `/drafts` route because a draft *is* one of your trips — the same
+ * itinerary, the same card, the same globe behind it — differing only in whether you have said you
+ * want it. A second route would have duplicated the hero, the grid, the delete flow and the photo
+ * pipeline to express that one bit.
+ */
+type TripsTab = "memories" | "drafts";
+
+const tabClass = (active: boolean) =>
+  `inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+    active
+      ? "bg-white/10 text-foreground"
+      : "text-muted hover:bg-white/5 hover:text-foreground"
+  }`;
+
+export default function TripsView({
+  initialTrips,
+  initialDrafts = [],
+}: {
+  initialTrips: TripSummary[];
+  /** Plans generated but never kept. Defaults to empty so a caller written before drafts existed
+   *  still renders the page it used to. */
+  initialDrafts?: TripSummary[];
+}) {
   // Seeded by the server page, then owned locally so a delete can splice the list without a
   // refetch. There is no `loading` here any more, and no fatal `error` either: the read is a
   // synchronous SQLite call inside the page component, so the list is already correct on first
   // paint, and a read that throws is caught by `error.tsx` beside this file rather than by a
   // state branch that renders the whole route as a message.
   const [trips, setTrips] = useState<TripSummary[]>(initialTrips);
+  const [drafts, setDrafts] = useState<TripSummary[]>(initialDrafts);
+  const [tab, setTab] = useState<TripsTab>("memories");
   // The trip the dialog is currently asking about — holding the whole summary rather than
   // an id lets the prompt name the destination without a second lookup, and doubles as the
   // dialog's own open/closed state.
@@ -367,7 +417,13 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
       // no other change to report. Deleting the last trip drops `trips.length` to 0, which
       // is what flips the hero to its empty variant and drops <main>'s padding — both are
       // already keyed on that count, so neither needs its own branch here.
-      setTrips((prev) => prev.filter((t) => t.id !== pendingDelete.id));
+      //
+      // Which list it came from is read off the row's own status, not off the tab that was open:
+      // the two are the same today, and a tab that stops being the source of truth for what a card
+      // *is* would leave a deleted trip on screen and a live one spliced out.
+      const removeById = (prev: TripSummary[]) => prev.filter((t) => t.id !== pendingDelete.id);
+      if (pendingDelete.status === "draft") setDrafts(removeById);
+      else setTrips(removeById);
       setPendingDelete(null);
     } catch (e) {
       // The dialog closes on failure so the error underneath isn't hidden behind it; the
@@ -388,6 +444,20 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
   // you can't see, that point at nothing once you scroll past the hero, are noise. Removing
   // them was confirmed rather than assumed, since it takes away working controls.
   //
+  // Drafts alone are enough to give this page content. The hero still keys on *saved* trips —
+  // it's a wall of memories, and a plan nobody kept isn't one yet — but the padding, the
+  // full-bleed cancellation and the grid below key on whether there is anything at all to show,
+  // or a traveler whose only plans are drafts would land on the "start here" empty state with
+  // their drafts nowhere on the page.
+  const hasContent = trips.length > 0 || drafts.length > 0;
+  // The strip only exists when there is a second collection to switch to, so a traveler with no
+  // drafts sees this page exactly as it was. That also means it can disappear from under them —
+  // discarding the last draft — so the tab actually in force is derived on every render rather
+  // than trusted from state, which would otherwise leave `tab` pointing at a list that is gone.
+  const showTabs = drafts.length > 0;
+  const activeTab: TripsTab = showTabs ? tab : "memories";
+  const shown = activeTab === "drafts" ? drafts : trips;
+
   // There used to be centered loading and error returns above this one, both of which
   // deliberately withheld the hero because they didn't yet know the trip count the hero needs to
   // pick its variant. Neither exists now: the count arrives with the first render, so the hero
@@ -395,7 +465,7 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
   return (
     <main
       className={`dashboard-page map-chrome-hidden min-h-full ${
-        trips.length > 0 ? "p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)]" : ""
+        hasContent ? "p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)]" : ""
       }`}
     >
       {/* Cancels this <main>'s own padding for the hero only, the same technique
@@ -405,7 +475,7 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
           the full, unpadded viewport itself. */}
       <div
         className={
-          trips.length > 0
+          hasContent
             ? "-mx-5 -mt-[calc(var(--nav-h)+1.25rem)] sm:-mx-6 sm:-mt-[calc(var(--nav-h)+1.5rem)]"
             : ""
         }
@@ -417,7 +487,7 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
           in the middle of a 2560px screen with 640px of dead slate either side is the thing the
           whole full-bleed pass was correcting. The gutter from `<main>` is the only constraint it
           needs. */}
-      {trips.length > 0 && (
+      {hasContent && (
         <div className="pointer-events-auto pt-10 sm:pt-12">
           {/* A delete that failed reports here rather than inside the dialog, which has
               already closed — the grid it refers to is what's on screen. */}
@@ -426,17 +496,74 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
               <ErrorNote>{deleteError}</ErrorNote>
             </div>
           )}
+
+          {/* Deliberately **not** `role="tablist"` / `role="tab"`. That pattern comes with a
+              keyboard contract — arrow keys move between tabs, only the selected one is a tab stop
+              — and claiming the role without implementing it is worse for a screen reader user
+              than not claiming it, because it promises navigation that isn't there. These are two
+              toggle buttons in a named group: `aria-pressed` states which collection is showing,
+              and Tab reaches both, which is the behaviour the markup actually has. */}
+          {showTabs && (
+            <div
+              role="group"
+              aria-label="Which trips to show"
+              className="mb-6 flex gap-1 sm:mb-7"
+            >
+              <button
+                type="button"
+                onClick={() => setTab("memories")}
+                aria-pressed={activeTab === "memories"}
+                className={tabClass(activeTab === "memories")}
+              >
+                My memories
+                <span className="text-xs tabular-nums text-muted">{trips.length}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("drafts")}
+                aria-pressed={activeTab === "drafts"}
+                className={tabClass(activeTab === "drafts")}
+              >
+                Drafts
+                <span className="text-xs tabular-nums text-muted">{drafts.length}</span>
+              </button>
+            </div>
+          )}
+
+          {/* The drafts tab explains itself once, above its cards. Drafts appear without anybody
+              asking for them, so the one thing this strip has to answer is why a plan is here that
+              the traveler never saved — and that it will not sit here forever. */}
+          {activeTab === "drafts" && (
+            <p className="mb-5 max-w-2xl text-sm text-muted">
+              Plans you generated but haven&apos;t kept. Open one to carry on where you left off —
+              unkept drafts are cleared after {DRAFT_TTL_DAYS} days.
+            </p>
+          )}
           {/* A third column from `xl`. Widening an uncapped grid by making two cards enormous is
               not opening it up, it is just a bigger box — the extra room goes into more
               photographs. Stops at three: a fourth would put the caption's destination name and
               date row on cards narrow enough to wrap again. */}
-          <ul className="memory-cards grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {trips.map((trip) => (
-              <li key={trip.id}>
-                <MemoryCard trip={trip} onDelete={() => setPendingDelete(trip)} />
-              </li>
-            ))}
-          </ul>
+          {shown.length > 0 ? (
+            <ul className="memory-cards grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {shown.map((trip) => (
+                <li key={trip.id}>
+                  <MemoryCard
+                    trip={trip}
+                    draft={activeTab === "drafts"}
+                    onDelete={() => setPendingDelete(trip)}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            // Only reachable on the memories tab with drafts in hand — the drafts tab doesn't
+            // exist at zero. Says what turns a draft into a memory, since that is the one move
+            // this traveler hasn't made yet.
+            <p className="max-w-2xl text-sm text-muted">
+              Nothing kept yet. Open a draft and press <em>Keep this trip</em>, and it becomes a
+              memory here.
+            </p>
+          )}
         </div>
       )}
 
@@ -445,7 +572,7 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
           it carries no padding at all so there is nothing to cancel. */}
       <div
         className={
-          trips.length > 0 ? "-mx-5 -mb-5 sm:-mx-6 sm:-mb-6" : ""
+          hasContent ? "-mx-5 -mb-5 sm:-mx-6 sm:-mb-6" : ""
         }
       >
         <SiteFooter />
@@ -453,14 +580,14 @@ export default function TripsView({ initialTrips }: { initialTrips: TripSummary[
 
       <ConfirmDialog
         open={pendingDelete !== null}
-        title="Delete this trip?"
+        title={pendingDelete?.status === "draft" ? "Discard this draft?" : "Delete this trip?"}
         body={
           <>
             Your {pendingDelete?.destination} itinerary will be permanently deleted. This
             can&apos;t be undone.
           </>
         }
-        confirmLabel="Delete trip"
+        confirmLabel={pendingDelete?.status === "draft" ? "Discard draft" : "Delete trip"}
         pending={deleting}
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}

@@ -11,41 +11,47 @@ import {
   ReactNode,
   RefObject,
 } from "react";
-import type { Cartesian3, Entity, Viewer } from "cesium";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { metresBetween, peekFlightSeconds, peekRangeM } from "@/lib/peekRange";
 import {
-  arcLift,
   buildDayClusters,
-  buildRouteGeometry,
-  cssColor,
-  dayColorToken,
   dayVisualState,
-  frameRouteBesidePanel,
-  routeViewHeadingDeg,
   RouteCluster,
-  RouteGeometry,
   RouteStop,
-  sampleRouteAltitude,
   STEM_HEIGHT_M,
 } from "@/lib/mapRoute";
+import type { CameraPose, MapRenderer } from "@/lib/mapRenderer";
+import type { MapEngine } from "@/lib/mapEngine";
 
 // Re-exported so the marker layer can reach the rule without importing two modules for it.
 export { dayVisualState } from "@/lib/mapRoute";
 
 interface MapCameraContextValue {
-  setViewer: (viewer: Viewer | null) => void;
-  /** The live viewer, for components that drive the camera directly (MapControls). Exposed as
-   *  the ref rather than wrapped in per-action context methods — one consumer doesn't justify
-   *  five indirections, and camera math is better kept next to the control it belongs to. */
-  viewerRef: RefObject<Viewer | null>;
-  /** False until the viewer exists — the 3D tileset takes seconds, so map chrome must not
-   *  render (and reach for `viewerRef.current`) before then. */
+  /**
+   * Register the engine that is drawing the world, or `null` on teardown.
+   *
+   * Called by whichever background component the `MAP_ENGINE` flag mounted — `GlobeBackground`
+   * for Cesium, `MapLibreBackground` for MapLibre — once its map is ready to take commands.
+   * Everything below this line is written against `MapRenderer` and does not know which one
+   * answered.
+   */
+  setRenderer: (renderer: MapRenderer | null) => void;
+  /** The live renderer, for components that drive the camera directly (MapControls, the marker
+   *  layer's per-frame projection, the split editor's map picking). Exposed as the ref rather
+   *  than wrapped in per-action context methods — camera math is better kept next to the control
+   *  it belongs to, and the ref is what keeps a per-frame loop out of React's render path. */
+  rendererRef: RefObject<MapRenderer | null>;
+  /** Which engine is drawing, for the rare consumer that legitimately has to know — the dev
+   *  overlay's engine switch, and the GPU probe. Not for branching behaviour. */
+  engine: MapEngine;
+  /** False until the map exists — Cesium's 3D tileset takes seconds, and MapLibre's style is a
+   *  network round-trip — so map chrome must not render (and reach for `rendererRef.current`)
+   *  before then. */
   ready: boolean;
-  /** Whether the currently-mounted surface puts the globe on screen. Exactly two do: `/trip/[id]`
+  /** Whether the currently-mounted surface puts the map on screen. Exactly two do: `/trip/[id]`
    *  for its whole life, and `/` from the moment generation starts through the result view.
-   *  Everywhere else this stays false and Cesium is never imported at all — a cold `/profile` was
-   *  measured at 5410ms of long tasks across 32 tasks, a 2287KB chunk, 33 `/cesium/` asset
+   *  Everywhere else this stays false and the engine is never imported at all — a cold `/profile`
+   *  was measured at 5410ms of long tasks across 32 tasks, a 2287KB chunk, 33 `/cesium/` asset
    *  requests and a live WebGL2 context, for a settings form.
    *
    *  Deliberately NOT derived from `usePathname()`, which replaced a `globeVisibility.ts` that
@@ -66,7 +72,7 @@ interface MapCameraContextValue {
    *
    * The peek answers "which stop is this?" while *reading* a plan. While editing one, the same
    * pointer movement means something else entirely — dragging a stop between days, or reading a
-   * chat turn with the globe's marker cards still under the cursor — and a camera that dives at
+   * chat turn with the map's marker cards still under the cursor — and a camera that dives at
    * whatever the pointer brushed is moving the ground out from under the edit. Editing surfaces
    * declare themselves with `useHoverPeekSuspended`, the same way a surface declares it wants
    * the globe at all.
@@ -75,9 +81,9 @@ interface MapCameraContextValue {
   setPeekSuspended: (suspended: boolean) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   flyToPlace: (lat: number, lng: number, label?: string) => void;
-  /** Wipe every trip overlay, fly back to the hero pose and resume the idle spin. The globe
-   *  lives above the route boundary and never unmounts, so without this a trip's route and
-   *  markers survive a navigation back to the landing page. No-ops before the viewer exists. */
+  /** Wipe every trip overlay and fly back to the hero pose. The map lives above the route
+   *  boundary and never unmounts, so without this a trip's route and markers survive a navigation
+   *  back to the landing page. No-ops before the renderer exists. */
   resetToHome: () => void;
   /**
    * Draw every day of the trip at once — lit stems out of glow pools at each stop, a route line
@@ -96,8 +102,9 @@ interface MapCameraContextValue {
    * with it collapsed the same day is centred. It is a separate argument from `focusDay` because
    * these are separate questions — which day matters, and how much screen is left to put it in.
    *
-   * Call again on every day-tab change. Cheap to do so: it rebuilds geometry, but the height
-   * sample that dominates the cost is taken once for the whole trip.
+   * Call again on every day-tab change. Cheap to do so on either engine: Cesium rebuilds geometry
+   * but takes its one expensive height sample per trip rather than per day, and MapLibre just
+   * re-serialises a few hundred coordinates.
    */
   showTripRoute: (
     days: RouteStop[][],
@@ -129,8 +136,15 @@ interface MapCameraContextValue {
    *  decide whose stop names are worth showing: all of them at once is ~45 serif names over
    *  photography, which is unreadable however they are coloured. */
   focusedDay: number | null;
-  /** Altitude the current route is drawn at. A ref, not state: the marker layer reads it once
-   *  per frame to place cards on top of the stems, and that must not re-render anything. */
+  /**
+   * Altitude the current route is drawn at, in metres. A ref, not state: the marker layer reads
+   * it once per frame to place cards on top of the stems, and that must not re-render anything.
+   *
+   * Engine-dependent by design. Cesium floats its geometry above the ellipsoid and samples the
+   * rendered tile surface to find out how far, so this settles on a real city elevation; MapLibre
+   * drapes on terrain and reports 0, which is the correct "the route is on the ground" for it.
+   * Either way the marker layer adds `STEM_HEIGHT_M` on top and lands on the stem.
+   */
   routeAltitudeRef: RefObject<number>;
   /**
    * Index of the stop being pointed at, from either side — a marker card or an itinerary row.
@@ -210,74 +224,6 @@ const SCROLL_SETTLE_MS = 350;
  * immediate, because the flight it starts dwarfs this.
  */
 const PEEK_LEAVE_GRACE_MS = 220;
-/** Mirrors --on-deep / --surface-deep. Cesium wants plain colour strings at label-build time,
- *  so these can't be `var()` — update both here if those tokens move. */
-const LABEL_COLOR = "#f4f7fa";
-const LABEL_OUTLINE = "#0f172a";
-/** The landing-page pose, mirrored from GlobeBackground's initial `setView`. Kept in sync by
- *  hand — these are true altitudes, unlike `flyTo`'s `height` which is a HeadingPitchRange range. */
-const HERO_VIEW = { lng: 8, lat: 22, height: 2_500_000, headingDeg: 5, pitchDeg: -45 };
-/** Framing floor for a day's stops, in metres — a lone stop gives a zero-radius sphere, and a
- *  tight cluster gives one small enough that the camera dives into the building mesh. */
-const MIN_ROUTE_RADIUS_M = 400;
-/** Same reasoning as HIGHWAY_HEIGHT_M: a fixed height above the *ellipsoid*, which is routinely
- *  below the real tile surface — the depth-fail material is what keeps the line visible there. */
-const CITY_BOUNDARY_HEIGHT_M = 40;
-
-/**
- * Camera pitch when a route is framed, in degrees.
- *
- * Was -60, which is 30 degrees off straight down, and at that angle a day's arcs project back
- * onto the ground line they span: the whole point of lifting them (`ARC_LIFT_RATIO`) is that two
- * hops over the same ground sit at different heights, and height is exactly what a near-nadir
- * view throws away. So the overview stayed a tangle while the same route read cleanly the moment
- * the camera came over. -45 is the compromise, and the same pose the landing-page hero uses:
- * enough plan to see where the day goes, enough elevation to see the arches as arches.
- *
- * Pitching over costs frame height — a metre of altitude maps to more screen at a shallow pitch
- * than a steep one — which is why the framing sphere below had to grow to include the arc apexes
- * at the same time. Changing one without the other just clips the arcs off the top instead.
- */
-const ROUTE_FRAME_PITCH_DEG = -45;
-
-/**
- * Half the camera's *horizontal* field of view, as a tangent, for turning screen pixels into
- * metres at a given depth.
- *
- * Derived from `fovy` and the aspect ratio rather than read off `frustum.fov`, which is the
- * horizontal angle only while the canvas is wider than it is tall and silently becomes the
- * vertical one when it is not. Returns undefined in 2D, where the frustum is orthographic and has
- * no field of view at all — `frameRouteBesidePanel` then falls back to Cesium's 60° default,
- * which is the right kind of wrong: a slightly off-centre aim, not a thrown error.
- */
-function horizontalTanHalfFov(viewer: Viewer): number | undefined {
-  const frustum = viewer.camera.frustum as { fovy?: number; aspectRatio?: number };
-  if (typeof frustum.fovy !== "number" || typeof frustum.aspectRatio !== "number") return undefined;
-  return Math.tan(frustum.fovy / 2) * frustum.aspectRatio;
-}
-
-// Warm gold rather than the UI's amber accent or the route's Apple blue — highways are ambient
-// city context, not the thing the app is asking you to look at, so they need their own hue that
-// doesn't compete with either.
-const HIGHWAY_COLOR = "#F5C242";
-const HIGHWAY_CASING = "#8A5A00";
-/** Fixed float height for highway lines, in metres. Unlike the day route's per-stop sampling
- *  (sampleRouteAltitude), a highway query can return hundreds of vertices — sampling each would
- *  be slow and isn't worth it for roads that are only ever viewed from a city-wide camera height.
- *  Same "unclamped and floating" reasoning as the day route: CLAMP_TO_GROUND climbs Google 3D
- *  Tiles rooftops, and TERRAIN classification draws nothing with globe.show = false. */
-const HIGHWAY_HEIGHT_M = 25;
-
-// Cesium's PinBuilder only draws its own squat rounded-square marker, so the classic teardrop
-// comes from an inline SVG instead. `encodeURIComponent` rather than `btoa` — this module is
-// imported during SSR, where `btoa` doesn't exist. Red is deliberate and follows Apple's own
-// convention: red marks the place you searched for, blue marks the route through it.
-const PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32"><path d="M12 .8C6 .8 1.2 5.6 1.2 11.6c0 8 10.8 19.6 10.8 19.6s10.8-11.6 10.8-19.6C22.8 5.6 18 .8 12 .8z" fill="#FF3B30" stroke="#C1271F" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="11.6" r="4.2" fill="#fff"/></svg>`;
-const PIN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PIN_SVG)}`;
-
-/** Cesium is only ever reached through `await import("cesium")`, so the helpers below take the
- *  module as a parameter rather than importing it — same contract as mapRoute's. */
-type CesiumModule = typeof import("cesium");
 
 type Flight = [
   lat: number,
@@ -296,7 +242,7 @@ export interface NearbyPlaceMarker {
   kind: string;
 }
 
-/** A whole trip's worth of routes, held for replay when the request beats the viewer. */
+/** A whole trip's worth of routes, held for replay when the request beats the renderer. */
 interface TripRouteRequest {
   days: RouteStop[][];
   focusedDay: number | null;
@@ -304,155 +250,29 @@ interface TripRouteRequest {
   panelVisible: boolean;
 }
 
-/**
- * The days a `showTripRoute` call actually puts on screen — the focused one if it has stops in it,
- * otherwise every day. The camera frames these, the height probe samples these, and the arc-apex
- * reservation walks these, so the rule lives in one place rather than three.
- */
-function drawnDaysOf(days: RouteStop[][], focusDay: number | null): RouteStop[][] {
-  return focusDay !== null && days[focusDay]?.length ? [days[focusDay]] : days;
-}
-
-/**
- * Fly the camera to the framing for a drawn route, without touching any geometry.
- *
- * Lifted out of `showTripRoute` so it can be replayed. Closing a stop's detail panel used to fly
- * out to the destination at `DESTINATION_HEIGHT_M` — a 15km nadir view of the whole city — which
- * was survivable while a day's framing was also near-nadir and looked much the same. It stopped
- * being survivable once a day got a heading and a pitch of its own (`routeViewHeadingDeg`,
- * `ROUTE_FRAME_PITCH_DEG`): backing out of a stop threw away the side-on view of the day and
- * landed somewhere that read as the map having forgotten which day was open.
- */
-function flyToRouteFraming(
-  viewer: Viewer,
-  Cesium: CesiumModule,
-  days: RouteStop[][],
-  focusDay: number | null,
-  panelVisible: boolean,
-  routeAltitudeM: number
-) {
-      // Frame the focused day if there is one, otherwise the whole trip. Selecting a day is an
-      // explicit "show me this", so this deliberately overrides wherever the user had dragged
-      // the camera. The caller starts this before its own height sampling, since framing needs no
-      // heights and the 2s flight covers the sampling latency.
-      const drawnDays = drawnDaysOf(days, focusDay);
-      const drawnStops = drawnDays.flat();
-      const drawnPositions = drawnStops.map((st) =>
-        Cesium.Cartesian3.fromDegrees(st.lng, st.lat)
-      );
-
-      // The stops *and* the apex of every arc between them. Framing the stops alone was right
-      // while arcs bowed 180m; they now peak at a fraction of the hop's ground length, so a
-      // cross-city day arches kilometres up and the camera cut the tops off — worse at
-      // `ROUTE_FRAME_PITCH_DEG`, which trades frame height for exactly the elevation this
-      // sphere now has to contain. Grouped by day rather than run across the flat list: two
-      // consecutive days are joined in `flat` by a pair that no arc is ever drawn between, and
-      // reserving room for that phantom hop would pull the whole trip's overview back.
-      //
-      // The apex is the arc's own midpoint height (see `arcPositionsAt`), read off the previous
-      // route's altitude for the same reason the geometry is drawn at it — the real sample is
-      // seconds away and consecutive days of one trip share a city. A degenerate hop that will
-      // draw no arc at all still contributes `MIN_ARC_LIFT_M`, which is 80m of slack on a frame
-      // measured in kilometres.
-      const framePositions = [...drawnPositions];
-      for (const stops of drawnDays) {
-        for (let i = 1; i < stops.length; i++) {
-          const a = stops[i - 1];
-          const b = stops[i];
-          const span = Cesium.Cartesian3.distance(
-            Cesium.Cartesian3.fromDegrees(a.lng, a.lat),
-            Cesium.Cartesian3.fromDegrees(b.lng, b.lat)
-          );
-          framePositions.push(
-            Cesium.Cartesian3.fromDegrees(
-              (a.lng + b.lng) / 2,
-              (a.lat + b.lat) / 2,
-              routeAltitudeM + STEM_HEIGHT_M + arcLift(span)
-            )
-          );
-        }
-      }
-      const sphere = Cesium.BoundingSphere.fromPoints(framePositions);
-      const radius = Math.max(sphere.radius, MIN_ROUTE_RADIUS_M);
-      // Aim at the middle of the strip the panel leaves, not the middle of the viewport — see
-      // `frameRouteBesidePanel`. Measured off the panel's own box rather than assumed from its
-      // width classes, so Focus Mode's wider 62% split and any future width are handled without
-      // this knowing about either.
-      //
-      // Keyed on the panel actually being there, not on whether a day is focused: collapsed, the
-      // panel is a pill in a corner and aiming beside it would shove the route left of an
-      // otherwise empty screen.
-      const viewWidth = viewer.scene.canvas.clientWidth;
-      const panelLeft =
-        panelVisible && window.innerWidth >= 640
-          ? (document.querySelector(".docked-panel")?.getBoundingClientRect().left ?? viewWidth)
-          : viewWidth;
-      const { biasM, rangeM } = frameRouteBesidePanel(
-        radius,
-        viewWidth,
-        panelLeft,
-        horizontalTanHalfFov(viewer)
-      );
-      // Face the route across its long axis rather than down it — see `routeViewHeadingDeg`.
-      const headingDeg = routeViewHeadingDeg(drawnStops);
-      const heading = Cesium.Math.toRadians(headingDeg);
-
-      // The panel bias has to run along the camera's own *right*, not along world east.
-      //
-      // Those were the same vector for as long as the heading was hardcoded to north, and the
-      // bias was written as "shove the aim point east" on that basis. They stop being the same
-      // the moment the camera turns: at heading 90 world east is straight into the screen, so an
-      // east-shifted aim point would push the route away from the camera instead of sideways out
-      // from under the panel, and the framing this bias exists for would silently stop working.
-      //
-      // Screen-right in the local frame is (cos h, -sin h) over (east, north) — at h = 0 that is
-      // east, which is exactly the old behaviour, so a north-facing route is bit-identical.
-      const enu = Cesium.Transforms.eastNorthUpToFixedFrame(sphere.center);
-      const east = Cesium.Cartesian3.fromCartesian4(
-        Cesium.Matrix4.getColumn(enu, 0, new Cesium.Cartesian4())
-      );
-      const north = Cesium.Cartesian3.fromCartesian4(
-        Cesium.Matrix4.getColumn(enu, 1, new Cesium.Cartesian4())
-      );
-      const right = Cesium.Cartesian3.subtract(
-        Cesium.Cartesian3.multiplyByScalar(east, Math.cos(heading), new Cesium.Cartesian3()),
-        Cesium.Cartesian3.multiplyByScalar(north, Math.sin(heading), new Cesium.Cartesian3()),
-        new Cesium.Cartesian3()
-      );
-      const target = Cesium.Cartesian3.add(
-        sphere.center,
-        Cesium.Cartesian3.multiplyByScalar(right, biasM, new Cesium.Cartesian3()),
-        new Cesium.Cartesian3()
-      );
-      viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, radius), {
-        offset: new Cesium.HeadingPitchRange(
-          heading,
-          Cesium.Math.toRadians(ROUTE_FRAME_PITCH_DEG),
-          rangeM
-        ),
-        duration: 2.0,
-      });
-}
-
-export function MapCameraProvider({ children }: { children: ReactNode }) {
-  const viewerRef = useRef<Viewer | null>(null);
-  const markerRef = useRef<Entity | null>(null);
+export function MapCameraProvider({
+  engine,
+  children,
+}: {
+  /** Resolved once by `AppShell` and passed down, so every consumer sees the same answer and
+   *  nothing re-reads `localStorage` on a render. */
+  engine: MapEngine;
+  children: ReactNode;
+}) {
+  const rendererRef = useRef<MapRenderer | null>(null);
   const pendingRef = useRef<Flight | null>(null);
   const pendingRouteRef = useRef<TripRouteRequest | null>(null);
   /** The last route asked for, kept after it is drawn rather than cleared like `pendingRouteRef`,
    *  so `reframeRoute` can replay its framing without rebuilding any geometry. */
   const lastRouteRef = useRef<TripRouteRequest | null>(null);
-  const routeEntitiesRef = useRef<Entity[]>([]);
   /** Altitude the current route was drawn at, so new geometry lands on the arcs. */
   const routeAltitudeRef = useRef(0);
   /** Bumped per showTripRoute call so a slow height sample from an older trip can't win. */
   const routeGenerationRef = useRef(0);
   const pendingHighwaysRef = useRef<[lat: number, lng: number] | null>(null);
-  const highwayEntitiesRef = useRef<Entity[]>([]);
   /** Bumped per showHighways call so a slow, superseded fetch (e.g. re-picking a destination
    *  before the previous city's highways landed) can't draw over the newer city's roads. */
   const highwayGenerationRef = useRef(0);
-  const cityEntitiesRef = useRef<Entity[]>([]);
   /** Bumped per showCityContext call, so a slow answer for a city the traveler has already
    *  moved on from cannot draw over the one they are looking at now. */
   const cityGenerationRef = useRef(0);
@@ -484,19 +304,10 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   const [focusedDay, setFocusedDay] = useState<number | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  /** The live geometry, one per day, so hover emphasis and dimming can reach it without
-   *  rebuilding the routes. Index is the day index; a day with no stops still takes a slot so
-   *  this stays aligned with `Itinerary.days[]`. */
-  const routeGeometriesRef = useRef<RouteGeometry[]>([]);
   /** Where the camera was before the current run of hover peeks began, so leaving the list puts
    *  it back. Null means no peek is in flight — and any real camera command clears it, which is
    *  what stops an unhover from yanking the camera off a stop that was just clicked. */
-  const peekReturnRef = useRef<{
-    position: Cartesian3;
-    heading: number;
-    pitch: number;
-    roll: number;
-  } | null>(null);
+  const peekReturnRef = useRef<CameraPose | null>(null);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Seconds the flight *in* took, replayed on the way out so the two read as one gesture. A deep
    *  dive travelled over 1.4s and snapped back in 0.8s would look like the camera being dropped. */
@@ -540,94 +351,45 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       height: number,
       pitchDeg: number,
       label?: string,
-      /** Altitude of the point to centre in frame. Zero aims at the ellipsoid surface, which for
-       *  a stop means aiming below the street; a stop flight passes its card's height instead. */
+      /** Altitude of the point to centre in frame. Zero aims at the ground, which for a stop means
+       *  aiming below the street; a stop flight passes its card's height instead. */
       centreHeightM = 0
     ) => {
       // A real flight supersedes any hover peek, including one still waiting out its dwell.
       cancelPeek();
-      const viewer = viewerRef.current;
-      if (!viewer || viewer.isDestroyed()) {
-        // The viewer registers only once the 3D tileset has loaded, which takes seconds — long
-        // after a trip page has fetched its trip and asked to fly. Hold the request and replay
-        // it on registration instead of dropping it.
+      const renderer = rendererRef.current;
+      if (!renderer?.isAlive()) {
+        // The renderer registers only once its map is ready — Cesium's 3D tileset takes seconds,
+        // long after a trip page has fetched its trip and asked to fly. Hold the request and
+        // replay it on registration instead of dropping it.
         pendingRef.current = [lat, lng, height, pitchDeg, label, centreHeightM];
         return;
       }
-      import("cesium").then((Cesium) => {
-        // The viewer can be torn down while this dynamic import is in flight.
-        if (viewer.isDestroyed()) return;
-
-        // One marker at a time: the pin always sits wherever the camera last flew, so a
-        // labelless flight (the global reset) just clears it.
-        if (markerRef.current) viewer.entities.remove(markerRef.current);
-        markerRef.current = label
-          ? viewer.entities.add({
-              position: Cesium.Cartesian3.fromDegrees(lng, lat),
-              billboard: {
-                image: PIN_IMAGE,
-                width: 30,
-                height: 40,
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-                // Without this the photorealistic tiles bury the pin inside nearby buildings.
-                disableDepthTestDistance: Number.POSITIVE_INFINITY,
-              },
-              label: {
-                text: label,
-                font: '500 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
-                fillColor: Cesium.Color.fromCssColorString(LABEL_COLOR),
-                outlineColor: Cesium.Color.fromCssColorString(LABEL_OUTLINE),
-                outlineWidth: 4,
-                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                pixelOffset: new Cesium.Cartesian2(0, -44),
-                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-                disableDepthTestDistance: Number.POSITIVE_INFINITY,
-              },
-            })
-          : null;
-
-        // Frame the target rather than hovering over it: `camera.flyTo` puts the camera *at*
-        // these coordinates, so at a downward pitch the place itself sits at nadir, outside the
-        // frustum — you'd fly to Rome and never see Rome. A bounding sphere keeps it centred,
-        // with `height` read as distance-to-target instead of altitude.
-        viewer.camera.flyToBoundingSphere(
-          new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(lng, lat, centreHeightM), 0),
-          {
-            offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(pitchDeg), height),
-            duration: 2.5,
-          }
-        );
-      });
+      // One marker at a time: the pin always sits wherever the camera last flew, so a labelless
+      // flight (the global reset) just clears it.
+      renderer.setPin(label ? { lat, lng, label } : null);
+      renderer.flyToPoint({ lat, lng, rangeM: height, pitchDeg, centreHeightM });
     },
     [cancelPeek]
   );
 
   const showTripRoute = useCallback(
-    (
-      days: RouteStop[][],
-      focusDay: number | null,
-      panelVisible = true,
-      soloFocus = false
-    ) => {
+    (days: RouteStop[][], focusDay: number | null, panelVisible = true, soloFocus = false) => {
       // A new route reframes the camera, so any peek's saved pose belongs to a view that is about
       // to stop existing.
       cancelPeek();
       const flat = days.flat();
-      // Published before the viewer check: the cards are plain DOM and cost nothing to mount
-      // early, and they stay hidden until the per-frame loop has a viewer to project them with.
+      // Published before the renderer check: the cards are plain DOM and cost nothing to mount
+      // early, and they stay hidden until the per-frame loop has a map to project them with.
       routeStopsRef.current = flat;
       lastRouteRef.current = { days, focusedDay: focusDay, panelVisible, soloFocus };
       setRouteStops(flat);
       // Only for days that will actually be drawn. Under `soloFocus` the others have no route
-    // under them, and a "Day 4" badge hanging over bare imagery names nothing.
-    setRouteClusters(
-      buildDayClusters(days).filter(
-        (c) => !soloFocus || focusDay === null || c.day === focusDay
-      )
-    );
-        setFocusedDay(focusDay);
+      // under them, and a "Day 4" badge hanging over bare imagery names nothing.
+      setRouteClusters(
+        buildDayClusters(days).filter((c) => !soloFocus || focusDay === null || c.day === focusDay)
+      );
+      setFocusedDay(focusDay);
       // A rebuilt trip means the day under the pointer is gone with the old geometry; a stale
       // hover would leave one day lit through the next selection.
       hoveredDayRef.current = null;
@@ -636,85 +398,45 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       // rather than merely unhelpful — they index a flat list whose length changes with the trip.
       setHoveredIndex(null);
       setActiveIndex(null);
-      const viewer = viewerRef.current;
-      if (!viewer || viewer.isDestroyed()) {
+      const renderer = rendererRef.current;
+      if (!renderer?.isAlive()) {
         // Same race as flyTo: the itinerary renders in a few hundred ms, the tileset takes
         // seconds. Dropping the request here meant the route silently never drew on a cold load.
         pendingRouteRef.current = { days, focusedDay: focusDay, panelVisible, soloFocus };
         return;
       }
       const generation = ++routeGenerationRef.current;
-      import("cesium").then(async (Cesium) => {
-        if (viewer.isDestroyed()) return;
-        for (const e of routeEntitiesRef.current) viewer.entities.remove(e);
-        routeEntitiesRef.current = [];
-        routeGeometriesRef.current = [];
-        if (flat.length === 0) return;
+      if (flat.length === 0) {
+        renderer.clearRoute();
+        return;
+      }
 
-        flyToRouteFraming(viewer, Cesium, days, focusDay, panelVisible, routeAltitudeRef.current);
-
-        // The same days the framing works on, because the height probe below needs their ground
-        // positions and nothing else here does. Through `drawnDaysOf` so the camera and the probe
-        // cannot disagree about which days are on screen.
-        const drawnPositions = drawnDaysOf(days, focusDay)
-          .flat()
-          .map((st) => Cesium.Cartesian3.fromDegrees(st.lng, st.lat));
-
-        // Drawn immediately at the last route's altitude and corrected once the real sample lands,
-        // rather than awaiting first. Height sampling takes ~1.3s alone but several seconds when
-        // day-tab clicks stack the requests up, which left the map visibly empty. Consecutive days
-        // of one trip share a city, so the previous altitude is a near-perfect stand-in; the very
-        // first route falls back to 0 and visibly settles once.
-        const altitudeAtDraw = routeAltitudeRef.current;
-        // Two modes, and the difference is what is drawn at all rather than how brightly. With
-        // `focusDay === null` every day goes on the globe at once, each in its own colour — the
-        // overview a finished trip opens on. Once a day is picked in the panel it is the only
-        // day drawn: reading one day means reading one day, and leaving the rest on screen
-        // behind it is a week of arcs crossing the one being read.
-        //
-        // Holes are deliberate. `routeGeometriesRef` stays indexed *by day index* so the
-        // emphasis effect can look a day up directly; in focused mode every slot but one is
-        // empty, and `forEach`/`flatMap` skip holes rather than visiting undefined.
-        // Two readings of "select a day", and they belong to different surfaces.
-        //
-        // `soloFocus` — the itinerary panel. Picking a day there means "show me this day", and
-        // the answer is that day and nothing else: five other days' arcs crossing the one being
-        // read is not context, and dimming them to 0.25 was still enough line to obscure it.
-        //
-        // Otherwise — the split editor. Every day stays drawn and the unselected ones dim,
-        // because a cross-day drag is a decision about two days and hiding one hides half of it.
-        const geometries: RouteGeometry[] = [];
-        days.forEach((stops, day) => {
-          if (soloFocus && focusDay !== null && day !== focusDay) return;
-          const geometry = buildRouteGeometry(
-            viewer,
-            Cesium,
-            stops,
-            altitudeAtDraw,
-            dayColorToken(day)
-          );
-          geometry.setDayState(dayVisualState(day, focusDay, hoveredDayRef.current));
-          geometries[day] = geometry;
-        });
-        routeEntitiesRef.current = geometries.flatMap((g) => g.entities);
-        routeGeometriesRef.current = geometries;
-
-        // One sample across everything drawn, not one per day: `clampToHeightMostDetailed` is
-        // the expensive part (~1.3s for a single day) and the days of one trip share a city, so
-        // sampling each separately would multiply the wait by the trip length to land on
-        // near-identical answers — and any disagreement between them would step the days onto
-        // visibly different planes in the overview.
-        const altitude = await sampleRouteAltitude(viewer, Cesium, drawnPositions);
-        // A fast day-tab switch can land a newer route mid-sample; the newest request wins, and a
-        // superseded generation's entities are already gone from the collection.
-        if (generation !== routeGenerationRef.current || viewer.isDestroyed()) return;
-        routeAltitudeRef.current = altitude;
-        if (Math.abs(altitude - altitudeAtDraw) < 0.5) return;
-        geometries.forEach((geometry) => geometry.reposition(altitude));
+      // Framing first, and deliberately before the draw resolves: it needs no heights, and its
+      // 2s flight covers whatever the renderer's own sampling costs.
+      renderer.frameRoute({
+        days,
+        focusDay,
+        panelVisible,
+        routeAltitudeM: routeAltitudeRef.current,
       });
+
+      void renderer
+        .drawRoute({
+          days,
+          focusDay,
+          soloFocus,
+          altitudeHintM: routeAltitudeRef.current,
+          stateFor: (day) => dayVisualState(day, focusDay, hoveredDayRef.current),
+        })
+        .then((altitude) => {
+          // A fast day-tab switch can land a newer route mid-sample; the newest request wins.
+          if (generation !== routeGenerationRef.current) return;
+          routeAltitudeRef.current = altitude;
+        });
     },
     [cancelPeek]
   );
+
   const setHoveredDay = useCallback((day: number | null) => {
     if (hoveredDayRef.current === day) return;
     hoveredDayRef.current = day;
@@ -725,37 +447,22 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   // every day is already drawn, and which one is being read is a colour and a width, not a
   // question of what exists.
   useEffect(() => {
-    routeGeometriesRef.current.forEach((geometry, day) =>
-      geometry.setDayState(dayVisualState(day, focusedDay, hoveredDay))
-    );
-    // Load-bearing under `requestRenderMode`: recolouring a material moves nothing, so without a
-    // frame requested here the change is not drawn until some unrelated camera move repaints.
-    const viewer = viewerRef.current;
-    if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender();
+    rendererRef.current?.applyDayStates((day) => dayVisualState(day, focusedDay, hoveredDay));
   }, [focusedDay, hoveredDay, routeStops]);
 
-  // Hover wins over selection: while the pointer is on something, that is what the globe should
-  // be pointing at. Falls back to the selected stop when the pointer leaves.
+  // Hover wins over selection: while the pointer is on something, that is what the map should be
+  // pointing at. Falls back to the selected stop when the pointer leaves.
   useEffect(() => {
     // `hoveredIndex` indexes the flat stop list, but emphasis is per-route, so it has to be
-    // resolved back to (which day, which stop within it). Every other day is explicitly cleared
-    // rather than left alone: without that, moving the pointer from a stop on day 2 to one on
-    // day 5 leaves day 2's stem amber and the trip shows two "you are pointing at this".
+    // resolved back to (which day, which stop within it).
     const emphasised = hoveredIndex ?? activeIndex;
     const emphasisedStop = emphasised === null ? null : routeStops[emphasised];
-    const dayStart = emphasisedStop
-      ? routeStops.findIndex((st) => st.day === emphasisedStop.day)
-      : -1;
-    routeGeometriesRef.current.forEach((geometry, day) =>
-      geometry.setEmphasis(
-        emphasisedStop && day === emphasisedStop.day ? emphasised! - dayStart : null
-      )
-    );
-    // Load-bearing under `requestRenderMode`: swapping the emphasised material moves nothing, so
-    // without a frame requested here the highlight is not drawn until some unrelated camera move
-    // happens to repaint. Hovering a marker card with the camera at rest showed nothing at all.
-    const viewer = viewerRef.current;
-    if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender();
+    if (!emphasisedStop) {
+      rendererRef.current?.applyEmphasis(null, null);
+      return;
+    }
+    const dayStart = routeStops.findIndex((st) => st.day === emphasisedStop.day);
+    rendererRef.current?.applyEmphasis(emphasisedStop.day, emphasised! - dayStart);
   }, [hoveredIndex, activeIndex, routeStops]);
 
   /**
@@ -804,9 +511,9 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
    *
    * Three gates, each a cost decision rather than a nicety:
    *
-   * - **A viewer must already exist.** Hovering must never be the thing that boots one — a
-   *   pointer crossing a list would otherwise spin up a WebGL context and a tile stream on a
-   *   surface that had declined the globe.
+   * - **A map must already exist.** Hovering must never be the thing that boots one — a pointer
+   *   crossing a list would otherwise spin up a WebGL context and a tile stream on a surface that
+   *   had declined the globe.
    * - **PEEK_DWELL_MS of stillness first.** A sweep down the list costs nothing; only a row
    *   actually paused on is fetched.
    * - **The pointer, not a scroll, must be what arrived on the row.** A list scrolling under a
@@ -825,8 +532,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
    * full lean-out and a fresh dive.
    */
   useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!ready || !viewer || viewer.isDestroyed()) return;
+    const renderer = rendererRef.current;
+    if (!ready || !renderer?.isAlive()) return;
     if (prefersReducedMotion()) return;
     // An editing surface is open. Not merely "don't start a new peek": a peek already in flight
     // when the editor opened would otherwise leave the camera leaned in on a stop with the plan
@@ -853,65 +560,51 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       peekTimerRef.current = null;
       const home = peekReturnRef.current;
       peekRearmRef.current = null;
-      if (!home) return;
-      import("cesium").then(() => {
-        if (viewer.isDestroyed()) return;
-        viewer.camera.flyTo({
-          destination: home.position,
-          orientation: { heading: home.heading, pitch: home.pitch, roll: home.roll },
-          duration: peekFlightRef.current,
-          // Forgotten on *arrival*, not on departure. Clearing it here was a real bug: a row
-          // hovered while this flight was still running found no saved pose, captured the camera
-          // mid-flight as its own "home", and the next lean-out went to that meaningless
-          // intermediate point — measured 4.5km from where the run had started. Deep dives made it
-          // easy to hit, since they take longer to fly and leave a wider window to interrupt.
-          // Guarded by identity so a newer run's pose is never the one dropped.
-          complete: () => {
-            if (peekReturnRef.current === home) peekReturnRef.current = null;
-          },
-        });
+      if (!home || !renderer.isAlive()) return;
+      renderer.flyToPose(home, peekFlightRef.current, () => {
+        // Forgotten on *arrival*, not on departure. Clearing it on departure was a real bug: a row
+        // hovered while this flight was still running found no saved pose, captured the camera
+        // mid-flight as its own "home", and the next lean-out went to that meaningless
+        // intermediate point — measured 4.5km from where the run had started. Deep dives made it
+        // easy to hit, since they take longer to fly and leave a wider window to interrupt.
+        // Guarded by identity so a newer run's pose is never the one dropped.
+        if (peekReturnRef.current === home) peekReturnRef.current = null;
       });
     };
 
     const fire = () => {
       peekTimerRef.current = null;
-      if (!stop) return;
-      import("cesium").then((Cesium) => {
-        if (viewer.isDestroyed()) return;
-        // Captured once per run of peeks, not per row: hovering four rows in sequence should
-        // return to where the camera was before the first of them, not to the third one.
-        peekReturnRef.current ??= {
-          position: viewer.camera.position.clone(),
-          heading: viewer.camera.heading,
-          pitch: viewer.camera.pitch,
-          roll: viewer.camera.roll,
-        };
-        const home = peekReturnRef.current;
-        // Aim at the stop's floating card rather than the ground, same as a click does, so the
-        // peek centres on the thing that names the place.
-        const target = Cesium.Cartesian3.fromDegrees(
-          stop.lng,
-          stop.lat,
-          routeAltitudeRef.current + STEM_HEIGHT_M
-        );
-        // Every other stop of the *hovered stop's own day* — the pocket it sits in is what
-        // decides whether a lean is enough to tell it apart from its neighbours. Other days are
-        // excluded: they are drawn, but dimmed and unnamed, and they are not what the pointer is
-        // reading.
-        const neighbourDistancesM = routeStops.reduce<number[]>((acc, other, i) => {
-          if (i !== hoveredIndex && other.day === stop.day) acc.push(metresBetween(stop, other));
-          return acc;
-        }, []);
-        const cameraDistanceM = Cesium.Cartesian3.distance(home.position, target);
-        const range = peekRangeM(cameraDistanceM, neighbourDistancesM, home.pitch);
-        peekFlightRef.current = peekFlightSeconds(cameraDistanceM, range);
-        viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, 0), {
-          // The pre-peek heading and pitch, deliberately kept rather than snapped to the click's
-          // -35°. Re-tilting on hover is what made this read as "the camera went somewhere":
-          // holding the angle already being looked from leaves only the distance changing.
-          offset: new Cesium.HeadingPitchRange(home.heading, home.pitch, range),
-          duration: peekFlightRef.current,
-        });
+      if (!stop || !renderer.isAlive()) return;
+      // Captured once per run of peeks, not per row: hovering four rows in sequence should
+      // return to where the camera was before the first of them, not to the third one.
+      peekReturnRef.current ??= renderer.capturePose();
+      const home = peekReturnRef.current;
+      if (!home) return;
+      // Every other stop of the *hovered stop's own day* — the pocket it sits in is what decides
+      // whether a lean is enough to tell it apart from its neighbours. Other days are excluded:
+      // they are drawn, but dimmed and unnamed, and they are not what the pointer is reading.
+      const neighbourDistancesM = routeStops.reduce<number[]>((acc, other, i) => {
+        if (i !== hoveredIndex && other.day === stop.day) acc.push(metresBetween(stop, other));
+        return acc;
+      }, []);
+      // Aim at the stop's floating card rather than the ground, same as a click does, so the peek
+      // centres on the thing that names the place.
+      const centreHeightM = routeAltitudeRef.current + STEM_HEIGHT_M;
+      const cameraDistanceM = renderer.distanceFromPoseM(home, stop.lat, stop.lng, centreHeightM);
+      const homePitch = renderer.posePitchRad(home);
+      const range = peekRangeM(cameraDistanceM, neighbourDistancesM, homePitch);
+      peekFlightRef.current = peekFlightSeconds(cameraDistanceM, range);
+      renderer.flyToPoint({
+        lat: stop.lat,
+        lng: stop.lng,
+        rangeM: range,
+        // The pre-peek heading and pitch, deliberately kept rather than snapped to the click's
+        // -35°. Re-tilting on hover is what made this read as "the camera went somewhere":
+        // holding the angle already being looked from leaves only the distance changing.
+        pitchDeg: (homePitch * 180) / Math.PI,
+        headingRad: renderer.poseHeadingRad(home),
+        centreHeightM,
+        durationS: peekFlightRef.current,
       });
     };
 
@@ -991,7 +684,10 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
 
     const generation = ++cityGenerationRef.current;
     (async () => {
-      let data: { boundary: { segments: { lat: number; lng: number }[][] } | null; nearby: NearbyPlaceMarker[] };
+      let data: {
+        boundary: { segments: { lat: number; lng: number }[][] } | null;
+        nearby: NearbyPlaceMarker[];
+      };
       try {
         const query = new URLSearchParams({ lat: String(lat), lng: String(lng) });
         if (name) query.set("name", name);
@@ -1013,57 +709,26 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       // Read AFTER the fetch, never before it.
       //
       // On a cold load this is called from the destination flight, which happens long before the
-      // Cesium viewer registers — capturing the ref up front therefore captured `null` every
-      // time, and the outline was silently dropped while the fetch it had just paid for sat
-      // there complete. `showHighways` survives the same race only because it queues into
-      // `pendingHighwaysRef`; the Overpass round-trip here is seconds long, which is more than
-      // enough for the viewer to arrive, so re-reading is all this needs.
-      const viewer = viewerRef.current;
-      if (!viewer || viewer.isDestroyed() || !data.boundary) {
+      // renderer registers — capturing the ref up front therefore captured `null` every time, and
+      // the outline was silently dropped while the fetch it had just paid for sat there complete.
+      // `showHighways` survives the same race only because it queues into `pendingHighwaysRef`;
+      // the Overpass round-trip here is seconds long, which is more than enough for the map to
+      // arrive, so re-reading is all this needs.
+      const renderer = rendererRef.current;
+      if (!renderer?.isAlive() || !data.boundary) {
         // Let the next attempt try again rather than caching the failure forever.
         cityKeyRef.current = null;
         return;
       }
-      const Cesium = await import("cesium");
-      if (generation !== cityGenerationRef.current || viewer.isDestroyed()) return;
-      for (const e of cityEntitiesRef.current) viewer.entities.remove(e);
-      // Outline only, never a fill. A translucent polygon over photorealistic terrain hides the
-      // city it is describing, which is the one thing this must not do.
-      cityEntitiesRef.current = data.boundary.segments.map((segment) =>
-        viewer.entities.add({
-          polyline: {
-            positions: segment.map((p) =>
-              Cesium.Cartesian3.fromDegrees(p.lng, p.lat, CITY_BOUNDARY_HEIGHT_M)
-            ),
-            width: 2,
-            arcType: Cesium.ArcType.GEODESIC,
-            material: new Cesium.ColorMaterialProperty(
-              Cesium.Color.fromCssColorString(cssColor("--city-boundary")).withAlpha(0.85)
-            ),
-            // Full strength on depth-fail, which is the *normal* case rather than the exception.
-            // `CITY_BOUNDARY_HEIGHT_M` is a height above the ellipsoid and the real tile surface
-            // is routinely tens of metres higher, so this line is below the visible ground almost
-            // everywhere — exactly the situation `showHighways` documents. A dimmed depth-fail
-            // material therefore isn't "the occluded parts are subtler", it is the whole line at
-            // that alpha, which is why the first attempt drew nothing anybody could see.
-            //
-            // Solid rather than dashed for the same reason: a dash material has no depth-fail
-            // equivalent, so the pattern would be lost on every stretch that matters.
-            depthFailMaterial: new Cesium.ColorMaterialProperty(
-              Cesium.Color.fromCssColorString(cssColor("--city-boundary")).withAlpha(0.85)
-            ),
-          },
-        })
-      );
-      viewer.scene.requestRender();
+      renderer.drawCityBoundary(data.boundary.segments);
     })();
   }, []);
 
   const showHighways = useCallback((lat: number, lng: number) => {
-    const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed()) {
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive()) {
       // Same cold-load race as flyTo/showTripRoute: the destination flight can be requested
-      // before the tileset (and thus the viewer) registers. Replayed from setViewer below.
+      // before the map (and thus the renderer) registers. Replayed from setRenderer below.
       pendingHighwaysRef.current = [lat, lng];
       return;
     }
@@ -1079,47 +744,15 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       } catch {
         return; // Ambient context, not core to the trip — a miss here just leaves them off.
       }
-      if (generation !== highwayGenerationRef.current || viewer.isDestroyed()) return;
-
-      const Cesium = await import("cesium");
-      if (generation !== highwayGenerationRef.current || viewer.isDestroyed()) return;
-      for (const e of highwayEntitiesRef.current) viewer.entities.remove(e);
-      highwayEntitiesRef.current = segments.map((segment) =>
-        viewer.entities.add({
-          polyline: {
-            positions: segment.points.map((p) =>
-              Cesium.Cartesian3.fromDegrees(p.lng, p.lat, HIGHWAY_HEIGHT_M)
-            ),
-            width: 3,
-            arcType: Cesium.ArcType.GEODESIC,
-            material: new Cesium.PolylineOutlineMaterialProperty({
-              color: Cesium.Color.fromCssColorString(HIGHWAY_COLOR),
-              outlineColor: Cesium.Color.fromCssColorString(HIGHWAY_CASING),
-              outlineWidth: 1,
-            }),
-            // HIGHWAY_HEIGHT_M is a fixed height above the *ellipsoid*, not local terrain — the
-            // real ground surface is routinely tens of metres higher (see sampleRouteAltitude's
-            // own comment on this), so the line sits *below* the visible 3D-tile surface almost
-            // everywhere and would otherwise fail the depth test and never be seen. Sampling
-            // real terrain height per vertex isn't worth it for a query that can return hundreds
-            // of points, so instead — same fallback the day route uses for occluded segments —
-            // draw the full-strength colour on depth-fail too, making it effectively always-on.
-            depthFailMaterial: new Cesium.ColorMaterialProperty(
-              Cesium.Color.fromCssColorString(HIGHWAY_COLOR)
-            ),
-          },
-        })
-      );
+      if (generation !== highwayGenerationRef.current) return;
+      rendererRef.current?.drawHighways(segments);
     })();
   }, []);
 
-  const setViewer = useCallback(
-    (viewer: Viewer | null) => {
-      viewerRef.current = viewer;
-      if (!viewer) {
-        markerRef.current = null;
-        routeEntitiesRef.current = [];
-        highwayEntitiesRef.current = [];
+  const setRenderer = useCallback(
+    (renderer: MapRenderer | null) => {
+      rendererRef.current = renderer;
+      if (!renderer) {
         setReady(false);
         return;
       }
@@ -1128,7 +761,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       pendingRef.current = null;
       if (pending) flyTo(...pending);
       // Replayed after the flight so its framing wins — a queued route is the more specific
-      // request, and both resolve to a flyToBoundingSphere where the last call cancels the first.
+      // request, and both resolve to a camera flight where the last call cancels the first.
       const pendingRoute = pendingRouteRef.current;
       pendingRouteRef.current = null;
       if (pendingRoute)
@@ -1146,15 +779,14 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   );
 
   const flyToDestination = useCallback(
-    (lat: number, lng: number, label?: string) =>
-      flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
+    (lat: number, lng: number, label?: string) => flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
     [flyTo]
   );
   /**
    * Fly to one stop of the current day, framing its floating card rather than the ground.
    *
    * The card is the thing that names the place, so it is what the camera should arrive on. Aiming
-   * at the default ellipsoid surface put the card near the top edge of the frame — or out of it —
+   * at the default ground surface put the card near the top edge of the frame — or out of it —
    * and centred a patch of road instead, which is what made both the Play tour and a marker click
    * look like they were zooming to the bottom of the marker.
    *
@@ -1183,11 +815,7 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   const setActiveStop = useCallback(
     (stop: { lat: number; lng: number; name: string; time?: string }) => {
       const index = routeStopsRef.current.findIndex(
-        (s) =>
-          s.lat === stop.lat &&
-          s.lng === stop.lng &&
-          s.name === stop.name &&
-          s.time === stop.time
+        (s) => s.lat === stop.lat && s.lng === stop.lng && s.name === stop.name && s.time === stop.time
       );
       if (index >= 0) setActiveIndex(index);
     },
@@ -1211,42 +839,34 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     const request = lastRouteRef.current;
     if (!request) return false;
     cancelPeek();
-    const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed()) return false;
-    import("cesium").then((Cesium) => {
-      if (viewer.isDestroyed()) return;
-      // `routeAltitudeRef` is the real sampled altitude by now, rather than the previous route's
-      // stand-in that the first draw had to make do with — so this framing is the better of the two.
-      flyToRouteFraming(
-        viewer,
-        Cesium,
-        request.days,
-        request.focusedDay,
-        request.panelVisible,
-        routeAltitudeRef.current
-      );
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive()) return false;
+    // `routeAltitudeRef` is the real sampled altitude by now, rather than the previous route's
+    // stand-in that the first draw had to make do with — so this framing is the better of the two.
+    renderer.frameRoute({
+      days: request.days,
+      focusDay: request.focusedDay,
+      panelVisible: request.panelVisible,
+      routeAltitudeM: routeAltitudeRef.current,
     });
     return true;
   }, [cancelPeek]);
 
   const resetToHome = useCallback(() => {
     cancelPeek();
-    const viewer = viewerRef.current;
-    // No-op before the viewer exists, which is exactly right on a cold load of `/`: the home
-    // effect fires long before the tileset registers, so GlobeBackground's own setView and spin
-    // proceed untouched. On a soft navigation the viewer always exists, so this always runs.
-    if (!viewer || viewer.isDestroyed()) return;
+    const renderer = rendererRef.current;
+    // No-op before the renderer exists, which is exactly right on a cold load of `/`: the home
+    // effect fires long before the map registers, so the background's own initial pose proceeds
+    // untouched. On a soft navigation the renderer always exists, so this always runs.
+    if (!renderer?.isAlive()) return;
 
     routeGenerationRef.current++;
-    for (const e of routeEntitiesRef.current) viewer.entities.remove(e);
-    routeEntitiesRef.current = [];
-    // Same reasoning as the route entities: the globe never unmounts, so the previous city's
-    // highways would otherwise still be drawn under the landing-page hero pose.
     highwayGenerationRef.current++;
-    for (const e of highwayEntitiesRef.current) viewer.entities.remove(e);
-    highwayEntitiesRef.current = [];
-    // Otherwise the day's marker cards survive a navigation back to the landing page — the
-    // globe never unmounts, so nothing else clears them.
+    // The map never unmounts, so without this the previous city's route, highways and pin would
+    // still be drawn under the landing-page hero pose.
+    renderer.clearOverlays();
+    // Otherwise the day's marker cards survive a navigation back to the landing page — the map
+    // never unmounts, so nothing else clears them.
     routeStopsRef.current = [];
     lastRouteRef.current = null;
     setRouteStops([]);
@@ -1254,28 +874,12 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
     setFocusedDay(null);
     setHoveredIndex(null);
     setActiveIndex(null);
-    routeGeometriesRef.current = [];
-    if (markerRef.current) viewer.entities.remove(markerRef.current);
-    markerRef.current = null;
-    // Otherwise a request queued while the tileset was loading replays onto the empty globe.
+    // Otherwise a request queued while the map was loading replays onto the empty world.
     pendingRef.current = null;
     pendingRouteRef.current = null;
     pendingHighwaysRef.current = null;
 
-    import("cesium").then((Cesium) => {
-      if (viewer.isDestroyed()) return;
-      // camera.flyTo directly rather than this module's flyTo helper, which layers this app's
-      // own pitch/range conventions on top of a destination — this wants the raw hero pose.
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(HERO_VIEW.lng, HERO_VIEW.lat, HERO_VIEW.height),
-        orientation: {
-          heading: Cesium.Math.toRadians(HERO_VIEW.headingDeg),
-          pitch: Cesium.Math.toRadians(HERO_VIEW.pitchDeg),
-          roll: 0,
-        },
-        duration: 2.0,
-      });
-    });
+    renderer.flyHome();
   }, [cancelPeek]);
 
   // Memoised because this provider is rendered from the root layout, so *any* re-render of
@@ -1288,8 +892,9 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
   // but it changes the shape of `useMapCamera()` for every caller — a separate piece of work.
   const value = useMemo(
     () => ({
-      setViewer,
-      viewerRef,
+      setRenderer,
+      rendererRef,
+      engine,
       ready,
       globeWanted,
       setGlobeWanted,
@@ -1316,7 +921,8 @@ export function MapCameraProvider({ children }: { children: ReactNode }) {
       reframeRoute,
     }),
     [
-      setViewer,
+      setRenderer,
+      engine,
       ready,
       peekSuspended,
       globeWanted,
@@ -1351,14 +957,7 @@ export function useMapCamera() {
 }
 
 /**
- * Declares that the calling surface puts the globe on screen for as long as `wanted` holds.
- *
- * Released on unmount, so leaving a globe surface hides the canvas and pauses the render loop.
- * The viewer is never *destroyed* — see `GlobeBackground`'s construction effect for why a swap is
- * unrecoverable — so this is a visibility gate, not a lifecycle one.
- */
-/**
- * Declare that this surface is an editing one, and that the globe's hover peek should hold still
+ * Declare that this surface is an editing one, and that the map's hover peek should hold still
  * while it is mounted. Mirrors `useGlobeOnScreen`: the surface that knows says so, and unmounting
  * lifts it.
  */
@@ -1370,6 +969,13 @@ export function useHoverPeekSuspended(suspended = true) {
   }, [suspended, setPeekSuspended]);
 }
 
+/**
+ * Declares that the calling surface puts the map on screen for as long as `wanted` holds.
+ *
+ * Released on unmount, so leaving a map surface hides the canvas and pauses the render loop. The
+ * map is never *destroyed* — see `GlobeBackground`'s construction effect for why a swap is
+ * unrecoverable — so this is a visibility gate, not a lifecycle one.
+ */
 export function useGlobeOnScreen(wanted: boolean) {
   const { setGlobeWanted } = useMapCamera();
   useEffect(() => {

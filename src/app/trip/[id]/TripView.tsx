@@ -16,6 +16,7 @@ import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/li
 import { formatMoney } from "@/lib/format";
 import { devLabel } from "@/lib/devInspector";
 import { clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
+import { DRAFT_TTL_DAYS } from "@/lib/drafts";
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -57,6 +58,7 @@ export default function TripView({
   // Step 7 edit session. Unlike the pre-save view, every accepted edit here is persisted.
   const focus = useFocusEdit(itinerary);
   const [savingFocus, setSavingFocus] = useState(false);
+  const [keeping, setKeeping] = useState(false);
 
   const {
     flyToDestinationByName,
@@ -111,6 +113,36 @@ export default function TripView({
     const saved = await res.json().catch(() => null);
     if (saved?.endDate) {
       setTrip((prev) => (prev && prev.endDate !== saved.endDate ? { ...prev, endDate: saved.endDate } : prev));
+    }
+  }
+
+  /**
+   * Promotes the draft this page is showing to a kept trip.
+   *
+   * A draft opens here as a fully working trip — the chat, the drag board, the cost inputs and
+   * `persist` above all key off the row, not off its status — so the only thing missing was a way
+   * to say "keep this" from the page the traveler actually lands on when they reopen a draft.
+   * Sends the current itinerary with the flip for the same reason `save()` on the home view does:
+   * one request, so the status and the plan it applies to can't disagree.
+   */
+  async function keepTrip() {
+    if (!trip || !itinerary) return;
+    setKeeping(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/trips/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itinerary, status: "saved" }),
+      });
+      if (!res.ok) throw new Error("We couldn't keep this trip. Try again.");
+      // Local, not a reload: the row is unchanged apart from the one field, and re-fetching the
+      // whole trip would reset the panel, the active day and the camera the traveler set.
+      setTrip((prev) => (prev ? { ...prev, status: "saved" } : prev));
+    } catch (e) {
+      setError(errorMessage(e, "We couldn't keep this trip. Try again."));
+    } finally {
+      setKeeping(false);
     }
   }
 
@@ -243,6 +275,29 @@ export default function TripView({
           {error && <ErrorNote>{error}</ErrorNote>}
           {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
 
+          {/* Above the overspend banner and everything else in the panel, because it is the one
+              thing on this page with a deadline. Every edit made here is already persisted to the
+              draft row — this asks only whether to keep it past the sweep. */}
+          {trip?.status === "draft" && (
+            <div className="glass-itinerary flex flex-col items-start justify-between gap-3 rounded-2xl p-4 text-sm sm:flex-row sm:items-center">
+              <div>
+                <p className="font-semibold text-foreground">This plan is still a draft.</p>
+                <p className="text-muted">
+                  Your changes are saved as you make them, but unkept drafts are cleared after{" "}
+                  {DRAFT_TTL_DAYS} days.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={keepTrip}
+                disabled={keeping}
+                className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-accent px-4 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:scale-[0.98] disabled:opacity-50"
+              >
+                {keeping ? "Keeping…" : "Keep this trip"}
+              </button>
+            </div>
+          )}
+
           {hasOverspend && itinerary && (
             <div
               ref={overspendRef}
@@ -327,31 +382,6 @@ export default function TripView({
               round trip instead of resetting when ItineraryCard remounts. */}
           {!focus.target && (
             <div className={selectedStop ? "hidden" : "space-y-4"}>
-              {/* Above the card, not below it: at the foot of the panel this sat under the
-                  floating trace/terminal button in the same bottom-right corner, and a
-                  30-day trip buried it behind a full scroll of the itinerary.
-
-                  `px-5` below `sm`: the panel is full-bleed there, and this row — unlike its
-                  `.glass-itinerary` sibling, which insets its own inner box — has nothing to
-                  inset it, so the label sat hard against the screen edge. */}
-              {trip && itinerary && (
-                <div className="flex justify-end px-5 sm:px-0">
-                  <button
-                    type="button"
-                    onClick={() => focus.open(0, "trip")}
-                    // No `hover:bg-*` here: `.refine-affordance` and `.glass-control` both set
-                    // `background` as unlayered rules in `globals.css`, which outrank every
-                    // `@layer utilities` declaration regardless of specificity — so the utility
-                    // that used to sit here was dead, and the app's most prominent secondary
-                    // action had no hover at all. Both states are defined beside those base
-                    // rules now. `transition-colors` is what animates them.
-                    className="refine-affordance glass-control pointer-events-auto rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors"
-                  >
-                    Refine with AI
-                  </button>
-                </div>
-              )}
-
               {trip && itinerary && (
                 <ItineraryCard
                   itinerary={itinerary}

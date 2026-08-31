@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { listTrips } from "@/lib/db";
+import { listTrips, purgeStaleDrafts } from "@/lib/db";
 import { toTripSummary } from "@/lib/tripPayload";
 import TripsView from "./TripsView";
 
@@ -36,5 +36,20 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default function TripsPage() {
-  return <TripsView initialTrips={listTrips().map(toTripSummary)} />;
+  // Swept before the read, not after, so an expired draft can't appear once and vanish on the next
+  // visit. This is the app's only sweep trigger — there is no scheduler here — and it is enough:
+  // the rows it deletes are only ever *seen* on this page and `/api/trips`, which does the same.
+  // Best-effort; a failed sweep leaves stale drafts listed, which is strictly better than a
+  // memories page that won't render.
+  try {
+    purgeStaleDrafts();
+  } catch (err) {
+    console.error("[trips] draft sweep failed", err);
+  }
+  return (
+    <TripsView
+      initialTrips={listTrips("saved").map(toTripSummary)}
+      initialDrafts={listTrips("draft").map(toTripSummary)}
+    />
+  );
 }

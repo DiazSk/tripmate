@@ -66,7 +66,19 @@ The glob in the `test` script needs **double** quotes. Single quotes reach Node 
 
 ## Architecture
 
-Next.js 16 App Router + React 19 + Tailwind v4. A CesiumJS globe renders behind most of the UI (assets copied into `public/` by the `postinstall` script).
+Next.js 16 App Router + React 19 + Tailwind v4. A 3D map renders behind most of the UI (engine assets copied into `public/` by the `postinstall` script).
+
+### Two map engines, one interface
+
+The world behind the itinerary is drawn by either **CesiumJS + Google Photorealistic 3D Tiles** (what the app shipped with) or **MapLibre GL JS + OpenFreeMap vector tiles + a terrarium DEM** (3D terrain and extruded buildings, deliberately no satellite imagery). **MapLibre is the default**; Cesium is one flag away and fully wired.
+
+`src/lib/mapRenderer.ts` is the contract both implement. **Nothing above it imports either engine** — `mapCamera.tsx`, `StopMarkerLayer`, `MapControls` and `SplitEditor`'s map picking all go through `MapRenderer`. The contract is in **metres, degrees and CSS pixels**: no `Cartesian3` and no `LngLat` crosses it, camera aim is a target point plus a *range* (not a zoom), and **pitch is Cesium's convention everywhere — negative is down**. MapLibre's complement is converted inside `maplibreRenderer.ts`; getting that backwards silently inverts the tilt slider.
+
+Pick the engine with `?map=cesium|maplibre` (sticky — it writes `localStorage.tripmateMapEngine`), or `NEXT_PUBLIC_MAP_ENGINE` in `.env.local`. Resolved once at `AppShell` mount; changing it needs a reload, because the map is built once and never swapped.
+
+`docs/map-engine-gpu.md` has the side-by-side cost measurement (`scripts/map-engine-probe.mjs`) and the list of what MapLibre deliberately does not reproduce. The headline: **both engines idle at 0 WebGL draw calls/s**, which is the number that governs this app — every map frame re-blurs every `backdrop-filter` panel above the canvas. Under a drag Cesium issues 3.4x the draw calls (8,706/s vs 2,539/s), and the cost lands in the frame-time tail rather than the median (p95 25.2ms vs 9.8ms) and in streaming (798 requests / 16.9MB vs 158 / 9.2MB).
+
+**MapLibre's tile-parsing worker does not survive Turbopack.** It resolves the worker from `new URL("./maplibre-gl-worker.mjs", import.meta.url)`, Turbopack does not serve that path, the module worker dies on its own import, and **not one tile is ever parsed** — with no error anywhere. The style, sprite and raster layers all load, `getStyle()` shows every layer present, and the canvas stays a flat fill. `scripts/copy-maplibre-assets.mjs` copies the worker into `public/maplibre/` at postinstall and `createMapLibreMap` calls `setWorkerUrl` at it — same shape as `copy-cesium-assets.mjs`, same underlying reason (no CopyWebpackPlugin under Turbopack). Don't "simplify" that away.
 
 ### Two transports, one chokepoint
 

@@ -1,0 +1,305 @@
+import type { DayVisualState, RouteStop } from "@/lib/mapRoute";
+import type { MapEngine } from "@/lib/mapEngine";
+
+/**
+ * Everything `mapCamera.tsx` needs a map engine to do, and nothing about how either one does it.
+ *
+ * This exists so the camera state machine — the pending-request queues, the hover-peek dwell and
+ * intent gating, the day emphasis rules, the fetch-and-fail-soft overlays — is written once. That
+ * logic is the same whether the world underneath is Cesium's photogrammetry or MapLibre's vector
+ * tiles, and it is the part with all the hard-won behaviour in it.
+ *
+ * **The contract is in metres, degrees and CSS pixels.** No `Cartesian3` and no `LngLat` crosses
+ * this boundary. Camera aim is expressed the way Cesium already expressed it internally — a target
+ * point plus a *range* (distance from camera to target), a pitch and a heading — because that is
+ * the vocabulary the app's framing rules are written in (`frameRouteBesidePanel`, `peekRangeM`).
+ * MapLibre thinks in `{center, zoom, bearing, pitch}` instead and converts on the way in; see
+ * `rangeToZoom` in `maplibreRenderer.ts`.
+ *
+ * **Pitch is Cesium's convention throughout: negative is looking down.** -90 is nadir, -45 is the
+ * house oblique, 0 is the horizon. MapLibre's is the complement (0 = nadir) and the conversion is
+ * the renderer's problem, not the caller's. Getting this backwards silently inverts the tilt
+ * slider, so it is stated here rather than left to be inferred.
+ *
+ * Anything asynchronous resolves rather than throws — the map is ambient context, and the house
+ * fail-soft convention (see CLAUDE.md) applies to it as much as to a weather fetch.
+ */
+export interface MapRenderer {
+  readonly engine: MapEngine;
+
+  /**
+   * False once the underlying map has been torn down. Every method is safe to call on a dead
+   * renderer — they no-op — but callers holding an `await` across a teardown should check, the
+   * same way the Cesium code checked `viewer.isDestroyed()`.
+   */
+  isAlive(): boolean;
+
+  /**
+   * Ask for one frame.
+   *
+   * Load-bearing on Cesium, which runs in `requestRenderMode` and will otherwise not repaint a
+   * recolour that moved no geometry. MapLibre repaints on its own schedule and treats this as a
+   * hint (`triggerRepaint`).
+   */
+  requestRender(): void;
+
+  // ---------------------------------------------------------------- overlays
+
+  /**
+   * Draw the trip: a route per day, a stem and a ground pool per stop.
+   *
+   * Resolves with the altitude the geometry ended up at, in metres. Cesium samples the *rendered*
+   * tile surface for this and takes over a second to answer, which is why the request carries
+   * `altitudeHintM` — the previous route's altitude, good enough to draw at immediately and
+   * corrected when the real number lands. MapLibre reads its DEM and answers instantly, and
+   * resolves with the hint's replacement just the same.
+   *
+   * Implementations must tolerate being superseded: a newer `drawRoute` may land before an older
+   * one resolves, and the caller guards with a generation counter, but the renderer must not have
+   * drawn the older route's corrections over the newer one in the meantime.
+   */
+  drawRoute(request: RouteDrawRequest): Promise<number>;
+  clearRoute(): void;
+
+  /**
+   * Retint every drawn day in place. The callback is asked per drawn day index rather than handed
+   * an array, so a renderer that keeps its days sparse (Cesium's `routeGeometries` has holes by
+   * design) doesn't have to reconstruct one.
+   */
+  applyDayStates(stateFor: (day: number) => DayVisualState): void;
+
+  /**
+   * Mark one stop as the thing being pointed at — `dayIndex` plus the stop's index *within that
+   * day*, or `(null, null)` to clear. Every other day is cleared by the implementation, so two
+   * days can never both read as emphasised.
+   */
+  applyEmphasis(dayIndex: number | null, indexWithinDay: number | null): void;
+
+  /** The single search pin. `null` removes it. One at a time, by design. */
+  setPin(pin: { lat: number; lng: number; label?: string } | null): void;
+
+  drawHighways(segments: { points: { lat: number; lng: number }[] }[]): void;
+  drawCityBoundary(segments: { lat: number; lng: number }[][]): void;
+
+  /** Route, highways, city outline and pin — everything a trip put on the map. */
+  clearOverlays(): void;
+
+  // ---------------------------------------------------------------- camera
+
+  /**
+   * Frame a point: put it at the centre of the view, `rangeM` away, at this pitch and heading.
+   *
+   * Not "fly the camera to these coordinates" — that lands the camera *on* the place, which at a
+   * downward pitch puts the place itself outside the frustum. `centreHeightM` lifts the aim point
+   * off the ground so a stop's floating card is what gets centred rather than the road under it.
+   */
+  flyToPoint(options: FlyToPointOptions): void;
+
+  /** Frame a whole route, biased clear of the itinerary panel. See `frameRouteBesidePanel`. */
+  frameRoute(options: FrameRouteOptions): void;
+
+  /** The landing-page pose. */
+  flyHome(durationS?: number): void;
+
+  /**
+   * Snapshot the camera, for the hover peek to lean back out to.
+   *
+   * Opaque: only this renderer can read it back. Null when there is no camera yet.
+   */
+  capturePose(): CameraPose | null;
+  flyToPose(pose: CameraPose, durationS: number, onArrive?: () => void): void;
+  /** Heading and pitch of a snapshot, in radians, so the peek can hold the angle it was at. */
+  poseHeadingRad(pose: CameraPose): number;
+  posePitchRad(pose: CameraPose): number;
+  /** Metres from a snapshot's camera position to a world point. Drives `peekRangeM`. */
+  distanceFromPoseM(pose: CameraPose, lat: number, lng: number, heightM: number): number;
+
+  // ------------------------------------------------- projection & chrome
+
+  /**
+   * Run `cb` after every rendered frame. Returns the unsubscribe.
+   *
+   * This is the marker layer's clock and the map chrome's readout. It must fire on frames where
+   * the camera moved and cost nothing on frames where it did not.
+   */
+  onFrame(cb: () => void): () => void;
+
+  /** The drawing surface, for a `ResizeObserver` and for CSS-pixel dimensions. */
+  canvas(): HTMLCanvasElement | null;
+
+  /**
+   * World point to CSS pixels, written into `out`. Returns false when the point should not be
+   * drawn at all — behind the camera, or over the horizon on a globe.
+   *
+   * CSS pixels, not device pixels: Cesium runs a custom `resolutionScale` here, so the two
+   * genuinely differ. Allocation-free by contract — this runs per marker per frame.
+   */
+  project(lat: number, lng: number, heightM: number, out: ScreenPoint): boolean;
+
+  /** Metres from the camera to a world point. Drives marker scale. */
+  cameraDistanceM(lat: number, lng: number, heightM: number): number;
+
+  headingRad(): number;
+  /** Cesium convention: negative is down. */
+  pitchRad(): number;
+
+  /**
+   * Dolly toward or away from whatever is under the middle of the screen.
+   *
+   * The step is expressed as a fraction of the current distance so it scales with proximity, and
+   * clamped in metres so repeated presses cannot end up inside the building mesh. `fromRangeM`
+   * lets successive presses compound off the range the previous flight was heading for rather
+   * than off wherever the camera happens to be mid-flight.
+   */
+  zoomStep(options: ZoomStepOptions): void;
+
+  /** Turn to a heading, keeping the screen-centre point fixed. */
+  setHeadingRad(headingRad: number, durationS?: number): void;
+  /** Tilt to a pitch (negative down), keeping the screen-centre point fixed. */
+  setPitchDeg(pitchDeg: number, options?: { animate?: boolean; durationS?: number }): void;
+  /** Distance from the camera to the screen-centre ground point, in metres. */
+  centreRangeM(): number;
+
+  /** Clicks on the map itself, in lat/lng. Returns the unsubscribe. */
+  onMapClick(cb: (lat: number, lng: number) => void): () => void;
+}
+
+/** Opaque camera snapshot. Only the renderer that produced it can read it. */
+export type CameraPose = object;
+
+export interface ScreenPoint {
+  x: number;
+  y: number;
+}
+
+export interface RouteDrawRequest {
+  /** Every day of the trip, in order. Days with no stops keep their slot. */
+  days: RouteStop[][];
+  /** The panel's selected day, or null for the whole-trip overview. */
+  focusDay: number | null;
+  /** True when the focused day should be the *only* one drawn (the itinerary panel's reading of
+   *  "select a day"); false when the others stay drawn and dim (the split editor's). */
+  soloFocus: boolean;
+  /** Altitude to draw at right now, corrected once the real sample lands. */
+  altitudeHintM: number;
+  /** How present each day should be, resolved by the caller from focus and hover. */
+  stateFor: (day: number) => DayVisualState;
+}
+
+export interface FlyToPointOptions {
+  lat: number;
+  lng: number;
+  /** Camera-to-target distance in metres. */
+  rangeM: number;
+  /** Negative is down. */
+  pitchDeg: number;
+  headingRad?: number;
+  /** Altitude of the point to centre. Zero aims at the ground. */
+  centreHeightM?: number;
+  durationS?: number;
+}
+
+export interface FrameRouteOptions {
+  days: RouteStop[][];
+  focusDay: number | null;
+  /** True when the itinerary panel is open, so the route is aimed into the strip it leaves. */
+  panelVisible: boolean;
+  routeAltitudeM: number;
+  durationS?: number;
+}
+
+export interface ZoomStepOptions {
+  direction: 1 | -1;
+  /** Fraction of the current distance each press covers. */
+  ratio: number;
+  minRangeM: number;
+  maxRangeM: number;
+  /** Range the previous press was heading for, so held presses compound. */
+  fromRangeM?: number | null;
+  durationS?: number;
+  /** The range this press settled on, so the caller can accumulate the next one off it. */
+  onSettled?: (rangeM: number | null) => void;
+}
+
+/**
+ * The days a draw or a framing actually puts on screen — the focused one if it has stops,
+ * otherwise every day.
+ *
+ * Shared between the renderers and the provider so the camera, the height probe and the
+ * arc-apex reservation cannot disagree about which days are on screen.
+ */
+export function drawnDaysOf(days: RouteStop[][], focusDay: number | null): RouteStop[][] {
+  return focusDay !== null && days[focusDay]?.length ? [days[focusDay]] : days;
+}
+
+/**
+ * Where the itinerary panel's left edge is, in CSS pixels, or the full width when it isn't there.
+ *
+ * Measured off the panel's own box rather than assumed from its width classes, so Focus Mode's
+ * wider 62% split and any future width are handled without this knowing about either. Below `sm`
+ * the panel is full-bleed and there is no strip to aim into, so the whole viewport is the answer.
+ */
+export function panelLeftEdgePx(panelVisible: boolean, viewWidthPx: number): number {
+  if (!panelVisible || typeof window === "undefined" || window.innerWidth < 640) return viewWidthPx;
+  const panel = document.querySelector(".docked-panel");
+  // A *collapsed* panel is a capsule in the corner, not a wall — biasing away from it would shove
+  // the subject left of an otherwise empty screen. `DockedPanel` marks that state itself.
+  if (!panel || panel.classList.contains("docked-panel-collapsed")) return viewWidthPx;
+  return panel.getBoundingClientRect().left;
+}
+
+/**
+ * The width of the map a traveler can actually see, in CSS pixels — the strip from the left edge
+ * to the itinerary panel, or the whole viewport when nothing covers it.
+ *
+ * Measured rather than passed, because the callers that need it (a stop flight, a hover peek)
+ * have no idea whether a panel is open. `frameRoute` takes `panelVisible` explicitly instead,
+ * since there the caller genuinely knows and the answer has to survive the panel animating.
+ */
+export function visibleMapWidthPx(viewWidthPx: number): number {
+  return panelLeftEdgePx(true, viewWidthPx);
+}
+
+/** The landing-page pose. True altitude, unlike `flyToPoint`'s `rangeM`. */
+export const HERO_VIEW = {
+  lng: 8,
+  lat: 22,
+  heightM: 2_500_000,
+  headingDeg: 5,
+  pitchDeg: -45,
+} as const;
+
+/** Framing floor for a day's stops, in metres — a lone stop gives a zero-radius sphere, and a
+ *  tight cluster gives one small enough that the camera dives into the building mesh. */
+export const MIN_ROUTE_RADIUS_M = 400;
+
+/**
+ * Camera pitch when a route is framed, in degrees.
+ *
+ * Was -60, which is 30 degrees off straight down, and at that angle a day's arcs project back
+ * onto the ground line they span. -45 is the compromise, and the same pose the landing-page hero
+ * uses: enough plan to see where the day goes, enough elevation to see the arches as arches.
+ */
+export const ROUTE_FRAME_PITCH_DEG = -45;
+
+/** Fixed float height for highway lines, in metres. */
+export const HIGHWAY_HEIGHT_M = 25;
+/** Same reasoning: a fixed height above the ellipsoid, routinely below the real tile surface. */
+export const CITY_BOUNDARY_HEIGHT_M = 40;
+
+// Warm gold rather than the UI's amber accent or the route's Apple blue — highways are ambient
+// city context, not the thing the app is asking you to look at.
+export const HIGHWAY_COLOR = "#F5C242";
+export const HIGHWAY_CASING = "#8A5A00";
+
+/** Mirrors --on-deep / --surface-deep. Label builders want plain colour strings, so these can't
+ *  be `var()` — update both here if those tokens move. */
+export const LABEL_COLOR = "#f4f7fa";
+export const LABEL_OUTLINE = "#0f172a";
+
+// Cesium's PinBuilder only draws its own squat rounded-square marker, so the classic teardrop
+// comes from an inline SVG instead. `encodeURIComponent` rather than `btoa` — this module is
+// imported during SSR, where `btoa` doesn't exist. Red is deliberate and follows Apple's own
+// convention: red marks the place you searched for, blue marks the route through it.
+const PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32"><path d="M12 .8C6 .8 1.2 5.6 1.2 11.6c0 8 10.8 19.6 10.8 19.6s10.8-11.6 10.8-19.6C22.8 5.6 18 .8 12 .8z" fill="#FF3B30" stroke="#C1271F" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="11.6" r="4.2" fill="#fff"/></svg>`;
+export const PIN_IMAGE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PIN_SVG)}`;

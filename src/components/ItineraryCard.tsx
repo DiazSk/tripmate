@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
@@ -10,7 +10,10 @@ import { useMapCamera } from "@/lib/mapCamera";
 import { useStopTour } from "@/lib/useStopTour";
 import { daySpendByCategory } from "@/lib/itinerary";
 import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
-import SplitEditor from "./SplitEditor";
+import EditableStopList from "./EditableStopList";
+import AutoTextarea from "./AutoTextarea";
+import { addDay, deleteStop, insertStop, updateStop } from "@/lib/itineraryEdits";
+import { moveStop } from "@/lib/schedule";
 import { formatMoney } from "@/lib/format";
 import BudgetBar from "./BudgetBar";
 import DayHeader, { DayEditUpdates } from "./DayHeader";
@@ -174,6 +177,34 @@ export default function ItineraryCard({
       ),
     [itinerary.days]
   );
+
+  /**
+   * The route's *shape* — every stop's position, in order, and nothing else.
+   *
+   * This is what the route effect below keys off, and getting that dependency right is what makes
+   * editing in place possible at all. `routeDays` changes identity on **every** keystroke, because
+   * it carries `name` and `time`; keyed on that, the effect would call `showTripRoute` per typed
+   * character. That call is not a repaint — it reframes the camera (`flyToRouteFraming`), clears
+   * `hoveredIndex` and `activeIndex`, rebuilds every entity and re-runs the ~1.3s ground-height
+   * probe. Typing a stop's name would fly the camera twenty times and drop the highlight the row
+   * and its marker share.
+   *
+   * So: only a move, an insert, a delete or a reorder redraws. Renaming a stop or rewriting its
+   * note changes nothing the ribbons or rings are made of, and correctly does nothing to them.
+   *
+   * **What this defers.** `name` and `time` *are* read by the map — the first for the floating
+   * marker card's label, the second for the dusk/night tint — and under this signature an edit to
+   * either does not reach them until the next redraw. `editing` is therefore a dependency too, so
+   * leaving edit mode catches the labels up at a natural boundary. Making that live needs a
+   * text-only entry point on the map camera (refresh `routeStops`, touch neither geometry, camera
+   * nor selection); it is a ~15-line addition to `mapCamera.tsx` and is not here because that
+   * file is mid-refactor behind a renderer abstraction. Add `syncRouteStops` there, call it from
+   * the edit handlers below, and delete this paragraph.
+   */
+  const routeShape = useMemo(
+    () => JSON.stringify(itinerary.days.map((d) => d.stops.map((st) => [st.lat, st.lng]))),
+    [itinerary.days]
+  );
   /** Where this day's stops start in the flat list the map indexes hover/selection by. The panel
    *  numbers its rows from 0 within the day, so every index crossing this boundary is shifted. */
   const dayOffset = useMemo(
@@ -206,15 +237,85 @@ export default function ItineraryCard({
   // must defer to the stagger effect below instead of instantly revealing everything.
   const skipNextInstantRevealRef = useRef(!!animateReveal);
 
-  /** The full-page arrange board, opened by a day's edit (pencil) control.
+  /**
+   * Edit mode: this same card, with its text swapped for fields.
    *
-   * Rearranging used to happen in this list, which meant a cross-day move had to be performed
-   * against a day the traveller couldn't see: drag onto a day *tab*, hold until it opened, then
-   * drop. The board shows every day at once instead, so both ends of a move are visible for the
-   * whole gesture — and this list goes back to being purely for reading. */
-  const [boardOpen, setBoardOpen] = useState(false);
+   * Two surfaces came before it and both were separate windows — `ArrangeBoard`, a full-screen
+   * board that covered the map, and `SplitEditor`, a portalled panel at 62%/880px against this
+   * card's 40%/520px. Each fixed the previous one's complaint and both kept the same underlying
+   * problem: entering edit mode replaced one DOM tree with another, so the panel resized, the
+   * scroll position reset, and the hero photo, the budget bar and the day's spend band all
+   * vanished and came back. The plan you were reading and the plan you were editing were visibly
+   * two different documents.
+   *
+   * There is nothing to lay out here, which is the whole design. The hero, the budget bar, the
+   * day tabs and the spend band are outside this flag entirely and never re-render because of it.
+   * Inside the day panel, each region swaps for an equivalent built from the *same* measurements
+   * (see the module comment in `EditableStopList`), so the card's height and rhythm survive the
+   * switch. What edit mode adds is affordances in the panel's own padding — a grip in the left
+   * gutter, a bin in the right — and one row of controls at the end of the day.
+   */
+  const [editing, setEditing] = useState(false);
   /** Whether this card is an editing surface at all (the host gave us a way to commit changes). */
   const canRearrange = !!onItineraryChange;
+
+  /**
+   * Every edit routes through the host's `onItineraryChange`, and none of them keeps a local copy.
+   *
+   * That is what "bi-directional" means in practice: the field is not the source of truth, the
+   * itinerary is. A keystroke builds a new itinerary, the host commits it, and it arrives back
+   * here as a prop — so the field, the guardrail findings, the day's spend tiles, the budget bar
+   * and (on a structural change) the map's ribbons and markers are all rendered from the one
+   * value. A field holding its own draft would let any of those disagree with the others.
+   */
+  const editStop = (stopIndex: number, patch: Partial<Stop>) =>
+    onItineraryChange?.(updateStop(itinerary, dayIndex, stopIndex, patch));
+  const removeStop = (stopIndex: number) =>
+    onItineraryChange?.(deleteStop(itinerary, dayIndex, stopIndex));
+  const reorderStops = (from: number, to: number) =>
+    onItineraryChange?.(
+      moveStop(itinerary, { dayIndex, stopIndex: from }, { dayIndex, stopIndex: to })
+    );
+  const editDay = (updates: Partial<Pick<DayPlan, "title" | "date" | "summary">>) =>
+    onItineraryChange?.({
+      ...itinerary,
+      days: itinerary.days.map((d, i) => (i === dayIndex ? { ...d, ...updates } : d)),
+    });
+
+  /**
+   * Where a hand-added stop lands, since a stop without coordinates is not something the map can
+   * draw and `newStop` has no way to invent them.
+   *
+   * It inherits the day's last stop, falling back to the last stop anywhere in the trip — so a
+   * new stop appears *on* the plan, at somewhere the traveller has already been, and is then
+   * dragged or renamed from there. Guessing the city centre instead would need a coordinate this
+   * component is never given (`TripSummary` carries no lat/lng), and defaulting to 0,0 would draw
+   * a ribbon to the Gulf of Guinea.
+   *
+   * `null` only for an itinerary with no stops at all, which no generated plan produces; the
+   * control disables itself rather than adding a stop the map cannot place.
+   */
+  const anchorForNewStop = (() => {
+    const here = itinerary.days[dayIndex]?.stops;
+    const last = here?.[here.length - 1];
+    if (last) return last;
+    for (let i = itinerary.days.length - 1; i >= 0; i--) {
+      const stops = itinerary.days[i].stops;
+      if (stops.length) return stops[stops.length - 1];
+    }
+    return null;
+  })();
+
+  const addStop = () => {
+    if (!anchorForNewStop) return;
+    onItineraryChange?.(
+      insertStop(itinerary, dayIndex, {
+        name: "",
+        lat: anchorForNewStop.lat,
+        lng: anchorForNewStop.lng,
+      })
+    );
+  };
 
   /**
    * The itinerary as it first arrived — straight from generation, or straight from the database.
@@ -339,9 +440,21 @@ export default function ItineraryCard({
     setRevealedCount(day.stops.length);
     // `soloFocus` — picking a day in this panel means "show me this day", so the globe draws
     // that day alone. Collapsed, the focus is null and every day is up as the trip overview.
-    // The split editor passes this false: editing needs the other days on screen.
-    showTripRoute(routeDays, panelCollapsed ? null : dayIndex, !panelCollapsed, true);
-  }, [day, dayIndex, routeDays, panelCollapsed, showTripRoute]);
+    // In edit mode it is false: a stop dragged toward another day is a decision about two days,
+    // and hiding one of them hides half the question. This is the one thing about the map that
+    // edit mode does change, and it is a change in *what is drawn*, not in the panel's layout.
+    showTripRoute(routeDays, panelCollapsed ? null : dayIndex, !panelCollapsed, !editing);
+    // `routeShape` and not `routeDays`, and `day` is deliberately absent — both change identity
+    // on every keystroke. See the long note on `routeShape` for what that would cost and what it
+    // defers. `editing` is here so entering and leaving the mode redraws once, which is what
+    // catches marker labels up on Done.
+    //
+    // `routeDays` is still read from the closure and is still correct: the effect only fires on a
+    // render where `routeShape` (or one of the others) changed, and on that render `routeDays` is
+    // this render's own fresh array. A ref was used here first and is not needed — it also trips
+    // the "no refs during render" rule, which is what made the simpler reading obvious.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeShape, dayIndex, panelCollapsed, showTripRoute, editing]);
 
   // Staggered reveal, played once on mount when animateReveal is true: every REVEAL_STEP_MS,
   // one more stop card mounts (with its own slide-down + typewriter, see StopRow) and its map
@@ -663,6 +776,28 @@ export default function ItineraryCard({
         >
           <ChevronRightIcon className="h-4 w-4" />
         </button>
+
+        {/* Adding a day belongs with the days, and only exists in edit mode. It sits *after* the
+            next-day arrow rather than inside the scrolling tab strip: the strip measures and
+            scrolls its own children to keep the active tab in view, and a control that is not a
+            day would be scrolled off with them. Sized to the arrows' own `arrowClass` so the
+            strip's height is unchanged whether or not this is rendered. */}
+        {editing && canRearrange && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = addDay(itinerary);
+              onItineraryChange?.(next);
+              setActiveDayIndex(next.days.length - 1);
+            }}
+            aria-label="Add a day to this trip"
+            title="Add a day"
+            className={arrowClass}
+            style={arrowStyle}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       <div
@@ -679,13 +814,16 @@ export default function ItineraryCard({
               animateReveal={animateReveal}
               editable={editable}
               onEditDay={onEditDay}
-              // The pencil opens the full-page board rather than an inline form: renaming a day
-              // and rearranging it are the same job, and the board can do both with every day in
-              // view. `isEditing` stays false so the inline rename form never takes over the
-              // header — the board owns that now.
+              // The pencil turns the whole day panel editable rather than opening a form over
+              // this one heading: renaming a day and rearranging it are the same job, and now
+              // they are the same mode. `isEditing` stays false so `DayEditForm` — a bordered,
+              // different-height save/cancel form — never takes the header's place; inside a
+              // mode built on nothing moving, that is exactly the wrong shape.
               isEditing={false}
-              onEditingChange={(editing) => {
-                if (editing && canRearrange) setBoardOpen(true);
+              inlineEditing={editing}
+              onInlineEdit={editDay}
+              onEditingChange={(next) => {
+                if (next && canRearrange) setEditing(true);
               }}
             />
           </div>
@@ -760,10 +898,29 @@ export default function ItineraryCard({
           )}
         </div>
 
-        {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
+        {/* Same box either way: `mb-3 text-sm italic text-muted`, so the line under the heading
+            keeps its height and the stops below it do not shift. Editing offers the field even
+            when the day has no summary yet — a plan generated before the field existed should be
+            able to gain one — while reading still renders nothing rather than an empty line. */}
+        {editing ? (
+          <AutoTextarea
+            value={day.summary ?? ""}
+            onChange={(e) => editDay({ summary: e.target.value || undefined })}
+            aria-label={`Day ${dayIndex + 1} summary`}
+            placeholder="Describe the shape of this day…"
+            className="-mx-1.5 mb-3 block w-[calc(100%+0.75rem)] rounded-md border border-transparent bg-transparent px-1.5 text-sm italic text-muted transition-colors placeholder:not-italic placeholder:text-muted/50 hover:border-white/10 hover:bg-white/[0.07] focus:border-white/10 focus:bg-white/[0.07] focus:outline-none"
+          />
+        ) : (
+          day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>
+        )}
 
-        {/* Only worth offering when there is more than one place to move between. */}
-        {day.stops.length > 1 && (
+        {/* Only worth offering when there is more than one place to move between — and not while
+            editing, where a camera flying itself between stops fights the hand rearranging them.
+            This is the one control the mode removes rather than converts, and it is why the row
+            of stops below can still start at the same offset: the pill sits above them and takes
+            its `mb-3` with it, so the list moves up by exactly the height of a control nobody
+            can use in this mode. */}
+        {!editing && day.stops.length > 1 && (
           <button
             type="button"
             onClick={toggleTour}
@@ -823,7 +980,24 @@ export default function ItineraryCard({
           </div>
         )}
 
-        {day.stops.length === 0 ? (
+        {editing ? (
+          /* The same list, row for row — see the module comment in EditableStopList for why its
+             geometry is copied from StopList rather than shared with it. `highlightedIndex` and
+             `onHoverStop` are the identical contract, so the globe's paired highlight keeps
+             working across the mode switch: point at a marker and its field lights up, point at
+             a field and its marker does. `activeIndex` is not passed, and that is deliberate —
+             it drives StopList's scroll-to-selected loop, which would yank the list under a
+             caret while somebody was typing in it. */
+          <EditableStopList
+            stops={day.stops}
+            dayIndex={dayIndex}
+            highlightedIndex={highlightedRow}
+            onHoverStop={(index) => setHoveredIndex(index === null ? null : dayOffset + index)}
+            onEditStop={editStop}
+            onDeleteStop={removeStop}
+            onReorder={reorderStops}
+          />
+        ) : day.stops.length === 0 ? (
           <p className="text-sm text-muted">
             No stops planned for this day — it&rsquo;s yours to fill.
           </p>
@@ -845,6 +1019,27 @@ export default function ItineraryCard({
           />
         )}
 
+        {/* The day's own add control, at the end of the day's own stops — so "add a stop to this
+            day" is answered where the day ends rather than by a global bar at the top of the
+            panel that needed a "which day?" of its own. `mt-4` is the list's own row gap, so the
+            control reads as one more entry in it. */}
+        {editing && (
+          <button
+            type="button"
+            onClick={addStop}
+            disabled={!anchorForNewStop}
+            title={
+              anchorForNewStop
+                ? "Adds a stop at the last one's location — drag it or rename it from there"
+                : "Add a stop from the map first: a new stop needs somewhere to be"
+            }
+            className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-card-border py-2.5 text-xs font-medium text-muted transition-colors hover:border-accent/40 hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-card-border disabled:hover:bg-transparent disabled:hover:text-muted"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Stop
+          </button>
+        )}
+
         {/* Findings for the day on screen, plus the trip-wide budget one. Computed locally, so
             they appear the instant a drop lands rather than after a model round trip. */}
         {dayFindings.length > 0 && (
@@ -861,17 +1056,27 @@ export default function ItineraryCard({
           </ul>
         )}
 
+        {/* The mode toggle stays one control in one place, so the act of entering and leaving
+            edit mode does not itself move anything. Its label and styling change; its box does
+            not. */}
         {canRearrange && itinerary.days.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted/70">
-              Editing keeps the map beside you, so a move between days is a decision you can see.
+              {editing
+                ? "Changes are live — the map follows as you move stops between days."
+                : "Editing keeps the map beside you, so a move between days is a decision you can see."}
             </p>
             <button
               type="button"
-              onClick={() => setBoardOpen(true)}
-              className="shrink-0 rounded-full border border-card-border bg-white/10 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-white/20"
+              onClick={() => setEditing((e) => !e)}
+              aria-pressed={editing}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                editing
+                  ? "bg-accent text-accent-foreground hover:opacity-90"
+                  : "border border-card-border bg-white/10 text-foreground hover:bg-white/20"
+              }`}
             >
-              Edit itinerary
+              {editing ? "Done" : "Edit itinerary"}
             </button>
           </div>
         )}
@@ -941,19 +1146,6 @@ export default function ItineraryCard({
         </div>
       </div>
 
-      {/* Rendered from here so the card owns the state that opens it, but portalled to the body
-          inside SplitEditor — a fixed panel cannot live inside a `backdrop-filter` ancestor,
-          which contains `position: fixed` and would trap it in this 520px column.
-          `ArrangeBoard`, the full-screen board this replaced, is still on disk with no importers
-          — kept for one release in case the split proves wrong, and safe to delete after. */}
-      {boardOpen && trip && onItineraryChange && (
-        <SplitEditor
-          trip={trip}
-          itinerary={itinerary}
-          onItineraryChange={onItineraryChange}
-          onClose={() => setBoardOpen(false)}
-        />
-      )}
     </div>
   );
 }
