@@ -28,6 +28,31 @@ const MIN_SEPARATION_Y_PX = 32;
  *  clipped at the edge still reads rather than popping out of existence at the boundary. */
 const OFFSCREEN_MARGIN_PX = 110;
 
+/**
+ * How close the camera has to be to a stop before its name appears, in metres.
+ *
+ * **The reveal is keyed on camera-to-stop distance, not on zoom**, and that is the whole design.
+ * Zoom is a property of the view; this is a property of each stop, and on a pitched camera those
+ * are not the same thing — the near edge of the frame can be 800m away while the far edge is 9km,
+ * and a single zoom threshold either floods the horizon with names or hides the street you are
+ * standing over. Distance answers per marker, so names surface as the ground comes to meet you.
+ *
+ * It also makes a pitch correction unnecessary rather than approximate: a true 3D distance to the
+ * point already *is* the pitch-corrected number, where `zoom` plus a pitch fudge is an estimate of
+ * it. And it works identically on both engines, because `cameraDistanceM` is on `MapRenderer` —
+ * Satellite reveals names on the same rule, which the Map/Satellite toggle needs to stay honest.
+ *
+ * The band is chosen to match what a zoom-based rule would have done at this app's framing: on a
+ * 1440x900 viewport at Lisbon's latitude, MapLibre zoom 13.5 puts the camera ~7.1km from the
+ * centre point and 14.8 puts it ~2.9km. So a day framed for reading shows no names, and coming in
+ * on a stop brings its neighbourhood's names up smoothly rather than switching them on.
+ */
+const LABEL_HIDDEN_BEYOND_M = 7000;
+const LABEL_VISIBLE_WITHIN_M = 2800;
+/** Below this the card is not worth compositing, and — more importantly — must not claim a slot in
+ *  the declutter scan, or a name nobody can see would suppress one they can. */
+const LABEL_MIN_OPACITY = 0.06;
+
 /** `scale = clamp(900000 / (distance + 260000), 0.55, 1)`. The floor is what keeps a card
  *  readable when the whole trip is in frame; the ceiling stops it dominating at street level. */
 const SCALE_NUMERATOR = 900_000;
@@ -91,9 +116,22 @@ export default function StopMarkerLayer() {
   } = useMapCamera();
   const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  /** Which day, if any, gets its stops named: the panel's selection, or the day the pointer is
-   *  resting on. */
-  const namedDay = focusedDay ?? hoveredDay;
+  /**
+   * Which day gets its stops named — the panel's selection, or *every* day when there is none.
+   *
+   * Hover used to be half of this rule (`focusedDay ?? hoveredDay`): pointing at a day badge
+   * popped that day's names up. That is gone. A name appearing because the pointer brushed
+   * something is a different question from a name appearing because you can see the street it is
+   * on, and only the second one is what a map label is for.
+   *
+   * Emitting *all* days in the overview is new and is only safe because of the distance gate
+   * below. The old rule existed because ~45 serif names over one city is unreadable however they
+   * are coloured — but that is a statement about a trip framed whole, and at that framing every
+   * one of them is now beyond `LABEL_HIDDEN_BEYOND_M` and draws nothing. Come down onto a street
+   * and the stops on it are named whichever day they belong to, which is the honest answer to
+   * "what is this place" and something the old rule could not give without a hover.
+   */
+  const namedDay = focusedDay;
 
   /**
    * Everything to place, clusters first.
@@ -124,14 +162,11 @@ export default function StopMarkerLayer() {
       day: c.day,
       state: dayVisualState(c.day, focusedDay, hoveredDay),
     }));
-    const stops: Marker[] =
-      namedDay === null
-        ? []
-        : routeStops.flatMap((stop, flatIndex) =>
-            stop.day === namedDay
-              ? [{ kind: "stop" as const, lat: stop.lat, lng: stop.lng, name: stop.name, flatIndex }]
-              : []
-          );
+    const stops: Marker[] = routeStops.flatMap((stop, flatIndex) =>
+      namedDay === null || stop.day === namedDay
+        ? [{ kind: "stop" as const, lat: stop.lat, lng: stop.lng, name: stop.name, flatIndex }]
+        : []
+    );
     /**
      * The stop being pointed at goes first of everything — ahead of the day badges too.
      *
@@ -209,6 +244,10 @@ export default function StopMarkerLayer() {
     // Flat [x0, y0, x1, y1, …] of cards already given a slot this frame, for the separation
     // check — a flat array of numbers so the check costs no objects either.
     const placed = new Float64Array(markers.length * 2);
+    // Last opacity written per node. Writing the same number every frame is a style invalidation
+    // for no change, on a tree that already carries several large backdrop-filter surfaces — and
+    // the reveal is constant for most frames, because most frames the camera is still.
+    const lastOpacity = new Float64Array(markers.length).fill(-1);
     // The anchor height for each marker: the top of the stem, with a day badge floating higher
     // still. Recomputed only when the route's altitude changes — which happens once, when the
     // height sample lands — rather than every frame. See DAY_LABEL_LIFT_M.
@@ -295,6 +334,41 @@ export default function StopMarkerLayer() {
           SCALE_MAX,
           Math.max(SCALE_MIN, SCALE_NUMERATOR / (distance + SCALE_DISTANCE_BIAS))
         );
+
+        // The reveal. A name is a claim about a building, and it earns the screen only once the
+        // camera is close enough that the building is a thing you can see — see the note on
+        // `LABEL_HIDDEN_BEYOND_M`. Day badges are exempt: they name a *group*, not a location, and
+        // they are the whole at-a-glance layer of a trip framed whole.
+        const reveal =
+          marker.kind === "cluster"
+            ? 1
+            : Math.min(
+                1,
+                Math.max(
+                  0,
+                  (LABEL_HIDDEN_BEYOND_M - distance) /
+                    (LABEL_HIDDEN_BEYOND_M - LABEL_VISIBLE_WITHIN_M)
+                )
+              );
+        if (reveal < LABEL_MIN_OPACITY) {
+          // Hidden *before* the declutter scan, so a name nobody can see never takes the slot of
+          // one they can — the same reasoning the off-screen rejection above documents.
+          if (lastOpacity[i] !== 0) {
+            node.style.opacity = "0";
+            node.style.pointerEvents = "none";
+            lastOpacity[i] = 0;
+          }
+          node.style.visibility = "hidden";
+          continue;
+        }
+        if (lastOpacity[i] !== reveal) {
+          node.style.opacity = reveal.toFixed(3);
+          // Off while fading in, so a half-visible name cannot swallow a click meant for the map
+          // under it. `auto` rather than a class, because the anchor is `pointer-events-none` in
+          // CSS and its children opt back in — this only has to not block them.
+          node.style.pointerEvents = reveal > 0.9 ? "auto" : "none";
+          lastOpacity[i] = reveal;
+        }
 
         // Declutter in visit order rather than nearest-camera-first. Visit order is stable, so a
         // card never flickers as two stops trade places by a metre; distance order does exactly

@@ -488,13 +488,13 @@ function addTripLayers(map: MapLibreMap) {
     source: SEARCH_SOURCE_ID,
     layout: {
       "text-field": ["get", "name"],
-      "text-size": 12,
+      // Grows as the camera comes in, the same direction the reveal below runs. A label that is
+      // fading in at a fixed size reads as a thing switching on; one that fades *and* grows reads
+      // as a thing you are approaching.
+      "text-size": ["interpolate", ["linear"], ["zoom"], 13.5, 10, 16, 16],
       "text-offset": [0, 1.2],
       "text-anchor": "top",
       "text-max-width": 9,
-      // Only the pin being pointed at is named. Two dozen labels over a city is the same
-      // unreadable field of serif names `StopMarkerLayer` exists to declutter, and here the list
-      // beside the map already carries every name.
       "text-allow-overlap": false,
       "text-optional": true,
     },
@@ -502,7 +502,32 @@ function addTripLayers(map: MapLibreMap) {
       "text-color": "#f4f7fa",
       "text-halo-color": "#0f172a",
       "text-halo-width": 1.4,
-      "text-opacity": ["case", ["get", "selected"], 1, 0],
+      // The same rule the trip's own stop names follow, in the vocabulary a symbol layer speaks:
+      // nothing at a distance, fading in as the ground comes up. 13.5 → 14.8 is the zoom band
+      // that corresponds to `LABEL_HIDDEN_BEYOND_M` → `LABEL_VISIBLE_WITHIN_M` at this app's
+      // viewport, so a searched café and a planned stop surface together rather than one before
+      // the other.
+      //
+      // The pin the traveler picked from the list is exempt. They asked for that one by name, and
+      // a selection that cannot be seen until you zoom to it is a selection that did nothing.
+      //
+      // **The `case` is inside the interpolation's outputs, not wrapped around it**, and it has to
+      // be: MapLibre rejects `["zoom"]` anywhere but as the direct input of a top-level `step` or
+      // `interpolate`, and the wrapped version — which reads more naturally — is a style error that
+      // silently drops the whole property and leaves every label at full opacity. Caught by the
+      // `error` listener in `createMapLibreMap`, which exists for exactly this.
+      //
+      // Reading it as written: at the far end a selected pin is 1 and an unselected one is 0; at
+      // the near end both are 1. So selection is exempt by having the same value at both ends.
+      "text-opacity": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        13.5,
+        ["case", ["get", "selected"], 1, 0],
+        14.8,
+        1,
+      ],
     },
   });
 
