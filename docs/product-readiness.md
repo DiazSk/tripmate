@@ -92,6 +92,11 @@ listed deferrals are not oversights.
 in-app feedback widget, payments, the B2B API tier and white-label, and the seven data-blocked
 rubric gaps at `itinerary-quality.md:165-179`. Every one of these is downstream of a G1 result.
 
+**Update, 2026-08-25:** deploy is no longer deferred — a public Railway link is needed for a
+LinkedIn demo, a different trigger than this round's validation sequencing. Not a reversal of the
+judgment above: hosted Postgres/Turso, auth/multi-tenancy, and the B2B pitch are all still
+deferred. See `docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md`.
+
 ## What a generation costs — 2026-08-23 (Claude)
 
 Closes G5. Measured off the 237 rows already in `llm_traces`, grouped into runs by `run_id`, with
@@ -147,6 +152,55 @@ Three findings the raw totals hide:
 Caveat on all of it: n=8 for the headline, all from 2026-08-20/22, one destination mix, and untagged
 (`llm_runs.batch_tag` is NULL on all 116 runs — nothing here came from a controlled sweep). Good
 enough to size the unit and rank the levers, not to quote as a stable per-user cost.
+
+## What a generation costs — API transport, 2026-08-27 (Claude)
+
+First real measurement off the new `LLM_TRANSPORT=api` path (`runClaudeViaApi()` in
+`src/lib/claude.ts`, added alongside the CLI transport — see
+`docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md`). The CLI-based numbers above
+stay the reference for that transport; this section is the API transport's own, not a correction
+to them — both transports coexist permanently.
+
+One real 2-day Kyoto trip (`comfort` tier, $800 budget), `generate` + `critique`, context served
+from the existing `destination_context` cache (no fresh `context` call fired):
+
+| Call | Input tokens | Output tokens (of which thinking) | Cost | Model time |
+|---|---|---|---|---|
+| `generate` | 1,727 | 4,377 (1,708) | $0.070836 | 68.5s |
+| `critique` | 2,834 | 4,458 (1,664) | $0.075372 | 65.5s |
+| **Run total** | 4,561 | 8,835 (3,372) | **$0.146208** | **134.0s (2.2 min)** |
+
+Real end-to-end request time (route overhead, day normalization, network included) was 3m32s —
+the model-time sum above is just the billed/thinking portion of that.
+
+**~5.8× cheaper than the CLI transport's equivalent run shape** (`generate + critique`, context
+cached: $0.850 median above), on the same model. The likely reason, not yet confirmed by a second
+sample: `thinkingFor()` caps `generate`/`critique` at a fixed `budget_tokens: 4096`, while the CLI
+has no way to turn thinking off or bound it at all (see the `--effort` doc comment in
+`claude.ts`) — the CLI numbers above were measured under that unbounded regime. The `output_tokens`
+figures here already include the 1,708/1,664 thinking tokens, so the visible itinerary/critique
+text per call is much smaller than the raw total suggests.
+
+Two smaller real calls, for the cheap end of the range: `place-detail` (Fushimi Inari Shrine,
+Kyoto) — 130 in / 191 out, **$0.003255**, 6.1s. Two tiny `chat` calls (a session persist + resume
+round-trip, used to prove session replay actually works) — $0.000174 and $0.000111, under a second
+each.
+
+Prompt caching is not paid for on this transport at all (`cache_creation_input_tokens: 0` on both
+`generate` and `critique`) — `runClaudeViaApi()` sets no `cache_control` markers, so unlike the CLI
+transport (which paid the 1.25× cache-write rate on every call and almost never read it back), this
+one just pays the plain 1× input rate with no cache overhead either way. Nothing to collect because
+nothing is spent on it.
+
+The `generate` call did persist a real session (`llm_sessions`, confirmed via the returned
+`sessionId`) exactly as `generationRunner.ts` requests — the chat-edit resume path is live against
+this transport, not just exercised in isolation.
+
+**Caveat, as plainly as the CLI section states its own: n=1 for the generate+critique run.** One
+destination, one trip length, one tier, measured once. Good enough to show the shape (cheaper,
+capped-thinking-driven) and to rule the CLI section's ~$1/run figure out as this transport's
+number — not to quote as a stable per-generation cost until a real sweep runs, the same way the
+CLI figures above needed n=8 before they were trustworthy.
 
 ### Reviewer findings
 

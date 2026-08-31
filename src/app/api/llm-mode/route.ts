@@ -12,7 +12,7 @@ import {
 /**
  * The runtime transport switch, and the answer to "which model is serving what right now".
  *
- * `LLM_MODE` in `.env.local` is the durable setting; this is the toggle you reach for mid-session
+ * `LLM_TRANSPORT` in `.env.local` is the durable setting; this is the toggle you reach for mid-session
  * to answer "is this a model problem or a transport problem?" without restarting the dev server and
  * losing the state that reproduced it. Process-local and not persisted — see the note on
  * `runtimeOverride` in llmConfig.ts for why a flag that survives a restart is the wrong default.
@@ -46,7 +46,7 @@ function snapshot() {
     // every type on MODEL (claude-sonnet-4-5), whose calibration is documented in claude.ts.
     apiModels: Object.fromEntries(CALL_TYPES.map((t) => [t, apiModelFor(t)])),
     env: {
-      LLM_MODE: process.env.LLM_MODE?.trim() || null,
+      LLM_TRANSPORT: process.env.LLM_TRANSPORT?.trim() || null,
       LLM_MODEL_STRONG: process.env.LLM_MODEL_STRONG?.trim() || null,
       LLM_MODEL_CHEAP: process.env.LLM_MODEL_CHEAP?.trim() || null,
       LLM_MODEL_CHAT: process.env.LLM_MODEL_CHAT?.trim() || null,
@@ -61,7 +61,7 @@ export async function GET() {
 
 /**
  * `POST {"mode":"cli"}` forces the CLI, `{"mode":"api"}` forces the API, `{"mode":null}` clears the
- * override and hands the decision back to `LLM_MODE`.
+ * override and hands the decision back to `LLM_TRANSPORT`.
  */
 export async function POST(req: NextRequest) {
   let body: unknown;

@@ -1,5 +1,13 @@
 import { MODEL } from "../claude";
-import { MODEL_PRICES } from "../llmConfig";
+import {
+  DEFAULT_PRICES,
+  computeCostUsd as computeCostUsdWithPrices,
+  promptTokens,
+  type TokenUsage,
+} from "../modelPricing";
+
+export { promptTokens };
+export type { TokenUsage };
 
 /**
  * Which models the benchmark compares, and what a token costs on each.
@@ -37,15 +45,6 @@ const DEFAULT_MODELS: BenchModel[] = [
   { id: "claude-opus-4-5", label: "Opus 4.5" },
 ];
 
-/**
- * The price table, imported rather than kept here.
- *
- * It moved to llmConfig.ts when the API transport landed: the production path now has to turn
- * `usage` into a dollar figure itself (an HTTP response reports tokens, not money, where the CLI
- * envelope reported both), so the table stopped being bench-only. `BENCH_PRICES` still layers over
- * it below for sweeps — this is the default, not the ceiling.
- */
-const DEFAULT_PRICES = MODEL_PRICES;
 
 function parseModelsEnv(raw: string): BenchModel[] {
   return raw
@@ -85,46 +84,7 @@ export function benchTimeoutMs(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 900_000;
 }
 
-/** Cache-write and cache-read multipliers on the input rate (5-minute TTL). */
-const CACHE_WRITE_MULTIPLIER = 1.25;
-const CACHE_READ_MULTIPLIER = 0.1;
-
-export interface TokenUsage {
-  inputTokens: number | null;
-  outputTokens: number | null;
-  cacheReadInputTokens?: number | null;
-  cacheCreationInputTokens?: number | null;
-}
-
-/**
- * Total prompt size. `inputTokens` alone is the UNCACHED REMAINDER, not the prompt — the CLI caches
- * the skill+context prefix, and a real sweep showed Sonnet 5 reporting `inputTokens: 2` against
- * 14,023 cache-creation tokens. Summing the three is the only reading that means "how big was the
- * prompt", and it's what the benchmark charts and prices.
- */
-export function promptTokens(usage: TokenUsage): number | null {
-  const parts = [usage.inputTokens, usage.cacheReadInputTokens, usage.cacheCreationInputTokens];
-  if (parts.every((p) => p === null || p === undefined)) return null;
-  return parts.reduce((sum: number, p) => sum + (p ?? 0), 0);
-}
-
-/**
- * Cost in USD from the price table, priced per token class rather than lumping the prompt together:
- * cache writes cost more than fresh input and cache reads cost far less, and on these prompts the
- * cache-write tier is most of the input bill. Returns null rather than 0 when the model isn't
- * priced or the counts are missing — a missing cost must not render as "free" on the Pareto chart.
- */
+/** Delegates to the shared price table with the bench-specific BENCH_PRICES override applied. */
 export function computeCostUsd(model: string, usage: TokenUsage): number | null {
-  const price = benchPrices()[model];
-  if (!price || usage.outputTokens === null) return null;
-  const [inRate, outRate] = price;
-  const perMillion = (tokens: number | null | undefined, rate: number) =>
-    ((tokens ?? 0) / 1_000_000) * rate;
-
-  return (
-    perMillion(usage.inputTokens, inRate) +
-    perMillion(usage.cacheCreationInputTokens, inRate * CACHE_WRITE_MULTIPLIER) +
-    perMillion(usage.cacheReadInputTokens, inRate * CACHE_READ_MULTIPLIER) +
-    perMillion(usage.outputTokens, outRate)
-  );
+  return computeCostUsdWithPrices(model, usage, benchPrices());
 }

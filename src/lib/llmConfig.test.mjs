@@ -20,7 +20,7 @@ import {
 /** Every test that touches env or the runtime override has to put both back — the module holds
  *  `runtimeOverride` in module scope, and `node --test` shares one module instance across files. */
 const ENV_KEYS = [
-  "LLM_MODE",
+  "LLM_TRANSPORT",
   "LLM_MODEL_STRONG",
   "LLM_MODEL_CHEAP",
   "LLM_MODEL_CHAT",
@@ -33,33 +33,35 @@ afterEach(() => {
 });
 
 describe("transport mode", () => {
-  it("defaults to api with nothing configured", () => {
-    assert.equal(llmMode(), "api");
+  // `cli` by default so local development stays free under the CLI subscription; only the
+  // deployed environment sets LLM_TRANSPORT=api. See llmMode().
+  it("defaults to cli with nothing configured", () => {
+    assert.equal(llmMode(), "cli");
     assert.equal(llmModeSource(), "default");
   });
 
-  it("reads LLM_MODE from the environment", () => {
-    process.env.LLM_MODE = "cli";
-    assert.equal(llmMode(), "cli");
+  it("reads LLM_TRANSPORT from the environment", () => {
+    process.env.LLM_TRANSPORT = "api";
+    assert.equal(llmMode(), "api");
     assert.equal(llmModeSource(), "env");
   });
 
-  it("ignores an unrecognised LLM_MODE rather than failing the app", () => {
-    process.env.LLM_MODE = "grpc";
-    assert.equal(llmMode(), "api");
+  it("ignores an unrecognised LLM_TRANSPORT rather than failing the app", () => {
+    process.env.LLM_TRANSPORT = "grpc";
+    assert.equal(llmMode(), "cli");
     assert.equal(llmModeSource(), "default");
   });
 
   it("lets the runtime override beat the environment", () => {
-    process.env.LLM_MODE = "cli";
+    process.env.LLM_TRANSPORT = "cli";
     assert.equal(setLlmMode("api"), "api");
     assert.equal(llmModeSource(), "runtime");
   });
 
   it("hands the decision back to env when the override is cleared", () => {
-    process.env.LLM_MODE = "cli";
-    setLlmMode("api");
-    assert.equal(setLlmMode(null), "cli");
+    process.env.LLM_TRANSPORT = "api";
+    setLlmMode("cli");
+    assert.equal(setLlmMode(null), "api");
     assert.equal(llmModeSource(), "env");
   });
 });

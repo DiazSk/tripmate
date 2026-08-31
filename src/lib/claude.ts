@@ -2,9 +2,18 @@ import { spawn } from "child_process";
 import { accessSync, constants, readdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import { runClaudeApi } from "./claudeApi";
-import { insertTrace, updateTrace } from "./db";
-import { llmMode, type ClaudeCallType, type LlmMode } from "./llmConfig";
+import Anthropic from "@anthropic-ai/sdk";
+import { appendLlmSessionTurns, createLlmSession, getLlmSession, insertTrace, updateTrace } from "./db";
+import { computeCostUsd } from "./modelPricing";
+import {
+  apiEffortFor,
+  apiModelFor,
+  llmMode,
+  maxTokensFor,
+  supportsAdaptiveThinking,
+  supportsEffort,
+  type ClaudeCallType,
+} from "./llmConfig";
 
 /**
  * The production model for every call in the app.
@@ -265,89 +274,21 @@ export interface ClaudeResult {
 
 /**
  * Moved to llmConfig.ts, which needs it to type the model-routing table and cannot import it from
- * here (this module imports that one, so the dependency only runs one way). Re-exported so every
- * existing `import { ClaudeCallType } from "@/lib/claude"` keeps resolving unchanged.
+ * here (this module imports that one). Re-exported so every existing
+ * `import { ClaudeCallType } from "@/lib/claude"` keeps resolving unchanged.
  */
 export type { ClaudeCallType };
 
 /**
- * **The transport switch.** Every model call in the app arrives here, and this is the only place
- * that decides whether it is served by spawning the CLI or by an HTTPS request.
- *
- * Deliberately the chokepoint and not the call sites. There are eight call sites across six files
- * (generate, refine, critique, rebalance, chat, element-edit, place-detail, context) and none of
- * them has any business knowing the transport — they assemble a prompt and want a string back.
- * Branching here means the switch reached all of them the day it was written, and that a ninth
- * caller added later rides it without being told to.
- *
- * The two paths are held to being indistinguishable:
- *   - same signature, same `ClaudeResult` (including `sessionId`, which the API path emulates —
- *     see `SessionOption` below and `llm_sessions` in db.ts),
- *   - a row in `llm_traces` on every outcome, with the same statuses (`ok` / `error` / `timeout`)
- *     and a `raw_response` in the same envelope shape, so the trace viewer and `parseUsage()` read
- *     both without branching,
- *   - `timeoutMs` means the same hard wall-clock ceiling in both, so the day-scaled budgets above
- *     carry over unchanged.
- *
- * What differs, and only these: **which model answers** — the API path routes per task through
- * `apiModelFor()` (strong for generation, cheap for patches and lookups) while the CLI path stays
- * pinned to `MODEL`, because the constants above were calibrated against that model and re-pointing
- * it would invalidate them — and **where conversational memory lives**: a JSONL file on one machine
- * for the CLI, a `llm_sessions` row for the API.
- *
- * `meta.mode` forces one path for a single call, bypassing both env and the runtime override. No
- * production caller passes it; it exists so a comparison harness can run the same prompt down both
- * transports without mutating global state.
+ * The `claude` CLI subprocess transport — unchanged from before the API transport existed. Every
+ * doc comment above (spawn-vs-execFile, CLAUDECODE stripping, PATH resolution, resolveCliBin) and
+ * every non-obvious behavior it describes still applies exactly as written. Kept in permanent
+ * service for local development — see the `LLM_TRANSPORT` dispatcher below.
  */
-export function runClaude(
+function runClaudeViaCli(
   prompt: string,
   type: ClaudeCallType,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS,
-  meta?: {
-    runId?: string;
-    effort?: "low" | "medium" | "high";
-    model?: string;
-    session?: SessionOption;
-    mode?: LlmMode;
-  }
-): Promise<ClaudeResult> {
-  const mode = meta?.mode ?? llmMode();
-  return mode === "api"
-    ? runClaudeApi(prompt, type, timeoutMs, meta)
-    : runClaudeCli(prompt, type, timeoutMs, meta);
-}
-
-/**
- * Runs a one-shot prompt through the `claude` CLI (Haiku, no tools) instead
- * of a metered LLM API. Two non-obvious requirements found while wiring this up:
- * - CLAUDECODE must be unset in the child's env, or the CLI refuses to launch
- *   nested inside another Claude Code session.
- * - Must use `spawn`, not `execFile`: execFile reliably hangs forever on this
- *   binary (reproduced consistently), spawn does not. Root cause not chased
- *   further since spawn just works.
- * - The CLI installer places the binary in `~/.local/bin`, which shell
- *   profiles (e.g. .zshrc) add to PATH — but non-login/non-interactive
- *   process launchers (dev server started from an IDE, a task runner, etc.)
- *   often don't source that profile, so PATH lookup for "claude" fails with
- *   ENOENT even though the binary is installed. Force it onto PATH here
- *   instead of trusting the inherited environment.
- *
- * Every call is logged to the llm_traces table (prompt + raw response, on
- * every outcome including errors/timeouts) so it can be inspected via the
- * LLM trace FAB (src/components/LlmTraceFab.tsx) — this is the single choke
- * point all itinerary generation goes through, so it's the natural place to
- * log from. `meta.runId`, when passed, groups this call with sibling calls
- * (context/generate/critique/place-detail) from the same pipeline execution
- * — see llm_runs in src/lib/db.ts.
- *
- * `meta.model` overrides which model serves the call. It exists for the dev-only benchmark
- * harness (src/lib/bench), which holds prompt/skill/context constant and varies only this —
- * every production caller omits it and gets `MODEL` exactly as before.
- */
-function runClaudeCli(
-  prompt: string,
-  type: ClaudeCallType,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  timeoutMs: number,
   meta?: {
     runId?: string;
     effort?: "low" | "medium" | "high";
@@ -374,8 +315,14 @@ function runClaudeCli(
         ? []
         : ["--no-session-persistence"];
 
+    // turbopackIgnore: cliBin is resolved at runtime (resolveCliBin), so Turbopack's static
+    // file-tracer can't determine what this touches and defensively traces the whole project
+    // as a dependency of every route that imports this file — which is what makes a production
+    // build's page-data collection step for /api/bench fail under constrained build environments
+    // (first surfaced running a real container build; reproduces identically on a pre-existing,
+    // untouched version of this exact call, so it predates this file's CLI/API transport split).
     const child = spawn(
-      cliBin,
+      /* turbopackIgnore: true */ cliBin,
       [
         "-p",
         prompt,
@@ -433,7 +380,8 @@ function runClaudeCli(
           ? ` — no runnable claude CLI was found (tried '${cliBin}'). If ~/.local/bin/claude is a` +
             ` symlink into a VS Code extension directory that an update has since deleted, repoint` +
             ` it at the current one; otherwise set CLAUDE_CLI_PATH to the binary's absolute path` +
-            ` and restart the server.`
+            ` and restart the server; or, if this is a deployed container with no claude CLI` +
+            ` installed at all, set LLM_TRANSPORT=api instead.`
           : "";
       updateTrace(traceId, {
         status: "error",
@@ -485,6 +433,276 @@ function runClaudeCli(
       }
     });
   });
+}
+
+const anthropic = new Anthropic();
+
+/**
+ * Output-token ceiling for every API-transport call. Exported so `claude.test.mjs` can pin the
+ * two bounds below, which are otherwise a magic number nobody could re-derive.
+ *
+ * **This is a ceiling, not a budget: unused headroom is free.** You are billed for
+ * `usage.output_tokens` actually produced, so there is no cost or latency argument for setting
+ * this tightly — and deliberately no per-trip-day scaling of the kind `itineraryTimeoutMs()`
+ * uses, because scaling a free ceiling buys nothing but a branch.
+ *
+ * Two bounds fix the value, and it sits between them:
+ *
+ *  - **Floor — the largest generation actually observed.** `claude-sonnet-4-5` has emitted up to
+ *    **17,789** output tokens for one generate call (Haiku 4.5, far more verbose, reached 27,849;
+ *    Opus 4.5 peaked at 15,759). The previous value of 16,000 sat *below* the production model's
+ *    own observed maximum: measured against history, **5.7% of Sonnet generate calls (2 of 35)
+ *    would have been truncated**, and 72% of Haiku's. Truncation is the worst-shaped failure
+ *    available here — the response is cut mid-JSON so `parseJsonResponse` throws in the route,
+ *    the traveller is told "The planner didn't finish", and you are billed for every token of the
+ *    truncated output anyway.
+ *  - **Hard ceiling — 21,333, imposed by the SDK.** `calculateNonstreamingTimeout` throws
+ *    `AnthropicError("Streaming is required for operations that may take longer than 10 minutes")`
+ *    when `(60min * max_tokens) / 128000 > 10min`. That guard runs whenever no explicit `timeout`
+ *    is passed, and the call below passes only an AbortSignal, so it is live for us. Note this is
+ *    a *request-time throw*, not a slow request: every API-transport call would fail instantly.
+ *
+ * 21,000 clears the observed Sonnet maximum by ~18% and leaves 333 tokens under the SDK's limit.
+ *
+ * **What this does NOT fix.** Every generation measured so far was a 2-8 day trip, while
+ * `MAX_TRIP_DAYS` is 30 — a long trip could plausibly exceed even this, and Haiku already does.
+ * Raising the number further is not available; the ceiling above is the wall. The real fix for
+ * that case is streaming (which lifts the 10-minute constraint entirely), deliberately deferred.
+ * Until then, a `stop_reason: "max_tokens"` response is detected and reported explicitly below
+ * rather than being left to surface as an unexplained JSON parse failure.
+ */
+export const API_MAX_TOKENS = 21_000;
+
+/**
+ * Maps this app's `effort`/call-type vocabulary onto the Messages API's `thinking` param.
+ *
+ * Sonnet 4.5 has no `effort` parameter at all (that's a Sonnet-5+/Opus-4.5+ knob) — the only
+ * thinking control available is `thinking.budget_tokens`, and *omitting* `thinking` entirely
+ * means no extended thinking runs, which the CLI could never do (see its own `--effort` comment
+ * above: "there is no way to turn thinking off").
+ *
+ * `effort: "low"` calls (chat, element-edit, the bench harness) map to no-thinking outright — a
+ * genuine improvement over the CLI floor. The big structured-output calls that ran under the
+ * CLI's always-on thinking (generate/refine/rebalance/critique — the model's 0.959 benchmark
+ * score was measured under that regime) get a modest fixed budget to approximate it; this is a
+ * ported starting point, not a measured constant. Small lookups (place-detail/context/judge) get
+ * no thinking either.
+ */
+export function thinkingFor(
+  type: ClaudeCallType,
+  effort?: "low" | "medium" | "high"
+): Anthropic.Messages.ThinkingConfigParam | undefined {
+  if (effort) return undefined;
+  const alwaysOnUnderCli: ClaudeCallType[] = ["generate", "refine", "rebalance", "critique"];
+  if (alwaysOnUnderCli.includes(type)) {
+    return { type: "enabled", budget_tokens: 4096 };
+  }
+  return undefined;
+}
+
+/**
+ * The direct Anthropic Messages API transport. Used only when `LLM_TRANSPORT=api` (see the
+ * dispatcher below) — there is no `claude` CLI binary or logged-in session on a deployed
+ * container, so this exists to make a public deploy possible without touching local dev.
+ *
+ * Session continuity has no server-side primitive in the Messages API (unlike the CLI's local
+ * JSONL replay) — `llm_sessions` (src/lib/db.ts) stores the growing message array ourselves and
+ * replays it in full on resume, which is the same trick the CLI's file already does.
+ */
+function runClaudeViaApi(
+  prompt: string,
+  type: ClaudeCallType,
+  timeoutMs: number,
+  meta?: {
+    runId?: string;
+    effort?: "low" | "medium" | "high";
+    model?: string;
+    session?: SessionOption;
+  }
+): Promise<ClaudeResult> {
+  return (async () => {
+    // Per task, not one model for everything. Generation and the passes that judge a whole plan
+    // go to the strong tier; patches and lookups go to the cheap one. `MODEL` still serves the CLI
+    // transport unchanged — its timeout constants above were calibrated against that model.
+    const model = meta?.model ?? apiModelFor(type);
+    const traceId = insertTrace({ type, prompt, model, runId: meta?.runId });
+    const startedAt = Date.now();
+
+    let priorMessages: Anthropic.Messages.MessageParam[] = [];
+    if (meta?.session?.resume) {
+      const stored = getLlmSession(meta.session.resume) as
+        | Anthropic.Messages.MessageParam[]
+        | undefined;
+      if (!stored) {
+        updateTrace(traceId, {
+          status: "error",
+          durationMs: Date.now() - startedAt,
+          errorMessage: `llm session ${meta.session.resume} not found`,
+        });
+        throw new Error(`llm session ${meta.session.resume} not found`);
+      }
+      priorMessages = stored;
+    }
+    const messages: Anthropic.Messages.MessageParam[] = [
+      ...priorMessages,
+      { role: "user", content: prompt },
+    ];
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      // Streamed, which is what lets the ceiling be per-task rather than one number just under the
+      // SDK's non-streaming limit. API_MAX_TOKENS existed because a non-streaming request cannot
+      // ask for more without risking an HTTP timeout — the comment on it says as much ("trips long
+      // enough to need more than this require the streaming transport"). This is that transport;
+      // `finalMessage()` returns the same assembled message `create()` did, so everything below
+      // reads unchanged.
+      const response = await anthropic.messages
+        .stream(
+          {
+            model,
+            max_tokens: maxTokensFor(type),
+            messages,
+            // Capability-gated, and that gate is load-bearing now that the model varies by task.
+            // `thinkingFor()` speaks Sonnet 4.5's dialect — `budget_tokens` — which is a 400 on
+            // Opus 5 and Haiku 4.5 alike. Each model gets only the knobs it actually accepts.
+            ...(supportsAdaptiveThinking(model)
+              ? { thinking: { type: "adaptive" as const } }
+              : { thinking: thinkingFor(type, meta?.effort) }),
+            // An explicit caller wins; otherwise the per-task default. Only ever sent to a model
+            // that accepts it — `effort` is a 400, not a no-op, on the 4.5-generation models.
+            ...(() => {
+              const effort = meta?.effort ?? apiEffortFor(type);
+              return effort && supportsEffort(model) ? { output_config: { effort } } : {};
+            })(),
+          },
+          { signal: controller.signal }
+        )
+        .finalMessage();
+      clearTimeout(timer);
+      const durationMs = Date.now() - startedAt;
+
+      // Truncation is diagnosed HERE, where the cause is still knowable, because by the time it
+      // reaches the caller it no longer looks like truncation: the text comes back cut mid-JSON,
+      // `parseJsonResponse` throws a generic syntax error in the route, and the trace reads `ok`
+      // — a real outcome recorded as a success, which is exactly the shape of the two failure
+      // modes this file has already been burned by (timeouts logged as generic errors, the
+      // dangling-symlink ENOENT). See API_MAX_TOKENS for why this can still happen at 21,000.
+      if (response.stop_reason === "max_tokens") {
+        const detail =
+          `hit the ${maxTokensFor(type)}-token output ceiling for a '${type}' call (used` +
+          ` ${response.usage.output_tokens}) — the response is truncated, not malformed. The` +
+          ` transport streams now, so this ceiling is a per-call-type budget in llmConfig.ts and` +
+          ` can be raised there; it is no longer bounded by the SDK's non-streaming limit.`;
+        updateTrace(traceId, {
+          status: "error",
+          rawResponse: JSON.stringify(response),
+          durationMs,
+          errorMessage: `truncated at max_tokens: ${detail}`,
+        });
+        console.warn(`[claude] ${type} call ${detail}`);
+        throw new Error(`claude API response truncated: ${detail}`);
+      }
+
+      const textBlock = response.content.find(
+        (block): block is Anthropic.Messages.TextBlock => block.type === "text"
+      );
+      if (!textBlock) {
+        updateTrace(traceId, {
+          status: "error",
+          rawResponse: JSON.stringify(response),
+          durationMs,
+          errorMessage: "no text block in response",
+        });
+        throw new Error("claude API response contained no text block");
+      }
+
+      const costUsd = computeCostUsd(model, {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cacheReadInputTokens: response.usage.cache_read_input_tokens,
+        cacheCreationInputTokens: response.usage.cache_creation_input_tokens,
+      });
+      // A null cost means `model` has no entry in DEFAULT_PRICES — this call's spend is then
+      // invisible to getSpendSince() (cost_usd stays NULL), so the daily cap silently stops
+      // covering it. No trace row field for this today; a warn is the only signal.
+      if (costUsd === null) {
+        console.warn(`[claude] no price entry for model "${model}" — spend cap cannot see this call's cost`);
+      }
+
+      let sessionId: string | undefined;
+      const newTurns: Anthropic.Messages.MessageParam[] = [
+        { role: "user", content: prompt },
+        { role: "assistant", content: response.content },
+      ];
+      if (meta?.session?.resume) {
+        appendLlmSessionTurns(meta.session.resume, newTurns);
+        sessionId = meta.session.resume;
+      } else if (meta?.session?.persist) {
+        sessionId = createLlmSession(newTurns);
+      }
+
+      updateTrace(traceId, {
+        status: "ok",
+        rawResponse: JSON.stringify(response),
+        durationMs,
+        costUsd: costUsd ?? undefined,
+      });
+
+      return { result: textBlock.text, traceId, model, durationMs, sessionId };
+    } catch (err) {
+      clearTimeout(timer);
+      const durationMs = Date.now() - startedAt;
+      if (controller.signal.aborted) {
+        updateTrace(traceId, { status: "timeout", durationMs });
+        throw new Error(`claude API call timed out after ${timeoutMs}ms`);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      // AuthenticationError is a real 401 (an invalid/rejected key). A simply-*missing* key never
+      // reaches the API at all — the SDK throws a plain Error client-side ("Could not resolve
+      // authentication method...") — so match that message too, or the hint only fires for the
+      // less common case.
+      const hint =
+        err instanceof Anthropic.AuthenticationError || /authentication method/i.test(message)
+          ? " — ANTHROPIC_API_KEY is missing or invalid. Check Railway's environment variables."
+          : "";
+      updateTrace(traceId, { status: "error", durationMs, errorMessage: message + hint });
+      throw new Error(`claude API call failed: ${message}${hint}`);
+    }
+  })();
+}
+
+/**
+ * Dispatches to one of two transports based on `LLM_TRANSPORT` (default `"cli"`):
+ * `runClaudeViaCli()` (the local subprocess, free under the existing CLI subscription — serves
+ * local dev unchanged) or `runClaudeViaApi()` (a direct Anthropic API call, used only where
+ * `LLM_TRANSPORT=api` is set — Railway's deployed environment, which has no CLI binary at all).
+ * This is a deliberate, permanent dual-path design, not a migration in progress. See
+ * docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md.
+ *
+ * Every call is logged to `llm_traces` regardless of transport (prompt + raw response, on every
+ * outcome including errors/timeouts) — see the LLM trace FAB (src/components/LlmTraceFab.tsx).
+ * `meta.runId`, when passed, groups this call with sibling calls from the same pipeline execution.
+ * `meta.model` overrides which model serves the call, for the dev-only benchmark harness.
+ */
+export function runClaude(
+  prompt: string,
+  type: ClaudeCallType,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  meta?: {
+    runId?: string;
+    effort?: "low" | "medium" | "high";
+    model?: string;
+    session?: SessionOption;
+  }
+): Promise<ClaudeResult> {
+  // Through llmConfig rather than reading the env var here, so that POST /api/llm-mode can flip
+  // transport mid-session without a restart. With no override set this is exactly the same
+  // expression it replaced: `LLM_TRANSPORT` if set, `cli` otherwise.
+  return llmMode() === "api"
+    ? runClaudeViaApi(prompt, type, timeoutMs, meta)
+    : runClaudeViaCli(prompt, type, timeoutMs, meta);
 }
 
 /** Strips markdown code fences the model sometimes wraps JSON in, then parses it. */

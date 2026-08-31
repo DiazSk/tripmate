@@ -1,11 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ReactNode, useRef, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { MotionConfig } from "framer-motion";
 import { MapCameraProvider } from "@/lib/mapCamera";
 import { resolveMapEngine } from "@/lib/mapEngine";
 import Navbar from "@/components/Navbar";
+import InstallPrompt from "@/components/InstallPrompt";
 import DevInspectorOverlay from "@/components/dev/DevInspectorOverlay";
 import { ScrollContainerContext } from "@/lib/scrollContainer";
 
@@ -42,6 +43,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
    * `globeWanted` uses to keep Cesium off `/profile`, applied one level up.
    */
   const [mapEngine] = useState(resolveMapEngine);
+
+  // Production-only: registering in dev would cache Turbopack's HMR chunks, which is exactly
+  // the kind of staleness the dev server exists to avoid.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
+    }
+  }, []);
+
   return (
     // `reducedMotion="user"` makes every framer-motion component honour
     // `prefers-reduced-motion` automatically (jumping straight to its end state)
@@ -96,6 +106,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               the map controls, so it stays put no matter what shape a page's own content column
               takes. Above z-10 so the right-docked panels can't cover it. */}
           <Navbar />
+          <InstallPrompt />
           <DevInspectorOverlay />
           <MapControls />
         </div>

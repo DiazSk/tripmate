@@ -16,7 +16,9 @@ import {
   itineraryFingerprint,
 } from "@/lib/editPrompt";
 import { applyPatch, PatchOp } from "@/lib/itineraryPatch";
+import { isThrottled } from "@/lib/ipThrottle";
 import { loadSkill } from "@/lib/skill";
+import { isOverDailyCap } from "@/lib/spendCap";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
 
 interface EditResponse {
@@ -57,6 +59,18 @@ function daysModified(ops: PatchOp[], rejected: { op: PatchOp }[]): number[] {
  * the UI. Raw model output never leaves this route.
  */
 export async function POST(req: NextRequest) {
+  if (isThrottled(req)) {
+    return NextResponse.json(
+      { error: "Too many requests — slow down and try again shortly." },
+      { status: 429 }
+    );
+  }
+  if (isOverDailyCap()) {
+    return NextResponse.json(
+      { error: "Demo budget for today has been used up — try again tomorrow." },
+      { status: 503 }
+    );
+  }
   const body = await req.json();
   const { mode, trip, itinerary, tripId, userAnswers, sessionId, syncedHash } = body as {
     mode: "chat" | "element";
