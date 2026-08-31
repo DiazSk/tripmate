@@ -117,9 +117,9 @@ const ARC_SAMPLES = 48;
  * world geometry grows and shrinks with it. Scaling off the hop keeps a cross-city arc from
  * reading as a thread while a two-block hop stays a tube rather than a pipeline.
  */
-const ARC_RADIUS_RATIO = 0.006;
-const ARC_MIN_RADIUS_M = 8;
-const ARC_MAX_RADIUS_M = 90;
+const ARC_RADIUS_RATIO = 0.003;
+const ARC_MIN_RADIUS_M = 5;
+const ARC_MAX_RADIUS_M = 45;
 
 /**
  * Cesium's day/night phases are a CSS blend sheet over the canvas and stay that way, so nothing
@@ -1305,7 +1305,7 @@ function buildArcTube(
   const lift = arcLift(distanceM);
   const radiusM =
     Math.min(Math.max(distanceM * ARC_RADIUS_RATIO, ARC_MIN_RADIUS_M), ARC_MAX_RADIUS_M) *
-    (active ? 1.35 : 1);
+    (active ? 1.25 : 1);
 
   // The ground at each end, so the arc springs from the terrain rather than from sea level. Lerped
   // across the hop rather than sampled per point: `queryTerrainElevation` is a DEM lookup per call
