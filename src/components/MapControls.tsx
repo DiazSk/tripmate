@@ -2,9 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMapCamera } from "@/lib/mapCamera";
+import { ROUTE_FRAME_PITCH_DEG } from "@/lib/mapRenderer";
 
-/** Pitch the "3D" button returns to — matches the day-route framing in mapCamera. */
-const OBLIQUE_PITCH = -60;
+/**
+ * The pitch "3D" returns to, and it is **imported rather than restated**.
+ *
+ * It used to be a local `-60` with a comment claiming it matched the day-route framing. That was
+ * true when it was written and stopped being true the moment the framing moved to -45 — a change
+ * made for a documented reason (at 30° off straight down a day's arcs project back onto the ground
+ * line they span, which is exactly what lifting them was for). Nothing failed, so nothing said so:
+ * pressing 2D and then 3D quietly left the camera at an angle the app uses nowhere else, neither
+ * the pose a route is framed at nor the one the landing hero opens on.
+ *
+ * Reading it from `ROUTE_FRAME_PITCH_DEG` means "back to 3D" means "back to the pose this app
+ * considers normal", and that it cannot drift again without the framing drifting with it.
+ */
+const OBLIQUE_PITCH = ROUTE_FRAME_PITCH_DEG;
 /** Never exactly -90: at ±π/2 a heading-pitch-range's heading component is degenerate, so the
  *  camera snaps to an arbitrary yaw and the next compass reset or 3D toggle visibly jumps. */
 const TOPDOWN_PITCH = -89.9;
@@ -177,7 +190,10 @@ export default function MapControls() {
             type="range"
             min={TILT_MIN}
             max={TILT_MAX}
-            defaultValue={60}
+            // The same default, expressed the way the slider reads pitch — degrees below the
+            // horizon, so the thumb starts where the camera actually is instead of 15° off it
+            // until the first readout frame corrects it.
+            defaultValue={-OBLIQUE_PITCH}
             aria-label="Map tilt — top is looking straight down, bottom is a low 3D angle"
             className="tilt-slider"
             onPointerDown={() => {
