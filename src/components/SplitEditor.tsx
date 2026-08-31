@@ -29,8 +29,10 @@ import { evaluateItinerary } from "@/lib/guardrails";
 import { insertionIndexByTime, moveStop } from "@/lib/schedule";
 import { formatItineraryDate } from "@/lib/itinerary";
 import { useHoverPeekSuspended, useMapCamera } from "@/lib/mapCamera";
+import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { addDay, deleteStop, insertStop, updateStop } from "@/lib/itineraryEdits";
 import { devLabel } from "@/lib/devInspector";
+import BudgetBar from "./BudgetBar";
 
 /**
  * The split-screen itinerary editor: the trip's own globe on the left, day-by-day editable cards
@@ -53,6 +55,24 @@ import { devLabel } from "@/lib/devInspector";
  * inside a `backdrop-filter` panel, and a filtered ancestor contains `position: fixed`, so
  * rendered in place it would be trapped in a 520px column.
  */
+/**
+ * The header photograph, blurred and tinted — the same two-layer treatment `ItineraryCard` gives
+ * its own hero: a scaled, blurred copy of the photo under a gradient, so the title above it is
+ * legible over any picture without the picture being reduced to a texture.
+ */
+function BlurredPhotoLayer({ photo, tint }: { photo: string; tint: string }) {
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 scale-110 bg-cover bg-center blur-[2px]"
+        style={{ backgroundImage: `url(${photo})` }}
+      />
+      <div aria-hidden="true" className="absolute inset-0" style={{ background: tint }} />
+    </>
+  );
+}
+
 export default function SplitEditor({
   trip,
   itinerary,
@@ -64,6 +84,9 @@ export default function SplitEditor({
   onItineraryChange: (next: Itinerary) => void;
   onClose: () => void;
 }) {
+  // The same cache key `ItineraryCard` and the /trips collage already use, so the picture is
+  // usually resolved before this opens and costs no request.
+  const headerPhoto = usePlacePhoto(trip.destination, "full");
   /** The day whose stops are being edited, or `null` for "All Days". */
   const [activeDay, setActiveDay] = useState<number | null>(null);
   const [dragging, setDragging] = useState<{
@@ -217,49 +240,79 @@ export default function SplitEditor({
       role="dialog"
       aria-modal="false"
       aria-label="Edit itinerary"
-      // Same window the refine chat opens in: `DockedPanel`'s open geometry at its `wide` width,
-      // in `.glass-itinerary`, rounded and inset from the nav — copied rather than imported
-      // because this is still its own separate surface (it portals out of the panel, see below)
-      // and only the *look* is shared. Not `inset-0` either way: the strip the panel leaves is
-      // left alone so the globe stays visible *and* clickable — clicking a pin is one of this
-      // editor's inputs, and a full-screen overlay would eat it.
-      className="glass-itinerary fixed z-[70] flex flex-col overflow-hidden rounded-2xl top-[calc(var(--nav-h)+1.25rem)] right-0 left-0 h-[calc(100dvh-var(--nav-h)-1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:h-[calc(100dvh-var(--nav-h)-3rem)] sm:w-[62%] sm:max-w-[880px]"
+      // **The itinerary result page's own box, to the pixel.** `DockedPanel`'s open geometry at
+      // its default (non-`wide`) width, in `.glass-itinerary`, with the same rounding and the same
+      // inset from the nav — because editing a plan and reading one are the same plan, and a
+      // surface that changes size when you press Edit reads as having navigated somewhere.
+      // Copied rather than imported: this portals out of the panel (see below), so it cannot *be*
+      // a `DockedPanel`, and only the geometry is shared. Change one and change the other.
+      //
+      // Not `inset-0`: the strip the panel leaves is left alone so the map stays visible *and*
+      // clickable — clicking a pin is one of this editor's inputs, and a full-screen overlay would
+      // eat it.
+      className="glass-itinerary fixed z-[70] flex flex-col overflow-hidden rounded-none sm:rounded-2xl top-[calc(var(--nav-h)+1.25rem)] right-0 left-0 h-[calc(100dvh-var(--nav-h)-1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:h-[calc(100dvh-var(--nav-h)-3rem)] sm:w-[40%] sm:max-w-[520px]"
       {...devLabel("SplitEditor")}
     >
-      {/* Same header the chat window wears — title, a line of context under it, one accent
-          action on the right — so the two surfaces read as the same window doing two jobs. */}
-      <header className="flex items-center justify-between gap-3 border-b border-card-border px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="truncate font-display text-base font-semibold text-foreground">
-            Edit itinerary
-            <span className="font-normal text-muted">
-              {" "}
-              — {itinerary.days.length} day{itinerary.days.length > 1 ? "s" : ""}
+      {/* The result page's header, not a dialog's.
+          `ItineraryCard` leads with the destination photograph and its title, so this does too —
+          the same `BlurredPhotoLayer` treatment, the same 5rem band, the same type. It does not
+          collapse on scroll the way the card's does: that behaviour is driven by `--hero-p` off
+          the card's own scroller, and here the scroller is the day list below a fixed head. */}
+      <div className="relative shrink-0 overflow-hidden border-b border-card-border">
+        {headerPhoto && (
+          <BlurredPhotoLayer
+            photo={headerPhoto}
+            tint="linear-gradient(rgb(var(--surface-deep-rgb) / 0.5), rgb(var(--surface-deep-rgb) / 0.86))"
+          />
+        )}
+        <div className="relative z-10 flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
+          <div className="min-w-0">
+            <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold tracking-wide text-accent-foreground uppercase">
+              Editing
             </span>
-          </h2>
-          <p className="mt-0.5 truncate text-xs text-muted">{trip.destination}</p>
+            <h2 className="mt-1.5 truncate font-display text-xl font-semibold text-on-deep">
+              {trip.destination}
+              <span className="font-normal opacity-80">
+                {": "}
+                {itinerary.days.length} day{itinerary.days.length > 1 ? "s" : ""}
+              </span>
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
+          >
+            <X className="h-3.5 w-3.5" />
+            Done
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
-        >
-          <X className="h-3.5 w-3.5" />
-          Done
-        </button>
-      </header>
+      </div>
 
-      {/* Day tabs. "All Days" first because it is the state the map opens in, and the one that
-          makes a cross-day move possible without switching tabs mid-drag. */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-card-border px-4 py-2.5">
-        <DayPill active={activeDay === null} onClick={() => setActiveDay(null)}>
-          All Days
-        </DayPill>
-        {itinerary.days.map((day, i) => (
-          <DayPill key={i} active={activeDay === i} onClick={() => setActiveDay(i)} day={i}>
-            Day {i + 1}
-          </DayPill>
-        ))}
+      {/* The same budget bar the result page carries, reading the same numbers off the same
+          itinerary — so a stop deleted here moves the bar the traveller was watching there. */}
+      <div className="shrink-0 border-b border-card-border px-5 py-3 sm:px-6">
+        <BudgetBar days={itinerary.days} budget={trip.budget} />
+      </div>
+
+      {/* Day tabs, in the result page's arrow-clipped shape rather than the pills this used to
+          use — the row is a sequence of days either way, and there is no reason for the two
+          surfaces to draw it differently.
+
+          "All Days" leads, which the result page has no equivalent of and this one needs: it is
+          the state the map opens in and the only one in which a cross-day drag has both ends on
+          screen. */}
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-card-border px-5 py-2.5 sm:px-6">
+        <div className="scrollbar-none flex flex-1 gap-1.5 overflow-x-auto">
+          <DayTab active={activeDay === null} onClick={() => setActiveDay(null)} first>
+            All Days
+          </DayTab>
+          {itinerary.days.map((day, i) => (
+            <DayTab key={i} active={activeDay === i} onClick={() => setActiveDay(i)} day={i}>
+              Day {i + 1}
+            </DayTab>
+          ))}
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -267,10 +320,11 @@ export default function SplitEditor({
             onItineraryChange(next);
             setActiveDay(next.days.length - 1);
           }}
-          className="ml-auto flex items-center gap-1 rounded-full border border-card-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+          aria-label="Add a day to this trip"
+          title="Add a day"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-card-border text-muted transition-colors hover:bg-white/10 hover:text-foreground"
         >
-          <Plus className="h-3 w-3" />
-          Add Day
+          <Plus className="h-4 w-4" />
         </button>
       </div>
 
@@ -374,28 +428,46 @@ export default function SplitEditor({
   return typeof document === "undefined" ? null : createPortal(panel, document.body);
 }
 
-/** A day tab. Carries the day's own map colour as a dot, so the tabs and the globe agree on
- *  which day is which without the traveler having to hold a legend in their head. */
-function DayPill({
+/**
+ * A day tab, in the result page's shape.
+ *
+ * The arrow-point clip-path, the notch on every tab after the first, the padding and the type are
+ * lifted from `ItineraryCard`'s strip unchanged — the row means the same thing on both surfaces
+ * (a sequence of days, one of them current) and there is no reason for it to be drawn two ways.
+ * Change one and change the other.
+ *
+ * It keeps the day's own map colour as a dot, which the result page's tabs do not carry: here the
+ * unselected days stay *drawn on the map* so a cross-day drag has both ends on screen, so the
+ * traveller needs to know which ribbon is which.
+ */
+function DayTab({
   active,
   onClick,
   day,
+  first,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   day?: number;
+  first?: boolean;
   children: React.ReactNode;
 }) {
+  const clipPath = first
+    ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
+    : "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%)";
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+      style={{ clipPath }}
+      className={`flex shrink-0 items-center gap-1.5 py-2.5 pr-7 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70 focus-visible:outline-none ${
+        first ? "pl-5" : "pl-7"
+      } ${
         active
-          ? "bg-accent text-accent-foreground"
-          : "border border-card-border text-muted hover:text-foreground"
+          ? "bg-accent font-semibold text-accent-foreground"
+          : "bg-white/10 text-muted hover:bg-white/15"
       }`}
     >
       {day !== undefined && (
