@@ -48,6 +48,7 @@ using an HTTP SDK, so that needs to be installed and authenticated.
 | `OPENTRIPMAP_API_KEY` | No POI suggestions. Generation still works |
 | `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Globe falls back to free OpenStreetMap raster tiles |
 | `YELP_API_KEY` | No dietary-matched venue examples in generated notes. Generation still works |
+| `BRAVE_API_KEY` | No destination festival/event suggestions. Generation still works |
 
 Weather, geocoding, public holidays and OSM data need no key.
 
