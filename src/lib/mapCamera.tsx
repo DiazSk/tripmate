@@ -646,13 +646,18 @@ export function MapCameraProvider({
       renderer.flyToPoint({
         lat: stop.lat,
         lng: stop.lng,
+        // **No `minRangeM` here, and that is load-bearing.** `peekRangeM` already carries the only
+        // floor this flight should have (`PEEK_MIN_HEIGHT_M` converted through the pitch, so a
+        // shallow angle over a dense downtown does not fly the camera through a tower), and it
+        // chooses the range from concentric rings around the hovered stop — 250m for a café
+        // inside its own market, 11km for a day that crosses a region.
+        //
+        // A second floor at neighbourhood scale swallowed that table whole: measured against the
+        // saved trips, every ring from 250m to 2800m clamped to the same number, so a pocket 80m
+        // across framed identically to a day spanning 12km and the feature was dead while looking
+        // like it worked. The click path is where the over-zoom complaint actually lived, and it
+        // is handled there with `contextRadiusM`.
         rangeM: range,
-        // A floor, not a fixed distance. The peek's whole point is a *relative* lean whose depth
-        // `peekRangeM` derives from how crowded this stop's neighbours are, and replacing that
-        // with a fixed framing would throw the crowding away — but leaning past neighbourhood
-        // scale is the over-zoom this exists to stop, so the range is clamped rather than
-        // recomputed.
-        minRangeM: STOP_MIN_RANGE_M,
         // The pre-peek heading and pitch, deliberately kept rather than snapped to the click's
         // -35°. Re-tilting on hover is what made this read as "the camera went somewhere":
         // holding the angle already being looked from leaves only the distance changing.
