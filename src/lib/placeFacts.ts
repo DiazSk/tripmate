@@ -1,13 +1,15 @@
-import { closedDaysFromOpeningHours, fetchPoiOsmTags } from "./poiDetails";
+import { closedDaysFromOpeningHours } from "./poiDetails";
+import type { PoiOsmTags } from "./types";
 
 /** Real, looked-up facts about one named place. Every field is independently nullable: a place
  *  can have hours but no admission, or accessibility but no rating, and a caller must be able to
  *  act on whichever it got.
  *
  *  Sourced from OSM/Overpass (`poiDetails.ts`), which is free and needs no API key but only
- *  publishes opening hours as tags. `admissionUsd`, `accessibility`, `bookAhead`, `rating`, and
- *  `crowdByDay` are therefore permanently `null`/`false`/`[]` — there is no free source for any of
- *  them — and are kept in the shape only because `placeConflicts.ts` still reads them defensively. */
+ *  publishes opening hours as tags. `admissionUsd`, `accessibility`, `bookAhead`, `rating`,
+ *  `title`, and `crowdByDay` are therefore permanently `null`/`false`/`[]` — there is no free
+ *  source for any of them — and are kept in the shape only because `placeConflicts.ts` still
+ *  reads them defensively. */
 export interface PlaceFacts {
   /** Lowercase weekday → "Closed", from OSM's `opening_hours` tag via `closedDaysFromOpeningHours`.
    *  Can only ever hold confirmed-closed days; every other weekday is simply absent, meaning
@@ -18,7 +20,8 @@ export interface PlaceFacts {
   /** Always `false` — no free data source exists for a "book ahead" signal. */
   bookAhead: boolean;
   rating: number | null;
-  /** The listing's own title, kept so the caller can reject a confident mismatch. */
+  /** Always `null` — OSM's Overpass tags carry no independent listing title to cross-check
+   *  against the stop's own name. */
   title: string | null;
   /** Always `null` — no free source exists for crowd/popular-times data. */
   crowdByDay: Record<string, { time: string; busyness: number | null }[]> | null;
@@ -46,15 +49,13 @@ export function mapClosedDaysToHoursByDay(closedDays: string[] | null): Record<s
 }
 
 /**
- * Look up one named stop by its own coordinates. OSM matching is coordinate-radius-based rather
- * than geocoded-by-name, so the caller supplies the stop's own lat/lon instead of a destination
- * string. Resolves `null` on any failure, per the house convention — the caller leaves the
- * model's own values in place.
+ * Turns one stop's already-fetched OSM tags into its `PlaceFacts`. Pure — the caller is
+ * responsible for the batched `fetchPoiOsmTags` call (one per generation run, covering every
+ * stop that needs enrichment) and for handing this the right entry, or `undefined` if the name
+ * had no match. Resolves `null` when there's nothing usable, per the house convention — the
+ * caller leaves the model's own values in place.
  */
-export async function fetchPlaceFacts(name: string, lat: number, lon: number): Promise<PlaceFacts | null> {
-  const tagsByName = await fetchPoiOsmTags([{ name, lat, lon }]);
-  if (tagsByName === null) return null; // network/HTTP failure
-  const tags = tagsByName[name];
+export function buildPlaceFacts(tags: PoiOsmTags | undefined): PlaceFacts | null {
   if (!tags) return null; // queried fine, no OSM match — same null contract as before
 
   const hoursByDay = mapClosedDaysToHoursByDay(closedDaysFromOpeningHours(tags.openingHours));
