@@ -35,6 +35,7 @@ import {
   ROUTE_FRAME_PITCH_DEG,
   RouteDrawRequest,
   ScreenPoint,
+  SearchPin,
   STOP_MIN_RANGE_M,
   visibleMapWidthPx,
   ZoomStepOptions,
@@ -65,6 +66,7 @@ const ROUTE_SOURCE_ID = "tripmate-route";
 const STEM_SOURCE_ID = "tripmate-stems";
 const HIGHWAY_SOURCE_ID = "tripmate-highways";
 const CITY_SOURCE_ID = "tripmate-city";
+const SEARCH_SOURCE_ID = "tripmate-search";
 const BUILDINGS_LAYER_ID = "tripmate-buildings";
 
 /**
@@ -383,7 +385,13 @@ function addTripLayers(map: MapLibreMap) {
   const isRoute: FilterSpecification = ["==", ["get", "kind"], "route"];
   const isStop: FilterSpecification = ["==", ["get", "kind"], "stop"];
 
-  for (const id of [ROUTE_SOURCE_ID, STEM_SOURCE_ID, HIGHWAY_SOURCE_ID, CITY_SOURCE_ID]) {
+  for (const id of [
+    ROUTE_SOURCE_ID,
+    STEM_SOURCE_ID,
+    HIGHWAY_SOURCE_ID,
+    CITY_SOURCE_ID,
+    SEARCH_SOURCE_ID,
+  ]) {
     if (!map.getSource(id)) map.addSource(id, { type: "geojson", data: emptyCollection() });
   }
 
@@ -444,6 +452,59 @@ function addTripLayers(map: MapLibreMap) {
   // a custom WebGL layer and not a style layer. Added last of the trip layers so it draws over the
   // ground track and the stop dots, the way a raised ribbon should.
   map.addLayer(createArcTubeLayer(ARC_LAYER_ID));
+
+  // Search results, above everything the trip drew. A place the traveler is considering has to be
+  // findable *while* the plan is on screen, so it sits over the ribbons rather than under them —
+  // the opposite of the ordering every other overlay here uses, and deliberate.
+  //
+  // Amber, which DESIGN.md reserves for "you are pointing at this" and this app otherwise keeps
+  // off the map. A search result is exactly that: a candidate under consideration, not part of the
+  // plan. It stops being amber the moment it becomes a stop, because then it is a Tuesday.
+  map.addLayer({
+    id: `${SEARCH_SOURCE_ID}-halo`,
+    type: "circle",
+    source: SEARCH_SOURCE_ID,
+    paint: {
+      "circle-color": cssColor("--accent"),
+      "circle-radius": ["case", ["get", "selected"], 20, 13],
+      "circle-blur": 0.9,
+      "circle-opacity": 0.7,
+    },
+  });
+  map.addLayer({
+    id: `${SEARCH_SOURCE_ID}-dot`,
+    type: "circle",
+    source: SEARCH_SOURCE_ID,
+    paint: {
+      "circle-color": cssColor("--accent"),
+      "circle-radius": ["case", ["get", "selected"], 8, 5.5],
+      "circle-stroke-width": 2,
+      "circle-stroke-color": "#0f172a",
+    },
+  });
+  map.addLayer({
+    id: `${SEARCH_SOURCE_ID}-label`,
+    type: "symbol",
+    source: SEARCH_SOURCE_ID,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-size": 12,
+      "text-offset": [0, 1.2],
+      "text-anchor": "top",
+      "text-max-width": 9,
+      // Only the pin being pointed at is named. Two dozen labels over a city is the same
+      // unreadable field of serif names `StopMarkerLayer` exists to declutter, and here the list
+      // beside the map already carries every name.
+      "text-allow-overlap": false,
+      "text-optional": true,
+    },
+    paint: {
+      "text-color": "#f4f7fa",
+      "text-halo-color": "#0f172a",
+      "text-halo-width": 1.4,
+      "text-opacity": ["case", ["get", "selected"], 1, 0],
+    },
+  });
 
   // The ground pool under each stop, and its bright centre — Cesium's two nested ellipses.
   map.addLayer({
@@ -727,11 +788,25 @@ export class MapLibreRenderer implements MapRenderer {
     });
   }
 
+  showSearchResults(places: SearchPin[]) {
+    this.setData(SEARCH_SOURCE_ID, {
+      type: "FeatureCollection",
+      features: places.map((place) => ({
+        type: "Feature",
+        // `id` on the feature as well as in the properties: MapLibre needs it for feature state
+        // if this ever grows hover styling, and the properties are what the paint expressions read.
+        properties: { id: place.id, name: place.name, selected: !!place.selected },
+        geometry: { type: "Point", coordinates: [place.lng, place.lat] },
+      })),
+    });
+  }
+
   clearOverlays() {
     this.drawGeneration++;
     this.clearRoute();
     this.setData(HIGHWAY_SOURCE_ID, emptyCollection());
     this.setData(CITY_SOURCE_ID, emptyCollection());
+    this.setData(SEARCH_SOURCE_ID, emptyCollection());
     this.setPin(null);
   }
 

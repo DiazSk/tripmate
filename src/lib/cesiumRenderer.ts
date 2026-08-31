@@ -32,6 +32,7 @@ import {
   ROUTE_FRAME_PITCH_DEG,
   RouteDrawRequest,
   ScreenPoint,
+  SearchPin,
   visibleMapWidthPx,
   ZoomStepOptions,
 } from "@/lib/mapRenderer";
@@ -279,6 +280,14 @@ export class CesiumRenderer implements MapRenderer {
       })
     );
     this.requestRender();
+  }
+
+  showSearchResults(places: SearchPin[]) {
+    // Satellite does not carry search results — see `MapRenderer.showSearchResults`. Toggling to
+    // it while a search is open is what calls this with an empty list, and there is nothing to
+    // clear because nothing was ever drawn; the method exists so the contract has one shape on
+    // both engines and callers never branch on which one is live.
+    void places;
   }
 
   clearOverlays() {

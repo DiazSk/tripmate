@@ -152,7 +152,9 @@ External fetches degrade rather than throw. Two idioms to match:
 
 ### Data sources (all free; one needs a key)
 
-Open-Meteo (geocoding, forecast, historical fallback beyond a 16-day horizon, sunrise/sunset, timezone), Nager.Date (public holidays), Overpass/OSM (highway geometry *and* POI opening hours), OpenTripMap (candidate POIs — **the only one needing `OPENTRIPMAP_API_KEY`** in `.env.local`; absent key degrades to no suggestions rather than erroring).
+Open-Meteo (geocoding, forecast, historical fallback beyond a 16-day horizon, sunrise/sunset, timezone), Nager.Date (public holidays), Overpass/OSM (highway geometry, city boundaries, POI opening hours, **and the map's place search**), OpenTripMap (candidate POIs — needs `OPENTRIPMAP_API_KEY` in `.env.local`; absent key degrades to no suggestions rather than erroring).
+
+`src/lib/placeSearch.ts` is the one place with a **swappable** provider: Google Places when `GOOGLE_PLACES_API_KEY` is set, Overpass otherwise. It is also the only caller that fails across Overpass *mirrors* — a search box generates exactly the traffic a shared community instance rate-limits, and being turned away is the ordinary case rather than the exceptional one. It returns `available: false` for that, distinct from `[]` for "this neighbourhood has no cafés"; the UI says "search is busy" rather than lying about the neighbourhood.
 
 ### Chat memory is reconstructed, not held
 

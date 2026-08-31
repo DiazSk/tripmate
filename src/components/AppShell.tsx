@@ -5,6 +5,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { MotionConfig } from "framer-motion";
 import { MapCameraProvider } from "@/lib/mapCamera";
 import { resolveMapEngine } from "@/lib/mapEngine";
+import { ActiveItineraryProvider } from "@/lib/activeItinerary";
 import Navbar from "@/components/Navbar";
 import InstallPrompt from "@/components/InstallPrompt";
 import { ScrollContainerContext } from "@/lib/scrollContainer";
@@ -17,6 +18,7 @@ const MapLibreBackground = dynamic(() => import("@/components/MapLibreBackground
 });
 const MapControls = dynamic(() => import("@/components/MapControls"), { ssr: false });
 const MapEngineToggle = dynamic(() => import("@/components/MapEngineToggle"), { ssr: false });
+const MapSearchPanel = dynamic(() => import("@/components/MapSearchPanel"), { ssr: false });
 const StopMarkerLayer = dynamic(() => import("@/components/StopMarkerLayer"), { ssr: false });
 
 /**
@@ -66,6 +68,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     // CSS-only `prefers-reduced-motion: reduce` blanket rule.
     <MotionConfig reducedMotion="user">
       <MapCameraProvider engine={mapEngine} onEngineChange={setMapEngine}>
+        <ActiveItineraryProvider>
         <div className="app-shell relative flex h-dvh flex-col overflow-hidden bg-canvas md:flex-row">
           <div className="absolute inset-0 z-0 bg-canvas">
             {/* The background must stay mounted across route changes — Next.js already keeps
@@ -115,9 +118,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
               takes. Above z-10 so the right-docked panels can't cover it. */}
           <Navbar />
           <MapEngineToggle />
+          <MapSearchPanel />
           <InstallPrompt />
           <MapControls />
         </div>
+        </ActiveItineraryProvider>
       </MapCameraProvider>
     </MotionConfig>
   );
