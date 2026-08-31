@@ -1,81 +1,108 @@
 "use client";
 
 import { getImageProps } from "next/image";
+import { BACK, FRONT, LAYER_WIDTH } from "./heroScene";
 
 /**
- * The photograph the trip form stands on.
+ * The landing hero's photograph, carried behind the trip form.
  *
- * Between the landing hero and the generation screen, the wizard had nothing behind it. The globe
- * is deliberately un-booted for these steps (`useGlobeOnScreen(generating || step === "result")` in
- * HomeView) and `.blue-hour-scene` is scoped to the landing alone, so four consecutive screens —
- * the busiest, most decision-heavy part of the product — rendered as glass panels floating on flat
- * `--canvas`. Glass with nothing behind it is just a grey box with a hairline.
+ * Between the hero and the generation screen, the wizard had nothing behind it. The globe is
+ * deliberately un-booted for those steps (`useGlobeOnScreen(generating || step === "result")` in
+ * HomeView) and `.blue-hour-scene` is scoped to the landing alone, so the four most decision-heavy
+ * screens in the product rendered as glass panels on flat `--canvas`. Glass with nothing behind it
+ * is a grey box with a hairline.
  *
- * This is the same image `GenerationScreen` falls back to, and that is the whole point: the
- * backdrop is established when the traveller opens the form and does not change again until their
- * plan appears. Every step swaps the panel in front of it and nothing else, so the handoff into
- * generation has no visual seam at all — the screen they wait on is the screen they were already
- * looking at.
+ * **It is the same photograph, not a matching one.** Pressing "Plan a trip" should feel like the
+ * page dimming and a panel rising on it, not like a cut to somewhere else — the traveller is
+ * standing in the same place they were a moment ago, deciding where to go. An unrelated image here
+ * (this component shipped with one) reads as a scene change and quietly costs the flow its
+ * continuity, which is the whole reason the hero is a photograph rather than a gradient.
  *
  * Rendered as a sibling *behind* the form rather than as a CSS background on it, for two reasons:
  * `backdrop-filter` on the panels needs a real painted layer beneath them to sample, and a
  * `<picture>` is the only way to art-direct the crop.
  */
-
-/** Landscape and portrait crops, switched on the same 3/5 aspect ratio the hero uses — one
- *  threshold in the codebase rather than two. Intrinsics must be the files' true dimensions:
- *  `getImageProps` builds the srcset from this ratio, and a wrong pair stretches the horizon. */
-const SCENE = {
-  landscape: { src: "/scenes/scenic-cloudy-background.webp", width: 2880, height: 1726 },
-  portrait: { src: "/scenes/mobile-scenic-cloudy-background.webp", width: 750, height: 1714 },
-};
-
 export default function SceneBackdrop() {
-  // No `fill` here, and that is not an oversight. `fill` and `width`/`height` are mutually
-  // exclusive — passing both is a *runtime* error next/image throws on render, which no amount of
-  // typechecking catches because each is individually valid. The intrinsics have to be the ones
-  // that survive, since `getImageProps` needs them to build the srcset; the element is stretched
-  // to the viewport by `h-full w-full object-cover` below instead.
+  // `priority` deliberately absent, unlike Hero's. This mounts after a click, on a screen the
+  // traveller is already reading — it must not compete with the form's own work for bandwidth, and
+  // both files are in cache from the landing anyway.
   const common = { alt: "", sizes: "100vw" } as const;
-  const { props: landscapeProps } = getImageProps({ ...common, ...SCENE.landscape });
-  const { props: portraitProps } = getImageProps({ ...common, ...SCENE.portrait });
-  const { srcSet: landscapeSrcSet } = landscapeProps;
-  const { srcSet: portraitSrcSet, ...rest } = portraitProps;
+  const {
+    props: { srcSet: backLandscape },
+  } = getImageProps({ ...common, ...BACK.landscape });
+  const {
+    props: { srcSet: backPortrait, ...backRest },
+  } = getImageProps({ ...common, ...BACK.portrait });
+  const {
+    props: { srcSet: frontLandscape },
+  } = getImageProps({ ...common, ...FRONT.landscape });
+  const {
+    props: { srcSet: frontPortrait, ...frontRest },
+  } = getImageProps({ ...common, ...FRONT.portrait });
 
   return (
     <div
       aria-hidden
-      // `fixed`, not `absolute`. The form column scrolls and is taller than the viewport on the
-      // interests step; an absolutely-positioned backdrop would scroll away and strand the last
-      // fields on bare canvas — which is the bug this component exists to fix, reintroduced
-      // halfway down the page. Behind the content overlay, above AppShell's canvas.
-      className="pointer-events-none fixed inset-0 -z-10"
+      // `fixed`, not `absolute`. The preferences step is taller than the viewport, and an absolute
+      // backdrop scrolls away and strands the last fields on bare canvas — the exact bug this
+      // component exists to fix, reintroduced halfway down the page.
+      className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
     >
-      <picture>
-        <source media="(min-aspect-ratio: 3/5)" srcSet={landscapeSrcSet} sizes="100vw" />
-        <source srcSet={portraitSrcSet} sizes="100vw" />
-        {/* eslint-disable-next-line jsx-a11y/alt-text -- `alt=""` arrives through {...rest}; the
-            wrapper is already aria-hidden and this image is decorative. */}
-        <img {...rest} className="absolute inset-0 h-full w-full object-cover" />
-      </picture>
       {/*
-        The dimming, and it is heavier than the one GenerationScreen wears over the same file.
-        That screen sets display-size type over the photograph and wants it seen; this one carries
-        input labels, date fields and a budget figure at 12-16px, and those have to clear contrast
-        against whatever pixel lands behind them. The panels supply their own translucent ground on
-        top of this, so the photograph reads as weather behind frosted glass rather than as a
-        picture someone put text on.
+        The composition's own geometry, which is what keeps the two layers interlocked.
 
-        Stronger at top and bottom than through the middle: the navbar and the step's primary
-        action sit in those bands, and both are small type. Authored as a gradient on
-        `--surface-deep-rgb` — the same token the itinerary header band and every other photo scrim
-        in this app uses, so this is one more instance of an existing material, not a new one.
+        BACK hangs from the top and FRONT stands on the bottom, and they overlap by a fixed fraction
+        of the *width* — so their container's height has to follow its width, exactly as the hero's
+        section does. Sizing this box to the viewport instead would pull them apart and open a band
+        of bare canvas between the mountains and the steppe (Hero.tsx measured 378px of it at
+        768x1024).
+
+        `w-[max(100vw,…)]` is cover semantics applied to the composition rather than to either
+        image: the box is always at least as wide as the viewport and at least tall enough to fill
+        it, whichever binds, so a tall window widens the scene and overflows it sideways instead of
+        leaving a seam of empty canvas above the mountains. Centred horizontally so that overflow is
+        symmetric. The aspect ratios are the hero's own, switched on the same 3/5 threshold.
+      */}
+      <div
+        className="absolute bottom-0 left-1/2 -translate-x-1/2 aspect-[1440/922] w-[max(100vw,calc(100dvh*1440/922))] [@media(aspect-ratio<=3/5)]:aspect-[375/812] [@media(aspect-ratio<=3/5)]:w-[max(100vw,calc(100dvh*375/812))]"
+      >
+        <picture>
+          <source media="(aspect-ratio > 3/5)" srcSet={backLandscape} sizes="100vw" />
+          <source srcSet={backPortrait} sizes="100vw" />
+          {/* eslint-disable-next-line jsx-a11y/alt-text -- alt="" arrives via {...backRest}. */}
+          <img {...backRest} className={`absolute top-0 left-0 h-auto ${LAYER_WIDTH}`} />
+        </picture>
+        <picture>
+          <source media="(aspect-ratio > 3/5)" srcSet={frontLandscape} sizes="100vw" />
+          <source srcSet={frontPortrait} sizes="100vw" />
+          {/* The same -0.4vw nudge Hero gives this layer: the landscape file's own bottom margin
+              otherwise shows as a hairline of canvas under the steppe.
+              eslint-disable-next-line jsx-a11y/alt-text -- alt="" arrives via {...frontRest}. */}
+          {/* eslint-disable-next-line jsx-a11y/alt-text */}
+          <img
+            {...frontRest}
+            className={`absolute bottom-0 left-0 h-auto ${LAYER_WIDTH} [@media(aspect-ratio>3/5)]:-bottom-[0.4vw]`}
+          />
+        </picture>
+      </div>
+
+      {/*
+        The dimming — the "opacity decreases" half of the effect. The hero wears this photograph at
+        full strength behind one word set at 13rem; this screen carries 12-16px field labels, and
+        those have to clear contrast against whatever pixel lands behind them. The panels supply
+        their own translucent ground on top, so the photograph reads as weather behind frosted glass
+        rather than as a picture someone put a form on.
+
+        Heavier at top and bottom than through the middle: the navbar and the step's primary action
+        live in those bands and both are small type, while the middle is where the mountains and the
+        steppe actually are. Authored on `--surface-deep-rgb`, the same token every other photo
+        scrim in this app uses, so this is one more instance of an existing material.
       */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgb(var(--surface-deep-rgb) / 0.86) 0%, rgb(var(--surface-deep-rgb) / 0.52) 24%, rgb(var(--surface-deep-rgb) / 0.34) 52%, rgb(var(--surface-deep-rgb) / 0.5) 80%, rgb(var(--surface-deep-rgb) / 0.82) 100%)",
+            "linear-gradient(to bottom, rgb(var(--surface-deep-rgb) / 0.86) 0%, rgb(var(--surface-deep-rgb) / 0.6) 24%, rgb(var(--surface-deep-rgb) / 0.46) 52%, rgb(var(--surface-deep-rgb) / 0.6) 80%, rgb(var(--surface-deep-rgb) / 0.88) 100%)",
         }}
       />
     </div>
