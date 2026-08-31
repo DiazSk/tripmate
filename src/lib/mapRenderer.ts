@@ -238,6 +238,26 @@ export interface FlyToPointOptions {
   /** Altitude of the point to centre. Zero aims at the ground. */
   centreHeightM?: number;
   durationS?: number;
+  /**
+   * Frame at least this much ground around the point, in metres, instead of diving to `rangeM`.
+   *
+   * A stop is a building, and `rangeM` for one is 600m — which puts the camera on the pavement
+   * outside it with nothing else in frame. That answers "where exactly is this" and not "where is
+   * this *in the city*", which is the question somebody reading an itinerary is actually asking.
+   * With a radius set, the renderer frames a box that size around the point and lets the stop sit
+   * inside its own neighbourhood.
+   *
+   * MapLibre implements this as `fitBounds` over the box; Cesium pulls its range back until the
+   * same ground is in frame. Both then obey `minRangeM` below.
+   */
+  contextRadiusM?: number;
+  /**
+   * Never come closer than this, in metres.
+   *
+   * The floor that stops a lean turning into a dive. Expressed as a distance rather than as
+   * MapLibre's `maxZoom` because this contract is in metres — the renderer converts.
+   */
+  minRangeM?: number;
 }
 
 export interface FrameRouteOptions {
@@ -309,6 +329,24 @@ export const HERO_VIEW = {
   headingDeg: 5,
   pitchDeg: -45,
 } as const;
+
+/**
+ * How much ground to keep around a single stop when the camera goes to it, in metres.
+ *
+ * Roughly a fifteen-minute walk in every direction — enough that the streets, the river or the park
+ * next door are in frame and the stop reads as somewhere rather than as a pin on a texture.
+ */
+export const STOP_CONTEXT_RADIUS_M = 800;
+
+/**
+ * The closest the camera goes to a single stop, in metres. Equivalent to MapLibre zoom ~14.5 at
+ * mid latitudes, which is the scale where a neighbourhood is legible and a building is not yet a
+ * roof filling the screen.
+ *
+ * A floor rather than a fixed distance, so the hover peek keeps the *relative* lean `peekRangeM`
+ * computes from how crowded a stop's neighbours are — it just cannot lean past this.
+ */
+export const STOP_MIN_RANGE_M = 3500;
 
 /** Framing floor for a day's stops, in metres — a lone stop gives a zero-radius sphere, and a
  *  tight cluster gives one small enough that the camera dives into the building mesh. */

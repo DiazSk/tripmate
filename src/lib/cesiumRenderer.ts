@@ -298,23 +298,40 @@ export class CesiumRenderer implements MapRenderer {
     const { viewer, Cesium } = this;
     if (!this.isAlive()) return;
     const heading = options.headingRad ?? 0;
+    const viewWidth = viewer.scene.canvas.clientWidth;
+    const freeWidth = visibleMapWidthPx(viewWidth);
+    const tanHalfFov = horizontalTanHalfFov(viewer);
 
-    // Centre the stop in the strip the itinerary leaves, not in the window.
+    // How far back, and how far sideways.
     //
-    // Dead centre of a 1440px window is 720px in — well inside the 40%-wide panel — so hovering a
-    // row flew the camera to a point that landed *behind* the plan being read. The route framing
-    // has corrected for this since it existed (`frameRouteBesidePanel`); a stop flight never did,
-    // and it is the same question. Same correction, same helper, both engines.
+    // Two cases, and they share a rule. With a context radius the camera frames that much ground
+    // around the stop — `frameRouteBesidePanel` is exactly that calculation, the same one a whole
+    // route goes through, so a stop and a day are framed by one piece of arithmetic rather than
+    // two that can drift. Without one it is a plain flight at the range asked for.
     //
+    // Either way the aim point is shoved sideways so the subject lands in the middle of the strip
+    // the itinerary panel leaves, not in the middle of the window — dead centre of a 1440px window
+    // is well inside a 40%-wide panel.
+    let rangeM: number;
+    let biasM: number;
+    if (options.contextRadiusM) {
+      const framing = frameRouteBesidePanel(
+        options.contextRadiusM,
+        viewWidth,
+        freeWidth,
+        tanHalfFov
+      );
+      rangeM = Math.max(framing.rangeM, options.minRangeM ?? 0);
+      // Recomputed at the range actually used, since the pixels-to-metres conversion depends on it
+      // and the floor above may have moved the camera back.
+      biasM = lateralPanelBiasM(rangeM, viewWidth, freeWidth, tanHalfFov);
+    } else {
+      rangeM = Math.max(options.rangeM, options.minRangeM ?? 0);
+      biasM = lateralPanelBiasM(rangeM, viewWidth, freeWidth, tanHalfFov);
+    }
+
     // The shove runs along the camera's own *right*, not along world east — see `frameRoute` for
     // why those stop being the same vector the moment the camera turns.
-    const viewWidth = viewer.scene.canvas.clientWidth;
-    const biasM = lateralPanelBiasM(
-      options.rangeM,
-      viewWidth,
-      visibleMapWidthPx(viewWidth),
-      horizontalTanHalfFov(viewer)
-    );
     let target = Cesium.Cartesian3.fromDegrees(
       options.lng,
       options.lat,
@@ -348,9 +365,12 @@ export class CesiumRenderer implements MapRenderer {
       offset: new Cesium.HeadingPitchRange(
         heading,
         Cesium.Math.toRadians(options.pitchDeg),
-        options.rangeM
+        rangeM
       ),
-      duration: options.durationS ?? 2.5,
+      duration: options.durationS ?? (options.contextRadiusM ? 1.2 : 2.5),
+      // Matches the cubic MapLibre eases a stop flight on, so the two engines glide identically
+      // and the Map/Satellite toggle does not change how arriving at a stop *feels*.
+      easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
     });
   }
 
