@@ -223,8 +223,23 @@ export async function runGeneration(
   const placeFacts = new Map<string, PlaceFacts>();
   try {
     const names = selectStopsToEnrich(itinerary.days, { stepFreeRequired });
+    // OSM matches by coordinate radius, not by name+destination, so look up each stop's own
+    // lat/lng from the itinerary rather than passing `destination` through.
+    const coordsByName = new Map<string, { lat: number; lng: number }>();
+    for (const day of itinerary.days) {
+      for (const stop of day.stops ?? []) {
+        if (typeof stop.lat === "number" && typeof stop.lng === "number" && !coordsByName.has(stop.name)) {
+          coordsByName.set(stop.name, { lat: stop.lat, lng: stop.lng });
+        }
+      }
+    }
     const fetched = await Promise.all(
-      names.map(async (name) => [name, await fetchPlaceFacts(name, destination)] as const)
+      names
+        .filter((name) => coordsByName.has(name))
+        .map(async (name) => {
+          const { lat, lng } = coordsByName.get(name)!;
+          return [name, await fetchPlaceFacts(name, lat, lng)] as const;
+        })
     );
     for (const [name, facts] of fetched) {
       if (facts) placeFacts.set(normalizeStopName(name), facts);
