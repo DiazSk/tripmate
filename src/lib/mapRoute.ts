@@ -1,4 +1,5 @@
 import type { Cartesian3, Entity, Viewer } from "cesium";
+import { createGlassRibbonMaterial, registerGlassRibbonMaterial } from "./glassRibbon";
 
 /** Cesium is always reached through `await import("cesium")` — a static import pulls the whole
  *  library into the server bundle — so every function here takes the module as a parameter
@@ -89,37 +90,133 @@ export function cssColor(name: string): string {
 }
 
 /**
- * The per-day colour ramp, as CSS custom property names resolved through `cssColor`.
+ * One day's colours: a primary core and the emissive glow that surrounds it, as CSS custom
+ * property names resolved through `cssColor`.
  *
- * Six rather than one because the globe now draws every day of the trip at once; DESIGN.md's
+ * A pair rather than a single colour, and that is the point of this type existing. The core is
+ * the *object* — the ribbon body, the ring cores, the beam core, the badge's border. The glow is
+ * the *light coming off it* — the halo around the ribbon, the beam's bloom, the outermost radar
+ * ring, the outer footprint disc. Making the glow a neighbouring hue rather than a dimmer copy
+ * of the core is what makes a day read as lit rather than merely coloured in: real emission
+ * shifts hue as it falls off, and a halo that is only a faded core reads as a blur.
+ */
+export interface DayPalette {
+  core: string;
+  glow: string;
+}
+
+/**
+ * The palette pool, one entry per day, cycling.
+ *
+ * Five rather than one because the globe draws every day of the trip at once; DESIGN.md's
  * "per-day accent colours were considered and rejected" rested entirely on the premise that
  * "only the active day is ever drawn", which stopped being true here.
  *
- * Day 1 is `--route-blue` — the colour the single-day route already used — so a one-day trip
- * looks exactly as it always did and nothing new is introduced to earn its keep.
+ * A curated set rather than points on a hue wheel — five pairs picked for the character of the
+ * pair, the way a system accent is picked. What each still has to survive is uncontrolled aerial
+ * photography: an older ramp opened on Apple Maps' systemBlue and ran through a system green and
+ * a rose, all of which the *background* can produce, so a mid-blue arc over water and a green one
+ * over a park were the same colour as the thing behind them. Hence no earthy greens, no muted
+ * yellows, no desert sand — and hence Electric Emerald being a green with more chroma than
+ * chlorophyll can reach and an ambient that pulls toward cyan rather than yellow, which is the
+ * direction foliage actually sits.
  *
- * Cycles for trips longer than six days. That is safe for the thing the colour has to do,
- * which is separate a cluster from its *neighbours*: consecutive entries are 70-170 degrees
- * apart in hue, and day 1 only meets day 7, by which point the two clusters are labelled and
- * usually nowhere near each other. It is not safe as an identifier, which is why every cluster
- * carries a "Day N" label rather than relying on colour alone.
+ * **Ultra Iris is the quiet one, knowingly.** Its core is a twilight indigo at roughly a third
+ * the chroma of the other four, and its ambient is *lighter* than its core rather than darker —
+ * the only pair here that inverts that relationship. Over dark water or shadowed terrain it reads
+ * considerably softer than days 1-4, and what keeps it legible there is the casing rather than
+ * its own luminance. If a day 5 ever reads as missing rather than as recessive, raise this entry
+ * rather than thickening the ribbon.
  *
- * The amber/red band (roughly 0-50 degrees) is deliberately absent. `--accent` means "you are
- * pointing at this" on the globe and `--map-pin-red` is the destination pin; a day tinted into
- * either would collide with a meaning that is already taken.
+ * Cycles for trips longer than five days. That is safe for the thing the colour has to do, which
+ * is separate a cluster from its *neighbours*: day 1 only meets day 6, by which point the two
+ * clusters are labelled and usually nowhere near each other. It is not safe as an identifier,
+ * which is why every cluster carries a "Day N" label rather than relying on colour alone.
+ *
+ * **Solar Ember is a knowing exception to a standing rule.** The 0-50 degree amber/red band
+ * belongs to `--accent` ("you are pointing at this") and `--map-pin-red` (the destination pin),
+ * and every other entry stays out of it for that reason. This one is in it by explicit request.
+ * The collision it creates is handled in `emphasisColorFor` below rather than left to chance —
+ * read that before adding a second warm entry, because the mitigation has exactly one fallback
+ * colour and this palette already spends it.
  */
-export const DAY_COLOR_TOKENS = [
-  "--route-blue",
-  "--route-day-green",
-  "--route-day-purple",
-  "--route-day-rose",
-  "--route-day-cyan",
-  "--route-day-magenta",
+export const DAY_PALETTES: readonly DayPalette[] = [
+  { core: "--route-neon-cyan", glow: "--route-neon-cyan-glow" },
+  { core: "--route-neon-magenta", glow: "--route-neon-magenta-glow" },
+  { core: "--route-neon-amber", glow: "--route-neon-amber-glow" },
+  { core: "--route-neon-lime", glow: "--route-neon-lime-glow" },
+  { core: "--route-neon-violet", glow: "--route-neon-violet-glow" },
 ] as const;
 
-/** The token for a day, cycling. Exported because the marker layer tints its labels to match. */
+/**
+ * The palette for a day, cycling.
+ *
+ * Keyed on the day's index in `Itinerary.days[]` rather than on a hash of some day identifier,
+ * and deliberately: the index *is* the day's identity here — `Stop` carries no day field, and
+ * `RouteStop.day` is that index attached at the route boundary and nowhere else. A hash would
+ * also be worse at the one job the colour has. Modulo guarantees that adjacent days never share
+ * a palette until the pool wraps; a hash makes no such promise, so two consecutive days could
+ * collide on the same colour by chance, which is precisely the case the palette exists to
+ * prevent. Deterministic either way — this is deterministic *and* collision-free where it counts.
+ */
+export function dayPalette(dayIndex: number): DayPalette {
+  return DAY_PALETTES[dayIndex % DAY_PALETTES.length];
+}
+
+/** The core token for a day. Exported because the marker layer and the split editor tint their
+ *  own chrome to match a day without needing the rest of the palette. */
 export function dayColorToken(dayIndex: number): string {
-  return DAY_COLOR_TOKENS[dayIndex % DAY_COLOR_TOKENS.length];
+  return dayPalette(dayIndex).core;
+}
+
+/** The glow token for a day, for the surfaces that carry a day's bloom rather than its body. */
+export function dayGlowToken(dayIndex: number): string {
+  return dayPalette(dayIndex).glow;
+}
+
+/** Hues, in degrees, that `--accent` owns on the globe. `--accent` is around 32 and
+ *  `--map-pin-red` around 4; the band is drawn wide enough to cover both plus the distance at
+ *  which two saturated warm hues stop being told apart at a glance over photography. */
+const ACCENT_HUE_BAND: readonly [number, number] = [0, 50];
+
+/** A colour's hue in degrees, 0-360. Grey returns 0, which is harmless here: a desaturated
+ *  colour cannot be confused with a saturated accent whatever its hue says. */
+function hueDeg(color: import("cesium").Color): number {
+  const { red: r, green: g, blue: b } = color;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  if (d === 0) return 0;
+  const h =
+    max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
+/**
+ * Which colour means "you are pointing at this" for a day drawn in `dayColor`.
+ *
+ * Normally `--accent`, and DESIGN.md's one sanctioned exception to keeping interface colour off
+ * the globe: amber there means hover or selection, never "this is a Tuesday".
+ *
+ * That rule assumed no *day* would ever be amber, which the Electric Amber palette breaks. On
+ * that day the emphasis tint would land within a few degrees of the colour the day is already
+ * drawn in, so pointing at a stop would change nothing visible — the interaction would still
+ * fire, the feedback would simply be gone. When the day's own core falls inside the accent's
+ * band this returns white instead: the one colour guaranteed to read against a saturated hue
+ * whatever that hue is, and the only one left that has no other meaning on the globe.
+ *
+ * Pure and exported so it can be tested without a viewer, and so the rule lives in one place —
+ * emphasis is applied from three call sites (the ribbon body, the radar rings, and `applyTints`
+ * for everything painted imperatively) and they must not disagree about what amber means.
+ */
+export function emphasisColorFor(
+  dayColor: import("cesium").Color,
+  accent: import("cesium").Color,
+  white: import("cesium").Color
+): import("cesium").Color {
+  const hue = hueDeg(dayColor);
+  const collides = hue >= ACCENT_HUE_BAND[0] && hue <= ACCENT_HUE_BAND[1];
+  return collides ? white : accent;
 }
 
 /**
@@ -155,8 +252,13 @@ export interface RouteCluster {
   /** "Day 3" — built here rather than in the marker layer so the globe and the panel cannot
    *  drift apart on how a day is named. */
   label: string;
-  /** The token this day's geometry was drawn with, so the label can match it. */
+  /** The core token this day's geometry was drawn with, so the label's border and text can
+   *  match the ribbons it names. */
   colorToken: string;
+  /** The same day's glow token, for the label's bloom — see `DayPalette`. Kept alongside rather
+   *  than re-derived in the marker layer, so the badge and the geometry cannot pick different
+   *  entries out of the pool. */
+  glowToken: string;
 }
 
 /**
@@ -241,6 +343,7 @@ export function buildDayClusters(days: RouteStop[][]): RouteCluster[] {
       radiusDeg,
       label: `Day ${day + 1}`,
       colorToken: dayColorToken(day),
+      glowToken: dayGlowToken(day),
     };
   });
 }
@@ -382,6 +485,31 @@ export function frameRouteBesidePanel(
 }
 
 /**
+ * How many metres sideways to shove a *point* the camera is flying to, so it lands in the middle
+ * of the strip the itinerary panel leaves rather than in the middle of the viewport.
+ *
+ * The same correction `frameRouteBesidePanel` applies to a whole route, split out for the case
+ * where the range is already decided rather than derived from a radius — a stop flight, a hover
+ * peek. Without it, hovering a row on the far side of the plan flies the camera to a point that
+ * ends up *underneath* the panel: dead centre of the window is well inside the covered 40%.
+ *
+ * Positive means "move the aim point toward the panel", which moves the subject away from it.
+ * Zero when there is no panel to clear, which is also the phone layout (full-bleed panel, no strip
+ * to aim into) and any nonsense measurement.
+ */
+export function lateralPanelBiasM(
+  rangeM: number,
+  viewWidthPx: number,
+  freeWidthPx: number,
+  tanHalfFovX: number = DEFAULT_TAN_HALF_FOV_X
+): number {
+  if (!(rangeM > 0) || !(viewWidthPx > 0) || !(freeWidthPx > 0)) return 0;
+  if (freeWidthPx >= viewWidthPx) return 0;
+  const metresPerPx = (2 * rangeM * tanHalfFovX) / viewWidthPx;
+  return (viewWidthPx / 2 - freeWidthPx / 2) * metresPerPx;
+}
+
+/**
  * How present a day is on the globe. Every day is always drawn; this is the only thing that
  * separates the one being read from the rest.
  *
@@ -397,7 +525,9 @@ export function frameRouteBesidePanel(
  */
 export type DayVisualState = "baseline" | "active" | "dimmed" | "hover";
 
-const DAY_STATE_ALPHA: Record<DayVisualState, number> = {
+/** Exported so a renderer that paints with plain alpha rather than Cesium materials — the
+ *  MapLibre one — reads the same table the ribbon shader does. */
+export const DAY_STATE_ALPHA: Record<DayVisualState, number> = {
   baseline: 0.75,
   active: 1,
   dimmed: 0.25,
@@ -425,9 +555,14 @@ export function dayVisualState(
 }
 
 /** The active day's arcs also thicken. Alpha alone reads as "brighter"; width reads as "nearer",
- *  which is the distinction that survives a busy satellite background. */
+ *  which is the distinction that survives a busy satellite background.
+ *
+ *  The ribbon core scales less than its halo: the core carries a dark casing whose width is
+ *  fixed in pixels, so growing the body too far would leave the border looking thin against it
+ *  and the ribbon would lose the edge that separates it from the photography. */
 const ACTIVE_GLOW_WIDTH_SCALE = 1.55;
-const ACTIVE_STEM_WIDTH_SCALE = 1.5;
+const ACTIVE_CORE_WIDTH_SCALE = 1.22;
+const ACTIVE_STEM_WIDTH_SCALE = 1.4;
 
 /** Metres above the sampled surface to float the route. Small on purpose: enough to clear the
  *  road mesh without the line reading as detached when the camera drops to street level. */
@@ -447,18 +582,99 @@ const ROUTE_OCCLUDED_ALPHA = 0.3;
  * labelling, not behind it.
  */
 export const STEM_HEIGHT_M = 150;
-const STEM_WIDTH = 4;
-/** Low power keeps a bright thin core with a soft falloff; higher values wash the whole width out. */
-const STEM_GLOW_POWER = 0.25;
+/**
+ * The vertical anchor under each card is a **light pillar**, built in three layers rather than as
+ * one line: a translucent cylinder of world-space volume, a wide emissive halo, and a thin hard
+ * core inside both.
+ *
+ * The cylinder is what makes it a beam instead of a stroke. A polyline's width is screen-space,
+ * so a "beam" made only of polylines stays the same thickness whether the camera is at 300m or
+ * 30km — it reads as a drawn line at every range, which is exactly what a shaft of light does
+ * not do. The cylinder is metres, so it fattens as you descend into it and vanishes to nothing
+ * from orbit, and the polylines inside it keep the pillar visible once it does.
+ *
+ * Wider at the bottom than the top, which is the opposite of a searchlight and deliberate: the
+ * light reads as pooling into the ground ring underneath it rather than being projected up from
+ * it, so the ring and the pillar are one object.
+ */
+const BEAM_BOTTOM_RADIUS_M = 9;
+const BEAM_TOP_RADIUS_M = 3.5;
+const BEAM_COLUMN_ALPHA = 0.16;
+/** Slices the column is stacked from, to fake a vertical gradient a single Cesium material
+ *  cannot express. Three is enough: the beam is 150m of translucent volume, the steps are hidden
+ *  by the halo around it, and each slice is an entity multiplied by every stop in the trip. */
+const BEAM_COLUMN_SLICES = 3;
+/** Alpha at the top of the beam as a fraction of the bottom's, so the pillar dissolves upward
+ *  into the card rather than ending on a hard disc. */
+const BEAM_TOP_ALPHA_SCALE = 0.35;
+const BEAM_HALO_WIDTH = 16;
+const BEAM_HALO_POWER = 0.16;
+const BEAM_HALO_ALPHA = 0.3;
+const STEM_WIDTH = 7;
+/** Total across both edges, like `ARC_CASING_WIDTH` — 3 here is a 4px body between 1.5px edges. */
+const STEM_CASING_WIDTH = 3;
 
-/** Ground footprint under each stop. Two concentric discs at falling alpha — Cesium ellipses take
- *  a flat fill with no gradient, so a soft edge has to be faked by stacking. Drawn as circles, not
- *  oblong: at any pitch the app actually frames a route at, a ground circle already reads as an
- *  ellipse in perspective, and a real oblong would need an arbitrary rotation to point somewhere. */
+/**
+ * Ground footprint under each stop: a stack of discs plus two glowing rings, replacing the flat
+ * pair of filled discs that used to sit here.
+ *
+ * The discs are the heatmap — Cesium ellipses take a flat fill with no gradient, so a soft
+ * falloff has to be faked by stacking translucent circles at falling alpha. On their own they
+ * read as a stain rather than a marker, which is why the rings are the actual figure: a crisp,
+ * emissive circle has an *edge*, and an edge is the thing photography cannot fake underneath it.
+ *
+ * Drawn as circles, not oblong: at any pitch the app actually frames a route at, a ground circle
+ * already reads as an ellipse in perspective, and a real oblong would need an arbitrary rotation
+ * to point somewhere.
+ */
 const POOL_RADIUS_M = 42;
 const POOL_OUTER_RATIO = 2.1;
-const POOL_ALPHA = 0.22;
-const POOL_OUTER_ALPHA = 0.09;
+const POOL_ALPHA = 0.24;
+const POOL_OUTER_ALPHA = 0.07;
+
+/**
+ * The rings. Polylines traced around the circle rather than `ellipse.outline`, and that is not a
+ * stylistic choice: `outlineWidth` above 1 is silently ignored on Windows/ANGLE, so an ellipse
+ * outline is a hairline on a large share of machines. A polyline's width is honoured everywhere,
+ * and it can carry a glow material, which an ellipse outline cannot.
+ *
+ * 48 samples is smooth at street level for a 40-90m circle — the arc between two samples is
+ * under 6m — and a stop carries two of them, so this is the number multiplied by every stop in
+ * the trip.
+ */
+const RING_SAMPLES = 48;
+
+/**
+ * Three concentric rings per stop, brightening in sequence from the inside out, which is what
+ * turns a static circle into a radar sweep: at any instant one ring is near its peak and the
+ * others are falling, so the eye tracks a wave travelling outward.
+ *
+ * **The wave is alpha, not radius**, and that is a hard constraint rather than an approximation.
+ * A real expanding ring means a `CallbackProperty` on `positions` (or on an ellipse's
+ * `semiMajorAxis`), which moves that geometry into Cesium's dynamic batch and rebuilds it every
+ * frame — for every ring of every stop of every day on screen. A material colour is a uniform,
+ * so this costs nothing per frame. Three rings at fixed radii with staggered phase buys the
+ * reading a moving radius would, at zero geometry cost.
+ *
+ * Radii, widths and alphas fall outward together: the innermost is the tight bright one sitting
+ * on the stop itself, the outermost is a wide faint halo at the edge of the footprint.
+ */
+const RING_RADII_RATIO = [0.7, 1.35, 2.1] as const;
+const RING_WIDTHS = [5, 3.5, 2.5] as const;
+const RING_ALPHAS = [0.85, 0.5, 0.3] as const;
+/** Soft-edged rather than a hard stroke: the ring is meant to read as light on the ground. */
+const RING_GLOW_POWER = 0.3;
+
+/** The radar sweep. One full cycle, the lag each ring adds behind the one inside it (a third of
+ *  a cycle, so the three are evenly spread around it), and a further lag per stop so a day looks
+ *  like it is being counted out rather than blinking at once. Held flat under
+ *  `prefers-reduced-motion`, like the arc shimmer and the travelling dash. */
+const PULSE_PERIOD_MS = 2400;
+const PULSE_RING_LAG = 0.33;
+const PULSE_STOP_LAG = 0.13;
+const PULSE_ALPHA_MIN = 0.42;
+const PULSE_ALPHA_RANGE = 0.58;
+const PULSE_ALPHA_STATIC = 0.8;
 
 /** Points sampled along each arc. High on purpose: at `ARC_LIFT_RATIO` below, a cross-city hop is
  *  a kilometre-tall parabola, and 96 points across one of those is visibly faceted at street
@@ -508,32 +724,122 @@ export function arcLift(surfaceDistanceM: number): number {
 }
 
 /**
- * The halo under each arc: wide, soft and *faint*.
+ * The emissive halo around each arc: wide, soft, and now genuinely visible.
  *
- * Every number here came down. A 9px halo at alpha 0.5 and glowPower 0.2 was legible over busy
- * photography and also the single loudest thing on screen — with a dozen days drawn at once the
- * halos bloomed into each other and the route read as a smear of light rather than a set of
- * lines. The halo's job is to keep a thin line from disappearing against a mid-grey rooftop, not
- * to be seen in its own right. Legibility over photography now comes mostly from the arcs being
- * lifted clear of the ground (`ARC_LIFT_RATIO`) rather than from brightness.
+ * The halo's numbers came *down* once, to 6px at alpha 0.22, because a thin bright line plus a
+ * bright halo bloomed into a smear once a dozen days were drawn at once. That reasoning applied
+ * to a 3px line whose only defence against the photography was brightness. The ribbon below no
+ * longer relies on brightness — it has a dark casing, so its edge survives whatever is behind it
+ * — and the halo's job changed with it: it is the emissive bleed that says the ribbon is lit
+ * rather than painted, and it lifts the shape off the tiles at a distance where the casing is
+ * sub-pixel.
+ *
+ * Wide and *low-powered* is what keeps that from becoming the old smear. `glowPower` is the
+ * falloff exponent, not the brightness: at 0.1 across 20px almost all of the width is nearly
+ * transparent, so two neighbouring days bleed into each other far less than the old 6px halo at
+ * 0.12 did, despite covering three times the pixels.
  */
-const ARC_GLOW_WIDTH = 6;
-const ARC_GLOW_POWER = 0.12;
-const ARC_GLOW_ALPHA = 0.22;
+const ARC_GLOW_WIDTH = 20;
+const ARC_GLOW_POWER = 0.1;
+const ARC_GLOW_ALPHA = 0.3;
 /**
- * The arc's core line. Solid, not dashed.
+ * The arc's body: a thick neon ribbon with a hard dark stroke down both edges, drawn as one
+ * `PolylineOutlineMaterialProperty` rather than a bright line stacked on a wider dark one.
  *
- * Dashes were the other half of the clutter: an 18px dash pattern along a kilometre-tall parabola
- * breaks one continuous shape into a stipple, and a screen holding six days of stipple has no
- * followable lines left in it. A thin solid stroke is what reads as "this connects to that".
+ * One material, not two entities, and it matters: two stacked polylines are two draws whose
+ * depth ordering against each other is not guaranteed on a scene that also holds translucent 3D
+ * tiles, and the casing flickered through the core wherever they tied. The outline material
+ * resolves the edge inside a single fragment shader, so it cannot come apart.
  *
- * **3, not 2.** At 2 the arcs stippled themselves back into dashes wherever the scene renders
- * below native — `resolutionScale` is `1.5 / devicePixelRatio`, so a 2x display renders the
- * canvas at 0.75 and a 2px line lands on 1.5 buffer pixels, which an upscale with no FXAA breaks
- * into dots. Verified against the highway lines, which share the buffer at a similar alpha and
- * stay solid because they are wider. Don't shave this back down.
+ * **The casing is the whole point.** The background here is Google Photorealistic 3D Tiles —
+ * uncontrolled aerial photography that can put any colour, at any luminance, behind any pixel of
+ * the route. A stroke of colour alone has no guaranteed contrast against that; a stroke of
+ * colour with a near-black border does, because the border supplies its own local contrast
+ * wherever it lands. This is the same reason the labels carry an omnidirectional halo.
+ *
+ * **`outlineWidth` is the total across both edges, not the width of one.** Cesium's
+ * PolylineOutlineMaterial shades `halfInteriorWidth = 0.5 * (width - outlineWidth) / width`, so
+ * 16/5 is an 11px neon body between two 2.5px dark edges — not two 5px ones. Halve any number
+ * you mean per-edge before putting it here, and note that only `width` scales with the active
+ * state (`ACTIVE_CORE_WIDTH_SCALE`), so the casing takes a larger share as the ribbon narrows.
+ *
+ * **The ribbon tapers**, from `ARC_WIDTH_START` at the stop being left to `ARC_WIDTH_END` at the
+ * stop being arrived at, so the shape itself says which way the day runs before any animation
+ * does. Cesium has no per-vertex width — a polyline has exactly one — so the taper is built by
+ * cutting the arc into `ARC_TAPER_SEGMENTS` consecutive polylines, each a constant width sampled
+ * at its own midpoint. Segments share their boundary vertex, so there is no seam to see through;
+ * what there is instead is a step of `(start - end) / segments` px at each join, which is why
+ * that ratio is kept under about 1.5px. The casing stays a fixed pixel count, so the neon body
+ * narrows faster than the ribbon does — 11px of colour at the start against 4px at the end,
+ * which is a much stronger taper than the outline widths alone suggest.
+ *
+ * The cost is the reason not to raise the segment count casually: this multiplies the core
+ * entity count per arc by `ARC_TAPER_SEGMENTS`. They are all static (constant positions, constant
+ * widths) so they batch, but a 6-day trip is now several hundred entities on the globe.
+ *
+ * Static dashes are still out — an 18px dash pattern along a kilometre-tall parabola breaks one
+ * continuous shape into a stipple, and a screen holding six days of stipple has no followable
+ * lines left in it. The travelling pulse below is a separate, thin layer *over* an unbroken
+ * ribbon, which is a different thing: the line stays continuous and the light moves along it.
  */
-const ARC_CORE_WIDTH = 3;
+const ARC_WIDTH_START = 16;
+const ARC_WIDTH_END = 9;
+const ARC_TAPER_SEGMENTS = 6;
+const ARC_CASING_WIDTH = 5;
+
+/**
+ * The travelling pulse: light running along each arc in the direction of travel, so the route
+ * shows the *order* of the day and not merely its shape.
+ *
+ * Built as a `PolylineDashMaterialProperty` with a transparent `gapColor` and an **animated
+ * `dashPattern`**, which is the whole trick here. `dashPattern` is a 16-bit mask the shader
+ * tests per fragment (`maskTest = floor(dashPattern / pow(2, maskIndex))`), so rotating the mask
+ * by one bit per step slides the lit band one sixteenth of a dash along the line. Rotating
+ * *left* moves it toward increasing vertex index, which is stop N to stop N+1 — chronological.
+ * It is a uniform, so the geometry never rebuilds; an animation done by re-sampling positions
+ * instead would put every arc in the dynamic batch.
+ *
+ * Two consequences of that shader worth knowing before touching this. The dash is measured in
+ * **screen space** (`gl_FragCoord.xy` rotated by the polyline angle), not along the curve's
+ * arclength, so dash spacing is constant in pixels at any zoom and the pulse neither stretches
+ * nor bunches as the camera moves. And the pattern's period is the dash length, so the pulse
+ * repeats along the arc rather than being one comet head — which is the correct reading for a
+ * *route*, where every part of the leg is being travelled, not a vehicle position.
+ *
+ * `0b0000000000000111` is three lit bits in sixteen: a short bright streak with a long dark gap,
+ * so the ribbon underneath stays the thing you read and the pulse is a highlight moving over it.
+ */
+const PULSE_DASH_PATTERN = 0b0000000000000111;
+const PULSE_DASH_LENGTH_PX = 56;
+const PULSE_DASH_WIDTH = 5;
+const PULSE_DASH_ALPHA = 0.95;
+/** How long the mask takes to travel one full dash, i.e. 16 single-bit rotations. */
+const PULSE_TRAVEL_PERIOD_MS = 1100;
+/** Metres above the ribbon the pulse rides. Coincident polylines z-fight; a metre of separation
+ *  is invisible on an arc hundreds of metres up and puts the pulse cleanly in front. */
+const PULSE_LIFT_M = 1;
+/** How opaque the dark casing runs. Not 1: a fully opaque border on a translucent body reads as
+ *  two separate objects, a black line with a coloured filling. Just under, and it reads as one
+ *  extruded thing with a shaded edge. */
+const CASING_ALPHA = 0.88;
+
+/**
+ * How hard the ribbon's specular highlight burns — see `glassRibbon.ts` for the shader that
+ * draws it and for what "along the top curve" can and cannot mean on a polyline.
+ *
+ * Low, and it has to stay low. The highlight is added to a body that is *already* a saturated
+ * neon at high lightness, so anything approaching 1 blows the streak to white and the ribbon
+ * stops carrying its day's colour where the eye lands hardest — which is the one place it most
+ * needs to. At 0.34 the streak reads as a sheen on the surface rather than as a second white
+ * line drawn down the middle of a coloured one.
+ */
+const RIBBON_SPECULAR_INTENSITY = 0.34;
+/** The colour of the reflection itself. Not pure white: a cool near-white is what a sky reflects,
+ *  and it keeps the highlight from reading as a blown-out gap in the ribbon. */
+const RIBBON_SPECULAR_TINT = "#dff2ff";
+/** The highlight fades with the day's standing, like everything else on the route — a receded
+ *  day with a full-strength sheen would be the brightest thing about it. */
+const SPECULAR_DIM_FLOOR = 0.35;
 /** One full shimmer cycle. Slow on purpose — this is meant to read as a breath along the route,
  *  not a chase light. */
 const SHIMMER_PERIOD_MS = 2600;
@@ -638,16 +944,22 @@ export function buildRouteGeometry(
   Cesium: CesiumModule,
   stops: RouteStop[],
   altitude: number,
-  colorToken: string = "--route-blue"
+  palette: DayPalette = DAY_PALETTES[0]
 ): RouteGeometry {
   const positionsAt = (h: number) =>
     stops.map((s) => Cesium.Cartesian3.fromDegrees(s.lng, s.lat, h));
   const positions = positionsAt(altitude);
   const ellipsoid = viewer.scene.globe.ellipsoid;
-  // One route's colour, which since the globe started drawing every day at once is the day's
-  // colour rather than a constant. Defaulted so a caller that has only one route to draw does
-  // not have to know the ramp exists.
-  const dayColor = Cesium.Color.fromCssColorString(cssColor(colorToken));
+  // This route's pair. `dayColor` is the object — ribbon body, ring cores, beam core — and
+  // `glowColor` is the light coming off it: the arc halo, the beam bloom, the outermost radar
+  // ring, the outer footprint disc. See `DayPalette`. Defaulted so a caller with only one route
+  // to draw does not have to know the pool exists.
+  const dayColor = Cesium.Color.fromCssColorString(cssColor(palette.core));
+  const glowColor = Cesium.Color.fromCssColorString(cssColor(palette.glow));
+  // Idempotent, and it has to run before the first ribbon is added: `Material.fromType` resolves
+  // the fabric out of a global cache at the moment a material is first built.
+  registerGlassRibbonMaterial(Cesium);
+  const specularTint = Cesium.Color.fromCssColorString(RIBBON_SPECULAR_TINT);
 
   // --- Arcs -------------------------------------------------------------------------------
   // One raised great-circle hop per consecutive pair, replacing the single flat cased line.
@@ -674,7 +986,18 @@ export function buildRouteGeometry(
     segments.push({ geodesic, lift: arcLift(geodesic.surfaceDistance), from: i - 1, to: i });
   }
 
-  const accent = Cesium.Color.fromCssColorString(cssColor("--accent"));
+  /** What "you are pointing at this" is drawn in *on this day*. Amber almost always; white on a
+   *  day whose own colour is already amber, or the hover would be invisible — see
+   *  `emphasisColorFor`. Resolved once here rather than per callback, so the ribbon, the rings
+   *  and `applyTints` cannot disagree about it. */
+  const accent = emphasisColorFor(
+    dayColor,
+    Cesium.Color.fromCssColorString(cssColor("--accent")),
+    Cesium.Color.WHITE
+  );
+  /** The dark stroke down both edges of every ribbon — arcs and stems alike. Read from the same
+   *  stylesheet the day colours are, so the route's whole palette stays in globals.css. */
+  const casing = Cesium.Color.fromCssColorString(cssColor("--route-casing"));
   /** Which stop is currently hovered or selected, or null. Read live by the core line shimmer's
    *  callback, and written by `setEmphasis` below. */
   let emphasised: number | null = null;
@@ -713,11 +1036,65 @@ export function buildRouteGeometry(
   // unless it is checked here.
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  /** The dark casing's colour at the current day state, as a live property.
+   *
+   *  It has to follow `stateAlpha` rather than being a constant, and that is the one non-obvious
+   *  thing about drawing an outlined ribbon here: a dimmed day fades its *body* to 0.25, and a
+   *  casing left at full opacity would leave the receded days reading as black lines with a
+   *  ghost of colour inside them — louder dimmed than they were lit. Both edges of the ribbon
+   *  fade together or the ribbon comes apart. */
+  const casingProperty = () =>
+    new Cesium.CallbackProperty(
+      (_time, result) =>
+        casing.withAlpha(CASING_ALPHA * stateAlpha(), result as import("cesium").Color),
+      false
+    );
+
+  /**
+   * One taper segment's slice of the sampled arc, and the width to draw it at.
+   *
+   * Each slice ends on the vertex the next one starts on (`end` is inclusive), so consecutive
+   * polylines meet exactly rather than leaving a hairline gap that shows as a dotted arc at
+   * street level. The width is sampled at the slice's midpoint, so the first and last segments
+   * sit slightly inside `ARC_WIDTH_START`/`_END` rather than hitting them exactly — which is
+   * what keeps the two end steps the same size as the interior ones.
+   */
+  const taperSlices = Array.from({ length: ARC_TAPER_SEGMENTS }, (_, k) => {
+    const start = Math.round((k * (ARC_SAMPLES - 1)) / ARC_TAPER_SEGMENTS);
+    const end = Math.round(((k + 1) * (ARC_SAMPLES - 1)) / ARC_TAPER_SEGMENTS);
+    const mid = (k + 0.5) / ARC_TAPER_SEGMENTS;
+    return { start, end, width: ARC_WIDTH_START + (ARC_WIDTH_END - ARC_WIDTH_START) * mid };
+  });
+
   const arcs = segments.map((_, index) => {
     const arcPositions = arcPositionsAt(index, altitude);
 
-    // Soft, low-alpha halo. Just enough to keep the thin core line off a mid-grey rooftop — see
-    // ARC_GLOW_ALPHA for why this is no longer carrying legibility on its own.
+    /** The ribbon's live colour, shared by every taper segment of this arc.
+     *
+     *  One property object handed to all of them rather than one each: they are the same ribbon
+     *  and must shimmer in lockstep, and six `CallbackProperty` instances evaluating the same
+     *  clock is six times the work to arrive at the same colour. */
+    const bodyColor = new Cesium.CallbackProperty((_time, result) => {
+      const base = isArcEmphasised(index) ? accent : dayColor;
+      if (reduceMotion) {
+        return base.withAlpha(
+          SHIMMER_ALPHA_STATIC * stateAlpha(),
+          result as import("cesium").Color
+        );
+      }
+      const phase = (performance.now() - startedAt) / SHIMMER_PERIOD_MS - index * SHIMMER_ARC_LAG;
+      const wave = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+      return base.withAlpha(
+        (SHIMMER_ALPHA_MIN + SHIMMER_ALPHA_RANGE * wave) * stateAlpha(),
+        result as import("cesium").Color
+      );
+    }, false);
+    const bodyCasing = casingProperty();
+
+    // The emissive bleed. Wide and very low-powered, so it reads as light coming off the ribbon
+    // rather than as a second, fuzzier line beside it — see ARC_GLOW_POWER. Not tapered: a halo
+    // is a soft field with no edge to read a width off, so segmenting it would spend six
+    // entities on a difference nobody can see.
     const glow = viewer.entities.add({
       polyline: {
         positions: arcPositions,
@@ -725,92 +1102,293 @@ export function buildRouteGeometry(
         arcType: Cesium.ArcType.NONE,
         material: new Cesium.PolylineGlowMaterialProperty({
           glowPower: ARC_GLOW_POWER,
-          color: dayColor.withAlpha(ARC_GLOW_ALPHA),
+          // The palette's *glow*, not a faded core — the halo is the light coming off the
+          // ribbon, and shifting hue as it falls off is what emission actually does.
+          color: glowColor.withAlpha(ARC_GLOW_ALPHA),
+        }),
+      },
+    });
+
+    // The ribbon proper, in `ARC_TAPER_SEGMENTS` pieces of falling width — see ARC_WIDTH_START.
+    const cores = taperSlices.map((slice) =>
+      viewer.entities.add({
+        polyline: {
+          positions: arcPositions.slice(slice.start, slice.end + 1),
+          width: slice.width,
+          // NONE, not GEODESIC: these vertices already describe the curve, and asking Cesium to
+          // re-trace a great circle between each adjacent pair would flatten the lift back out.
+          arcType: Cesium.ArcType.NONE,
+          // Neon body, dark stroke down both edges, a specular sheen along the shoulder — one
+          // material, drawn by the custom shader in `glassRibbon.ts`. This was a
+          // `PolylineOutlineMaterialProperty`, before that a `ColorMaterialProperty`, and before
+          // that a `PolylineDashMaterialProperty`; see ARC_WIDTH_START for the first two. The
+          // casing half of the shader is a verbatim copy of the stock outline material, so the
+          // edge behaves exactly as it did and `ARC_CASING_WIDTH` keeps its meaning.
+          material: createGlassRibbonMaterial(Cesium, {
+            color: bodyColor,
+            outlineColor: bodyCasing,
+            outlineWidth: ARC_CASING_WIDTH,
+            // Also a callback: the sheen recedes with the day, or a dimmed route would keep the
+            // brightest pixel on screen. Scaled on **rgb**, not alpha — the shader adds
+            // `specularColor.rgb` to the body and never reads its alpha, so fading this the way
+            // every other material here fades would have done nothing at all. Floored rather
+            // than taken to zero, so a stepped-back ribbon still reads as the same material as
+            // the active one rather than as a flat stripe.
+            specularColor: new Cesium.CallbackProperty((_time, result) => {
+              const dim = SPECULAR_DIM_FLOOR + (1 - SPECULAR_DIM_FLOOR) * stateAlpha();
+              return Cesium.Color.multiplyByScalar(
+                specularTint,
+                dim,
+                result as import("cesium").Color
+              );
+            }, false),
+            specularIntensity: RIBBON_SPECULAR_INTENSITY,
+          }) as unknown as import("cesium").MaterialProperty,
+          // Stretches behind buildings draw dimmed rather than disappearing, so the whole day
+          // stays traceable from a low angle. Only available unclamped. Matters much less now
+          // that the arcs are lifted clear of the rooftops — it still catches the run down to
+          // each card, which is the part that passes through the city. Flat colour rather than
+          // the outlined material: this is the see-through state, and a casing on it would draw
+          // a dark edge *through* the building in front, which is the opposite of receding.
+          depthFailMaterial: new Cesium.ColorMaterialProperty(
+            dayColor.withAlpha(ROUTE_OCCLUDED_ALPHA)
+          ),
+        },
+      })
+    );
+
+    // The travelling pulse, riding a metre above the ribbon it highlights. See
+    // PULSE_DASH_PATTERN for how the motion is done and why it costs no geometry.
+    const pulse = viewer.entities.add({
+      polyline: {
+        positions: arcPositionsAt(index, altitude + PULSE_LIFT_M),
+        width: PULSE_DASH_WIDTH,
+        arcType: Cesium.ArcType.NONE,
+        material: new Cesium.PolylineDashMaterialProperty({
+          color: new Cesium.CallbackProperty(
+            (_time, result) =>
+              // Near-white rather than the day's colour: this is the *light* moving along the
+              // ribbon, and tinting it the same neon underneath makes it disappear into it. It
+              // still takes `stateAlpha`, so a dimmed day's pulse recedes with the day.
+              Cesium.Color.WHITE.withAlpha(
+                PULSE_DASH_ALPHA * stateAlpha(),
+                result as import("cesium").Color
+              ),
+            false
+          ),
+          // Transparent gaps, not a second colour: the ribbon underneath is the gap.
+          gapColor: Cesium.Color.TRANSPARENT,
+          dashLength: PULSE_DASH_LENGTH_PX,
+          dashPattern: new Cesium.CallbackProperty(() => {
+            if (reduceMotion) return PULSE_DASH_PATTERN;
+            // One bit of rotation per 1/16th of a travel period, left-rotated within 16 bits so
+            // the streak advances toward increasing vertex index. `>>> 0` keeps the intermediate
+            // out of the sign bit; the shader wants a plain positive number.
+            const steps = Math.floor(
+              (((performance.now() - startedAt) / PULSE_TRAVEL_PERIOD_MS) % 1) * 16
+            );
+            return (
+              (((PULSE_DASH_PATTERN << steps) | (PULSE_DASH_PATTERN >>> (16 - steps))) &
+                0xffff) >>>
+              0
+            );
+          }, false),
+        }),
+      },
+    });
+
+    return { glow, cores, pulse };
+  });
+
+  const stemTopAt = (i: number, h: number) =>
+    Cesium.Cartesian3.fromDegrees(stops[i].lng, stops[i].lat, h + STEM_HEIGHT_M);
+
+  // A light pillar standing in the ground rings, replacing the flat blue dot that used to mark
+  // each stop and, before that, the thin drop line that replaced it. It carries the eye from the
+  // ground up to the card, and from there the arcs leave at exactly the height it ends — see
+  // BEAM_BOTTOM_RADIUS_M for why one line was not enough to read as a beam.
+  //
+  // arcType NONE is load-bearing on both polylines: the default GEODESIC would try to trace a
+  // great circle between two points that differ only in altitude, which is degenerate.
+  /**
+   * The beam's slices, computed once for the whole route since every stop's pillar is identical
+   * in shape. `centreM` is the slice's own centre above the ground, because a cylinder is
+   * anchored at its middle; `mix` walks core to glow up the beam and `alphaScale` fades it out.
+   */
+  const beamSlices = Array.from({ length: BEAM_COLUMN_SLICES }, (_, k) => {
+    const lengthM = STEM_HEIGHT_M / BEAM_COLUMN_SLICES;
+    const t0 = k / BEAM_COLUMN_SLICES;
+    const t1 = (k + 1) / BEAM_COLUMN_SLICES;
+    const mid = (t0 + t1) / 2;
+    const radiusAt = (t: number) =>
+      BEAM_BOTTOM_RADIUS_M + (BEAM_TOP_RADIUS_M - BEAM_BOTTOM_RADIUS_M) * t;
+    return {
+      lengthM,
+      centreM: mid * STEM_HEIGHT_M,
+      bottomRadiusM: radiusAt(t0),
+      topRadiusM: radiusAt(t1),
+      mix: mid,
+      alphaScale: 1 + (BEAM_TOP_ALPHA_SCALE - 1) * mid,
+    };
+  });
+
+  const beams = stops.map((_, i) => {
+    const foot = positions[i];
+    const head = stemTopAt(i, altitude);
+
+    // The volume, as a vertical gradient: `BEAM_COLUMN_SLICES` stacked cylinders running from
+    // the core colour at the ground to the glow colour at the top, thinning and fading as they
+    // rise. A Cesium material is a single uniform with no gradient of its own, so a graded beam
+    // has to be built out of slices — the same reason the ground discs are stacked rather than
+    // drawn with a radial falloff.
+    //
+    // A cylinder takes its position at its own *centre*, not its base, and its altitude comes
+    // from that position rather than from any height property — so every slice's centre point
+    // has to be rebuilt in `reposition`.
+    const columns = beamSlices.map((slice) =>
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(stops[i].lng, stops[i].lat, altitude + slice.centreM),
+        cylinder: {
+          length: slice.lengthM,
+          topRadius: slice.topRadiusM,
+          bottomRadius: slice.bottomRadiusM,
+          material: new Cesium.ColorMaterialProperty(
+            Cesium.Color.lerp(
+              dayColor,
+              glowColor,
+              slice.mix,
+              new Cesium.Color()
+            ).withAlpha(BEAM_COLUMN_ALPHA * slice.alphaScale)
+          ),
+        },
+      })
+    );
+
+    const halo = viewer.entities.add({
+      polyline: {
+        positions: [foot, head],
+        width: BEAM_HALO_WIDTH,
+        arcType: Cesium.ArcType.NONE,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: BEAM_HALO_POWER,
+          color: glowColor.withAlpha(BEAM_HALO_ALPHA),
         }),
       },
     });
 
     const core = viewer.entities.add({
       polyline: {
-        positions: arcPositions,
-        width: ARC_CORE_WIDTH,
-        // NONE, not GEODESIC: these vertices already describe the curve, and asking Cesium to
-        // re-trace a great circle between each adjacent pair would flatten the lift back out.
+        positions: [foot, head],
+        width: STEM_WIDTH,
         arcType: Cesium.ArcType.NONE,
-        // Solid. This was a PolylineDashMaterialProperty — see ARC_CORE_WIDTH for why it isn't.
-        material: new Cesium.ColorMaterialProperty(
-          // Always a callback, even under reduced motion, so hover emphasis has one place to
-          // take effect. Second argument false = "not constant", so Cesium re-evaluates every
-          // frame; `withAlpha` into the supplied result keeps that allocation-free at ~160fps.
-          new Cesium.CallbackProperty((_time, result) => {
-            const base = isArcEmphasised(index) ? accent : dayColor;
-            if (reduceMotion) {
-              return base.withAlpha(
-                SHIMMER_ALPHA_STATIC * stateAlpha(),
-                result as import("cesium").Color
-              );
-            }
-            const phase =
-              (performance.now() - startedAt) / SHIMMER_PERIOD_MS - index * SHIMMER_ARC_LAG;
-            const wave = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
-            return base.withAlpha(
-              (SHIMMER_ALPHA_MIN + SHIMMER_ALPHA_RANGE * wave) * stateAlpha(),
-              result as import("cesium").Color
-            );
-          }, false)
-        ),
-        // Stretches behind buildings draw dimmed rather than disappearing, so the whole day
-        // stays traceable from a low angle. Only available unclamped. Matters much less now that
-        // the arcs are lifted clear of the rooftops — it still catches the run down to each
-        // card, which is the part that passes through the city.
-        depthFailMaterial: new Cesium.ColorMaterialProperty(
-          dayColor.withAlpha(ROUTE_OCCLUDED_ALPHA)
-        ),
+        material: new Cesium.PolylineOutlineMaterialProperty({
+          color: dayColor,
+          outlineColor: casingProperty(),
+          outlineWidth: STEM_CASING_WIDTH,
+        }),
       },
     });
 
-    return { glow, core };
+    return { columns, halo, core };
   });
-
-  const stemTopAt = (i: number, h: number) =>
-    Cesium.Cartesian3.fromDegrees(stops[i].lng, stops[i].lat, h + STEM_HEIGHT_M);
-
-  // A thin lit stem out of a pool of light on the ground, replacing the flat blue dot that used
-  // to mark each stop. The dot had nowhere to put a name; this lifts the label clear of the
-  // rooftops and gives the card something to stand on.
-  //
-  // arcType NONE is load-bearing: the default GEODESIC would try to trace a great circle between
-  // two points that differ only in altitude, which is degenerate.
-  const stems = stops.map((_, i) =>
-    viewer.entities.add({
-      polyline: {
-        positions: [positions[i], stemTopAt(i, altitude)],
-        width: STEM_WIDTH,
-        arcType: Cesium.ArcType.NONE,
-        material: new Cesium.PolylineGlowMaterialProperty({
-          glowPower: STEM_GLOW_POWER,
-          color: dayColor,
-        }),
-      },
-    })
-  );
 
   // Ellipse geometry takes its centre from `entity.position` but its altitude from `ellipse.height`
   // — the position's own height is ignored — so both have to be written here and in `reposition`.
+  //
+  // The discs are the soft half of the footprint: a small bright one inside a wide faint one,
+  // which is as close to a radial falloff as a flat ellipse fill gets. The radar rings below are
+  // the half that actually reads.
   const pools = stops.map((_, i) =>
     (
       [
-        [POOL_RADIUS_M, POOL_ALPHA],
-        [POOL_RADIUS_M * POOL_OUTER_RATIO, POOL_OUTER_ALPHA],
+        [POOL_RADIUS_M, POOL_ALPHA, dayColor],
+        [POOL_RADIUS_M * POOL_OUTER_RATIO, POOL_OUTER_ALPHA, glowColor],
       ] as const
-    ).map(([radius, alpha]) =>
+    ).map(([radius, alpha, tint]) =>
       viewer.entities.add({
         position: positions[i],
         ellipse: {
           semiMajorAxis: radius,
           semiMinorAxis: radius,
           height: altitude,
-          material: new Cesium.ColorMaterialProperty(dayColor.withAlpha(alpha)),
+          // Core inside, glow outside: the footprint falls off in hue as well as alpha, the same
+          // way the ribbon's halo does.
+          material: new Cesium.ColorMaterialProperty(tint.withAlpha(alpha)),
+        },
+      })
+    )
+  );
+
+  /**
+   * A circle of positions on the ground around a stop.
+   *
+   * Flat-earth offsets rather than a geodesic walk: these circles are 40-90m across, where the
+   * error from treating a degree of latitude as a constant 111.32km is centimetres, and a stop
+   * near a pole is not a case this app has — every stop is a place someone visits. The cosine
+   * term keeps the circle round rather than an ellipse squashed east-west at high latitude,
+   * which at 60°N would otherwise be a 2:1 oval.
+   */
+  const ringPositionsAt = (i: number, radius: number, h: number) => {
+    const dLat = radius / 111_320;
+    const dLng = dLat / Math.max(Math.cos((stops[i].lat * Math.PI) / 180), 0.01);
+    const out: import("cesium").Cartesian3[] = new Array(RING_SAMPLES + 1);
+    for (let k = 0; k <= RING_SAMPLES; k++) {
+      const a = (k / RING_SAMPLES) * Math.PI * 2;
+      out[k] = Cesium.Cartesian3.fromDegrees(
+        stops[i].lng + dLng * Math.cos(a),
+        stops[i].lat + dLat * Math.sin(a),
+        h,
+        ellipsoid
+      );
+    }
+    return out;
+  };
+
+  /**
+   * Three concentric radar rings per stop, brightening from the inside out — see RING_RADII_RATIO
+   * for the sweep and why it is alpha rather than a moving radius.
+   *
+   * Rings are the figure and the discs are the ground: a translucent disc alone reads as a stain
+   * on the photograph, while a circle has an *edge*, which is the thing satellite imagery cannot
+   * fake underneath it.
+   */
+  const rings = stops.map((_, i) =>
+    RING_RADII_RATIO.map((ratio, r) =>
+      viewer.entities.add({
+        polyline: {
+          positions: ringPositionsAt(i, POOL_RADIUS_M * ratio, altitude),
+          width: RING_WIDTHS[r],
+          // The ring's own vertices already trace the circle; GEODESIC would re-trace between
+          // each adjacent pair, which is the same trap the arcs document.
+          arcType: Cesium.ArcType.NONE,
+          material: new Cesium.PolylineGlowMaterialProperty({
+            glowPower: RING_GLOW_POWER,
+            // Every ring pulses, each a third of a cycle behind the one inside it, which is what
+            // makes the brightness read as a wave travelling outward rather than three circles
+            // blinking together. The callback also reads `emphasised`, so the amber
+            // "you are pointing at this" tint reaches the rings without a second write path.
+            color: new Cesium.CallbackProperty((_time, result) => {
+              // Inner two rings in the core, the outermost in the glow — the footprint reads as
+              // one light source falling off outward rather than three circles of one colour.
+              const base =
+                i === emphasised ? accent : r === RING_RADII_RATIO.length - 1 ? glowColor : dayColor;
+              if (reduceMotion) {
+                return base.withAlpha(
+                  RING_ALPHAS[r] * PULSE_ALPHA_STATIC * stateAlpha(),
+                  result as import("cesium").Color
+                );
+              }
+              const phase =
+                (performance.now() - startedAt) / PULSE_PERIOD_MS -
+                i * PULSE_STOP_LAG -
+                r * PULSE_RING_LAG;
+              const wave = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+              return base.withAlpha(
+                RING_ALPHAS[r] * (PULSE_ALPHA_MIN + PULSE_ALPHA_RANGE * wave) * stateAlpha(),
+                result as import("cesium").Color
+              );
+            }, false),
+          }),
         },
       })
     )
@@ -824,6 +1402,9 @@ export function buildRouteGeometry(
   const tintPolyline =
     (entity: Entity, alpha: number) =>
     (base: import("cesium").Color) => {
+      // `PolylineGlowMaterialProperty` and `PolylineOutlineMaterialProperty` both expose `color`
+      // and nothing else here touches the casing, which follows `stateAlpha` through its own
+      // callback — so one closure still covers a glow halo, a ring and an outlined stem.
       (entity.polyline!.material as import("cesium").PolylineGlowMaterialProperty).color =
         new Cesium.ConstantProperty(base.withAlpha(alpha * stateAlpha()));
     };
@@ -833,19 +1414,45 @@ export function buildRouteGeometry(
       (entity.ellipse!.material as import("cesium").ColorMaterialProperty).color =
         new Cesium.ConstantProperty(base.withAlpha(alpha * stateAlpha()));
     };
+  /** The beam's volume, which is a `cylinder` and so reaches its material by a third path. */
+  const tintCylinder =
+    (entity: Entity, alpha: number) =>
+    (base: import("cesium").Color) => {
+      (entity.cylinder!.material as import("cesium").ColorMaterialProperty).color =
+        new Cesium.ConstantProperty(base.withAlpha(alpha * stateAlpha()));
+    };
 
-  /** Arc glow and stem widths follow the active flag. Written imperatively for the same reason
+  /** Arc and beam widths follow the active flag. Written imperatively for the same reason
    *  the tints are: a `CallbackProperty` here would move these polylines into Cesium's dynamic
-   *  batch and rebuild their geometry every frame, to animate a number that changes on a click. */
+   *  batch and rebuild their geometry every frame, to animate a number that changes on a click.
+   *
+   *  Every taper segment scales by the same factor rather than to a common width — scaling to a
+   *  single number would flatten the taper the moment a day was selected, which is precisely
+   *  when the day is being read most closely. */
   const applyWidths = () => {
     const active = dayState === "active";
     const glowWidth = active ? ARC_GLOW_WIDTH * ACTIVE_GLOW_WIDTH_SCALE : ARC_GLOW_WIDTH;
+    const coreScale = active ? ACTIVE_CORE_WIDTH_SCALE : 1;
     const stemWidth = active ? STEM_WIDTH * ACTIVE_STEM_WIDTH_SCALE : STEM_WIDTH;
-    for (const arc of arcs) arc.glow.polyline!.width = new Cesium.ConstantProperty(glowWidth);
-    for (const stem of stems) stem.polyline!.width = new Cesium.ConstantProperty(stemWidth);
+    for (const arc of arcs) {
+      arc.glow.polyline!.width = new Cesium.ConstantProperty(glowWidth);
+      arc.cores.forEach((core, k) => {
+        core.polyline!.width = new Cesium.ConstantProperty(taperSlices[k].width * coreScale);
+      });
+    }
+    for (const beam of beams) beam.core.polyline!.width = new Cesium.ConstantProperty(stemWidth);
   };
 
-  const stemTints = stems.map((e) => tintPolyline(e, 1));
+  // Every piece of a beam takes the tint at its own alpha, and the column's slices keep their
+  // own gradient step — emphasis must light the whole pillar without flattening the fade that
+  // makes it read as a beam rather than a stick.
+  const beamTints = beams.map((beam) => [
+    tintPolyline(beam.core, 1),
+    tintPolyline(beam.halo, BEAM_HALO_ALPHA),
+    ...beam.columns.map((column, k) =>
+      tintCylinder(column, BEAM_COLUMN_ALPHA * beamSlices[k].alphaScale)
+    ),
+  ]);
   const poolTints = pools.map((pair) => [
     tintEllipse(pair[0], POOL_ALPHA),
     tintEllipse(pair[1], POOL_OUTER_ALPHA),
@@ -854,19 +1461,29 @@ export function buildRouteGeometry(
 
   /** Repaint every imperatively-tinted piece from the current `emphasised` and `dayState`.
    *  Shared by `setEmphasis` and `setDayState`: both change the same colours, and two copies of
-   *  this loop is how one of them ends up forgetting the pools. */
+   *  this loop is how one of them ends up forgetting the pools.
+   *
+   *  Three things are deliberately absent and must stay absent: the ribbon's body, the travelling
+   *  pulse and the radar rings. All three drive their colour from a per-frame `CallbackProperty`
+   *  that reads `emphasised` and `stateAlpha` directly, so they are already correct — writing a
+   *  `ConstantProperty` over them here would replace the callback and stop the animation dead on
+   *  the first hover, which is the exact bug this note exists to prevent. */
   const applyTints = () => {
     stops.forEach((_, i) => {
       const base = i === emphasised ? accent : dayColor;
-      stemTints[i](base);
+      beamTints[i].forEach((tint) => tint(base));
       poolTints[i].forEach((tint) => tint(base));
     });
-    // The core line needs no write here — its callback reads `emphasised` directly, every frame.
     arcGlowTints.forEach((tint, k) => tint(isArcEmphasised(k) ? accent : dayColor));
   };
 
   return {
-    entities: [...arcs.flatMap((a) => [a.glow, a.core]), ...stems, ...pools.flat()],
+    entities: [
+      ...arcs.flatMap((a) => [a.glow, ...a.cores, a.pulse]),
+      ...beams.flatMap((b) => [...b.columns, b.halo, b.core]),
+      ...pools.flat(),
+      ...rings.flat(),
+    ],
     setEmphasis: (index: number | null) => {
       if (index === emphasised) return;
       emphasised = index;
@@ -884,20 +1501,49 @@ export function buildRouteGeometry(
     },
     reposition: (h: number) => {
       const corrected = positionsAt(h);
-      // Both polylines of an arc share one freshly sampled array — they trace the same curve at
-      // different widths, so re-sampling twice would only cost time.
-      arcs.forEach(({ glow, core }, index) => {
-        const resampled = new Cesium.ConstantProperty(arcPositionsAt(index, h));
-        glow.polyline!.positions = resampled;
-        core.polyline!.positions = resampled;
+      // The halo and every taper segment share one freshly sampled array — they trace the same
+      // curve at different widths, so re-sampling per entity would only cost time. The pulse is
+      // the exception: it rides a metre higher and needs its own trace.
+      arcs.forEach(({ glow, cores, pulse }, index) => {
+        const sampled = arcPositionsAt(index, h);
+        glow.polyline!.positions = new Cesium.ConstantProperty(sampled);
+        cores.forEach((core, k) => {
+          core.polyline!.positions = new Cesium.ConstantProperty(
+            sampled.slice(taperSlices[k].start, taperSlices[k].end + 1)
+          );
+        });
+        pulse.polyline!.positions = new Cesium.ConstantProperty(
+          arcPositionsAt(index, h + PULSE_LIFT_M)
+        );
       });
-      stems.forEach((e, i) => {
-        e.polyline!.positions = new Cesium.ConstantProperty([corrected[i], stemTopAt(i, h)]);
+      // All three layers of a beam move together. The cylinder is the awkward one: its altitude
+      // lives in its own centre position rather than in any height property, so it is re-anchored
+      // half a beam above the new ground rather than on it.
+      beams.forEach(({ columns, halo, core }, i) => {
+        const span = new Cesium.ConstantProperty([corrected[i], stemTopAt(i, h)]);
+        halo.polyline!.positions = span;
+        core.polyline!.positions = span;
+        columns.forEach((column, k) => {
+          column.position = new Cesium.ConstantPositionProperty(
+            Cesium.Cartesian3.fromDegrees(stops[i].lng, stops[i].lat, h + beamSlices[k].centreM)
+          );
+        });
       });
       pools.forEach((pair, i) =>
         pair.forEach((e) => {
           e.position = new Cesium.ConstantPositionProperty(corrected[i]);
           e.ellipse!.height = new Cesium.ConstantProperty(h);
+        })
+      );
+      // The rings are polylines, so their altitude lives in the vertices rather than in a
+      // `height` property — they have to be re-traced, not just re-anchored. Forgetting this is
+      // exactly the failure `reposition`'s doc comment is about: they would stay on the first,
+      // pre-sample altitude and detach from the discs underneath them at an oblique angle.
+      rings.forEach((ringSet, i) =>
+        ringSet.forEach((e, r) => {
+          e.polyline!.positions = new Cesium.ConstantProperty(
+            ringPositionsAt(i, POOL_RADIUS_M * RING_RADII_RATIO[r], h)
+          );
         })
       );
     },

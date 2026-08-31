@@ -8,16 +8,52 @@ const primaryButtonClass =
 const ghostButtonClass =
   "inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium text-muted transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none disabled:opacity-50 disabled:pointer-events-none";
 
+/**
+ * Where the plan's automatic draft has got to. `null` means no draft is being tracked at all, so
+ * the reassurance line is simply absent — the state this footer shipped in.
+ */
+export type DraftState = "pending" | "saved" | "failed" | null;
+
+/**
+ * The one line that tells the traveler their plan is not riding on this button.
+ *
+ * `Keep this trip` reads as the only thing standing between them and losing the plan, because for
+ * a long time it was. It isn't any more — the itinerary is written to a draft row the moment it
+ * arrives — but a silent safety net is one nobody trusts, and the traveler who presses Back is
+ * exactly the traveler who never learned it was there. So the state is stated, including when it
+ * fails: the failed copy points at the button, which really is the only path left in that case.
+ *
+ * `role="status"` rather than a bare <p>: the text changes under the traveler without them acting,
+ * so a screen reader has to be told, and politely enough not to interrupt the card's own reveal.
+ */
+function DraftNote({ state }: { state: DraftState }) {
+  if (!state) return null;
+  const failed = state === "failed";
+  return (
+    <p
+      role="status"
+      className={`mt-0.5 text-xs ${failed ? "text-red-400" : "text-muted"}`}
+    >
+      {state === "pending" && "Saving a draft…"}
+      {state === "saved" && "Saved as a draft — find it under Drafts in My memories."}
+      {failed && "We couldn't save a draft of this. Keep it to be sure it sticks."}
+    </p>
+  );
+}
+
 export default function FeedbackLoop({
   onSave,
   onRefine,
   saving,
   refining,
+  draftState = null,
 }: {
   onSave: () => void;
   onRefine: (feedback: string) => void;
   saving: boolean;
   refining: boolean;
+  /** Optional so the preview/fixture callers that don't own a draft keep working unchanged. */
+  draftState?: DraftState;
 }) {
   const [feedback, setFeedback] = useState("");
   const [showFeedback, setShowFeedback] = useState(false);
@@ -36,9 +72,12 @@ export default function FeedbackLoop({
     <div className="glass-itinerary rounded-2xl p-5 sm:p-6" {...devLabel("FeedbackLoop")}>
       {!showFeedback ? (
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-          {/* Was "Happy with this itinerary?" — a yes/no question whose two answers
-              were "Give feedback" and "Save trip". */}
-          <p className="text-sm font-medium text-foreground">This is your plan.</p>
+          <div>
+            {/* Was "Happy with this itinerary?" — a yes/no question whose two answers
+                were "Give feedback" and "Save trip". */}
+            <p className="text-sm font-medium text-foreground">This is your plan.</p>
+            <DraftNote state={draftState} />
+          </div>
           <div className="flex gap-2">
             <button
               type="button"

@@ -1,14 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  DAY_COLOR_TOKENS,
+  DAY_PALETTES,
   arcLift,
   buildDayClusters,
   dayColorToken,
+  dayGlowToken,
+  dayPalette,
+  emphasisColorFor,
   DAY_LABEL_LIFT_M,
   dayPhase,
   dayVisualState,
   frameRouteBesidePanel,
+  lateralPanelBiasM,
   routeViewHeadingDeg,
 } from "./mapRoute.ts";
 
@@ -18,32 +22,72 @@ import {
 const day = (index, coords) =>
   coords.map(([lat, lng], i) => ({ lat, lng, name: `stop ${i}`, day: index }));
 
-test("day 1 keeps the colour the single-day route always used", () => {
-  // The whole point of anchoring the ramp here: a one-day trip must look untouched.
-  assert.equal(dayColorToken(0), "--route-blue");
+test("day 1 opens the pool on cyber cyan", () => {
+  // Anchored rather than merely "some token": day 1 is the palette a one-day trip is drawn in,
+  // and the pool's whole premise is that it opens on a hue no satellite imagery contains.
+  assert.deepEqual(dayPalette(0), {
+    core: "--route-neon-cyan",
+    glow: "--route-neon-cyan-glow",
+  });
 });
 
-test("each of the first six days gets a distinct colour", () => {
-  const tokens = [0, 1, 2, 3, 4, 5].map(dayColorToken);
-  assert.equal(new Set(tokens).size, 6);
+test("every day resolves to a core and a glow, and they are never the same token", () => {
+  // A palette whose glow equals its core is a halo that reads as a blur rather than as light —
+  // the reason the pool holds pairs at all.
+  for (const i of [0, 1, 2, 3, 4, 5, 12, 99]) {
+    assert.equal(dayColorToken(i), dayPalette(i).core);
+    assert.equal(dayGlowToken(i), dayPalette(i).glow);
+    assert.notEqual(dayPalette(i).core, dayPalette(i).glow);
+  }
 });
 
-test("the ramp cycles rather than running off the end", () => {
+test("each of the first five days gets a distinct palette", () => {
+  const cores = [0, 1, 2, 3, 4].map(dayColorToken);
+  assert.equal(new Set(cores).size, DAY_PALETTES.length);
+});
+
+test("the pool cycles rather than running off the end", () => {
   // A 30-day trip is expressible; `undefined` reaching Cesium.Color.fromCssColorString throws
   // and would take the whole route with it.
-  assert.equal(dayColorToken(6), dayColorToken(0));
-  assert.equal(dayColorToken(13), dayColorToken(1));
+  assert.equal(dayColorToken(DAY_PALETTES.length), dayColorToken(0));
+  assert.equal(dayColorToken(DAY_PALETTES.length + 1), dayColorToken(1));
   for (const i of [0, 7, 29, 100]) {
-    assert.ok(DAY_COLOR_TOKENS.includes(dayColorToken(i)));
+    assert.ok(DAY_PALETTES.some((p) => p.core === dayColorToken(i)));
   }
 });
 
-test("consecutive days never share a colour", () => {
-  // The one thing the colour has to do. Cycling is fine; two adjacent clusters in the same
-  // colour is the failure that would make the ramp pointless.
+test("consecutive days never share a palette", () => {
+  // The one thing the colour has to do, and the reason the mapping is `index % pool.length`
+  // rather than a hash of the day: modulo cannot collide on adjacent days, a hash can.
   for (let i = 0; i < 40; i++) {
     assert.notEqual(dayColorToken(i), dayColorToken(i + 1));
+    assert.notEqual(dayGlowToken(i), dayGlowToken(i + 1));
   }
+});
+
+/** Cesium's Color, near enough for `emphasisColorFor` — it reads red/green/blue only. */
+const rgb = (red, green, blue) => ({ red, green, blue });
+
+test("emphasis stays amber on a day that is not itself amber", () => {
+  const accent = rgb(1, 0.7, 0.25);
+  const white = rgb(1, 1, 1);
+  // Cyan, magenta, lime, violet — every palette outside the accent's hue band.
+  for (const core of [rgb(0, 0.95, 1), rgb(1, 0, 0.5), rgb(0, 1, 0.4), rgb(0.71, 0, 1)]) {
+    assert.equal(emphasisColorFor(core, accent, white), accent);
+  }
+});
+
+test("emphasis falls back to white on the amber day", () => {
+  // Electric Amber (#FF6B00, hue ~25) sits inside the band --accent owns, so pointing at one of
+  // its stops would tint it a colour it is already drawn in and the hover would read as nothing
+  // happening at all. This is the guard for that, and the reason a second warm palette must not
+  // be added — white is the only fallback and it is spent here.
+  const accent = rgb(1, 0.7, 0.25);
+  const white = rgb(1, 1, 1);
+  assert.equal(emphasisColorFor(rgb(1, 0.42, 0), accent, white), white);
+  // The glow half of that palette (#FF0055, hue ~340) is *outside* the band and must not trip
+  // the guard — only the core decides, because the core is what emphasis replaces.
+  assert.equal(emphasisColorFor(rgb(1, 0, 0.33), accent, white), accent);
 });
 
 test("a cluster sits at the mean of its day's stops", () => {
@@ -133,6 +177,28 @@ test("the aim holds for any panel width", () => {
       `free strip ${freeWidth}`
     );
   }
+});
+
+test("a stop flight puts the stop in the middle of the strip the panel leaves", () => {
+  // Same rule as the route framing, for a point whose range is already decided — a hover peek or
+  // a marker click. Without it the camera aims at 720 on a 1440px window, which is *inside* a
+  // panel whose left edge is at 900, so the stop being pointed at lands behind the plan.
+  const rangeM = 600;
+  for (const freeWidth of [1440, 1200, 900, 700, 520]) {
+    const biasM = lateralPanelBiasM(rangeM, 1440, freeWidth, TAN_HALF_FOV);
+    const metresPerPx = (2 * rangeM * TAN_HALF_FOV) / 1440;
+    const onScreen = 1440 / 2 - biasM / metresPerPx;
+    assert.ok(Math.abs(onScreen - freeWidth / 2) < 0.001, `free strip ${freeWidth}`);
+  }
+});
+
+test("a stop flight is unbiased when nothing covers the map", () => {
+  assert.equal(lateralPanelBiasM(600, 1440, 1440, TAN_HALF_FOV), 0);
+  // A full-bleed panel is the phone layout: no strip to aim into, so centred is correct.
+  assert.equal(lateralPanelBiasM(600, 1440, 1600, TAN_HALF_FOV), 0);
+  // Nonsense measurements degrade to centred rather than to NaN metres.
+  assert.equal(lateralPanelBiasM(0, 1440, 900, TAN_HALF_FOV), 0);
+  assert.equal(lateralPanelBiasM(600, 0, 900, TAN_HALF_FOV), 0);
 });
 
 test("the camera pulls back so the route fits the strip rather than the viewport", () => {

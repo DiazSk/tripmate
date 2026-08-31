@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstall": "node scripts/copy-cesium-assets.mjs",
+    "postinstall": "node scripts/copy-cesium-assets.mjs && node scripts/copy-maplibre-assets.mjs",
     "dev": "next dev",
     "build": "next build && node scripts/verify-build.mjs",
     "start": "next start",
@@ -22,6 +22,7 @@
     "framer-motion": "^13.0.0",
     "gsap": "^3.15.0",
     "lucide-react": "^1.28.0",
+    "maplibre-gl": "^6.6.0",
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"

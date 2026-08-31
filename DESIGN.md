@@ -20,10 +20,22 @@ colors:
   tag-highlight-fg: "#ffca7a"
   tile: "rgba(255, 255, 255, 0.1)"
   tile-foreground: "#e3e9f1"
-  route-blue: "#0A84FF"
+  route-neon-cyan: "#00F2FE"
+  route-neon-cyan-glow: "#4FACFE"
+  route-neon-magenta: "#F355DA"
+  route-neon-magenta-glow: "#7000FF"
+  route-neon-amber: "#FF6A00"
+  route-neon-amber-glow: "#EE0979"
+  route-neon-lime: "#00F5A0"
+  route-neon-lime-glow: "#00D9F5"
+  route-neon-violet: "#654EA3"
+  route-neon-violet-glow: "#EAAFC8"
+  ribbon-specular: "#DFF2FF"
+  route-casing: "#050A12"
+  map-glass: "rgb(10 14 23)"
   map-pin-red: "#FF3B30"
-  marker-title: "rgb(244 247 250 / 0.88)"
-  marker-title-receded: "rgb(244 247 250 / 0.32)"
+  marker-title: "rgb(244 247 250 / 0.95)"
+  marker-title-receded: "rgb(244 247 250 / 0.4)"
   shadow-control: "rgba(0, 0, 0, 0.32)"
   shadow-panel: "rgba(0, 0, 0, 0.37)"
   shadow-thumb: "rgba(0, 0, 0, 0.4)"
@@ -34,7 +46,9 @@ typography:
     note: "Fluid root; every rem below scales with it. Floors at 16px, never shrinks."
   family:
     all: "Archivo, ui-sans-serif, system-ui, sans-serif"
-    note: "One face for the whole product — see The One Face Rule. There is no second family."
+    mapDisplay: "Orbitron, Archivo, ui-sans-serif, sans-serif"
+    mapLabel: "Rajdhani, Archivo, ui-sans-serif, sans-serif"
+    note: "One face for the whole product — see The One Face Rule. The two exceptions are mapDisplay and mapLabel, which set the labels standing on the globe and nothing else."
   tracking:
     note: "Tightens as type grows, which is the inverse of the usual instinct. Nothing at zero or positive."
     display: "-0.076em"
@@ -220,14 +234,16 @@ A cool near-black slate carrying the entire surface layer, one warm amber for an
 - **Hairline** (`{colors.card-border}`): every glass edge, every divider, every internal rule.
 - **Chip Glass** (`{colors.tag-neutral-bg}` / `{colors.tag-neutral-fg}`) and **Tile Glass** (`{colors.tile}` / `{colors.tile-foreground}`): white-wash fills for chips and tiles, so the amber Total row is the only thing in the band that pops.
 - **Alert Red** (`text-red-400`, `border-red-500/30`, `bg-red-500/10`, and `bg-red-600` on the one solid destructive-adjacent button): not a second accent — it appears only when something failed or a day ran over budget, never as decoration or category. `red-400` and not `red-600` for text: inside `.glass-itinerary` the panel redefines `--foreground` to white, and dark red on dark slate is the wrong red. **`bg-red-500/10` is a fill only over decorative scenery, never over a live map.** The trip-form's own error block uses it correctly — it sits over the `.map-chrome-hidden`, soft-focus globe on the pre-generation steps, which is scenery, not something being read. `/trip/[id]`'s overspend banner shipped with the same class and nearly disappeared: a real, arbitrary, often-bright aerial map showed straight through a 10%-opacity tint. The fix was `.glass-itinerary`'s actual slate backing (per the One Slate Rule: a new surface takes a new alpha of the one material, not a new hue), with red kept to text, icon and border only.
-- **Shadow black** (`{colors.shadow-control}` at 0.32, `{colors.shadow-panel}` at 0.37, `{colors.shadow-thumb}` at 0.4, `{colors.shadow-object}` at 0.55): the four alphas of the shadow vocabulary below, one per surface class. They are shadow, not surface — they never fill anything, and they belong to no tonal ramp. The stop marker no longer carries a box-shadow at all (nor any fill or border) — see The Day on the Globe, above.
+- **Shadow black** (`{colors.shadow-control}` at 0.32, `{colors.shadow-panel}` at 0.37, `{colors.shadow-thumb}` at 0.4, `{colors.shadow-object}` at 0.55): the four alphas of the shadow vocabulary below, one per surface class. They are shadow, not surface — they never fill anything, and they belong to no tonal ramp. The stop marker's own shadow is not from this vocabulary: its chip carries a map-native `0 2px 10px` at 0.5 plus a hairline inset highlight, because it sits on photography rather than on any of the four surface classes — see The Day on the Globe, above.
 
 ### Tertiary (map-native, outside the brand palette)
-- **Route Blue** (`{colors.route-blue}`, with `#0060DF` casing): the day's arcs, the stop stems and their glow pools.
+- **The neon day palette pool**: five core/glow *pairs*, one per day, cycling. The core draws the ribbon body, the ring cores, the beam core and the badge's border; the glow draws the ribbon's halo, the beam's bloom, the outermost radar ring and the outer footprint disc. Every entry is a fully-saturated neon; see the day palette section below.
+- **Route Casing** (`{colors.route-casing}`): the near-black stroke down both edges of every ribbon. Not pure black — a true black edge reads as a hole punched in the photography, a cool near-black reads as depth.
+- **Map Glass** (`{colors.map-glass}`): the chip behind every label standing on the globe — day badges and stop names at 0.75 under an 8px backdrop blur, place names at 0.55 with no filter. Distinct from the interface's own `{colors.surface-deep}` on purpose: this is a surface drawn *in the world*, and it takes its material from the map palette the way the arcs take their colour from it.
 - **Pin Red** (`{colors.map-pin-red}`, with `#C1271F` stroke): the destination teardrop pin and the compass needle.
-- **Marker Title** (`{colors.marker-title}`, receded to `{colors.marker-title-receded}` when a different stop is focused): the stop title card's own text, floating directly on the globe with no fill, border or blur behind it — an off-white rather than pure white. See The Day on the Globe, above.
+- **Marker Title** (`{colors.marker-title}`, receded to `{colors.marker-title-receded}` when a different stop is focused): the stop title card's own text, set in `{typography.family.mapLabel}` on a Map Glass chip — an off-white rather than pure white. See The Day on the Globe, above.
 
-These three are map affordances that must read against arbitrary satellite imagery at any brightness. They are not part of the interface palette and must never appear in a panel, chip or button.
+These are map affordances that must read against arbitrary satellite imagery at any brightness. They are not part of the interface palette and must never appear in a panel, chip or button.
 
 **The one exception, in the other direction.** `{colors.accent}` is allowed onto the globe, and only
 to mark the stop the user is *touching*: the hovered or selected stem, its glow pool, and the arcs
@@ -235,9 +251,16 @@ either side of it. Amber on the globe means "you are pointing at this" — never
 Keep this exception to interaction state, or the separation between map and interface erodes one
 reasonable-looking case at a time.
 
-- **The day ramp** (`{colors.route-blue}`, then `#32D74B`, `#BF5AF2`, `#FF5C8A`, `#22D3EE`,
-  `#F472D0`): one colour per day, cycling every six. Map-native like route blue and bound by the
-  same rule — never in a panel, chip or button.
+- **The day palette pool**: 1 Pacific Teal / Frost (`{colors.route-neon-cyan}` / `{colors.route-neon-cyan-glow}`),
+  2 Hyper Violet / Neon Rose (`{colors.route-neon-magenta}` / `{colors.route-neon-magenta-glow}`),
+  3 Solar Ember / Tangerine (`{colors.route-neon-amber}` / `{colors.route-neon-amber-glow}`),
+  4 Electric Emerald (`{colors.route-neon-lime}` / `{colors.route-neon-lime-glow}`),
+  5 Ultra Iris / Cobalt (`{colors.route-neon-violet}` / `{colors.route-neon-violet-glow}`). One pair
+  per day, cycling every five. Map-native and bound by the rule above — never in a panel, chip or
+  button.
+- **Ribbon Specular** (`{colors.ribbon-specular}`): the colour of the sheen along the ribbon's
+  shoulder. A cool near-white rather than pure white, because that is what a sky reflects and
+  because a pure-white highlight reads as a blown-out gap in the line rather than a lit surface.
 
 Per-day colours were rejected once, and the reason they were rejected is worth keeping: *"only the
 active day is ever drawn, so a per-day ramp has nothing to distinguish itself from."* That was
@@ -246,15 +269,55 @@ itinerary now opens on its own map with every day clustered, coloured and labell
 panel collapsed behind a single arrow. A ramp that had nothing to separate now has five other days
 to separate from.
 
-Three constraints came out of the original rejection and all three still hold. Day 1 **is**
-`{colors.route-blue}`, so a one-day trip is pixel-identical to what it always was and the ramp
-costs nothing where there is nothing to distinguish. Nothing in the ramp enters the 0-50° amber/red
-band, because `{colors.accent}` and `{colors.map-pin-red}` already mean something there. And
-`Stop` still carries **no** day identity — the day is still just the index in `Itinerary.days[]`,
-attached at the `RouteStop` boundary in `mapRoute.ts` and nowhere else.
+One of the three constraints that came out of the original rejection still holds unchanged. `Stop`
+carries **no** day identity — the day is still just the index in `Itinerary.days[]`, attached at
+the `RouteStop` boundary in `mapRoute.ts` and nowhere else. That index is also what picks the
+palette (`dayIndex % DAY_PALETTES.length`), and modulo rather than a hash of some day identifier
+is deliberate: modulo cannot give two *adjacent* days the same colour, a hash can, and separating
+a cluster from its neighbours is the entire job.
+
+The second is gone, deliberately. Day 1 used to be Apple Maps' systemBlue (`#0A84FF`), pinned
+there so a one-day trip stayed pixel-identical to the version before the ramp existed. That anchor
+is cut, along with the whole of the old ramp (a system green, a rose, a soft cyan and a pink), and
+the reason is the background rather than taste: the globe is Google Photorealistic 3D Tiles — real
+aerial photography that can put any colour at any luminance behind any pixel of the route. A
+mid-blue arc over water, a green one over a park and a sand-toned one over a desert are each the
+same colour as the thing behind them. The pool is chosen on exactly one criterion: **no satellite
+imagery contains these hues.** No earthy greens, no muted yellows, no desert sand, nothing
+desaturated enough to sit down into the imagery.
+
+**A day is a pair, not a colour.**
+The core is the object — ribbon body, ring cores, beam core, badge border. The glow is the light
+coming off it — the ribbon's halo, the beam's bloom, the outermost radar ring, the outer footprint
+disc, the badge's outer bloom. The glow is a *neighbouring hue*, not a dimmer copy of the core,
+because that is what emission actually does as it falls off; a halo that is only a faded core
+reads as a blur rather than as light.
+
+The pool is curated rather than generated — five pairs picked for the character of the pair, the
+way a system accent is picked, not five points spaced around a hue wheel. Four of the five are
+high-chroma. **Ultra Iris is not, knowingly:** a twilight indigo at roughly a third the chroma of
+the others, with an ambient *lighter* than its core rather than darker, the only pair here that
+inverts that relationship. It reads as sophisticated beside them and as considerably softer over
+dark water or shadowed terrain, where the casing rather than its own luminance is what keeps it
+legible. If a day 5 ever reads as missing rather than as recessive, raise that entry — do not
+thicken the ribbon.
+
+**One constraint is knowingly broken, once.** Nothing in the pool was allowed into the 0-50°
+amber/red band, because `{colors.accent}` ("you are pointing at this") and `{colors.map-pin-red}`
+(the destination pin) already mean something there. Palette 3, Solar Ember, is in that band by
+explicit request. The collision is real: on that day the hover tint would land within a few degrees
+of the colour the day is already drawn in, so pointing at a stop would fire the interaction and
+show nothing. It is handled rather than accepted — `emphasisColorFor` swaps the emphasis tint to
+white on any day whose core falls inside the accent's band. **Do not add a second warm palette.**
+The swap has exactly one fallback colour with no other meaning on the globe, and this palette
+already spends it.
+
+Colour alone still is not the guarantee. Every ribbon carries a `{colors.route-casing}` stroke down
+both edges, which supplies local contrast wherever it lands regardless of what is behind it — the
+same argument as the omnidirectional halo on the labels, applied to geometry.
 
 Colour never identifies a day on its own. Every cluster carries a `Day N` label in that day's
-colour, which is what makes a six-day cycle and a colour-blind reader both fine — the colour
+colour, which is what makes a five-day cycle and a colour-blind reader both fine — the colour
 groups, the label names.
 
 The ramp is only ever on screen in the overview: selecting a day draws that day alone. So the
@@ -358,7 +421,7 @@ is preserved in the `.blue-hour-scene` entry, which is the rule it was arguing a
 - **Body** (system sans, 400, 0.875rem, relaxed leading): panel copy, stop names and notes, day summaries (italic). The hero subline is the one deliberate exception at `text-base` / `sm:text-lg`, capped at `max-w-xl` — the poster above it is 134px at a laptop width and 202px at 1920, so dropping to 14px is a cliff rather than a scale step, and that line carries the mechanism the rest of the page only implies.
 - **Field** (system sans, 500, 1rem): a value the user has typed or picked, in the trip form's console cells. 16px rather than the body step is a hard requirement, not a preference — below 16px iOS Safari zooms the viewport on focus.
 - **Label** (system sans, 600, 0.75rem, tracking 0.025em, uppercase): field group labels inside the place-detail panel ("Best time to visit", "Tips", "Next up"). Uppercase labels belong *inside* a panel, beneath a heading, describing the field that follows.
-- **Marker Day Label** (`.marker-day-label`; system sans, 700, 0.8125rem, tracking 0.14em, uppercase): the per-day heading drawn directly on the globe at each day's centroid — see The Day on the Globe, above. A step of its own rather than the 0.75rem Label above: it has to win the eye at a zoom level where stop names have already faded toward their depth floor, and it reads against arbitrary satellite imagery rather than inside a glass panel.
+- **Marker Day Label** (`.marker-day-label`; `{typography.family.mapDisplay}`, 600, 0.8125rem, tracking 0.18em, uppercase, on a Map Glass chip edged in the day's own neon): the per-day heading drawn on the globe beside each day's cluster — see The Day on the Globe, above. A step of its own rather than the 0.75rem Label above: it has to win the eye at a zoom level where stop names have already faded toward their depth floor, and it reads against arbitrary satellite imagery rather than inside a glass panel. The tracking is wider than the 0.14em it carried in Archivo, because Orbitron's letterforms are already square and wide and the extra space is what turns "DAY 1" from a word into a readout.
 - **Numeric** (`tabular-nums`): every cost, total, budget figure and temperature, without exception.
 
 ### Named Rules
@@ -370,6 +433,10 @@ Its old subject, `.font-hero`, is deleted. It had drifted into dead CSS: defined
 **The Width-Axis Rule is retired.** Archivo no longer loads `axes: ["wdth"]`, because nothing sets `font-stretch` any more. Widening a heavy grotesk was the single strongest template tell on the landing — the reference never touches the width axis and gets its density from negative tracking instead. The poster is weight 900 at `-0.075em` now. Loading a variable axis no rule consumes is bytes for nothing.
 
 **The One Face Rule.** One family, Archivo, for the entire product: display, body, UI, posters. Every step in the ramp comes from size, weight and tracking, never from a second family. This replaced three faces (Source Serif 4, Archivo, Manrope) and, before those, five. What it knowingly gives up is the serif that used to mark "a real plan to look at" — `/trip/[id]` and `/trips` now speak in the same voice as the landing. Adding a second family back is a decision about the whole product, not a local one.
+
+**The one exception, and where its boundary is.** The marker layer — and only the marker layer — has its own two faces. `.marker-day-label` is Orbitron (`--font-map-display`); `.marker-title-card` and `.marker-place-label` are Rajdhani (`--font-map-label`). Nothing else in the product may reach either variable: not a panel, not a chip, not a heading, not a button. The argument is the same one that lets the globe have its own colour palette while the interface has another — these labels are objects in the *world*, drawn over aerial photography alongside the route geometry, not surfaces in the interface.
+
+Two faces rather than one because the two label kinds set different corpora. The badge sets `DAY 1`: four characters, uppercased, tracked to 0.18em, which have to win against a satellite image — Orbitron is poor at running text and excellent at exactly that. A stop name sets `Private car to Crawford Market`, which Orbitron would turn into a wall; Rajdhani is squarish enough to sit beside it and condensed enough that a long name takes visibly less screen than Archivo did, which directly buys back slots in the declutter scan (a name's cost there is measured in horizontal pixels — see `MIN_SEPARATION_X_PX`). The exception is safe to grant at this boundary and unsafe to widen. A second family in a panel is still a decision about the whole product.
 
 **Tracking tightens as type grows.** The ramp runs `-0.076em` at display, `-0.09em` on card titles, `-0.06em` on panel headings, `-0.04em` on body. Nothing sits at zero or positive. This is the inverse of the usual instinct — loosen small text for legibility — and it is measured off the reference rather than chosen: it is most of why a line reads as one packed shape instead of a row of letters. The `-0.04em` craft-floor tracking floor is deliberately exceeded above the body step; that floor is tuned for text sizes, and these are not.
 
@@ -500,6 +567,40 @@ Fields do not carry their own boxes. The trip form's four fields share one **con
 - **Empty dates:** `::placeholder` never applies to `input[type=date]`, so an empty date cell paints the UA's own "mm/dd/yyyy" at the input's colour and weight — two of four cells would read as filled while empty. The date inputs therefore take their tone from their own value: filled is `font-medium text-foreground`, empty drops to `font-normal text-white/65` to match the destination placeholder.
 - **Error:** a separate block below the form — `border-red-500/30 bg-red-500/10 text-red-400` at 12px radius. Soft failures (a geocoder miss) are muted 12px text inside the form, not the red block.
 
+### Editing In Place (signature)
+Editing a plan is a *mode* of the result card, not a second window. The whole idea is that nothing
+moves: `ItineraryCard` keeps its hero photo, budget bar, day tabs, stop list and spend band exactly
+where they are, and only the text inside the day panel becomes typeable. Two predecessors got this
+wrong in the same way — `ArrangeBoard` covered the map, `SplitEditor` opened a portalled panel at
+62%/880px against the card's 40%/520px — and in both, entering edit mode resized the panel, reset
+the scroll and made the hero, budget bar and spend band disappear. The plan you were reading and the
+plan you were editing looked like two different documents.
+
+- **Fields carry no boxes, again.** The Inputs/Fields console above is the pattern for *entering* a
+  trip; this is the pattern for *correcting* one, and it inverts the affordance: a field is
+  invisible at rest and grows a hairline glass fill (`bg-white/[0.07]` inside a `white/10` border)
+  only on hover and focus. A plan permanently drawn as a form stops reading as a plan.
+- **No `backdrop-filter` on a field.** They are glass by fill, not by blur — the list already sits
+  inside `.glass-itinerary`'s 56px pass, so there is nothing left behind a field to blur, and a
+  filtered element is a render surface that re-rasters on the keystroke that resizes it. Up to ~40
+  of them on a long day. The budget tiles record the same decision for the same reason.
+- **Every field matches the read-only text it replaces**, to the measurement: name at base
+  `font-medium`, time/duration/why/note at `text-sm`, day heading at `text-lg font-semibold`. The
+  editable list copies `StopList`'s geometry outright rather than sharing a component with it —
+  `space-y-4`, `flex gap-3`, the 2.5rem avatar, the connector at `top-11 left-5`. Change one and you
+  must change the other; that cost is chosen over a shared row that would be two components behind
+  one prop.
+- **Controls live in the panel's padding, not in the row.** The drag grip sits in the left gutter
+  and the delete in the right, absolutely positioned, revealed at 60% on hover or focus-within. In
+  flow they would take width from the flex row and shift the avatar — and with it the connector —
+  which is the one thing this mode may not do.
+- **Descriptions are auto-resizing textareas.** A fixed-height box cannot hold a description in the
+  place the description already is: too tall leaves a hole, too short hides the end behind an inner
+  scrollbar, and either way the row stops matching the row it replaced.
+- **What it costs, honestly:** an edit row is about 29px taller than its read row, because empty
+  optional fields have to render to be fillable where reading renders nothing. That is inherent to
+  editing in place. Nothing above the list moves.
+
 ### Chips
 - **Style:** fully round, `px-2 py-0.5`, 12px medium. Neutral glass by default; the amber wash is reserved for AI-attributed tags.
 - **Weather badge:** the same chip at `px-2.5 py-1` with an amber icon, a `tabular-nums` temperature, and the condition word at 70% alpha.
@@ -547,20 +648,28 @@ inside tiles of equal declared error, which is Google's data and not a setting.
 The map has to be readable on its own — you should be able to take the day off it without the
 panel. Four pieces, all built in `mapRoute.ts` and all floating at one sampled altitude:
 
-- **A title card per stop** (`.marker-title-card`), not a glass card — deliberately the one HTML
-  overlay in the system with no fill, no border and no blur. An earlier version *was* a small glass
-  chip (`.glass-marker`), matching every other surface's material; several bolder replacements
-  leaning into a sci-fi HUD/targeting-reticle register were mocked and rejected as reading like
-  generic "AI dashboard" styling rather than this app's own cinematic voice. The name now sits
-  directly on the globe in italic `.font-display`. Legibility took two passes: the first shipped
-  with only `.hero-legible`'s bottom-offset-only text-shadow, which real testing against actual
-  Google Photorealistic 3D Tiles showed blending into bright, busy rooftops — `.hero-legible` was
-  built for one curated, art-directed photo (DESIGN.md already accepted a known contrast risk
-  there as a deliberate tradeoff for *that* surface only), not arbitrary, uncontrolled imagery a
-  stop can land on anywhere. The card now also carries a zero-offset omnidirectional shadow pair
-  (hugging every edge of a thin italic stroke, not only its underside) and a soft, edgeless
-  radial-gradient vignette behind the text (`::before`, `z-index: -1`, no fill boundary, no
-  border — not a scrim box, a guarantee for the worst case a photo-only shadow can't cover). It is
+- **A title card per stop** (`.marker-title-card`): the name on a small chip of Map Glass —
+  `{colors.map-glass}` at 0.58, a hairline white edge, 5px radius, a soft dark bloom bleeding past
+  it so the chip dissolves into the photography rather than sitting on it. Legibility took three
+  passes and the middle one is worth keeping, because it was wrong in an instructive way. The
+  first shipped with only `.hero-legible`'s bottom-offset-only text-shadow, which real testing
+  against actual Google Photorealistic 3D Tiles showed blending into bright, busy rooftops —
+  `.hero-legible` was built for one curated, art-directed photo, not arbitrary imagery a stop can
+  land on anywhere. The second removed the chip entirely and leaned on a zero-offset
+  omnidirectional black halo plus an edgeless vignette, on the argument that a box on the map is
+  chrome. That instinct is right and it was not enough: the halo is a *black shadow*, and a black
+  shadow under white text over a white plaza at midday has nowhere to go. The chip is the
+  guarantee the shadow could only approximate, and the halo stays behind it as a crisp glow that
+  separates the glyphs from their own backdrop. The chip is `{colors.map-glass}` at 0.75 under an
+  8px `backdrop-filter`, set in Rajdhani — see The One Face Rule for why the marker layer has its
+  own faces. **The blur is this layer's one performance hazard and it is a deliberate trade, not
+  an oversight.** The anchor's `transform` is rewritten every `postRender` frame, a filtered
+  element owns a render surface, and moving one re-rasters everything behind it — once per frame,
+  per card, up to fifteen at a time, over a streaming tileset. It shipped without the filter for
+  exactly that reason and was added back on request. The fill at 0.75 already carries the
+  contrast, so if panning a long trip ever stutters, the blur is the first thing to cut and costs
+  nothing but gloss. A receded card drops it already (`backdrop-filter: none`), which is where
+  most of the count is. It is
   still an HTML overlay rather than a Cesium billboard (a billboard is a texture and cannot carry
   the app's other cinematic CSS effects), and `StopMarkerLayer` still reprojects each card every
   `postRender` frame with `SceneTransforms.worldToWindowCoordinates` — the CSS-pixel variant,
@@ -576,15 +685,81 @@ panel. Four pieces, all built in `mapRoute.ts` and all floating at one sampled a
   since a card-level default would win over the anchor's inherited value and silently disable the
   effect. A distant name recedes like a shallow depth of field instead of only shrinking; the
   focused/selected one reads sharp against it, like a rack focus.
-- **A lit stem out of a soft glow pool** at each stop, replacing the flat blue dot that had
-  nowhere to put a name. The stem is 150m of world space, so it grows and shrinks with everything
-  else; the pool is two concentric discs at falling alpha, because a Cesium ellipse takes a flat
-  fill and a soft edge has to be stacked.
-- **Raised dashed arcs** between consecutive stops: a great circle at 96 samples, lifted on a sine
-  so it leaves and meets the ground flat. Two polylines each — a wide low-alpha glow base and the
-  dashes on top. The base is not decoration; dashes alone disappear against a mid-grey rooftop.
-- **A travelling shimmer** on the dashes, each arc lagging the last by a fraction of a cycle so
-  the pulse reads as moving along the day rather than every arc breathing at once.
+- **A light pillar** at each stop, replacing the flat blue dot that had nowhere to put a name and
+  then the thin drop line that replaced *it*. Three layers: a translucent cylinder, a wide
+  emissive halo, and a thin hard core inside both. The cylinder is what makes it a beam rather
+  than a stroke — a polyline's width is screen-space, so a pillar made only of polylines is the
+  same thickness at 300m as at 30km, which is precisely what a shaft of light does not do. The
+  cylinder is metres, so it fattens as you descend into it; the polylines keep it visible once it
+  vanishes. It is wider at the bottom than the top, the opposite of a searchlight, so the light
+  reads as pooling *into* the ground ring rather than being projected up out of it.
+- **Radar rings** on the ground under each pillar: two translucent discs at falling alpha (a
+  Cesium ellipse takes a flat fill, so a radial falloff has to be stacked) under three concentric
+  rings that brighten in sequence from the inside out, each a third of a cycle behind the one
+  within it, so the eye reads a wave travelling outward. **The rings are the figure** — discs
+  alone read as a stain on the photograph, while a circle has an *edge*, which is the thing
+  imagery cannot fake underneath it. They are polylines traced around the circle rather than
+  `ellipse.outline`, because `outlineWidth` above 1 is silently ignored on Windows/ANGLE.
+- **Raised glass ribbons** between consecutive stops: a great circle at 256 samples, lifted on a
+  sine so it leaves and meets its card level. A wide, very low-powered emissive halo, and over it
+  the ribbon proper — one material drawing a neon body between two dark casing edges. One material
+  rather than a bright line stacked on a wider dark one: two stacked polylines are two draws whose
+  depth ordering against each other is not guaranteed in a scene holding translucent 3D tiles, and
+  the casing flickered through the core wherever they tied. **The casing is what makes the ribbon
+  legible**, not the brightness — a stroke of colour has no guaranteed contrast against
+  uncontrolled photography, a stroke of colour with a near-black border supplies its own wherever
+  it lands.
+- **The ribbon is shaded like glass, by a custom shader** (`glassRibbon.ts`), not by Cesium's
+  stock outline material. Three things have to happen across the line's width at once: the dark
+  casing at both edges, a body that shades like a rounded surface rather than a flat strip, and a
+  narrow specular streak along one shoulder. Only the first is available off the shelf, and the
+  other two are functions of *position across the width* — a value that exists only inside the
+  fragment shader (`materialInput.st.t`) and cannot be addressed from the entity API at all. No
+  number of stacked polylines can express this, because a stack of lines is a stack of flat
+  strips. So the material is a registered Cesium "fabric" plus a duck-typed `MaterialProperty`.
+  The casing half of that shader is a **verbatim copy** of Cesium's PolylineOutline material, so
+  the edge behaves exactly as it did and `outlineWidth`'s "total across both edges" semantics
+  still hold; only the interior is new. The shading is computed in *interior* coordinates rather
+  than raw `st.t`, which is what keeps the highlight proportional as the ribbon tapers — anchored
+  to the full width it would drift toward one edge and fall into the casing on the narrow
+  segments. Two honest limits: "along the top curve" means the ribbon's own consistent side, not
+  world up, because a polyline has no surface normal to orient a highlight against; and the
+  intensity has to stay low, since the body is already a saturated neon and a strong streak blows
+  to white exactly where the eye lands hardest.
+- **The ribbon tapers** from the stop being left toward the stop being arrived at, so the shape
+  says which way the day runs before any animation does. Cesium has no per-vertex width, so this
+  is built by cutting each arc into consecutive polylines of falling width that share their
+  boundary vertices. The casing stays a fixed pixel count while the ribbon narrows, so the neon
+  body tapers considerably harder than the outer edges do — 11px of colour at the start against
+  4px at the end.
+- **A travelling pulse** running along each ribbon in the direction of travel, so the route shows
+  the day's *order* and not merely its shape. It is a dash material with a transparent gap colour
+  and an animated `dashPattern`: that pattern is a 16-bit mask the shader tests per fragment, so
+  rotating it one bit per step slides the lit band a sixteenth of a dash along the line, and
+  rotating *left* moves it toward increasing vertex index — chronological. It is a uniform, so
+  nothing rebuilds. Note the dash is measured in screen space rather than along the curve's
+  arclength, which is why the pulse neither stretches nor bunches as the camera moves. Static
+  dashes remain rejected: a dash pattern *instead of* the line stipples one continuous shape into
+  something with no followable line left in it. A moving highlight over an unbroken ribbon is the
+  opposite trade.
+- **A shimmer and a sweep** underneath all of that: each arc's body breathes a fraction of a cycle
+  behind the last, and each stop's rings sweep a fraction behind the stop before, so a day looks
+  like it is being counted out. Both are alpha-only and both are held flat under
+  `prefers-reduced-motion`, as is the travelling pulse. Alpha rather than radius on the rings for
+  a mechanical reason: a `CallbackProperty` on `positions` moves that geometry into Cesium's
+  dynamic batch and rebuilds it every frame for every ring of every stop, while a material colour
+  is a uniform and animates for free.
+
+**Everything above answers to the same two pieces of state, and adding a piece that doesn't is the
+failure mode this section exists to prevent.** `setDayState` sets how present a whole day is
+(`baseline` / `active` / `dimmed` / `hover`) and `setEmphasis` marks the one stop being pointed
+at — from a marker card or from its row in the plan, since both write the same index. Every
+material multiplies by the day's `stateAlpha`, so a receded day fades as one object rather than
+leaving a bright halo around a dim line; the casing follows it too, or a dimmed day would read as
+black lines with a ghost of colour inside. The ribbon body, the travelling pulse and the radar
+rings take emphasis through their own per-frame callbacks; the halo, the pillar and the discs are
+repainted imperatively in `applyTints`. **Never write a `ConstantProperty` over the first group** —
+it replaces the callback and stops the animation dead on the first hover.
 
 Two things the layer must keep doing. It is a **sibling** of the content overlay in `AppShell`,
 never a child — that overlay scrolls, and a card inside it slides off its own stem. And the cards'

@@ -18,7 +18,7 @@ import {
   Wallet,
 } from "lucide-react";
 import type { DayEditUpdates } from "@/components/DayHeader";
-import FeedbackLoop from "@/components/FeedbackLoop";
+import FeedbackLoop, { type DraftState } from "@/components/FeedbackLoop";
 import InterestPicker from "@/components/InterestPicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
@@ -116,6 +116,33 @@ function defaultPartyForGroup(group: GroupType): PartyCounts {
  *  enough that nobody waiting two minutes notices it as a delay. */
 const ARRIVAL_HOLD_MS = 650;
 const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** How long an edit on the pre-save result view sits before it is written back to the draft row.
+ *
+ *  Every local edit here — a drag on the board, a retimed day, an inline cost — used to be state
+ *  only, and drag-and-drop fires a new itinerary object on every drop. Writing each one straight
+ *  through would mean a PATCH per drop for a row nobody has committed to yet, so edits are
+ *  coalesced: the timer restarts on each change and only the settled plan is persisted. Short
+ *  enough that a traveler who rearranges a day and immediately hits Back has already been saved
+ *  — which is the entire point of the draft. */
+const DRAFT_AUTOSAVE_MS = 1200;
+
+/** The draft row's edit write, shared by the coalescing timer and the leave-now flush below so
+ *  the two cannot send different bodies. `keepalive` lets the request outlive the document, which
+ *  is the whole point of the flush — a normal fetch fired during unload is cancelled with it. */
+function patchDraft(
+  tripId: string,
+  plan: Itinerary,
+  sessionId: string | null,
+  keepalive = false
+): Promise<Response> {
+  return fetch(`/api/trips/${tripId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ itinerary: plan, chatSessionId: sessionId }),
+    keepalive,
+  });
+}
 
 type Step = "landing" | "plan" | "result";
 /** Three questions and a review, replacing the old four ("basics" -> "purpose" -> "group" ->
@@ -475,6 +502,38 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // that same conversation, and saved with the trip so it survives a reload. Null whenever the
   // session is unknown or gone — every consumer treats that as "rebuild the full prompt".
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+  /**
+   * The `trips` row this plan already lives in, written as a `draft` the moment the generation
+   * landed — and the fix for the way this page used to lose work.
+   *
+   * A generated itinerary was React state and nothing else until Save ran, so a Back press, a
+   * reload or a closed tab discarded a two-minute model call with no way to get it back. It now
+   * has a row from the moment it exists; `Keep this trip` promotes that row rather than inserting
+   * a second one, which is what keeps the plan's chat session, its `generations` link and any
+   * pre-save edits attached to the trip the traveler ends up with.
+   *
+   * Null means there is no draft to promote — the write hasn't landed yet, or it failed. `save()`
+   * falls back to a plain insert in that case, exactly as it behaved before drafts existed.
+   */
+  const [draftTripId, setDraftTripId] = useState<string | null>(null);
+  const [draftState, setDraftState] = useState<DraftState>(null);
+  /** The in-flight draft insert, so a Save pressed in the first moments after arrival waits for
+   *  the id instead of racing it and inserting a duplicate row. */
+  const draftWriteRef = useRef<Promise<string | null> | null>(null);
+  /** The edit that is waiting out the coalescing timer, if any — the flush effect's only input.
+   *  Holds the trip id and session alongside the plan so it stays a complete, self-contained
+   *  request even if `draftTripId` has since moved on. */
+  const pendingDraftRef = useRef<{
+    tripId: string;
+    plan: Itinerary;
+    sessionId: string | null;
+  } | null>(null);
+  /** The exact itinerary object last written to the draft row. Compared by reference, not by
+   *  value: every edit path here produces a fresh object (`structuredClone`, `moveStop`), so
+   *  identity is a sound "has this changed" test and costs nothing — where a deep compare of a
+   *  whole plan would run on every keystroke. Its job is to stop the autosave effect from
+   *  re-PATCHing the plan the insert just stored. */
+  const persistedDraftRef = useRef<Itinerary | null>(null);
   // Plays the staggered card reveal + typewriter effect once, right after a fresh
   // generation — cleared the moment a stop is opened so backing out of the detail view
   // doesn't replay the whole entrance again.
@@ -1085,11 +1144,24 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // far more heavily than the middle minute, and they used to be spent on nothing.
       // ItineraryCard's own staggered reveal takes over from here.
       await settle(ARRIVAL_HOLD_MS);
+      // Cleared in the same tick as the new itinerary, and that pairing matters: leaving the
+      // previous run's id in place for even one render would point the autosave effect at the old
+      // draft row and overwrite the plan it holds with this new one. Both updates batch, so the
+      // effect never sees the new plan beside the old id.
+      setDraftTripId(null);
+      setDraftState(null);
+      persistedDraftRef.current = null;
+      draftWriteRef.current = null;
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
       setLastSessionId(data.sessionId ?? null);
       setRevealAnimation(true);
       setStep("result");
+      // Not awaited. The plan is already on screen and the traveler can read, edit or refine it
+      // while this lands; blocking the arrival on a database insert would add a pause to the one
+      // moment of this flow that should feel instant. `writeDraft` swallows its own failures, so
+      // there is nothing here to catch — the promise is kept only so `save()` can await it.
+      draftWriteRef.current = writeDraft(data.itinerary, data.runId ?? null, data.sessionId ?? null);
       // The wizard's job is done — drop its draft and the `?step=` it leaves in the URL, or a
       // refresh on this result page would find both still there and restore straight back into
       // the wizard instead of showing what was just generated.
@@ -1172,11 +1244,157 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
 
 
+  /**
+   * Writes the just-generated plan to its own `draft` row.
+   *
+   * **Fail-soft, and deliberately silent on failure.** This runs in the seconds after a
+   * two-minute wait finally paid off; an error block at that moment would report a problem the
+   * traveler did not cause and cannot act on, about a plan that is on screen and working. The
+   * failure is logged, surfaced as one quiet line in the footer beside Keep, and `save()` still
+   * has its insert path — so the worst case is the behaviour this whole feature replaced.
+   *
+   * Returns the new id (or null) so `save()` can await an insert still in flight.
+   */
+  async function writeDraft(
+    plan: Itinerary,
+    runId: string | null,
+    sessionId: string | null
+  ): Promise<string | null> {
+    setDraftState("pending");
+    try {
+      const res = await fetch("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destination,
+          startDate,
+          endDate,
+          budget,
+          itinerary: plan,
+          runId,
+          chatSessionId: sessionId,
+          userAnswers: currentAnswers(),
+          status: "draft",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save draft");
+      // The ref before the state, and in that order. Setting `draftTripId` is what arms the
+      // autosave effect below; if the ref were still null when it re-ran, it would immediately
+      // PATCH back the very itinerary this insert just stored.
+      persistedDraftRef.current = plan;
+      setDraftTripId(data.id);
+      setDraftState("saved");
+      return data.id as string;
+    } catch (e) {
+      console.error("[home] draft save failed", e);
+      setDraftState("failed");
+      return null;
+    }
+  }
+
+  /**
+   * Keeps the draft row level with the plan on screen.
+   *
+   * One effect rather than a PATCH at each of the four edit sites (refine, drag, day edit, stop
+   * cost): they all land in the same `itinerary` state, so watching that state catches every one
+   * of them — including any added later, which is the failure mode a per-site call has.
+   *
+   * `lastSessionId` is a dependency because a refine replaces the conversation the plan was
+   * written in, and a promoted trip whose row still points at the generate-only session opens its
+   * chat having forgotten the rework. Both change in the same tick, so this is still one write.
+   */
+  useEffect(() => {
+    if (!draftTripId || !itinerary) {
+      pendingDraftRef.current = null;
+      return;
+    }
+    if (persistedDraftRef.current === itinerary) {
+      pendingDraftRef.current = null;
+      return;
+    }
+    const snapshot = itinerary;
+    // Recorded before the timer, not inside it: between an edit and the write there is a window
+    // where the traveler can leave, and this is what the flush below sends if they do.
+    pendingDraftRef.current = { tripId: draftTripId, plan: snapshot, sessionId: lastSessionId };
+    const timer = setTimeout(() => {
+      patchDraft(draftTripId, snapshot, lastSessionId)
+        .then((res) => {
+          if (!res.ok) throw new Error(String(res.status));
+          // Only on success, so a failed write is retried by the next edit rather than being
+          // recorded as persisted.
+          persistedDraftRef.current = snapshot;
+          pendingDraftRef.current = null;
+          setDraftState("saved");
+        })
+        .catch((e) => {
+          console.error("[home] draft autosave failed", e);
+          setDraftState("failed");
+        });
+    }, DRAFT_AUTOSAVE_MS);
+    // Restarted on every change, which is what coalesces a run of drags into one write.
+    return () => clearTimeout(timer);
+  }, [itinerary, draftTripId, lastSessionId]);
+
+  /**
+   * Sends a pending edit immediately when the page is going away.
+   *
+   * Without this, the coalescing window above is a hole exactly the shape of the bug this feature
+   * exists to close: rearrange a day, press Back inside 1.2s, and the write is cancelled with the
+   * timer. `pagehide` covers a closed tab, a reload and a back/forward-cache freeze; the cleanup
+   * covers a client-side route change, which unmounts this view without any of those firing.
+   *
+   * Reads only refs and declares no dependencies on purpose — it must subscribe once, not re-run
+   * on every keystroke, and the ref always holds the latest unwritten plan.
+   */
+  useEffect(() => {
+    const flush = () => {
+      const pending = pendingDraftRef.current;
+      if (!pending) return;
+      pendingDraftRef.current = null;
+      // Fire-and-forget by definition: nothing is left to render the outcome to. A rejection here
+      // is not even reportable, so it is swallowed rather than left as an unhandled rejection.
+      patchDraft(pending.tripId, pending.plan, pending.sessionId, true).catch(() => {});
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+
   async function save() {
     if (!itinerary) return;
     setSaving(true);
     setError(null);
     try {
+      // Await the draft insert rather than racing it. Without this, a Save pressed in the first
+      // moment after arrival reads `draftTripId` as null and falls through to the insert below —
+      // two rows for one plan, one of which nobody opens again.
+      const draftId = draftTripId ?? (draftWriteRef.current ? await draftWriteRef.current : null);
+
+      // The ordinary path: the plan is already a row, so keeping it is a promotion. It carries the
+      // current itinerary too, which both flushes an edit the autosave timer hasn't written yet and
+      // makes the status flip and the plan it applies to one atomic request.
+      if (draftId) {
+        const res = await fetch(`/api/trips/${draftId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itinerary, chatSessionId: lastSessionId, status: "saved" }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Failed to save trip");
+        // This request carried the itinerary, so there is nothing pending any more — recorded
+        // before the navigation so the unmount flush doesn't re-send a plan that just saved.
+        persistedDraftRef.current = itinerary;
+        pendingDraftRef.current = null;
+        router.push(`/trip/${draftId}`);
+        return;
+      }
+
+      // No draft to promote, because its write failed (or never ran). Inserts the trip outright —
+      // the behaviour this page had before drafts existed, kept as the fallback so a draft outage
+      // costs the traveler nothing.
       const res = await fetch("/api/trips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2005,23 +2223,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 active day, this panel's scroll position and the stop tour's interval all
                 survive the round trip instead of resetting when ItineraryCard remounts. */}
             <div className={selectedStop ? "hidden" : "space-y-6"}>
-              {/* Refine rides the row the Back pill already owns rather than sitting alone at
-                  the foot of the panel, where it landed under the floating trace button and
-                  behind a full scroll of a long trip. */}
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
                 <button type="button" onClick={backToLanding} className={backPillClass}>
                   <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
                   Back
                 </button>
-                {!focus.target && (
-                  <button
-                    type="button"
-                    onClick={() => focus.open(0, "trip")}
-                    className={ghostButtonClass}
-                  >
-                    Refine with AI
-                  </button>
-                )}
               </div>
               {/* Focus Mode takes over the card while editing a day. */}
               {focus.target && focus.draft && (
@@ -2098,7 +2304,15 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 />
               )}
 
-              {!focus.target && <FeedbackLoop onSave={save} onRefine={refine} saving={saving} refining={refining} />}
+              {!focus.target && (
+                <FeedbackLoop
+                  onSave={save}
+                  onRefine={refine}
+                  saving={saving}
+                  refining={refining}
+                  draftState={draftState}
+                />
+              )}
             </div>
 
             {selectedStop && (

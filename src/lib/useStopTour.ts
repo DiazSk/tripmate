@@ -16,7 +16,7 @@ const TOUR_INTERVAL_MS = 6500;
  * there is no way to tell "still going" from "went round again" without watching the whole thing.
  */
 export function useStopTour() {
-  const { routeStops, focusedDay, flyToPlace, setActiveIndex, viewerRef, ready } = useMapCamera();
+  const { routeStops, focusedDay, flyToPlace, setActiveIndex, rendererRef, ready } = useMapCamera();
   const [playing, setPlaying] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -74,16 +74,16 @@ export function useStopTour() {
   // listener goes on the Cesium canvas rather than the window so clicking the panel's own
   // controls — including the stop button — doesn't count as taking over.
   //
-  // `ready` is in the deps because the viewer is built on demand and its canvas may not exist
+  // `ready` is in the deps because the map is built on demand and its canvas may not exist
   // at the moment Play is pressed. Without a re-run once it does, dragging the freshly-arrived
   // globe would never stop the tour.
   useEffect(() => {
     if (!playing) return;
-    const canvas = viewerRef.current?.scene.canvas;
+    const canvas = rendererRef.current?.canvas();
     if (!canvas) return;
     canvas.addEventListener("pointerdown", stop);
     return () => canvas.removeEventListener("pointerdown", stop);
-  }, [playing, viewerRef, ready, stop]);
+  }, [playing, rendererRef, ready, stop]);
 
   const toggle = useCallback(() => setPlaying((p) => !p), []);
 

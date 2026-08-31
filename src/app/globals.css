@@ -95,7 +95,7 @@ html {
   --tile-foreground: #e3e9f1;
 
   /* --- Map-native (tertiary) ------------------------------------------------
-     Apple Maps' systemBlue and its casing. These are NOT part of the interface
+     The route's own palette. These are NOT part of the interface
      palette and must never appear in a panel, chip or button — the globe gets
      its own colours because it is photography, not a surface. They live here
      rather than as string literals in mapRoute.ts so there is one place to
@@ -105,34 +105,98 @@ html {
      The converse of that rule has one deliberate exception: --accent reaches
      the globe to mark the marker the user is *touching* (hover/selection) and
      its adjacent arcs. Amber on the globe means "you are pointing at this",
-     never "this is a Tuesday". Keep this exception narrow. */
-  --route-blue: #0a84ff;
-  --route-casing: #0060df;
+     never "this is a Tuesday". Keep this exception narrow.
 
-  /* --- The day ramp ---------------------------------------------------------
-     Per-day route colours, cycling every six days (DAY_COLOR_TOKENS in
+     This used to be Apple Maps' systemBlue (#0A84FF) and its casing (#0060DF).
+     Both are gone, and the reason is the background rather than taste: the
+     globe is Google Photorealistic 3D Tiles, i.e. real aerial photography, and
+     a mid-blue line laid over water, shadow or a slate roof is the same colour
+     as the thing behind it. The ramp below is picked for one property only —
+     that no satellite imagery on Earth contains it. */
+
+  /* The ribbon's dark stroke. Near-black with a blue cast rather than pure
+     #000: this outlines a neon line, and a true black edge reads as a hole
+     punched in the photography while a cool near-black reads as depth. Shared
+     with the label chips (--map-glass) so the route and its labels are
+     obviously the same material. */
+  --route-casing: #050a12;
+
+  /* --- The day palette pool -------------------------------------------------
+     Per-day route colours, cycling every five days (DAY_PALETTES in
      mapRoute.ts). These were rejected once, on the reasoning that "only the
      active day is ever drawn, so a per-day ramp has nothing to distinguish
      itself from". The globe now draws the whole trip at once, so it does.
 
-     Day 1 is --route-blue itself, so a single-day trip is pixel-identical to
-     what it was and the ramp costs nothing where there is nothing to separate.
+     **Each day is a pair, not a colour.** A core and an emissive glow, always
+     used together: the core draws the ribbon body, the ring cores, the beam
+     core and its badge's border; the glow draws the halo around the ribbon,
+     the beam's bloom, the outermost radar ring and the outer footprint disc.
+     Two hues per day is what makes a day read as a lit object rather than a
+     coloured line — the glow is a neighbouring hue, not a dimmer copy of the
+     core, so the falloff has chroma in it the way real emission does. A single
+     token per day is why this block used to be six flat names.
 
-     Still map-native, and bound by the same rule as route blue: never in a
-     panel, chip or button. Chosen so consecutive days sit 70-170 degrees apart
-     in hue, since the only job the colour has is separating a cluster from its
-     neighbours. Nothing here enters the 0-50 degree amber/red band — that is
-     --accent ("you are pointing at this") and --map-pin-red (the destination
-     pin), and a day tinted into either would take a meaning that is spoken
-     for. Colour never identifies a day on its own: every cluster is labelled.
-     */
-  --route-day-green: #32d74b;
-  --route-day-purple: #bf5af2;
-  --route-day-rose: #ff5c8a;
-  --route-day-cyan: #22d3ee;
-  --route-day-magenta: #f472d0;
+     The pool is a curated set rather than points on a hue wheel: five pairs
+     picked the way Apple picks a system accent, for the character of the pair
+     as a whole. What each one still has to survive is uncontrolled aerial
+     photography, so earthy greens, sand and yellow-browns are excluded, and
+     the emerald in particular is a green chosen to read as *light* rather than
+     as vegetation — chroma far past anything chlorophyll makes, with the
+     ambient pulling toward cyan rather than toward yellow.
 
-  /* The destination's administrative outline. Map-native like route blue and bound by the same
+     Four of the five are high-chroma. The fifth is not, deliberately; see the
+     note on its own entry below.
+
+     Still map-native, and bound by the same rule as the casing: never in a
+     panel, chip or button. Colour never identifies a day on its own: every
+     cluster is labelled in words.
+
+     **One entry knowingly breaks a standing rule.** Solar Ember's core sits
+     at hue 25 and its glow at 340 — inside the 0-50 degree amber/red band this
+     palette otherwise excludes, because that band belongs to --accent ("you are
+     pointing at this") and --map-pin-red (the destination pin). It is here by
+     explicit request. The collision is real and is handled rather than ignored:
+     `emphasisColorFor` in mapRoute.ts swaps the hover tint to white on any day
+     whose own core falls in the accent's band, so "you are pointing at this"
+     stays legible on day 3. Do not add a second amber entry — the swap has one
+     colour to fall back to, and it is already spent. */
+
+  /* 1 — Pacific Teal / Frost. Clean and crisp; the highest-contrast pair
+     over land, which is why it is day 1. */
+  --route-neon-cyan: #00f2fe;
+  --route-neon-cyan-glow: #4facfe;
+  /* 2 — Hyper Violet / Neon Rose. */
+  --route-neon-magenta: #f355da;
+  --route-neon-magenta-glow: #7000ff;
+  /* 3 — Solar Ember / Tangerine. See the note above before reusing this hue. */
+  --route-neon-amber: #ff6a00;
+  --route-neon-amber-glow: #ee0979;
+  /* 4 — Electric Emerald. A green chosen to read as light rather than as
+     vegetation: chroma far past anything chlorophyll produces, and an ambient
+     that pulls toward cyan rather than toward yellow, which is the direction
+     foliage actually sits. */
+  --route-neon-lime: #00f5a0;
+  --route-neon-lime-glow: #00d9f5;
+  /* 5 — Ultra Iris / Cobalt. The quiet one, and knowingly so: a twilight
+     indigo at roughly a third the chroma of the other four, with an ambient
+     that is *lighter* than its core rather than darker — the only pair here
+     that inverts that relationship. It reads as sophisticated next to them and
+     as considerably softer over dark water or shadowed terrain. The casing is
+     what keeps it legible there rather than its own luminance; if a day 5 ever
+     reads as missing rather than as recessive, this is the entry to raise. */
+  --route-neon-violet: #654ea3;
+  --route-neon-violet-glow: #eaafc8;
+
+  /* --- Map label glass ------------------------------------------------------
+     The backdrop behind every label standing on the globe — day badges, stop
+     names, place names. One deep, cool, near-opaque ink so a label is legible
+     over anything the tiles can put behind it, which no text-shadow alone can
+     promise over a white plaza at noon. Kept out of the interface palette on
+     purpose: this is a chip drawn *in the world*, not a surface in the UI. */
+  --map-glass: 10 14 23;
+  --map-glass-edge: rgb(255 255 255 / 0.16);
+
+  /* The destination's administrative outline. Map-native like the day ramp and bound by the same
      rule — never in a panel, chip or button. A cool near-white rather than a hue: the boundary
      is context for everything else on the map, and any colour of its own would compete with the
      day ramp it sits underneath. Dashed and semi-transparent in mapCamera, so it reads as a
@@ -457,8 +521,10 @@ body {
   will-change: transform;
 }
 
-/* The Location Title Card. No fill, no border, no blur — see the --marker-* comment above
-   for why. `--marker-depth` is read via `var(--marker-depth, 1)` in each property below
+/* The Location Title Card: a name on a small chip of dark map glass. It carried no fill, no
+   border and no blur for most of its life — legibility from a black text halo alone — and the
+   note inside the rule records why that stopped being enough over real aerial photography.
+   `--marker-depth` is read via `var(--marker-depth, 1)` in each property below
    rather than declared as a property on this rule: a default set here would win over the
    value StopMarkerLayer writes on the parent `.marker-anchor` regardless of the cascade,
    since an element's own declaration always beats an inherited one — which silently
@@ -468,28 +534,55 @@ body {
 .marker-title-card {
   position: relative;
   display: inline-block;
-  padding-bottom: 0.375rem;
-  /* Was the serif in italic. One face now, so the map label leans on weight and tracking to
-     separate itself from the terrain instead of on a second style. */
-  font-family: var(--font-sans-stack);
+  padding: 0.3rem 0.55rem 0.34rem;
+  border-radius: 5px;
+  /* The glass chip. This card used to have no fill, no border and no blur at all — legibility
+     came entirely from an omnidirectional text halo, on the argument that a box on the map is
+     chrome. It is still the right instinct and it was not enough: the halo is a black shadow,
+     and a black shadow under white text over a *white* plaza at midday has nowhere to go. The
+     chip is the guarantee the shadow could only approximate.
+
+     `--map-glass` rather than the interface's `--surface-deep-rgb`, deliberately: this is a
+     surface drawn in the world, next to the route geometry, and it takes its material from the
+     map palette for the same reason the arcs take their colour from there. */
+  background: rgb(var(--map-glass) / 0.75);
+  border: 1px solid var(--map-glass-edge);
+  /* Real glassmorphism, and the cost is real too — this is the layer's one performance hazard,
+     recorded here rather than discovered later. The parent `.marker-anchor` has its `transform`
+     rewritten on **every** `postRender` frame; an element with a backdrop filter owns its own
+     render surface, and moving a render surface re-rasters everything behind it. That is once per
+     frame per card, and a dense day puts up to ~15 of these on screen at once over a streaming
+     photorealistic tileset. It shipped without the filter for exactly this reason and was added
+     back deliberately, because the chip is what the labels are *for* at this point.
+     If panning a long trip ever stutters, cut this line first: the fill is already at 0.75, which
+     carries the contrast on its own, and the blur is the part that only makes it prettier.
+     8px, not the control chrome's 20px — this is a ~28px-tall chip, and a wide blur on a surface
+     that small just samples flat colour (see `.glass-control` for the same note). */
+  backdrop-filter: blur(8px);
+  box-shadow:
+    0 2px 10px rgb(0 0 0 / 0.55),
+    inset 0 1px 0 rgb(255 255 255 / 0.07);
+  /* Rajdhani, not the product face and not Orbitron either — see the note on `rajdhani` in
+     layout.tsx. A stop name is real prose ("Private car to Crawford Market"), which Orbitron
+     sets badly and Rajdhani sets tightly; the condensed width also buys the declutter scan room,
+     since a name's cost there is measured in horizontal pixels. Sized up a step and tracked out
+     slightly to compensate for the smaller x-height. */
+  font-family: var(--font-map-label), var(--font-sans-stack), ui-sans-serif, sans-serif;
   font-weight: 600;
-  letter-spacing: -0.03em;
-  font-size: 0.875rem;
-  line-height: 1.2;
-  color: rgb(244 247 250 / 0.88);
+  letter-spacing: 0.02em;
+  font-size: 0.9375rem;
+  line-height: 1.15;
+  color: rgb(244 247 250 / 0.97);
   white-space: nowrap;
-  /* Real Google Photorealistic 3D Tiles are arbitrary and uncontrolled — unlike a curated hero
-     photo, a stop can land on a bright rooftop, a pale plaza, anywhere. .hero-legible's
-     bottom-offset-only shadow was built for one art-directed photo and DESIGN.md already
-     documents its known contrast risk as an accepted, deliberate tradeoff for that one surface;
-     here, over arbitrary imagery, an offset-only shadow leaves the left/right edges of thin
-     italic strokes under-defined exactly where the map happens to be light. The first two
-     layers below are zero-offset (an omnidirectional halo hugging every edge, not just the
-     underside) at high alpha; the third keeps the soft ambient depth cue. */
+  /* Kept, and now doing a narrower job: with the chip behind it this no longer has to carry
+     contrast against arbitrary photography, so it is a crisp glow that separates the glyphs from
+     their own backdrop rather than a heavy black halo fighting the map. The third layer is a
+     faint cool bloom — white at low alpha, not the day's colour, since a stop name is not a
+     per-day object and tinting it would say it was. */
   text-shadow:
-    0 0 2px rgb(0 0 0 / 1),
-    0 0 6px rgb(0 0 0 / 0.9),
-    0 3px 16px rgb(0 0 0 / 0.55);
+    0 0 1px rgb(0 0 0 / 0.9),
+    0 0 8px rgb(0 0 0 / 0.55),
+    0 0 14px rgb(210 235 255 / 0.28);
   opacity: calc(0.5 + var(--marker-depth, 1) * 0.5);
   /* `isolation`, and not the `filter: blur(calc((1 - var(--marker-depth,1)) * 1.5px))` that used
      to sit here. The blur was the soft half of the rack-focus effect and it cost a render surface
@@ -503,17 +596,20 @@ body {
      from anyway. If the far end reads flat, widen this ramp (`0.35 + depth * 0.65`) rather than
      bringing a filter back.
 
-     `isolation` is load-bearing, not tidiness: the ::before vignette below sits at `z-index: -1`
+     `isolation` is load-bearing, not tidiness: the ::before bloom below sits at `z-index: -1`
      and needs a stacking context on this element to stay scoped to it. `filter` used to supply
      one unconditionally; `opacity` only forms one while it is below 1, i.e. everywhere except
      full zoom-in, which is precisely the case that would have leaked. */
   isolation: isolate;
-  /* `color` only. `opacity` is driven off `--marker-depth`, which the render loop rewrites on the
-     anchor every frame — so transitioning it meant every frame *restarted* a 400ms fade toward a
-     target that had already moved, on every card at once. The per-frame write is itself the
-     animation; depth already changes smoothly because the camera does. Do not add it back. */
+  /* `color`, `background`, `border-color` and `text-shadow` — never `opacity`, which is driven
+     off `--marker-depth` and rewritten on the anchor every frame, so transitioning it meant
+     every frame *restarted* a 400ms fade toward a target that had already moved, on every card
+     at once. The per-frame write is itself the animation; depth already changes smoothly because
+     the camera does. Do not add it back. */
   transition:
     color var(--marker-transition),
+    background var(--marker-transition),
+    border-color var(--marker-transition),
     text-shadow var(--marker-transition);
 }
 
@@ -522,54 +618,67 @@ body {
    competing for the eye. `[data-focused]` is set on the layer by StopMarkerLayer whenever any
    stop is hovered or selected, from either the card here or its row in the panel.
 
-   Done with `color` and `text-shadow`, NOT `opacity` — deliberately, and this is the trap the
+   Done with `color`, `background`, `border-color` and `text-shadow`, NOT `opacity` —
+   deliberately, and this is the trap the
    comment on `.marker-title-card`'s opacity is about. That opacity is computed from
    `--marker-depth`, which the render loop rewrites on the anchor on every frame the camera
    moves; a transition on it restarts a 400ms fade toward a target that has already moved, on
-   every card at once. `color` and `text-shadow` are written by nothing per-frame, so they can
+   every card at once. None of these four are written per-frame, so they can
    carry a transition safely and the recede is smooth rather than a snap.
 
-   The halo drops with the text. Holding a full-strength black shadow under a 32%-alpha name
-   leaves a dark smudge that reads as dirt on the map rather than as a name standing back. */
+   The chip drops with the text. Holding a full-strength fill and a black shadow under a
+   40%-alpha name leaves a dark smudge that reads as dirt on the map rather than as a name
+   standing back — so a receded card thins back toward the halo-only card this used to be. */
 .stop-marker-layer[data-focused="true"] .marker-title-card:not([data-hovered="true"]) {
-  color: rgb(244 247 250 / 0.32);
-  text-shadow:
-    0 0 2px rgb(0 0 0 / 0.55),
-    0 0 6px rgb(0 0 0 / 0.4);
+  color: rgb(244 247 250 / 0.4);
+  background: rgb(var(--map-glass) / 0.3);
+  border-color: rgb(255 255 255 / 0.06);
+  box-shadow: none;
+  /* Dropped, not thinned. A receded card is one nobody is reading, and holding a backdrop filter
+     on it means still paying a render surface per frame for a label that has stepped out of the
+     way — the cards being pushed back are exactly the ones there are most of. */
+  backdrop-filter: none;
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.4);
 }
 
 /* Day labels recede on the same signal. In the overview a day label is the heading for a
    cluster; once the traveler is reading one stop inside one day, the other days' headings are
    the same distraction the other stop names are. */
 .stop-marker-layer[data-focused="true"] .marker-day-label {
-  color: color-mix(in oklab, var(--day-color, var(--route-blue)) 34%, transparent);
-  text-shadow:
-    0 0 2px rgb(0 0 0 / 0.55),
-    0 0 6px rgb(0 0 0 / 0.4);
+  color: color-mix(in oklab, var(--day-color, var(--route-neon-cyan)) 45%, transparent);
+  border-color: color-mix(in oklab, var(--day-color, var(--route-neon-cyan)) 20%, transparent);
+  box-shadow: none;
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.5);
 }
 
 .stop-marker-layer[data-focused="true"] .marker-day-label::after {
   opacity: 0.3;
 }
 
-/* A soft, edgeless vignette behind the name — not a card: no fill boundary, no border, nothing
-   a viewer could point at and call "a box". It exists purely so contrast never depends on
-   what happens to be under a stop; the shadow above handles the common case, this is the
-   guarantee for the worst one (a bright, busy rooftop directly behind the text). Negative
-   z-index needs no extra work to land behind the text: the parent sets `isolation: isolate`, so
-   this is scoped to sit under this card's own text and nothing else. That property is there for
-   this, and only this — it replaced a `filter: blur()` that had been creating the stacking
-   context as a side effect. Deleting it puts the vignette behind the whole marker layer. */
+/* A soft dark bloom bleeding out past the chip, so the chip's edge dissolves into the
+   photography instead of sitting on it like a pasted rectangle. This used to be the *only*
+   backdrop the name had, doing the contrast job the chip now does; it stays for the softening
+   alone. Negative z-index needs no extra work to land behind the chip: the parent sets
+   `isolation: isolate`, so this is scoped to this card and nothing else. That property is there
+   for this, and only this — it replaced a `filter: blur()` that had been creating the stacking
+   context as a side effect. Deleting it puts the bloom behind the whole marker layer. */
 .marker-title-card::before {
   content: "";
   position: absolute;
-  inset: -0.5em -0.65em;
-  background: radial-gradient(ellipse 62% 85% at 50% 42%, rgb(0 0 0 / 0.4), transparent 72%);
+  inset: -0.45em -0.6em;
+  /* A soft dark bloom bleeding out past the chip's edge, so the chip does not read as a hard
+     rectangle pasted onto the photograph. Not a scrim: the chip itself now carries contrast, and
+     this only softens the transition from it to whatever is behind. Negative z-index needs no
+     extra work to land behind the chip — the parent sets `isolation: isolate`, so this is scoped
+     to sit under this card and nothing else. That property is there for this, and only this; it
+     replaced a `filter: blur()` that had been creating the stacking context as a side effect.
+     Deleting it puts this behind the whole marker layer. */
+  background: radial-gradient(ellipse 70% 90% at 50% 50%, rgb(0 0 0 / 0.45), transparent 74%);
   z-index: -1;
   pointer-events: none;
 }
 
-/* The one accent mark: a 1px amber rule draws in left-to-right under the name via its own
+/* The one accent mark: a 1px glowing amber rule draws in left-to-right under the name via its own
    `::after`, kept off the anchor/card's own transform for the same reason the hover lift used
    to be — it would fight the per-frame inline write. `:hover` covers the pointer landing
    directly on the name; `[data-hovered]` is set from the itinerary panel's own hover so the
@@ -577,11 +686,12 @@ body {
 .marker-title-card::after {
   content: "";
   position: absolute;
-  left: 0;
-  bottom: 0;
+  left: 0.55rem;
+  right: 0.55rem;
+  bottom: 0.16rem;
   height: 1px;
-  width: 100%;
   background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform var(--marker-transition);
@@ -591,6 +701,13 @@ body {
 .marker-title-card:focus-visible,
 .marker-title-card[data-hovered="true"] {
   color: var(--on-deep);
+  background: rgb(var(--map-glass) / 0.78);
+  /* Amber as a literal for the same reason `.scene-void` uses one: `--accent` is a hex and
+     `rgb()` cannot take it. */
+  border-color: rgb(255 179 64 / 0.55);
+  box-shadow:
+    0 2px 14px rgb(0 0 0 / 0.6),
+    0 0 16px rgb(255 179 64 / 0.28);
 }
 
 .marker-title-card:hover::after,
@@ -644,53 +761,86 @@ body {
 }
 
 /* --- The day label ----------------------------------------------------------------------
-   One per day, at that day's centroid: the layer that makes a generated trip readable before
-   anything is opened. Same rules as the Location Title Card above — no fill, no border, no
-   blur, legibility from an omnidirectional halo rather than a scrim — because it sits on the
-   same photography and has the same worst case (a bright, busy rooftop directly behind it).
+   One per day, hung off that day's cluster: the layer that makes a generated trip readable
+   before anything is opened. Same material as the Location Title Card above — dark map glass,
+   a hairline edge, a bloom — because it sits on the same uncontrolled photography and has the
+   same worst case (a bright, busy rooftop directly behind it).
 
-   Louder than a stop name on purpose, and in three ways at once rather than by size alone:
-   larger, tracked out and uppercased. It has to win the eye at a zoom level where the stop
-   names are at their 0.55 depth floor, and it is the only label drawn at all while the plan
-   panel is shut.
+   Louder than a stop name on purpose, and in four ways at once rather than by size alone:
+   tracked out, uppercased, set in the tech display face, and edged and lit in the day's own
+   neon. It has to win the eye at a zoom level where the stop names are at their 0.55 depth
+   floor, and it is the only label drawn at all while the plan panel is shut.
 
-   `--day-color` is written per-element by StopMarkerLayer from the same DAY_COLOR_TOKENS the
-   route geometry is drawn with. Colour is never the whole message here — the label says which
+   `--day-color` and `--day-glow` are written per-element by StopMarkerLayer from the same
+   `DayPalette` the route geometry is drawn with. Colour is never the whole message here — the label says which
    day in words, so a six-day cycle and a colour-blind reader both stay fine. */
 .marker-day-label {
   position: relative;
   display: inline-block;
-  padding-bottom: 0.3rem;
-  font-family: var(--font-sans-stack);
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  padding: 0.34rem 0.7rem 0.36rem;
+  border-radius: 6px;
+  /* The one place in the product that uses a second typeface — see the long note on `orbitron`
+     in layout.tsx for why the exception is drawn here and nowhere else. Falls back through the
+     product face rather than to a generic, so a failed font load degrades to the tracked-out
+     uppercase Archivo this badge used to be rather than to Times. */
+  font-family: var(--font-map-display), var(--font-sans-stack), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  /* Wider than the 0.14em this carried in Archivo. Orbitron's letterforms are already square and
+     wide, and at four characters the tracking is what turns "DAY 1" from a word into a readout. */
+  letter-spacing: 0.18em;
+  /* Orbitron's glyphs sit optically left inside their advance width once tracked out this far;
+     without this the chip has a visible extra sliver of padding on the right. */
+  text-indent: 0.18em;
   text-transform: uppercase;
   font-size: 0.8125rem;
   line-height: 1.2;
-  color: var(--day-color, var(--route-blue));
+  color: var(--day-color, var(--route-neon-cyan));
   white-space: nowrap;
-  /* Heavier than the stop name's. This is coloured text rather than near-white, so it starts
-     with less contrast against the map and needs the halo to do more. */
-  text-shadow:
-    0 0 2px rgb(0 0 0 / 1),
-    0 0 5px rgb(0 0 0 / 0.95),
-    0 0 12px rgb(0 0 0 / 0.7),
-    0 3px 16px rgb(0 0 0 / 0.55);
+  /* The glass chip, tinted by the day it names: deep map ink, a hairline edge in the day's own
+     neon, and an outer bloom in the same colour so the badge reads as lit rather than printed.
+     `color-mix` on the day token rather than a second per-day custom property — StopMarkerLayer
+     writes exactly one (`--day-color`) and everything here derives from it. */
+  background: rgb(var(--map-glass) / 0.75);
+  /* Border and text in the day's **core**, bloom in its **glow** — the same split the geometry
+     uses, so the badge is lit by the same light as the ribbons it names rather than merely
+     matching their colour. Both are written per-element by StopMarkerLayer from the one
+     `DayPalette` the route was drawn with; the fallbacks are palette A. */
+  border: 1px solid color-mix(in oklab, var(--day-color, var(--route-neon-cyan)) 55%, transparent);
+  box-shadow:
+    0 2px 12px rgb(0 0 0 / 0.55),
+    0 0 20px color-mix(in oklab, var(--day-glow, var(--route-neon-cyan-glow)) 32%, transparent),
+    inset 0 0 12px color-mix(in oklab, var(--day-glow, var(--route-neon-cyan-glow)) 12%, transparent);
+  /* Same hazard `.marker-title-card` documents at length — a filtered element owns a render
+     surface and this layer moves it every frame — but the cheapest instance of it: one badge per
+     day, against up to fifteen stop names. The `saturate` is only here, where there is a neon
+     edge and an inner bloom for it to lift. */
+  backdrop-filter: blur(8px) saturate(140%);
   /* Shallower ramp than the stop name's `0.5 + depth * 0.5`: a day label that has faded out at
      the far end has failed at the one job it exists for. */
   opacity: calc(0.78 + var(--marker-depth, 1) * 0.22);
-  /* Scopes the vignette below, exactly as on .marker-title-card. */
+  /* A crisp emissive glow rather than the four-layer black halo this used to carry. The chip
+     under the text is doing the contrast work now, so the shadow's job is to make coloured
+     glyphs look lit from within — one tight dark layer for edge definition, two in the day's own
+     colour for the bloom. */
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 0.85),
+    0 0 8px color-mix(in oklab, var(--day-color, var(--route-neon-cyan)) 70%, transparent),
+    0 0 18px color-mix(in oklab, var(--day-glow, var(--route-neon-cyan-glow)) 40%, transparent);
+  /* Scopes the bloom below, exactly as on .marker-title-card. */
   isolation: isolate;
   transition:
     color var(--marker-transition),
+    border-color var(--marker-transition),
+    box-shadow var(--marker-transition),
     text-shadow var(--marker-transition);
 }
 
 .marker-day-label::before {
   content: "";
   position: absolute;
-  inset: -0.55em -0.7em;
-  background: radial-gradient(ellipse 62% 85% at 50% 42%, rgb(0 0 0 / 0.45), transparent 72%);
+  inset: -0.5em -0.65em;
+  /* Softens the chip's edge into the photography, same role as `.marker-title-card::before`. */
+  background: radial-gradient(ellipse 70% 95% at 50% 50%, rgb(0 0 0 / 0.5), transparent 74%);
   z-index: -1;
   pointer-events: none;
 }
@@ -702,11 +852,12 @@ body {
 .marker-day-label::after {
   content: "";
   position: absolute;
-  left: 0;
-  bottom: 0;
+  left: 0.7rem;
+  right: 0.7rem;
+  bottom: 0.16rem;
   height: 2px;
-  width: 100%;
-  background: var(--day-color, var(--route-blue));
+  background: var(--day-color, var(--route-neon-cyan));
+  box-shadow: 0 0 8px var(--day-color, var(--route-neon-cyan));
   opacity: 0.85;
   transition: opacity var(--marker-transition);
 }
@@ -738,6 +889,14 @@ body {
 .marker-day-label:hover,
 .marker-day-label:focus-visible {
   color: var(--on-deep);
+  border-color: var(--day-color, var(--route-neon-cyan));
+  box-shadow:
+    0 2px 14px rgb(0 0 0 / 0.6),
+    0 0 28px color-mix(in oklab, var(--day-glow, var(--route-neon-cyan-glow)) 52%, transparent),
+    inset 0 0 14px color-mix(in oklab, var(--day-glow, var(--route-neon-cyan-glow)) 20%, transparent);
+  text-shadow:
+    0 0 2px rgb(0 0 0 / 0.85),
+    0 0 10px color-mix(in oklab, var(--day-color, var(--route-neon-cyan)) 80%, transparent);
 }
 
 .marker-day-label:hover::after,
@@ -751,20 +910,27 @@ body {
 
 /* --- Neighbouring towns ------------------------------------------------------------------
    The quietest layer on the map: place names around the destination, there to answer "what is
-   that over there" and nothing else. Smaller, lighter and un-tracked next to the day badges, so
-   the eye sorts the three label kinds by weight without being told. Same halo technique as the
-   others — these sit on the same arbitrary photography. */
+   that over there" and nothing else. The same map glass as the other two labels at a third of
+   the presence — thinner fill, barely-there edge, no bloom, no neon — so the eye sorts the
+   three label kinds by weight without being told. */
 .marker-place-label {
-  font-family: var(--font-sans-stack);
+  display: inline-block;
+  padding: 0.12rem 0.4rem 0.14rem;
+  border-radius: 4px;
+  background: rgb(var(--map-glass) / 0.55);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  /* The same map face as the stop names, at the lightest weight it ships — this label is the
+     quietest thing on the globe and the family is what keeps it in the same voice. No
+     `backdrop-filter`: there can be a dozen of these and they are, by design, the layer nobody
+     is reading. */
+  font-family: var(--font-map-label), var(--font-sans-stack), ui-sans-serif, sans-serif;
   font-weight: 500;
-  font-size: 0.6875rem;
-  letter-spacing: 0.02em;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
   line-height: 1.2;
-  color: rgb(233 240 248 / 0.62);
+  color: rgb(233 240 248 / 0.78);
   white-space: nowrap;
-  text-shadow:
-    0 0 2px rgb(0 0 0 / 0.9),
-    0 0 6px rgb(0 0 0 / 0.7);
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.7);
   opacity: calc(0.45 + var(--marker-depth, 1) * 0.55);
 }
 

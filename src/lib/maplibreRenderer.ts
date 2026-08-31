@@ -1,0 +1,1204 @@
+import type {
+  FilterSpecification,
+  LngLatLike,
+  Map as MapLibreMap,
+  Marker,
+  StyleSpecification,
+} from "maplibre-gl";
+import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geojson";
+
+import {
+  arcLift,
+  cssColor,
+  DAY_STATE_ALPHA,
+  dayPalette,
+  DayVisualState,
+  frameRouteBesidePanel,
+  RouteStop,
+  routeViewHeadingDeg,
+  STEM_HEIGHT_M,
+} from "@/lib/mapRoute";
+import { metresBetween } from "@/lib/peekRange";
+import {
+  CameraPose,
+  drawnDaysOf,
+  FlyToPointOptions,
+  FrameRouteOptions,
+  HERO_VIEW,
+  HIGHWAY_CASING,
+  HIGHWAY_COLOR,
+  MapRenderer,
+  MIN_ROUTE_RADIUS_M,
+  panelLeftEdgePx,
+  ROUTE_FRAME_PITCH_DEG,
+  RouteDrawRequest,
+  ScreenPoint,
+  visibleMapWidthPx,
+  ZoomStepOptions,
+} from "@/lib/mapRenderer";
+
+/**
+ * Vector tiles, free and keyless — the same bar every other data source in this app clears (see
+ * CLAUDE.md's "Data sources"). Liberty is OpenMapTiles' full-detail street style, which is what
+ * carries the `building` layer the 3D extrusion below is built from.
+ */
+export const MAPLIBRE_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+
+/**
+ * Elevation, as a terrarium-encoded DEM from the AWS Open Data terrain-tiles bucket. Also keyless.
+ *
+ * This is what makes the MapLibre map *3D* rather than merely tilted: without a terrain source a
+ * pitched view is a flat plane seen at an angle, and a mountain trip renders as if it were on a
+ * table. Deliberately **not** satellite/photographic imagery — that is the one thing this engine
+ * is not meant to reproduce.
+ */
+const DEM_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+/** Copied into `public/` by the postinstall step — see `scripts/copy-maplibre-assets.mjs`. */
+export const MAPLIBRE_WORKER_URL = "/maplibre/maplibre-gl-worker.mjs";
+const DEM_SOURCE_ID = "tripmate-dem";
+const DEM_MAX_ZOOM = 14;
+
+const ROUTE_SOURCE_ID = "tripmate-route";
+const STEM_SOURCE_ID = "tripmate-stems";
+const HIGHWAY_SOURCE_ID = "tripmate-highways";
+const CITY_SOURCE_ID = "tripmate-city";
+const BUILDINGS_LAYER_ID = "tripmate-buildings";
+
+/**
+ * MapLibre's zoom is defined against a 512px world tile, so this is the width of the whole world
+ * in metres at the equator divided by that. Everything that converts between a camera *range* in
+ * metres and a zoom level goes through it.
+ */
+const EQUATOR_M = 40_075_016.686;
+const WORLD_TILE_PX = 512;
+
+/** Pitch beyond MapLibre's default 60° cap. The tilt slider goes to 65° of MapLibre pitch (25 on
+ *  its own scale), and the 2D/3D toggle wants the full range, so the cap is raised once at
+ *  construction rather than clamped at every call site. */
+const MAX_PITCH_DEG = 85;
+
+/** Metres. Matches Cesium's `screenSpaceCameraController` bounds so both engines bottom out and
+ *  top out in the same place — a GPU comparison at different altitudes compares nothing. */
+const MIN_RANGE_M = 50;
+const MAX_RANGE_M = 25_000_000;
+
+/** Radius of a stem column, in metres. Cesium draws three nested cylinders 9m → 3.5m across; this
+ *  is one extruded octagon at the middle of that, which is what a vector renderer can do
+ *  cheaply. */
+const STEM_RADIUS_M = 6;
+const STEM_SIDES = 8;
+
+/** Line widths in screen pixels for the *ground track* under each arc. */
+const ROUTE_CORE_WIDTH_PX = 4;
+const ROUTE_GLOW_WIDTH_PX = 14;
+const ACTIVE_CORE_WIDTH_SCALE = 1.22;
+const ACTIVE_GLOW_WIDTH_SCALE = 1.55;
+
+const ARC_SOURCE_ID = "tripmate-arcs";
+/**
+ * How tall any one slab of the arc ribbon is allowed to be, in metres.
+ *
+ * This, not a segment count, is what sets the resolution — and it is the difference between an arc
+ * and a row of blocks. A `fill-extrusion` prism is axis-aligned: it cannot be tilted to follow a
+ * slope, so a segment spanning a steep stretch of the curve becomes a *tall box*. The curve is at
+ * its steepest right where it leaves each stop, so a fixed segment count gave a smooth apex and
+ * chunky ends — visibly a staircase of cubes at the start of every long hop.
+ *
+ * Sizing the segments off the height they climb instead makes them dense where the curve is steep
+ * and sparse where it is flat, which is where the geometry is worth spending. A 200m hop lifts 80m
+ * and needs ~13 slabs; a 4km hop lifts 1.2km and takes ~190.
+ */
+const ARC_STEP_M = 20;
+const ARC_MIN_SEGMENTS = 14;
+const ARC_MAX_SEGMENTS = 200;
+/**
+ * Half-width of the arc ribbon in metres, as a fraction of the hop's own ground length.
+ *
+ * World-space rather than screen-space, and that is a real difference from Cesium: `fill-extrusion`
+ * has no pixel-width mode, so the ribbon grows and shrinks with the camera instead of holding a
+ * constant 16px. Scaling it off the hop keeps a cross-city arc from reading as a thread while a
+ * two-block hop stays a ribbon rather than a runway.
+ */
+const ARC_HALF_WIDTH_RATIO = 0.008;
+const ARC_MIN_HALF_WIDTH_M = 10;
+const ARC_MAX_HALF_WIDTH_M = 120;
+/** Vertical thickness of a slab. Must exceed `ARC_STEP_M` or consecutive slabs leave gaps. */
+const ARC_THICKNESS_M = 24;
+
+/**
+ * Cesium's day/night phases are a CSS blend sheet over the canvas and stay that way, so nothing
+ * here needs to know about them. What *does* differ: the vector basemap ships light, and this app
+ * is dark glass over dark imagery. `--map-basemap-tint` is laid over the tiles as a fill so the
+ * ground reads as the same cool slate the photogrammetry was tinted to (`#9BA6B4` at 0.1 MIX).
+ */
+const BASEMAP_TINT_LAYER_ID = "tripmate-basemap-tint";
+
+interface MapLibrePose {
+  center: [number, number];
+  zoom: number;
+  bearing: number;
+  /** MapLibre's own convention: 0 is nadir. */
+  pitch: number;
+}
+
+type ArcProps = {
+  color: string;
+  base: number;
+  height: number;
+};
+
+type RouteProps = {
+  kind: "route" | "stop";
+  day: number;
+  color: string;
+  glow: string;
+  opacity: number;
+  glowOpacity: number;
+  width: number;
+  glowWidth: number;
+  emphasised: boolean;
+};
+
+function emptyCollection(): FeatureCollection {
+  return { type: "FeatureCollection", features: [] };
+}
+
+/** Metres per pixel at a given zoom and latitude, on MapLibre's 512px world. */
+function metresPerPixel(zoom: number, lat: number): number {
+  return (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (WORLD_TILE_PX * 2 ** zoom);
+}
+
+/**
+ * Move a lat/lng by a metre offset in the local east/north frame.
+ *
+ * Flat-earth arithmetic, which is exactly right at the scale this is used for (framing bias,
+ * stem footprints — hundreds of metres, not hundreds of kilometres) and avoids pulling a geodesy
+ * library in for it.
+ */
+function offsetMetres(lat: number, lng: number, eastM: number, northM: number): [number, number] {
+  const dLat = northM / 111_320;
+  const dLng = eastM / (111_320 * Math.max(0.01, Math.cos((lat * Math.PI) / 180)));
+  return [lng + dLng, lat + dLat];
+}
+
+/** Cesium pitch (negative down, -90 nadir) → MapLibre pitch (0 nadir, 85 near-horizon). */
+function toMapLibrePitch(cesiumPitchDeg: number): number {
+  return Math.max(0, Math.min(MAX_PITCH_DEG, 90 + cesiumPitchDeg));
+}
+
+/** The inverse, so the app's chrome keeps reading pitch in the one convention. */
+function toCesiumPitchRad(mapLibrePitchDeg: number): number {
+  return ((mapLibrePitchDeg - 90) * Math.PI) / 180;
+}
+
+/**
+ * Build the style: OpenFreeMap Liberty, plus this app's own tint, terrain and extruded buildings.
+ *
+ * Fetched and patched rather than handed to the map as a URL, because three of the four things
+ * added here have to be positioned *relative to layers the style already has* — the tint goes
+ * above the landcover and below the roads, the buildings go under the labels — and a style
+ * mutated after `load` flashes the untinted version for a frame first.
+ */
+async function buildStyle(): Promise<StyleSpecification | string> {
+  let style: StyleSpecification;
+  try {
+    const res = await fetch(MAPLIBRE_STYLE_URL);
+    if (!res.ok) throw new Error(`style ${res.status}`);
+    style = (await res.json()) as StyleSpecification;
+  } catch {
+    // Fail-soft, the house convention: an unreachable style host should cost the map its
+    // *styling*, not its existence. The URL form still boots and MapLibre will surface its own
+    // error, which is strictly more informative than a blank container.
+    return MAPLIBRE_STYLE_URL;
+  }
+
+  style.sources = {
+    ...style.sources,
+    [DEM_SOURCE_ID]: {
+      type: "raster-dem",
+      tiles: [DEM_TILES],
+      tileSize: 256,
+      maxzoom: DEM_MAX_ZOOM,
+      encoding: "terrarium",
+      attribution:
+        '<a href="https://registry.opendata.aws/terrain-tiles/">Terrain Tiles</a> (AWS Open Data)',
+    },
+  };
+  style.terrain = { source: DEM_SOURCE_ID, exaggeration: 1 };
+
+  // **Labels in English.** OpenMapTiles ships every place name in its local script — Lisbon's
+  // basemap comes back as `Lisboa`, Tokyo's in kana — and Liberty's own `text-field` asks for
+  // `name:latin`, which transliterates rather than translates. The itinerary beside the map is in
+  // English, so the map should be too. Rewritten here rather than after `load` because a style
+  // mutated later flashes the local names for a frame first.
+  //
+  // `coalesce` and not a bare `name:en`: OSM has no English name for most minor streets, and a
+  // missing key would blank the label entirely. English → transliterated latin → whatever the
+  // local name is, which is strictly better than nothing.
+  const englishName: unknown = [
+    "coalesce",
+    ["get", "name:en"],
+    ["get", "name:latin"],
+    ["get", "name"],
+  ];
+  for (const layer of style.layers) {
+    if (layer.type !== "symbol") continue;
+    const layout = (layer as { layout?: Record<string, unknown> }).layout;
+    if (!layout || !("text-field" in layout)) continue;
+    // Only the layers that actually name a place. A few symbol layers put a shield number or an
+    // icon label in `text-field`, and rewriting those to a place name would be nonsense.
+    if (!JSON.stringify(layout["text-field"]).includes("name")) continue;
+    layout["text-field"] = englishName;
+  }
+
+  // Slate the basemap down to the tone the photogrammetry was tinted to. A `background`-style
+  // fill over the land layers rather than a CSS filter on the canvas, because a CSS filter would
+  // take the route ribbons and the buildings with it — the same trap Cesium's tileset tint
+  // documents.
+  const firstSymbol = style.layers.findIndex((l) => l.type === "symbol");
+  const tintLayer = {
+    id: BASEMAP_TINT_LAYER_ID,
+    type: "background" as const,
+    paint: {
+      "background-color": "#0f172a",
+      "background-opacity": 0.34,
+    },
+  };
+
+  // Extruded buildings, from the source layer Liberty already carries. Under the labels, so street
+  // names still read over them.
+  const openMapTilesSource = Object.entries(style.sources).find(
+    ([, source]) => source.type === "vector"
+  )?.[0];
+  const buildingLayer = openMapTilesSource
+    ? [
+        {
+          id: BUILDINGS_LAYER_ID,
+          type: "fill-extrusion" as const,
+          source: openMapTilesSource,
+          "source-layer": "building",
+          minzoom: 13,
+          paint: {
+            "fill-extrusion-color": "#7c8899",
+            // `render_height` is OpenMapTiles' own field; the fallback keeps a footprint with no
+            // height data from collapsing to nothing.
+            "fill-extrusion-height": ["coalesce", ["get", "render_height"], 8],
+            "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+            "fill-extrusion-opacity": 0.72,
+          } as never,
+        },
+      ]
+    : [];
+
+  const insertAt = firstSymbol < 0 ? style.layers.length : firstSymbol;
+  style.layers = [
+    ...style.layers.slice(0, insertAt),
+    tintLayer,
+    ...buildingLayer,
+    ...style.layers.slice(insertAt),
+  ];
+  return style;
+}
+
+/**
+ * Construct the map. Resolves once the style has loaded and the trip layers exist, which is the
+ * moment the renderer is safe to hand to the provider — the same contract Cesium's tileset load
+ * has.
+ */
+export async function createMapLibreMap(container: HTMLElement): Promise<MapLibreMap> {
+  const { Map: MapLibreGlMap, setWorkerUrl } = await import("maplibre-gl");
+
+  // Point the tile-parsing worker at a static copy, because the one MapLibre resolves for itself
+  // does not survive this bundler. See `scripts/copy-maplibre-assets.mjs` for the full failure
+  // mode — the short version is that the default is
+  // `new URL("./maplibre-gl-worker.mjs", import.meta.url)`, Turbopack does not serve that path,
+  // the module worker dies on its own import, and the map then renders a flat fill forever
+  // without a single error anywhere.
+  setWorkerUrl(MAPLIBRE_WORKER_URL);
+  const style = await buildStyle();
+  const map = new MapLibreGlMap({
+    container,
+    style,
+    center: [HERO_VIEW.lng, HERO_VIEW.lat],
+    zoom: rangeToZoomStatic(HERO_VIEW.heightM, HERO_VIEW.lat, container.clientHeight || 800),
+    bearing: HERO_VIEW.headingDeg,
+    pitch: toMapLibrePitch(HERO_VIEW.pitchDeg),
+    maxPitch: MAX_PITCH_DEG,
+    // The app draws its own compass, tilt slider and zoom buttons (`MapControls`), and its own
+    // attribution slot — every default control here would be a second copy.
+    attributionControl: false,
+    // Matches Cesium's `useBrowserRecommendedResolution: false` + capped `resolutionScale`, so a
+    // GPU comparison is not secretly a comparison of two different pixel counts.
+    pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+    // MapLibre's own name for "don't repaint when nothing changed". Cesium runs the equivalent
+    // (`requestRenderMode`), and the glass panels' `backdrop-filter` re-blur on every map frame,
+    // so this is the same load-bearing setting under a different name.
+    refreshExpiredTiles: false,
+    fadeDuration: 150,
+  });
+
+  // MapLibre reports style/tile trouble through an `error` *event*, not a rejection — with no
+  // listener it is swallowed entirely. A DEM tile 404 or a bad paint expression would otherwise
+  // leave a map that renders a basemap and silently never gets a route.
+  map.on("error", (e) => console.error("[maplibre]", e?.error?.message ?? e));
+
+  // `style.load`, and specifically not `load` or `isStyleLoaded()`.
+  //
+  // Both of the obvious choices deadlock here, and each cost a debugging session:
+  //
+  // - **`load`** means "style parsed AND every source in view settled AND the first frame
+  //   painted". It never fired at all with a terrain DEM in the style.
+  // - **`isStyleLoaded()`** stays `false` for as long as *any* source is still settling, and with
+  //   `style.terrain` pointing at a DEM whose tiles stream continuously it never came back true —
+  //   measured: `styledata` fired seven times in the first second, `isStyleLoaded()` false on
+  //   every one of them, and the promise below never resolved. The map rendered a perfectly
+  //   healthy basemap the whole time, which is what made it look like a route-drawing bug.
+  //
+  // `style.load` is the event that actually gates `addSource`/`addLayer`: the style is parsed and
+  // mutable, whatever the tiles are doing. Guarded against having already fired, since the
+  // listener is attached one statement after construction but the contract shouldn't depend on
+  // that staying true.
+  await new Promise<void>((resolve) => {
+    if (map.style && map.isStyleLoaded()) {
+      resolve();
+      return;
+    }
+    map.once("style.load", () => resolve());
+  });
+
+  // Terrain has to be re-applied after load when the style came in as a URL fallback.
+  if (!map.getSource(DEM_SOURCE_ID)) {
+    map.addSource(DEM_SOURCE_ID, {
+      type: "raster-dem",
+      tiles: [DEM_TILES],
+      tileSize: 256,
+      maxzoom: DEM_MAX_ZOOM,
+      encoding: "terrarium",
+    });
+  }
+  if (!map.getTerrain()) map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1 });
+
+  addTripLayers(map);
+  return map;
+}
+
+/** Zoom for a camera-to-target distance, without a live transform to read the FOV off. */
+function rangeToZoomStatic(rangeM: number, lat: number, viewHeightPx: number): number {
+  // MapLibre's default vertical FOV is 36.87°, giving cameraToCenterDistance = 1.5 · height.
+  const cameraToCentrePx = 1.5 * viewHeightPx;
+  const mpp = rangeM / cameraToCentrePx;
+  return Math.log2((EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (WORLD_TILE_PX * mpp));
+}
+
+/** The trip's own sources and layers, added once. Everything the app draws lives in these. */
+function addTripLayers(map: MapLibreMap) {
+  const isRoute: FilterSpecification = ["==", ["get", "kind"], "route"];
+  const isStop: FilterSpecification = ["==", ["get", "kind"], "stop"];
+
+  for (const id of [ROUTE_SOURCE_ID, ARC_SOURCE_ID, STEM_SOURCE_ID, HIGHWAY_SOURCE_ID, CITY_SOURCE_ID]) {
+    if (!map.getSource(id)) map.addSource(id, { type: "geojson", data: emptyCollection() });
+  }
+
+  // Ambient city context first, so the trip's own route always sits over it.
+  map.addLayer({
+    id: `${HIGHWAY_SOURCE_ID}-casing`,
+    type: "line",
+    source: HIGHWAY_SOURCE_ID,
+    paint: { "line-color": HIGHWAY_CASING, "line-width": 5, "line-opacity": 0.75 },
+    layout: { "line-cap": "round", "line-join": "round" },
+  });
+  map.addLayer({
+    id: HIGHWAY_SOURCE_ID,
+    type: "line",
+    source: HIGHWAY_SOURCE_ID,
+    paint: { "line-color": HIGHWAY_COLOR, "line-width": 3 },
+    layout: { "line-cap": "round", "line-join": "round" },
+  });
+  map.addLayer({
+    id: CITY_SOURCE_ID,
+    type: "line",
+    source: CITY_SOURCE_ID,
+    paint: { "line-color": cssColor("--city-boundary"), "line-width": 2, "line-opacity": 0.85 },
+  });
+
+  // The ground track: a blurred wide line under the arc, standing in for Cesium's
+  // PolylineGlowMaterial *and* doing a job Cesium does not need — the arc floats hundreds of
+  // metres up, so at a shallow pitch it can sit well away from the ground it belongs to, and this
+  // is the shadow that ties it back down. Also the only thing left to read at nadir, where a
+  // lifted ribbon collapses onto its own plan line.
+  map.addLayer({
+    id: `${ROUTE_SOURCE_ID}-glow`,
+    type: "line",
+    source: ROUTE_SOURCE_ID,
+    filter: isRoute,
+    paint: {
+      "line-color": ["get", "glow"],
+      "line-width": ["get", "glowWidth"],
+      "line-opacity": ["*", ["get", "glowOpacity"], 0.55],
+      "line-blur": 8,
+    },
+    layout: { "line-cap": "round", "line-join": "round" },
+  });
+  map.addLayer({
+    id: `${ROUTE_SOURCE_ID}-core`,
+    type: "line",
+    source: ROUTE_SOURCE_ID,
+    filter: isRoute,
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": ["*", ["get", "width"], 0.5],
+      "line-opacity": ["*", ["get", "opacity"], 0.5],
+    },
+    layout: { "line-cap": "round", "line-join": "round" },
+  });
+
+  // **The parabolic arc**, and the reason it is an extrusion rather than a line.
+  //
+  // Cesium lifts each hop onto a raised great circle so two trips over the same ground read as
+  // separate, and so the shape of a day is legible as a shape. MapLibre has no elevated-line
+  // primitive at all — there is no `line-z-offset`, and `line-*` geometry is draped on the terrain
+  // — so the arc is built out of `fill-extrusion` prisms instead: one thin horizontal slab per
+  // segment, each floating at that segment's height on the same `base + lift · sin(πt)` profile
+  // `buildRouteGeometry` uses, so both engines draw the same curve from the same `arcLift()`.
+  //
+  // Alpha is baked into `fill-extrusion-color` rather than set through
+  // `fill-extrusion-opacity`, which is not data-driven — so a per-day state alpha could not reach
+  // it any other way.
+  map.addLayer({
+    id: ARC_SOURCE_ID,
+    type: "fill-extrusion",
+    source: ARC_SOURCE_ID,
+    paint: {
+      "fill-extrusion-color": ["get", "color"],
+      "fill-extrusion-base": ["get", "base"],
+      "fill-extrusion-height": ["get", "height"],
+      "fill-extrusion-opacity": 1,
+    },
+  });
+
+  // The ground pool under each stop, and its bright centre — Cesium's two nested ellipses.
+  map.addLayer({
+    id: `${ROUTE_SOURCE_ID}-pool`,
+    type: "circle",
+    source: ROUTE_SOURCE_ID,
+    filter: isStop,
+    paint: {
+      "circle-color": ["get", "glow"],
+      "circle-radius": 22,
+      "circle-blur": 1,
+      "circle-opacity": ["*", ["get", "glowOpacity"], 0.55],
+    },
+  });
+  map.addLayer({
+    id: `${ROUTE_SOURCE_ID}-dot`,
+    type: "circle",
+    source: ROUTE_SOURCE_ID,
+    filter: isStop,
+    paint: {
+      "circle-color": ["get", "color"],
+      "circle-radius": 5,
+      "circle-opacity": ["get", "opacity"],
+      "circle-stroke-width": 1.5,
+      "circle-stroke-color": "#0f172a",
+      "circle-stroke-opacity": ["get", "opacity"],
+    },
+  });
+
+  // The stems: real vertical volume, which is the one piece of Cesium's light-pillar the vector
+  // renderer can reproduce honestly. An extruded octagon rather than a cylinder, at world scale,
+  // so it fattens as the camera descends exactly as the beam did.
+  map.addLayer({
+    id: STEM_SOURCE_ID,
+    type: "fill-extrusion",
+    source: STEM_SOURCE_ID,
+    paint: {
+      "fill-extrusion-color": ["get", "color"],
+      "fill-extrusion-height": ["get", "height"],
+      "fill-extrusion-base": 0,
+      "fill-extrusion-opacity": 0.55,
+    },
+  });
+}
+
+/**
+ * The `MapRenderer` over MapLibre GL JS.
+ *
+ * The deliberate differences from `CesiumRenderer`, all of them consequences of a vector renderer
+ * having no true globe camera and no 3D-tile mesh to sample:
+ *
+ * - **Routes are draped, not arched.** Cesium lifts each hop onto a raised great circle so two
+ *   trips over the same ground read as separate. Here they are lines on the terrain. Nothing above
+ *   this file depends on the arc — `frameRoute` simply stops reserving room for apexes that don't
+ *   exist.
+ * - **Altitude is always 0.** `drawRoute` resolves 0 rather than a sampled surface height, because
+ *   the geometry sits *on* the terrain rather than floating above an ellipsoid. `routeAltitudeRef`
+ *   then makes the marker layer lift cards by `STEM_HEIGHT_M` alone, which is correct here.
+ * - **No horizon cull.** A mercator map has no far side, so `project` rejects only what is behind
+ *   the camera.
+ * - **`centreHeightM` is ignored.** MapLibre aims at a point on the ground; there is no way to ask
+ *   it to centre something 150m up. The stop's card lands slightly high in frame rather than dead
+ *   centre, which is the pre-`centreHeightM` behaviour and was survivable.
+ */
+export class MapLibreRenderer implements MapRenderer {
+  readonly engine = "maplibre" as const;
+
+  private readonly map: MapLibreMap;
+  private alive = true;
+  private pin: Marker | null = null;
+  private drawGeneration = 0;
+
+  /** The last drawn trip, kept so a retint or an emphasis change can rebuild the GeoJSON. Vector
+   *  features are cheap to regenerate — a week's trip is a few hundred coordinates — so this
+   *  renderer re-serialises rather than reaching into live geometry the way Cesium does. */
+  private days: RouteStop[][] = [];
+  private soloFocus = false;
+  private focusDay: number | null = null;
+  private stateFor: (day: number) => DayVisualState = () => "baseline";
+  private emphasis: { day: number; index: number } | null = null;
+
+  constructor(map: MapLibreMap) {
+    this.map = map;
+    map.once("remove", () => {
+      this.alive = false;
+    });
+  }
+
+  isAlive() {
+    return this.alive && !!this.map.getCanvas();
+  }
+
+  requestRender() {
+    if (this.isAlive()) this.map.triggerRepaint();
+  }
+
+  // ---------------------------------------------------------------- overlays
+
+  async drawRoute(request: RouteDrawRequest): Promise<number> {
+    if (!this.isAlive()) return 0;
+    this.drawGeneration++;
+    this.days = request.days;
+    this.soloFocus = request.soloFocus;
+    this.focusDay = request.focusDay;
+    this.stateFor = request.stateFor;
+    this.emphasis = null;
+    this.rebuildRoute();
+    // Terrain-draped geometry has no float to sample. Zero is the honest answer and it is what
+    // keeps the marker layer's lift correct — see the class comment.
+    return 0;
+  }
+
+  clearRoute() {
+    this.days = [];
+    this.emphasis = null;
+    this.setData(ROUTE_SOURCE_ID, emptyCollection());
+    this.setData(ARC_SOURCE_ID, emptyCollection());
+    this.setData(STEM_SOURCE_ID, emptyCollection());
+  }
+
+  applyDayStates(stateFor: (day: number) => DayVisualState) {
+    this.stateFor = stateFor;
+    this.rebuildRoute();
+  }
+
+  applyEmphasis(dayIndex: number | null, indexWithinDay: number | null) {
+    const next =
+      dayIndex === null || indexWithinDay === null ? null : { day: dayIndex, index: indexWithinDay };
+    const same =
+      (next === null && this.emphasis === null) ||
+      (next !== null &&
+        this.emphasis !== null &&
+        next.day === this.emphasis.day &&
+        next.index === this.emphasis.index);
+    if (same) return;
+    this.emphasis = next;
+    this.rebuildRoute();
+  }
+
+  /**
+   * Serialise the whole trip into the two GeoJSON sources.
+   *
+   * One pass builds both, because a stop's dot, its pool and its stem all read the same
+   * day-state alpha and the same emphasis flag — splitting them across two builders is how they
+   * would drift apart.
+   */
+  private rebuildRoute() {
+    if (!this.isAlive() || this.days.length === 0) return;
+    const accent = cssColor("--accent");
+    const routeFeatures: Feature<LineString | Point, RouteProps>[] = [];
+    const stemFeatures: Feature<Polygon, { color: string; height: number }>[] = [];
+    const arcFeatures: Feature<Polygon, ArcProps>[] = [];
+
+    this.days.forEach((stops, day) => {
+      if (this.soloFocus && this.focusDay !== null && day !== this.focusDay) return;
+      if (stops.length === 0) return;
+      const palette = dayPalette(day);
+      const state = this.stateFor(day);
+      const alpha = DAY_STATE_ALPHA[state];
+      const active = state === "active";
+      const color = cssColor(palette.core);
+      const glow = cssColor(palette.glow);
+      const base: Omit<RouteProps, "kind" | "emphasised"> = {
+        day,
+        color,
+        glow,
+        opacity: alpha,
+        glowOpacity: alpha * 0.6,
+        width: ROUTE_CORE_WIDTH_PX * (active ? ACTIVE_CORE_WIDTH_SCALE : 1),
+        glowWidth: ROUTE_GLOW_WIDTH_PX * (active ? ACTIVE_GLOW_WIDTH_SCALE : 1),
+      };
+
+      if (stops.length > 1) {
+        routeFeatures.push({
+          type: "Feature",
+          properties: { ...base, kind: "route", emphasised: false },
+          geometry: {
+            type: "LineString",
+            coordinates: stops.map((s) => [s.lng, s.lat]),
+          },
+        });
+        for (let i = 1; i < stops.length; i++) {
+          // An arc touching the stop being pointed at takes the accent, exactly as Cesium's does —
+          // amber means "you are pointing at this", never "this is a Tuesday".
+          const touchesEmphasis =
+            this.emphasis?.day === day &&
+            (this.emphasis.index === i - 1 || this.emphasis.index === i);
+          arcFeatures.push(
+            ...buildArcRibbon(
+              stops[i - 1],
+              stops[i],
+              touchesEmphasis ? accent : color,
+              touchesEmphasis ? 1 : alpha,
+              active
+            )
+          );
+        }
+      }
+
+      stops.forEach((stop, index) => {
+        // Amber means "you are pointing at this", never "this is a Tuesday" — the single
+        // deliberate exception to keeping interface colours off the map. See `RouteGeometry`.
+        const emphasised = this.emphasis?.day === day && this.emphasis.index === index;
+        routeFeatures.push({
+          type: "Feature",
+          properties: {
+            ...base,
+            kind: "stop",
+            emphasised,
+            color: emphasised ? accent : color,
+            glow: emphasised ? accent : glow,
+            opacity: emphasised ? 1 : alpha,
+            glowOpacity: emphasised ? 0.9 : alpha * 0.6,
+          },
+          geometry: { type: "Point", coordinates: [stop.lng, stop.lat] },
+        });
+        stemFeatures.push({
+          type: "Feature",
+          properties: {
+            color: emphasised ? accent : color,
+            height: STEM_HEIGHT_M,
+          },
+          geometry: {
+            type: "Polygon",
+            coordinates: [circleRing(stop.lat, stop.lng, STEM_RADIUS_M)],
+          },
+        });
+      });
+    });
+
+    this.setData(ROUTE_SOURCE_ID, { type: "FeatureCollection", features: routeFeatures });
+    this.setData(ARC_SOURCE_ID, { type: "FeatureCollection", features: arcFeatures });
+    this.setData(STEM_SOURCE_ID, { type: "FeatureCollection", features: stemFeatures });
+  }
+
+  setPin(pin: { lat: number; lng: number; label?: string } | null) {
+    if (!this.isAlive()) return;
+    this.pin?.remove();
+    this.pin = null;
+    if (!pin?.label) return;
+    void import("maplibre-gl").then(({ Marker: MapLibreMarker }) => {
+      if (!this.isAlive()) return;
+      // A DOM marker rather than a symbol layer: the pin is one element that never needs
+      // collision detection, and this way it carries the same SVG the Cesium billboard does
+      // without a sprite round-trip.
+      const el = document.createElement("div");
+      el.className = "tripmate-map-pin";
+      el.innerHTML = `<img src="${PIN_DATA_URI}" width="24" height="32" alt="" /><span>${escapeHtml(
+        pin.label ?? ""
+      )}</span>`;
+      this.pin = new MapLibreMarker({ element: el, anchor: "bottom" })
+        .setLngLat([pin.lng, pin.lat])
+        .addTo(this.map);
+    });
+  }
+
+  drawHighways(segments: { points: { lat: number; lng: number }[] }[]) {
+    this.setData(HIGHWAY_SOURCE_ID, {
+      type: "FeatureCollection",
+      features: segments.map((segment) => ({
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: segment.points.map((p) => [p.lng, p.lat]),
+        },
+      })),
+    });
+  }
+
+  drawCityBoundary(segments: { lat: number; lng: number }[][]) {
+    // Outline only, never a fill — a translucent polygon over the map hides the city it is
+    // describing, which is the one thing this must not do.
+    this.setData(CITY_SOURCE_ID, {
+      type: "FeatureCollection",
+      features: segments.map((segment) => ({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: segment.map((p) => [p.lng, p.lat]) },
+      })),
+    });
+  }
+
+  clearOverlays() {
+    this.drawGeneration++;
+    this.clearRoute();
+    this.setData(HIGHWAY_SOURCE_ID, emptyCollection());
+    this.setData(CITY_SOURCE_ID, emptyCollection());
+    this.setPin(null);
+  }
+
+  private setData(id: string, data: FeatureCollection) {
+    if (!this.isAlive()) return;
+    const source = this.map.getSource(id);
+    if (source && "setData" in source) {
+      (source as { setData: (d: FeatureCollection) => void }).setData(data);
+    }
+  }
+
+  // ---------------------------------------------------------------- camera
+
+
+  /**
+   * The three numbers every camera conversion here needs, derived from public getters only.
+   *
+   * `map.transform` carries all of them and is *not* public API — reaching into it would tie this
+   * file to MapLibre's internals for arithmetic that is three lines. The camera-to-centre distance
+   * is fixed by the vertical FOV and the viewport height (MapLibre's own definition), and metres
+   * per pixel follows from the zoom and the centre latitude.
+   */
+  private viewSizePx() {
+    const canvas = this.map.getCanvas();
+    return { width: canvas?.clientWidth ?? 0, height: canvas?.clientHeight ?? 0 };
+  }
+
+  private fovRad() {
+    return (this.map.getVerticalFieldOfView() * Math.PI) / 180;
+  }
+
+  /** Camera-to-centre distance in *pixels* — MapLibre's `cameraToCenterDistance`, recomputed. */
+  private cameraToCentrePx() {
+    return (0.5 / Math.tan(this.fovRad() / 2)) * Math.max(1, this.viewSizePx().height);
+  }
+
+  /** Camera-to-target distance in metres → zoom, using the live viewport and FOV. */
+  private rangeToZoom(rangeM: number, lat: number): number {
+    const mpp = Math.max(1e-6, rangeM / this.cameraToCentrePx());
+    const zoom = Math.log2(
+      (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (WORLD_TILE_PX * mpp)
+    );
+    return Math.max(this.map.getMinZoom(), Math.min(this.map.getMaxZoom(), zoom));
+  }
+
+  /** The current camera-to-screen-centre distance in metres. */
+  centreRangeM(): number {
+    if (!this.isAlive()) return 0;
+    return this.cameraToCentrePx() * metresPerPixel(this.map.getZoom(), this.map.getCenter().lat);
+  }
+
+  flyToPoint(options: FlyToPointOptions) {
+    if (!this.isAlive()) return;
+    // Centre the stop in the strip the itinerary leaves, not in the window.
+    //
+    // Dead centre of a 1440px window is 720px in — well inside the 40%-wide panel — so hovering a
+    // row used to fly the camera to a point that landed *behind* the plan you were reading. The
+    // route framing has corrected for this since it existed (`frameRouteBesidePanel`); a stop
+    // flight never did, and it is the same question.
+    //
+    // MapLibre answers it natively: `padding` shifts the vanishing point, so `center` lands in the
+    // middle of the *padded* box. Cesium has no such control and offsets the aim point in metres
+    // instead — see `CesiumRenderer.flyToPoint`. Both put the subject in the same place on screen.
+    const { width: viewWidth } = this.viewSizePx();
+    const freeWidth = visibleMapWidthPx(viewWidth);
+    const rightPadding = Math.max(0, viewWidth - freeWidth);
+    this.map.flyTo({
+      center: [options.lng, options.lat],
+      zoom: this.rangeToZoom(
+        Math.max(MIN_RANGE_M, Math.min(MAX_RANGE_M, options.rangeM)),
+        options.lat
+      ),
+      pitch: toMapLibrePitch(options.pitchDeg),
+      bearing: ((options.headingRad ?? 0) * 180) / Math.PI,
+      padding: { top: 0, bottom: 0, left: 0, right: rightPadding },
+      duration: (options.durationS ?? 2.5) * 1000,
+      essential: true,
+    });
+  }
+
+  frameRoute({ days, focusDay, panelVisible, durationS }: FrameRouteOptions) {
+    if (!this.isAlive()) return;
+    const drawnStops = drawnDaysOf(days, focusDay).flat();
+    if (drawnStops.length === 0) return;
+
+    // The centroid and the radius that contains every stop — the flat-map equivalent of Cesium's
+    // `BoundingSphere.fromPoints`. No arc-apex reservation: the routes are draped, so there are no
+    // apexes to keep in frame.
+    const centreLat = drawnStops.reduce((sum, s) => sum + s.lat, 0) / drawnStops.length;
+    const centreLng = drawnStops.reduce((sum, s) => sum + s.lng, 0) / drawnStops.length;
+    const radius = Math.max(
+      MIN_ROUTE_RADIUS_M,
+      ...drawnStops.map((s) => metresBetween({ lat: centreLat, lng: centreLng }, s))
+    );
+
+    // The same framing rule Cesium uses, from the same pure function: pull back so the route fills
+    // the strip the panel leaves, then shift the aim point so it lands in that strip.
+    const { width: viewWidth, height: viewHeight } = this.viewSizePx();
+    const tanHalfFovX = Math.tan(this.fovRad() / 2) * (viewWidth / Math.max(1, viewHeight));
+    const { biasM, rangeM } = frameRouteBesidePanel(
+      radius,
+      viewWidth,
+      panelLeftEdgePx(panelVisible, viewWidth),
+      tanHalfFovX
+    );
+
+    // Face the route across its long axis rather than down it — see `routeViewHeadingDeg`.
+    const headingDeg = routeViewHeadingDeg(drawnStops);
+    const heading = (headingDeg * Math.PI) / 180;
+    // Screen-right in the local frame is (cos h, -sin h) over (east, north). Identical to the
+    // Cesium path's ENU derivation, minus the matrix work a sphere needs.
+    const centre = offsetMetres(
+      centreLat,
+      centreLng,
+      biasM * Math.cos(heading),
+      -biasM * Math.sin(heading)
+    );
+
+    this.map.flyTo({
+      center: centre as LngLatLike,
+      zoom: this.rangeToZoom(Math.max(MIN_RANGE_M, rangeM), centreLat),
+      bearing: headingDeg,
+      pitch: toMapLibrePitch(ROUTE_FRAME_PITCH_DEG),
+      // Explicitly zero, not omitted. `flyTo` *retains* whatever padding the last camera command
+      // set, so a stop flight's right-padding would otherwise still be in force here and compound
+      // with the metre bias this function already applied — biasing the route twice.
+      padding: { top: 0, bottom: 0, left: 0, right: 0 },
+      duration: (durationS ?? 2.0) * 1000,
+      essential: true,
+    });
+  }
+
+  flyHome(durationS = 2.0) {
+    if (!this.isAlive()) return;
+    this.map.flyTo({
+      center: [HERO_VIEW.lng, HERO_VIEW.lat],
+      zoom: this.rangeToZoom(HERO_VIEW.heightM, HERO_VIEW.lat),
+      bearing: HERO_VIEW.headingDeg,
+      pitch: toMapLibrePitch(HERO_VIEW.pitchDeg),
+      duration: durationS * 1000,
+      essential: true,
+    });
+  }
+
+  capturePose(): CameraPose | null {
+    if (!this.isAlive()) return null;
+    const c = this.map.getCenter();
+    return {
+      center: [c.lng, c.lat],
+      zoom: this.map.getZoom(),
+      bearing: this.map.getBearing(),
+      pitch: this.map.getPitch(),
+    } satisfies MapLibrePose;
+  }
+
+  flyToPose(pose: CameraPose, durationS: number, onArrive?: () => void) {
+    if (!this.isAlive()) return;
+    const p = pose as MapLibrePose;
+    if (onArrive) this.map.once("moveend", onArrive);
+    this.map.flyTo({
+      center: p.center,
+      zoom: p.zoom,
+      bearing: p.bearing,
+      pitch: p.pitch,
+      duration: durationS * 1000,
+      essential: true,
+    });
+  }
+
+  poseHeadingRad(pose: CameraPose) {
+    return ((pose as MapLibrePose).bearing * Math.PI) / 180;
+  }
+
+  posePitchRad(pose: CameraPose) {
+    return toCesiumPitchRad((pose as MapLibrePose).pitch);
+  }
+
+  distanceFromPoseM(pose: CameraPose, lat: number, lng: number, heightM: number) {
+    const p = pose as MapLibrePose;
+    const rangeM = this.cameraToCentrePx() * metresPerPixel(p.zoom, p.center[1]);
+    return this.distanceFromCamera(p.center, rangeM, p.bearing, p.pitch, lat, lng, heightM);
+  }
+
+  /**
+   * Where the camera actually is, and how far that is from a world point.
+   *
+   * MapLibre has no "camera position" getter, so it is reconstructed: the camera sits `rangeM`
+   * from the centre point, tilted back by the pitch and behind the bearing. Good to the metre at
+   * every framing this app uses, and the only alternative is reaching into the transform's
+   * internal matrices.
+   */
+  private distanceFromCamera(
+    centre: [number, number],
+    rangeM: number,
+    bearingDeg: number,
+    pitchDeg: number,
+    lat: number,
+    lng: number,
+    heightM: number
+  ) {
+    const pitchRad = (pitchDeg * Math.PI) / 180;
+    const bearingRad = (bearingDeg * Math.PI) / 180;
+    const groundBack = rangeM * Math.sin(pitchRad);
+    const altitude = rangeM * Math.cos(pitchRad);
+    // Opposite the bearing: the camera is *behind* the centre point.
+    const [camLng, camLat] = offsetMetres(
+      centre[1],
+      centre[0],
+      -groundBack * Math.sin(bearingRad),
+      -groundBack * Math.cos(bearingRad)
+    );
+    const horizontal = metresBetween({ lat: camLat, lng: camLng }, { lat, lng });
+    const vertical = altitude - heightM;
+    return Math.hypot(horizontal, vertical);
+  }
+
+  // ------------------------------------------------- projection & chrome
+
+  onFrame(cb: () => void) {
+    if (!this.isAlive()) return () => {};
+    this.map.on("render", cb);
+    return () => {
+      if (this.isAlive()) this.map.off("render", cb);
+    };
+  }
+
+  canvas() {
+    return this.isAlive() ? this.map.getCanvas() : null;
+  }
+
+  project(lat: number, lng: number, heightM: number, out: ScreenPoint): boolean {
+    if (!this.isAlive()) return false;
+    const p = this.map.project([lng, lat]);
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
+
+    // Screen lift for an object `heightM` above the ground. At nadir a vertical column projects
+    // to nothing; at the horizon it projects to its full height. `sin(pitch)` is that factor, and
+    // `pixelsPerMeter` converts once at the centre latitude — perspective foreshortening across
+    // the frame is a sub-pixel effect at every framing this app uses.
+    const pixelsPerMetre = 1 / metresPerPixel(this.map.getZoom(), this.map.getCenter().lat);
+    out.x = p.x;
+    out.y = p.y - heightM * pixelsPerMetre * Math.sin((this.map.getPitch() * Math.PI) / 180);
+
+    // No horizon cull — a mercator map has no far side. What it does have is everything *beyond*
+    // the horizon line at a steep pitch, which MapLibre projects to coordinates above the top of
+    // the frame; the caller's own off-screen margin rejects those.
+    return true;
+  }
+
+  cameraDistanceM(lat: number, lng: number, heightM: number) {
+    if (!this.isAlive()) return Number.POSITIVE_INFINITY;
+    const c = this.map.getCenter();
+    return this.distanceFromCamera(
+      [c.lng, c.lat],
+      this.centreRangeM(),
+      this.map.getBearing(),
+      this.map.getPitch(),
+      lat,
+      lng,
+      heightM
+    );
+  }
+
+  headingRad() {
+    return this.isAlive() ? (this.map.getBearing() * Math.PI) / 180 : 0;
+  }
+
+  pitchRad() {
+    return this.isAlive() ? toCesiumPitchRad(this.map.getPitch()) : 0;
+  }
+
+  zoomStep({
+    direction,
+    ratio,
+    minRangeM,
+    maxRangeM,
+    fromRangeM,
+    durationS = 0.45,
+    onSettled,
+  }: ZoomStepOptions) {
+    if (!this.isAlive()) return;
+    const distance = this.centreRangeM();
+    // Successive presses step from the range the *previous* press was heading for, not from
+    // wherever the camera happens to be mid-flight.
+    const base = fromRangeM ?? distance;
+    const wanted = base * (direction === 1 ? 1 - ratio : 1 + ratio);
+    const clamped = Math.min(Math.max(wanted, minRangeM), maxRangeM);
+    if (Math.abs(distance - clamped) < 1) return;
+    onSettled?.(clamped);
+    const centre = this.map.getCenter();
+    this.map.once("moveend", () => onSettled?.(null));
+    this.map.easeTo({
+      zoom: this.rangeToZoom(clamped, centre.lat),
+      duration: durationS * 1000,
+      essential: true,
+    });
+  }
+
+  setHeadingRad(headingRad: number, durationS = 0.6) {
+    if (!this.isAlive()) return;
+    this.map.easeTo({
+      bearing: (headingRad * 180) / Math.PI,
+      duration: durationS * 1000,
+      essential: true,
+    });
+  }
+
+  setPitchDeg(pitchDeg: number, options?: { animate?: boolean; durationS?: number }) {
+    if (!this.isAlive()) return;
+    const pitch = toMapLibrePitch(pitchDeg);
+    if (options?.animate) {
+      this.map.easeTo({ pitch, duration: (options.durationS ?? 0.6) * 1000, essential: true });
+      return;
+    }
+    this.map.jumpTo({ pitch });
+  }
+
+  onMapClick(cb: (lat: number, lng: number) => void) {
+    if (!this.isAlive()) return () => {};
+    const handler = (e: { lngLat: { lat: number; lng: number } }) => cb(e.lngLat.lat, e.lngLat.lng);
+    this.map.on("click", handler);
+    return () => {
+      if (this.isAlive()) this.map.off("click", handler);
+    };
+  }
+}
+
+/**
+ * One hop as a chain of floating slabs — the MapLibre stand-in for Cesium's raised great circle.
+ *
+ * The height profile is `STEM_HEIGHT_M + arcLift(distance) · sin(πt)`, character for character the
+ * one `buildRouteGeometry` uses, so a trip drawn on either engine arches by the same amount. What
+ * differs is only how it is realised: Cesium can put a polyline at an altitude, MapLibre cannot, so
+ * each segment becomes a rectangle extruded between `base` and `height`.
+ *
+ * The slabs are deliberately *thicker* than the height they climb per segment (`ARC_THICKNESS_M`
+ * against a few metres of rise), so consecutive ones overlap and the chain reads as one continuous
+ * ribbon rather than a staircase.
+ */
+function buildArcRibbon(
+  from: RouteStop,
+  to: RouteStop,
+  color: string,
+  alpha: number,
+  active: boolean
+): Feature<Polygon, ArcProps>[] {
+  const distanceM = metresBetween(from, to);
+  // Same floor Cesium uses to skip degenerate hops: two stops at one address get no arc, only the
+  // stems that already mark them.
+  if (!(distanceM > 5)) return [];
+  const lift = arcLift(distanceM);
+  const halfWidth =
+    Math.min(
+      Math.max(distanceM * ARC_HALF_WIDTH_RATIO, ARC_MIN_HALF_WIDTH_M),
+      ARC_MAX_HALF_WIDTH_M
+    ) * (active ? 1.35 : 1);
+  const fill = withAlpha(color, alpha);
+
+  // Segment count from the curve's own steepness. `d/dt [lift·sin(πt)]` peaks at `lift·π` (at the
+  // ends), so this many segments keeps every slab under `ARC_STEP_M` tall.
+  const segments = Math.min(
+    ARC_MAX_SEGMENTS,
+    Math.max(ARC_MIN_SEGMENTS, Math.ceil((lift * Math.PI) / ARC_STEP_M))
+  );
+
+  // Bearing of the hop, so each slab can be laid perpendicular to it.
+  const midLat = (from.lat + to.lat) / 2;
+  const eastM = (to.lng - from.lng) * 111_320 * Math.cos((midLat * Math.PI) / 180);
+  const northM = (to.lat - from.lat) * 111_320;
+  const length = Math.hypot(eastM, northM) || 1;
+  // Unit vector across the hop.
+  const acrossE = -northM / length;
+  const acrossN = eastM / length;
+
+  const heightAt = (t: number) => STEM_HEIGHT_M + lift * Math.sin(t * Math.PI);
+  const pointAt = (t: number) => ({
+    lat: from.lat + (to.lat - from.lat) * t,
+    lng: from.lng + (to.lng - from.lng) * t,
+  });
+
+  const features: Feature<Polygon, ArcProps>[] = [];
+  for (let i = 0; i < segments; i++) {
+    const t0 = i / segments;
+    const t1 = (i + 1) / segments;
+    const a = pointAt(t0);
+    const b = pointAt(t1);
+    // Centred on the segment's own mid-height and given a constant thickness, rather than stretched
+    // to span `[min, max]`. With the step bounded above, the two are within a few metres of each
+    // other — and a constant thickness is what makes the chain read as a ribbon of even weight
+    // instead of one that fattens toward the stops.
+    const mid = (heightAt(t0) + heightAt(t1)) / 2;
+    const top = mid + ARC_THICKNESS_M / 2;
+    const bottom = Math.max(0, mid - ARC_THICKNESS_M / 2);
+    const corner = (p: { lat: number; lng: number }, sign: 1 | -1) =>
+      offsetMetres(p.lat, p.lng, acrossE * halfWidth * sign, acrossN * halfWidth * sign);
+    const ring: [number, number][] = [corner(a, 1), corner(b, 1), corner(b, -1), corner(a, -1)];
+    ring.push(ring[0]);
+    features.push({
+      type: "Feature",
+      properties: { color: fill, base: bottom, height: top },
+      geometry: { type: "Polygon", coordinates: [ring] },
+    });
+  }
+  return features;
+}
+
+/** `#rrggbb` plus an alpha, as the `rgba()` string a data-driven paint property will accept. */
+function withAlpha(hex: string, alpha: number): string {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return hex;
+  const value = parseInt(match[1], 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+}
+
+/** A closed ring of `STEM_SIDES` points around a stop, for the extruded stem footprint. */
+function circleRing(lat: number, lng: number, radiusM: number): [number, number][] {
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= STEM_SIDES; i++) {
+    const angle = (i / STEM_SIDES) * Math.PI * 2;
+    ring.push(offsetMetres(lat, lng, radiusM * Math.cos(angle), radiusM * Math.sin(angle)));
+  }
+  return ring;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string
+  );
+}
+
+// Same teardrop the Cesium billboard uses, so the searched-for place is marked identically on
+// both engines. Red marks the place you searched for, blue marks the route through it.
+const PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32"><path d="M12 .8C6 .8 1.2 5.6 1.2 11.6c0 8 10.8 19.6 10.8 19.6s10.8-11.6 10.8-19.6C22.8 5.6 18 .8 12 .8z" fill="#FF3B30" stroke="#C1271F" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="11.6" r="4.2" fill="#fff"/></svg>`;
+const PIN_DATA_URI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PIN_SVG)}`;

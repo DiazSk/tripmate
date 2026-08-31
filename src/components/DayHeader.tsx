@@ -166,6 +166,8 @@ export default function DayHeader({
   onEditDay,
   isEditing: controlledEditing,
   onEditingChange,
+  inlineEditing,
+  onInlineEdit,
 }: {
   day: DayPlan;
   dayIndex: number;
@@ -184,6 +186,19 @@ export default function DayHeader({
    *  doesn't care. */
   isEditing?: boolean;
   onEditingChange?: (editing: boolean) => void;
+  /**
+   * Inline edit mode — the card's whole day panel is editable and this header is part of it.
+   *
+   * Distinct from `isEditing` above, which swaps this header for `DayEditForm`: a labelled,
+   * bordered, save/cancel form that is a different height and a different shape from the heading
+   * it replaces. That is the right affordance for "edit just this day's title" reached from the
+   * pencil, and the wrong one inside a mode whose entire premise is that nothing moves. Here the
+   * heading keeps its own box, its own type and its own weather badge, and only the text becomes
+   * typeable. Changes commit as they are typed — there is no local save, because the card's Done
+   * is the save.
+   */
+  inlineEditing?: boolean;
+  onInlineEdit?: (updates: DayEditUpdates) => void;
 }) {
   const [localEditing, setLocalEditing] = useState(false);
   const isEditing = controlledEditing ?? localEditing;
@@ -192,6 +207,44 @@ export default function DayHeader({
     setLocalEditing(editing);
     onEditingChange?.(editing);
   };
+
+  if (inlineEditing) {
+    return (
+      <div
+        // The read-only heading's container, unchanged, so the weather badge stays exactly where
+        // it was and the row keeps its height.
+        className="mb-3 flex flex-wrap items-center justify-between gap-2"
+        {...devLabel("ItineraryCard.DayHeader.Inline")}
+      >
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-1.5 font-display text-lg font-semibold text-foreground">
+          {/* "Day N" is not editable — it is the day's index, not a name, and typing over it
+              would imply a reordering this control cannot perform. */}
+          <span className="shrink-0">Day {dayIndex + 1}</span>
+          <input
+            value={day.title ?? ""}
+            onChange={(e) => onInlineEdit?.({ title: e.target.value || undefined })}
+            aria-label={`Day ${dayIndex + 1} title`}
+            placeholder="Add a title…"
+            // Inherits the heading's font, size and weight from the container — the whole point.
+            // Same borderless-until-touched fill as the stop fields in EditableStopList.
+            className="min-w-24 flex-1 rounded-md border border-transparent bg-transparent px-1.5 transition-colors placeholder:font-normal placeholder:text-muted/60 hover:border-white/10 hover:bg-white/[0.07] focus:border-white/10 focus:bg-white/[0.07] focus:outline-none"
+          />
+          <span aria-hidden="true" className="shrink-0 text-muted">·</span>
+          {/* A native date input, because the value is an ISO calendar date and hand-typing one
+              is how a trip ends up with a day dated 2026-13-04. It carries the heading's own type
+              rather than the form's `text-sm`, so the line does not change height. */}
+          <input
+            type="date"
+            value={day.date}
+            onChange={(e) => e.target.value && onInlineEdit?.({ date: e.target.value })}
+            aria-label={`Day ${dayIndex + 1} date`}
+            className="shrink-0 rounded-md border border-transparent bg-transparent px-1.5 font-display text-lg font-semibold text-foreground transition-colors hover:border-white/10 hover:bg-white/[0.07] focus:border-white/10 focus:bg-white/[0.07] focus:outline-none"
+          />
+        </div>
+        <WeatherBadge day={day} />
+      </div>
+    );
+  }
 
   if (isEditing) {
     return (
