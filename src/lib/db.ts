@@ -2,6 +2,8 @@ import Database from "better-sqlite3";
 import path from "path";
 import { randomUUID } from "crypto";
 import { LOCAL_OWNER, parseProfile, type TravelerProfile } from "./travelerProfile";
+import { staleDraftCutoff } from "./drafts";
+import type { TripStatus } from "./types";
 
 const db = new Database(path.join(process.cwd(), "tripmate.db"));
 
@@ -131,6 +133,16 @@ addColumnIfMissing("bench_results", "task_id", "TEXT");
 // this existed), stale, or gone (another device, a cleaned home dir) — every reader must be able
 // to fall back to a fully-rebuilt prompt. See SessionOption in claude.ts.
 addColumnIfMissing("trips", "chat_session_id", "TEXT");
+// `draft` until the traveler keeps it, `saved` once they do. Nullable rather than defaulted for
+// the usual reason — the rows that predate the column all exist *because* somebody pressed Save,
+// so they are not drafts and must not read as one.
+addColumnIfMissing("trips", "status", "TEXT");
+// The one-time backfill for exactly those rows. `status IS NULL` can only ever match them:
+// `insertTrip` has written the column since it existed, so after the first boot this is a no-op
+// that costs one statement at import — cheaper than a nullable read every caller has to remember
+// to coalesce. Deliberately not `WHERE status IS NULL OR status = ''`; nothing writes an empty
+// string, and widening it would catch a value some future writer meant.
+db.exec(`UPDATE trips SET status = 'saved' WHERE status IS NULL`);
 
 export interface TripRow {
   id: string;
@@ -142,25 +154,35 @@ export interface TripRow {
   run_id: string | null;
   user_answers_json: string | null;
   chat_session_id: string | null;
+  /** See `TripStatus`. Typed as non-null because the column is backfilled at import and written
+   *  on every insert, so no row can be read without one. */
+  status: TripStatus;
   created_at: string;
 }
 
 export function insertTrip(
-  trip: Omit<TripRow, "created_at" | "run_id" | "user_answers_json" | "chat_session_id"> & {
+  trip: Omit<
+    TripRow,
+    "created_at" | "run_id" | "user_answers_json" | "chat_session_id" | "status"
+  > & {
     run_id?: string | null;
     user_answers_json?: string | null;
     chat_session_id?: string | null;
+    /** Defaults to `"saved"`, so a caller that predates drafts keeps inserting kept trips. The
+     *  auto-draft written after a generation is the one caller that passes `"draft"`. */
+    status?: TripStatus;
   }
 ): TripRow {
   const created_at = new Date().toISOString();
   const run_id = trip.run_id ?? null;
   const user_answers_json = trip.user_answers_json ?? null;
   const chat_session_id = trip.chat_session_id ?? null;
+  const status: TripStatus = trip.status ?? "saved";
   db.prepare(
-    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, created_at)
-     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @created_at)`
-  ).run({ ...trip, run_id, user_answers_json, chat_session_id, created_at });
-  return { ...trip, run_id, user_answers_json, chat_session_id, created_at };
+    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, status, created_at)
+     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @status, @created_at)`
+  ).run({ ...trip, run_id, user_answers_json, chat_session_id, status, created_at });
+  return { ...trip, run_id, user_answers_json, chat_session_id, status, created_at };
 }
 
 /**
@@ -179,9 +201,12 @@ export function insertTrip(
  * can also be replaced mid-trip (a vanished session file falls back to a fresh id), and the
  * transcript should survive that — so it is stored here rather than trusted to the CLI.
  *
- * Only for saved trips. The pre-save result view on `/` has no trip row to hang a conversation
- * on, so its chat stays in memory for that session and is gone on reload — the same bargain
- * every other unsaved edit on that page already makes.
+ * Only for trips opened at `/trip/[id]`, which is now every plan the traveler comes back to,
+ * draft or saved. The pre-save result view on `/` does have a row to hang a conversation on since
+ * drafts exist, but it still doesn't use one: it passes no `tripId` to the edit components, so its
+ * chat stays in memory for that session and is gone on reload. Wiring `draftTripId` through would
+ * persist it — deliberately left undone rather than overlooked, since `/api/trip-edit` writes the
+ * itinerary to the row it is given and that page owns its own copy of the plan.
  */
 export interface ChatTurnRow {
   id: number;
@@ -243,18 +268,57 @@ export function setTripChatSession(id: string, sessionId: string | null): void {
  *  neither `run_id` nor `user_answers_json`, so the type was quietly lying about three fields. */
 export type TripListRow = Pick<
   TripRow,
-  "id" | "destination" | "start_date" | "end_date" | "budget" | "created_at"
+  "id" | "destination" | "start_date" | "end_date" | "budget" | "status" | "created_at"
 >;
 
-export function listTrips(): TripListRow[] {
+/**
+ * Trips of one status, newest first.
+ *
+ * **Defaults to `"saved"`, and every existing caller depends on that.** `/trips`' memories wall,
+ * `/profile`'s recent-trips strip and `/trip/latest` all mean "trips the traveler kept" — an
+ * unfiltered list would put a plan somebody abandoned mid-wizard into the hero collage and into
+ * the dev entry point. Drafts are read deliberately, by passing `"draft"`.
+ */
+export function listTrips(status: TripStatus = "saved"): TripListRow[] {
   return db
     .prepare(
       // No `itinerary_json`: it was being selected and then dropped by every caller, which meant
       // reading every stored itinerary off disk to render a list of destinations and dates.
-      `SELECT id, destination, start_date, end_date, budget, created_at
-       FROM trips ORDER BY created_at DESC`
+      `SELECT id, destination, start_date, end_date, budget, status, created_at
+       FROM trips WHERE status = ? ORDER BY created_at DESC`
     )
-    .all() as TripListRow[];
+    .all(status) as TripListRow[];
+}
+
+/**
+ * Keeps a draft: the same row, re-labelled.
+ *
+ * Promotion rather than a second insert is the whole point. The draft row is what the traveler has
+ * been editing since the moment it was generated — its id is in `generations.trip_id`, its chat
+ * turns are in `trip_chat_turns`, and its `chat_session_id` carries the planner's own reasoning.
+ * Inserting a copy on Save would leave all of that pointing at a row nobody opens again.
+ *
+ * Idempotent and safe on an already-saved trip, so a double-clicked Save button is not a bug.
+ */
+export function promoteTripToSaved(id: string): void {
+  db.prepare(`UPDATE trips SET status = 'saved' WHERE id = ?`).run(id);
+}
+
+/**
+ * Deletes drafts older than the TTL, and returns how many went.
+ *
+ * Called on read from the pages that list trips rather than from a scheduler: this app has no
+ * background worker, and a sweep that only runs when somebody is actually looking at their trips
+ * is enough for rows whose only cost is disk. `saved` rows are untouchable here — the `status`
+ * predicate is the load-bearing half of this statement, not the date.
+ *
+ * See `staleDraftCutoff` for why the cutoff is built in JS instead of by SQLite's `datetime()`.
+ */
+export function purgeStaleDrafts(now: Date = new Date()): number {
+  const result = db
+    .prepare(`DELETE FROM trips WHERE status = 'draft' AND created_at < ?`)
+    .run(staleDraftCutoff(now));
+  return result.changes;
 }
 
 export function getTrip(id: string): TripRow | undefined {
@@ -323,6 +387,170 @@ export function getTripArtifacts(runId: string): TripArtifactRow | undefined {
   return db.prepare(`SELECT * FROM trip_artifacts WHERE run_id = ?`).get(runId) as
     | TripArtifactRow
     | undefined;
+}
+
+/**
+ * A conversation the API path can resume — this table **is** the model's memory.
+ *
+ * The CLI kept it in `~/.claude/projects/<slug>/<session-id>.jsonl` and replayed the whole file to
+ * the model on every `--resume` (measured in claude.ts: a six-word follow-up cost 13,475 input
+ * tokens). The Messages API is stateless, so the same replay has to come from somewhere we own.
+ * That is this table, and the swap is deliberate rather than incidental — the JSONL was a file on
+ * one machine, which is why `/api/trip-edit` needs a whole rebuild-on-missing-session fallback. A
+ * SQLite row travels with the database.
+ *
+ * `messages_json` is `[{role, content}]` with string content — the exact `Anthropic.MessageParam`
+ * shape, so it feeds `messages.create()` with no mapping. Turns are appended, never rewritten.
+ */
+export interface LlmSessionRow {
+  id: string;
+  messages_json: string;
+  model: string;
+  created_at: string;
+  updated_at: string;
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS llm_sessions (
+    id TEXT PRIMARY KEY,
+    messages_json TEXT NOT NULL,
+    model TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`);
+
+export interface LlmSessionTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** The transcript to replay, oldest first. Empty for an id that has expired or never existed —
+ *  the caller treats that the same way the CLI path treats a missing session file: rebuild. */
+export function getSessionMessages(id: string): LlmSessionTurn[] {
+  const row = db.prepare(`SELECT * FROM llm_sessions WHERE id = ?`).get(id) as
+    | LlmSessionRow
+    | undefined;
+  if (!row) return [];
+  try {
+    return JSON.parse(row.messages_json) as LlmSessionTurn[];
+  } catch {
+    // A corrupt transcript must read as "no session", never as a failed turn — same bargain the
+    // CLI path makes for a session file it cannot open.
+    return [];
+  }
+}
+
+/** Append this turn pair, creating the session if it is new. Written whole rather than as rows
+ *  because it is always read whole — the model needs every turn or none of them. */
+export function appendSessionTurns(id: string, model: string, turns: LlmSessionTurn[]): void {
+  const now = new Date().toISOString();
+  const existing = db.prepare(`SELECT * FROM llm_sessions WHERE id = ?`).get(id) as
+    | LlmSessionRow
+    | undefined;
+  const messages = [...(existing ? getSessionMessages(id) : []), ...turns];
+  if (existing) {
+    db.prepare(`UPDATE llm_sessions SET messages_json = ?, model = ?, updated_at = ? WHERE id = ?`)
+      .run(JSON.stringify(messages), model, now, id);
+    return;
+  }
+  db.prepare(
+    `INSERT INTO llm_sessions (id, messages_json, model, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(id, JSON.stringify(messages), model, now, now);
+}
+
+/**
+ * One row per itinerary generation, written the moment the model answers.
+ *
+ * Deliberately NOT the `trips` table. A trip row is something the traveller chose to keep — it has
+ * a URL, it shows in the trips list, and it is created by `save()` in HomeView. A generation is
+ * something that merely happened, and most of them are discarded: writing drafts into `trips`
+ * would fill the traveller's own list with plans they rejected.
+ *
+ * What it stores is the full input→output record: `context_json` is the exact argument object
+ * handed to `buildGeneratePrompt`/`buildRefinePrompt` (the "context/account payload"), `prompt` is
+ * what that produced, and `response` is the raw model text before any parsing. Together those three
+ * make a generation reproducible without re-running the fetch stages — and give the chat and detail
+ * flows a base context to read instead of regenerate.
+ */
+export interface GenerationRow {
+  run_id: string;
+  trip_id: string | null;
+  session_id: string | null;
+  kind: string;
+  destination: string;
+  context_json: string;
+  prompt: string;
+  response: string;
+  model: string;
+  mode: string;
+  created_at: string;
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS generations (
+    run_id TEXT PRIMARY KEY,
+    trip_id TEXT,
+    session_id TEXT,
+    kind TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    context_json TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    response TEXT NOT NULL,
+    model TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_generations_trip ON generations (trip_id)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_generations_session ON generations (session_id)`);
+
+/** `INSERT OR REPLACE` keyed by run: a run generates once, and a retry under the same run id is a
+ *  correction of that record rather than a second one. */
+export function insertGeneration(row: Omit<GenerationRow, "created_at">): GenerationRow {
+  const created_at = new Date().toISOString();
+  db.prepare(
+    `INSERT OR REPLACE INTO generations
+       (run_id, trip_id, session_id, kind, destination, context_json, prompt, response, model, mode, created_at)
+     VALUES (@run_id, @trip_id, @session_id, @kind, @destination, @context_json, @prompt, @response, @model, @mode, @created_at)`
+  ).run({ ...row, created_at });
+  return { ...row, created_at };
+}
+
+export function getGeneration(runId: string): GenerationRow | undefined {
+  return db.prepare(`SELECT * FROM generations WHERE run_id = ?`).get(runId) as
+    | GenerationRow
+    | undefined;
+}
+
+/**
+ * The most recent generation for a trip — the plan the cheap flows should read, after any number
+ * of refines.
+ *
+ * `created_at` sorts lexically (every writer here uses `toISOString()`), but on its own it is not a
+ * total order: two rows written in the same millisecond tie, and the tie is broken arbitrarily. That
+ * is the same trap `trip_chat_turns` documents and dodges with its AUTOINCREMENT `id` — this table
+ * is keyed by `run_id` and has no such column, so `rowid` (SQLite's implicit, monotonically
+ * increasing insert counter) is the tiebreak. `INSERT OR REPLACE` assigns a fresh rowid, which is
+ * the behaviour wanted here: a corrected generation is the newest one.
+ *
+ * A real trip cannot generate twice in a millisecond — a generation takes minutes — so this is
+ * defensive rather than load-bearing in production. It is load-bearing in tests, and a tie that only
+ * shows up under a seeded fixture is exactly the kind that reaches production eventually.
+ */
+export function getLatestGenerationForTrip(tripId: string): GenerationRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM generations WHERE trip_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`
+    )
+    .get(tripId) as GenerationRow | undefined;
+}
+
+/** Attach a generation to the trip row that was eventually saved from it. Called by `POST
+ *  /api/trips`, since the run exists before the trip does. */
+export function linkGenerationToTrip(runId: string, tripId: string): void {
+  db.prepare(`UPDATE generations SET trip_id = ? WHERE run_id = ?`).run(tripId, runId);
 }
 
 export interface TraceRow {

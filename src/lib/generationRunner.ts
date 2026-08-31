@@ -27,7 +27,8 @@ import {
 } from "./placeConflicts";
 import type { LodgingOption } from "./lodging";
 import { getDestinationContextInsight } from "./destinationContext";
-import { insertRun } from "./db";
+import { insertGeneration, insertRun } from "./db";
+import { llmMode } from "./llmConfig";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
 import { normalizeDays } from "./itinerary";
 import { tripDays, TierId } from "./tiers";
@@ -84,6 +85,16 @@ export async function runGeneration(
   } = params;
 
   let prompt: string;
+  /**
+   * The exact argument object handed to the prompt builder — the "context/account payload" that
+   * produced this plan, captured so it can be persisted beside the prompt and the response.
+   *
+   * Captured rather than reassembled afterwards. The two branches below feed different builders
+   * from a dozen locals (effective budget after the flight estimate, the awaited lodging options,
+   * the destination-context insight), and a second pass that tried to rebuild it would be a second
+   * source of truth that drifts the first time either branch gains a field.
+   */
+  let contextPayload: Record<string, unknown>;
   let effectiveTier: TierId;
   let dayCount: number;
   let weather: DayWeather[] = [];
@@ -172,7 +183,7 @@ export async function runGeneration(
     onStage({ stage: "context", status: "done" });
     flightEstimate = await flightEstimatePromise;
     effectiveBudget = computeEffectiveBudget(budget, flightEstimate);
-    prompt = buildRefinePrompt({
+    prompt = buildRefinePrompt((contextPayload = {
       destination,
       startDate,
       endDate,
@@ -183,7 +194,7 @@ export async function runGeneration(
       resolvedFlags,
       dietary,
       logistics,
-    });
+    }));
   } else {
     if (!tier) {
       // route.ts already validated tier is present whenever isRefine is false; this
@@ -231,7 +242,7 @@ export async function runGeneration(
     onStage({ stage: "context", status: "done" });
     flightEstimate = await flightEstimatePromise;
     effectiveBudget = computeEffectiveBudget(budget, flightEstimate);
-    prompt = buildGeneratePrompt({
+    prompt = buildGeneratePrompt((contextPayload = {
       destination,
       startDate,
       endDate,
@@ -244,7 +255,7 @@ export async function runGeneration(
       dietary,
       logistics,
       lodging: (lodgingOptions = await lodgingPromise),
-    });
+    }));
   }
 
   onStage({ stage: "generate", status: "start" });
@@ -253,13 +264,39 @@ export async function runGeneration(
   // Only the generate call gets a session: critique/place-detail/context are internal passes the
   // traveller never talks to, and threading them through the same session would bury their chat
   // turns under machine traffic. See SessionOption in claude.ts for what this does not buy.
-  const { result: raw, traceId, sessionId } = await runClaude(
+  const { result: raw, traceId, sessionId, model: servedBy } = await runClaude(
     prompt,
     isRefine ? "refine" : "generate",
     itineraryTimeoutMs(dayCount),
     { runId, session: { persist: true } }
   );
   onStage({ stage: "generate", status: "done" });
+
+  // The full input→output record, written the moment the model answers and **before** anything is
+  // parsed. Order matters: a response that fails `parseJsonResponse` below is exactly the one worth
+  // having on disk, and persisting after the parse would keep only the generations that already
+  // worked. Best-effort for the same reason every other side-effect here is — a plan the traveller
+  // is waiting on must not fail because a bookkeeping insert did.
+  //
+  // Not a `trips` row. This is a generation, not a kept trip; `save()` in HomeView still promotes
+  // one to a trip, and `linkGenerationToTrip` back-fills `trip_id` when it does.
+  try {
+    insertGeneration({
+      run_id: runId,
+      trip_id: tripId ?? null,
+      session_id: sessionId ?? null,
+      kind: isRefine ? "refine" : "generate",
+      destination,
+      context_json: JSON.stringify(contextPayload),
+      prompt,
+      response: raw,
+      model: servedBy,
+      mode: llmMode(),
+    });
+  } catch (err) {
+    console.error("[itinerary] generation record write failed", err);
+  }
+
   // The model returns just { days: [...] } — tier is known server-side, not part of its output.
   const { days } = parseJsonResponse<{ days: Itinerary["days"] }>(raw);
   // `flightCostUsd` rides on the itinerary rather than beside it in the return value, so it

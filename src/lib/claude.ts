@@ -2,7 +2,9 @@ import { spawn } from "child_process";
 import { accessSync, constants, readdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { runClaudeApi } from "./claudeApi";
 import { insertTrace, updateTrace } from "./db";
+import { llmMode, type ClaudeCallType, type LlmMode } from "./llmConfig";
 
 /**
  * The production model for every call in the app.
@@ -261,17 +263,59 @@ export interface ClaudeResult {
   sessionId?: string;
 }
 
-export type ClaudeCallType =
-  | "generate"
-  | "refine"
-  | "rebalance"
-  | "place-detail"
-  | "context"
-  | "critique"
-  | "chat"
-  | "element-edit"
-  /** Dev-only: the blinded quality judge in the model benchmark harness (src/lib/bench). */
-  | "judge";
+/**
+ * Moved to llmConfig.ts, which needs it to type the model-routing table and cannot import it from
+ * here (this module imports that one, so the dependency only runs one way). Re-exported so every
+ * existing `import { ClaudeCallType } from "@/lib/claude"` keeps resolving unchanged.
+ */
+export type { ClaudeCallType };
+
+/**
+ * **The transport switch.** Every model call in the app arrives here, and this is the only place
+ * that decides whether it is served by spawning the CLI or by an HTTPS request.
+ *
+ * Deliberately the chokepoint and not the call sites. There are eight call sites across six files
+ * (generate, refine, critique, rebalance, chat, element-edit, place-detail, context) and none of
+ * them has any business knowing the transport — they assemble a prompt and want a string back.
+ * Branching here means the switch reached all of them the day it was written, and that a ninth
+ * caller added later rides it without being told to.
+ *
+ * The two paths are held to being indistinguishable:
+ *   - same signature, same `ClaudeResult` (including `sessionId`, which the API path emulates —
+ *     see `SessionOption` below and `llm_sessions` in db.ts),
+ *   - a row in `llm_traces` on every outcome, with the same statuses (`ok` / `error` / `timeout`)
+ *     and a `raw_response` in the same envelope shape, so the trace viewer and `parseUsage()` read
+ *     both without branching,
+ *   - `timeoutMs` means the same hard wall-clock ceiling in both, so the day-scaled budgets above
+ *     carry over unchanged.
+ *
+ * What differs, and only these: **which model answers** — the API path routes per task through
+ * `apiModelFor()` (strong for generation, cheap for patches and lookups) while the CLI path stays
+ * pinned to `MODEL`, because the constants above were calibrated against that model and re-pointing
+ * it would invalidate them — and **where conversational memory lives**: a JSONL file on one machine
+ * for the CLI, a `llm_sessions` row for the API.
+ *
+ * `meta.mode` forces one path for a single call, bypassing both env and the runtime override. No
+ * production caller passes it; it exists so a comparison harness can run the same prompt down both
+ * transports without mutating global state.
+ */
+export function runClaude(
+  prompt: string,
+  type: ClaudeCallType,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  meta?: {
+    runId?: string;
+    effort?: "low" | "medium" | "high";
+    model?: string;
+    session?: SessionOption;
+    mode?: LlmMode;
+  }
+): Promise<ClaudeResult> {
+  const mode = meta?.mode ?? llmMode();
+  return mode === "api"
+    ? runClaudeApi(prompt, type, timeoutMs, meta)
+    : runClaudeCli(prompt, type, timeoutMs, meta);
+}
 
 /**
  * Runs a one-shot prompt through the `claude` CLI (Haiku, no tools) instead
@@ -300,7 +344,7 @@ export type ClaudeCallType =
  * harness (src/lib/bench), which holds prompt/skill/context constant and varies only this —
  * every production caller omits it and gets `MODEL` exactly as before.
  */
-export function runClaude(
+function runClaudeCli(
   prompt: string,
   type: ClaudeCallType,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,

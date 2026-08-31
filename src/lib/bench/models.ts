@@ -1,4 +1,5 @@
 import { MODEL } from "../claude";
+import { MODEL_PRICES } from "../llmConfig";
 
 /**
  * Which models the benchmark compares, and what a token costs on each.
@@ -37,26 +38,14 @@ const DEFAULT_MODELS: BenchModel[] = [
 ];
 
 /**
- * USD per million tokens, [input, output].
+ * The price table, imported rather than kept here.
  *
- * The 5-generation rows are Anthropic's published list prices. The 4.5 rows are NOT in the current
- * published table (they're legacy models) — they're set to their tier's rate, which is an
- * assumption, not a quote. Override with BENCH_PRICES before trusting a cost comparison to the
- * cent; the UI shows the CLI's own reported cost beside the computed one as a cross-check.
+ * It moved to llmConfig.ts when the API transport landed: the production path now has to turn
+ * `usage` into a dollar figure itself (an HTTP response reports tokens, not money, where the CLI
+ * envelope reported both), so the table stopped being bench-only. `BENCH_PRICES` still layers over
+ * it below for sweeps — this is the default, not the ceiling.
  */
-const DEFAULT_PRICES: Record<string, [number, number]> = {
-  "claude-haiku-4-5-20251001": [1, 5],
-  "claude-haiku-4-5": [1, 5],
-  "claude-sonnet-4-5": [3, 15],
-  "claude-sonnet-4-5-20250929": [3, 15],
-  "claude-opus-4-5": [5, 25],
-  "claude-opus-4-5-20251101": [5, 25],
-  // Sonnet 5 list price. An introductory $2/$10 runs through 2026-08-31; the higher list price is
-  // the default here so a cost comparison doesn't flatter it past that date without anyone noticing.
-  "claude-sonnet-5": [3, 15],
-  "claude-opus-5": [5, 25],
-  "claude-fable-5": [10, 50],
-};
+const DEFAULT_PRICES = MODEL_PRICES;
 
 function parseModelsEnv(raw: string): BenchModel[] {
   return raw

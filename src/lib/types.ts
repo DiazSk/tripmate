@@ -66,12 +66,27 @@ export interface Itinerary {
   flightCostUsd?: number;
 }
 
+/**
+ * Whether the traveler has *kept* this trip, or whether it is only the draft written
+ * automatically the moment its itinerary was generated.
+ *
+ * A generated plan used to live in React state alone until the traveler pressed Save, so a back
+ * navigation, a reload or a closed tab threw away a two-minute model call with nothing to reopen.
+ * Every plan is now persisted as a `draft` row the moment it arrives; Save promotes that same row
+ * to `saved` rather than inserting a second one. The distinction is what keeps `/trips`' memories
+ * wall showing only trips somebody chose, instead of every plan they ever glanced at.
+ */
+export type TripStatus = "draft" | "saved";
+
 export interface TripSummary {
   id: string;
   destination: string;
   startDate: string;
   endDate: string;
   budget: number;
+  /** Absent on payloads built before drafts existed; every reader treats a missing value as
+   *  `"saved"`, matching the column's own backfill. */
+  status?: TripStatus;
 }
 
 export interface Trip extends TripSummary {

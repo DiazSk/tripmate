@@ -18,6 +18,7 @@ export function toTripSummary(row: TripListRow): TripSummary {
     startDate: row.start_date,
     endDate: row.end_date,
     budget: row.budget,
+    status: row.status,
   };
 }
 

@@ -68,11 +68,25 @@ The glob in the `test` script needs **double** quotes. Single quotes reach Node 
 
 Next.js 16 App Router + React 19 + Tailwind v4. A CesiumJS globe renders behind most of the UI (assets copied into `public/` by the `postinstall` script).
 
-### The LLM is a subprocess, not an SDK
+### Two transports, one chokepoint
 
-Every model call goes through `runClaude()` in `src/lib/claude.ts`, which spawns the **`claude` CLI** as a one-shot child process. This is the single choke point — it writes a row to `llm_traces` on *every* outcome (success, non-zero exit, timeout, malformed envelope), and `meta.runId` groups sibling calls into an `llm_runs` row for the trace viewer. Route new model calls through it rather than adding an HTTP client.
+Every model call goes through `runClaude()` in `src/lib/claude.ts`. That is the single choke point — it writes a row to `llm_traces` on *every* outcome (success, non-zero exit, timeout, malformed envelope), and `meta.runId` groups sibling calls into an `llm_runs` row for the trace viewer. Route new model calls through it rather than adding your own client.
 
-Four non-obvious constraints are already handled there; don't "fix" them back:
+It now **branches on transport**, and the branch is the only place that knows which one serves a call:
+
+- **`api` (the default)** — an HTTPS request through `@anthropic-ai/sdk`, in `src/lib/claudeApi.ts`. Needs `ANTHROPIC_API_KEY`; a missing key fails loudly rather than falling back.
+- **`cli`** — the original `spawn` of the **`claude` CLI** as a one-shot child process, unchanged.
+
+Set `LLM_MODE=api|cli` in `.env.local`, or flip it mid-session with `POST /api/llm-mode {"mode":"cli"}` (`GET` the same route to see the mode, its source, and what each call type resolves to). The two paths are held to being indistinguishable to callers: same signature, same `ClaudeResult` including `sessionId`, same meaning for `timeoutMs`, and the API path **synthesizes the CLI's JSON envelope** so `parseUsage()` in `runs.ts` and the trace viewer read both without branching.
+
+Two things genuinely differ, and both are deliberate:
+
+- **Which model answers.** The API path routes per task through `apiModelFor()` in `src/lib/llmConfig.ts` — strong (`claude-opus-5`) for anything that writes or judges a whole plan, cheap (`claude-haiku-4-5`) for bounded work against facts that already exist. The CLI path stays pinned to `MODEL` (`claude-sonnet-4-5`) because the timeout constants in `claude.ts` were calibrated against that model; re-pointing it silently invalidates them. **`src/lib/llmConfig.ts` is the only place model names belong** — don't hardcode one at a call site.
+- **Where conversational memory lives.** A JSONL file on one machine for the CLI, an `llm_sessions` row for the API. See "Chat memory" below.
+
+`effort` and `thinking` are **capability-gated, and that gate is load-bearing**: both are a 400, not a no-op, on `claude-haiku-4-5` and `claude-sonnet-4-5`. Forwarding the CLI's `--effort low` to the cheap tier unconditionally would fail every chat call.
+
+Four non-obvious CLI-path constraints are already handled there; don't "fix" them back:
 - `CLAUDECODE` is stripped from the child env, or the CLI refuses to launch nested inside a Claude Code session.
 - `spawn`, never `execFile` — `execFile` reliably hangs on this binary.
 - `~/.local/bin` is forced onto `PATH`, since non-login process launchers don't source the shell profile.
@@ -95,9 +109,25 @@ External fetches degrade rather than throw. Two idioms to match:
 
 Open-Meteo (geocoding, forecast, historical fallback beyond a 16-day horizon, sunrise/sunset, timezone), Nager.Date (public holidays), Overpass/OSM (highway geometry *and* POI opening hours), OpenTripMap (candidate POIs — **the only one needing `OPENTRIPMAP_API_KEY`** in `.env.local`; absent key degrades to no suggestions rather than erroring).
 
+### Chat memory is reconstructed, not held
+
+The model holds no state between calls on either transport. What differs is where the transcript that gets replayed lives.
+
+The CLI kept it in `~/.claude/projects/<slugified-cwd>/<session-id>.jsonl` and `--resume` replayed the whole file — which buys *continuity, not savings*: a six-word follow-up measured at 13,475 input tokens against 13,332 for the turn that established the context. The API path replays from the `llm_sessions` table instead, with a cache breakpoint on the last replayed message so the stable prefix bills at ~0.1x.
+
+Three things carry chat state, and only the first is the model's:
+
+1. **`llm_sessions` / the JSONL** — the conversation. Generation runs with `session: {persist: true}`, so the session is **seeded with the generate prompt and its response**. That is why chat inherits the planner's own reasoning (why the temple went before lunch, what it already rejected) rather than a summary of its output — and why `buildResumedChatPrompt` can send only the traveler's message.
+2. **`trip_chat_turns`** — the traveler's transcript, for redisplay. Ordered by AUTOINCREMENT `id`, never `created_at`, which ties.
+3. **`syncedHash`** — drift detection. `itineraryFingerprint()` catches the plan changing behind the session's back (element edits are a separate call, `applyPatch` can reject ops, the board reorders with no model involvement) and injects a `<plan_changed>` block. Transport-agnostic; don't touch it when working on transports.
+
+**A resume with no stored conversation must throw, not proceed.** The resumed prompt is tiny by design and assumes the rules, context and plan are already in the conversation; running it against an empty history hands the model a bare question and it will answer anyway. `/api/trip-edit` already catches that and rebuilds the full prompt — the API path throws into that same recovery rather than duplicating it. This fires for real whenever a trip generated in one mode is chatted with in the other.
+
 ### Storage
 
-SQLite via `better-sqlite3`, single file `tripmate.db` at repo root. `src/lib/db.ts` creates every table at import time with `CREATE TABLE IF NOT EXISTS`, and adds later columns through the `addColumnIfMissing()` PRAGMA guard — follow that pattern instead of writing migration files. Note the deliberate split: DB rows are `snake_case` (`TripRow.start_date`), API/type surfaces are `camelCase` (`TripSummary.startDate`), mapped by hand in each route.
+SQLite via `better-sqlite3`, single file `tripmate.db` at repo root. `generations` holds one row per itinerary generation — the context payload, the full prompt and the full response, keyed by run id — written the moment the model answers and *before* the parse, so a response that fails `parseJsonResponse` is still on disk. It is deliberately **not** a `trips` row: it is keyed by run and holds unparsed text, so it can record a generation that never produced a renderable plan.
+
+A `trips` row, by contrast, now exists from the moment a plan does. `trips.status` is `'draft'` until the traveller presses Keep and `'saved'` after — an itinerary used to live in React state until Save ran, so a Back press threw the whole generation away. Save **promotes the same row** (`promoteTripToSaved`) rather than inserting, which is what keeps the plan's `chat_session_id`, its `generations.trip_id` link and its pre-save edits attached to the trip they belong to. `POST /api/trips` back-fills `generations.trip_id` when the draft is created. **`listTrips()` defaults to `status = 'saved'`** — the memories wall, `/profile` and `/trip/latest` all mean "trips somebody kept" — and unkept drafts are swept after `DRAFT_TTL_DAYS` (`src/lib/drafts.ts`) on read from `/trips` and `GET /api/trips`, this app having no scheduler. `src/lib/db.ts` creates every table at import time with `CREATE TABLE IF NOT EXISTS`, and adds later columns through the `addColumnIfMissing()` PRAGMA guard — follow that pattern instead of writing migration files. Note the deliberate split: DB rows are `snake_case` (`TripRow.start_date`), API/type surfaces are `camelCase` (`TripSummary.startDate`), mapped by hand in each route.
 
 ## Gotchas
 
