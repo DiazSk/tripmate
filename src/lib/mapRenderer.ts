@@ -81,6 +81,18 @@ export interface MapRenderer {
   drawHighways(segments: { points: { lat: number; lng: number }[] }[]): void;
   drawCityBoundary(segments: { lat: number; lng: number }[][]): void;
 
+  /**
+   * Pins for places the traveler searched for, distinct from the trip's own stops.
+   *
+   * **MapLibre only, by product decision rather than by capability.** Exploring is what the vector
+   * map is for — it has the street network, the labels and the venue data underneath it — while
+   * satellite is for looking at a plan that already exists. `CesiumRenderer` implements this as a
+   * clear, so switching to Satellite puts the search results away rather than carrying them over
+   * into a view that has nothing to say about them. A place added to the itinerary is a *stop* by
+   * then, and stops are drawn on both.
+   */
+  showSearchResults(places: SearchPin[]): void;
+
   /** Route, highways, city outline and pin — everything a trip put on the map. */
   clearOverlays(): void;
 
@@ -211,6 +223,16 @@ export interface CameraState {
 export interface ScreenPoint {
   x: number;
   y: number;
+}
+
+/** One searched-for place on the map. Deliberately smaller than `FoundPlace`: the renderer needs
+ *  a position, a label and whether it is the one being pointed at, and nothing else. */
+export interface SearchPin {
+  id: string;
+  lat: number;
+  lng: number;
+  name: string;
+  selected?: boolean;
 }
 
 export interface RouteDrawRequest {

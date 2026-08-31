@@ -5,6 +5,7 @@ import { TriangleAlert } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import FocusEditMode from "@/components/FocusEditMode";
 import { useFocusEdit } from "@/lib/useFocusEdit";
+import { usePublishItinerary } from "@/lib/activeItinerary";
 import { DayEditUpdates } from "@/components/DayHeader";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import DockedPanel from "@/components/DockedPanel";
@@ -57,6 +58,11 @@ export default function TripView({
   const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
   // Step 7 edit session. Unlike the pre-save view, every accepted edit here is persisted.
   const focus = useFocusEdit(itinerary);
+  // Publishes the plan to surfaces mounted outside this tree — today the map's search control,
+  // which lives with the map chrome in `AppShell` and needs somewhere to put a café it found.
+  // `handleRearrange` is the same commit path the card's drag-and-drop uses, so a place added from
+  // the map saves exactly the way a dragged stop does.
+  usePublishItinerary(itinerary, handleRearrange);
   const [savingFocus, setSavingFocus] = useState(false);
   const [keeping, setKeeping] = useState(false);
 

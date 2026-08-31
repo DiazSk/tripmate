@@ -29,6 +29,7 @@ import SuggestInput, { TIME_OPTIONS, SuggestOption } from "@/components/SuggestI
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import PoiCandidatePicker from "@/components/PoiCandidatePicker";
 import { useFocusEdit } from "@/lib/useFocusEdit";
+import { usePublishItinerary } from "@/lib/activeItinerary";
 import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
 import type { PlanPrefill } from "@/components/blue-hour/planExamples";
@@ -569,6 +570,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
   // Step 7 edit session. `chatScope` null = closed; { dayIndex: null } = whole trip.
   const focus = useFocusEdit(itinerary);
+  // Publishes the plan to surfaces mounted outside this tree — the map's search control, which
+  // lives with the map chrome in `AppShell`. Same commit path the result card's own drag-and-drop
+  // uses, so a café added from the map is saved exactly like a dragged stop.
+  usePublishItinerary(itinerary, handleRearrange);
   const [error, setError] = useState<string | null>(null);
 
   const {
