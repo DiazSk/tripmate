@@ -34,6 +34,7 @@ import {
   ROUTE_FRAME_PITCH_DEG,
   RouteDrawRequest,
   ScreenPoint,
+  STOP_MIN_RANGE_M,
   visibleMapWidthPx,
   ZoomStepOptions,
 } from "@/lib/mapRenderer";
@@ -817,31 +818,97 @@ export class MapLibreRenderer implements MapRenderer {
 
   flyToPoint(options: FlyToPointOptions) {
     if (!this.isAlive()) return;
-    // Centre the stop in the strip the itinerary leaves, not in the window.
-    //
-    // Dead centre of a 1440px window is 720px in — well inside the 40%-wide panel — so hovering a
-    // row used to fly the camera to a point that landed *behind* the plan you were reading. The
-    // route framing has corrected for this since it existed (`frameRouteBesidePanel`); a stop
-    // flight never did, and it is the same question.
-    //
-    // MapLibre answers it natively: `padding` shifts the vanishing point, so `center` lands in the
-    // middle of the *padded* box. Cesium has no such control and offsets the aim point in metres
-    // instead — see `CesiumRenderer.flyToPoint`. Both put the subject in the same place on screen.
-    const { width: viewWidth } = this.viewSizePx();
-    const freeWidth = visibleMapWidthPx(viewWidth);
-    const rightPadding = Math.max(0, viewWidth - freeWidth);
+    const padding = this.panelPadding();
+    const bearing = ((options.headingRad ?? 0) * 180) / Math.PI;
+    const pitch = toMapLibrePitch(options.pitchDeg);
+
+    // --- The neighbourhood framing: a box around the stop, not a dive onto it.
+    if (options.contextRadiusM) {
+      const [west, south] = offsetMetres(
+        options.lat,
+        options.lng,
+        -options.contextRadiusM,
+        -options.contextRadiusM
+      );
+      const [east, north] = offsetMetres(
+        options.lat,
+        options.lng,
+        options.contextRadiusM,
+        options.contextRadiusM
+      );
+      // `fitBounds` and not a computed zoom, because the two answer different questions. A zoom is
+      // "how far back"; bounds are "keep this much ground in the clear part of the frame", and the
+      // clear part is what the padding below describes. The `maxZoom` cap is what actually stops
+      // the over-zoom: a small box in a large viewport would otherwise fit at street level again.
+      this.map.fitBounds(
+        [
+          [west, south],
+          [east, north],
+        ],
+        {
+          padding,
+          maxZoom: this.zoomForRange(options.minRangeM ?? STOP_MIN_RANGE_M, options.lat),
+          bearing,
+          pitch,
+          // `linear: true` picks `easeTo` over `flyTo`. `flyTo` flies the van Wijk arc — it pulls
+          // out to altitude and descends again, which over a few hundred metres of ground reads as
+          // the map lurching away and coming back. A monotone ease across the same short distance
+          // is the glide this wants.
+          linear: true,
+          easing: cubicInOut,
+          duration: (options.durationS ?? 1.2) * 1000,
+          essential: true,
+        }
+      );
+      return;
+    }
+
+    // --- Everything else: a destination flight, or the hover peek's own computed lean.
+    const rangeM = Math.max(
+      MIN_RANGE_M,
+      Math.min(MAX_RANGE_M, Math.max(options.rangeM, options.minRangeM ?? 0))
+    );
     this.map.flyTo({
       center: [options.lng, options.lat],
-      zoom: this.rangeToZoom(
-        Math.max(MIN_RANGE_M, Math.min(MAX_RANGE_M, options.rangeM)),
-        options.lat
-      ),
-      pitch: toMapLibrePitch(options.pitchDeg),
-      bearing: ((options.headingRad ?? 0) * 180) / Math.PI,
-      padding: { top: 0, bottom: 0, left: 0, right: rightPadding },
+      zoom: this.rangeToZoom(rangeM, options.lat),
+      pitch,
+      bearing,
+      padding,
       duration: (options.durationS ?? 2.5) * 1000,
       essential: true,
     });
+  }
+
+  /**
+   * The clear part of the map, as MapLibre padding.
+   *
+   * Centre the stop in the strip the itinerary leaves, not in the window. Dead centre of a 1440px
+   * window is 720px in — well inside the 40%-wide panel — so hovering a row used to fly the camera
+   * to a point that landed *behind* the plan you were reading.
+   *
+   * The right inset is **measured** off the panel's own box rather than hardcoded, so Focus Mode's
+   * wider 62% split and the collapsed capsule are both handled without this knowing about either;
+   * collapsed, it falls back to the same inset as the left and the framing is symmetric again.
+   *
+   * The top inset is the largest of the four and that is not arbitrary: a stop's marker card is
+   * drawn a full card-height *above* its anchor (`translate(-50%, -100%)`) and a day badge floats
+   * `DAY_LABEL_LIFT_M` higher still, so a stop framed flush against the top edge has its own label
+   * off-screen — the one piece of the map that names it.
+   */
+  private panelPadding() {
+    const { width } = this.viewSizePx();
+    const panelInset = Math.max(0, width - visibleMapWidthPx(width));
+    return {
+      top: 120,
+      bottom: 80,
+      left: 80,
+      right: Math.max(80, panelInset),
+    };
+  }
+
+  /** The zoom at which the camera sits `rangeM` from the ground — `rangeToZoom`'s public shape. */
+  private zoomForRange(rangeM: number, lat: number) {
+    return this.rangeToZoom(Math.max(MIN_RANGE_M, Math.min(MAX_RANGE_M, rangeM)), lat);
   }
 
   frameRoute({ days, focusDay, panelVisible, durationS }: FrameRouteOptions) {
@@ -1197,6 +1264,17 @@ function buildArcRibbon(
     });
   }
   return features;
+}
+
+/**
+ * Cubic in-out, the same shape Cesium's `EasingFunction.CUBIC_IN_OUT` traces.
+ *
+ * Written out rather than reached for from a library: it is four lines, and having both engines
+ * ease a stop flight on visibly different curves is exactly the kind of drift the `MapRenderer`
+ * boundary exists to prevent.
+ */
+function cubicInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 /** `#rrggbb` plus an alpha, as the `rgba()` string a data-driven paint property will accept. */

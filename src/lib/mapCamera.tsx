@@ -20,7 +20,13 @@ import {
   RouteStop,
   STEM_HEIGHT_M,
 } from "@/lib/mapRoute";
-import type { CameraPose, CameraState, MapRenderer } from "@/lib/mapRenderer";
+import {
+  STOP_CONTEXT_RADIUS_M,
+  STOP_MIN_RANGE_M,
+  type CameraPose,
+  type CameraState,
+  type MapRenderer,
+} from "@/lib/mapRenderer";
 import type { MapEngine } from "@/lib/mapEngine";
 
 // Re-exported so the marker layer can reach the rule without importing two modules for it.
@@ -244,6 +250,7 @@ type Flight = [
   pitchDeg: number,
   label?: string,
   centreHeightM?: number,
+  framing?: { contextRadiusM?: number; minRangeM?: number },
 ];
 
 /** A named town near the destination, for the marker layer to label. */
@@ -389,7 +396,10 @@ export function MapCameraProvider({
       label?: string,
       /** Altitude of the point to centre in frame. Zero aims at the ground, which for a stop means
        *  aiming below the street; a stop flight passes its card's height instead. */
-      centreHeightM = 0
+      centreHeightM = 0,
+      /** How the renderer should frame it — see `FlyToPointOptions`. A stop asks for its
+       *  neighbourhood; a destination is already a city-wide view and asks for nothing. */
+      framing: { contextRadiusM?: number; minRangeM?: number } = {}
     ) => {
       // A real flight supersedes any hover peek, including one still waiting out its dwell.
       cancelPeek();
@@ -398,14 +408,14 @@ export function MapCameraProvider({
         // The renderer registers only once its map is ready — Cesium's 3D tileset takes seconds,
         // long after a trip page has fetched its trip and asked to fly. Hold the request and
         // replay it on registration instead of dropping it.
-        pendingRef.current = [lat, lng, height, pitchDeg, label, centreHeightM];
+        pendingRef.current = [lat, lng, height, pitchDeg, label, centreHeightM, framing];
         return;
       }
       // One marker at a time: the pin always sits wherever the camera last flew, so a labelless
       // flight (the global reset) just clears it. Cached so an engine swap can put it back.
       lastPinRef.current = label ? { lat, lng, label } : null;
       renderer.setPin(lastPinRef.current);
-      renderer.flyToPoint({ lat, lng, rangeM: height, pitchDeg, centreHeightM });
+      renderer.flyToPoint({ lat, lng, rangeM: height, pitchDeg, centreHeightM, ...framing });
     },
     [cancelPeek]
   );
@@ -637,6 +647,12 @@ export function MapCameraProvider({
         lat: stop.lat,
         lng: stop.lng,
         rangeM: range,
+        // A floor, not a fixed distance. The peek's whole point is a *relative* lean whose depth
+        // `peekRangeM` derives from how crowded this stop's neighbours are, and replacing that
+        // with a fixed framing would throw the crowding away — but leaning past neighbourhood
+        // scale is the over-zoom this exists to stop, so the range is clamped rather than
+        // recomputed.
+        minRangeM: STOP_MIN_RANGE_M,
         // The pre-peek heading and pitch, deliberately kept rather than snapped to the click's
         // -35°. Re-tilting on hover is what made this read as "the camera went somewhere":
         // holding the angle already being looked from leaves only the distance changing.
@@ -935,7 +951,15 @@ export function MapCameraProvider({
    */
   const flyToPlace = useCallback(
     (lat: number, lng: number, label?: string) =>
-      flyTo(lat, lng, PLACE_HEIGHT_M, -35, label, routeAltitudeRef.current + STEM_HEIGHT_M),
+      flyTo(lat, lng, PLACE_HEIGHT_M, -35, label, routeAltitudeRef.current + STEM_HEIGHT_M, {
+        // `PLACE_HEIGHT_M` is 600m, which puts the camera on the pavement outside the building
+        // with nothing else in frame. That answers "where exactly is this" and not "where is this
+        // in the city", which is the question somebody reading an itinerary is asking — so the
+        // renderer frames the stop's neighbourhood around it and treats the 600m as a floor it is
+        // no longer allowed to reach.
+        contextRadiusM: STOP_CONTEXT_RADIUS_M,
+        minRangeM: STOP_MIN_RANGE_M,
+      }),
     [flyTo]
   );
   /**
