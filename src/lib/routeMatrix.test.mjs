@@ -8,12 +8,18 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { distilRouteMatrix, MAX_MATRIX_STOPS, probeTransitAvailable } from "./routeMatrix.ts";
+import {
+  distilRouteMatrix,
+  fetchDayTravelMinutes,
+  MAX_MATRIX_STOPS,
+  probeTransitAvailable,
+} from "./routeMatrix.ts";
 
 /** Verified live: `curl "https://router.project-osrm.org/table/v1/driving/2.3522,48.8566;2.3376,48.8606;2.3444,48.8738?annotations=duration,distance"`
  *  against the same 3-point Paris triangle used by the old fixture. `walking`, `foot`, and
  *  `cycling` all returned this exact same payload byte-for-byte — the public demo only hosts the
- *  driving profile — which is why the app now requests `driving` for every routable mode. */
+ *  driving profile — which is why `drive` is the only mode that queries it; `walk` short-circuits
+ *  to an empty map instead of getting car speeds mislabeled as walking times. */
 const response = {
   code: "Ok",
   durations: [
@@ -78,4 +84,13 @@ test("keeps the stop cap sane for a shared public demo server", () => {
 
 test("probeTransitAvailable is unconditionally false — no free transit data source exists", async () => {
   assert.equal(await probeTransitAvailable(), false);
+});
+
+test("walk mode resolves an empty map without a network call — no real walking data exists on this server", async () => {
+  const points = [
+    { lat: 48.8566, lon: 2.3522 },
+    { lat: 48.8606, lon: 2.3376 },
+  ];
+  const legs = await fetchDayTravelMinutes(points, "walk");
+  assert.deepEqual(legs, new Map());
 });

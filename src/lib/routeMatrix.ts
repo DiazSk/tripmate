@@ -14,12 +14,16 @@ const MAX_MATRIX_STOPS = 10;
 /**
  * The public demo server hosts only the driving/car road network. `walking`, `foot`, and `cycling`
  * are all accepted in the URL but verified live to return byte-identical numbers to `driving` for
- * the same coordinates — the profile segment is silently ignored rather than rejected. Reporting
- * those as real walking times would misrepresent car speeds as foot speeds, so every routable mode
- * maps to the one profile that's actually real, and transit has no profile at all.
+ * the same coordinates — the profile segment is silently ignored rather than rejected. That's not
+ * "no data," it's *wrong* data: a real endpoint exists and answers, but under a name that lies
+ * about what it measured. Presenting it as walking-verified minutes would displace the existing
+ * haversine walking estimate (`travelTime.ts`'s `SPEED_KMH` for `"walk"`) with car speeds mislabeled
+ * as foot speeds — worse than falling back to that estimate, not more precise than it. So `walk` has
+ * no entry here and short-circuits to an empty `Map` before any network call, exactly like `transit`
+ * (which has no entry because no free transit data source exists at all — a different reason,
+ * same "treat it as no data" outcome). `drive` is the one mode this server actually serves honestly.
  */
 const MODE_BY_TRANSPORT: Partial<Record<TransportMode, string>> = {
-  walk: "driving",
   drive: "driving",
 };
 
@@ -67,9 +71,11 @@ export function distilRouteMatrix(raw: unknown): RealLeg[] {
  * cost, not per-leg. The full matrix is requested rather than only consecutive pairs because it
  * costs the same and also answers §3c ("is this day's route actually clustered").
  *
- * Resolves an empty map on any failure (including a transit-mode request, for which OSRM has no
- * profile at all), so callers fall back to `travelLegBetween`'s estimate, which already flags
- * itself `estimated: true`.
+ * Resolves an empty map on any failure, including a `walk`- or `transit`-mode request — `walk` has
+ * no entry in `MODE_BY_TRANSPORT` because the demo server can't actually serve walking-network data
+ * (see that comment), and `transit` has none because no free transit data source exists — so both
+ * short-circuit before any network call. Callers fall back to `travelLegBetween`'s estimate, which
+ * already flags itself `estimated: true`.
  */
 export async function fetchDayTravelMinutes(
   points: { lat: number; lon: number }[],
