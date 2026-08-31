@@ -174,6 +174,46 @@ export function apiModelFor(type: ClaudeCallType): string {
   }
 }
 
+/**
+ * How hard the model should think, on the API path, when the caller hasn't said.
+ *
+ * **This exists because routing generation to Opus 5 broke the timeout.** The constants in
+ * claude.ts were derived against Sonnet 4.5 — p50 153s, max measured 221s, cap 300s + 2s/day — and
+ * `apiModelFor` re-pointed generation at a model those numbers never described. Opus 5 at the
+ * default effort (`high`) runs this app's generate prompt in 285s, 305s, and once 330s, where the
+ * last one was killed. Three points, one already censored: exactly the shape claude.ts warns about
+ * two constants in a row for.
+ *
+ * Measured on this machine against a real 9-day generate prompt, same model, same max_tokens:
+ *
+ *     effort=medium   154.3s   11,672 output tokens   valid 9-day plan
+ *     effort=high     304.7s   23,413 output tokens   valid 9-day plan
+ *
+ * Twice as fast for the same shape of answer, and the extra tokens are almost entirely thinking.
+ * 154s also puts the API path back inside the budget the CLI path was calibrated for, rather than
+ * asking for a cap nobody has measured a tail for.
+ *
+ * **What this does NOT claim is that medium is as good as high.** Latency and token count are
+ * measured; quality is not, and one prompt is not a benchmark. `/bench` exists to settle exactly
+ * this — it holds skill, context and prompt constant and varies one axis — and this is the axis it
+ * should be pointed at next. If a sweep says high earns its five minutes, raise this and re-derive
+ * `itineraryTimeoutMs` against the model actually serving it, in that order.
+ *
+ * Chat and element-edit are not here: `/api/trip-edit` already passes `effort: "low"` explicitly,
+ * and an explicit caller always wins.
+ */
+export function apiEffortFor(type: ClaudeCallType): "low" | "medium" | "high" | undefined {
+  switch (type) {
+    case "generate":
+    case "refine":
+    case "rebalance":
+    case "critique":
+      return "medium";
+    default:
+      return undefined;
+  }
+}
+
 /** Ceiling on generated tokens, by what the call actually emits. Hitting the cap truncates
  *  mid-JSON and costs a full retry, so these are generous — an unused ceiling is free. */
 export function maxTokensFor(type: ClaudeCallType): number {
