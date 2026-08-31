@@ -5,7 +5,7 @@ import { LOCAL_OWNER, parseProfile, type TravelerProfile } from "./travelerProfi
 import { staleDraftCutoff } from "./drafts";
 import type { TripStatus } from "./types";
 
-const db = new Database(path.join(process.cwd(), "tripmate.db"));
+const db = new Database(process.env.DB_PATH ?? path.join(process.cwd(), "tripmate.db"));
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS trips (
@@ -29,6 +29,18 @@ db.exec(`
     duration_ms INTEGER,
     status TEXT NOT NULL,
     error_message TEXT,
+    created_at TEXT NOT NULL
+  )
+`);
+
+// One row per persisted API-transport chat/edit session — the LLM_TRANSPORT=api counterpart to
+// the CLI's local JSONL session file. `messages` is a JSON array of Anthropic message turns (both
+// user and assistant), replayed in full on every resume. See claude.ts's runClaudeViaApi and
+// docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS llm_sessions (
+    id TEXT PRIMARY KEY,
+    messages TEXT NOT NULL,
     created_at TEXT NOT NULL
   )
 `);
@@ -143,6 +155,11 @@ addColumnIfMissing("trips", "status", "TEXT");
 // to coalesce. Deliberately not `WHERE status IS NULL OR status = ''`; nothing writes an empty
 // string, and widening it would catch a value some future writer meant.
 db.exec(`UPDATE trips SET status = 'saved' WHERE status IS NULL`);
+// Populated only by runClaudeViaApi() — the Messages API reports no cost itself, so this is
+// computed from its usage block via modelPricing.ts at write time. NULL forever on
+// LLM_TRANSPORT=cli traces, which keep deriving cost from the CLI envelope on read instead
+// (see runs.ts/perfAggregate.ts) — both are permanent, not a migration in progress.
+addColumnIfMissing("llm_traces", "cost_usd", "REAL");
 
 export interface TripRow {
   id: string;
@@ -390,75 +407,12 @@ export function getTripArtifacts(runId: string): TripArtifactRow | undefined {
 }
 
 /**
- * A conversation the API path can resume — this table **is** the model's memory.
- *
- * The CLI kept it in `~/.claude/projects/<slug>/<session-id>.jsonl` and replayed the whole file to
- * the model on every `--resume` (measured in claude.ts: a six-word follow-up cost 13,475 input
- * tokens). The Messages API is stateless, so the same replay has to come from somewhere we own.
- * That is this table, and the swap is deliberate rather than incidental — the JSONL was a file on
- * one machine, which is why `/api/trip-edit` needs a whole rebuild-on-missing-session fallback. A
- * SQLite row travels with the database.
- *
- * `messages_json` is `[{role, content}]` with string content — the exact `Anthropic.MessageParam`
- * shape, so it feeds `messages.create()` with no mapping. Turns are appended, never rewritten.
+ * Conversational memory for the API transport lives in `llm_sessions` — see `createLlmSession` /
+ * `getLlmSession` / `appendLlmSessionTurns` further down. The table and those accessors arrived
+ * with the deploy branch; a second `llm_sessions` declared here (different columns, same name)
+ * would have been created only if it won the import race and silently ignored otherwise, which is
+ * the worst shape a schema conflict can take. One table.
  */
-export interface LlmSessionRow {
-  id: string;
-  messages_json: string;
-  model: string;
-  created_at: string;
-  updated_at: string;
-}
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS llm_sessions (
-    id TEXT PRIMARY KEY,
-    messages_json TEXT NOT NULL,
-    model TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`);
-
-export interface LlmSessionTurn {
-  role: "user" | "assistant";
-  content: string;
-}
-
-/** The transcript to replay, oldest first. Empty for an id that has expired or never existed —
- *  the caller treats that the same way the CLI path treats a missing session file: rebuild. */
-export function getSessionMessages(id: string): LlmSessionTurn[] {
-  const row = db.prepare(`SELECT * FROM llm_sessions WHERE id = ?`).get(id) as
-    | LlmSessionRow
-    | undefined;
-  if (!row) return [];
-  try {
-    return JSON.parse(row.messages_json) as LlmSessionTurn[];
-  } catch {
-    // A corrupt transcript must read as "no session", never as a failed turn — same bargain the
-    // CLI path makes for a session file it cannot open.
-    return [];
-  }
-}
-
-/** Append this turn pair, creating the session if it is new. Written whole rather than as rows
- *  because it is always read whole — the model needs every turn or none of them. */
-export function appendSessionTurns(id: string, model: string, turns: LlmSessionTurn[]): void {
-  const now = new Date().toISOString();
-  const existing = db.prepare(`SELECT * FROM llm_sessions WHERE id = ?`).get(id) as
-    | LlmSessionRow
-    | undefined;
-  const messages = [...(existing ? getSessionMessages(id) : []), ...turns];
-  if (existing) {
-    db.prepare(`UPDATE llm_sessions SET messages_json = ?, model = ?, updated_at = ? WHERE id = ?`)
-      .run(JSON.stringify(messages), model, now, id);
-    return;
-  }
-  db.prepare(
-    `INSERT INTO llm_sessions (id, messages_json, model, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(id, JSON.stringify(messages), model, now, now);
-}
 
 /**
  * One row per itinerary generation, written the moment the model answers.
@@ -563,6 +517,7 @@ export interface TraceRow {
   status: string;
   error_message: string | null;
   run_id: string | null;
+  cost_usd: number | null;
   created_at: string;
 }
 
@@ -595,6 +550,7 @@ export function updateTrace(
     rawResponse?: string;
     durationMs?: number;
     errorMessage?: string;
+    costUsd?: number;
   }
 ): void {
   db.prepare(
@@ -602,7 +558,8 @@ export function updateTrace(
      SET status = @status,
          raw_response = COALESCE(@rawResponse, raw_response),
          duration_ms = @durationMs,
-         error_message = @errorMessage
+         error_message = @errorMessage,
+         cost_usd = COALESCE(@costUsd, cost_usd)
      WHERE id = @id`
   ).run({
     id,
@@ -610,6 +567,7 @@ export function updateTrace(
     rawResponse: fields.rawResponse ?? null,
     durationMs: fields.durationMs ?? null,
     errorMessage: fields.errorMessage ?? null,
+    costUsd: fields.costUsd ?? null,
   });
 }
 
@@ -979,4 +937,38 @@ export function tagRunsCreatedBetween(label: string, fromIso: string, toIso: str
     )
     .run({ label, fromIso, toIso });
   return result.changes;
+}
+
+export function createLlmSession(messages: unknown[]): string {
+  const id = randomUUID();
+  db.prepare(
+    `INSERT INTO llm_sessions (id, messages, created_at) VALUES (@id, @messages, @createdAt)`
+  ).run({ id, messages: JSON.stringify(messages), createdAt: new Date().toISOString() });
+  return id;
+}
+
+export function getLlmSession(id: string): unknown[] | undefined {
+  const row = db.prepare(`SELECT messages FROM llm_sessions WHERE id = ?`).get(id) as
+    | { messages: string }
+    | undefined;
+  if (!row) return undefined;
+  return JSON.parse(row.messages) as unknown[];
+}
+
+export function appendLlmSessionTurns(id: string, newTurns: unknown[]): void {
+  const existing = getLlmSession(id) ?? [];
+  db.prepare(`UPDATE llm_sessions SET messages = ? WHERE id = ?`).run(
+    JSON.stringify([...existing, ...newTurns]),
+    id
+  );
+}
+
+/** Sum of `cost_usd` for traces created at or after `isoCutoff`. Built from a caller-supplied ISO
+ *  string, never SQLite's `datetime('now', ...)` — see the CLAUDE.md gotcha on comparing ISO
+ *  ("...T...Z") timestamps against SQLite's space-separated `datetime()` output. */
+export function getSpendSince(isoCutoff: string): number {
+  const row = db
+    .prepare(`SELECT COALESCE(SUM(cost_usd), 0) as total FROM llm_traces WHERE created_at >= ?`)
+    .get(isoCutoff) as { total: number };
+  return row.total;
 }

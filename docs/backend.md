@@ -36,6 +36,8 @@ Covers `src/app/api/**`, `src/lib/db.ts`, `src/lib/weather.ts`. See
 | `tripDays.ts` — add/remove whole trip days, dates re-flowed | Active | 2026-08-19 | Claude | Holds the invariant the rest of the app assumes: a trip's days are consecutive UTC calendar dates from `startDate`, so `endDate` is derived, never stored independently of the plan. All arithmetic is UTC (`Date.parse(iso + "T00:00:00Z")`, `setUTCDate`) — the local-accessor version of this has already put a wrong day-of-week into generated output once. `PATCH /api/trips/[id]` recomputes `end_date` from the itinerary it is given, and `updateTripItinerary` writes both in one statement so they cannot diverge halfway |
 | `GET /api/arrival-points` — airports and mainline stations near a destination | 2026-08-20 | Zaid | Overpass/OSM, no key, reusing `roads.ts`'s request block (the `Accept: "*/*"` header is there because Overpass's front-end 406s a bare `fetch`). Pure query-building and parsing live in `arrivalPoints.ts` with type-only imports so they stay `.test.mjs`-loadable; the route owns only the fetch. **Four things the live runs corrected, each invisible in code review:** (1) `around:` timed out server-side at 32s — a bounding box uses the spatial index and answered in 18s; (2) Overpass reports that timeout as HTTP **200** with an empty `elements` and a `remark`, which read as "no airports near Kyoto" until the route learned to check for it — exactly the null-vs-empty confusion `holidays.ts` warns about; (3) an IATA code doesn't mean passenger service, so Yokota Air Base and Atsugi took two of Tokyo's three airport slots and Narita took none — `["military"!~"."]` plus ranking `aerodrome=international` first fixed it, and the same bug had dropped CDG behind Le Bourget; (4) a bbox circumscribes its circle, so its corners are out of range by up to 40% and offered Gifu Airbase, 109km from Kyoto. Stations are filtered to `train=yes` — mainline only, which is both the relevance filter and what makes the clause affordable (unfiltered, Tokyo 504'd). No bus clause: a third of the query for a case nobody has. Always answers 200 with `points: []` on failure — the field it feeds is optional free text, so an Overpass outage costs a convenience, not the form. The public instance is genuinely flaky under load; a mirror was tried and was worse |
 | `GET /api/trips/[id]/export` — downloadable self-contained HTML itinerary | Active | 2026-08-25 | Claude | Renders the trip as one offline-readable `.html` file (`Content-Disposition: attachment`) instead of a printed-feeling PDF: a transit-line diagram where each day is a station and each stop-to-stop hop carries a real walk/tram leg computed by `buildTravelLegs` (`travelTime.ts`) — the export can never disagree with the app about distances, since it reuses the exact same unchanged function. `force-dynamic` because the itinerary is edited in place and a cached export would hand the traveler a stale plan. Photos (`exportPhotos.ts`) and the Archivo font subset (`exportFont.ts`, vendored under `public/fonts/` since `next/font/google` leaves nothing readable on disk) are both inlined as base64 data URIs and fetched fail-soft — a photo miss or font-load failure degrades the artifact, never breaks it. `src/lib/tripPayload.ts` was extracted alongside this route so the snake_case→camelCase trip mapping has one home instead of a third inline copy — `GET /api/trips/[id]` now calls it too, rather than duplicating the mapping inline. `src/lib/wikiTitle.ts` (the Wikipedia title-matching logic `/api/place-photo` already had) was extracted the same way, for the same reason. Extraction lives in [frontend.md](./frontend.md)'s Download control row |
+| SSE keepalive comment frame every 20s (`POST /api/itinerary?stream=1`) | Active | 2026-08-25 | Claude | Closes the idle-timeout gap this doc used to flag as "not built now" — a public Railway deploy makes it load-bearing. `:`-prefixed lines are already skipped by the client parser (`eventStream.ts`), so no client change |
+| `runClaude()` gains a second transport: direct Anthropic API calls | Active | 2026-08-25 | Claude | `LLM_TRANSPORT=api` routes through `runClaudeViaApi()` instead of the CLI subprocess; default stays `cli` so local dev is unaffected. See CLAUDE.md and the design spec for the full picture |
 
 ## Enhancements
 
@@ -46,19 +48,9 @@ Covers `src/app/api/**`, `src/lib/db.ts`, `src/lib/weather.ts`. See
 
 ## Deployment prerequisites
 
-- **SSE idle-timeout gap (`POST /api/itinerary?stream=1`):** the stream goes quiet for
-  60–150s between `generate: start`/`done` and again for 10–30s during critique.
-  `X-Accel-Buffering: no` stops proxy buffering but does nothing for idle-connection
-  timeouts — nginx `proxy_read_timeout` (60s default), an AWS ALB (60s idle timeout), and
-  Cloudflare (~100s) would all kill the connection mid-wait, and the client would report
-  "The planner didn't finish" after a full wait despite the server having succeeded.
-  Not built now: the app only runs against a local `claude` subprocess and a local SQLite
-  file, so there is no proxy or CDN in front of it yet, and a keepalive for a deployment
-  that doesn't exist is exactly the speculative work this feature's spec ruled out. If a
-  non-localhost deployment happens, add a `setInterval` in the stream's `start()` that
-  enqueues a `:\n\n` comment frame every ~20s, cleared in `finally` and `cancel()` — the
-  client parser (`eventStream.ts`) already skips lines starting with `:`, so no client
-  change is needed.
+- **SSE idle-timeout gap (`POST /api/itinerary?stream=1`) — resolved 2026-08-25.** Implemented the
+  keepalive this section used to defer: a `setInterval` in the stream's `start()` enqueues a
+  `:\n\n` comment frame every 20s, cleared in `finally` and `cancel()`. See the Features table.
 
 ## Bugs
 

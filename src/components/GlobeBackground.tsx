@@ -161,6 +161,15 @@ export default function GlobeBackground({ creditClassName }: { creditClassName?:
 
     (async () => {
       if (!built || !containerRef.current) return;
+      // Cesium's own required runtime assets under /cesium/ and every tile it fetches after that
+      // are all real network requests with no offline fallback — attempting construction with no
+      // connection doesn't degrade, it throws mid-construction and Cesium paints its own generic
+      // "An error occurred while rendering" panel over the canvas. Skipping construction entirely
+      // leaves this container's `bg-canvas` parent background showing instead, which is exactly
+      // the same colour `scene.backgroundColor` would have painted below — a clean, silent
+      // no-globe state rather than a visible crash. Reconnecting mid-session doesn't retry this;
+      // the fix is a reload, same as the rest of this app's other one-way-latch behaviour.
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       (window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = "/cesium/";
       const Cesium = await import("cesium");
       if (cancelled || !containerRef.current) return;
