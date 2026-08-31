@@ -67,3 +67,6 @@ Trace-*.json
 .impeccable/
 # superpowers brainstorming companion
 .superpowers/
+
+# git worktree scratch space (superpowers subagent-driven-development)
+.worktrees/

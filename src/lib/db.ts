@@ -3,9 +3,10 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { LOCAL_OWNER, parseProfile, type TravelerProfile } from "./travelerProfile";
 import { staleDraftCutoff } from "./drafts";
+import { LEGACY_OWNER, readableOwners } from "./owner";
 import type { TripStatus } from "./types";
 
-const db = new Database(path.join(process.cwd(), "tripmate.db"));
+const db = new Database(process.env.DB_PATH ?? path.join(process.cwd(), "tripmate.db"));
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS trips (
@@ -29,6 +30,18 @@ db.exec(`
     duration_ms INTEGER,
     status TEXT NOT NULL,
     error_message TEXT,
+    created_at TEXT NOT NULL
+  )
+`);
+
+// One row per persisted API-transport chat/edit session — the LLM_TRANSPORT=api counterpart to
+// the CLI's local JSONL session file. `messages` is a JSON array of Anthropic message turns (both
+// user and assistant), replayed in full on every resume. See claude.ts's runClaudeViaApi and
+// docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS llm_sessions (
+    id TEXT PRIMARY KEY,
+    messages TEXT NOT NULL,
     created_at TEXT NOT NULL
   )
 `);
@@ -109,12 +122,69 @@ db.exec(`
 // `run_id`/`trips.run_id` were added after these tables already existed in
 // deployed dbs — ALTER TABLE ADD COLUMN errors if the column is already
 // there, so this only runs once per fresh column, guarded by PRAGMA lookup.
-function addColumnIfMissing(table: string, column: string, ddlType: string): void {
+function hasColumn(table: string, column: string): boolean {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  if (!cols.some((c) => c.name === column)) {
+  return cols.some((c) => c.name === column);
+}
+
+function addColumnIfMissing(table: string, column: string, ddlType: string): void {
+  if (!hasColumn(table, column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddlType}`);
   }
 }
+
+/**
+ * Reconciles an `llm_sessions` table written by the other API-transport branch before the two were
+ * merged.
+ *
+ * Both branches built this table independently and gave it the same name with different columns —
+ * `messages` here, `messages_json`/`model`/`updated_at` there. `CREATE TABLE IF NOT EXISTS` is a
+ * no-op against a table that already exists, so it does not reconcile them and cannot: a database
+ * written by that build keeps the old shape, and every session read fails with
+ * `table llm_sessions has no column named messages`. The merge chose one schema; it could not
+ * choose one for databases that already existed.
+ *
+ * Additive rather than a drop-and-recreate, because those rows are conversations — a trip's chat
+ * resumes by replaying them, so dropping the table would silently reset every in-flight trip's
+ * memory to nothing while looking like a clean migration. The legacy column is left in place: it
+ * costs a few KB and it is the only copy of the data if this ever has to be undone.
+ *
+ * Guarded on the legacy column existing, so a fresh database runs one PRAGMA and stops.
+ */
+function migrateLegacyLlmSessions(): void {
+  if (!hasColumn("llm_sessions", "messages_json")) return;
+  // A rebuild, not an ALTER, and the reason is the constraint rather than the column. Adding
+  // `messages` alongside is easy and useless: the legacy `messages_json` is NOT NULL with no
+  // default, so the very next insert — which supplies only the columns this build knows about —
+  // dies with `NOT NULL constraint failed`. The old shape has to actually go, and SQLite's only
+  // route to that is create-copy-drop-rename. (`ALTER TABLE DROP COLUMN` exists in modern SQLite
+  // but is refused on a PRIMARY KEY table with dependent indexes, which is what this is.)
+  //
+  // One transaction, so a crash midway leaves the original table intact rather than a half-copied
+  // one — the rows are conversations, and the failure mode of a partial migration is a trip whose
+  // chat has forgotten the middle of itself.
+  // An earlier build of this migration added a `messages` column before switching to a rebuild, so
+  // a database may carry either shape. Prefer the new column where it exists and has been filled,
+  // fall back to the legacy one — naming a column that isn't there is itself a hard error, which is
+  // why this is computed rather than written as a flat COALESCE.
+  const source = hasColumn("llm_sessions", "messages")
+    ? "COALESCE(messages, messages_json)"
+    : "messages_json";
+  db.exec(`
+    BEGIN;
+    CREATE TABLE llm_sessions_migrated (
+      id TEXT PRIMARY KEY,
+      messages TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    INSERT INTO llm_sessions_migrated (id, messages, created_at)
+      SELECT id, ${source}, created_at FROM llm_sessions;
+    DROP TABLE llm_sessions;
+    ALTER TABLE llm_sessions_migrated RENAME TO llm_sessions;
+    COMMIT;
+  `);
+}
+migrateLegacyLlmSessions();
 addColumnIfMissing("llm_traces", "run_id", "TEXT");
 addColumnIfMissing("trips", "run_id", "TEXT");
 // The Step 2b answers (priorities, energy, crowds, group, purpose). Stored so the edit loop can
@@ -143,6 +213,19 @@ addColumnIfMissing("trips", "status", "TEXT");
 // to coalesce. Deliberately not `WHERE status IS NULL OR status = ''`; nothing writes an empty
 // string, and widening it would catch a value some future writer meant.
 db.exec(`UPDATE trips SET status = 'saved' WHERE status IS NULL`);
+// Which browser wrote this trip — see src/lib/owner.ts. Nullable rather than defaulted, then
+// backfilled to the legacy bucket below, for the same reason `status` was: the rows that predate
+// the column cannot be attributed to anyone, and guessing would be worse than saying so.
+addColumnIfMissing("trips", "owner_id", "TEXT");
+// One statement at import, a no-op after the first boot — `insertTrip` has written the column
+// since it existed. Rows holding LEGACY_OWNER stay readable by every browser; see LEGACY_OWNER.
+db.exec(`UPDATE trips SET owner_id = '${LEGACY_OWNER}' WHERE owner_id IS NULL`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_trips_owner_status ON trips (owner_id, status, created_at)`);
+// Populated only by runClaudeViaApi() — the Messages API reports no cost itself, so this is
+// computed from its usage block via modelPricing.ts at write time. NULL forever on
+// LLM_TRANSPORT=cli traces, which keep deriving cost from the CLI envelope on read instead
+// (see runs.ts/perfAggregate.ts) — both are permanent, not a migration in progress.
+addColumnIfMissing("llm_traces", "cost_usd", "REAL");
 
 export interface TripRow {
   id: string;
@@ -157,13 +240,16 @@ export interface TripRow {
   /** See `TripStatus`. Typed as non-null because the column is backfilled at import and written
    *  on every insert, so no row can be read without one. */
   status: TripStatus;
+  /** The browser that wrote it, or `LEGACY_OWNER` for rows that predate ownership. Non-null for
+   *  the same reason as `status` — backfilled at import, written on every insert. */
+  owner_id: string;
   created_at: string;
 }
 
 export function insertTrip(
   trip: Omit<
     TripRow,
-    "created_at" | "run_id" | "user_answers_json" | "chat_session_id" | "status"
+    "created_at" | "run_id" | "user_answers_json" | "chat_session_id" | "status" | "owner_id"
   > & {
     run_id?: string | null;
     user_answers_json?: string | null;
@@ -171,6 +257,10 @@ export function insertTrip(
     /** Defaults to `"saved"`, so a caller that predates drafts keeps inserting kept trips. The
      *  auto-draft written after a generation is the one caller that passes `"draft"`. */
     status?: TripStatus;
+    /** Defaults to the legacy bucket, so a caller with no cookie (curl, the perf scripts, the
+     *  bench harness) writes a row every browser can still see — exactly what it saw before
+     *  ownership existed. Browser traffic always supplies a real one via the proxy. */
+    owner_id?: string;
   }
 ): TripRow {
   const created_at = new Date().toISOString();
@@ -178,11 +268,12 @@ export function insertTrip(
   const user_answers_json = trip.user_answers_json ?? null;
   const chat_session_id = trip.chat_session_id ?? null;
   const status: TripStatus = trip.status ?? "saved";
+  const owner_id = trip.owner_id ?? LEGACY_OWNER;
   db.prepare(
-    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, status, created_at)
-     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @status, @created_at)`
-  ).run({ ...trip, run_id, user_answers_json, chat_session_id, status, created_at });
-  return { ...trip, run_id, user_answers_json, chat_session_id, status, created_at };
+    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, status, owner_id, created_at)
+     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @status, @owner_id, @created_at)`
+  ).run({ ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, created_at });
+  return { ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, created_at };
 }
 
 /**
@@ -279,15 +370,31 @@ export type TripListRow = Pick<
  * unfiltered list would put a plan somebody abandoned mid-wizard into the hero collage and into
  * the dev entry point. Drafts are read deliberately, by passing `"draft"`.
  */
-export function listTrips(status: TripStatus = "saved"): TripListRow[] {
+/**
+ * The caller's trips of one status, newest first.
+ *
+ * Scoped to `ownerId` plus the legacy bucket — see `readableOwners`. `ownerId` defaults to the
+ * legacy bucket so every existing caller that never passed one keeps returning exactly what it
+ * returned before, which is what makes this column additive rather than a behaviour change.
+ *
+ * The `IN` list is expanded into placeholders rather than interpolated: it is one or two values
+ * decided entirely server-side, but a query built by concatenation is a habit that outlives the
+ * one safe call site it was written for.
+ */
+export function listTrips(
+  status: TripStatus = "saved",
+  ownerId: string = LEGACY_OWNER
+): TripListRow[] {
+  const owners = readableOwners(ownerId);
   return db
     .prepare(
       // No `itinerary_json`: it was being selected and then dropped by every caller, which meant
       // reading every stored itinerary off disk to render a list of destinations and dates.
       `SELECT id, destination, start_date, end_date, budget, status, created_at
-       FROM trips WHERE status = ? ORDER BY created_at DESC`
+       FROM trips WHERE status = ? AND owner_id IN (${owners.map(() => "?").join(",")})
+       ORDER BY created_at DESC`
     )
-    .all(status) as TripListRow[];
+    .all(status, ...owners) as TripListRow[];
 }
 
 /**
@@ -358,8 +465,22 @@ export function updateTripItinerary(
  * produced it, and the trace viewer keeps working either way since it reads `destination`
  * and `kind` off the run rather than resolving the trip.
  */
-export function deleteTrip(id: string): void {
-  db.prepare(`DELETE FROM trips WHERE id = ?`).run(id);
+/**
+ * Delete one trip, if it belongs to the caller.
+ *
+ * Scoped where `getTrip` deliberately is not. Reading a trip by its id is how a shared link works
+ * and the id is unguessable; *destroying* one is the operation where being wrong is unrecoverable,
+ * so it is the one that checks. Returns whether a row actually went, so a caller can tell "deleted"
+ * from "not yours" instead of reporting success either way.
+ */
+export function deleteTrip(id: string, ownerId: string = LEGACY_OWNER): boolean {
+  const owners = readableOwners(ownerId);
+  const result = db
+    .prepare(
+      `DELETE FROM trips WHERE id = ? AND owner_id IN (${owners.map(() => "?").join(",")})`
+    )
+    .run(id, ...owners);
+  return result.changes > 0;
 }
 
 /** The two frozen Step 5/6 artifacts, keyed by the run that produced them. Kept out of `trips`
@@ -390,75 +511,12 @@ export function getTripArtifacts(runId: string): TripArtifactRow | undefined {
 }
 
 /**
- * A conversation the API path can resume — this table **is** the model's memory.
- *
- * The CLI kept it in `~/.claude/projects/<slug>/<session-id>.jsonl` and replayed the whole file to
- * the model on every `--resume` (measured in claude.ts: a six-word follow-up cost 13,475 input
- * tokens). The Messages API is stateless, so the same replay has to come from somewhere we own.
- * That is this table, and the swap is deliberate rather than incidental — the JSONL was a file on
- * one machine, which is why `/api/trip-edit` needs a whole rebuild-on-missing-session fallback. A
- * SQLite row travels with the database.
- *
- * `messages_json` is `[{role, content}]` with string content — the exact `Anthropic.MessageParam`
- * shape, so it feeds `messages.create()` with no mapping. Turns are appended, never rewritten.
+ * Conversational memory for the API transport lives in `llm_sessions` — see `createLlmSession` /
+ * `getLlmSession` / `appendLlmSessionTurns` further down. The table and those accessors arrived
+ * with the deploy branch; a second `llm_sessions` declared here (different columns, same name)
+ * would have been created only if it won the import race and silently ignored otherwise, which is
+ * the worst shape a schema conflict can take. One table.
  */
-export interface LlmSessionRow {
-  id: string;
-  messages_json: string;
-  model: string;
-  created_at: string;
-  updated_at: string;
-}
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS llm_sessions (
-    id TEXT PRIMARY KEY,
-    messages_json TEXT NOT NULL,
-    model TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`);
-
-export interface LlmSessionTurn {
-  role: "user" | "assistant";
-  content: string;
-}
-
-/** The transcript to replay, oldest first. Empty for an id that has expired or never existed —
- *  the caller treats that the same way the CLI path treats a missing session file: rebuild. */
-export function getSessionMessages(id: string): LlmSessionTurn[] {
-  const row = db.prepare(`SELECT * FROM llm_sessions WHERE id = ?`).get(id) as
-    | LlmSessionRow
-    | undefined;
-  if (!row) return [];
-  try {
-    return JSON.parse(row.messages_json) as LlmSessionTurn[];
-  } catch {
-    // A corrupt transcript must read as "no session", never as a failed turn — same bargain the
-    // CLI path makes for a session file it cannot open.
-    return [];
-  }
-}
-
-/** Append this turn pair, creating the session if it is new. Written whole rather than as rows
- *  because it is always read whole — the model needs every turn or none of them. */
-export function appendSessionTurns(id: string, model: string, turns: LlmSessionTurn[]): void {
-  const now = new Date().toISOString();
-  const existing = db.prepare(`SELECT * FROM llm_sessions WHERE id = ?`).get(id) as
-    | LlmSessionRow
-    | undefined;
-  const messages = [...(existing ? getSessionMessages(id) : []), ...turns];
-  if (existing) {
-    db.prepare(`UPDATE llm_sessions SET messages_json = ?, model = ?, updated_at = ? WHERE id = ?`)
-      .run(JSON.stringify(messages), model, now, id);
-    return;
-  }
-  db.prepare(
-    `INSERT INTO llm_sessions (id, messages_json, model, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(id, JSON.stringify(messages), model, now, now);
-}
 
 /**
  * One row per itinerary generation, written the moment the model answers.
@@ -563,6 +621,7 @@ export interface TraceRow {
   status: string;
   error_message: string | null;
   run_id: string | null;
+  cost_usd: number | null;
   created_at: string;
 }
 
@@ -595,6 +654,7 @@ export function updateTrace(
     rawResponse?: string;
     durationMs?: number;
     errorMessage?: string;
+    costUsd?: number;
   }
 ): void {
   db.prepare(
@@ -602,7 +662,8 @@ export function updateTrace(
      SET status = @status,
          raw_response = COALESCE(@rawResponse, raw_response),
          duration_ms = @durationMs,
-         error_message = @errorMessage
+         error_message = @errorMessage,
+         cost_usd = COALESCE(@costUsd, cost_usd)
      WHERE id = @id`
   ).run({
     id,
@@ -610,6 +671,7 @@ export function updateTrace(
     rawResponse: fields.rawResponse ?? null,
     durationMs: fields.durationMs ?? null,
     errorMessage: fields.errorMessage ?? null,
+    costUsd: fields.costUsd ?? null,
   });
 }
 
@@ -979,4 +1041,38 @@ export function tagRunsCreatedBetween(label: string, fromIso: string, toIso: str
     )
     .run({ label, fromIso, toIso });
   return result.changes;
+}
+
+export function createLlmSession(messages: unknown[]): string {
+  const id = randomUUID();
+  db.prepare(
+    `INSERT INTO llm_sessions (id, messages, created_at) VALUES (@id, @messages, @createdAt)`
+  ).run({ id, messages: JSON.stringify(messages), createdAt: new Date().toISOString() });
+  return id;
+}
+
+export function getLlmSession(id: string): unknown[] | undefined {
+  const row = db.prepare(`SELECT messages FROM llm_sessions WHERE id = ?`).get(id) as
+    | { messages: string }
+    | undefined;
+  if (!row) return undefined;
+  return JSON.parse(row.messages) as unknown[];
+}
+
+export function appendLlmSessionTurns(id: string, newTurns: unknown[]): void {
+  const existing = getLlmSession(id) ?? [];
+  db.prepare(`UPDATE llm_sessions SET messages = ? WHERE id = ?`).run(
+    JSON.stringify([...existing, ...newTurns]),
+    id
+  );
+}
+
+/** Sum of `cost_usd` for traces created at or after `isoCutoff`. Built from a caller-supplied ISO
+ *  string, never SQLite's `datetime('now', ...)` — see the CLAUDE.md gotcha on comparing ISO
+ *  ("...T...Z") timestamps against SQLite's space-separated `datetime()` output. */
+export function getSpendSince(isoCutoff: string): number {
+  const row = db
+    .prepare(`SELECT COALESCE(SUM(cost_usd), 0) as total FROM llm_traces WHERE created_at >= ?`)
+    .get(isoCutoff) as { total: number };
+  return row.total;
 }

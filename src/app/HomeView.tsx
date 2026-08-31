@@ -85,6 +85,9 @@ import { usePlacePhoto } from "@/lib/usePlacePhoto";
 const ItineraryCard = dynamic(() => import("@/components/ItineraryCard"), { ssr: false });
 const FocusEditMode = dynamic(() => import("@/components/FocusEditMode"), { ssr: false });
 const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), { ssr: false });
+// Behind its own boundary like every other blue-hour piece: it is only ever on stage during the
+// plan step, and its two crops should not be fetched by a traveller who never opens the form.
+const SceneBackdrop = dynamic(() => import("@/components/blue-hour/SceneBackdrop"), { ssr: false });
 const GenerationScreen = dynamic(() => import("@/components/GenerationScreen"), {
   ssr: false,
 });
@@ -184,10 +187,13 @@ const ghostButtonClass =
 // panels use, reused here for consistency across every step of this page.
 // `pointer-events-auto` opts back in from AppShell's `pointer-events-none` overlay, which
 // exists so the Cesium canvas underneath stays draggable. Every interactive box needs it.
-// `is-opaque`: the plan step runs with `globeWanted` false, so there is nothing behind this
-// card to frost. It never coexists with a visible globe — submitting unmounts it and boots
-// the globe in the same beat. See `.glass-itinerary.is-opaque`.
-const cardClass = "glass-itinerary is-opaque pointer-events-auto rounded-2xl p-5 sm:p-6";
+// It carried `.is-opaque` until `SceneBackdrop` existed, and the reasoning was sound at the time:
+// the plan step runs with `globeWanted` false, and a 56px blur of flat `--canvas` is a blur of
+// nothing that still costs a render surface. There is a photograph behind the wizard now, so the
+// frost has something to sample and the premise is gone — taking the opacity off is what lets the
+// image read through the glass at all. The test is "is anything painted behind this card", which
+// was indistinguishable from "is the globe on" right up until it wasn't.
+const cardClass = "glass-itinerary pointer-events-auto rounded-2xl p-5 sm:p-6";
 
 // `text-base`, not the 14px body step: 16px is what stops iOS Safari zooming the viewport on
 // focus, and it's already a step the system uses (the hero subline).
@@ -549,6 +555,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [planCollapsed, setPlanCollapsed] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
+  const [notifyOnDone, setNotifyOnDone] = useState(false);
+  const [notifyBlocked, setNotifyBlocked] = useState(false);
   const [stages, setStages] = useState<StageProgress[]>(
     STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const }))
   );
@@ -1045,6 +1053,56 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   }
 
   /**
+   * Fires when generation finishes while the tab is backgrounded. The title flash needs no
+   * permission and always runs; the Notification is gated on `permitted` (granted at opt-in,
+   * see handleNotifyToggle) since firing an unpermitted one throws.
+   */
+  function notifyGenerationDone(ok: boolean, permitted: boolean) {
+    if (typeof document === "undefined" || !document.hidden) return;
+
+    const original = document.title;
+    document.title = ok ? "✅ Itinerary ready!" : "⚠️ Generation failed";
+    const restoreTitle = () => {
+      if (!document.hidden) {
+        document.title = original;
+        document.removeEventListener("visibilitychange", restoreTitle);
+      }
+    };
+    document.addEventListener("visibilitychange", restoreTitle);
+
+    if (permitted && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      const n = new Notification(
+        ok ? "Your itinerary is ready!" : "Itinerary generation failed",
+        { body: ok ? "Click to view your trip." : "Something went wrong — tap to try again." }
+      );
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    }
+  }
+
+  // The permission prompt only fires from here — a real click — never proactively.
+  async function handleNotifyToggle(checked: boolean) {
+    if (!checked) {
+      setNotifyOnDone(false);
+      setNotifyBlocked(false);
+      return;
+    }
+    if (typeof Notification === "undefined") {
+      setNotifyOnDone(false);
+      setNotifyBlocked(true);
+      return;
+    }
+    const permission =
+      Notification.permission === "default"
+        ? await Notification.requestPermission()
+        : Notification.permission;
+    setNotifyOnDone(permission === "granted");
+    setNotifyBlocked(permission !== "granted");
+  }
+
+  /**
    * Posts to /api/itinerary with `?stream=1` and updates `stages` as real progress frames
    * arrive via readEventStream. Falls back to the plain (non-streaming) POST if the stream
    * never opens at all — a network error or non-200 status before any bytes arrive. Once
@@ -1162,6 +1220,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // moment of this flow that should feel instant. `writeDraft` swallows its own failures, so
       // there is nothing here to catch — the promise is kept only so `save()` can await it.
       draftWriteRef.current = writeDraft(data.itinerary, data.runId ?? null, data.sessionId ?? null);
+      notifyGenerationDone(true, notifyOnDone);
       // The wizard's job is done — drop its draft and the `?step=` it leaves in the URL, or a
       // refresh on this result page would find both still there and restore straight back into
       // the wizard instead of showing what was just generated.
@@ -1181,6 +1240,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // as one — cancelGeneration has already reset the UI.
       if (!isAbort(e)) {
         setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
+        notifyGenerationDone(false, notifyOnDone);
       }
     } finally {
       setGenerating(false);
@@ -1495,6 +1555,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         step === "landing" ? "blue-hour-scene" : ""
       }`}
     >
+      {/* The photograph the form stands on, from the moment the traveller opens it until their
+          plan appears. Not rendered while generating: GenerationScreen is a full-bleed opaque
+          layer that paints this same image itself, so a second copy underneath would be two
+          decodes of one file to show one picture. */}
+      {step === "plan" && !generating && !refining && <SceneBackdrop />}
+
       {/* Gated here rather than left to the component's own `if (!active) return null`. It is
           behind a dynamic() boundary now, and an unconditionally-rendered dynamic component
           fetches its chunk on first render — i.e. on the landing, which is the one thing the
@@ -2131,6 +2197,21 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     Takes about two minutes. You can cancel any time, and refine the plan in plain
                     language afterwards.
                   </p>
+                  <label className="mt-2 flex items-center gap-2 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={notifyOnDone}
+                      onChange={(e) => void handleNotifyToggle(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-card-border"
+                    />
+                    Notify me when it&apos;s ready
+                  </label>
+                  {notifyBlocked && (
+                    <p className="mt-1 text-xs text-muted">
+                      Notifications are blocked in your browser — we&apos;ll still flash the tab
+                      title when it&apos;s done.
+                    </p>
+                  )}
                 </Screen>
               )}
 

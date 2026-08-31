@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { listTrips, purgeStaleDrafts } from "@/lib/db";
+import { currentOwnerId } from "@/lib/ownerRequest";
 import { toTripSummary } from "@/lib/tripPayload";
 import TripsView from "./TripsView";
 
@@ -35,7 +36,7 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function TripsPage() {
+export default async function TripsPage() {
   // Swept before the read, not after, so an expired draft can't appear once and vanish on the next
   // visit. This is the app's only sweep trigger — there is no scheduler here — and it is enough:
   // the rows it deletes are only ever *seen* on this page and `/api/trips`, which does the same.
@@ -46,10 +47,14 @@ export default function TripsPage() {
   } catch (err) {
     console.error("[trips] draft sweep failed", err);
   }
+  // Both lists are scoped to the browser that made them — see `currentOwnerId`. Resolved once and
+  // passed to both calls rather than awaited twice, so a saved trip and a draft can never be read
+  // against two different owners.
+  const ownerId = await currentOwnerId();
   return (
     <TripsView
-      initialTrips={listTrips("saved").map(toTripSummary)}
-      initialDrafts={listTrips("draft").map(toTripSummary)}
+      initialTrips={listTrips("saved", ownerId).map(toTripSummary)}
+      initialDrafts={listTrips("draft", ownerId).map(toTripSummary)}
     />
   );
 }

@@ -10,8 +10,8 @@
  * that can fail to import is a config module that can take the whole app down.
  */
 
-/** Transport, not provider. Both modes talk to the same Anthropic models — one over a child
- *  process, one over HTTPS. */
+/** Transport, not provider. Both talk to the same Anthropic models — one over a child process,
+ *  one over HTTPS. */
 export type LlmMode = "api" | "cli";
 
 /**
@@ -50,15 +50,27 @@ export type ClaudeCallType =
  */
 let runtimeOverride: LlmMode | null = null;
 
+/**
+ * `LLM_TRANSPORT` — the name the deploy path already uses, not a second spelling of it.
+ *
+ * This module arrived from a branch that called it `LLM_MODE`; the variable is `LLM_TRANSPORT`
+ * because that is what Railway is configured with and what claude.ts documented first. One name.
+ */
 function envMode(): LlmMode | null {
-  const raw = process.env.LLM_MODE?.trim().toLowerCase();
+  const raw = process.env.LLM_TRANSPORT?.trim().toLowerCase();
   if (raw === "cli" || raw === "api") return raw;
   return null;
 }
 
-/** The mode in force right now: runtime override, else env, else the `api` default. */
+/**
+ * The transport in force right now: runtime override, else env, else `cli`.
+ *
+ * The `cli` default is deliberate and belongs to the deploy design — local development runs free
+ * under the existing CLI subscription, and only the deployed environment (which has no CLI binary)
+ * sets `LLM_TRANSPORT=api`. Flipping the default would start metering every developer's machine.
+ */
 export function llmMode(): LlmMode {
-  return runtimeOverride ?? envMode() ?? "api";
+  return runtimeOverride ?? envMode() ?? "cli";
 }
 
 /** Where the current mode came from — surfaced by `GET /api/llm-mode` so the answer to "why is it
@@ -162,6 +174,46 @@ export function apiModelFor(type: ClaudeCallType): string {
   }
 }
 
+/**
+ * How hard the model should think, on the API path, when the caller hasn't said.
+ *
+ * **This exists because routing generation to Opus 5 broke the timeout.** The constants in
+ * claude.ts were derived against Sonnet 4.5 — p50 153s, max measured 221s, cap 300s + 2s/day — and
+ * `apiModelFor` re-pointed generation at a model those numbers never described. Opus 5 at the
+ * default effort (`high`) runs this app's generate prompt in 285s, 305s, and once 330s, where the
+ * last one was killed. Three points, one already censored: exactly the shape claude.ts warns about
+ * two constants in a row for.
+ *
+ * Measured on this machine against a real 9-day generate prompt, same model, same max_tokens:
+ *
+ *     effort=medium   154.3s   11,672 output tokens   valid 9-day plan
+ *     effort=high     304.7s   23,413 output tokens   valid 9-day plan
+ *
+ * Twice as fast for the same shape of answer, and the extra tokens are almost entirely thinking.
+ * 154s also puts the API path back inside the budget the CLI path was calibrated for, rather than
+ * asking for a cap nobody has measured a tail for.
+ *
+ * **What this does NOT claim is that medium is as good as high.** Latency and token count are
+ * measured; quality is not, and one prompt is not a benchmark. `/bench` exists to settle exactly
+ * this — it holds skill, context and prompt constant and varies one axis — and this is the axis it
+ * should be pointed at next. If a sweep says high earns its five minutes, raise this and re-derive
+ * `itineraryTimeoutMs` against the model actually serving it, in that order.
+ *
+ * Chat and element-edit are not here: `/api/trip-edit` already passes `effort: "low"` explicitly,
+ * and an explicit caller always wins.
+ */
+export function apiEffortFor(type: ClaudeCallType): "low" | "medium" | "high" | undefined {
+  switch (type) {
+    case "generate":
+    case "refine":
+    case "rebalance":
+    case "critique":
+      return "medium";
+    default:
+      return undefined;
+  }
+}
+
 /** Ceiling on generated tokens, by what the call actually emits. Hitting the cap truncates
  *  mid-JSON and costs a full retry, so these are generous — an unused ceiling is free. */
 export function maxTokensFor(type: ClaudeCallType): number {
@@ -232,58 +284,11 @@ export function refusalFallbackEnabled(model: string): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * USD per million tokens, [input, output].
+ * Re-exported, not redefined.
  *
- * The 5-generation rows are Anthropic's published list prices. The 4.5 rows are NOT in the current
- * published table (they're legacy models) — they're set to their tier's rate, which is an
- * assumption, not a quote.
- *
- * Lives here rather than in the bench harness because it is no longer bench-only: the API path has
- * no vendor-reported cost to fall back on (the CLI envelope carried one; an HTTP response carries
- * token counts and nothing else), so this table is what turns `usage` into the `costUSD` the trace
- * viewer renders. `src/lib/bench/models.ts` imports it as its own default and still layers
- * `BENCH_PRICES` on top for sweeps.
+ * Two price tables reached this file from opposite directions — one here, one in `modelPricing.ts`
+ * — with the same rates and the same cache multipliers. `modelPricing.ts` wins because the trace
+ * viewer, the perf aggregate and the bench harness all already read it; a second copy would be a
+ * table that disagrees with the UI the first time either is edited.
  */
-export const MODEL_PRICES: Record<string, [number, number]> = {
-  "claude-haiku-4-5-20251001": [1, 5],
-  "claude-haiku-4-5": [1, 5],
-  "claude-sonnet-4-5": [3, 15],
-  "claude-sonnet-4-5-20250929": [3, 15],
-  "claude-opus-4-5": [5, 25],
-  "claude-opus-4-5-20251101": [5, 25],
-  // Sonnet 5 list price. An introductory $2/$10 runs through 2026-08-31; the higher list price is
-  // the default here so a cost comparison doesn't flatter it past that date without anyone noticing.
-  "claude-sonnet-5": [3, 15],
-  "claude-opus-5": [5, 25],
-  "claude-fable-5": [10, 50],
-};
-
-/**
- * Dollar cost of one call, or null for a model with no price on file.
- *
- * Cache multipliers are the published ones: a cache *read* bills at ~0.1x the input rate, a cache
- * *write* at ~1.25x. Both matter here — the chat path deliberately caches a large stable prefix
- * (the seeded generate turn), so ignoring them would overstate turn 2 by roughly 10x.
- */
-export function computeCostUsd(
-  model: string,
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadInputTokens?: number;
-    cacheCreationInputTokens?: number;
-  }
-): number | null {
-  const price =
-    MODEL_PRICES[model] ??
-    MODEL_PRICES[Object.keys(MODEL_PRICES).find((k) => model.startsWith(k)) ?? ""];
-  if (!price) return null;
-  const [inPerM, outPerM] = price;
-  const perM = (tokens: number, rate: number) => (tokens / 1_000_000) * rate;
-  return (
-    perM(usage.inputTokens, inPerM) +
-    perM(usage.outputTokens, outPerM) +
-    perM(usage.cacheReadInputTokens ?? 0, inPerM * 0.1) +
-    perM(usage.cacheCreationInputTokens ?? 0, inPerM * 1.25)
-  );
-}
+export { DEFAULT_PRICES as MODEL_PRICES, computeCostUsd } from "./modelPricing";

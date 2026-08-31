@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, Orbitron, Rajdhani } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
@@ -81,6 +81,12 @@ const rajdhani = Rajdhani({
 export const metadata: Metadata = {
   title: "TripMate — Plan your trip",
   description: "AI-planned itineraries with real weather, budget tracking, and maps.",
+};
+
+// Matches --canvas in globals.css. manifest.ts's own theme_color covers the installed app; this
+// covers the browser chrome (address bar / status bar tint) before it's installed.
+export const viewport: Viewport = {
+  themeColor: "#091b20",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

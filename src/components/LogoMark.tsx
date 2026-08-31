@@ -23,6 +23,10 @@
  *
  * Sized in `em` by default so a caller sets the mark's size by setting its type size, and the two
  * stay in proportion if the type step moves.
+ *
+ * The PWA's static home-screen icons (`public/icons/`, `src/app/apple-icon.png`) were generated
+ * once from these same paths — see git history for the generation script — and aren't wired to
+ * regenerate from this file automatically. Redraw both by hand together if the mark changes.
  */
 export default function LogoMark({ className = "h-[1em] w-[1em]" }: { className?: string }) {
   return (

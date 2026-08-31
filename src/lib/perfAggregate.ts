@@ -18,19 +18,27 @@ const EMPTY_METRICS: CliMetrics = {
   apiDurationMs: null,
 };
 
-/** Pulls tokens/cost/timing back out of the CLI's raw JSON envelope — the same
- *  envelope `runs.ts`'s `parseUsage` already reads for the trace-viewer UI, but this
- *  additionally surfaces the timing fields (`ttft_ms`, `time_to_request_ms`,
- *  `duration_api_ms`) that only the Perf Dashboard needs, kept in a separate function
- *  so the existing trace-viewer's `RunStepUsage` type/consumers stay untouched. */
+/** Pulls tokens/timing back out of the raw envelope. Branches on shape: a CLI envelope
+ *  (`modelUsage` present) carries `ttft_ms`/`time_to_request_ms`/`duration_api_ms` and its own
+ *  `total_cost_usd`; a Messages API response (`usage` present, no `modelUsage`) has none of
+ *  those — no first-token concept on a non-streaming call, no subprocess-spawn overhead, and no
+ *  cost field at all, so those stay null for an API-transport trace forever (permanent, not a
+ *  migration step, since the CLI keeps running for local dev). Cost for an API-transport trace
+ *  comes from the trace row's own `cost_usd` column instead — see aggregatePerfStats below. */
 export function parseCliMetrics(rawResponse: string | null): CliMetrics {
   if (!rawResponse) return EMPTY_METRICS;
   try {
     const envelope = JSON.parse(rawResponse);
-    // Keyed by whichever model actually produced this trace, not a hardcoded
-    // constant — a model swap (the exact kind of change this dashboard exists
-    // to measure) would otherwise silently blank token stats for every trace
-    // recorded under the old model string.
+    const num = (v: unknown) => (typeof v === "number" ? v : null);
+
+    if (!("modelUsage" in envelope) && "usage" in envelope) {
+      return {
+        ...EMPTY_METRICS,
+        inputTokens: num(envelope.usage?.input_tokens),
+        outputTokens: num(envelope.usage?.output_tokens),
+      };
+    }
+
     const modelUsage = Object.values(envelope.modelUsage ?? {})[0] as
       | { inputTokens?: number; outputTokens?: number }
       | undefined;
@@ -68,6 +76,10 @@ export interface PerfTraceInput {
   type: string;
   durationMs: number | null;
   rawResponse: string | null;
+  /** The trace's own `cost_usd` column — the only source of cost for an API-transport trace, and
+   *  preferred over the CLI envelope's `total_cost_usd` for a CLI-transport one too. Optional so
+   *  existing callers/fixtures that don't pass it still work, falling back to the envelope. */
+  costUsd?: number | null;
 }
 
 /** Groups traces by `type` (generate/critique/rebalance/place-detail/chat/element-edit/
@@ -95,7 +107,7 @@ export function aggregatePerfStats(traces: PerfTraceInput[]): FeaturePerfStats[]
       apiDurationMs: computeStats(numbersOnly(metrics.map((m) => m.apiDurationMs))),
       inputTokens: computeStats(numbersOnly(metrics.map((m) => m.inputTokens))),
       outputTokens: computeStats(numbersOnly(metrics.map((m) => m.outputTokens))),
-      costUsd: computeStats(numbersOnly(metrics.map((m) => m.costUsd))),
+      costUsd: computeStats(numbersOnly(rows.map((r, i) => r.costUsd ?? metrics[i].costUsd))),
     });
   }
 
