@@ -6,6 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { appendLlmSessionTurns, createLlmSession, getLlmSession, insertTrace, updateTrace } from "./db";
 import { computeCostUsd } from "./modelPricing";
 import {
+  apiEffortFor,
   apiModelFor,
   llmMode,
   maxTokensFor,
@@ -569,9 +570,12 @@ function runClaudeViaApi(
             ...(supportsAdaptiveThinking(model)
               ? { thinking: { type: "adaptive" as const } }
               : { thinking: thinkingFor(type, meta?.effort) }),
-            ...(meta?.effort && supportsEffort(model)
-              ? { output_config: { effort: meta.effort } }
-              : {}),
+            // An explicit caller wins; otherwise the per-task default. Only ever sent to a model
+            // that accepts it — `effort` is a 400, not a no-op, on the 4.5-generation models.
+            ...(() => {
+              const effort = meta?.effort ?? apiEffortFor(type);
+              return effort && supportsEffort(model) ? { output_config: { effort } } : {};
+            })(),
           },
           { signal: controller.signal }
         )
