@@ -226,7 +226,7 @@ export default function DayHeader({
             aria-label={`Day ${dayIndex + 1} title`}
             placeholder="Add a title…"
             // Inherits the heading's font, size and weight from the container — the whole point.
-            // Same borderless-until-touched fill as the stop fields in EditableStopList.
+            // Borderless until touched, so a heading that can be edited still reads as a heading.
             className="min-w-24 flex-1 rounded-md border border-transparent bg-transparent px-1.5 transition-colors placeholder:font-normal placeholder:text-muted/60 hover:border-white/10 hover:bg-white/[0.07] focus:border-white/10 focus:bg-white/[0.07] focus:outline-none"
           />
           <span aria-hidden="true" className="shrink-0 text-muted">·</span>

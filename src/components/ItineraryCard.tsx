@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Plus, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
@@ -10,12 +10,9 @@ import { useMapCamera } from "@/lib/mapCamera";
 import { useStopTour } from "@/lib/useStopTour";
 import { daySpendByCategory } from "@/lib/itinerary";
 import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
-import EditableStopList from "./EditableStopList";
-import AutoTextarea from "./AutoTextarea";
-import { addDay, deleteStop, insertStop, updateStop } from "@/lib/itineraryEdits";
-import { moveStop } from "@/lib/schedule";
 import { formatMoney } from "@/lib/format";
 import BudgetBar from "./BudgetBar";
+import SplitEditor from "./SplitEditor";
 import DayHeader, { DayEditUpdates } from "./DayHeader";
 import StopList from "./StopList";
 import Typewriter from "./Typewriter";
@@ -251,11 +248,13 @@ export default function ItineraryCard({
    * There is nothing to lay out here, which is the whole design. The hero, the budget bar, the
    * day tabs and the spend band are outside this flag entirely and never re-render because of it.
    * Inside the day panel, each region swaps for an equivalent built from the *same* measurements
-   * (see the module comment in `EditableStopList`), so the card's height and rhythm survive the
+   * so the card's height and rhythm survive the
    * switch. What edit mode adds is affordances in the panel's own padding — a grip in the left
    * gutter, a bin in the right — and one row of controls at the end of the day.
    */
-  const [editing, setEditing] = useState(false);
+  /** Open when the full editor is up. Editing is one surface — `SplitEditor` — rather than a
+   *  second mode inside this card; see the note on the Edit control at the foot of the card. */
+  const [boardOpen, setBoardOpen] = useState(false);
   /** Whether this card is an editing surface at all (the host gave us a way to commit changes). */
   const canRearrange = !!onItineraryChange;
 
@@ -268,54 +267,11 @@ export default function ItineraryCard({
    * and (on a structural change) the map's ribbons and markers are all rendered from the one
    * value. A field holding its own draft would let any of those disagree with the others.
    */
-  const editStop = (stopIndex: number, patch: Partial<Stop>) =>
-    onItineraryChange?.(updateStop(itinerary, dayIndex, stopIndex, patch));
-  const removeStop = (stopIndex: number) =>
-    onItineraryChange?.(deleteStop(itinerary, dayIndex, stopIndex));
-  const reorderStops = (from: number, to: number) =>
-    onItineraryChange?.(
-      moveStop(itinerary, { dayIndex, stopIndex: from }, { dayIndex, stopIndex: to })
-    );
   const editDay = (updates: Partial<Pick<DayPlan, "title" | "date" | "summary">>) =>
     onItineraryChange?.({
       ...itinerary,
       days: itinerary.days.map((d, i) => (i === dayIndex ? { ...d, ...updates } : d)),
     });
-
-  /**
-   * Where a hand-added stop lands, since a stop without coordinates is not something the map can
-   * draw and `newStop` has no way to invent them.
-   *
-   * It inherits the day's last stop, falling back to the last stop anywhere in the trip — so a
-   * new stop appears *on* the plan, at somewhere the traveller has already been, and is then
-   * dragged or renamed from there. Guessing the city centre instead would need a coordinate this
-   * component is never given (`TripSummary` carries no lat/lng), and defaulting to 0,0 would draw
-   * a ribbon to the Gulf of Guinea.
-   *
-   * `null` only for an itinerary with no stops at all, which no generated plan produces; the
-   * control disables itself rather than adding a stop the map cannot place.
-   */
-  const anchorForNewStop = (() => {
-    const here = itinerary.days[dayIndex]?.stops;
-    const last = here?.[here.length - 1];
-    if (last) return last;
-    for (let i = itinerary.days.length - 1; i >= 0; i--) {
-      const stops = itinerary.days[i].stops;
-      if (stops.length) return stops[stops.length - 1];
-    }
-    return null;
-  })();
-
-  const addStop = () => {
-    if (!anchorForNewStop) return;
-    onItineraryChange?.(
-      insertStop(itinerary, dayIndex, {
-        name: "",
-        lat: anchorForNewStop.lat,
-        lng: anchorForNewStop.lng,
-      })
-    );
-  };
 
   /**
    * The itinerary as it first arrived — straight from generation, or straight from the database.
@@ -443,7 +399,7 @@ export default function ItineraryCard({
     // In edit mode it is false: a stop dragged toward another day is a decision about two days,
     // and hiding one of them hides half the question. This is the one thing about the map that
     // edit mode does change, and it is a change in *what is drawn*, not in the panel's layout.
-    showTripRoute(routeDays, panelCollapsed ? null : dayIndex, !panelCollapsed, !editing);
+    showTripRoute(routeDays, panelCollapsed ? null : dayIndex, !panelCollapsed, true);
     // `routeShape` and not `routeDays`, and `day` is deliberately absent — both change identity
     // on every keystroke. See the long note on `routeShape` for what that would cost and what it
     // defers. `editing` is here so entering and leaving the mode redraws once, which is what
@@ -454,7 +410,7 @@ export default function ItineraryCard({
     // this render's own fresh array. A ref was used here first and is not needed — it also trips
     // the "no refs during render" rule, which is what made the simpler reading obvious.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeShape, dayIndex, panelCollapsed, showTripRoute, editing]);
+  }, [routeShape, dayIndex, panelCollapsed, showTripRoute]);
 
   // Staggered reveal, played once on mount when animateReveal is true: every REVEAL_STEP_MS,
   // one more stop card mounts (with its own slide-down + typewriter, see StopRow) and its map
@@ -777,27 +733,6 @@ export default function ItineraryCard({
           <ChevronRightIcon className="h-4 w-4" />
         </button>
 
-        {/* Adding a day belongs with the days, and only exists in edit mode. It sits *after* the
-            next-day arrow rather than inside the scrolling tab strip: the strip measures and
-            scrolls its own children to keep the active tab in view, and a control that is not a
-            day would be scrolled off with them. Sized to the arrows' own `arrowClass` so the
-            strip's height is unchanged whether or not this is rendered. */}
-        {editing && canRearrange && (
-          <button
-            type="button"
-            onClick={() => {
-              const next = addDay(itinerary);
-              onItineraryChange?.(next);
-              setActiveDayIndex(next.days.length - 1);
-            }}
-            aria-label="Add a day to this trip"
-            title="Add a day"
-            className={arrowClass}
-            style={arrowStyle}
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        )}
       </div>
 
       <div
@@ -820,10 +755,13 @@ export default function ItineraryCard({
               // different-height save/cancel form — never takes the header's place; inside a
               // mode built on nothing moving, that is exactly the wrong shape.
               isEditing={false}
-              inlineEditing={editing}
+              // The day heading is never edited in place. The pencil opens the full editor on
+              // this day instead — renaming a day and rearranging it are the same job, and that
+              // job has one surface.
+              inlineEditing={false}
               onInlineEdit={editDay}
               onEditingChange={(next) => {
-                if (next && canRearrange) setEditing(true);
+                if (next && canRearrange) setBoardOpen(true);
               }}
             />
           </div>
@@ -902,17 +840,7 @@ export default function ItineraryCard({
             keeps its height and the stops below it do not shift. Editing offers the field even
             when the day has no summary yet — a plan generated before the field existed should be
             able to gain one — while reading still renders nothing rather than an empty line. */}
-        {editing ? (
-          <AutoTextarea
-            value={day.summary ?? ""}
-            onChange={(e) => editDay({ summary: e.target.value || undefined })}
-            aria-label={`Day ${dayIndex + 1} summary`}
-            placeholder="Describe the shape of this day…"
-            className="-mx-1.5 mb-3 block w-[calc(100%+0.75rem)] rounded-md border border-transparent bg-transparent px-1.5 text-sm italic text-muted transition-colors placeholder:not-italic placeholder:text-muted/50 hover:border-white/10 hover:bg-white/[0.07] focus:border-white/10 focus:bg-white/[0.07] focus:outline-none"
-          />
-        ) : (
-          day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>
-        )}
+        {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
 
         {/* Only worth offering when there is more than one place to move between — and not while
             editing, where a camera flying itself between stops fights the hand rearranging them.
@@ -920,7 +848,7 @@ export default function ItineraryCard({
             of stops below can still start at the same offset: the pill sits above them and takes
             its `mb-3` with it, so the list moves up by exactly the height of a control nobody
             can use in this mode. */}
-        {!editing && day.stops.length > 1 && (
+        {day.stops.length > 1 && (
           <button
             type="button"
             onClick={toggleTour}
@@ -980,24 +908,7 @@ export default function ItineraryCard({
           </div>
         )}
 
-        {editing ? (
-          /* The same list, row for row — see the module comment in EditableStopList for why its
-             geometry is copied from StopList rather than shared with it. `highlightedIndex` and
-             `onHoverStop` are the identical contract, so the globe's paired highlight keeps
-             working across the mode switch: point at a marker and its field lights up, point at
-             a field and its marker does. `activeIndex` is not passed, and that is deliberate —
-             it drives StopList's scroll-to-selected loop, which would yank the list under a
-             caret while somebody was typing in it. */
-          <EditableStopList
-            stops={day.stops}
-            dayIndex={dayIndex}
-            highlightedIndex={highlightedRow}
-            onHoverStop={(index) => setHoveredIndex(index === null ? null : dayOffset + index)}
-            onEditStop={editStop}
-            onDeleteStop={removeStop}
-            onReorder={reorderStops}
-          />
-        ) : day.stops.length === 0 ? (
+        {day.stops.length === 0 ? (
           <p className="text-sm text-muted">
             No stops planned for this day — it&rsquo;s yours to fill.
           </p>
@@ -1019,26 +930,6 @@ export default function ItineraryCard({
           />
         )}
 
-        {/* The day's own add control, at the end of the day's own stops — so "add a stop to this
-            day" is answered where the day ends rather than by a global bar at the top of the
-            panel that needed a "which day?" of its own. `mt-4` is the list's own row gap, so the
-            control reads as one more entry in it. */}
-        {editing && (
-          <button
-            type="button"
-            onClick={addStop}
-            disabled={!anchorForNewStop}
-            title={
-              anchorForNewStop
-                ? "Adds a stop at the last one's location — drag it or rename it from there"
-                : "Add a stop from the map first: a new stop needs somewhere to be"
-            }
-            className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-card-border py-2.5 text-xs font-medium text-muted transition-colors hover:border-accent/40 hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-card-border disabled:hover:bg-transparent disabled:hover:text-muted"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Stop
-          </button>
-        )}
 
         {/* Findings for the day on screen, plus the trip-wide budget one. Computed locally, so
             they appear the instant a drop lands rather than after a model round trip. */}
@@ -1062,21 +953,14 @@ export default function ItineraryCard({
         {canRearrange && itinerary.days.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted/70">
-              {editing
-                ? "Changes are live — the map follows as you move stops between days."
-                : "Editing keeps the map beside you, so a move between days is a decision you can see."}
+              Editing keeps the map beside you, so a move between days is a decision you can see.
             </p>
             <button
               type="button"
-              onClick={() => setEditing((e) => !e)}
-              aria-pressed={editing}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                editing
-                  ? "bg-accent text-accent-foreground hover:opacity-90"
-                  : "border border-card-border bg-white/10 text-foreground hover:bg-white/20"
-              }`}
+              onClick={() => setBoardOpen(true)}
+              className="shrink-0 rounded-full border border-card-border bg-white/10 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-white/20"
             >
-              {editing ? "Done" : "Edit itinerary"}
+              Edit itinerary
             </button>
           </div>
         )}
@@ -1146,6 +1030,26 @@ export default function ItineraryCard({
         </div>
       </div>
 
+
+      {/* Rendered from here so the card owns the state that opens it, but portalled to the body
+          inside SplitEditor — a fixed panel cannot live inside a `backdrop-filter` ancestor,
+          which contains `position: fixed` and would trap it in this column.
+
+          One editing surface, not two. In-place editing of this card was tried and is gone: the
+          argument for it was that switching modes moves nothing, which is true and is worth
+          something — but it cost a duplicate of every stop row (`EditableStopList`, a documented
+          near-copy of `StopList`'s geometry that had to be changed in lockstep with it), and it
+          left the full editor orphaned while answering only half of what it does. Adding a stop
+          from the map, moving one between days with both days on screen, and reordering a day are
+          the same job as renaming a stop, and they now happen in the same place. */}
+      {boardOpen && trip && onItineraryChange && (
+        <SplitEditor
+          trip={trip}
+          itinerary={itinerary}
+          onItineraryChange={onItineraryChange}
+          onClose={() => setBoardOpen(false)}
+        />
+      )}
     </div>
   );
 }
