@@ -1,6 +1,4 @@
-import { runComposioTool } from "./composio";
-
-const TOOL_SLUG = "COMPOSIO_SEARCH_NEWS";
+const GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc";
 const MAX_NOTES = 5;
 
 export interface SafetyNote {
@@ -25,24 +23,27 @@ export function classifySeverity(text: string): "low" | "medium" | "high" {
 }
 
 /**
- * Pure. `note` is built from the article's own title and source — never model-written — so
- * every word a traveler reads traces back to something a real outlet actually published.
+ * Pure. `note` is built from the article's own title and domain — never model-written — so
+ * every word a traveler reads traces back to something a real outlet actually published. GDELT
+ * is a metadata index, not a summarizer: there's no snippet/body field on an article, so
+ * `classifySeverity` runs on the title alone. That's a real accuracy reduction versus the old
+ * title+snippet input, accepted rather than worked around.
  */
 export function distilSafetyNotes(raw: unknown, limit = MAX_NOTES): SafetyNote[] {
-  const results = (raw as { news_results?: unknown } | null)?.news_results;
-  if (!Array.isArray(results)) return [];
+  const articles = (raw as { articles?: unknown } | null)?.articles;
+  if (!Array.isArray(articles)) return [];
 
   const notes: SafetyNote[] = [];
-  for (const entry of results) {
-    const r = entry as Record<string, unknown> | null;
-    const title = typeof r?.title === "string" ? r.title.trim() : "";
+  for (const entry of articles) {
+    const a = entry as Record<string, unknown> | null;
+    const title = typeof a?.title === "string" ? a.title.trim() : "";
     if (!title) continue;
 
-    const source = typeof r?.source === "string" ? r.source.trim() : null;
+    const domain = typeof a?.domain === "string" ? a.domain.trim() : null;
     notes.push({
-      note: source ? `${title} — ${source}` : title,
-      severity: classifySeverity(`${title} ${typeof r?.snippet === "string" ? r.snippet : ""}`),
-      sourceUrl: typeof r?.link === "string" ? r.link : null,
+      note: domain ? `${title} — ${domain}` : title,
+      severity: classifySeverity(title),
+      sourceUrl: typeof a?.url === "string" ? a.url : null,
     });
     if (notes.length >= limit) break;
   }
@@ -50,15 +51,28 @@ export function distilSafetyNotes(raw: unknown, limit = MAX_NOTES): SafetyNote[]
 }
 
 /**
- * Real, dated safety coverage for a destination. `hl: "en"` and a specific query both matter —
- * verified live: a loose query without them returned Arabic-dated results and an off-topic
- * article about a different country. Resolves `null` on failure, per the house convention; the
+ * Real, dated safety coverage for a destination, from GDELT's free DOC 2.0 API (no key). GDELT
+ * ANDs every bare word in `query` against an article's full text, not just its title, with no
+ * proximity requirement — verified live, the brief's original 6-word query
+ * (`tourist safety advisory scam warning`) returned zero results for every destination tried,
+ * because requiring all 6 words to co-occur anywhere in one article is unrealistic. Cut to
+ * `tourist safety` + `sourcelang:english` (the closest GDELT equivalent to the old `hl: "en"`):
+ * verified live against Paris and Bangkok, both returned genuinely on-topic, English-language,
+ * safety/travel-relevant articles. Resolves `null` on failure, per the house convention; the
  * caller must degrade to an empty section, never back to invention.
  */
 export async function fetchSafetyNotes(destination: string): Promise<SafetyNote[] | null> {
-  const data = await runComposioTool(TOOL_SLUG, {
-    query: `${destination} tourist safety advisory scam warning`,
-    hl: "en",
-  });
-  return data === null ? null : distilSafetyNotes(data);
+  try {
+    const url = new URL(GDELT_URL);
+    url.searchParams.set("query", `${destination} tourist safety sourcelang:english`);
+    url.searchParams.set("mode", "artlist");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("maxrecords", "10");
+    url.searchParams.set("sort", "datedesc");
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return null;
+    return distilSafetyNotes(await res.json());
+  } catch {
+    return null;
+  }
 }
