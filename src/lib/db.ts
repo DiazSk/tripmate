@@ -122,12 +122,69 @@ db.exec(`
 // `run_id`/`trips.run_id` were added after these tables already existed in
 // deployed dbs — ALTER TABLE ADD COLUMN errors if the column is already
 // there, so this only runs once per fresh column, guarded by PRAGMA lookup.
-function addColumnIfMissing(table: string, column: string, ddlType: string): void {
+function hasColumn(table: string, column: string): boolean {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  if (!cols.some((c) => c.name === column)) {
+  return cols.some((c) => c.name === column);
+}
+
+function addColumnIfMissing(table: string, column: string, ddlType: string): void {
+  if (!hasColumn(table, column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddlType}`);
   }
 }
+
+/**
+ * Reconciles an `llm_sessions` table written by the other API-transport branch before the two were
+ * merged.
+ *
+ * Both branches built this table independently and gave it the same name with different columns —
+ * `messages` here, `messages_json`/`model`/`updated_at` there. `CREATE TABLE IF NOT EXISTS` is a
+ * no-op against a table that already exists, so it does not reconcile them and cannot: a database
+ * written by that build keeps the old shape, and every session read fails with
+ * `table llm_sessions has no column named messages`. The merge chose one schema; it could not
+ * choose one for databases that already existed.
+ *
+ * Additive rather than a drop-and-recreate, because those rows are conversations — a trip's chat
+ * resumes by replaying them, so dropping the table would silently reset every in-flight trip's
+ * memory to nothing while looking like a clean migration. The legacy column is left in place: it
+ * costs a few KB and it is the only copy of the data if this ever has to be undone.
+ *
+ * Guarded on the legacy column existing, so a fresh database runs one PRAGMA and stops.
+ */
+function migrateLegacyLlmSessions(): void {
+  if (!hasColumn("llm_sessions", "messages_json")) return;
+  // A rebuild, not an ALTER, and the reason is the constraint rather than the column. Adding
+  // `messages` alongside is easy and useless: the legacy `messages_json` is NOT NULL with no
+  // default, so the very next insert — which supplies only the columns this build knows about —
+  // dies with `NOT NULL constraint failed`. The old shape has to actually go, and SQLite's only
+  // route to that is create-copy-drop-rename. (`ALTER TABLE DROP COLUMN` exists in modern SQLite
+  // but is refused on a PRIMARY KEY table with dependent indexes, which is what this is.)
+  //
+  // One transaction, so a crash midway leaves the original table intact rather than a half-copied
+  // one — the rows are conversations, and the failure mode of a partial migration is a trip whose
+  // chat has forgotten the middle of itself.
+  // An earlier build of this migration added a `messages` column before switching to a rebuild, so
+  // a database may carry either shape. Prefer the new column where it exists and has been filled,
+  // fall back to the legacy one — naming a column that isn't there is itself a hard error, which is
+  // why this is computed rather than written as a flat COALESCE.
+  const source = hasColumn("llm_sessions", "messages")
+    ? "COALESCE(messages, messages_json)"
+    : "messages_json";
+  db.exec(`
+    BEGIN;
+    CREATE TABLE llm_sessions_migrated (
+      id TEXT PRIMARY KEY,
+      messages TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    INSERT INTO llm_sessions_migrated (id, messages, created_at)
+      SELECT id, ${source}, created_at FROM llm_sessions;
+    DROP TABLE llm_sessions;
+    ALTER TABLE llm_sessions_migrated RENAME TO llm_sessions;
+    COMMIT;
+  `);
+}
+migrateLegacyLlmSessions();
 addColumnIfMissing("llm_traces", "run_id", "TEXT");
 addColumnIfMissing("trips", "run_id", "TEXT");
 // The Step 2b answers (priorities, energy, crowds, group, purpose). Stored so the edit loop can
