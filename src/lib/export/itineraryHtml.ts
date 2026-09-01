@@ -309,7 +309,6 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
   const cityName = trip.destination.split(",")[0].trim();
   const totalStops = days.reduce((sum, d) => sum + d.stops.length, 0);
   const tripTotal = days.reduce((sum, d) => sum + dayPlanned(d), 0);
-  const flightCostUsd = trip.itinerary.flightCostUsd;
 
   const fontFace = assets.fontDataUri
     ? `@font-face{font-family:Archivo;src:url(${assets.fontDataUri}) format('woff2');font-weight:100 900;font-display:swap}\n`
@@ -320,11 +319,6 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
   <img src="${escapeHtml(assets.photos.cover)}" alt="${escapeHtml(cityName)}">
 </header>`
     : "";
-
-  const flightLine =
-    flightCostUsd != null
-      ? `<p class="budget">Flight <b>${costLabel(flightCostUsd)}</b> booked separately</p>`
-      : "";
 
   const tripline = days
     .map((day, i) => renderStation(day, i, assets.photos.days[i] ?? null))
@@ -351,7 +345,6 @@ ${cover}
   <h1>${escapeHtml(cityName)}</h1>
   <p class="dates">${escapeHtml(formatDateRange(trip.startDate, trip.endDate))} · ${days.length} day${days.length === 1 ? "" : "s"} · ${pluralStops(totalStops)}</p>
   <p class="budget"><b>${costLabel(tripTotal)}</b> planned of a ${formatMoney(trip.budget)} budget</p>
-  ${flightLine}
 </div>
 
 <nav class="tripline">

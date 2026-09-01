@@ -11,44 +11,66 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildFestivalExtractionPrompt, hasExtractableContent } from "./destinationFestivals.ts";
 
-/** Verified live against COMPOSIO_SEARCH_WEB for "festivals events in Paris September 2026". */
+/** Brave web search shape for "festivals events in Paris September 2026". Not live-verified —
+ * BRAVE_API_KEY was unavailable in this environment; coded against documented/expected shape
+ * (`{ web: { results: [{ title, url, description }] } }`). Spot-check once a real key exists. */
 const realResponse = {
-  answer:
-    "Paris hosts numerous festivals throughout September 2026. Early in the month, you can attend the Asian Street Food Festival [1] from September 5 to 6, as well as the Traversées du Marais [2] from September 4 to 6.",
-  citations: [
-    { title: "Asian Street Food Festival, 6e édition - Ville de Paris", url: "https://www.paris.fr/evenements/asian-street-food-festival-6e-edition" },
-    { title: "Festival Traversées du Marais 2026 - Ville de Paris", url: "https://www.paris.fr/evenements/festival-traversees-du-marais-2026" },
-  ],
+  web: {
+    results: [
+      {
+        title: "Asian Street Food Festival, 6e édition - Ville de Paris",
+        url: "https://www.paris.fr/evenements/asian-street-food-festival-6e-edition",
+        description: "Asian Street Food Festival runs September 5 to 6, 2026 in Paris.",
+      },
+      {
+        title: "Festival Traversées du Marais 2026 - Ville de Paris",
+        url: "https://www.paris.fr/evenements/festival-traversees-du-marais-2026",
+        description: "Traversées du Marais takes place September 4 to 6, 2026.",
+      },
+    ],
+  },
 };
 
 test("recognizes real search output as extractable", () => {
   assert.equal(hasExtractableContent(realResponse), true);
 });
 
-test("treats Google's own empty-results shape as nothing to extract", () => {
-  // Verified live: the structured events tool returns this shape for forward dates, and a plain
-  // web search with no results looks the same — an empty answer, no citations.
-  assert.equal(hasExtractableContent({ error: "Google hasn't returned any results for this query." }), false);
-  assert.equal(hasExtractableContent({ answer: "", citations: [] }), false);
-  assert.equal(hasExtractableContent({ answer: "   ", citations: [{ title: "x", url: "y" }] }), false);
+test("treats an empty-results response as nothing to extract", () => {
+  // Assumed shape (unverified — no BRAVE_API_KEY available): an empty result set still nests
+  // under `web.results` as an empty array, and a response omitting `web` entirely also degrades
+  // to nothing extractable.
+  assert.equal(hasExtractableContent({ web: { results: [] } }), false);
+  assert.equal(hasExtractableContent({}), false);
 });
 
-test("requires citations even if the answer text is non-empty", () => {
-  // An answer with no citations has no way to attribute a source — treat it as unusable rather
-  // than extracting an unsourced claim.
-  assert.equal(hasExtractableContent({ answer: "Something happens in September.", citations: [] }), false);
+test("requires both a title and description on at least one result", () => {
+  // A result missing either field can't produce a usable numbered line — treat it as unusable
+  // rather than extracting from a partial entry.
+  assert.equal(hasExtractableContent({ web: { results: [{ title: "x", url: "y" }] } }), false);
+  assert.equal(hasExtractableContent({ web: { results: [{ description: "x", url: "y" }] } }), false);
+  assert.equal(
+    hasExtractableContent({ web: { results: [{ title: "  ", description: "", url: "y" }] } }),
+    false
+  );
 });
 
 test("tolerates a malformed payload without throwing", () => {
   assert.equal(hasExtractableContent(null), false);
-  assert.equal(hasExtractableContent({}), false);
-  assert.equal(hasExtractableContent({ answer: 42, citations: "nope" }), false);
+  assert.equal(hasExtractableContent({ web: {} }), false);
+  assert.equal(hasExtractableContent({ web: { results: "nope" } }), false);
+  assert.equal(hasExtractableContent({ web: { results: [null, 42] } }), false);
 });
 
 test("the extraction prompt instructs citing by number, never guessing a date", () => {
-  const prompt = buildFestivalExtractionPrompt(realResponse.answer, [
-    { title: realResponse.citations[0].title, url: realResponse.citations[0].url },
-  ]);
+  const prompt = buildFestivalExtractionPrompt(
+    "[1] Asian Street Food Festival, 6e édition - Ville de Paris: Asian Street Food Festival runs September 5 to 6, 2026 in Paris.",
+    [
+      {
+        title: realResponse.web.results[0].title,
+        url: realResponse.web.results[0].url,
+      },
+    ]
+  );
   assert.match(prompt, /Asian Street Food Festival/); // the real text is actually included
   assert.match(prompt, /omit that item entirely rather than guessing/);
   assert.match(prompt, /Do not add any festival, date, or detail that is not present/);

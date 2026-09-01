@@ -1,13 +1,8 @@
 import { randomUUID } from "crypto";
 import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "./claude";
 import { geocodeDestination, getWeatherForDates, DayWeather } from "./weather";
-import { resolveNamedPlaceCoords } from "./poiDetails";
-import { fetchLodgingOptions, reconcileLodging } from "./lodging";
-import { computeEffectiveBudget, fetchFlightEstimate } from "./flights";
-import type { FlightEstimate } from "./flights";
-import { resolveOriginAirport } from "./originAirport";
-import { fetchPlaceFacts } from "./placeFacts";
-import { fetchDayTravelMinutes } from "./routeMatrix";
+import { fetchPoiOsmTags, resolveNamedPlaceCoords } from "./poiDetails";
+import { buildPlaceFacts } from "./placeFacts";
 import {
   dietaryNote,
   fetchDietaryVenues,
@@ -25,7 +20,6 @@ import {
   pinAdmissionCosts,
   selectStopsToEnrich,
 } from "./placeConflicts";
-import type { LodgingOption } from "./lodging";
 import { getDestinationContextInsight } from "./destinationContext";
 import { insertGeneration, insertRun } from "./db";
 import { llmMode } from "./llmConfig";
@@ -90,18 +84,15 @@ export async function runGeneration(
    * produced this plan, captured so it can be persisted beside the prompt and the response.
    *
    * Captured rather than reassembled afterwards. The two branches below feed different builders
-   * from a dozen locals (effective budget after the flight estimate, the awaited lodging options,
-   * the destination-context insight), and a second pass that tried to rebuild it would be a second
-   * source of truth that drifts the first time either branch gains a field.
+   * from a spread of locals (the weather window, the resolved flags, the destination-context
+   * insight), and a second pass that tried to rebuild it would be a second source of truth that
+   * drifts the first time either branch gains a field.
    */
   let contextPayload: Record<string, unknown>;
   let effectiveTier: TierId;
   let dayCount: number;
   let weather: DayWeather[] = [];
   let geoPoint: { lat: number; lon: number } | null = null;
-  // Stays null for refine (no search runs there) and for a failed/empty lookup — both are
-  // no-ops for `reconcileLodging` below, so nothing else needs to branch on isRefine for this.
-  let lodgingOptions: LodgingOption[] | null = null;
   const isRefine = Boolean(previousItinerary && feedback);
 
   // The wizard has always sent these; the route simply never read them, so six
@@ -124,28 +115,6 @@ export async function runGeneration(
     }
   }
 
-  // Kicked off here — as soon as a possible origin exists — so it overlaps the geocode/weather/
-  // lodging/context work below rather than adding its latency on top. Gated in code on
-  // `originCity` being stated at all: a trip with no origin costs zero calls and produces
-  // `effectiveBudget === budget`, byte-identical to before this feature existed. Re-resolved for
-  // a refine turn too, so refining an itinerary that had a real flight cost applied doesn't
-  // silently drop the adjustment the original generation had.
-  const flightEstimatePromise: Promise<FlightEstimate | null> = logistics?.originCity
-    ? resolveOriginAirport(logistics.originCity)
-        .then((airport) =>
-          airport?.iata
-            ? fetchFlightEstimate({
-                departureIata: airport.iata,
-                destination,
-                outboundDate: startDate,
-                returnDate: endDate,
-                adults: resolvedFlags?.partySize ?? undefined,
-              })
-            : null
-        )
-        .catch(() => null)
-    : Promise.resolve(null);
-
   const runId = randomUUID();
   insertRun({
     id: runId,
@@ -159,14 +128,6 @@ export async function runGeneration(
   onStage({ stage: "context", status: "start" });
   const contextInsightPromise = getDestinationContextInsight(destination, startDate, endDate, runId);
   let contextInsight: string;
-  // Set inside whichever branch runs, right alongside `contextInsight` — same reasoning as
-  // `effectiveTier`: one variable, computed once, read by buildGeneratePrompt, buildRefinePrompt,
-  // AND buildCritiquePrompt identically. That uniformity is the point: critique independently
-  // restates "cost within 85-100% of budget" in its own review criteria, and a fix that only
-  // reached generate's prompt would get silently re-derived away against the original, ungrounded
-  // number — the exact failure mode the lodging backstop hit once already this session.
-  let flightEstimate: FlightEstimate | null = null;
-  let effectiveBudget: number = budget;
 
   if (isRefine) {
     // Refine reuses the previous itinerary's coordinates and tier — there is nothing to
@@ -181,13 +142,11 @@ export async function runGeneration(
     dayCount = previousItinerary.days.length;
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
-    flightEstimate = await flightEstimatePromise;
-    effectiveBudget = computeEffectiveBudget(budget, flightEstimate);
     prompt = buildRefinePrompt((contextPayload = {
       destination,
       startDate,
       endDate,
-      budget: effectiveBudget,
+      budget,
       previousItinerary,
       feedback,
       contextInsight,
@@ -203,18 +162,6 @@ export async function runGeneration(
     }
     effectiveTier = tier;
     dayCount = tripDays(startDate, endDate);
-    // Started here and awaited just before the prompt is built, so its ~6s overlaps the
-    // geocode/weather/context work below instead of stacking on top of it. The hotel search
-    // takes a text query, so unlike the weather it does not depend on the geocode's result.
-    // `.catch` keeps a surprise rejection on the fail-soft path: no lodging data degrades to
-    // the type-first instruction, it never fails the generation.
-    const lodgingPromise = fetchLodgingOptions({
-      destination,
-      checkIn: startDate,
-      checkOut: endDate,
-      tier,
-      adults: resolvedFlags?.partySize ?? undefined,
-    }).catch(() => null);
     onStage({ stage: "geocode", status: "start" });
     try {
       const geo = await geocodeDestination(destination);
@@ -240,13 +187,11 @@ export async function runGeneration(
     onStage({ stage: "geocode", status: geoPoint ? "done" : "skipped" });
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
-    flightEstimate = await flightEstimatePromise;
-    effectiveBudget = computeEffectiveBudget(budget, flightEstimate);
     prompt = buildGeneratePrompt((contextPayload = {
       destination,
       startDate,
       endDate,
-      budget: effectiveBudget,
+      budget,
       tier,
       weather,
       preferences,
@@ -254,7 +199,6 @@ export async function runGeneration(
       resolvedFlags,
       dietary,
       logistics,
-      lodging: (lodgingOptions = await lodgingPromise),
     }));
   }
 
@@ -299,14 +243,9 @@ export async function runGeneration(
 
   // The model returns just { days: [...] } — tier is known server-side, not part of its output.
   const { days } = parseJsonResponse<{ days: Itinerary["days"] }>(raw);
-  // `flightCostUsd` rides on the itinerary rather than beside it in the return value, so it
-  // persists into `trips.itinerary_json` with no schema change and reaches the client through
-  // `data.itinerary` without a single line of new plumbing. Left absent (not 0) when no flight was
-  // found, so readers can tell "no origin given" from "flights were free".
   const itinerary: Itinerary = {
     tier: effectiveTier,
     days: normalizeDays(days),
-    ...(flightEstimate ? { flightCostUsd: flightEstimate.costUsd } : {}),
   };
 
   // Look up real listings for the stops where the answer can change the plan, then check the
@@ -320,41 +259,35 @@ export async function runGeneration(
   const placeFacts = new Map<string, PlaceFacts>();
   try {
     const names = selectStopsToEnrich(itinerary.days, { stepFreeRequired });
-    const fetched = await Promise.all(
-      names.map(async (name) => [name, await fetchPlaceFacts(name, destination)] as const)
-    );
-    for (const [name, facts] of fetched) {
-      if (facts) placeFacts.set(normalizeStopName(name), facts);
+    // OSM matches by coordinate radius, not by name+destination, so look up each stop's own
+    // lat/lng from the itinerary rather than passing `destination` through.
+    const coordsByName = new Map<string, { lat: number; lng: number }>();
+    for (const day of itinerary.days) {
+      for (const stop of day.stops ?? []) {
+        if (typeof stop.lat === "number" && typeof stop.lng === "number" && !coordsByName.has(stop.name)) {
+          coordsByName.set(stop.name, { lat: stop.lat, lng: stop.lng });
+        }
+      }
     }
+    // One batched Overpass call for every stop needing enrichment — matches poiEnrichment.ts's
+    // shape — rather than one POST per stop, which used to fire N concurrent requests at a
+    // public instance this repo already documents as flaky under load.
+    const toFetch = names
+      .filter((name) => coordsByName.has(name))
+      .map((name) => ({ name, ...coordsByName.get(name)! }))
+      .map(({ name, lat, lng }) => ({ name, lat, lon: lng }));
+    const tagsByName = await fetchPoiOsmTags(toFetch);
+    if (tagsByName) {
+      for (const { name } of toFetch) {
+        const facts = buildPlaceFacts(tagsByName[name]);
+        if (facts) placeFacts.set(normalizeStopName(name), facts);
+      }
+    } // network/HTTP failure (tagsByName === null) — every requested stop stays unenriched
   } catch (err) {
     // Fail-soft: no facts means no annotations and no pinned costs, never a failed generation.
     console.error("[itinerary] place-facts lookup failed", err);
   }
   const placeConflicts = detectConflicts(itinerary.days, placeFacts, { stepFreeRequired, crowdBias });
-
-  // Real door-to-door durations, one matrix call per day — the whole N×N comes back in a single
-  // call (~3s), so this is per-day, not per-leg. Keyed by coordinate pair rather than by stop
-  // position: critique may reorder the day, and a leg that no longer exists must fall back to the
-  // estimate rather than reporting a stale number.
-  const realLegMinutes = new Map<string, number>();
-  try {
-    await Promise.all(
-      itinerary.days.map(async (day) => {
-        const points = (day.stops ?? [])
-          .filter((s) => typeof s.lat === "number" && typeof s.lng === "number")
-          .map((s) => ({ lat: s.lat, lon: s.lng }));
-        const legs = await fetchDayTravelMinutes(points, "walk");
-        for (const leg of legs.values()) {
-          const from = points[leg.fromIndex];
-          const to = points[leg.toIndex];
-          if (from && to) realLegMinutes.set(legKey(from, to), leg.minutes);
-        }
-      })
-    );
-  } catch (err) {
-    // Fail-soft: no real durations means the existing straight-line estimate still applies.
-    console.error("[itinerary] route-matrix lookup failed", err);
-  }
 
   // §3d is a hard constraint, but only once something was stated — a traveler with no
   // restrictions costs zero calls here and gets a byte-identical plan. The model currently asserts
@@ -384,13 +317,11 @@ export async function runGeneration(
     }
   }
 
-  // Reuses the §12a/§12b arithmetic and phrasing in guardrails.ts rather than restating it,
-  // substituting looked-up minutes where a route was found.
-  const travelFindings = evaluateItinerary(itinerary, {
-    realMinutes: (from, to) =>
-      realLegMinutes.get(legKey({ lat: from.lat, lon: from.lng }, { lat: to.lat, lon: to.lng })) ??
-      null,
-  })
+  // Reuses the §12a/§12b arithmetic and phrasing in guardrails.ts rather than restating it.
+  // No real door-to-door durations are available (the OSRM route-matrix path was removed — it
+  // was unreachable dead code, since this app never requests drive mode and OSRM's demo instance
+  // cannot serve real walking data), so this always runs on the haversine estimate.
+  const travelFindings = evaluateItinerary(itinerary)
     .filter((g) => g.rule === "travel")
     .map((g) => g.message)
     .concat(dietaryFindings);
@@ -403,7 +334,7 @@ export async function runGeneration(
   try {
     const critiquePrompt = buildCritiquePrompt({
       itinerary,
-      budget: effectiveBudget,
+      budget,
       contextInsight,
       interestTags: preferences?.tags,
       resolvedFlags,
@@ -421,19 +352,6 @@ export async function runGeneration(
     critiqued = true;
   } catch {
     // Keep the uncritiqued itinerary.
-  }
-
-  // Deterministic backstop, run AFTER critique rather than before it. It has to be: critique's
-  // own prompt independently re-derives the 85-100% budget target with zero knowledge of the
-  // real lodging list, the pricing basis, or the overshoot escape, and can replace
-  // `itinerary.days` wholesale via `revisedDays` — verified live, this is exactly how the
-  // invented-hotel defect reappeared after generate's own output had already been corrected.
-  // Running the check here, on whatever `itinerary.days` ends up being, is the one point both
-  // paths (revised or not) converge on — the fix belongs where the callers join, not duplicated
-  // before each one. A no-op when `lodgingOptions` is null/empty (refine, or the lookup
-  // failed/found nothing) — nothing to check the name against.
-  for (const day of itinerary.days) {
-    if (day.lodging) day.lodging = reconcileLodging(day.lodging, lodgingOptions, effectiveBudget);
   }
 
   // Re-detect against whatever critique actually returned, then annotate and pin. Re-detection
@@ -508,9 +426,3 @@ export async function runGeneration(
   return { itinerary, traceId, runId, sessionId };
 }
 
-/** Key a leg by rounded coordinates. Rounding matters: the model emits lat/lng at varying
- *  precision, and keying on raw floats would miss pairs that are the same place. */
-function legKey(a: { lat: number; lon: number }, b: { lat: number; lon: number }): string {
-  const r = (n: number) => n.toFixed(4);
-  return `${r(a.lat)},${r(a.lon)}->${r(b.lat)},${r(b.lon)}`;
-}

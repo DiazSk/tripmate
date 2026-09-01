@@ -15,11 +15,9 @@ import { formatTravelLegs, formatTravelerProfile } from "./travelerProfilePrompt
 import { formatDietary } from "./dietaryPrompt";
 import {
   budgetInstruction,
-  formatLodging,
   lodgingInstruction,
   lodgingPricingBasis,
 } from "./lodgingPrompt";
-import type { LodgingOption } from "./lodging";
 import { formatPlaceConflicts } from "./placeConflicts";
 import type { PlaceConflict } from "./placeConflicts";
 import type { DietaryNeeds } from "./travelerProfile";
@@ -144,9 +142,6 @@ export function buildGeneratePrompt(params: {
   resolvedFlags?: ResolvedFlags | null;
   dietary?: DietaryNeeds | null;
   logistics?: TripLogistics | null;
-  /** Real, tier-filtered properties. `null` = lookup failed, `[]` = nothing at this tier;
-   *  both fall back to the type-first instruction, so the prompt is unchanged without them. */
-  lodging?: LodgingOption[] | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -154,14 +149,14 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatLodging(params.lodging ?? null)}${formatContextBlock(params.contextInsight)}
+${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
-Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis((params.lodging ?? []).length > 0)}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
-${lodgingInstruction((params.lodging ?? []).length > 0)}
+Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
+${lodgingInstruction()}
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
-${budgetInstruction((params.lodging ?? []).length > 0)}
+${budgetInstruction()}
 Include real, well-known places (or real, well-known areas, per the food-stop rule) for the destination with their real approximate latitude/longitude.
 For each day, also write a short, elegant 1-2 sentence "summary" capturing that day's theme and flow, with 1-2 tasteful emojis, e.g. "A relaxing mix of historic sightseeing in Asakusa followed by local dining along the river. 🏯🍜"
 
@@ -193,8 +188,8 @@ Revise the itinerary to address this feedback. Keep real, well-known places with
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
-${lodgingInstruction(false)}
-${budgetInstruction(false)}
+${lodgingInstruction()}
+${budgetInstruction()}
 For each day, also write (or rewrite, if the feedback changes its theme) a short, elegant 1-2 sentence "summary" with 1-2 tasteful emojis capturing that day's theme and flow.
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
@@ -247,7 +242,7 @@ The traveler overspent on an earlier day. Only $${params.remainingBudget} is lef
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
-${lodgingInstruction(false)}
+${lodgingInstruction()}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, as a JSON array of day objects in this shape:
 [{"date":"YYYY-MM-DD","weather":"short weather summary","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]`;
