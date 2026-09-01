@@ -33,6 +33,8 @@ import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
 import type { PlanPrefill } from "@/components/blue-hour/planExamples";
 import DockedPanel from "@/components/DockedPanel";
+import { useStopTour } from "@/lib/useStopTour";
+import { PauseIcon, PlayIcon } from "@/components/icons";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
@@ -528,6 +530,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * and the plan is one click behind the panel's arrow.
    */
   const [planCollapsed, setPlanCollapsed] = useState(true);
+  // Owned here, not in ItineraryCard, so the capsule's play button and the card's drive one
+  // timer. `useStopTour` keeps `playing` in local state, so a second call site is a second
+  // interval and a second boolean that disagree the moment either is used.
+  const tour = useStopTour();
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
   const [notifyOnDone, setNotifyOnDone] = useState(false);
@@ -2110,6 +2116,19 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         <DockedPanel
           collapsible
           busy={refining}
+          capsuleAction={
+            itinerary?.days.length
+              ? {
+                  label: tour.playing ? "Stop tour" : "Play tour",
+                  onClick: tour.toggle,
+                  icon: tour.playing ? (
+                    <PauseIcon className="h-4 w-4" />
+                  ) : (
+                    <PlayIcon className="h-4 w-4" />
+                  ),
+                }
+              : undefined
+          }
           wide={!!focus.target}
           collapsed={planCollapsed}
           onCollapsedChange={setPlanCollapsed}
@@ -2188,6 +2207,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
               {!focus.target && (
                 <ItineraryCard
+                  tour={tour}
                   itinerary={itinerary}
                   budget={budget}
                   destination={destination}

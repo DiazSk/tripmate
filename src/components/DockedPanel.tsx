@@ -23,6 +23,23 @@ export interface CapsuleSummary {
   step?: string;
 }
 
+/**
+ * One control the capsule carries beside its summary, supplied by the host.
+ *
+ * Deliberately not folded into `CapsuleSummary`: that interface is documented as facts only, and
+ * a callback is not a fact. The panel still knows nothing about what the action does — it draws a
+ * round button with the host's glyph and calls the host's handler.
+ *
+ * One, not a list. The capsule has ~176px for its title at `sm:w-96`, and each control costs 44
+ * of it; a second would take the title back under what "Mumbai, India · 7 days" needs.
+ */
+export interface CapsuleAction {
+  /** The accessible name, and the only label this control has — it is icon-only at this size. */
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}
+
 /** The house curve — the same easing and duration the stop rows and the map chrome animate on. */
 const MORPH_TRANSITION = { duration: 0.32, ease: [0.16, 1, 0.3, 1] as const };
 /** Long enough to read as a hand-off, short enough that the shape is what the eye follows. */
@@ -75,6 +92,7 @@ export default function DockedPanel({
   collapsed: controlledCollapsed,
   onCollapsedChange,
   capsule,
+  capsuleAction,
   children,
 }: {
   collapsible?: boolean;
@@ -90,6 +108,10 @@ export default function DockedPanel({
   onCollapsedChange?: (collapsed: boolean) => void;
   /** What the capsule carries while shut. Omitted, it shuts to a bare expand pill. */
   capsule?: CapsuleSummary;
+  /** An optional action alongside that summary — the trip page and the result view both pass the
+   *  stop tour, which is the one thing worth reaching while the panel is shut: you closed it to
+   *  watch the map, and the tour is a map animation. */
+  capsuleAction?: CapsuleAction;
   children: React.ReactNode;
 }) {
   const [uncontrolledCollapsed, setUncontrolledCollapsed] = useState(defaultCollapsed);
@@ -153,7 +175,12 @@ export default function DockedPanel({
           ? // Shut, the panel *is* the capsule: same top-right corner it opened from, so the card
             // collapses into its own upper edge rather than flying somewhere else. `overflow-hidden`
             // is what makes the shrink read as a fold — the body is clipped by the closing box.
-            `docked-panel-collapsed top-[calc(var(--nav-h)+1.25rem)] right-4 left-4 h-14 overflow-hidden sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:w-80 ${
+            // `sm:w-96`, up from `sm:w-80`. Measured at 320px the row had 14px spare — photo 32,
+            // title 140, "Day 1" 44, expand 28, plus 24 padding and 36 of gaps — so an action
+            // button would have taken the title down to ~58px and truncated it to "Mumbai…",
+            // losing both the city and the trip length the capsule exists to keep on screen.
+            // 384px leaves the title ~176px, which is more than it has today.
+            `docked-panel-collapsed top-[calc(var(--nav-h)+1.25rem)] right-4 left-4 h-14 overflow-hidden sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:w-96 ${
               wide ? "sm:max-w-[880px]" : "sm:max-w-[520px]"
             }`
           : `top-[calc(var(--nav-h)+1.25rem)] right-0 left-0 h-[calc(100dvh-var(--nav-h)-1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:h-[calc(100dvh-var(--nav-h)-3rem)] ${widthClass}`
@@ -170,7 +197,7 @@ export default function DockedPanel({
           // in globals.css, where four controls lost their hovers to exactly that.
           className="docked-panel-capsule h-full w-full overflow-hidden rounded-[18px] border border-white/15 bg-slate-950/80 shadow-2xl backdrop-blur-md transition-colors duration-300 hover:border-white/30"
         >
-          <Capsule summary={capsule} onExpand={() => setCollapsed(false)} />
+          <Capsule summary={capsule} action={capsuleAction} onExpand={() => setCollapsed(false)} />
         </motion.div>
       )}
       {/* The scroller, and the element `className` (a `space-y-*` by default) belongs to — it
@@ -197,54 +224,92 @@ export default function DockedPanel({
 }
 
 /**
- * What the capsule shows: the trip in one row.
+ * What the capsule shows: the trip in one row, and at most one thing to do with it.
  *
- * A single `<button>` filling the shape rather than a row of content with a button on the end —
- * the whole capsule is one target, which is both easier to hit and one accessible name instead of
- * four. The `Maximize2` on the right is therefore decorative: an affordance, not the control.
+ * It was a single `<button>` filling the whole shape — one target, one accessible name instead of
+ * four — and that is still the shape when no action is passed. An action cannot go *inside* that
+ * button (a `<button>` may not contain a `<button>`; browsers recover, but the inner control's
+ * activation is not reliably its own), so the row splits: the summary keeps the growing, oversized
+ * expand target it always had, and the action is its sibling at the trailing edge.
+ *
+ * What that costs is one extra tab stop, which is the honest price of putting a second verb here.
+ * What it keeps is the property that mattered: clicking anywhere on the trip's own name, picture
+ * or day chip still opens the plan. The `Maximize2` stays decorative inside that target.
  */
-function Capsule({ summary, onExpand }: { summary?: CapsuleSummary; onExpand: () => void }) {
+function Capsule({
+  summary,
+  action,
+  onExpand,
+}: {
+  summary?: CapsuleSummary;
+  action?: CapsuleAction;
+  onExpand: () => void;
+}) {
   const photo = usePlacePhoto(summary?.title ?? "");
   const [photoFailed, setPhotoFailed] = useState(false);
 
   return (
-    <button
-      type="button"
-      onClick={onExpand}
-      aria-label="Show the plan"
-      className="group flex h-full w-full items-center gap-3 px-3 text-left focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
-    >
-      {summary && (
-        // The tile stays whatever the photo does: a lookup that misses (or 404s on the way in)
-        // leaves a filled rounded square rather than a torn image icon or a collapsed row.
-        <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-white/10">
-          {photo && !photoFailed && (
-            // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small and lazy, not worth next/image config
-            <img
-              src={photo}
-              alt=""
-              onError={() => setPhotoFailed(true)}
-              className="value-in absolute inset-0 h-8 w-8 object-cover"
-            />
-          )}
+    <div className="flex h-full w-full items-center px-3">
+      <button
+        type="button"
+        onClick={onExpand}
+        aria-label="Show the plan"
+        className="group flex h-full min-w-0 grow items-center gap-3 pr-2 text-left focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
+      >
+        {summary && (
+          // The tile stays whatever the photo does: a lookup that misses (or 404s on the way in)
+          // leaves a filled rounded square rather than a torn image icon or a collapsed row.
+          <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-white/10">
+            {photo && !photoFailed && (
+              // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia thumbnails, small and lazy, not worth next/image config
+              <img
+                src={photo}
+                alt=""
+                onError={() => setPhotoFailed(true)}
+                className="value-in absolute inset-0 h-8 w-8 object-cover"
+              />
+            )}
+          </span>
+        )}
+        {summary && (
+          <span className="min-w-0 truncate text-sm font-medium whitespace-nowrap text-white">
+            {summary.title}
+            {summary.subtitle && (
+              // Desktop only. Below `sm` the capsule is the viewport minus 32px, and the action
+              // button takes 48 of that: measured at 375px the title had 121px and truncated
+              // "Mumbai, India · 7 days" to "Mumbai, India · 7…", cutting a number in half, which
+              // reads as broken rather than as elided. Of the three facts here the trip length is
+              // the one worth dropping — the city says where and the chip says which day, and
+              // both survive. Restored the moment there is room for it.
+              <span className="hidden font-normal text-white/55 sm:inline">
+                {" "}
+                · {summary.subtitle}
+              </span>
+            )}
+          </span>
+        )}
+        {summary?.step && (
+          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-white/75">
+            {summary.step}
+          </span>
+        )}
+        <span className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors group-hover:bg-white/10 group-hover:text-white">
+          <Maximize2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
         </span>
+      </button>
+      {action && (
+        // 44px, not the 36 the shape would prefer: this is the one control on screen while the
+        // plan is shut, and it is reached with a thumb over a live map as often as with a mouse.
+        // It clears the 56px capsule with 6px either side, the same gutter the navbar keeps.
+        <button
+          type="button"
+          onClick={action.onClick}
+          aria-label={action.label}
+          className="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-accent transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
+        >
+          {action.icon}
+        </button>
       )}
-      {summary && (
-        <span className="min-w-0 truncate text-sm font-medium whitespace-nowrap text-white">
-          {summary.title}
-          {summary.subtitle && (
-            <span className="font-normal text-white/55"> · {summary.subtitle}</span>
-          )}
-        </span>
-      )}
-      {summary?.step && (
-        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-white/75">
-          {summary.step}
-        </span>
-      )}
-      <span className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors group-hover:bg-white/10 group-hover:text-white sm:ml-1">
-        <Maximize2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-      </span>
-    </button>
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import { Stop, StopCategory } from "@/lib/types";
+import { groupStopsByTimeOfDay, type TimeOfDay } from "@/lib/timeOfDay";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import Typewriter from "./Typewriter";
 import { EntryIcon, FoodIcon, PinIcon, TransitIcon } from "./icons";
@@ -90,6 +91,10 @@ function StopRow({
   return (
     <motion.div
       {...motionProps}
+      // The index this stop has in the day's own `stops` array, published to the DOM because the
+      // scroll-to-active effect below can no longer count children: the list is grouped now, and
+      // the group wrappers and their headings are children too.
+      data-stop-index={index}
       onPointerEnter={() => onHover?.(true)}
       onPointerLeave={() => onHover?.(false)}
       className={`relative flex gap-3 rounded-xl transition-colors ${
@@ -180,7 +185,11 @@ export default function StopList({
    */
   useEffect(() => {
     if (activeIndex == null) return;
-    const row = listRef.current?.children[activeIndex];
+    // Queried, not `children[activeIndex]`. That indexed the list positionally, which held only
+    // while every child was a stop; the time-of-day grouping puts a wrapper per group (and a
+    // heading inside it) in the same collection, so counting would land on the wrong row — or on
+    // a heading — the moment a day spans more than one part of the day.
+    const row = listRef.current?.querySelector(`[data-stop-index="${activeIndex}"]`);
     if (!(row instanceof HTMLElement)) return;
     let scroller: HTMLElement | null = null;
     for (let el = row.parentElement; el; el = el.parentElement) {
@@ -227,20 +236,61 @@ export default function StopList({
     return () => cancelAnimationFrame(frame);
   }, [activeIndex]);
 
+  const groups = groupStopsByTimeOfDay(stops.slice(0, revealedCount));
+  /**
+   * A day that happens entirely in one part of the day gets no headings at all.
+   *
+   * One heading over the whole list separates nothing — it is a label for a distinction the list
+   * does not contain, which is the same thing the day-spend band refuses when it drops a category
+   * that cost nothing. Every row already carries its own clock time, so nothing is lost. The
+   * headings appear exactly when there is a boundary for them to mark.
+   */
+  const showHeadings = groups.length > 1;
+
   return (
     <div ref={listRef} className="space-y-4" {...devLabel("ItineraryCard.StopList")}>
-      {stops.slice(0, revealedCount).map((stop, i, visible) => (
-        <StopRow
-          key={i}
-          stop={stop}
-          index={i}
-          isLast={i === visible.length - 1}
-          onSelect={onSelect}
-          revealAnimation={revealAnimation}
-          isHighlighted={highlightedIndex === i}
-          onHover={(hovered) => onHoverStop?.(hovered ? i : null)}
-        />
+      {groups.map((group, groupIndex) => (
+        <div key={`${group.label}-${groupIndex}`} className="space-y-4">
+          {showHeadings && group.label && <TimeOfDayHeading label={group.label} />}
+          {group.stops.map(({ stop, index }, i) => (
+            <StopRow
+              key={index}
+              stop={stop}
+              index={index}
+              // Last *in its group*, not in the day. The connector is drawn from this row's avatar
+              // to the next one's and is sized off the list's `space-y-4`; letting it run past the
+              // final row of a group would draw a line down through the next heading, and the
+              // thread breaking at the boundary is what makes the grouping read as grouping.
+              isLast={i === group.stops.length - 1}
+              onSelect={onSelect}
+              revealAnimation={revealAnimation}
+              isHighlighted={highlightedIndex === index}
+              onHover={(hovered) => onHoverStop?.(hovered ? index : null)}
+            />
+          ))}
+        </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The rule between two parts of the day.
+ *
+ * Uppercase at the label step with a hairline running out to the right — the panel's own existing
+ * idiom (the "DAY 1 OF 7" badge is uppercase and tracked in the same card), pitched down to muted
+ * because this divides content rather than announcing it. It is not a kicker: nothing follows it
+ * on the next line that it is labelling, it labels the group beneath it, and the rule is what
+ * makes that reading unambiguous.
+ *
+ * `aria-hidden` on the rule only; the word itself stays in the accessibility tree, since "these
+ * next three stops are the afternoon" is exactly the structure a screen reader should get.
+ */
+function TimeOfDayHeading({ label }: { label: TimeOfDay }) {
+  return (
+    <div className="flex items-center gap-3 pt-1">
+      <span className="text-xs font-semibold tracking-wide text-muted uppercase">{label}</span>
+      <span aria-hidden="true" className="h-px flex-1 bg-card-border" />
     </div>
   );
 }

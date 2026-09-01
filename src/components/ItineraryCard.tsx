@@ -28,7 +28,7 @@ const REVEAL_STEP_MS = 400;
  * unless it is registered with `@property`. Parsing them out of the computed style is the same
  * duplication with an extra step and a silent failure mode if the unit ever changes.
  */
-const HERO_MAX_REM = { base: 14, sm: 18 };
+const HERO_MAX_REM = { base: 11, sm: 14 };
 const HERO_MIN_REM = 4.5;
 import {
   ChevronLeftIcon,
@@ -44,6 +44,68 @@ import {
 
 function cityName(destination: string): string {
   return destination.split(",")[0].trim();
+}
+
+/**
+ * A circular control on the header photograph, with its name revealed on hover and on keyboard
+ * focus.
+ *
+ * The name is *also* always the accessible name, never only the visible bubble: on touch there is
+ * no hover to enter, so the bubble is a desktop affordance and `aria-label` is what actually
+ * labels the control everywhere. That is the honest limit of an icon button, and the reason both
+ * glyphs here are conventional ones (a download arrow, a play triangle) rather than invented.
+ *
+ * The bubble opens to the *left*. The hero is `overflow-hidden` — it has to be, the photo fills a
+ * box that compresses — so a bubble above or below one of these buttons is clipped by the frame.
+ * These sit at the hero's right edge, so leftward is the one direction with room.
+ */
+function HeroAction({
+  label,
+  tone,
+  children,
+  ...rest
+}: {
+  label: string;
+  /** `accent` is the solid amber fill, and only one control in the row may take it. `glass` is
+   *  the secondary tone — a *darkening* one, see below. */
+  tone: "accent" | "glass";
+} & React.ComponentPropsWithoutRef<"button"> &
+  Pick<React.ComponentPropsWithoutRef<"a">, "href" | "download">) {
+  const Tag = "href" in rest && rest.href ? "a" : "button";
+  return (
+    <Tag
+      {...(Tag === "button" ? { type: "button" as const } : {})}
+      {...(rest as Record<string, unknown>)}
+      aria-label={label}
+      className={`group relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+        tone === "accent"
+          ? "bg-accent text-accent-foreground hover:bg-accent-hover"
+          : // Slate at 0.55 and a hairline, NOT the `bg-tag-neutral-bg` white wash this control
+            // wore in the day panel. That wash is 13% white, which is a chip treatment for a chip
+            // sitting on a panel; up here it sits on the photograph. The hero's scrim is bottom-up
+            // and near-transparent at this height, and at 11rem on a phone the row rides higher
+            // into it than it does at 14 — measured against the Mumbai sunset the disc simply was
+            // not there, while the amber Download beside it was fine because amber is opaque.
+            // Darken-Never-Lighten, and the One Slate Rule for which dark: the same material every
+            // other surface here uses, at an alpha of its own.
+            //
+            // Both alphas live in `.hero-action-glass` (globals.css) rather than an inline
+            // `style` plus a `hover:bg-*` utility: an inline background outranks every class, so
+            // the hover would have been dead on arrival — the same cascade trap DockedPanel's
+            // capsule comment and four map controls already hit in this codebase.
+            "hero-action-glass border border-white/15 text-accent backdrop-blur-sm"
+      }`}
+    >
+      {children}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/2 right-full mr-2 -translate-y-1/2 rounded-md border border-card-border px-2 py-1 text-xs font-medium whitespace-nowrap text-on-deep opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+        style={{ background: "rgb(var(--surface-deep-rgb) / 0.92)" }}
+      >
+        {label}
+      </span>
+    </Tag>
+  );
 }
 
 function BlurredPhotoLayer({ photo, tint }: { photo: string; tint: string }) {
@@ -93,6 +155,7 @@ export default function ItineraryCard({
   unseenChangedDays,
   panelCollapsed = false,
   onMinimize,
+  tour,
 }: {
   itinerary: Itinerary;
   budget: number;
@@ -145,6 +208,12 @@ export default function ItineraryCard({
    * It is handed to `showTripRoute` twice, for two different questions: as the focus (collapsed
    * means no day is singled out) and as `panelVisible` (whether there is a panel to aim beside).
    */
+  /** The stop tour, hoisted to the host so the collapsed capsule's play button and this card's
+   *  drive one timer instead of two. `useStopTour` keeps `playing` in local state, so a second
+   *  call site is a second interval and a second boolean that disagree the moment either is used.
+   *  Optional, and falling back to a private instance, so a caller with no capsule (the arrange
+   *  board's preview) still gets a working tour without wiring one. */
+  tour?: ReturnType<typeof useStopTour>;
   panelCollapsed?: boolean;
   /** Shuts the panel to its capsule. Given, the header image grows a grab line along its top
    *  edge — the handle belongs on the picture rather than on a bar of chrome above it. */
@@ -223,7 +292,11 @@ export default function ItineraryCard({
   /** Read by the one-shot stagger interval, which must not re-run when the panel opens — the
    *  stagger is mounted once and a dep on `panelCollapsed` would restart it on every collapse. */
   const panelCollapsedRef = useRef(panelCollapsed);
-  const { playing: touring, toggle: toggleTour, stop: stopTour } = useStopTour();
+  // The fallback instance is created unconditionally (hooks cannot be conditional) but never
+  // plays when `tour` is supplied: nothing calls its `toggle`, so its `playing` stays false and
+  // its interval effect returns on the first line. One live timer either way.
+  const fallbackTour = useStopTour();
+  const { playing: touring, toggle: toggleTour, stop: stopTour } = tour ?? fallbackTour;
   const heroRef = useRef<HTMLDivElement>(null);
   const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const dayTabStripRef = useRef<HTMLDivElement>(null);
@@ -349,10 +422,19 @@ export default function ItineraryCard({
       return (max - HERO_MIN_REM) * rem;
     };
     let range = collapseRange();
+    // 0.45 is where `.itinerary-hero-full`'s opacity clamp reaches zero. Tracked as a boolean and
+    // written only when it flips, so the common case stays the single property write this effect
+    // was built to be — see the `[data-hero-collapsed]` rule in globals.css for what it fixes.
+    let hidden: boolean | null = null;
     const apply = () => {
       frame = 0;
       const progress = Math.min(1, Math.max(0, scroller.scrollTop / range));
       hero.style.setProperty("--hero-p", progress.toFixed(3));
+      const nextHidden = progress >= 0.45;
+      if (nextHidden !== hidden) {
+        hidden = nextHidden;
+        hero.dataset.heroCollapsed = String(nextHidden);
+      }
     };
     const onResize = () => {
       range = collapseRange();
@@ -622,22 +704,46 @@ export default function ItineraryCard({
           <span className="mb-1 inline-block w-fit -rotate-2 rounded bg-accent px-2 py-1 text-xs font-bold tracking-wide text-accent-foreground uppercase">
             Day {dayIndex + 1} of {dayCount}
           </span>
+          {/* Both actions live on the photograph now, which is what lets the day panel below start
+              at the stops. Two circles rather than two pills, and deliberately at different
+              weights: amber is the reserved accent, so exactly one control here may wear it as a
+              fill. Download takes it (it is the terminal action on the whole trip); the tour takes
+              the neutral wash it already had in the body, keeping its amber to the glyph. Two
+              solid amber circles would read as two primaries, which is one more than there is. */}
           <div className="flex items-start justify-between gap-3">
             <h1 className="font-display text-2xl font-semibold italic">
               {cityName(destination)}: {dayCount} day{dayCount > 1 ? "s" : ""}
             </h1>
-            {trip?.id && trip.id !== "preview" && (
-              <a
-                href={`/api/trips/${trip.id}/export`}
-                download
-                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                  <path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16" />
-                </svg>
-                Download
-              </a>
-            )}
+            <div className="flex shrink-0 items-center gap-2">
+              {/* The same and only gate the pill carried in the day panel: a tour needs more than
+                  one place to move between. The arrange board is a separate overlay over this
+                  card rather than a mode of it, so there is nothing to gate against here. */}
+              {day.stops.length > 1 && (
+                <HeroAction
+                  label={touring ? "Stop tour" : "Play tour"}
+                  tone="glass"
+                  onClick={toggleTour}
+                >
+                  {touring ? (
+                    <PauseIcon className="h-4 w-4" />
+                  ) : (
+                    <PlayIcon className="h-4 w-4" />
+                  )}
+                </HeroAction>
+              )}
+              {trip?.id && trip.id !== "preview" && (
+                <HeroAction
+                  label="Download itinerary"
+                  tone="accent"
+                  href={`/api/trips/${trip.id}/export`}
+                  download
+                >
+                  <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.9}>
+                    <path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16" />
+                  </svg>
+                </HeroAction>
+              )}
+            </div>
           </div>
           <p className="text-sm opacity-90">{tier ? `${tier.name} · ${tier.description}` : ""}</p>
         </div>
@@ -838,37 +944,29 @@ export default function ItineraryCard({
             able to gain one — while reading still renders nothing rather than an empty line. */}
         {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
 
-        {/* Only worth offering when there is more than one place to move between — and not while
-            editing, where a camera flying itself between stops fights the hand rearranging them.
-            This is the one control the mode removes rather than converts, and it is why the row
-            of stops below can still start at the same offset: the pill sits above them and takes
-            its `mb-3` with it, so the list moves up by exactly the height of a control nobody
-            can use in this mode. */}
-        {day.stops.length > 1 && (
-          <button
-            type="button"
-            onClick={toggleTour}
-            className="mb-3 flex min-h-11 items-center gap-2 rounded-full bg-tag-neutral-bg px-4 text-xs font-medium text-foreground transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-          >
-            {touring ? (
-              <PauseIcon className="h-3.5 w-3.5 text-accent" />
-            ) : (
-              <PlayIcon className="h-3.5 w-3.5 text-accent" />
-            )}
-            {touring ? "Stop tour" : "Play tour"}
-          </button>
-        )}
-
+        {/* `py-2` and `leading-snug`, not the `p-3`/normal leading this had. Measured at 88px tall
+            against a 44px input, so the height was never the control — it was a 24px name over a
+            40px two-line note, and the padding on top of that. Neither line is dropped here: the
+            note keeps every word it had. */}
         {day.lodging && (
-          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl bg-white/10 p-3">
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-white/10 px-3 py-2">
             <LodgingIcon className="h-5 w-5 shrink-0 text-accent" />
             {/* `basis-40` is what makes the wrap actually happen on a phone: with `flex-1`
                 alone the name shrank to fit beside the input instead. */}
             <div className="min-w-0 flex-1 basis-40">
-              <div className="font-medium text-foreground">{day.lodging.name}</div>
-              <div className="text-sm text-muted">
-                {[day.lodging.note, formatMoney(day.lodging.cost)].filter(Boolean).join(" · ")}
+              {/* The cost moved up here from the end of the note, where it was joined on with a
+                  "·" and so was the first thing to fall off the end of a long one. It is a figure,
+                  not prose: it belongs beside the name, right-aligned and `tabular-nums` like
+                  every other cost in this system. */}
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate font-medium text-foreground">{day.lodging.name}</span>
+                <span className="shrink-0 text-sm tabular-nums text-muted">
+                  {formatMoney(day.lodging.cost)}
+                </span>
               </div>
+              {day.lodging.note && (
+                <div className="text-sm leading-snug text-muted">{day.lodging.note}</div>
+              )}
             </div>
             {editable && onLodgingActualCostChange && (
               <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted">
