@@ -76,8 +76,6 @@ function horizontalTanHalfFov(viewer: Viewer): number | undefined {
  */
 export class CesiumRenderer implements MapRenderer {
   readonly engine = "cesium" as const;
-  /** Leaning in on a stop is what Satellite is *for* — see `MapRenderer.hoverPeek`. */
-  readonly hoverPeek = true;
 
   private readonly viewer: Viewer;
   private readonly Cesium: CesiumModule;

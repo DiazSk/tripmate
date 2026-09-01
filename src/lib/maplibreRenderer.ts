@@ -596,8 +596,6 @@ function addTripLayers(map: MapLibreMap) {
  */
 export class MapLibreRenderer implements MapRenderer {
   readonly engine = "maplibre" as const;
-  /** The map holds still under the pointer — see `MapRenderer.hoverPeek`. */
-  readonly hoverPeek = false;
 
   private readonly map: MapLibreMap;
   private alive = true;
