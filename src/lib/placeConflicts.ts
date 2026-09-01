@@ -123,7 +123,7 @@ export function detectConflicts(
 }
 
 /** Key stops and facts the same way, so a lookup survives the model's capitalisation and
- *  punctuation drift. Mirrors `matchLodgingOption`'s normalisation in lodging.ts. */
+ *  punctuation drift. */
 export function normalizeStopName(name: string): string {
   return name
     .toLowerCase()
@@ -180,7 +180,7 @@ export function annotateBookAhead(days: DayPlan[], facts: Map<string, PlaceFacts
 }
 
 /**
- * Pin "entry" stop costs to real admission, the same way `reconcileLodging` pins the nightly rate.
+ * Pin "entry" stop costs to real admission.
  *
  * Measured: a generated Paris itinerary priced the Louvre at $50 against a real $37.39 general
  * adult admission. §3a asks every stop for "a realistic estimated cost" and §5 sums them into the

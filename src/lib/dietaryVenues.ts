@@ -1,7 +1,7 @@
-import { runComposioTool } from "./composio";
 import type { DietaryNeeds } from "./travelerProfile";
 
-const TOOL_SLUG = "YELP_SEARCH_BUSINESSES";
+const YELP_SEARCH_URL = "https://api.yelp.com/v3/businesses/search";
+const FETCH_TIMEOUT_MS = 10_000;
 
 /** How far from a food stop still counts as "in that area". §3b's area-level stops name a
  *  neighbourhood, so the radius has to cover a walkable district, not a street corner. */
@@ -80,15 +80,27 @@ export async function fetchDietaryVenues(
   const categories = searchableCategories(dietary);
   if (categories.length === 0) return null;
 
-  const data = await runComposioTool(TOOL_SLUG, {
-    latitude: point.lat,
-    longitude: point.lon,
-    categories: categories.join(","),
-    radius: AREA_RADIUS_M,
-    limit: 10,
-  });
-  if (data === null) return null;
-  return distilVenues(data);
+  const apiKey = process.env.YELP_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const url = new URL(YELP_SEARCH_URL);
+    url.searchParams.set("latitude", String(point.lat));
+    url.searchParams.set("longitude", String(point.lon));
+    url.searchParams.set("categories", categories.join(","));
+    url.searchParams.set("radius", String(AREA_RADIUS_M));
+    url.searchParams.set("limit", "10");
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return distilVenues(data);
+  } catch {
+    return null;
+  }
 }
 
 /**

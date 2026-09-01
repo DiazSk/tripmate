@@ -52,7 +52,6 @@ export interface CustomTripInput {
   departureTime?: string | null;
   departurePoint?: string | null;
   stayBooked?: string | null;
-  originCity?: string | null;
 }
 
 export interface CustomTripResult {
@@ -82,15 +81,13 @@ export async function buildCustomFixture(input: CustomTripInput): Promise<Custom
     input.arrivalPoint ||
     input.departureTime ||
     input.departurePoint ||
-    input.stayBooked ||
-    input.originCity
+    input.stayBooked
       ? {
           arrivalTime: input.arrivalTime || null,
           arrivalPoint: input.arrivalPoint || null,
           departureTime: input.departureTime || null,
           departurePoint: input.departurePoint || null,
           stayBooked: input.stayBooked || null,
-          originCity: input.originCity || null,
         }
       : undefined;
 

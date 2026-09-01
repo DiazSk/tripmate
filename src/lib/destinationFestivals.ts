@@ -1,7 +1,7 @@
-import { runComposioTool } from "./composio";
 import { DEFAULT_TIMEOUT_MS, parseJsonResponse, runClaude } from "./claude";
 
-const SEARCH_SLUG = "COMPOSIO_SEARCH_WEB";
+const BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search";
+const MAX_RESULTS_FOR_EXTRACTION = 8;
 
 export interface Festival {
   name: string;
@@ -15,6 +15,12 @@ interface WebCitation {
   url: string | null;
 }
 
+interface BraveResult {
+  title: string | null;
+  description: string | null;
+  url: string | null;
+}
+
 /** Calendar dates are parsed as UTC midnight in this app — see CLAUDE.md. A month label built
  *  from local accessors can name the wrong month for a date near a month boundary. */
 function monthYearLabel(isoDate: string): string {
@@ -22,13 +28,15 @@ function monthYearLabel(isoDate: string): string {
   return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-function distilCitations(raw: unknown): WebCitation[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((entry) => {
-    const c = entry as Record<string, unknown> | null;
+function distilBraveResults(raw: unknown, limit = MAX_RESULTS_FOR_EXTRACTION): BraveResult[] {
+  const results = (raw as { web?: { results?: unknown } } | null)?.web?.results;
+  if (!Array.isArray(results)) return [];
+  return results.slice(0, limit).map((entry) => {
+    const r = entry as Record<string, unknown> | null;
     return {
-      title: typeof c?.title === "string" ? c.title : null,
-      url: typeof c?.url === "string" ? c.url : null,
+      title: typeof r?.title === "string" ? r.title : null,
+      description: typeof r?.description === "string" ? r.description : null,
+      url: typeof r?.url === "string" ? r.url : null,
     };
   });
 }
@@ -42,8 +50,20 @@ function distilCitations(raw: unknown): WebCitation[] {
  * structurally impossible rather than merely discouraged by a prompt instruction.
  */
 export function hasExtractableContent(raw: unknown): boolean {
-  const data = raw as { answer?: unknown; citations?: unknown } | null;
-  return typeof data?.answer === "string" && data.answer.trim().length > 0 && Array.isArray(data.citations) && data.citations.length > 0;
+  return distilBraveResults(raw).some((r) => r.title?.trim() && r.description?.trim());
+}
+
+/**
+ * Synthesizes the old Composio `{ answer, citations }` shape from Brave's plain results list, so
+ * `buildFestivalExtractionPrompt`'s tested contract (cite by `[n]`, never invent a date) needs no
+ * changes. Each usable result becomes one numbered line, doubling as its own citation entry.
+ */
+function buildTextAndCitations(results: BraveResult[]): { text: string; citations: WebCitation[] } {
+  const usable = results.filter((r) => r.title?.trim() && r.description?.trim());
+  return {
+    text: usable.map((r, i) => `[${i + 1}] ${r.title}: ${r.description}`).join("\n"),
+    citations: usable.map((r) => ({ title: r.title, url: r.url })),
+  };
 }
 
 /**
@@ -80,32 +100,38 @@ Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly
 /**
  * Real festivals for a destination's trip month, extracted only from real cited text.
  *
- * Verified live: the structured `COMPOSIO_SEARCH_EVENT` tool returns zero results for forward
- * dates ("Google hasn't returned any results"), so this uses a plain web search instead, whose
- * `answer` field came back with real names/dates and a `citations[]` array of real source URLs.
- * The dates live only in prose tied to citation markers, not a structured per-item field — a
- * regex across the phrasing variety observed would be the fragile, confidently-wrong kind of
- * parser, so a bounded extraction call reads it instead.
+ * Brave's plain web search returns a results list, not a single synthesized answer string, so the
+ * extraction prompt's input is built from the results list itself (numbered, doubling as its own
+ * citation list) rather than a Composio-shaped `{ answer, citations }` payload. The dates live
+ * only in prose, not a structured per-item field — a regex across the phrasing variety observed
+ * would be the fragile, confidently-wrong kind of parser, so a bounded extraction call reads it
+ * instead.
  *
- * Resolves `null` on a failed search. Resolves `[]`, with **no model call attempted**, when the
- * search succeeded but returned nothing extractable — see `hasExtractableContent`.
+ * Resolves `null` on a missing key or failed search. Resolves `[]`, with **no model call
+ * attempted**, when the search succeeded but returned nothing extractable — see
+ * `hasExtractableContent`.
  */
 export async function fetchFestivals(
   destination: string,
   startDate: string,
   runId?: string
 ): Promise<Festival[] | null> {
-  const data = await runComposioTool(SEARCH_SLUG, {
-    query: `festivals events in ${destination} ${monthYearLabel(startDate)}`,
-  });
-  if (data === null) return null;
-  if (!hasExtractableContent(data)) return [];
-
-  const { answer, citations: rawCitations } = data as { answer: string; citations: unknown };
-  const citations = distilCitations(rawCitations);
+  const apiKey = process.env.BRAVE_API_KEY;
+  if (!apiKey) return null;
 
   try {
-    const prompt = buildFestivalExtractionPrompt(answer, citations);
+    const url = new URL(BRAVE_SEARCH_URL);
+    url.searchParams.set("q", `festivals events in ${destination} ${monthYearLabel(startDate)}`);
+    const res = await fetch(url, {
+      headers: { "X-Subscription-Token": apiKey, Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!hasExtractableContent(data)) return [];
+
+    const { text, citations } = buildTextAndCitations(distilBraveResults(data));
+    const prompt = buildFestivalExtractionPrompt(text, citations);
     const { result: raw } = await runClaude(prompt, "context", DEFAULT_TIMEOUT_MS, { runId });
     return parseJsonResponse<Festival[]>(raw);
   } catch {
