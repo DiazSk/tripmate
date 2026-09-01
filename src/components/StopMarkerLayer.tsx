@@ -521,12 +521,15 @@ export default function StopMarkerLayer() {
                   ? "true"
                   : undefined
               }
-              onMouseEnter={() => setHoveredIndex(marker.flatIndex)}
-              onMouseLeave={() => setHoveredIndex(null)}
+              // `"map"` — this lights the stop and its itinerary row, and deliberately does not
+              // fly the camera. A pointer already on the card is already looking at the place; see
+              // `setHoveredIndex`.
+              onMouseEnter={() => setHoveredIndex(marker.flatIndex, "map")}
+              onMouseLeave={() => setHoveredIndex(null, "map")}
               // Pointer events rather than mouse events would fire on touch too, where there is
               // no hover to speak of and a tap would leave the card stuck lit.
-              onFocus={() => setHoveredIndex(marker.flatIndex)}
-              onBlur={() => setHoveredIndex(null)}
+              onFocus={() => setHoveredIndex(marker.flatIndex, "map")}
+              onBlur={() => setHoveredIndex(null, "map")}
               // No label passed, so this flies the camera without dropping the red search pin —
               // the card already names the place, and a pin plus a card is one label too many.
               onClick={() => {

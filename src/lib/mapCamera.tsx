@@ -174,7 +174,21 @@ interface MapCameraContextValue {
    * that reads refs only.
    */
   hoveredIndex: number | null;
-  setHoveredIndex: (index: number | null) => void;
+  /**
+   * Point at a stop, from either side.
+   *
+   * `source` is what decides whether the **camera** answers, and it is the whole of the rule:
+   * pointing at a row in the itinerary leans the camera in (that is the peek — you are reading a
+   * plan and asking "where is this"), while pointing at a card *on the map* only lights it up.
+   * A hover on the map is already looking at the place; moving the ground under the pointer that
+   * put itself there is the map arguing with the hand.
+   *
+   * The **highlight is identical either way** — both surfaces read the same index, which is what
+   * makes it bidirectional. Only the flight is conditional. Defaulted to `"itinerary"` so a new
+   * list of stops peeks without having to know this exists, and `StopMarkerLayer` is the one
+   * caller that opts out.
+   */
+  setHoveredIndex: (index: number | null, source?: HoverSource) => void;
   /** Index of the selected stop — clicked, or stepped onto by the tour. Outlives hover. */
   activeIndex: number | null;
   setActiveIndex: (index: number | null) => void;
@@ -196,6 +210,9 @@ interface MapCameraContextValue {
    */
   reframeRoute: () => boolean;
 }
+
+/** Where a hover came from — see `setHoveredIndex`. */
+export type HoverSource = "itinerary" | "map";
 
 const MapCameraContext = createContext<MapCameraContextValue | null>(null);
 
@@ -345,7 +362,19 @@ export function MapCameraProvider({
   /** The day the panel has selected, or null while the whole trip is being shown at once.
    *  Drives which route is drawn at full strength and which are dimmed behind it. */
   const [focusedDay, setFocusedDay] = useState<number | null>(null);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hoveredIndex, setHoveredIndexState] = useState<number | null>(null);
+  /** Which surface the current hover came from. A ref rather than state: it is set synchronously
+   *  alongside the index and read by the peek effect that the index change schedules, so it is
+   *  always current by the time anything looks — and routing it through state would re-render
+   *  every consumer of this context for a value none of them render. */
+  const hoverSourceRef = useRef<HoverSource>("itinerary");
+  const setHoveredIndex = useCallback(
+    (index: number | null, source: HoverSource = "itinerary") => {
+      hoverSourceRef.current = source;
+      setHoveredIndexState(index);
+    },
+    []
+  );
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   /** Where the camera was before the current run of hover peeks began, so leaving the list puts
    *  it back. Null means no peek is in flight — and any real camera command clears it, which is
@@ -481,7 +510,7 @@ export function MapCameraProvider({
           routeAltitudeRef.current = altitude;
         });
     },
-    [cancelPeek]
+    [cancelPeek, setHoveredIndex]
   );
 
   const setHoveredDay = useCallback((day: number | null) => {
@@ -584,13 +613,6 @@ export function MapCameraProvider({
     const renderer = rendererRef.current;
     if (!ready || !renderer?.isAlive()) return;
     if (prefersReducedMotion()) return;
-    // The surface says whether it leans in at all — see `MapRenderer.hoverPeek`. `cancelPeek`
-    // rather than a bare return, so toggling from Satellite to Map mid-dwell drops the pending
-    // flight instead of leaving a timer armed against a camera that has stopped answering.
-    if (!renderer.hoverPeek) {
-      cancelPeek();
-      return;
-    }
     // An editing surface is open. Not merely "don't start a new peek": a peek already in flight
     // when the editor opened would otherwise leave the camera leaned in on a stop with the plan
     // no longer on screen, so the pending dwell is dropped and the lean-out is allowed to run.
@@ -600,7 +622,12 @@ export function MapCameraProvider({
       return;
     }
 
-    const stop = hoveredIndex === null ? null : routeStops[hoveredIndex];
+    // A hover that came from the map is deliberately read as *no* stop here. Not an early return:
+    // routing it through the same `null` path is what makes a peek already in flight lean back
+    // out when the pointer leaves an itinerary row and lands on a marker card, instead of being
+    // stranded leaned in with its saved pose abandoned.
+    const stop =
+      hoverSourceRef.current === "map" || hoveredIndex === null ? null : routeStops[hoveredIndex];
 
     // Pointer has left the list. `peekReturnRef` is null unless a peek actually happened, so an
     // ordinary mouse-out over a map with no peek in flight is free.
@@ -1060,7 +1087,7 @@ export function MapCameraProvider({
     pendingHighwaysRef.current = null;
 
     renderer.flyHome();
-  }, [cancelPeek]);
+  }, [cancelPeek, setHoveredIndex]);
 
   // Memoised because this provider is rendered from the root layout, so *any* re-render of
   // AppShell — a route change, for one — otherwise handed every `useMapCamera()` consumer a
@@ -1124,8 +1151,11 @@ export function MapCameraProvider({
       activeIndex,
       // Stable — `useCallback(…, [])` — so these never re-run the memo. Listed only because
       // eslint knows `useState` setters are stable and cannot know that about a callback.
+      // `setHoveredIndex` joined them when it stopped being a bare setter and started carrying
+      // the hover's source.
       setActiveStop,
       reframeRoute,
+      setHoveredIndex,
     ]
   );
 
