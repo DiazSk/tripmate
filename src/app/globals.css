@@ -436,7 +436,11 @@ body {
 
 .itinerary-hero {
   --hero-p: 0;
-  --hero-max: 14rem;
+  /* 11/14rem, down from 14/18rem. At 18rem the photo was 288px of an 826px panel — 35% of the
+     plan spent on the header before a single stop was visible. It is still a photographic
+     moment at 14rem and not yet a banner strip, and the 4.5rem collapsed floor is far enough
+     below that the compression still reads as a compression. */
+  --hero-max: 11rem;
   --hero-min: 4.5rem;
   height: calc(var(--hero-max) - (var(--hero-max) - var(--hero-min)) * var(--hero-p));
   padding-bottom: calc(1.25rem * (1 - var(--hero-p)));
@@ -445,7 +449,7 @@ body {
 
 @media (width >= 40rem) {
   .itinerary-hero {
-    --hero-max: 18rem;
+    --hero-max: 14rem;
     padding-bottom: calc(1.5rem * (1 - var(--hero-p)));
     padding-top: calc(1.5rem * (1 - var(--hero-p)));
   }
@@ -460,6 +464,30 @@ body {
 
 .itinerary-hero-compact {
   opacity: clamp(0, (var(--hero-p) - 0.55) / 0.35, 1);
+}
+
+/* `opacity: 0` hides a control from the eye and from nothing else. Fully compressed, the block
+   above still hit-tested and was still a tab stop: measured at `--hero-p: 1`, a real pointer at
+   the lower half of the Download link (y 121-141 of its 97-141 box) landed on an invisible
+   `<a download>` floating over the compact title strip — the upper half only missed because the
+   grab handle's own 40px button happened to cover it. `visibility` is what actually removes a
+   subtree from hit-testing *and* from the tab order, and it flips at the same 0.45 where the
+   opacity clamp reaches zero, so nothing visible changes. The attribute is written by the same
+   rAF that writes `--hero-p` (ItineraryCard), because CSS cannot branch on a custom property's
+   value without `@container style()`. */
+.itinerary-hero[data-hero-collapsed="true"] .itinerary-hero-full {
+  visibility: hidden;
+}
+
+/* The secondary control on the header photograph (Play tour). Slate rather than the white wash a
+   chip on a panel would take — see the note at its call site in ItineraryCard. Here rather than
+   inline so the hover alpha is reachable at all: an inline `background` outranks every utility. */
+.hero-action-glass {
+  background: rgb(var(--surface-deep-rgb) / 0.55);
+}
+
+.hero-action-glass:hover {
+  background: rgb(var(--surface-deep-rgb) / 0.75);
 }
 
 /* The compression is a scroll-linked position, not an animation — there is nothing to hold still

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
+import { useStopTour } from "@/lib/useStopTour";
+import { PauseIcon, PlayIcon } from "@/components/icons";
 import FocusEditMode from "@/components/FocusEditMode";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
@@ -53,6 +55,10 @@ export default function TripView({
    *  the plan is one click away. Owned here because `ItineraryCard` reads it too — see the
    *  `panelCollapsed` prop. */
   const [planCollapsed, setPlanCollapsed] = useState(true);
+  // The stop tour lives here rather than inside ItineraryCard so the capsule's play button
+  // and the card's share one timer. `useStopTour` holds `playing` in local state, so two
+  // call sites would be two intervals and two booleans that disagree the moment either runs.
+  const tour = useStopTour();
   /** 0-based days a chat turn changed while the traveler was reading a different one. Owned here
    *  rather than in the card because the chat that produces them lives beside it, not inside it. */
   const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
@@ -260,6 +266,19 @@ export default function TripView({
           every "content over the globe" surface visually consistent. */}
       <DockedPanel
         collapsible
+        capsuleAction={
+          itinerary?.days.length
+            ? {
+                label: tour.playing ? "Stop tour" : "Play tour",
+                onClick: tour.toggle,
+                icon: tour.playing ? (
+                  <PauseIcon className="h-4 w-4" />
+                ) : (
+                  <PlayIcon className="h-4 w-4" />
+                ),
+              }
+            : undefined
+        }
         wide={!!focus.target}
         collapsed={planCollapsed}
         onCollapsedChange={setPlanCollapsed}
@@ -390,6 +409,7 @@ export default function TripView({
             <div className={selectedStop ? "hidden" : "space-y-4"}>
               {trip && itinerary && (
                 <ItineraryCard
+                  tour={tour}
                   itinerary={itinerary}
                   budget={trip.budget}
                   destination={trip.destination}
