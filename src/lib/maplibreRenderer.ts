@@ -110,16 +110,30 @@ const ARC_LAYER_ID = "tripmate-arcs";
  */
 const ARC_SAMPLES = 48;
 /**
- * Tube radius in metres, as a fraction of the hop's own ground length.
+ * Tube width on screen, in CSS pixels. The geometry is still world-space — it has to be, the tube
+ * floats at stem height and is drawn by a depth-tested GL layer — but the radius is re-derived
+ * from the camera on every zoom so the *rendered* width holds. This is what closes the last real
+ * gap with Cesium, whose ribbon has always held a constant 16px whatever the camera did.
  *
- * World-space rather than screen-space, and that is the one real difference from Cesium left in
- * the arcs: its ribbon holds a constant 16px whatever the camera does, and a tube built out of
- * world geometry grows and shrinks with it. Scaling off the hop keeps a cross-city arc from
- * reading as a thread while a two-block hop stays a tube rather than a pipeline.
+ * It replaces a radius scaled off the hop's own ground length, which was backwards in the one case
+ * that matters. That formula made the longest hops the fattest: this trip's 14.6km day-2 hop came
+ * out 87.7m across and its 9.9km day-5 hop 59.6m, and a long hop is precisely the one you end up
+ * zoomed into a slice of — so the arc you were nearest was always the widest wall on screen.
+ *
+ * Retuning those constants could not fix it, only move it. A tube narrow enough to be sane at
+ * street level (~18m) is half a pixel across at the whole-trip framing; a tube visible at overview
+ * is a wall up close. Only a camera-derived radius satisfies both ends, which is why this is a
+ * pixel target rather than a smaller ratio.
  */
-const ARC_RADIUS_RATIO = 0.003;
-const ARC_MIN_RADIUS_M = 5;
-const ARC_MAX_RADIUS_M = 45;
+const ARC_WIDTH_PX = 13;
+/** Floor and ceiling in metres, guarding the extremes of the zoom range rather than shaping the
+ *  ordinary case: sub-metre geometry degenerates, and a kilometre-wide tube at world zoom is
+ *  numerically pointless when the whole trip is four pixels wide anyway. */
+const ARC_MIN_RADIUS_M = 3;
+const ARC_MAX_RADIUS_M = 600;
+/** Zoom the arc mesh was last built for. A rebuild is ~10k vertices, so it is coalesced to one per
+ *  frame and skipped entirely below a delta the eye cannot resolve. */
+const ARC_REBUILD_ZOOM_DELTA = 0.05;
 
 /**
  * Cesium's day/night phases are a CSS blend sheet over the canvas and stay that way, so nothing
@@ -562,6 +576,14 @@ function addTripLayers(map: MapLibreMap) {
   // The stems: real vertical volume, which is the one piece of Cesium's light-pillar the vector
   // renderer can reproduce honestly. An extruded octagon rather than a cylinder, at world scale,
   // so it fattens as the camera descends exactly as the beam did.
+  //
+  // 0.2, down from 0.55. Cesium's beam runs at BEAM_COLUMN_ALPHA 0.16 fading to ×0.35 at the top,
+  // tapers 9m → 3.5m, and carries a 16px halo; this is a straight prism at one flat alpha with no
+  // taper and no bloom, so at 0.55 the same day colour read as a solid plastic column here and as
+  // a light beam there. Matching the alpha is most of closing that gap. It cannot close all of it:
+  // `fill-extrusion` has no taper and no per-vertex gradient, so the remaining difference is
+  // geometric and would mean moving the stem into the custom WebGL layer beside the arcs. Recorded
+  // in docs/map-engine-gpu.md rather than left for the next person to notice from a screenshot.
   map.addLayer({
     id: STEM_SOURCE_ID,
     type: "fill-extrusion",
@@ -570,7 +592,7 @@ function addTripLayers(map: MapLibreMap) {
       "fill-extrusion-color": ["get", "color"],
       "fill-extrusion-height": ["get", "height"],
       "fill-extrusion-base": 0,
-      "fill-extrusion-opacity": 0.55,
+      "fill-extrusion-opacity": 0.2,
     },
   });
 }
@@ -611,10 +633,27 @@ export class MapLibreRenderer implements MapRenderer {
   private stateFor: (day: number) => DayVisualState = () => "baseline";
   private emphasis: { day: number; index: number } | null = null;
 
+  /** Zoom the arc mesh currently on the GPU was built for, and the pending coalescing frame. */
+  private arcZoom = Number.NaN;
+  private arcFrame = 0;
+
   constructor(map: MapLibreMap) {
     this.map = map;
     map.once("remove", () => {
       this.alive = false;
+    });
+    // The arcs' radius is derived from the camera (see ARC_WIDTH_PX), so the mesh has to be
+    // rebuilt as the camera moves or the width it was built for stops being true. `zoom` fires
+    // per frame during a pinch, so this coalesces to one rebuild per frame and skips deltas below
+    // what the eye resolves — a rebuild is a ~10k-vertex array fill, cheap but not free.
+    map.on("zoom", () => {
+      if (!this.isAlive() || this.days.length === 0) return;
+      if (Math.abs(this.map.getZoom() - this.arcZoom) < ARC_REBUILD_ZOOM_DELTA) return;
+      if (this.arcFrame) return;
+      this.arcFrame = requestAnimationFrame(() => {
+        this.arcFrame = 0;
+        if (this.isAlive() && this.days.length) this.rebuildRoute();
+      });
     });
   }
 
@@ -723,7 +762,8 @@ export class MapLibreRenderer implements MapRenderer {
             touchesEmphasis ? accent : color,
             touchesEmphasis ? 1 : alpha,
             active,
-            (lat, lng) => this.groundElevationM(lat, lng)
+            (lat, lng) => this.groundElevationM(lat, lng),
+            metresPerPixel(this.map.getZoom(), this.map.getCenter().lat)
           );
           if (arc) arcs.push(arc);
         }
@@ -761,6 +801,7 @@ export class MapLibreRenderer implements MapRenderer {
     });
 
     this.setData(ROUTE_SOURCE_ID, { type: "FeatureCollection", features: routeFeatures });
+    this.arcZoom = this.map.getZoom();
     this.arcLayer()?.setArcs(arcs);
     this.setData(STEM_SOURCE_ID, { type: "FeatureCollection", features: stemFeatures });
   }
@@ -1296,16 +1337,22 @@ function buildArcTube(
   color: string,
   alpha: number,
   active: boolean,
-  groundAt: (lat: number, lng: number) => number
+  groundAt: (lat: number, lng: number) => number,
+  metresPerPx: number
 ): ArcTube | null {
   const distanceM = metresBetween(from, to);
   // Same floor Cesium uses to skip degenerate hops: two stops at one address get no arc, only the
   // stems that already mark them.
   if (!(distanceM > 5)) return null;
   const lift = arcLift(distanceM);
+  // Half the target width in metres at the current camera, so the tube renders at ARC_WIDTH_PX
+  // regardless of zoom. The hop's length no longer enters into it — every arc is the same weight,
+  // which is what a route line should be.
   const radiusM =
-    Math.min(Math.max(distanceM * ARC_RADIUS_RATIO, ARC_MIN_RADIUS_M), ARC_MAX_RADIUS_M) *
-    (active ? 1.25 : 1);
+    Math.min(
+      Math.max((ARC_WIDTH_PX / 2) * metresPerPx, ARC_MIN_RADIUS_M),
+      ARC_MAX_RADIUS_M
+    ) * (active ? 1.25 : 1);
 
   // The ground at each end, so the arc springs from the terrain rather than from sea level. Lerped
   // across the hop rather than sampled per point: `queryTerrainElevation` is a DEM lookup per call

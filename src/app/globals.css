@@ -161,22 +161,47 @@ html {
      stays legible on day 3. Do not add a second amber entry — the swap has one
      colour to fall back to, and it is already spent. */
 
-  /* 1 — Pacific Teal / Frost. Clean and crisp; the highest-contrast pair
-     over land, which is why it is day 1. */
-  --route-neon-cyan: #00f2fe;
-  --route-neon-cyan-glow: #4facfe;
-  /* 2 — Hyper Violet / Neon Rose. */
-  --route-neon-magenta: #f355da;
-  --route-neon-magenta-glow: #7000ff;
-  /* 3 — Solar Ember / Tangerine. See the note above before reusing this hue. */
-  --route-neon-amber: #ff6a00;
-  --route-neon-amber-glow: #ee0979;
-  /* 4 — Electric Emerald. A green chosen to read as light rather than as
-     vegetation: chroma far past anything chlorophyll produces, and an ambient
-     that pulls toward cyan rather than toward yellow, which is the direction
-     foliage actually sits. */
-  --route-neon-lime: #00f5a0;
-  --route-neon-lime-glow: #00d9f5;
+  /* --- Chroma, not luminance, is what changed here --------------------------
+     Every pair below keeps the hue *position* and roughly the lightness it had
+     while dropping to a bit over half the chroma. Both halves of that are
+     load-bearing.
+
+     Hue position, because the separation argument still holds: five hues around
+     the wheel, modulo-cycled so adjacent days cannot collide, and exactly one
+     entry inside the accent's 0-50° band so `emphasisColorFor`'s white swap
+     still has one colour to spend. Day 3 is that entry, as before.
+
+     Lightness, because these are not only line colours. `.marker-day-label`
+     sets its *text* in the day's core over the map-glass chip, and the stop
+     card and split editor tint their own chrome from it. Darkening the ramp to
+     calm it would have put dark text on a dark chip; the neon was bright partly
+     because it has to be legible as type. So the ramp desaturates in place
+     rather than dropping.
+
+     What this gives up, honestly: the original pool was picked so that *no
+     satellite imagery contains these hues*, which is why it was fluorescent. At
+     this chroma a green can sit closer to a park and a terracotta closer to
+     rooftops on Cesium. The `--route-casing` stroke down both ribbon edges is
+     what carries local contrast there, and it always was — colour was never the
+     only guarantee. MapLibre's flat vector ground, which is the default engine,
+     reads these better than it read the neon. */
+
+  /* 1 — Harbour Teal / Sky. The crispest pair over land, which is why it is
+     day 1; the ambient pulls blue rather than green, as it always did. */
+  --route-neon-cyan: #3d9ab8;
+  --route-neon-cyan-glow: #5fa8d6;
+  /* 2 — Orchid / Violet. */
+  --route-neon-magenta: #b563a6;
+  --route-neon-magenta-glow: #8a6bc4;
+  /* 3 — Terracotta / Rose. The one warm entry. See the note above before
+     reusing this hue: it is the one the hover-accent swap is calibrated on. */
+  --route-neon-amber: #c97544;
+  --route-neon-amber-glow: #be4f70;
+  /* 4 — Jade. Still a green chosen not to read as vegetation, but now by hue
+     rather than by brute chroma: the ambient pulls toward teal, away from the
+     yellow-green direction foliage actually sits in. */
+  --route-neon-lime: #3fa37a;
+  --route-neon-lime-glow: #4fb8a0;
   /* 5 — Ultra Iris / Cobalt. The quiet one, and knowingly so: a twilight
      indigo at roughly a third the chroma of the other four, with an ambient
      that is *lighter* than its core rather than darker — the only pair here
@@ -184,8 +209,8 @@ html {
      as considerably softer over dark water or shadowed terrain. The casing is
      what keeps it legible there rather than its own luminance; if a day 5 ever
      reads as missing rather than as recessive, this is the entry to raise. */
-  --route-neon-violet: #654ea3;
-  --route-neon-violet-glow: #eaafc8;
+  --route-neon-violet: #7c74c2;
+  --route-neon-violet-glow: #c0a9d6;
 
   /* --- Map label glass ------------------------------------------------------
      The backdrop behind every label standing on the globe — day badges, stop

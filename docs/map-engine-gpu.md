@@ -124,9 +124,15 @@ Deliberate, and none of it is above the `MapRenderer` boundary:
   no elevated-line primitive (no `line-z-offset`, every `line-*` layer is draped), and
   `fill-extrusion` prisms are axis-aligned so a segment across a steep stretch becomes a tall box,
   which read as a staircase of cubes exactly where the curve leaves each stop.
-  The one difference left: Cesium's ribbon holds a constant 16px whatever the camera does, and a
+  ~~The one difference left: Cesium's ribbon holds a constant 16px whatever the camera does, and a
   tube built from world geometry grows and shrinks with it, so the radius is scaled off the hop's
-  own length instead.
+  own length instead.~~ Also closed. Scaling off the hop was backwards in the case that mattered —
+  it made the *longest* hops the fattest, and a long hop is the one you end up zoomed into a slice
+  of, so this trip's 14.6km hop rendered 87.7m across and filled the screen at street level. The
+  radius is now derived from the camera to hold `ARC_WIDTH_PX` (13px), with the mesh rebuilt on
+  zoom, coalesced to one frame and skipped below a 0.05 zoom delta. Retuning the ratio could not
+  have fixed it: a tube narrow enough at street level (~18m) is 0.62px across at the whole-trip
+  framing.
 - **Route altitude.** Cesium samples the *rendered* tile surface (`clampToHeightMostDetailed`,
   ~1.3 s) so its geometry floats just above the roofs. MapLibre drapes on terrain and reports
   altitude 0, which is the correct answer for it — the marker layer then lifts cards by
@@ -135,11 +141,30 @@ Deliberate, and none of it is above the `MapRenderer` boundary:
   something 150 m up. A stop flight lands slightly high in frame rather than dead centre.
 - **Horizon culling.** A mercator map has no far side, so `project` rejects only what is behind the
   camera.
+- **The stop marker's material.** Both engines put a stem and a ground footprint under every stop,
+  but they are not the same rendering and a screenshot of one is not a preview of the other:
+
+  | | Cesium | MapLibre |
+  |---|---|---|
+  | stem shape | tapered 9m → 3.5m over 3 stacked slices | straight octagon, constant `STEM_RADIUS_M` 6m |
+  | stem alpha | `BEAM_COLUMN_ALPHA` 0.16, ×`BEAM_TOP_ALPHA_SCALE` 0.35 at the top | flat 0.2 |
+  | stem colour | mixes core → glow up the beam | one flat `["get","color"]` |
+  | halo | `BEAM_HALO_WIDTH` 16px bloom | none |
+  | ground | stack of discs **plus three rings**, inner two in core, outer in glow | one pool circle and one dot |
+
+  The alpha was 0.55 and is now 0.2, which was most of the visible gap — at 0.55 the same day
+  colour read as a solid plastic column on the vector map and as a light beam on the imagery. What
+  remains is geometric: `fill-extrusion` supports neither a taper nor a per-vertex gradient, so
+  closing it means moving the stem into `maplibreArcLayer.ts`'s custom WebGL layer. The ring
+  footprint has no MapLibre equivalent at all.
 
 Everything else is the same feature on both: per-day colour, focus/dim/hover day states, stop
-emphasis, stems, ground pools, day badges, highways, the city outline, the search pin, route
-framing beside the panel, the hover peek, the zoom/compass/tilt/2D-3D chrome, and click-to-pick in
-the split editor.
+emphasis, day badges, highways, the city outline, the search pin, route framing beside the panel,
+the hover peek, the zoom/compass/tilt/2D-3D chrome, and click-to-pick in the split editor.
+
+Stems and ground pools used to be listed here. They are not parity items — both engines draw one,
+with materially different geometry and material; see the bullet above. Reading this list as a
+guarantee that a stop looks the same on both engines is what that wording invited.
 
 ## One trap worth knowing about
 
