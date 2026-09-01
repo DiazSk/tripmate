@@ -224,8 +224,21 @@ html {
   /* Height of the fixed top navbar. Read by Navbar for its own height and by every
      surface that needs to clear it (page.tsx's <main>, ScrollStory's cancelling
      margins, DockedPanel's top offset) — one token so they cannot drift apart, same
-     pattern as --capsule-h above. */
-  --nav-h: 4rem;
+     pattern as --capsule-h above.
+
+     3.5rem, down from 4rem, to give the itinerary panel back the vertical space the bar
+     was spending on nothing: every interactive child in here — the wordmark link, each
+     nav link, the mobile toggle — is `min-h-11`, so 44px of the old 64px was content and
+     the other 20px was air. At 56px that air is 6px top and bottom, which is a real
+     gutter against the bottom hairline rather than a crush.
+
+     **44px is the hard floor and it is a touch-target floor, not a taste one.** Below it
+     the `min-h-11`/`min-w-11` children stop fitting and start overflowing a bar that has
+     no `overflow` set, so the hairline crosses them. Anything tighter than 3.5rem has to
+     drop those targets first, and dropping them is only defensible behind
+     `@media (pointer: fine)` — never for the phone bar, where the toggle is the one
+     control on screen. */
+  --nav-h: 3.5rem;
 }
 
 @theme inline {
