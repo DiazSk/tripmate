@@ -42,6 +42,7 @@ import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId, TIERS } fr
 import {
   AccessibilityNeeds,
   CrowdPreference,
+  DayPlan,
   DestinationContext,
   EnergyLevel,
   ExplorerStyle,
@@ -50,6 +51,7 @@ import {
   PartyCounts,
   RawFetch,
 } from "@/lib/types";
+import type { StreamedStop } from "@/lib/streamingItinerary";
 import { CandidatePoi } from "@/lib/pois";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
@@ -541,6 +543,14 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [stages, setStages] = useState<StageProgress[]>(
     STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const }))
   );
+  /** The plan as it is being written, assembled from `stop` and `day-coords` frames. Null
+   *  outside a generation. This is what the map and the itinerary card render during the wait —
+   *  there is no separate loading view to keep in sync with it. */
+  const [draftItinerary, setDraftItinerary] = useState<Itinerary | null>(null);
+  /** Set by any local mutation between `plan` and `revised`. Critique replaces the whole day
+   *  set, so a revision that lands on top of an edit the traveller just made would silently
+   *  discard it. */
+  const editedSincePlanRef = useRef(false);
   const [saving, setSaving] = useState(false);
   // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
   // state there would reset the view to Day 1 on the way back.
@@ -992,8 +1002,20 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * streaming has genuinely started, a mid-generation failure is never retried: it would
    * spend another two minutes and a second pair of model calls with no visibility to the
    * traveler that it's happening again.
+   *
+   * `stop` and `day-coords` frames build `draftItinerary` as the plan is written. `plan` means
+   * the plan is interactive now — `hooks.planned` fires and the stream is still read afterward,
+   * because the critique pass keeps running in the background and may still send `revised` (or
+   * an `error`, once `plan` is already out — see the `error` branch below). The plain-fallback
+   * path never sends any of `stop`/`day-coords`/`plan`/`revised` — only `done` (or `error`
+   * before anything is interactive) — so `hooks` is optional and callers must not assume the
+   * richer events arrive.
    */
-  async function runStreamed<T>(body: Record<string, unknown>): Promise<T> {
+  async function runStreamed<T>(
+    body: Record<string, unknown>,
+    hooks?: { planned?: (result: T) => void; revised?: (days: DayPlan[]) => void }
+  ): Promise<T> {
+    const { planned, revised } = hooks ?? {};
     // One controller per run, so Cancel aborts the in-flight request rather than leaving it
     // running invisibly while the UI pretends it stopped. Replaced (not reused) on every run.
     const controller = new AbortController();
@@ -1032,16 +1054,76 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
     let result: T | null = null;
     let failure: string | null = null;
+    // Whether a `plan` event has already landed — gates the `error` branch below (Ruling B):
+    // a background-critique failure after the plan is on screen must not undo it.
+    let planReceived = false;
     await readEventStream(res.body, (event, data) => {
       if (event === "stage") {
         const parsed = JSON.parse(data) as StageEvent;
         setStages((prev) =>
           prev.map((s) => (s.stage === parsed.stage ? { ...s, status: parsed.status } : s))
         );
+      } else if (event === "stop") {
+        const { dayIndex, stopIndex, stop } = JSON.parse(data) as StreamedStop;
+        setDraftItinerary((prev) => {
+          const days = [...(prev?.days ?? [])];
+          // Days arrive in order but a frame could in principle outrun its day, so grow the
+          // array rather than assuming the slot exists.
+          while (days.length <= dayIndex) {
+            days.push({ date: "", weather: "", stops: [] });
+          }
+          const stops = [...days[dayIndex].stops];
+          stops[stopIndex] = stop;
+          days[dayIndex] = { ...days[dayIndex], stops };
+          // `tier` is guaranteed set by the time generate() runs (validate() rejects otherwise),
+          // but it is not narrowed here, and Itinerary["tier"] is required.
+          return { tier: (prev?.tier ?? tier) as Itinerary["tier"], days };
+        });
+      } else if (event === "day-coords") {
+        const { dayIndex, coords } = JSON.parse(data) as {
+          dayIndex: number;
+          coords: Record<string, { lat: number; lon: number }>;
+        };
+        setDraftItinerary((prev) => {
+          if (!prev?.days[dayIndex]) return prev;
+          const days = [...prev.days];
+          days[dayIndex] = {
+            ...days[dayIndex],
+            stops: days[dayIndex].stops.map((s) => {
+              const fixed = coords[s.name.trim()];
+              // `lon` on the wire, `lng` on a Stop — the two names differ and always have.
+              return fixed ? { ...s, lat: fixed.lat, lng: fixed.lon } : s;
+            }),
+          };
+          return { ...prev, days };
+        });
+      } else if (event === "plan") {
+        // Bound to a local first: `result` is `T | null`, and TypeScript does not narrow a
+        // closed-over `let` across the assignment, so passing it straight to `planned` is an
+        // error.
+        const plan = JSON.parse(data) as T;
+        result = plan;
+        planReceived = true;
+        editedSincePlanRef.current = false;
+        planned?.(plan);
+      } else if (event === "revised") {
+        const revision = JSON.parse(data) as { days: DayPlan[]; issues: string[] };
+        // Critique replaces the whole day set. If the traveller has touched the plan since it
+        // opened, their edit is the more recent intent and the replacement is dropped — the
+        // issues list is still worth having either way.
+        if (!editedSincePlanRef.current) revised?.(revision.days);
       } else if (event === "done") {
         result = JSON.parse(data) as T;
       } else if (event === "error") {
-        failure = (JSON.parse(data) as { error: string }).error;
+        const parsed = JSON.parse(data) as { error: string };
+        // Ruling B: once `plan` is on the wire the traveler already has a working, interactive
+        // itinerary. A critique-pass failure at that point is a lost background refinement, not
+        // a lost trip — it must not fail the run out from under a plan already being read.
+        if (planReceived) {
+          console.error("[home] background review failed", parsed.error);
+        } else {
+          failure = parsed.error;
+        }
       }
     });
 
@@ -1064,45 +1146,87 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // never unmounts between the two, so the collapse state would otherwise carry over.
     setPlanCollapsed(true);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
+    setDraftItinerary(null);
+    editedSincePlanRef.current = false;
+
+    /**
+     * Swaps from the loading view to the interactive plan, once. Called either from `planned`
+     * the instant the stream's `plan` event lands, or — on the plain-fallback path, which never
+     * sends a `plan` event at all — after `runStreamed` resolves with the final result.
+     *
+     * `owner` is the AbortController that was live when this call was scheduled. The arrival
+     * hold below is a real wait with no fetch behind it, so a Cancel (or a fresh `generate()`
+     * call) racing it isn't caught by the abort signal the way the rest of this function is —
+     * checking that `owner` is still the live controller after the hold is what stops a
+     * cancelled or superseded run from resurrecting itself on screen a moment later.
+     */
+    const showPlan = async (
+      owner: AbortController | null,
+      plan: Itinerary,
+      runId: string | null,
+      sessionId: string | null
+    ) => {
+      // Let the arrival land before swapping surfaces. Without this the loader unmounts the
+      // instant the plan resolves, so the marker never reaches the pin and the wait ends on a
+      // hard cut. Peak-end weights these few hundred milliseconds far more heavily than the
+      // middle minute, and they used to be spent on nothing. ItineraryCard's own staggered
+      // reveal takes over from here.
+      await settle(ARRIVAL_HOLD_MS);
+      if (abortRef.current !== owner) return;
+      setDraftItinerary(null);
+      // Cleared in the same tick as the new itinerary, and that pairing matters: leaving the
+      // previous run's id in place for even one render would point the autosave effect at the
+      // old draft row and overwrite the plan it holds with this new one. Both updates batch, so
+      // the effect never sees the new plan beside the old id.
+      setDraftTripId(null);
+      setDraftState(null);
+      persistedDraftRef.current = null;
+      draftWriteRef.current = null;
+      setItinerary(plan);
+      setLastRunId(runId);
+      setLastSessionId(sessionId);
+      setRevealAnimation(true);
+      setStep("result");
+      setGenerating(false);
+      // Not awaited. The plan is already on screen and the traveler can read, edit or refine it
+      // while this lands; blocking the arrival on a database insert would add a pause to the one
+      // moment of this flow that should feel instant. `writeDraft` swallows its own failures, so
+      // there is nothing here to catch — the promise is kept only so `save()` can await it.
+      draftWriteRef.current = writeDraft(plan, runId, sessionId);
+    };
+
+    let planShown = false;
     try {
       const data = await runStreamed<{
         itinerary: Itinerary;
         runId?: string | null;
         sessionId?: string | null;
-      }>({
-        destination,
-        startDate,
-        endDate,
-        budget,
-        tier,
-        preferences: { tags: interests, vibe: null },
-        userAnswers: currentAnswers(),
-        dietary,
-      });
-      // Let the arrival land before swapping surfaces. Without this the loader unmounts the
-      // instant the itinerary resolves, so the marker never reaches the pin and the whole
-      // two-minute wait ends on a hard cut. Peak-end weights these few hundred milliseconds
-      // far more heavily than the middle minute, and they used to be spent on nothing.
-      // ItineraryCard's own staggered reveal takes over from here.
-      await settle(ARRIVAL_HOLD_MS);
-      // Cleared in the same tick as the new itinerary, and that pairing matters: leaving the
-      // previous run's id in place for even one render would point the autosave effect at the old
-      // draft row and overwrite the plan it holds with this new one. Both updates batch, so the
-      // effect never sees the new plan beside the old id.
-      setDraftTripId(null);
-      setDraftState(null);
-      persistedDraftRef.current = null;
-      draftWriteRef.current = null;
-      setItinerary(data.itinerary);
-      setLastRunId(data.runId ?? null);
-      setLastSessionId(data.sessionId ?? null);
-      setRevealAnimation(true);
-      setStep("result");
-      // Not awaited. The plan is already on screen and the traveler can read, edit or refine it
-      // while this lands; blocking the arrival on a database insert would add a pause to the one
-      // moment of this flow that should feel instant. `writeDraft` swallows its own failures, so
-      // there is nothing here to catch — the promise is kept only so `save()` can await it.
-      draftWriteRef.current = writeDraft(data.itinerary, data.runId ?? null, data.sessionId ?? null);
+      }>(
+        {
+          destination,
+          startDate,
+          endDate,
+          budget,
+          tier,
+          preferences: { tags: interests, vibe: null },
+          userAnswers: currentAnswers(),
+          dietary,
+        },
+        {
+          planned: (plan) => {
+            planShown = true;
+            void showPlan(abortRef.current, plan.itinerary, plan.runId ?? null, plan.sessionId ?? null);
+          },
+          revised: (days) => setItinerary((prev) => (prev ? { ...prev, days } : prev)),
+        }
+      );
+      // The plain-fallback path never sends a `plan` event, so `planned` never ran — this is
+      // the only place the result reaches the screen. On the streaming path `planned` has
+      // already handled it (`done` here just confirms what `plan` already delivered, possibly
+      // critiqued in the background), so this is a no-op.
+      if (!planShown) {
+        await showPlan(abortRef.current, data.itinerary, data.runId ?? null, data.sessionId ?? null);
+      }
       notifyGenerationDone(true, notifyOnDone);
       // The wizard's job is done — drop its draft and the `?step=` it leaves in the URL, or a
       // refresh on this result page would find both still there and restore straight back into
@@ -1175,6 +1299,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    *  than its job. */
   function handleRearrange(next: Itinerary) {
     setRevealAnimation(false);
+    // A local edit outranks a critique revision that lands after it — see editedSincePlanRef.
+    editedSincePlanRef.current = true;
     setItinerary(next);
   }
 
@@ -1182,6 +1308,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     if (!itinerary) return;
     const updated: Itinerary = structuredClone(itinerary);
     Object.assign(updated.days[dayIndex], updates);
+    // A local edit outranks a critique revision that lands after it — see editedSincePlanRef.
+    editedSincePlanRef.current = true;
     setItinerary(updated);
   }
 
@@ -2181,7 +2309,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   onCancel={focus.cancel}
                   onSave={() => {
                     const committed = focus.save();
-                    if (committed) setItinerary(committed);
+                    if (committed) {
+                      // A local edit outranks a critique revision that lands after it — see
+                      // editedSincePlanRef.
+                      editedSincePlanRef.current = true;
+                      setItinerary(committed);
+                    }
                   }}
                 />
               )}
