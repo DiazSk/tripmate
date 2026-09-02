@@ -1,11 +1,106 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMapCamera } from "./mapCamera";
+import { prefersReducedMotion } from "./reducedMotion";
 import { geocodeDestination } from "./weather";
-import { PlaceDetail, Stop } from "./types";
+import { Itinerary, PlaceDetail, Stop } from "./types";
 
 export type GeocodeOutcome = "found" | "missed" | "unreachable";
+
+/** How long the streaming camera takes to reach each new framing, in seconds. Longer than the
+ *  2s a finished route gets: this flight is unrequested, and a slow drift reads as the map
+ *  keeping up with the plan where a quick snap reads as the map being yanked. */
+const STREAM_FRAME_SECONDS = 2.4;
+
+/**
+ * Moves the camera as a plan is written, and keeps everything else off the camera while it does.
+ *
+ * Two halves, and both are needed for either to work:
+ *
+ * 1. **`showTripRoute`'s own framing is suspended for the length of the run.** `ItineraryCard`
+ *    redraws the route on every arriving stop, which is right — the pins and ribbons *are* the
+ *    reveal — but each of those calls also re-aimed the camera at a freshly-computed pose. On a
+ *    live 4-day Rome generation that meant five flights in 22 seconds whose headings went
+ *    25° → 23° → 53° → 276° → 281°, because `routeViewHeadingDeg` faces a route across its long
+ *    axis and a route's long axis changes completely every time a stop lands on it. Read as the
+ *    map spinning on the spot.
+ * 2. **One framing per day, when that day's real coordinates land.** `coordsDay` is the highest
+ *    day index a `day-coords` event has corrected, so it is both the trigger and the debounce —
+ *    no timer. It has to be the trigger rather than the stops themselves: the model writes
+ *    latitudes and longitudes from memory and has been measured 11km out, so the bounds of the
+ *    stops as *written* frame the wrong part of the city until Overpass answers.
+ *
+ * The framing is the growing trip, not the newest day — every day corrected so far, held in
+ * frame together. Following the newest day's centroid at a fixed range was built and watched
+ * against the same 4-day Rome generation, and lost on three counts: at any fixed range tight
+ * enough to be worth flying to, a real day in a real city already runs off both edges; two
+ * `day-coords` frames landing in the same CLI clump cancel each other's flight, so a day is
+ * silently skipped; and the run ends leaned in on one day with nothing to pull back out, since
+ * the finished plan's route shape equals the draft's and `ItineraryCard`'s route effect never
+ * re-fires. Growing bounds settle instead of churning by construction — each new day moves the
+ * accumulated bounds less than the last (measured: zoom 14.9 → 14.02 → 13.82 → 13.76).
+ *
+ * `running` rather than `draft !== null` gates the suspension, so it is in force from the button
+ * press: child effects commit before parent ones, and keyed on the draft the first clump of stops
+ * would frame itself on hallucinated coordinates before this hook ever ran.
+ *
+ * Also drives a refine, which streams the same events into the same draft.
+ */
+export function useStreamingCamera(
+  running: boolean,
+  draft: Itinerary | null,
+  coordsDay: number | null
+) {
+  const { setRouteFramingSuspended, rendererRef, routeAltitudeRef } = useMapCamera();
+
+  useEffect(() => {
+    setRouteFramingSuspended(running);
+    return () => setRouteFramingSuspended(false);
+  }, [running, setRouteFramingSuspended]);
+
+  useEffect(() => {
+    if (coordsDay === null || !draft) return;
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive()) return;
+    // Only the days whose coordinates have been corrected. A day still holding the model's own
+    // guesses would widen the bounds by however far it guessed wrong, and then snap back.
+    const days = draft.days
+      .slice(0, coordsDay + 1)
+      // `filter` and not a bare `map`: a `stop` frame writes into `stops[stopIndex]`, so the array
+      // can legitimately be sparse, and a hole would count toward the centroid's divisor.
+      .map((day, i) =>
+        day.stops
+          .filter(Boolean)
+          .map((s) => ({ lat: s.lat, lng: s.lng, name: s.name, day: i, time: s.time }))
+      );
+    if (!days.some((d) => d.length)) return;
+    // ponytail: no outlier rule, and the last day usually has one — the departure transfer. A
+    // Rome plan ending at Fiumicino frames 30km of Lazio on its final move and the city collapses
+    // into a clump. That is `frameRoute`'s own whole-trip answer, shared with the finished plan's
+    // overview, so this arrives at it early rather than inventing a worse one; fix it there (for
+    // both) if it ever needs fixing, not here. Trimming outliers *here* would misframe a genuine
+    // day trip, which looks identical to an airport run from this side.
+    renderer.frameRoute({
+      days,
+      // No day is singled out during a run: the panel is a capsule and the whole trip so far is
+      // the subject. `panelVisible` is still true so the framing measures the panel rather than
+      // assuming it away — `panelLeftEdgePx` reports the full width for a collapsed capsule, and
+      // reports the strip correctly if the traveller opens the plan mid-run.
+      focusDay: null,
+      panelVisible: true,
+      routeAltitudeM: routeAltitudeRef.current,
+      // Unrequested camera movement, which is what `prefers-reduced-motion` asks us to skip — but
+      // skipping it outright would leave the plan drawing itself off screen. Arrive instantly
+      // instead: the framing is the information, the flight is the decoration.
+      durationS: prefersReducedMotion() ? 0 : STREAM_FRAME_SECONDS,
+    });
+    // `draft` is read from the closure on purpose and is deliberately absent from the deps: it
+    // changes identity on every arriving stop, and this must fire once per *day*. On the render
+    // where `coordsDay` moves, the closure's `draft` is that render's own value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coordsDay, rendererRef, routeAltitudeRef]);
+}
 
 export function useTripCamera(destination: string, tripId?: string) {
   const {
