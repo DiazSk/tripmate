@@ -544,8 +544,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const }))
   );
   /** The plan as it is being written, assembled from `stop` and `day-coords` frames. Null
-   *  outside a generation. This is what the map and the itinerary card render during the wait —
-   *  there is no separate loading view to keep in sync with it. */
+   *  outside a generation or a refine — both drive the same `stop`/`day-coords`/`plan` events
+   *  off the one `runStreamed`, so both reset this to null at the start and clear it once their
+   *  own plan lands. This is what the map and the itinerary card render during the wait — there
+   *  is no separate loading view to keep in sync with it. */
   const [draftItinerary, setDraftItinerary] = useState<Itinerary | null>(null);
   /** Set by any local mutation between `plan` and `revised`. Critique replaces the whole day
    *  set, so a revision that lands on top of an edit the traveller just made would silently
@@ -1258,6 +1260,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setRefining(true);
     setError(null);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
+    // `runStreamed` drives the same `stop`/`day-coords`/`plan` events for a refine as for a
+    // from-scratch generate (the server's `live` sink isn't gated by which one this is), so a
+    // refine gets its own progressive reveal too — and needs the same clean start.
+    setDraftItinerary(null);
+    editedSincePlanRef.current = false;
     try {
       const data = await runStreamed<{
         itinerary: Itinerary;
@@ -1273,6 +1280,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         userAnswers: currentAnswers(),
         dietary,
       });
+      setDraftItinerary(null);
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
       setLastSessionId(data.sessionId ?? null);
