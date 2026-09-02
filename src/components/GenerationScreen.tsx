@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-import Image, { getImageProps } from "next/image";
+import { createPortal } from "react-dom";
 
 import { devLabel } from "@/lib/devInspector";
-import SectionOpener from "./blue-hour/SectionOpener";
 import { formatMoney } from "@/lib/format";
 import {
   STAGE_SECONDS,
@@ -16,50 +14,55 @@ import {
   stepGroupState,
 } from "@/lib/generationStages";
 import type { RawFetch } from "@/lib/types";
-import { usePlacePhoto } from "@/lib/usePlacePhoto";
 
 /**
  * What a traveller looks at for the ~five minutes a plan takes to write.
  *
- * This replaced a spinning "Generating" orb and a fanned stack of trivia cards floating over the
- * live Cesium globe. Three things were wrong with that. The globe is the busiest possible ground
- * for small text — every element needed its own 56px-blurred glass panel just to stay legible, and
- * the strip's own comment recorded measuring 1.02:1 against sampled globe pixels without one. The
- * orb said nothing except "working". And the screen showed almost none of what the app had already
- * fetched: by the time Generate is reachable, the real forecast for each of the traveller's dates,
- * the public holidays, and up to twelve candidate places are all sitting in memory.
+ * **This was a full-bleed opaque layer, and the reasoning that made it one still holds — it just
+ * no longer applies.** It covered the globe because the globe is the busiest possible ground for
+ * small text (every element needed its own 56px-blurred glass panel to stay legible, and the
+ * previous strip's comment recorded measuring 1.02:1 against sampled globe pixels without one) and
+ * because the globe had *nothing to say* underneath it: a spinning orb over scenery the traveller
+ * had no reason to look at. Covering it with the destination photographed full-bleed, the city set
+ * large, and a rotating feed of real facts about the place was strictly more than the map offered.
  *
- * So the wait states what is known rather than asking for patience: the destination photographed
- * full-bleed, its name set large, and — the screen's real content — a rotating feed of facts about
- * the place, at display size. The machinery (four steps, one forecast line, the cancel) is demoted
- * into a darkened band at the foot.
+ * The map has something to say now. The generation stream writes each stop as the model produces
+ * it, so the route, the pins and the card behind this band build themselves over the whole wait —
+ * the traveller's own plan, drawing itself on their own destination. That is worth more than a
+ * photograph of the same city, so the layer collapses into the darkened foot band it already had.
  *
- * The ordering is deliberate and was corrected once. The first version put the forecast across
- * seven columns in the best space on the screen and the facts in small prose at the very bottom.
- * Both were backwards: `DayHeader` already prints each day's temperature, rain chance and
- * typical-weather flag beside every day of the finished plan, so the week was a preview of
- * something arriving thirty seconds later, while the facts were the one thing the traveller could
- * not get anywhere else.
+ * **The legibility problem is re-introduced deliberately, and answered the same way it always was.**
+ * Nothing small is set on the open map. Everything dense lives in this band, at 92% over
+ * `--surface-deep` — where the worst measured bright ground composites to 7.1:1 against white,
+ * which clears body text with room. Only 8% of whatever is moving underneath reaches through, so a
+ * light-terrain pan does not change the number. Do not thin this background to "let the map show":
+ * the band's opacity is the entire reason small text is allowed on this screen at all.
  *
- * **The globe is covered, not switched off.** `useGlobeOnScreen(generating || …)` in HomeView still
- * boots Cesium at generation start, deliberately: the 2.3MB import and first tiles are free inside
- * a wait this long, and the queued destination flight replays on `setViewer` so the result view
- * opens already framed. This screen is opaque and sits on top. Un-booting it would move that cost
- * to the moment the plan arrives, which is the one moment it would be felt.
+ * Three things came down from the layer rather than going away with it:
+ *
+ * - **Cancel.** A five-minute call the traveller cannot stop is a trap.
+ * - **The four-group progress strip.** Still meaningful even with the plan drawing itself. It
+ *   covers the ten-odd seconds before the first stop arrives, when the map has nothing on it yet,
+ *   and it is the only place the stages the map cannot show — the context fetch, the critique,
+ *   the coordinate pass — are named at all. Note what it does *not* do: `showPlan` in HomeView
+ *   drops `generating` the moment the plan is interactive, so this band unmounts there and the
+ *   critique that keeps running afterwards runs unreported. That is the existing arrival
+ *   behaviour, not something this band changed; reporting it would mean keeping a status band
+ *   over a finished, editable plan for another two minutes.
+ * - **The rotating facts.** The feed was the entire point of this screen's last rewrite — by the
+ *   time Generate is reachable the app already holds the real forecast, the public holidays and up
+ *   to twelve candidate places, and was showing none of it. It keeps the band's largest type and
+ *   sits beside the strip. Dropping it here would have been a regression dressed as a feature.
+ *
+ * The forecast line stays where it was demoted to: `DayHeader` prints each day's temperature
+ * beside every day of the finished plan, so it was never worth the screen's best space — but it is
+ * still the one concrete thing known about the trip before the plan exists.
+ *
+ * **The globe is now uncovered rather than covered.** `useGlobeOnScreen(generating || …)` in
+ * HomeView already booted Cesium at generation start so the result view would open already framed;
+ * that cost is now spent on something visible for the whole wait instead of on a head start behind
+ * an opaque sheet.
  */
-
-/** The ground when the destination has no photograph. A real place beats a generic one every time,
- *  so this appears only where `usePlacePhoto` came back empty — which was previously flat
- *  `--canvas`, i.e. nothing at all. Dawn mist over hills is the one generic image this screen can
- *  honestly wear: it says "somewhere, early" without claiming to be the traveller's somewhere.
- *
- *  A pair, art-directed on the same 3/5 aspect ratio the hero switches on, because this is a
- *  full-bleed backdrop and the landscape crop centre-cuts badly on a phone. One threshold in the
- *  codebase rather than two. */
-const FALLBACK = {
-  landscape: { src: "/scenes/scenic-cloudy-background.webp", width: 2880, height: 1726 },
-  portrait: { src: "/scenes/mobile-scenic-cloudy-background.webp", width: 750, height: 1714 },
-};
 
 /** Longest week the strip will lay out before collapsing the rest into a count. Trips run to 30
  *  days and thirty columns is not a strip, it is a spreadsheet. */
@@ -119,18 +122,6 @@ export default function GenerationScreen({
   onCancel?: () => void;
 }) {
   const stripRef = useRef<HTMLDivElement>(null);
-  // Already resolved and cached by the plan step, which asks the same hook for the Wikipedia
-  // extract — all three variants share one request per name, so the photo costs no extra fetch.
-  const photo = usePlacePhoto(destination, "full");
-  // `getImageProps` only computes URLs — it renders nothing — so building these unconditionally
-  // costs no request unless the `<picture>` below actually mounts.
-  const fallbackCommon = { alt: "", sizes: "100vw", priority: true } as const;
-  const {
-    props: { srcSet: fallbackLandscape },
-  } = getImageProps({ ...fallbackCommon, ...FALLBACK.landscape });
-  const {
-    props: { srcSet: fallbackPortrait, ...fallbackRest },
-  } = getImageProps({ ...fallbackCommon, ...FALLBACK.portrait });
   const [factIndex, setFactIndex] = useState(0);
   const [cancelReady, setCancelReady] = useState(false);
 
@@ -188,46 +179,28 @@ export default function GenerationScreen({
     .filter(Boolean)
     .join(" · ");
 
-  return (
+  // Portalled to `document.body`, and that is not tidiness — it is the only way this band can be
+  // above the map's own chrome. HomeView renders it inside `.content-overlay`, which is `z-10`
+  // and therefore a stacking context, so every z-index in here is trapped under it: `MapControls`
+  // is a `z-20` *sibling* of that overlay, and its zoom pill and tilt slider drew straight
+  // through an opaque band at `z-40`, the slider's thumb landing on the rotating fact's first
+  // word. The full-bleed layer this replaced never showed the bug because the wizard's steps
+  // carry `.map-chrome-hidden`, which took the control stack off screen for the whole wait — and
+  // a generating run cannot carry that class any more, since the same rule also hides
+  // `.stop-marker-layer`, i.e. the stops this band exists to uncover. Safe to read `document.body`
+  // in render: HomeView imports this behind `dynamic(…, { ssr: false })`.
+  return createPortal(
     <section
-      // Opaque and full-bleed: this is what covers the globe. `z-30` sits under AppShell's
-      // `z-20` navbar only because the navbar lives outside the content overlay's stacking
-      // context — the bar stays visible, which is intended.
-      className="pointer-events-auto fixed inset-0 z-30 flex flex-col overflow-y-auto bg-canvas"
+      // Bottom-anchored, not full-bleed: the map above it is the wait now, and it stays live and
+      // draggable because this element is the only thing claiming pointer events.
+      // `z-40` clears `DockedPanel`'s `z-10` capsule and the marker cards at `z-5`, and stays under
+      // `LlmTraceFab` at `z-50` — see the `lg:pr-14` note on the cancel row for why that matters.
+      // The dark treatment is the band's original one, kept unchanged: it was designed for
+      // legibility over busy ground, which is exactly the problem a live map re-introduces.
+      className="pointer-events-auto fixed inset-x-0 bottom-0 z-40 border-t border-white/10"
+      style={{ background: "rgb(var(--surface-deep-rgb) / 0.92)" }}
       {...devLabel("GenerationScreen")}
     >
-      {/* The destination itself, behind everything.
-          Measured across eight cities before committing to this: every one resolved to a real
-          landscape cityscape (aspect 1.50–1.83), but mean luminance ranged 0.040 to 0.348 and
-          Kyoto peaked at 0.947 — near-white sky. White body text over that peak is 2.41:1 under a
-          60% scrim and 3.56:1 under 75%, so a flat scrim cannot make small text safe anywhere.
-          Hence the gradient: heavy at the top where the type sits (5.5:1 against the worst peak),
-          lighter through the middle so the photograph is actually visible, and heavy again under
-          the band. It is the same split the reference's own Combine section uses — large type on
-          the photo, dense type in a darkened band.
-          With no destination photograph this falls back to `FALLBACK` rather than to flat canvas,
-          which is what the screen showed before. The scrim is shared: it was measured against
-          destination photography peaking near white, and the fallback is darker than any of those,
-          so it inherits a gradient with margin to spare instead of needing one of its own. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        {photo ? (
-          <Image src={photo} alt="" fill priority sizes="100vw" className="object-cover" />
-        ) : (
-          <picture>
-            <source media="(min-aspect-ratio: 3/5)" srcSet={fallbackLandscape} sizes="100vw" />
-            <source srcSet={fallbackPortrait} sizes="100vw" />
-            <img {...fallbackRest} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          </picture>
-        )}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(to bottom, rgb(var(--surface-deep-rgb) / 0.94) 0%, rgb(var(--surface-deep-rgb) / 0.9) 34%, rgb(var(--surface-deep-rgb) / 0.55) 60%, rgb(var(--surface-deep-rgb) / 0.7) 86%, rgb(var(--surface-deep-rgb) / 0.88) 100%)",
-          }}
-        />
-      </div>
-
       {/* The only thing announced. The rotating fact and the week are deliberately outside it: a
           live region that re-reads on every stage change is worse than silence. */}
       <p role="status" aria-live="polite" className="sr-only">
@@ -236,48 +209,38 @@ export default function GenerationScreen({
           : `${mode === "refine" ? "Reworking" : "Building"} your ${city} itinerary — ${activeStep?.label ?? "starting"}.`}
       </p>
 
-      {/* `my-auto`, not `justify-center` on the parent: a flex container that overflows clips its
-          start, so on a phone the heading disappeared behind the fixed navbar and could not be
-          scrolled back to. This centres when the content fits and tops-out when it doesn't. */}
-      <div className="mx-auto my-auto w-full max-w-[100rem] px-5 py-[calc(var(--nav-h)+2rem)] sm:px-6">
-        <SectionOpener label={mode === "refine" ? "Reworking" : "Planning"} align="start">
-          <h1 className="font-scene-hero text-[clamp(2.5rem,9vw,8rem)] leading-[0.9] text-foreground">
-            {city}.
-          </h1>
-          {summary && <p className="mt-4 text-sm tabular-nums text-muted">{summary}</p>}
-        </SectionOpener>
+      <div className="mx-auto w-full max-w-[100rem] px-5 py-5 sm:px-6">
+        <div ref={stripRef} className="[--gen-progress:0]">
+          <div className="relative h-px w-full bg-white/10">
+            {/* Not `motion-safe:` — the transition is what makes this smooth, and removing it
+                leaves the bar jerking through ten JS writes a second. See the reduced-motion
+                exemption in globals.css. */}
+            <div className="gen-fill absolute inset-y-0 left-0 w-full origin-left bg-accent [transform:scaleX(var(--gen-progress))] [transition:transform_200ms_linear]" />
+          </div>
 
-        {/* The fact is the screen's second voice, not its footnote.
-            It sat at the bottom in small prose, below a seven-column weather grid, where a waiting
-            traveller had no reason to look. Set at display scale it earns the attention — and the
-            size is also what makes it safe over photography, since large text needs 3:1 where body
-            text needs 4.5:1.
-            `key` on the index restarts the entrance, so a change reads as a new line arriving
-            rather than as text mutating in place. */}
-        <p
-          key={factIndex}
-          className="mt-16 max-w-4xl text-[clamp(1.375rem,3.2vw,2.5rem)] leading-[1.25] tracking-[-0.045em] text-foreground motion-safe:[animation:value-in_520ms_cubic-bezier(0.16,1,0.3,1)_backwards] lg:ml-[calc(11rem+2.5rem)]"
-        >
-          {facts[factIndex] ?? `Reading everything we can find about ${city}.`}
-        </p>
-      </div>
-
-      {/* The working band. Everything small and dense lives here rather than on the photograph —
-          at 92% the worst measured peak composites to 7.1:1 against white, which clears body text
-          with room, where the same text on the open photo would not. */}
-      <div
-        className="mt-auto w-full border-t border-white/10"
-        style={{ background: "rgb(var(--surface-deep-rgb) / 0.92)" }}
-      >
-        <div className="mx-auto w-full max-w-[100rem] px-5 py-6 sm:px-6">
-          <div ref={stripRef} className="[--gen-progress:0]">
-            <div className="relative h-px w-full bg-white/10">
-              {/* Not `motion-safe:` — the transition is what makes this smooth, and removing it
-                  leaves the bar jerking through ten JS writes a second. See the reduced-motion
-                  exemption in globals.css. */}
-              <div className="gen-fill absolute inset-y-0 left-0 w-full origin-left bg-accent [transform:scaleX(var(--gen-progress))] [transition:transform_200ms_linear]" />
+          {/* The fact beside the strip rather than under the photograph it used to sit on. It
+              keeps the largest type in the band — partly because it is still the screen's real
+              content, and partly because large text needs 3:1 where body text needs 4.5:1, which
+              is the margin worth having on the one element people actually read while waiting. */}
+          <div className="grid gap-x-10 gap-y-5 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+            <div>
+              <p className="text-[0.62rem] font-semibold tracking-[0.14em] text-accent uppercase">
+                {mode === "refine" ? "Reworking" : "Planning"} {city}
+              </p>
+              {/* `key` on the index restarts the entrance, so a change reads as a new line
+                  arriving rather than as text mutating in place. `min-h` because this band is
+                  anchored to the bottom edge: a two-line fact replacing a one-line one would
+                  otherwise shove the whole band up and down every seven seconds. */}
+              <p
+                key={factIndex}
+                className="mt-2 min-h-[4rem] text-[clamp(1rem,1.7vw,1.375rem)] leading-[1.3] tracking-[-0.035em] text-foreground motion-safe:[animation:value-in_520ms_cubic-bezier(0.16,1,0.3,1)_backwards]"
+              >
+                {facts[factIndex] ?? `Reading everything we can find about ${city}.`}
+              </p>
+              {summary && <p className="text-xs tabular-nums text-muted">{summary}</p>}
             </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 pt-4 lg:grid-cols-4">
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 self-start sm:grid-cols-4">
               {STEP_GROUPS.map((step, i) => {
                 const state = stepGroupState(step, stages);
                 return (
@@ -312,49 +275,48 @@ export default function GenerationScreen({
               })}
             </div>
           </div>
+        </div>
 
-          {/* `lg:pr-14` reserves the bottom-right corner for `LlmTraceFab`, which is a `z-50` fixed
-              48px button at a 20px inset and is *not* dev-gated — it renders in production on every
-              route, above this screen's `z-30`. Without the reservation the Cancel button lands
-              underneath it and a hit-test at Cancel's centre returns the FAB: the control looks
-              normal and is completely dead. Only at `lg`, because that is where this row goes
-              horizontal and puts Cancel in the corner; stacked below that it sits at the left.
-              Verified with `elementFromPoint`, not `.click()` — see The Top-Layer-Still-Inherits
-              Rule for why a scripted click would have passed. */}
-          <div className="mt-6 flex flex-col gap-4 border-t border-white/10 pt-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10 lg:pr-14">
-            {/* The forecast, demoted from a seven-column grid to one line. It is the same
-                tempMin–tempMax the result view prints under every day heading (DayHeader.tsx), so
-                laying it out large here spent the screen's best space on a preview of something
-                the traveller sees thirty seconds later. Kept, because it is still the one concrete
-                thing known about the trip before the plan exists — just no longer the headline. */}
-            {week.length > 0 ? (
-              <p className="text-xs tabular-nums text-muted">
-                <span className="text-white/55">Forecast</span>{" "}
-                {week.map((d) => `${d.label} ${d.temp}`).join("  ·  ")}
-                {hiddenDays > 0 && `  ·  +${hiddenDays} more`}
-                {historical && <span className="text-white/40"> · same dates last year</span>}
-              </p>
-            ) : (
-              <span />
+        {/* `lg:pr-14` reserves the bottom-right corner for `LlmTraceFab`, which is a `z-50` fixed
+            48px button at a 20px inset and is *not* dev-gated — it renders in production on every
+            route, above this band's `z-40`. Without the reservation the Cancel button lands
+            underneath it and a hit-test at Cancel's centre returns the FAB: the control looks
+            normal and is completely dead. Only at `lg`, because that is where this row goes
+            horizontal and puts Cancel in the corner; stacked below that it sits at the left.
+            Verified with `elementFromPoint`, not `.click()` — see The Top-Layer-Still-Inherits
+            Rule for why a scripted click would have passed. */}
+        <div className="mt-5 flex flex-col gap-4 border-t border-white/10 pt-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10 lg:pr-14">
+          {/* The forecast, one line. It is the same tempMin–tempMax the result view prints under
+              every day heading (DayHeader.tsx), so it was never worth more than this — but it is
+              still the one concrete thing known about the trip before the plan exists. */}
+          {week.length > 0 ? (
+            <p className="text-xs tabular-nums text-muted">
+              <span className="text-white/55">Forecast</span>{" "}
+              {week.map((d) => `${d.label} ${d.temp}`).join("  ·  ")}
+              {hiddenDays > 0 && `  ·  +${hiddenDays} more`}
+              {historical && <span className="text-white/40"> · same dates last year</span>}
+            </p>
+          ) : (
+            <span />
+          )}
+
+          <div className="flex shrink-0 items-center gap-4">
+            <p className="text-xs text-muted">
+              {complete ? "Opening your plan…" : `Usually about ${spellMinutes(TYPICAL_MINUTES)}.`}
+            </p>
+            {onCancel && cancelReady && !complete && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
+              >
+                Cancel
+              </button>
             )}
-
-            <div className="flex shrink-0 items-center gap-4">
-              <p className="text-xs text-muted">
-                {complete ? "Opening your plan…" : `Usually about ${spellMinutes(TYPICAL_MINUTES)}.`}
-              </p>
-              {onCancel && cancelReady && !complete && (
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
           </div>
         </div>
       </div>
-    </section>
+    </section>,
+    document.body
   );
 }

@@ -473,6 +473,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setGenerating(false);
     setRefining(false);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
+    // Half a plan is not a plan. The draft used to be safe to leave lying around because nothing
+    // rendered it; it is the card and the map's route now, so a cancelled run would otherwise
+    // leave a partial itinerary on screen — and, on a refine, sitting *over* the finished plan it
+    // was meant to replace — until the next run happened to reset it.
+    setDraftItinerary(null);
+    // Clearing the draft unmounts the card, and the card is the only thing that calls
+    // `showTripRoute` — so on a *generate* there is nothing left to redraw the map, and the
+    // half-drawn route and its pins would sit on the globe until something else wiped them (the
+    // form's own backdrop hides them, but the next Generate uncovers them again). A refine needs
+    // the opposite: the finished plan is still there, its card re-renders from it, and its own
+    // route effect puts the real geometry back.
+    if (step !== "result") resetToHome();
     // Silent on purpose. The user asked for this; an error block telling them the planner
     // didn't finish would be the app reporting their own decision back to them as a fault.
     setError(null);
@@ -733,6 +745,34 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   useGlobeOnScreen(generating || step === "result");
 
   const preResult = step !== "result";
+
+  /**
+   * The plan on screen: the half-written one while a run is streaming, the finished one otherwise.
+   *
+   * One value rather than two render paths, deliberately — `ItineraryCard` is what drives
+   * `showTripRoute`, so feeding it the draft is what puts the route and the markers on the map as
+   * the model writes them. A second "streaming" card would mean a second thing to keep in step
+   * with the real one.
+   *
+   * **`itinerary` is only a fallback on the result step, and that condition is load-bearing.**
+   * Nothing clears `itinerary` when a traveller presses Back and plans a second trip — the page
+   * never unmounts between the two — so before this branch existed, pressing Generate for
+   * Reykjavik put *Kyoto's* finished plan and route on screen for the ten seconds until the first
+   * real stop arrived. A generate has nothing to fall back to by definition; a refine, which runs
+   * from the result step, falls back to the plan it is reworking, which is exactly right.
+   *
+   * Read only where the question is "what is being shown": the card, the capsule's day count, and
+   * the gate below. Everything that *edits* or *saves* still reads `itinerary`, because a draft is
+   * not a plan anybody can keep yet.
+   */
+  const shownItinerary = step === "result" ? (draftItinerary ?? itinerary) : draftItinerary;
+
+  /** True exactly while the card is showing a half-written plan. Preferred over `generating` for
+   *  gating the card's own controls: the two come apart at both ends of a run — `generating` is
+   *  true for the ten-odd seconds before the first stop arrives, and stays true through the
+   *  background critique after the plan is interactive — and it is the *draft* that makes an edit
+   *  or a tour a bad idea, not the run. */
+  const streamingPlan = draftItinerary !== null;
 
   // Null until both dates are set, so the tier cards show per-day rates rather than a total
   // derived from tripDays' floor-at-1.
@@ -1245,6 +1285,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // permanent default — the bug this codebase already hit twice with `tier`. /profile and
       // the onboarding card are the only writers.
     } catch (e) {
+      // Same reason as in cancelGeneration: a run that failed halfway leaves whatever stops it
+      // got in `draftItinerary`, and that value is now on screen. Cleared for the abort case too
+      // — cancelGeneration has already done it, but a `plainFallback` abort can land here without
+      // having gone through that button.
+      setDraftItinerary(null);
+      // Same wipe as cancelGeneration, and gated on `planShown` rather than on `step`: `step` here
+      // is this closure's stale copy from the click, while `runStreamed` can genuinely throw
+      // *after* `plan` landed (a socket dropping during the background critique). Wiping the map
+      // then would take the finished plan's own route off the globe.
+      if (!planShown) resetToHome();
       // A cancel arrives here as an AbortError. It is not a failure and must not be reported
       // as one — cancelGeneration has already reset the UI.
       if (!isAbort(e)) {
@@ -1285,6 +1335,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       setLastRunId(data.runId ?? null);
       setLastSessionId(data.sessionId ?? null);
     } catch (e) {
+      // "Your current plan is unchanged" has to be true on screen as well as in state. The draft
+      // is what the card renders while a refine streams, so leaving it here would show the
+      // traveller the abandoned half-rework under a message telling them nothing changed.
+      setDraftItinerary(null);
       if (!isAbort(e)) {
         setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
       }
@@ -1570,14 +1624,22 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // form, which carries its own type and palette and reads wrong under the scene
       // hues. The extra top padding is what ScrollStory's negative top margin cancels —
       // see the note on that component's wrapper.
-      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : "map-chrome-hidden"} ${
+      // `map-chrome-hidden` hides the control stack *and* `.stop-marker-layer` (globals.css), on
+      // the grounds that the wizard's steps are a form over a decorative globe with no route on
+      // it. Both halves of that stop being true the moment Generate is pressed: there is a route
+      // now, arriving stop by stop, and the marker cards are what the traveller is watching. So a
+      // generating run is neither a form step nor a result — it keeps the markers without taking
+      // `dashboard-page`'s token overrides, which belong to the solid-background result view.
+      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : generating || refining ? "" : "map-chrome-hidden"} ${
         step === "landing" ? "blue-hour-scene" : ""
       }`}
     >
-      {/* The photograph the form stands on, from the moment the traveller opens it until their
-          plan appears. Not rendered while generating: GenerationScreen is a full-bleed opaque
-          layer that paints this same image itself, so a second copy underneath would be two
-          decodes of one file to show one picture. */}
+      {/* The photograph the form stands on, from the moment the traveller opens it until Generate.
+          Still not rendered while generating, but for the opposite reason it was before:
+          `GenerationScreen` used to paint this same image full-bleed itself, so a second copy
+          underneath was two decodes of one file. It is a foot band now, and the ground it leaves
+          uncovered is the live map with the plan drawing itself onto it — which is the whole point
+          of the wait. A photograph over that would hide the thing worth watching. */}
       {step === "plan" && !generating && !refining && <SceneBackdrop />}
 
       {/* Gated here rather than left to the component's own `if (!active) return null`. It is
@@ -2248,12 +2310,19 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         </div>
       )}
 
-      {step === "result" && itinerary && (
+      {/* Also mounted while a generation streams, which is what makes the wait watchable: the
+          panel opens collapsed to its capsule, and the card inside it — kept mounted rather than
+          unmounted, see DockedPanel — runs its `showTripRoute` effect on every arriving stop, so
+          the route and the marker cards build themselves on the live map behind the foot band.
+          The card is the same one the result view uses; only the value differs. */}
+      {(step === "result" || generating || refining) && shownItinerary && (
         <DockedPanel
           collapsible
           busy={refining}
           capsuleAction={
-            itinerary?.days.length
+            // Not offered mid-run: the tour flies a camera through stops that are still
+            // arriving, and it would fight the route replay for the same camera.
+            step === "result" && !streamingPlan && itinerary?.days.length
               ? {
                   label: tour.playing ? "Stop tour" : "Play tour",
                   onClick: tour.toggle,
@@ -2275,10 +2344,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
             destination
               ? {
                   title: destination,
-                  subtitle: itinerary?.days.length
-                    ? `${itinerary.days.length} ${itinerary.days.length === 1 ? "day" : "days"}`
+                  subtitle: shownItinerary?.days.length
+                    ? `${shownItinerary.days.length} ${shownItinerary.days.length === 1 ? "day" : "days"}`
                     : undefined,
-                  step: itinerary?.days.length ? `Day ${activeDayIndex + 1}` : undefined,
+                  step: shownItinerary?.days.length ? `Day ${activeDayIndex + 1}` : undefined,
                 }
               : undefined
           }
@@ -2292,12 +2361,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 active day, this panel's scroll position and the stop tour's interval all
                 survive the round trip instead of resetting when ItineraryCard remounts. */}
             <div className={selectedStop ? "hidden" : "space-y-6"}>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={backToLanding} className={backPillClass}>
-                  <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
-                  Back
-                </button>
-              </div>
+              {/* Withheld while a run streams. `backToLanding` does not abort the request, so
+                  from here it would leave a five-minute model call running invisibly — Cancel in
+                  the generation band is the one way out of a run, and it is right there. */}
+              {step === "result" && !streamingPlan && (
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={backToLanding} className={backPillClass}>
+                    <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
+                    Back
+                  </button>
+                </div>
+              )}
               {/* Focus Mode takes over the card while editing a day. */}
               {focus.target && focus.draft && (
                 <FocusEditMode
@@ -2349,14 +2423,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {!focus.target && (
                 <ItineraryCard
                   tour={tour}
-                  itinerary={itinerary}
+                  itinerary={shownItinerary}
                   budget={budget}
                   destination={destination}
                   onSelectStop={(stop) => {
                     setRevealAnimation(false);
                     selectStop(stop);
                   }}
-                  editable
+                  // Read-only while the plan is still being written: a drag or an inline day edit
+                  // lands in `itinerary`, and the very next streamed stop would overwrite it.
+                  editable={!streamingPlan}
                   activeDayIndex={activeDayIndex}
                   unseenChangedDays={unseenChangedDays}
                   onActiveDayChange={(next) => {
@@ -2379,7 +2455,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 />
               )}
 
-              {!focus.target && (
+              {/* `itinerary`, not `shownItinerary`: Keep and Refine both act on a finished plan,
+                  and a half-written draft is not one. */}
+              {!focus.target && itinerary && (
                 <FeedbackLoop
                   onSave={save}
                   onRefine={refine}
@@ -2397,7 +2475,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 loading={detailLoading}
                 error={detailError}
                 onBack={closeDetail}
-                upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
+                upcomingStops={upcomingStopsAfter(shownItinerary, selectedStop)}
                 onSelectUpcoming={selectStop}
               />
             )}
