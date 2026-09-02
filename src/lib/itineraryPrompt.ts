@@ -23,7 +23,19 @@ import type { PlaceConflict } from "./placeConflicts";
 import type { DietaryNeeds } from "./travelerProfile";
 
 const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one line: why this stop suits this traveler","note":"one line: practical detail","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}`;
-const SHAPE_HINT = `{"days":[{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]}`;
+
+/**
+ * One day's shape, shared by every prompt that asks for days back.
+ *
+ * Shared because it drifted, and the drift lost data. `SHAPE_HINT` listed `summary` and the
+ * critique and rebalance shapes did not — and since both of those return a whole corrected day
+ * set that replaces the original wholesale, a model following its own prescribed shape silently
+ * erased every day's narrative, which `ItineraryCard` renders. Three literals meant nothing made
+ * the omission visible. One literal means a field added here reaches all three, and `carryOverDaySummaries`
+ * in itinerary.ts covers the case where a model ignores the shape anyway.
+ */
+const DAY_SHAPE = `{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}`;
+const SHAPE_HINT = `{"days":[${DAY_SHAPE}]}`;
 
 // Concrete stop-selection guidance per interest tag — generic "weight toward
 // this interest" phrasing wasn't specific enough to reliably avoid the
@@ -245,7 +257,7 @@ ${FOOD_STOP_INSTRUCTION}
 ${lodgingInstruction()}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, as a JSON array of day objects in this shape:
-[{"date":"YYYY-MM-DD","weather":"short weather summary","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]`;
+[${DAY_SHAPE}]`;
 }
 
 /**
@@ -294,5 +306,5 @@ If it already looks good, respond with exactly: {"issues":[],"revisedDays":null}
 Otherwise, respond with the specific issues found and a corrected "days" array in the same shape as the input, fixing those issues.
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
-{"issues":["short issue description"],"revisedDays":[{"date":"YYYY-MM-DD","weather":"short weather summary","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}]}`;
+{"issues":["short issue description"],"revisedDays":[${DAY_SHAPE}]}`;
 }

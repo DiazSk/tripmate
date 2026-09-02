@@ -128,6 +128,38 @@ export function normalizeDays(days: unknown): DayPlan[] {
   }));
 }
 
+/**
+ * Refill each revised day's `summary` from the day it replaces, where the revision left it out.
+ *
+ * The critique pass returns a whole corrected day set and `runGeneration` applies it wholesale, so
+ * any field the response omits is a field the plan loses. `summary` is the one that actually went
+ * missing: `buildCritiquePrompt`'s response shape did not list it while `buildGeneratePrompt`'s
+ * did, and `ItineraryCard` renders it — so a compliant critique silently erased every day's
+ * narrative. The shapes agree now, which is the necessary half of the fix; this is the half that
+ * does not depend on the model complying with them.
+ *
+ * **Matched by date, never by position.** Critique is told to keep the same dates but is not
+ * stopped from returning fewer days, and an index match would then hand day 2 day 1's narrative —
+ * a wrong summary reads as a real edit, which is worse than a missing one. A day with no
+ * counterpart keeps no summary at all.
+ *
+ * Mutates, matching `annotateConflicts` and `pinAdmissionCosts`, which the runner applies to the
+ * same array in the same breath.
+ */
+export function carryOverDaySummaries(revised: DayPlan[], previous: DayPlan[]): void {
+  const byDate = new Map<string, string>();
+  for (const day of previous) {
+    // A blank summary is not worth carrying and would only overwrite `undefined` with noise.
+    if (day?.date && day.summary?.trim()) byDate.set(day.date, day.summary);
+  }
+  if (byDate.size === 0) return;
+  for (const day of revised) {
+    if (!day || day.summary?.trim()) continue;
+    const inherited = byDate.get(day.date);
+    if (inherited) day.summary = inherited;
+  }
+}
+
 export interface DayActiveSpan {
   /** First stop's start and last stop's end, both as "8:00 AM". */
   start: string;

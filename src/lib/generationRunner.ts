@@ -24,7 +24,7 @@ import { getDestinationContextInsight } from "./destinationContext";
 import { insertGeneration, insertRun } from "./db";
 import { llmMode } from "./llmConfig";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
-import { normalizeDays } from "./itinerary";
+import { carryOverDaySummaries, normalizeDays } from "./itinerary";
 import { tripDays, TierId } from "./tiers";
 import { deriveFlags, sanitizeLogistics } from "./userAnswers";
 import {
@@ -502,9 +502,13 @@ export async function runGeneration(
       });
       const critique = parseJsonResponse<CritiqueResult>(critiqueRaw);
       onStage({ stage: "critique", status: "done" });
-      return critique.revisedDays
-        ? { days: critique.revisedDays, issues: critique.issues ?? [] }
-        : null;
+      if (!critique.revisedDays) return null;
+      // The critique's response replaces the day set wholesale, so a field it leaves out is a
+      // field the plan loses. Its prompt now asks for `summary` (the shapes were out of step and
+      // that is what lost it), but asking is not the same as getting: refill any day that came
+      // back without one from the day it replaces, matched by date. See carryOverDaySummaries.
+      carryOverDaySummaries(critique.revisedDays, itinerary.days);
+      return { days: critique.revisedDays, issues: critique.issues ?? [] };
     } catch {
       // `failed`, not `done` and not `skipped` — the pass really did consume its budget, and
       // critique is alone in its display group, so a skip would collapse to "Checking it over —

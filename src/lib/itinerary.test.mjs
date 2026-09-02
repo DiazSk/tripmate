@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  carryOverDaySummaries,
   dayActiveSpan,
   dayPlanned,
   daySpend,
@@ -143,4 +144,58 @@ test("dayActiveSpan measures first start to last end, and reads both time format
     dayActiveSpan({ date: "2026-09-01", weather: "", stops: [stop({ time: "", durationLabel: "" })] }),
     null
   );
+});
+
+// --- carryOverDaySummaries: the day narrative the critique is prone to dropping ----------------
+//
+// `buildCritiquePrompt` asks for a corrected day set and the model returns the whole thing, so a
+// response that omits `summary` silently erases a field the itinerary card renders. Asking for it
+// in the prompt is necessary but not sufficient — this is the part that does not depend on the
+// model complying.
+
+const day = (date, extra = {}) => ({ date, weather: "clear", stops: [], ...extra });
+
+test("a revised day with no summary inherits the one it replaced", () => {
+  const revised = [day("2026-05-01"), day("2026-05-02")];
+  carryOverDaySummaries(revised, [
+    day("2026-05-01", { summary: "Temples, then the market." }),
+    day("2026-05-02", { summary: "A slow morning by the river." }),
+  ]);
+  assert.equal(revised[0].summary, "Temples, then the market.");
+  assert.equal(revised[1].summary, "A slow morning by the river.");
+});
+
+test("a summary the critique did write is left alone", () => {
+  const revised = [day("2026-05-01", { summary: "Rewritten: museums instead." })];
+  carryOverDaySummaries(revised, [day("2026-05-01", { summary: "Temples, then the market." })]);
+  assert.equal(revised[0].summary, "Rewritten: museums instead.");
+});
+
+test("matching is by date, not position — a dropped day must not shift the rest", () => {
+  const revised = [day("2026-05-02"), day("2026-05-03")];
+  carryOverDaySummaries(revised, [
+    day("2026-05-01", { summary: "one" }),
+    day("2026-05-02", { summary: "two" }),
+    day("2026-05-03", { summary: "three" }),
+  ]);
+  assert.equal(revised[0].summary, "two", "day 2 must not inherit day 1's narrative");
+  assert.equal(revised[1].summary, "three");
+});
+
+test("a day with no counterpart is left without a summary rather than given a wrong one", () => {
+  const revised = [day("2026-05-09")];
+  carryOverDaySummaries(revised, [day("2026-05-01", { summary: "one" })]);
+  assert.equal(revised[0].summary, undefined);
+});
+
+test("an empty or blank previous summary is not copied over as a blank string", () => {
+  const revised = [day("2026-05-01")];
+  carryOverDaySummaries(revised, [day("2026-05-01", { summary: "   " })]);
+  assert.equal(revised[0].summary, undefined);
+});
+
+test("nothing to carry over is not an error", () => {
+  const revised = [day("2026-05-01")];
+  carryOverDaySummaries(revised, []);
+  assert.equal(revised[0].summary, undefined);
 });
