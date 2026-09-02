@@ -132,7 +132,22 @@ export async function fetchFestivals(
 
     const { text, citations } = buildTextAndCitations(distilBraveResults(data));
     const prompt = buildFestivalExtractionPrompt(text, citations);
-    const { result: raw } = await runClaude(prompt, "context", DEFAULT_TIMEOUT_MS, { runId });
+    // `effort: "low"` because this is extraction, not reasoning: every fact it may use is already
+    // in the prompt above, pasted out of the search results, and the answer is a JSON array of
+    // names and dates. Left at the CLI's always-on thinking it spent 92% of its output tokens
+    // thinking about it — measured on a real 4,543-char prompt that had previously been killed at
+    // the cap: 3,321 output tokens of which 3,069 were reasoning, to produce 813 characters of
+    // JSON, in 50.4s. The same prompt and the same model with this flag: 30.5s, 1,858 reasoning
+    // tokens, identical shape. That is the difference between a call that fits inside
+    // DEFAULT_TIMEOUT_MS and one that was being killed at it in 4 of 17 attempts.
+    //
+    // Only reaches the CLI transport, and deliberately so — the flag is a 400 rather than a no-op
+    // on the 4.5-generation models, so `supportsEffort()` drops it on the API path, where `context`
+    // already routes to the cheap tier and this same work measured 6.0s.
+    const { result: raw } = await runClaude(prompt, "context", DEFAULT_TIMEOUT_MS, {
+      runId,
+      effort: "low",
+    });
     return parseJsonResponse<Festival[]>(raw);
   } catch {
     return null;

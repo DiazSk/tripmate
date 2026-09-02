@@ -41,6 +41,22 @@ export async function getDestinationContext(
       return JSON.parse(cached.context_json) as DestinationContext;
     }
 
+    // ONE request through here writes TWO `llm_traces` rows of type `context`, both under the same
+    // `runId`, and that is correct rather than a duplicated call. Written down because it does not
+    // look correct: the pair arrives a second apart with the same type and the same run, which
+    // reads exactly like a cache miss racing its own populate, and cost a real investigation once.
+    //
+    // Tell them apart by prompt length. The recall below is ~535 characters and asks the model
+    // what it knows; `fetchFestivals` pastes up to eight search results into its prompt and comes
+    // out at 2.5-4.8k. Their behaviour is nothing alike either — over the traces to hand, the
+    // recall was 37 calls and 0 timeouts, the extraction 17 calls and 4 timeouts.
+    //
+    // Those 4 kills are why `fetchFestivals` now passes `effort: "low"` (see the measurement at
+    // its call site). Re-derive the rate from durations rather than from `status='ok'` before
+    // touching DEFAULT_TIMEOUT_MS here: a killed call records the cap, not the time it needed, so
+    // a percentile over the survivors cannot exceed the cap and will always look healthy. That
+    // exact mistake has rotted the timeout constants in claude.ts three times — its comment on
+    // CRITIQUE_TIMEOUT_MS is the long version.
     const [recalled, safety, festivals] = await Promise.all([
       (async () => {
         const prompt = buildContextPrompt({ destination, startDate, endDate });
