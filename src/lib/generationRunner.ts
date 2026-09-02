@@ -430,6 +430,14 @@ export async function runGeneration(
   // Wrapped in a function, not inlined, so both the plain-JSON and streaming branches below can
   // call it at the point in their own sequence where it belongs — before returning for JSON,
   // before handing the plan to the traveller for streaming.
+  // Every coordinate placeStops() has resolved against OSM, kept in scope (not local to the
+  // function) so the streaming path can re-apply it below. Critique returns its own day set with
+  // lat/lng written from the model's memory — the exact defect placeStops corrects for — and on
+  // the streaming path placeStops() runs once, before critique, so its output never runs back
+  // through the sweep. Re-applying this map to the revision costs no extra network: it is names
+  // already looked up, not a second Overpass call.
+  let resolvedCoords: Record<string, { lat: number; lon: number }> = {};
+
   const placeStops = async (): Promise<void> => {
     if (geoPoint) {
       onStage({ stage: "placing", status: "start" });
@@ -449,6 +457,7 @@ export async function runGeneration(
           ? await resolveNamedPlaceCoords(unresolved, geoPoint)
           : {};
         const all = { ...streamedCoords, ...resolved };
+        resolvedCoords = all;
         for (const stop of allStops) {
           const fixed = all[stop.name.trim()];
           if (fixed) {
@@ -468,6 +477,13 @@ export async function runGeneration(
   // Best-effort QA pass: checks budget/timing/context usage and swaps in a corrected day set if
   // it finds issues. Never fails the request — a broken critique call just leaves whichever day
   // set it was handed in place.
+  //
+  // On the streaming path this runs after finalizeDays() has already annotated the plan
+  // (conflict/book-ahead/dietary notes appended to stop.note, admission costs pinned), where the
+  // plain-JSON branch still hands it the raw plan — the two orders now differ in critique's input,
+  // not just in when critique runs. Left as is: the note fields are dedup-guarded (`!stop.note?.
+  // includes(note)`) so an echoed note is harmless, and a pinned cost arguably improves the
+  // budget review rather than confusing it.
   const runCritique = async (): Promise<{ days: Itinerary["days"]; issues: string[] } | null> => {
     onStage({ stage: "critique", status: "start" });
     try {
@@ -515,6 +531,21 @@ export async function runGeneration(
 
   const revision = await runCritique();
   if (revision) {
+    // Critique's JSON carries the model's own lat/lng guesses for every stop it touched, and
+    // placeStops() already ran once above, against the pre-critique day set — it does not run
+    // again down here. Re-apply the coordinates it resolved, by the same trimmed-name key, so a
+    // stop critique kept (renamed or not) gets its OSM-corrected position rather than the
+    // model's memory. A name critique invented has no entry and keeps the model's guess, which
+    // is exactly the existing fail-soft behaviour for anything placeStops itself couldn't match.
+    for (const day of revision.days) {
+      for (const stop of day.stops ?? []) {
+        const fixed = resolvedCoords[stop.name.trim()];
+        if (fixed) {
+          stop.lat = fixed.lat;
+          stop.lng = fixed.lon;
+        }
+      }
+    }
     finalizeDays(revision.days);
     live.onRevised({ days: revision.days, issues: revision.issues });
     itinerary.days = revision.days;
