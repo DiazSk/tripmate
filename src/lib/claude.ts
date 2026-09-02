@@ -301,8 +301,37 @@ function runClaudeViaCli(
   }
 ): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
-    const { CLAUDECODE: _drop, ...env } = process.env;
+    // `ANTHROPIC_API_KEY` is stripped for the same reason `CLAUDECODE` is: its presence makes the
+    // CLI refuse to run at all. The key lives in `.env.local` because `runClaudeViaApi` needs it,
+    // Next loads `.env.local` into `process.env`, and so it reached this child by accident —
+    // which is not what CLAUDE.md describes, where the CLI transport runs free under the existing
+    // CLI subscription and the API transport is the one that needs a key.
+    //
+    // What the child does with the key set is print
+    //
+    //   ⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is
+    //     set and takes precedence over your claude.ai login · Unset it to load your
+    //     organization's connectors
+    //
+    // and **exit 1**. It does not fall back to the key, and it does not fall back to the
+    // claude.ai login: that warning is the entire contents of stdout. Measured: six consecutive
+    // generate calls and a context call all landed as `error` / "exited 1" / ~1s in `llm_traces`
+    // with that text as their whole `raw_response`; commenting the key out of `.env.local` and
+    // restarting the dev server turned the very same context call into `ok` / 20,814ms with real
+    // content. Not the CLI version (2.1.258 either way), not this file's stream-json flags, not
+    // the missing TTY, not a stale server env.
+    //
+    // The trap, if you go to reproduce it: running the binary by hand with the key exported
+    // exits 0. Only the spawn fails. Don't conclude from a clean hand-run that this strip is
+    // redundant — it is load-bearing for every local CLI-transport call.
+    //
+    // Deliberately just this one variable. `CLAUDE_CODE_OAUTH_TOKEN` is the other "auth source"
+    // the warning alludes to, but it is the CLI's *own* credential rather than the SDK's:
+    // removing it would take auth away from a machine that has no keychain login, which is the
+    // opposite of the fix. Nothing in this repo sets it, so there is no evidence to act on.
+    const { CLAUDECODE: _drop, ANTHROPIC_API_KEY: _dropApiKey, ...env } = process.env;
     void _drop;
+    void _dropApiKey;
     env.PATH = [env.PATH, ...CLI_SEARCH_PATH].filter(Boolean).join(":");
     const cliBin = resolveCliBin(env.PATH);
 
