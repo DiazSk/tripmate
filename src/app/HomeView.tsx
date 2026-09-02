@@ -1196,6 +1196,14 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     setDraftItinerary(null);
     editedSincePlanRef.current = false;
+    // Frame the destination before the wait starts. Nothing else does: the only caller of
+    // `flyToTypedDestination` is the destination field's `onBlur`, and Cancel returns the
+    // traveller to the *review* step, where that field is not mounted — so a Cancel-then-Generate
+    // opened on the world pose with no pin for the ~40s until the first streamed stop arrived.
+    // Invisible while the loader was an opaque sheet; the map is the wait now.
+    // Not awaited, and cheap: `lastFlownRef` makes this a no-op on the ordinary path where the
+    // blur already flew, so it costs a geocode only when something cleared that ref.
+    void flyToTypedDestination();
 
     /**
      * Swaps from the loading view to the interactive plan, once. Called either from `planned`
@@ -1300,7 +1308,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // is this closure's stale copy from the click, while `runStreamed` can genuinely throw
       // *after* `plan` landed (a socket dropping during the background critique). Wiping the map
       // then would take the finished plan's own route off the globe.
-      if (!planShown) resetToHome();
+      // Paired with `resetToHome`, always: flying home and leaving `lastFlownRef` latched on the
+      // destination means the retry after a failure opens on the world pose, which is the same
+      // defect cancelGeneration fixes on its own path.
+      if (!planShown) {
+        resetToHome();
+        lastFlownRef.current = "";
+      }
       // A cancel arrives here as an AbortError. It is not a failure and must not be reported
       // as one — cancelGeneration has already reset the UI.
       if (!isAbort(e)) {
@@ -2461,16 +2475,24 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 />
               )}
 
-              {/* Same guard as Back and the tour action above, and for a sharper reason than
-                  either. `itinerary` is not cleared when a traveller presses Back and plans a
-                  second trip, so on trip B's generation this row would offer trip A's Keep and
-                  Refine under trip B's streaming card — and unlike a refine, a generate leaves
-                  the panel interactive (`busy={refining}`), so both buttons would work: `save()`
-                  would promote trip A's draft row and `router.push` away without aborting the run,
-                  and `onRefine` would fire a second model call against trip A mid-generate.
-                  `itinerary` rather than `shownItinerary` on top of that, because Keep and Refine
-                  act on a finished plan and a half-written draft is not one. */}
-              {step === "result" && !streamingPlan && !focus.target && itinerary && (
+              {/* `step === "result"`, because `itinerary` is not cleared when a traveller presses
+                  Back and plans a second trip: on trip B's generation this row would otherwise
+                  offer trip A's Keep and Refine under trip B's streaming card — and unlike a
+                  refine, a generate leaves the panel interactive (`busy={refining}` is false), so
+                  both would work. `save()` would promote trip A's draft row and `router.push`
+                  away without aborting the run, and `onRefine` would fire a second model call
+                  against trip A mid-generate. `itinerary` rather than `shownItinerary` on top of
+                  that, because Keep and Refine act on a finished plan and a half-written draft is
+                  not one.
+
+                  **Deliberately NOT `!streamingPlan`, unlike its two neighbours above.** That
+                  term does real work on the card render and the tour, which both act on the
+                  draft. Here it could only ever fire during a refine — where `step` is already
+                  `"result"` and `itinerary` is the *current* trip, so there is no stale-trip
+                  hazard left to guard — and it would unmount this row for the whole rework,
+                  losing its in-place busy state for no safety at all. Don't "fix" the
+                  inconsistency with its neighbours; the inconsistency is the point. */}
+              {step === "result" && !focus.target && itinerary && (
                 <FeedbackLoop
                   onSave={save}
                   onRefine={refine}
