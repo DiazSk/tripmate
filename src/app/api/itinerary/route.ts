@@ -179,6 +179,9 @@ export async function POST(req: NextRequest) {
         onStop: (stop: StreamedStop) => safeEnqueue("stop", stop),
         onDayCoords: (dayIndex: number, coords: Record<string, { lat: number; lon: number }>) =>
           safeEnqueue("day-coords", { dayIndex, coords }),
+        onPlan: (result: Awaited<ReturnType<typeof runGeneration>>) => safeEnqueue("plan", result),
+        onRevised: (revision: { days: DayPlan[]; issues: string[] }) =>
+          safeEnqueue("revised", revision),
       };
       try {
         const result = await runGeneration(params, onStage, live);
