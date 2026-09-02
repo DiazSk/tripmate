@@ -485,6 +485,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // the opposite: the finished plan is still there, its card re-renders from it, and its own
     // route effect puts the real geometry back.
     if (step !== "result") resetToHome();
+    // `resetToHome` flies the camera home and drops the pin, but the *reason* the destination was
+    // ever framed is `lastFlownRef`, and nothing re-flies on Generate — `flyToTypedDestination`
+    // only fires on blur of a field whose value changed. Left set, a Cancel-then-Generate on the
+    // same destination opens on the world pose with no pin until the first stop lands. Clearing
+    // it makes the next blur of the (unchanged) destination field count as new again.
+    lastFlownRef.current = "";
     // Silent on purpose. The user asked for this; an error block telling them the planner
     // didn't finish would be the app reporting their own decision back to them as a fault.
     setError(null);
@@ -2455,9 +2461,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 />
               )}
 
-              {/* `itinerary`, not `shownItinerary`: Keep and Refine both act on a finished plan,
-                  and a half-written draft is not one. */}
-              {!focus.target && itinerary && (
+              {/* Same guard as Back and the tour action above, and for a sharper reason than
+                  either. `itinerary` is not cleared when a traveller presses Back and plans a
+                  second trip, so on trip B's generation this row would offer trip A's Keep and
+                  Refine under trip B's streaming card — and unlike a refine, a generate leaves
+                  the panel interactive (`busy={refining}`), so both buttons would work: `save()`
+                  would promote trip A's draft row and `router.push` away without aborting the run,
+                  and `onRefine` would fire a second model call against trip A mid-generate.
+                  `itinerary` rather than `shownItinerary` on top of that, because Keep and Refine
+                  act on a finished plan and a half-written draft is not one. */}
+              {step === "result" && !streamingPlan && !focus.target && itinerary && (
                 <FeedbackLoop
                   onSave={save}
                   onRefine={refine}

@@ -191,8 +191,17 @@ export default function GenerationScreen({
   // in render: HomeView imports this behind `dynamic(…, { ssr: false })`.
   return createPortal(
     <section
-      // Bottom-anchored, not full-bleed: the map above it is the wait now, and it stays live and
-      // draggable because this element is the only thing claiming pointer events.
+      // Bottom-anchored, not full-bleed: the map above it is the wait now, and this band claims
+      // pointer events only over its own strip.
+      // That is not the same as the map being draggable for the whole wait, and the difference is
+      // worth knowing. `.content-overlay:not(:has(.docked-panel))` in globals.css hands pointer
+      // events back to the full-viewport overlay, and being unlayered it beats Tailwind's
+      // `pointer-events-none` utility on that element. HomeView only mounts `DockedPanel` once
+      // there is a plan to put in it, so for the ~40s before the first streamed stop arrives the
+      // overlay still swallows every gesture and the map cannot be dragged; the moment the card
+      // mounts, the `:has()` stops matching and the map silently becomes draggable. Acceptable —
+      // there is nothing on the map to go and look at until then — but it is a state change
+      // nothing announces.
       // `z-40` clears `DockedPanel`'s `z-10` capsule and the marker cards at `z-5`, and stays under
       // `LlmTraceFab` at `z-50` — see the `lg:pr-14` note on the cancel row for why that matters.
       // The dark treatment is the band's original one, kept unchanged: it was designed for
