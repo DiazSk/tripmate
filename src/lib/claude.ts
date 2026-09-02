@@ -294,6 +294,10 @@ function runClaudeViaCli(
     effort?: "low" | "medium" | "high";
     model?: string;
     session?: SessionOption;
+    /** Called with each text delta as the model produces it. Optional and additive: a caller
+     *  that omits it gets byte-identical behaviour, including the trace row. Only the
+     *  streaming generate path supplies one. */
+    onText?: (delta: string) => void;
   }
 ): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
@@ -518,6 +522,10 @@ function runClaudeViaApi(
     effort?: "low" | "medium" | "high";
     model?: string;
     session?: SessionOption;
+    /** Called with each text delta as the model produces it. Optional and additive: a caller
+     *  that omits it gets byte-identical behaviour, including the trace row. Only the
+     *  streaming generate path supplies one. */
+    onText?: (delta: string) => void;
   }
 ): Promise<ClaudeResult> {
   return (async () => {
@@ -558,28 +566,32 @@ function runClaudeViaApi(
       // enough to need more than this require the streaming transport"). This is that transport;
       // `finalMessage()` returns the same assembled message `create()` did, so everything below
       // reads unchanged.
-      const response = await anthropic.messages
-        .stream(
-          {
-            model,
-            max_tokens: maxTokensFor(type),
-            messages,
-            // Capability-gated, and that gate is load-bearing now that the model varies by task.
-            // `thinkingFor()` speaks Sonnet 4.5's dialect — `budget_tokens` — which is a 400 on
-            // Opus 5 and Haiku 4.5 alike. Each model gets only the knobs it actually accepts.
-            ...(supportsAdaptiveThinking(model)
-              ? { thinking: { type: "adaptive" as const } }
-              : { thinking: thinkingFor(type, meta?.effort) }),
-            // An explicit caller wins; otherwise the per-task default. Only ever sent to a model
-            // that accepts it — `effort` is a 400, not a no-op, on the 4.5-generation models.
-            ...(() => {
-              const effort = meta?.effort ?? apiEffortFor(type);
-              return effort && supportsEffort(model) ? { output_config: { effort } } : {};
-            })(),
-          },
-          { signal: controller.signal }
-        )
-        .finalMessage();
+      const pending = anthropic.messages.stream(
+        {
+          model,
+          max_tokens: maxTokensFor(type),
+          messages,
+          // Capability-gated, and that gate is load-bearing now that the model varies by task.
+          // `thinkingFor()` speaks Sonnet 4.5's dialect — `budget_tokens` — which is a 400 on
+          // Opus 5 and Haiku 4.5 alike. Each model gets only the knobs it actually accepts.
+          ...(supportsAdaptiveThinking(model)
+            ? { thinking: { type: "adaptive" as const } }
+            : { thinking: thinkingFor(type, meta?.effort) }),
+          // An explicit caller wins; otherwise the per-task default. Only ever sent to a model
+          // that accepts it — `effort` is a 400, not a no-op, on the 4.5-generation models.
+          ...(() => {
+            const effort = meta?.effort ?? apiEffortFor(type);
+            return effort && supportsEffort(model) ? { output_config: { effort } } : {};
+          })(),
+        },
+        { signal: controller.signal }
+      );
+      // Attached before the await, which is the whole requirement — a listener added after
+      // `finalMessage()` resolves would see nothing. `finalMessage()` still returns the same
+      // assembled message, so `stop_reason`, `usage`, the trace row and the computed cost are
+      // all unchanged by this.
+      if (meta?.onText) pending.on("text", meta.onText);
+      const response = await pending.finalMessage();
       clearTimeout(timer);
       const durationMs = Date.now() - startedAt;
 
@@ -695,6 +707,10 @@ export function runClaude(
     effort?: "low" | "medium" | "high";
     model?: string;
     session?: SessionOption;
+    /** Called with each text delta as the model produces it. Optional and additive: a caller
+     *  that omits it gets byte-identical behaviour, including the trace row. Only the
+     *  streaming generate path supplies one. */
+    onText?: (delta: string) => void;
   }
 ): Promise<ClaudeResult> {
   // Through llmConfig rather than reading the env var here, so that POST /api/llm-mode can flip
