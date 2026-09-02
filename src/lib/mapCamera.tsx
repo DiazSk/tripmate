@@ -97,6 +97,16 @@ interface MapCameraContextValue {
    */
   peekSuspended: boolean;
   setPeekSuspended: (suspended: boolean) => void;
+  /**
+   * Hold `showTripRoute`'s camera flight while something else is driving the camera, without
+   * holding the draw.
+   *
+   * Exists for a streaming generation, where the two halves of `showTripRoute` want opposite
+   * things: the route and its markers *should* be rebuilt on every arriving stop, and the camera
+   * *should not* be re-aimed on every arriving stop. Set by `useStreamingCamera`, which takes
+   * the camera over for the length of a run and gives it back on the way out.
+   */
+  setRouteFramingSuspended: (suspended: boolean) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   flyToPlace: (lat: number, lng: number, label?: string) => void;
   /** Wipe every trip overlay and fly back to the hero pose. The map lives above the route
@@ -343,6 +353,14 @@ export function MapCameraProvider({
   const [ready, setReady] = useState(false);
   const [globeWanted, setGlobeWanted] = useState(false);
   const [peekSuspended, setPeekSuspended] = useState(false);
+  /**
+   * Whether `showTripRoute` should draw without also reframing — see `setRouteFramingSuspended`.
+   *
+   * A ref rather than state, and that is load-bearing: `showTripRoute`'s identity is a dependency
+   * of `ItineraryCard`'s route effect, so putting this in state would rebuild the callback and
+   * redraw the entire route the moment it flipped.
+   */
+  const routeFramingSuspendedRef = useRef(false);
   /** Every stop of every day, flattened, each carrying its own `day`. Flat rather than nested
    *  because `hoveredIndex`/`activeIndex` index into it and always have — keeping one index
    *  space means StopMarkerLayer, useStopTour and the peek logic needed no reworking when the
@@ -489,12 +507,20 @@ export function MapCameraProvider({
 
       // Framing first, and deliberately before the draw resolves: it needs no heights, and its
       // 2s flight covers whatever the renderer's own sampling costs.
-      renderer.frameRoute({
-        days,
-        focusDay,
-        panelVisible,
-        routeAltitudeM: routeAltitudeRef.current,
-      });
+      //
+      // Skipped outright while a generation streams: this function is called once per arriving
+      // stop then, and each call is a 2s flight to a *different* pose — measured on a live 4-day
+      // Rome run, the framing heading swung 25° → 23° → 53° → 276° → 281° across five clumps of
+      // stops, because "face the route across its long axis" means something new every time a
+      // stop lands. `useStreamingCamera` owns the camera for the length of a run instead.
+      if (!routeFramingSuspendedRef.current) {
+        renderer.frameRoute({
+          days,
+          focusDay,
+          panelVisible,
+          routeAltitudeM: routeAltitudeRef.current,
+        });
+      }
 
       void renderer
         .drawRoute({
@@ -1055,6 +1081,10 @@ export function MapCameraProvider({
     return true;
   }, [cancelPeek]);
 
+  const setRouteFramingSuspended = useCallback((suspended: boolean) => {
+    routeFramingSuspendedRef.current = suspended;
+  }, []);
+
   const resetToHome = useCallback(() => {
     cancelPeek();
     const renderer = rendererRef.current;
@@ -1108,6 +1138,7 @@ export function MapCameraProvider({
       setGlobeWanted,
       peekSuspended,
       setPeekSuspended,
+      setRouteFramingSuspended,
       flyToDestination,
       flyToPlace,
       resetToHome,
@@ -1156,6 +1187,7 @@ export function MapCameraProvider({
       setActiveStop,
       reframeRoute,
       setHoveredIndex,
+      setRouteFramingSuspended,
     ]
   );
 

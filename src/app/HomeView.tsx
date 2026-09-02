@@ -53,7 +53,7 @@ import {
 } from "@/lib/types";
 import type { StreamedStop } from "@/lib/streamingItinerary";
 import { CandidatePoi } from "@/lib/pois";
-import { useTripCamera } from "@/lib/useTripCamera";
+import { useStreamingCamera, useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
 import { upcomingStopsAfter } from "@/lib/itinerary";
 import { formatMoney } from "@/lib/format";
@@ -478,6 +478,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // leave a partial itinerary on screen — and, on a refine, sitting *over* the finished plan it
     // was meant to replace — until the next run happened to reset it.
     setDraftItinerary(null);
+    setCoordsDay(null);
     // Clearing the draft unmounts the card, and the card is the only thing that calls
     // `showTripRoute` — so on a *generate* there is nothing left to redraw the map, and the
     // half-drawn route and its pins would sit on the globe until something else wiped them (the
@@ -567,6 +568,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    *  own plan lands. This is what the map and the itinerary card render during the wait — there
    *  is no separate loading view to keep in sync with it. */
   const [draftItinerary, setDraftItinerary] = useState<Itinerary | null>(null);
+  /** The highest day index whose `day-coords` frame has landed, or null before the first one.
+   *
+   *  Exists for the camera, which must not fly to a stop's coordinates until Overpass has
+   *  corrected them — the model writes them from memory and has been measured 11km out. Reset
+   *  alongside `draftItinerary` on every path that starts or abandons a run. */
+  const [coordsDay, setCoordsDay] = useState<number | null>(null);
   /** Set by any local mutation between `plan` and `revised`. Critique replaces the whole day
    *  set, so a revision that lands on top of an edit the traveller just made would silently
    *  discard it. */
@@ -598,6 +605,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     detailError,
   } = useTripCamera(destination);
   const { resetToHome } = useMapCamera();
+  // The camera for the length of a run. Holds `showTripRoute`'s own per-stop framing and moves
+  // once per day instead, when that day's real coordinates land — see `useStreamingCamera`.
+  useStreamingCamera(generating || refining, draftItinerary, coordsDay);
 
   // Mount-only on purpose. The globe lives above the route boundary and never unmounts, so
   // arriving here from /trips ("New trip") would otherwise keep the last trip's route, markers
@@ -1145,6 +1155,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           };
           return { ...prev, days };
         });
+        // Monotonic: days arrive in order, but a `Math.max` costs nothing and keeps the camera
+        // from walking backwards if one ever outran another.
+        setCoordsDay((prev) => (prev === null ? dayIndex : Math.max(prev, dayIndex)));
       } else if (event === "plan") {
         // Bound to a local first: `result` is `T | null`, and TypeScript does not narrow a
         // closed-over `let` across the assignment, so passing it straight to `planned` is an
@@ -1195,6 +1208,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setPlanCollapsed(true);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     setDraftItinerary(null);
+    setCoordsDay(null);
     editedSincePlanRef.current = false;
     // Frame the destination before the wait starts. Nothing else does: the only caller of
     // `flyToTypedDestination` is the destination field's `onBlur`, and Cancel returns the
@@ -1230,6 +1244,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       await settle(ARRIVAL_HOLD_MS);
       if (abortRef.current !== owner) return;
       setDraftItinerary(null);
+      setCoordsDay(null);
       // Cleared in the same tick as the new itinerary, and that pairing matters: leaving the
       // previous run's id in place for even one render would point the autosave effect at the
       // old draft row and overwrite the plan it holds with this new one. Both updates batch, so
@@ -1304,6 +1319,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // — cancelGeneration has already done it, but a `plainFallback` abort can land here without
       // having gone through that button.
       setDraftItinerary(null);
+      setCoordsDay(null);
       // Same wipe as cancelGeneration, and gated on `planShown` rather than on `step`: `step` here
       // is this closure's stale copy from the click, while `runStreamed` can genuinely throw
       // *after* `plan` landed (a socket dropping during the background critique). Wiping the map
@@ -1334,6 +1350,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // from-scratch generate (the server's `live` sink isn't gated by which one this is), so a
     // refine gets its own progressive reveal too — and needs the same clean start.
     setDraftItinerary(null);
+    setCoordsDay(null);
     editedSincePlanRef.current = false;
     try {
       const data = await runStreamed<{
@@ -1351,6 +1368,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         dietary,
       });
       setDraftItinerary(null);
+      setCoordsDay(null);
       setItinerary(data.itinerary);
       setLastRunId(data.runId ?? null);
       setLastSessionId(data.sessionId ?? null);
@@ -1359,6 +1377,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // is what the card renders while a refine streams, so leaving it here would show the
       // traveller the abandoned half-rework under a message telling them nothing changed.
       setDraftItinerary(null);
+      setCoordsDay(null);
       if (!isAbort(e)) {
         setError(errorMessage(e, "We couldn't apply that change. Your current plan is unchanged."));
       }
