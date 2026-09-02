@@ -175,6 +175,22 @@ function isPlanStep(value: string | null): value is PlanStep {
 // "planDraft" key is one accidental collision away from being someone else's storage bug.
 const PLAN_DRAFT_KEY = "tripmate:planDraft";
 
+/**
+ * Which days the background critique actually rewrote, as **1-based** day numbers —
+ * `markUnseenDays` takes them that way, since they are the numbers shown to people.
+ *
+ * A structural compare, not a field-by-field diff: the critique returns the whole day set and
+ * the only question here is "did this day come back different", so `JSON.stringify` answers it
+ * in one line. Key order is stable because both sides came from the same `JSON.parse` shape.
+ * A day the revision drops entirely is not reported — there is no tab left to carry a dot.
+ */
+function changedDayNumbers(before: DayPlan[] | null, after: DayPlan[]): number[] {
+  if (!before) return [];
+  return after.flatMap((day, i) =>
+    JSON.stringify(before[i]) === JSON.stringify(day) ? [] : [i + 1]
+  );
+}
+
 // Local calendar date in ISO shape. `toISOString()` would be UTC and roll the date over a
 // day early for anyone west of Greenwich in the evening; "sv-SE" formats local time as
 // YYYY-MM-DD, which is exactly what <input type="date"> wants.
@@ -585,6 +601,20 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   /** 0-based days a chat turn changed while the traveler was reading a different one. Owned here
    *  rather than in the card because the chat that produces them lives beside it, not inside it. */
   const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
+  /** The day on screen, readable from a closure that has been alive for minutes. `generate()`'s
+   *  `revised` hook runs ~150s after the click and needs to know which tab the traveller is on
+   *  *now* — its captured `activeDayIndex` is the value from the click and would mark a dot on
+   *  the very day they are reading. */
+  const activeDayRef = useRef(0);
+  useEffect(() => {
+    activeDayRef.current = activeDayIndex;
+  }, [activeDayIndex]);
+  /** True from the moment the plan is interactive until the stream closes — i.e. exactly while
+   *  the background critique is still running over a plan the traveller can already read. The
+   *  band is gone by then (`showPlan` drops `generating`), so this is what tells them a change
+   *  may still arrive. Generate-only: a refine keeps `refining` true through its own critique
+   *  and keeps the band up instead. */
+  const [reviewing, setReviewing] = useState(false);
   // Step 7 edit session. `chatScope` null = closed; { dayIndex: null } = whole trip.
   const focus = useFocusEdit(itinerary);
   // Publishes the plan to surfaces mounted outside this tree — the map's search control, which
@@ -1122,7 +1152,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           prev.map((s) => (s.stage === parsed.stage ? { ...s, status: parsed.status } : s))
         );
       } else if (event === "stop") {
-        const { dayIndex, stopIndex, stop } = JSON.parse(data) as StreamedStop;
+        const { dayIndex, stopIndex, date, stop } = JSON.parse(data) as StreamedStop;
         setDraftItinerary((prev) => {
           const days = [...(prev?.days ?? [])];
           // Days arrive in order but a frame could in principle outrun its day, so grow the
@@ -1132,7 +1162,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           }
           const stops = [...days[dayIndex].stops];
           stops[stopIndex] = stop;
-          days[dayIndex] = { ...days[dayIndex], stops };
+          // The frame carries its day's date so the day header has something to print for the
+          // whole reveal — the placeholder above renders an empty date field otherwise, and the
+          // day never closes until the last stop lands. `|| keep` because the frame is fail-soft:
+          // a model that omitted the field sends `""`, which must not blank a date already held.
+          days[dayIndex] = { ...days[dayIndex], date: date || days[dayIndex].date, stops };
           // `tier` is guaranteed set by the time generate() runs (validate() rejects otherwise),
           // but it is not narrowed here, and Itinerary["tier"] is required.
           return { tier: (prev?.tier ?? tier) as Itinerary["tier"], days };
@@ -1243,6 +1277,24 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // reveal takes over from here.
       await settle(ARRIVAL_HOLD_MS);
       if (abortRef.current !== owner) return;
+      // Every side effect of "the plan arrived" belongs here, not after `await runStreamed(…)`.
+      // That await used to resolve when the plan appeared; it now resolves when the *stream*
+      // closes, ~150s later, after the background critique. Left there, the tab title and the
+      // desktop Notification fired two and a half minutes into exactly the silence they exist to
+      // break, and the wizard draft plus the `?step=` query param survived that whole window —
+      // so a reload at t=200s restored the form and took the finished plan off screen. The
+      // ownership guard above is already the "is this run still the live one" test both paths
+      // need, and this funnel serves the plain fallback too.
+      notifyGenerationDone(true, notifyOnDone);
+      // The wizard's job is done — drop its draft and the `?step=` it leaves in the URL, or a
+      // refresh on this result page would find both still there and restore straight back into
+      // the wizard instead of showing what was just generated.
+      try {
+        sessionStorage.removeItem(PLAN_DRAFT_KEY);
+      } catch {
+        /* nothing to clean up if storage was never writable */
+      }
+      window.history.replaceState(null, "", window.location.pathname);
       setDraftItinerary(null);
       setCoordsDay(null);
       // Cleared in the same tick as the new itinerary, and that pairing matters: leaving the
@@ -1267,6 +1319,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     };
 
     let planShown = false;
+    /** The days as `plan` delivered them, so the `revised` hook below can say which ones the
+     *  critique actually changed. Safe to compare against: `revised` only fires when nothing
+     *  local has touched the plan since (see `editedSincePlanRef`), so this is still what is on
+     *  screen when it does. */
+    let plannedDays: DayPlan[] | null = null;
     try {
       const data = await runStreamed<{
         itinerary: Itinerary;
@@ -1286,9 +1343,21 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         {
           planned: (plan) => {
             planShown = true;
+            plannedDays = plan.itinerary.days;
+            // The plan is interactive but the run is not over — the critique is still reading it.
+            setReviewing(true);
             void showPlan(abortRef.current, plan.itinerary, plan.runId ?? null, plan.sessionId ?? null);
           },
-          revised: (days) => setItinerary((prev) => (prev ? { ...prev, days } : prev)),
+          revised: (days) => {
+            // A day set swapped out silently under someone mid-read is the startling outcome the
+            // spec's Risk 3 named. Reuse the dot the chat already uses for "this day changed while
+            // you were looking elsewhere" rather than inventing a second indicator.
+            const changed = changedDayNumbers(plannedDays, days);
+            setItinerary((prev) => (prev ? { ...prev, days } : prev));
+            if (changed.length) {
+              setUnseenChangedDays((prev) => markUnseenDays(changed, activeDayRef.current, prev));
+            }
+          },
         }
       );
       // The plain-fallback path never sends a `plan` event, so `planned` never ran — this is
@@ -1298,16 +1367,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       if (!planShown) {
         await showPlan(abortRef.current, data.itinerary, data.runId ?? null, data.sessionId ?? null);
       }
-      notifyGenerationDone(true, notifyOnDone);
-      // The wizard's job is done — drop its draft and the `?step=` it leaves in the URL, or a
-      // refresh on this result page would find both still there and restore straight back into
-      // the wizard instead of showing what was just generated.
-      try {
-        sessionStorage.removeItem(PLAN_DRAFT_KEY);
-      } catch {
-        /* nothing to clean up if storage was never writable */
-      }
-      window.history.replaceState(null, "", window.location.pathname);
 
       // Deliberately no profile write here. The preferences step's values are a per-trip
       // override, and writing them back would silently make one unusual trip the traveler's
@@ -1334,11 +1393,22 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // A cancel arrives here as an AbortError. It is not a failure and must not be reported
       // as one — cancelGeneration has already reset the UI.
       if (!isAbort(e)) {
-        setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
-        notifyGenerationDone(false, notifyOnDone);
+        // Ruling B again, on the *thrown* path this time. `runStreamed` doesn't only fail a run
+        // by receiving an `error` frame — `readEventStream` rejects on a dropped socket, and a
+        // `JSON.parse` throw on a malformed `revised` frame propagates out of `onEvent`. Either
+        // can land here long after `plan`, with a working, editable, already-persisted plan on
+        // screen. Telling that traveller we couldn't build their itinerary would be a lie about
+        // the thing they are looking at.
+        if (planShown) {
+          console.error("[home] background review failed", e);
+        } else {
+          setError(errorMessage(e, "We couldn't build your itinerary. Try generating again."));
+          notifyGenerationDone(false, notifyOnDone);
+        }
       }
     } finally {
       setGenerating(false);
+      setReviewing(false);
     }
   }
 
@@ -2494,6 +2564,20 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 />
               )}
 
+              {/* The one thing that reports the background critique once the band is gone.
+                  Spec §5 keeps the progress strip on the list of what must survive, and Risk 3
+                  asks for the review to be "visibly in progress so a change is expected rather
+                  than startling" — but the literal answer, keeping the band up, means a status
+                  bar over a finished editable plan for another two minutes. A phrase in the
+                  footer sets the expectation at the cost of one line; the arriving change itself
+                  is announced by the day dots `markUnseenDays` sets from the `revised` hook.
+                  `!generating` rather than plain `reviewing`: the two overlap for ARRIVAL_HOLD_MS
+                  while the band is still up, and both saying it at once is noise. */}
+              {step === "result" && !focus.target && itinerary && reviewing && !generating && (
+                <p role="status" aria-live="polite" className="px-1 text-xs text-muted">
+                  Still reviewing this plan — a day or two may change in a minute.
+                </p>
+              )}
               {/* `step === "result"`, because `itinerary` is not cleared when a traveller presses
                   Back and plans a second trip: on trip B's generation this row would otherwise
                   offer trip A's Keep and Refine under trip B's streaming card — and unlike a

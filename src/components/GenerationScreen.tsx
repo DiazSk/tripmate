@@ -44,11 +44,13 @@ import type { RawFetch } from "@/lib/types";
  * - **The four-group progress strip.** Still meaningful even with the plan drawing itself. It
  *   covers the ten-odd seconds before the first stop arrives, when the map has nothing on it yet,
  *   and it is the only place the stages the map cannot show — the context fetch, the critique,
- *   the coordinate pass — are named at all. Note what it does *not* do: `showPlan` in HomeView
- *   drops `generating` the moment the plan is interactive, so this band unmounts there and the
- *   critique that keeps running afterwards runs unreported. That is the existing arrival
- *   behaviour, not something this band changed; reporting it would mean keeping a status band
- *   over a finished, editable plan for another two minutes.
+ *   the coordinate pass — are named at all. Note where it stops: `showPlan` in HomeView drops
+ *   `generating` the moment the plan is interactive, so this band unmounts there while the
+ *   critique keeps running. Deliberately — a status band over a finished, editable plan for
+ *   another two minutes is worse than none. The critique is not unreported, though: HomeView
+ *   prints one muted line in the panel footer for as long as it runs (`reviewing`), and marks
+ *   the days it actually changed with the same unseen-day dots the chat uses. Don't extend this
+ *   band to cover that window; the whole point is that it ends.
  * - **The rotating facts.** The feed was the entire point of this screen's last rewrite — by the
  *   time Generate is reachable the app already holds the real forecast, the public holidays and up
  *   to twelve candidate places, and was showing none of it. It keeps the band's largest type and
