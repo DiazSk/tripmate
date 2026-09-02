@@ -325,6 +325,18 @@ function runClaudeViaCli(
     // build's page-data collection step for /api/bench fail under constrained build environments
     // (first surfaced running a real container build; reproduces identically on a pre-existing,
     // untouched version of this exact call, so it predates this file's CLI/API transport split).
+    //
+    // Only the caller that actually wants deltas pays for the format change. Every other call
+    // keeps the one-shot `json` envelope byte for byte, which is what keeps parseUsage() and the
+    // trace viewer reading exactly what they read before — see CLAUDE.md on the two envelope
+    // shapes living in raw_response side by side. Verified against CLI 2.1.243: the final
+    // `result` event of a stream-json run carries the identical key set to a one-shot envelope,
+    // `modelUsage` and `total_cost_usd` included.
+    const streaming = Boolean(meta?.onText);
+    const formatArgs = streaming
+      ? ["--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+      : ["--output-format", "json"];
+
     const child = spawn(
       /* turbopackIgnore: true */ cliBin,
       [
@@ -332,8 +344,7 @@ function runClaudeViaCli(
         prompt,
         "--model",
         model,
-        "--output-format",
-        "json",
+        ...formatArgs,
         "--tools",
         "",
         ...sessionArgs,
@@ -351,7 +362,51 @@ function runClaudeViaCli(
 
     let stdout = "";
     let stderr = "";
-    child.stdout.on("data", (d) => (stdout += d));
+    /** The final `result` event, kept as raw text so it can be written to the trace row in
+     *  exactly the shape a one-shot call writes. Only populated on the streaming path. */
+    let resultLine = "";
+    /** Bytes received but not yet terminated by a newline. A JSONL line splits across chunk
+     *  boundaries exactly as an SSE frame does — see eventStream.ts, same bug, same fix. */
+    let lineBuf = "";
+
+    /** One JSONL event. Never throws: a line this doesn't recognise is a line to ignore, and a
+     *  malformed one must not take down a generation the traveller is waiting on. */
+    const handleStreamLine = (line: string) => {
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+      if (event.type === "result") {
+        resultLine = line;
+        return;
+      }
+      // The CLI wraps raw Anthropic stream events under `event`; a text delta is the only one
+      // this cares about. Thinking and signature deltas arrive on the same event type and are
+      // deliberately dropped — the caller wants the answer, not the reasoning.
+      const inner = (event.event ?? event) as Record<string, unknown> | undefined;
+      if (inner?.type === "content_block_delta") {
+        const delta = inner.delta as { type?: string; text?: string } | undefined;
+        if (delta?.type === "text_delta" && typeof delta.text === "string") {
+          meta?.onText?.(delta.text);
+        }
+      }
+    };
+
+    child.stdout.on("data", (d) => {
+      const text = String(d);
+      stdout += text;
+      if (!streaming) return;
+      lineBuf += text;
+      let nl = lineBuf.indexOf("\n");
+      while (nl !== -1) {
+        const line = lineBuf.slice(0, nl).trim();
+        lineBuf = lineBuf.slice(nl + 1);
+        if (line) handleStreamLine(line);
+        nl = lineBuf.indexOf("\n");
+      }
+    });
     child.stderr.on("data", (d) => (stderr += d));
 
     // Killing the child makes it exit, which fires the `exit` handler below — and that
@@ -411,14 +466,33 @@ function runClaudeViaCli(
         reject(new Error(`claude CLI exited ${code}: ${stderr || stdout}`));
         return;
       }
+      // The observed CLI terminates every line, the last one included, but a final line left
+      // unterminated would otherwise be the one line that never reaches the parser — and it is
+      // the `result` event.
+      if (streaming && lineBuf.trim()) handleStreamLine(lineBuf.trim());
+      // On the streaming path stdout is a JSONL document, so the envelope is the final `result`
+      // line rather than the whole of it. Writing that line — and only that line — is what keeps
+      // raw_response the same shape a one-shot call writes, which parseUsage() in runs.ts and
+      // perfAggregate.ts both depend on.
+      const envelopeText = streaming ? resultLine : stdout;
+      if (streaming && !envelopeText) {
+        updateTrace(traceId, {
+          status: "error",
+          rawResponse: stdout,
+          durationMs,
+          errorMessage: "stream-json produced no result event",
+        });
+        reject(new Error("claude CLI stream ended without a result event"));
+        return;
+      }
       try {
-        const envelope = JSON.parse(stdout);
+        const envelope = JSON.parse(envelopeText);
         if (envelope.is_error) {
-          updateTrace(traceId, { status: "error", rawResponse: stdout, durationMs });
+          updateTrace(traceId, { status: "error", rawResponse: envelopeText, durationMs });
           reject(new Error(`claude CLI error: ${envelope.result}`));
           return;
         }
-        updateTrace(traceId, { status: "ok", rawResponse: stdout, durationMs });
+        updateTrace(traceId, { status: "ok", rawResponse: envelopeText, durationMs });
         resolve({
           result: envelope.result as string,
           traceId,
