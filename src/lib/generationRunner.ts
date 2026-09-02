@@ -49,6 +49,10 @@ import { StreamingItineraryParser, type StreamedStop } from "./streamingItinerar
 export interface LiveSink {
   onStop(stop: StreamedStop): void;
   onDayCoords(dayIndex: number, coords: Record<string, { lat: number; lon: number }>): void;
+  /** The plan is complete and interactive. Everything after this is a background improvement. */
+  onPlan(result: { itinerary: Itinerary; traceId: string; runId: string; sessionId?: string }): void;
+  /** Critique returned a corrected day set. The client decides whether to take it. */
+  onRevised(revision: { days: Itinerary["days"]; issues: string[] }): void;
 }
 
 export interface GenerationParams {
@@ -379,6 +383,36 @@ export async function runGeneration(
     }
   }
 
+  // Attach the real forecast (not the model's free-text guess) to each day by date, so the UI
+  // can render structured icon/temp/humidity data. Declared here, above finalizeDays, so the
+  // helper can close over it.
+  const weatherByDate = new Map(weather.map((w) => [w.date, w]));
+
+  /**
+   * Everything that turns a raw day set into a renderable one: conflict detection against the
+   * place facts, admission costs, book-ahead notes, verified dietary notes and the real forecast.
+   *
+   * One function rather than two call sites, because it now runs twice on a streaming run —
+   * once on the plan the traveller starts reading and again on whatever critique returns. Two
+   * copies of these rules is how the second one silently stops matching the first.
+   */
+  const finalizeDays = (target: Itinerary["days"]): void => {
+    const conflicts = detectConflicts(target, placeFacts, { stepFreeRequired, crowdBias });
+    annotateConflicts(target, conflicts);
+    pinAdmissionCosts(target, placeFacts);
+    annotateBookAhead(target, placeFacts);
+    for (const day of target) {
+      for (const stop of day.stops ?? []) {
+        const note = dietaryNote(dietaryByStop.get(normalizeStopName(stop.name)) ?? null);
+        if (note && !stop.note?.includes(note)) {
+          stop.note = stop.note ? `${stop.note} ${note}` : note;
+        }
+      }
+      const detail = weatherByDate.get(day.date);
+      if (detail) day.weatherDetail = detail;
+    }
+  };
+
   // Reuses the §12a/§12b arithmetic and phrasing in guardrails.ts rather than restating it.
   // No real door-to-door durations are available (the OSRM route-matrix path was removed — it
   // was unreachable dead code, since this app never requests drive mode and OSRM's demo instance
@@ -388,113 +422,103 @@ export async function runGeneration(
     .map((g) => g.message)
     .concat(dietaryFindings);
 
-  // Best-effort QA pass: checks budget/timing/context usage and swaps in a
-  // corrected day set if it finds issues. Never fails the request — a
-  // broken critique call just leaves the original itinerary in place.
-  onStage({ stage: "critique", status: "start" });
-  let critiqued = false;
-  try {
-    const critiquePrompt = buildCritiquePrompt({
-      itinerary,
-      budget,
-      contextInsight,
-      interestTags: preferences?.tags,
-      resolvedFlags,
-      dietary,
-      placeConflicts,
-      travelFindings,
-    });
-    const { result: critiqueRaw } = await runClaude(critiquePrompt, "critique", CRITIQUE_TIMEOUT_MS, {
-      runId,
-    });
-    const critique = parseJsonResponse<CritiqueResult>(critiqueRaw);
-    if (critique.revisedDays) {
-      itinerary.days = critique.revisedDays;
-    }
-    critiqued = true;
-  } catch {
-    // Keep the uncritiqued itinerary.
-  }
-
-  // Re-detect against whatever critique actually returned, then annotate and pin. Re-detection
-  // matters: if critique moved the Louvre off its closed Tuesday, the original conflict no longer
-  // applies and annotating it would warn about a problem that is fixed. Annotation is the floor —
-  // critique fails ~35% of the time, and the traveler still needs to know.
-  const finalConflicts = detectConflicts(itinerary.days, placeFacts, { stepFreeRequired, crowdBias });
-  annotateConflicts(itinerary.days, finalConflicts);
-  pinAdmissionCosts(itinerary.days, placeFacts);
-  annotateBookAhead(itinerary.days, placeFacts);
-
-  // Replaces the model's unverified claim about an area with names that were actually looked up.
-  for (const day of itinerary.days) {
-    for (const stop of day.stops ?? []) {
-      const note = dietaryNote(dietaryByStop.get(normalizeStopName(stop.name)) ?? null);
-      if (note && !stop.note?.includes(note)) {
-        stop.note = stop.note ? `${stop.note} ${note}` : note;
-      }
-    }
-  }
-  // `failed`, not `done` and not `skipped`, when the pass didn't actually run.
-  //
-  // `done` either way was the original bug: a 35% critique failure rate went unnoticed because
-  // the trip still arrived, just without the budget/timing review, and the loader said the
-  // review had happened. That was fixed to `skipped` — which was still wrong, and wrong in a way
-  // that looked right. The claim at the time was that `skipped` was "already in the vocabulary
-  // and the strip already renders it distinctly, so honesty here needs no new UI". The strip does
-  // not: `stepGroupState` collapses a group whose every stage was skipped to `done`, because for
-  // refine that is correct (geocode and placing genuinely never needed doing). Critique is ALONE
-  // in the "Checking it over" group, so skipping it emptied the group and the traveller was told
-  // "Checking it over — done" about a review that had timed out. Two failure modes, one value.
-  //
-  // `failed` also carries the right weight semantics: unlike a skip, this stage really did burn
-  // its budget (up to CRITIQUE_TIMEOUT_MS), so generationProgress counts it as time spent.
-  onStage({ stage: "critique", status: critiqued ? "done" : "failed" });
-
-  // Attach the real forecast (not the model's free-text guess) to each day
-  // by date, so the UI can render structured icon/temp/humidity data.
-  const weatherByDate = new Map(weather.map((w) => [w.date, w]));
-  for (const day of itinerary.days) {
-    const detail = weatherByDate.get(day.date);
-    if (detail) day.weatherDetail = detail;
-  }
-
   // Correct the model's coordinates against OSM. It writes lat/lng from memory and is often
   // badly wrong (measured: Fushimi Inari 11km off, Nishiki Market 3km), which lands map pins in
   // the wrong part of the city. Names it resolves get real positions; anything unmatched keeps
   // the model's guess, and the whole step is skipped if Overpass is unreachable.
-  if (geoPoint) {
-    onStage({ stage: "placing", status: "start" });
-    try {
-      // Settle whatever the stream started. `allSettled`, not `all`: each lookup already
-      // swallows its own failure, and one that somehow rejects must not skip the sweep.
-      await Promise.allSettled(pendingCoordLookups);
-      const allStops = itinerary.days.flatMap((d) => d.stops);
-      // Only the names the stream never resolved. On a streaming run this is usually empty or
-      // near it, so the stage that used to be a ~25s whole-trip Overpass call becomes a sweep
-      // for the leftovers. On a plain-JSON run nothing streamed, so this is the whole trip and
-      // the behaviour is exactly what it was before.
-      const unresolved = allStops
-        .map((s) => s.name.trim())
-        .filter((name) => !(name in streamedCoords));
-      const resolved = unresolved.length
-        ? await resolveNamedPlaceCoords(unresolved, geoPoint)
-        : {};
-      const all = { ...streamedCoords, ...resolved };
-      for (const stop of allStops) {
-        const fixed = all[stop.name.trim()];
-        if (fixed) {
-          stop.lat = fixed.lat;
-          stop.lng = fixed.lon;
+  //
+  // Wrapped in a function, not inlined, so both the plain-JSON and streaming branches below can
+  // call it at the point in their own sequence where it belongs — before returning for JSON,
+  // before handing the plan to the traveller for streaming.
+  const placeStops = async (): Promise<void> => {
+    if (geoPoint) {
+      onStage({ stage: "placing", status: "start" });
+      try {
+        // Settle whatever the stream started. `allSettled`, not `all`: each lookup already
+        // swallows its own failure, and one that somehow rejects must not skip the sweep.
+        await Promise.allSettled(pendingCoordLookups);
+        const allStops = itinerary.days.flatMap((d) => d.stops);
+        // Only the names the stream never resolved. On a streaming run this is usually empty or
+        // near it, so the stage that used to be a ~25s whole-trip Overpass call becomes a sweep
+        // for the leftovers. On a plain-JSON run nothing streamed, so this is the whole trip and
+        // the behaviour is exactly what it was before.
+        const unresolved = allStops
+          .map((s) => s.name.trim())
+          .filter((name) => !(name in streamedCoords));
+        const resolved = unresolved.length
+          ? await resolveNamedPlaceCoords(unresolved, geoPoint)
+          : {};
+        const all = { ...streamedCoords, ...resolved };
+        for (const stop of allStops) {
+          const fixed = all[stop.name.trim()];
+          if (fixed) {
+            stop.lat = fixed.lat;
+            stop.lng = fixed.lon;
+          }
         }
+      } catch {
+        // Keep the model's coordinates.
       }
-    } catch {
-      // Keep the model's coordinates.
+      onStage({ stage: "placing", status: "done" });
+    } else {
+      onStage({ stage: "placing", status: "skipped" });
     }
-    onStage({ stage: "placing", status: "done" });
-  } else {
-    onStage({ stage: "placing", status: "skipped" });
+  };
+
+  // Best-effort QA pass: checks budget/timing/context usage and swaps in a corrected day set if
+  // it finds issues. Never fails the request — a broken critique call just leaves whichever day
+  // set it was handed in place.
+  const runCritique = async (): Promise<{ days: Itinerary["days"]; issues: string[] } | null> => {
+    onStage({ stage: "critique", status: "start" });
+    try {
+      const critiquePrompt = buildCritiquePrompt({
+        itinerary,
+        budget,
+        contextInsight,
+        interestTags: preferences?.tags,
+        resolvedFlags,
+        dietary,
+        placeConflicts,
+        travelFindings,
+      });
+      const { result: critiqueRaw } = await runClaude(critiquePrompt, "critique", CRITIQUE_TIMEOUT_MS, {
+        runId,
+      });
+      const critique = parseJsonResponse<CritiqueResult>(critiqueRaw);
+      onStage({ stage: "critique", status: "done" });
+      return critique.revisedDays
+        ? { days: critique.revisedDays, issues: critique.issues ?? [] }
+        : null;
+    } catch {
+      // `failed`, not `done` and not `skipped` — the pass really did consume its budget, and
+      // critique is alone in its display group, so a skip would collapse to "Checking it over —
+      // done" about a review that never ran. See generationStages.ts.
+      onStage({ stage: "critique", status: "failed" });
+      return null;
+    }
+  };
+
+  if (!live) {
+    // Plain-JSON caller: one response, so critique has to land before it. Unchanged order.
+    const revision = await runCritique();
+    if (revision) itinerary.days = revision.days;
+    finalizeDays(itinerary.days);
+    await placeStops();
+    return { itinerary, traceId, runId, sessionId };
   }
 
+  // Streaming caller: finish the plan the traveller is watching, hand it over, and only then
+  // spend the ~150s critique costs. This is the halving — interactive at ~160s rather than ~310s.
+  finalizeDays(itinerary.days);
+  await placeStops();
+  live.onPlan({ itinerary, traceId, runId, sessionId });
+
+  const revision = await runCritique();
+  if (revision) {
+    finalizeDays(revision.days);
+    live.onRevised({ days: revision.days, issues: revision.issues });
+    itinerary.days = revision.days;
+  }
   return { itinerary, traceId, runId, sessionId };
 }
 
