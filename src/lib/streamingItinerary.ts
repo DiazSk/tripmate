@@ -3,6 +3,17 @@ import type { Stop } from "./types";
 export interface StreamedStop {
   dayIndex: number;
   stopIndex: number;
+  /**
+   * The day's own `date`, repeated on every stop of that day.
+   *
+   * A `stop` frame is the only thing the client receives before a day closes, so without this
+   * the day headers of a streaming plan have nothing to print and render an empty
+   * `<input type="date">` for the whole reveal. It costs nothing to carry: `date` is the first
+   * field of a day in the shape `itineraryPrompt.ts` asks for, so it is already parsed by the
+   * time any stop of that day is complete. `""` if the model omitted it — same fail-soft as
+   * everywhere else here.
+   */
+  date: string;
   stop: Stop;
 }
 
@@ -129,6 +140,7 @@ export class StreamingItineraryParser {
     const stops: StreamedStop[] = [];
     for (let d = 0; d < days.length; d++) {
       const dayStops = Array.isArray(days[d]?.stops) ? (days[d].stops as unknown[]) : [];
+      const date = typeof days[d]?.date === "string" ? (days[d].date as string) : "";
       let next = this.emitted[d] ?? 0;
       for (let s = next; s < dayStops.length; s++) {
         // `break`, never `continue`: stops must reach the map in the order the model wrote
@@ -136,7 +148,7 @@ export class StreamingItineraryParser {
         // that stop permanently, since `emitted` would have moved beyond it.
         const candidate = dayStops[s];
         if (!isRenderableStop(candidate)) break;
-        stops.push({ dayIndex: d, stopIndex: s, stop: candidate });
+        stops.push({ dayIndex: d, stopIndex: s, date, stop: candidate });
         next = s + 1;
       }
       this.emitted[d] = next;

@@ -94,3 +94,19 @@ test("garbage in yields nothing rather than throwing", () => {
   const parser = new StreamingItineraryParser();
   assert.deepEqual(parser.feed("not json at all }}}").stops, []);
 });
+
+/* `date` rides along on every stop because a `stop` frame is all the client gets before the
+ * day closes — see StreamedStop. The exhaustive-split test above already proves it survives a
+ * chunk boundary (it deep-equals whole stop objects); these two pin the value itself. */
+test("each stop carries its own day's date", () => {
+  const { stops } = drain([FULL]);
+  assert.deepEqual(
+    stops.map((s) => s.date),
+    ["2026-05-01", "2026-05-01", "2026-05-02"]
+  );
+});
+
+test("a day with no date reports an empty string, not undefined", () => {
+  const { stops } = drain([`{"days":[{"weather":"clear","stops":[${STOP_A}]}]}`]);
+  assert.equal(stops[0].date, "");
+});
