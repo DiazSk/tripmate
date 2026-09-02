@@ -59,7 +59,7 @@ import { upcomingStopsAfter } from "@/lib/itinerary";
 import { formatMoney } from "@/lib/format";
 import type { ArrivalPoint } from "@/lib/arrivalPoints";
 import { devLabel } from "@/lib/devInspector";
-import { clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
+import { clearUnseenDay, changedDayNumbers, markUnseenDays } from "@/lib/unseenChanges";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
@@ -175,21 +175,6 @@ function isPlanStep(value: string | null): value is PlanStep {
 // "planDraft" key is one accidental collision away from being someone else's storage bug.
 const PLAN_DRAFT_KEY = "tripmate:planDraft";
 
-/**
- * Which days the background critique actually rewrote, as **1-based** day numbers —
- * `markUnseenDays` takes them that way, since they are the numbers shown to people.
- *
- * A structural compare, not a field-by-field diff: the critique returns the whole day set and
- * the only question here is "did this day come back different", so `JSON.stringify` answers it
- * in one line. Key order is stable because both sides came from the same `JSON.parse` shape.
- * A day the revision drops entirely is not reported — there is no tab left to carry a dot.
- */
-function changedDayNumbers(before: DayPlan[] | null, after: DayPlan[]): number[] {
-  if (!before) return [];
-  return after.flatMap((day, i) =>
-    JSON.stringify(before[i]) === JSON.stringify(day) ? [] : [i + 1]
-  );
-}
 
 // Local calendar date in ISO shape. `toISOString()` would be UTC and roll the date over a
 // day early for anyone west of Greenwich in the evening; "sv-SE" formats local time as
