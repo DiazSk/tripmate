@@ -37,6 +37,19 @@ import {
 } from "./types";
 import { StageEvent } from "./generationStages";
 import type { DietaryNeeds } from "./travelerProfile";
+import { StreamingItineraryParser, type StreamedStop } from "./streamingItinerary";
+
+/**
+ * Where a streaming caller receives the plan as it is written. Absent for the plain-JSON
+ * caller, and its absence is the switch: `runGeneration` streams stops, resolves coordinates
+ * per day and moves critique off the critical path only when a sink is supplied. The JSON
+ * route has no channel to deliver anything after its single response, so it keeps the
+ * blocking order it has always had.
+ */
+export interface LiveSink {
+  onStop(stop: StreamedStop): void;
+  onDayCoords(dayIndex: number, coords: Record<string, { lat: number; lon: number }>): void;
+}
 
 export interface GenerationParams {
   destination: string;
@@ -62,7 +75,8 @@ export interface GenerationParams {
  */
 export async function runGeneration(
   params: GenerationParams,
-  onStage: (event: StageEvent) => void
+  onStage: (event: StageEvent) => void,
+  live?: LiveSink
 ): Promise<{ itinerary: Itinerary; traceId: string; runId: string; sessionId?: string }> {
   const {
     destination,
@@ -202,6 +216,54 @@ export async function runGeneration(
     }));
   }
 
+  const parser = new StreamingItineraryParser();
+  /** Stop names per day index, accumulated as they stream, so a day's coordinate lookup can be
+   *  fired the moment that day closes. */
+  const namesByDay = new Map<number, string[]>();
+  /** Coordinates already resolved during the stream, merged across days and keyed by the
+   *  trimmed stop name — the same key `resolveNamedPlaceCoords` returns. The `placing` sweep
+   *  below skips anything already in here, which is what shrinks it from the whole trip to
+   *  whatever the stream missed. */
+  const streamedCoords: Record<string, { lat: number; lon: number }> = {};
+  const pendingCoordLookups: Promise<unknown>[] = [];
+
+  const onText = live
+    ? (delta: string) => {
+        // See Task 2's review: runClaude invokes this with no try/catch around it on either
+        // transport, so a parse hiccup or a sink error here must degrade to "no live reveal
+        // for this generation" rather than derailing the model call it is riding along with.
+        try {
+          const { stops, closedDays } = parser.feed(delta);
+          for (const streamed of stops) {
+            const names = namesByDay.get(streamed.dayIndex) ?? [];
+            names.push(streamed.stop.name);
+            namesByDay.set(streamed.dayIndex, names);
+            live.onStop(streamed);
+          }
+          for (const dayIndex of closedDays) {
+            const names = namesByDay.get(dayIndex) ?? [];
+            // Nothing to place, or nowhere to place it from — a failed geocode leaves geoPoint
+            // unset and the whole correction is skipped, exactly as the batched version already does.
+            if (names.length === 0 || !geoPoint) continue;
+            // Deliberately NOT awaited. This is a ~25s Overpass call and the parse it would block
+            // is the feature; the whole set is awaited once, after generate, before the sweep.
+            pendingCoordLookups.push(
+              resolveNamedPlaceCoords(names, geoPoint)
+                .then((coords) => {
+                  Object.assign(streamedCoords, coords);
+                  live.onDayCoords(dayIndex, coords);
+                })
+                // Fail-soft, per the house convention: a day whose lookup fails keeps the model's
+                // coordinates and says nothing, which is what the batched call already did.
+                .catch((err) => console.error("[itinerary] day coords lookup failed", err))
+            );
+          }
+        } catch (err) {
+          console.error("[itinerary] live stream onText failed", err);
+        }
+      }
+    : undefined;
+
   onStage({ stage: "generate", status: "start" });
   // Persisted so the edit chat can resume THIS conversation rather than opening a fresh one —
   // the session the traveller goes on to refine through is the one that wrote their plan.
@@ -212,7 +274,7 @@ export async function runGeneration(
     prompt,
     isRefine ? "refine" : "generate",
     itineraryTimeoutMs(dayCount),
-    { runId, session: { persist: true } }
+    { runId, session: { persist: true }, onText }
   );
   onStage({ stage: "generate", status: "done" });
 
@@ -403,13 +465,23 @@ export async function runGeneration(
   if (geoPoint) {
     onStage({ stage: "placing", status: "start" });
     try {
+      // Settle whatever the stream started. `allSettled`, not `all`: each lookup already
+      // swallows its own failure, and one that somehow rejects must not skip the sweep.
+      await Promise.allSettled(pendingCoordLookups);
       const allStops = itinerary.days.flatMap((d) => d.stops);
-      const resolved = await resolveNamedPlaceCoords(
-        allStops.map((s) => s.name),
-        geoPoint
-      );
+      // Only the names the stream never resolved. On a streaming run this is usually empty or
+      // near it, so the stage that used to be a ~25s whole-trip Overpass call becomes a sweep
+      // for the leftovers. On a plain-JSON run nothing streamed, so this is the whole trip and
+      // the behaviour is exactly what it was before.
+      const unresolved = allStops
+        .map((s) => s.name.trim())
+        .filter((name) => !(name in streamedCoords));
+      const resolved = unresolved.length
+        ? await resolveNamedPlaceCoords(unresolved, geoPoint)
+        : {};
+      const all = { ...streamedCoords, ...resolved };
       for (const stop of allStops) {
-        const fixed = resolved[stop.name.trim()];
+        const fixed = all[stop.name.trim()];
         if (fixed) {
           stop.lat = fixed.lat;
           stop.lng = fixed.lon;

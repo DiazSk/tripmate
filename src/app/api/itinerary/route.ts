@@ -8,6 +8,7 @@ import { MAX_TRIP_DAYS, tripDays } from "@/lib/tiers";
 import { DayPlan } from "@/lib/types";
 import { GenerationParams, runGeneration } from "@/lib/generationRunner";
 import { StageEvent } from "@/lib/generationStages";
+import type { StreamedStop } from "@/lib/streamingItinerary";
 import { isThrottled } from "@/lib/ipThrottle";
 import { isOverDailyCap } from "@/lib/spendCap";
 
@@ -174,8 +175,13 @@ export async function POST(req: NextRequest) {
         }
       }, 20_000);
       const onStage = (event: StageEvent) => safeEnqueue("stage", event);
+      const live = {
+        onStop: (stop: StreamedStop) => safeEnqueue("stop", stop),
+        onDayCoords: (dayIndex: number, coords: Record<string, { lat: number; lon: number }>) =>
+          safeEnqueue("day-coords", { dayIndex, coords }),
+      };
       try {
-        const result = await runGeneration(params, onStage);
+        const result = await runGeneration(params, onStage, live);
         safeEnqueue("done", result);
       } catch (err) {
         console.error("[itinerary]", err);
