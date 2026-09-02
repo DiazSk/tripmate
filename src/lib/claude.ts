@@ -369,6 +369,18 @@ function runClaudeViaCli(
      *  boundaries exactly as an SSE frame does — see eventStream.ts, same bug, same fix. */
     let lineBuf = "";
 
+    // A chunk boundary lands wherever the pipe's buffer fills, which is mid-UTF-8-sequence as
+    // readily as anywhere else — and a naive per-chunk decode turns the two halves of a `ã` into
+    // two U+FFFD. That is not hypothetical here: destination names carry accents constantly
+    // ("São Paulo", "Kraków"), a generate call is hundreds of KB of JSONL, and the damage would
+    // reach both `onText` and the envelope persisted to `llm_traces.raw_response`. Setting an
+    // encoding puts Node's own StringDecoder on the stream, which holds a straddling sequence
+    // back until its remaining bytes arrive — the decoding half of what eventStream.ts gets from
+    // `decoder.decode(value, { stream: true })`, alongside the line buffering above.
+    // stderr gets the same treatment: it is what a non-zero exit writes to the trace row.
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+
     /** One JSONL event. Never throws: a line this doesn't recognise is a line to ignore, and a
      *  malformed one must not take down a generation the traveller is waiting on. */
     const handleStreamLine = (line: string) => {
