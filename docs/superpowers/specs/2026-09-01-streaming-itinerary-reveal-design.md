@@ -146,8 +146,7 @@ The SSE stream stays open past the plan.
 
 - New `plan` event carries what `done` carries today, and means "interactive now".
 - `critique` stage events continue to report as they do.
-- New `revised` event carries critique's output plus the `itineraryFingerprint()` of
-  the itinerary it was computed against.
+- New `revised` event carries critique's output.
 - `done` still closes the stream, after critique.
 
 `plan` is therefore not terminal, and the client must not stop reading on it. This is
@@ -160,11 +159,18 @@ critique's placement determined by whether an `onStop` sink was supplied.
 
 **Edit collision.** A traveller can drag a stop, or run an element edit, while
 critique is still running — and critique replaces the whole day set
-(`itinerary.days = critique.revisedDays`). The guard reuses machinery that already
-exists for exactly this hazard: the client applies `revisedDays` only if its own
-current `itineraryFingerprint()` still matches the one stamped on the `revised`
-event. On a mismatch it takes critique's annotations and discards the day
-replacement. This is the same drift check `/api/trip-edit` uses via `syncedHash`.
+(`itinerary.days = critique.revisedDays`). The client holds an `editedSincePlan`
+flag, set by any local mutation between the `plan` and `revised` events, and applies
+`revisedDays` only when it is false. On a mismatch it takes critique's `issues` and
+discards the day replacement.
+
+A flag rather than the `itineraryFingerprint()` drift check `/api/trip-edit` uses,
+for a reason that is decisive rather than stylistic: **`itineraryFingerprint` cannot
+run on the client at all.** It lives in `editPrompt.ts`, which imports `createHash`
+from `crypto`. Hashing would also be answering a harder question than this one —
+`syncedHash` exists to detect drift a *server* session was never told about, across
+process boundaries. Here both events land in one client that performed any edit
+itself, so it already knows the answer without computing it.
 
 **Abandonment is fail-soft.** If the traveller navigates away before `revised`
 arrives, the critique is lost. Acceptable: the plan is already persisted as a draft
