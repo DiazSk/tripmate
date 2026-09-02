@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearUnseenDay, markUnseenDays } from "./unseenChanges.ts";
+import { changedDayNumbers, clearUnseenDay, markUnseenDays } from "./unseenChanges.ts";
 
 test("1-based day numbers become 0-based indexes", () => {
   // The whole reason this is a function. The route reports what people read ("Day 2"); every
@@ -42,4 +42,89 @@ test("marking is a pure function of its inputs", () => {
   const existing = [3];
   markUnseenDays([1, 2], null, existing);
   assert.deepEqual(existing, [3]);
+});
+
+// --- changedDayNumbers: which days the background critique actually rewrote --------------------
+//
+// Moved here from HomeView so it can be tested at all. The two day sets it compares are two
+// separate model responses, which is what the fixed-order fingerprint exists for — the previous
+// raw `JSON.stringify` compared key order as much as content and its comment claimed, wrongly,
+// that both sides "came from the same JSON.parse shape".
+
+const stop = (over = {}) => ({
+  name: "Fushimi Inari",
+  lat: 34.96,
+  lng: 135.77,
+  cost: 0,
+  why: "w",
+  note: "n",
+  time: "9:00 AM",
+  durationLabel: "2 hours",
+  category: "other",
+  ...over,
+});
+const plan = (over = {}) => ({
+  date: "2026-05-01",
+  weather: "clear",
+  summary: "Temples, then the market.",
+  stops: [stop()],
+  ...over,
+});
+
+test("an untouched day set reports nothing changed", () => {
+  const days = [plan(), plan({ date: "2026-05-02" })];
+  assert.deepEqual(changedDayNumbers(days, days.map((d) => ({ ...d }))), []);
+});
+
+test("only the day the critique rewrote is reported, as a 1-based number", () => {
+  const before = [plan(), plan({ date: "2026-05-02" }), plan({ date: "2026-05-03" })];
+  const after = [
+    { ...before[0] },
+    { ...before[1], stops: [stop({ name: "Nishiki Market" })] },
+    { ...before[2] },
+  ];
+  assert.deepEqual(changedDayNumbers(before, after), [2]);
+});
+
+test("a different key order is not a change", () => {
+  // The regression the fixed-order fingerprint exists to prevent: two model responses have no
+  // guaranteed key order, and the raw stringify compared it. This dotted every day.
+  const before = [{ date: "2026-05-01", weather: "clear", summary: "s", stops: [stop()] }];
+  const after = [{ stops: [stop()], summary: "s", weather: "clear", date: "2026-05-01" }];
+  assert.deepEqual(changedDayNumbers(before, after), []);
+});
+
+test("a server-attached weatherDetail is not a change", () => {
+  // Attached from the forecast lookup rather than authored, and rebuilt per run — comparing it
+  // would flag every day on every revision.
+  const before = [plan({ weatherDetail: { date: "2026-05-01", tempMaxC: 21 } })];
+  const after = [plan({ weatherDetail: { date: "2026-05-01", tempMaxC: 22 } })];
+  assert.deepEqual(changedDayNumbers(before, after), []);
+});
+
+test("a rewritten day narrative IS a change", () => {
+  const before = [plan()];
+  const after = [plan({ summary: "Rewritten: museums instead." })];
+  assert.deepEqual(changedDayNumbers(before, after), [1]);
+});
+
+test("a changed lodging or a changed stop time is a change", () => {
+  assert.deepEqual(
+    changedDayNumbers([plan()], [plan({ lodging: { name: "H", cost: 100, note: "n" } })]),
+    [1]
+  );
+  assert.deepEqual(
+    changedDayNumbers([plan()], [plan({ stops: [stop({ time: "11:00 AM" })] })]),
+    [1]
+  );
+});
+
+test("no previous day set means nothing to compare and nothing reported", () => {
+  assert.deepEqual(changedDayNumbers(null, [plan()]), []);
+});
+
+test("a day the revision added is reported; one it dropped cannot be", () => {
+  const before = [plan()];
+  assert.deepEqual(changedDayNumbers(before, [plan(), plan({ date: "2026-05-02" })]), [2]);
+  assert.deepEqual(changedDayNumbers([plan(), plan({ date: "2026-05-02" })], [plan()]), []);
 });
