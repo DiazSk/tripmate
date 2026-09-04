@@ -137,8 +137,12 @@ Deliberate, and none of it is above the `MapRenderer` boundary:
   ~1.3 s) so its geometry floats just above the roofs. MapLibre drapes on terrain and reports
   altitude 0, which is the correct answer for it — the marker layer then lifts cards by
   `STEM_HEIGHT_M` alone and still lands on the stem.
-- **`centreHeightM`.** MapLibre aims at a ground point; there is no way to ask it to centre
-  something 150 m up. A stop flight lands slightly high in frame rather than dead centre.
+- ~~**`centreHeightM`.**~~ Closed. MapLibre still aims at a ground point, but `flyTo`/`fitBounds`
+  take a pixel `offset` for where that point lands, and a column of height `h` at pitch `φ`
+  displaces `h·sin(φ)` on screen — so the ground point is pushed down by exactly the amount that
+  puts the floating card on centre (`centreHeightOffsetPx`). Capped at a third of the viewport, so
+  a steep pitch cannot drive the stop off the bottom of the frame. Cesium reaches the same place
+  through a real 3D aim point; the two now agree on where a hovered stop lands.
 - **Horizon culling.** A mercator map has no far side, so `project` rejects only what is behind the
   camera.
 - **The stop marker's material.** Both engines put a stem and a ground footprint under every stop,

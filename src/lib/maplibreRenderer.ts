@@ -18,7 +18,7 @@ import {
   routeViewHeadingDeg,
   STEM_HEIGHT_M,
 } from "@/lib/mapRoute";
-import { metresBetween } from "@/lib/peekRange";
+import { centreHeightOffsetPx, metresBetween } from "@/lib/peekRange";
 import { createArcTubeLayer, type ArcTube } from "@/lib/maplibreArcLayer";
 import {
   CameraPose,
@@ -612,9 +612,12 @@ function addTripLayers(map: MapLibreMap) {
  *   then makes the marker layer lift cards by `STEM_HEIGHT_M` alone, which is correct here.
  * - **No horizon cull.** A mercator map has no far side, so `project` rejects only what is behind
  *   the camera.
- * - **`centreHeightM` is ignored.** MapLibre aims at a point on the ground; there is no way to ask
- *   it to centre something 150m up. The stop's card lands slightly high in frame rather than dead
- *   centre, which is the pre-`centreHeightM` behaviour and was survivable.
+ * - **`centreHeightM` is honoured indirectly.** MapLibre aims at a point on the ground and cannot
+ *   be asked to centre something 150m up — but it takes a pixel `offset` for where that ground
+ *   point should land, and the screen displacement of a vertical column is computable from the
+ *   pitch and the destination zoom. See `centreHeightOffsetPx`. This was previously dropped, which
+ *   left the hover peek framing the road under a stop while the card naming it rode high in the
+ *   frame, and on a tall anchor at a steep pitch, out of the clear area entirely.
  */
 export class MapLibreRenderer implements MapRenderer {
   readonly engine = "maplibre" as const;
@@ -972,16 +975,42 @@ export class MapLibreRenderer implements MapRenderer {
       // "how far back"; bounds are "keep this much ground in the clear part of the frame", and the
       // clear part is what the padding below describes. The `maxZoom` cap is what actually stops
       // the over-zoom: a small box in a large viewport would otherwise fit at street level again.
+      const bounds: [[number, number], [number, number]] = [
+        [west, south],
+        [east, north],
+      ];
+      const fitZoom = this.zoomForRange(options.minRangeM ?? STOP_MIN_RANGE_M, options.lat);
+      // The same lift the plain flight applies, but the zoom has to be asked for rather than
+      // computed: `fitBounds` picks its own, and the offset is only right at the zoom actually
+      // landed on. `cameraForBounds` runs the same solve without moving the camera.
+      const fitted = this.map.cameraForBounds(bounds, { padding, maxZoom: fitZoom, bearing, pitch });
+      const fitOffset = centreHeightOffsetPx(
+        options.centreHeightM ?? 0,
+        fitted?.zoom ?? fitZoom,
+        options.lat,
+        pitch,
+        this.viewSizePx().height
+      );
       this.map.fitBounds(
-        [
-          [west, south],
-          [east, north],
-        ],
+        bounds,
         {
           padding,
-          maxZoom: this.zoomForRange(options.minRangeM ?? STOP_MIN_RANGE_M, options.lat),
+          maxZoom: fitZoom,
           bearing,
           pitch,
+      // Spread conditionally, never `offset: <maybe undefined>`. MapLibre distinguishes an absent
+      // `offset` key from one present and undefined: it runs `Point.convert(options.offset)` and
+      // reads `.x` off the result, so an explicit `undefined` throws
+      // `TypeError: Cannot read properties of undefined (reading 'x')` out of `flyTo`/`fitBounds`
+      // — measured in a browser, where `offset: undefined` threw while an absent key and a real
+      // `[0, 40]` pair both succeeded. `centreHeightOffsetPx` returns `undefined` by design for
+      // "nothing to lift" (peekRange.test.mjs asserts exactly that), which is every destination
+      // flight, since those pass `centreHeightM = 0`. Passing it straight through made the throw
+      // escape `flyToPoint`, and the provider's queued first-build flight was dropped with it:
+      // the camera sat on HERO_VIEW over the Sahara for the whole generation while the band read
+      // "PLANNING ROME". Stop flights were unaffected — a card height is > 0, so they got a real
+      // pair — which is what made this look like a route-drawing bug rather than a camera one.
+          ...(fitOffset ? { offset: fitOffset } : {}),
           // `linear: true` picks `easeTo` over `flyTo`. `flyTo` flies the van Wijk arc — it pulls
           // out to altitude and descends again, which over a few hundred metres of ground reads as
           // the map lurching away and coming back. A monotone ease across the same short distance
@@ -1000,12 +1029,37 @@ export class MapLibreRenderer implements MapRenderer {
       MIN_RANGE_M,
       Math.min(MAX_RANGE_M, Math.max(options.rangeM, options.minRangeM ?? 0))
     );
+    const zoom = this.rangeToZoom(rangeM, options.lat);
+    // Honour `centreHeightM` rather than dropping it. The caller aims at the stop's floating
+    // card, not the ground under it, and on this engine that is the difference between the peek
+    // framing the thing that names the place and framing a patch of road with the label riding
+    // off the top of the clear area.
+    const flyOffset = centreHeightOffsetPx(
+      options.centreHeightM ?? 0,
+      zoom,
+      options.lat,
+      pitch,
+      this.viewSizePx().height
+    );
     this.map.flyTo({
       center: [options.lng, options.lat],
-      zoom: this.rangeToZoom(rangeM, options.lat),
+      zoom,
       pitch,
       bearing,
       padding,
+    // Spread conditionally, never `offset: <maybe undefined>`. MapLibre distinguishes an absent
+    // `offset` key from one present and undefined: it runs `Point.convert(options.offset)` and
+    // reads `.x` off the result, so an explicit `undefined` throws
+    // `TypeError: Cannot read properties of undefined (reading 'x')` out of `flyTo`/`fitBounds`
+    // — measured in a browser, where `offset: undefined` threw while an absent key and a real
+    // `[0, 40]` pair both succeeded. `centreHeightOffsetPx` returns `undefined` by design for
+    // "nothing to lift" (peekRange.test.mjs asserts exactly that), which is every destination
+    // flight, since those pass `centreHeightM = 0`. Passing it straight through made the throw
+    // escape `flyToPoint`, and the provider's queued first-build flight was dropped with it:
+    // the camera sat on HERO_VIEW over the Sahara for the whole generation while the band read
+    // "PLANNING ROME". Stop flights were unaffected — a card height is > 0, so they got a real
+    // pair — which is what made this look like a route-drawing bug rather than a camera one.
+      ...(flyOffset ? { offset: flyOffset } : {}),
       duration: (options.durationS ?? 2.5) * 1000,
       essential: true,
     });
