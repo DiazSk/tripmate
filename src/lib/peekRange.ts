@@ -213,3 +213,41 @@ export function peekFlightSeconds(fromRangeM: number, toRangeM: number): number 
   const seconds = PEEK_FLIGHT_BASE_S + Math.max(0, doublings - 1) * PEEK_FLIGHT_PER_DOUBLING_S;
   return Math.min(seconds, PEEK_FLIGHT_MAX_S);
 }
+
+/** Mercator constants, duplicated from the renderer rather than imported: this module is pure and
+ *  reachable from a `.test.mjs`, and `maplibreRenderer` pulls in `maplibre-gl`, which needs a DOM. */
+const EQUATOR_M = 40_075_016.686;
+const WORLD_TILE_PX = 512;
+
+/**
+ * How far *down* the ground point has to sit so a thing floating `heightM` above it lands on the
+ * centre of the frame — MapLibre's answer to Cesium's `centreHeightM`.
+ *
+ * MapLibre genuinely cannot aim at a point in the air: `flyTo` takes a `center` on the ground. But
+ * it does take a pixel `offset` for where that centre should land, and the screen displacement of
+ * a vertical column is computable. At pitch 0 (straight down) a column projects to a point and the
+ * offset is zero; at the horizon it is the column's full height in pixels. In between it is
+ * `h·sin(pitch)`, converted through the scale at the destination zoom.
+ *
+ * Orthographic, so it ignores the perspective foreshortening across the frame. That is accurate at
+ * the centre, which is the only place this is measured, and the residual at the edges is far below
+ * the size of the card being centred.
+ *
+ * Capped at a third of the viewport: an extreme pitch with a tall anchor would otherwise drive the
+ * ground point clean off the bottom of the screen, which trades a card slightly high in frame for
+ * a stop that isn't in it at all.
+ */
+export function centreHeightOffsetPx(
+  heightM: number,
+  zoom: number,
+  lat: number,
+  maplibrePitchDeg: number,
+  viewHeightPx: number
+): [number, number] | undefined {
+  if (!(heightM > 0)) return undefined;
+  const metresPerPixel =
+    (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (WORLD_TILE_PX * 2 ** zoom);
+  const px = (heightM * Math.sin((maplibrePitchDeg * Math.PI) / 180)) / metresPerPixel;
+  if (!(px > 0.5)) return undefined;
+  return [0, Math.min(px, viewHeightPx / 3)];
+}
