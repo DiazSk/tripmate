@@ -958,8 +958,14 @@ export default function ItineraryCard({
                   "·" and so was the first thing to fall off the end of a long one. It is a figure,
                   not prose: it belongs beside the name, right-aligned and `tabular-nums` like
                   every other cost in this system. */}
+              {/* `line-clamp-2`, not `truncate`. On one line the name lost its tail to an ellipsis
+                  — "Boutique agriturismo in Pien…" — directly above its own note wrapping freely
+                  to three lines, so the card was spending vertical room on the note while refusing
+                  it to the thing being named. Two lines is the cap rather than none, so a
+                  pathological name still can't push the stops off the card. `items-baseline`
+                  keeps the cost on the first line's baseline either way. */}
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate font-medium text-foreground">{day.lodging.name}</span>
+                <span className="line-clamp-2 font-medium text-foreground">{day.lodging.name}</span>
                 <span className="shrink-0 text-sm tabular-nums text-muted">
                   {formatMoney(day.lodging.cost)}
                 </span>
@@ -983,6 +989,15 @@ export default function ItineraryCard({
                     min={0}
                     step={1}
                     inputMode="decimal"
+                    // The wrapping label already names this "Actual", which is enough to pass a
+                    // name check and not enough to be useful: read aloud it is "Actual, spin
+                    // button" with no unit (the `$` beside it is aria-hidden), no subject, and no
+                    // way to tell one day's field from another's in a list of nine. The explicit
+                    // label overrides the wrapper with all three.
+                    aria-label={`Actual lodging cost in dollars for day ${dayIndex + 1}, ${day.lodging.name}`}
+                    // Sighted travellers had the same question in a shorter form: the field
+                    // appears next to an estimate with nothing saying what typing in it does.
+                    title="What you actually paid. Replaces the estimate in this trip's budget total."
                     defaultValue={day.lodging.actualCost}
                     onBlur={(e) =>
                       onLodgingActualCostChange(

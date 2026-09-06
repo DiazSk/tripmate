@@ -314,11 +314,13 @@ function openNativePicker(cell: HTMLLabelElement, target: EventTarget | null) {
  *  context, and doing both makes a screen reader say the step name twice. */
 function Screen({
   name,
+  step,
   title,
   subtitle,
   children,
 }: {
   name: string;
+  step: PlanStep;
   title: string;
   subtitle?: string;
   children: ReactNode;
@@ -328,12 +330,25 @@ function Screen({
     headingRef.current?.focus();
   }, []);
 
+  // Derived from PLAN_ORDER rather than written per screen, because the landing page promises
+  // "Four steps" and a hand-numbered wizard is a second place for that count to be wrong. `step`
+  // is typed as PlanStep, so a screen cannot be added without appearing here — the alternative,
+  // matching on the display `name`, would have failed silently the first time one was reworded.
+  const position = PLAN_ORDER.indexOf(step) + 1;
+
   return (
     <div className="value-in" style={{ animationDelay: "80ms" }} {...devLabel(`PlanStep.${name}`)}>
+      {/* The wizard gave no sense of length: four screens of questions with a Next button and no
+          way to tell whether you were one screen from a plan or ten. Stated once, quietly, above
+          the heading rather than as a progress bar — four steps is short enough that the count is
+          the reassurance and a bar would be furniture. */}
+      <p className="text-[0.7rem] font-medium tracking-[0.16em] text-muted uppercase">
+        Step {position} of {PLAN_ORDER.length}
+      </p>
       <h2
         ref={headingRef}
         tabIndex={-1}
-        className="font-display text-xl font-semibold text-foreground outline-none"
+        className="mt-1.5 font-display text-xl font-semibold text-foreground outline-none"
       >
         {title}
       </h2>
@@ -1841,6 +1856,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {planStep === "basics" && (
                 <Screen
                   name="Basics"
+                  step="basics"
                   title="Where and when"
                   subtitle="Destination, dates and what you want to spend in total."
                 >
@@ -2119,6 +2135,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {planStep === "group" && (
                 <Screen
                   name="Group"
+                  step="group"
                   title="Who's going?"
                   subtitle="This changes trip to trip, so we ask every time."
                 >
@@ -2160,6 +2177,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {planStep === "preferences" && (
                 <Screen
                   name="Preferences"
+                  step="preferences"
                   title="What you're after"
                   subtitle="Occasion, pace and what to prioritise. All optional, and specific to this trip."
                 >
@@ -2255,6 +2273,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {planStep === "review" && (
                 <Screen
                   name="Review"
+                  step="review"
                   title="Review your trip"
                   subtitle="Here's everything before we start planning."
                 >
@@ -2377,7 +2396,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 </button>
                 {planStep === PLAN_ORDER[PLAN_ORDER.length - 1] ? (
                   // The terminal button, deliberately unlike every "Next" before it: no arrow —
-                  // there's nowhere further to imply — and wider, so committing to a ~2-minute
+                  // there's nowhere further to imply — and wider, so committing to a multi-minute
                   // generation doesn't sit in a pill sized and shaped like the three-times-
                   // repeated "keep going" button that trained the traveler's muscle memory to
                   // press it without reading it.
