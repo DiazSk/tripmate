@@ -4,6 +4,7 @@ import { MapPin, CloudSun, ScanSearch, Compass } from "lucide-react";
 import type { ComponentType } from "react";
 import { useRef } from "react";
 
+import { TYPICAL_WAIT_PHRASE } from "@/lib/generationStages";
 import { useLineReveal } from "@/lib/lineReveal";
 
 /**
@@ -13,13 +14,21 @@ import { useLineReveal } from "@/lib/lineReveal";
  * names five measured stages — `geocode`, `context`, `generate`, `critique`, `placing` — and two of
  * them are things this product does that nothing on the landing previously mentioned:
  *
- *  - **critique** is a second model call (~50s of the ~150s run) that reviews the finished plan,
- *    lists its issues, and can return revised days which replace the originals.
+ *  - **critique** is a second model call (150s of the ~311s run — nearly half of it) that reviews
+ *    the finished plan, lists its issues, and can return revised days which replace the originals.
+ *    That is what makes "most of it is the plan being checked rather than written" literally true
+ *    rather than a turn of phrase.
  *  - **placing** corrects the model's coordinates against OSM, because it writes lat/lng from
  *    memory and gets them wrong — measured at 11km off for Fushimi Inari, 3km for Nishiki Market.
  *
  * Those are the interesting claims, and they are true. The previous three steps ("real prices",
  * "weather", "three tiers") described the inputs three times and the machinery not at all.
+ *
+ * The duration in the standfirst is `TYPICAL_WAIT_PHRASE`, not prose. It read "two and a half
+ * minutes" here while the loader said "five" and the review step said "two" — three numbers for
+ * one wait, two of them the stale pre-2026-08-21 estimate. A landing page that under-promises the
+ * wait is worse than one that states it: the traveler finds out either way, and only one version
+ * of them is still trusting the plan when they do.
  */
 const STEPS: { number: string; label: string; body: string; Icon: ComponentType<{ className?: string; strokeWidth?: number }> }[] = [
   {
@@ -73,7 +82,7 @@ export default function HowItWorks() {
           How it actually works
         </h2>
         <p className="scene-prose max-w-sm text-sm text-muted lg:pt-2">
-          Four steps, about two and a half minutes. Most of it is the plan being checked rather
+          Four steps, about {TYPICAL_WAIT_PHRASE}. Most of it is the plan being checked rather
           than written.
         </p>
       </div>

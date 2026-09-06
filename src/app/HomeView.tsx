@@ -62,7 +62,7 @@ import { devLabel } from "@/lib/devInspector";
 import { clearUnseenDay, changedDayNumbers, markUnseenDays } from "@/lib/unseenChanges";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
-import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
+import { STAGE_ORDER, StageEvent, TYPICAL_WAIT_PHRASE } from "@/lib/generationStages";
 import type { StageProgress } from "@/lib/generationStages";
 import { buildDestinationFacts } from "@/lib/destinationFacts";
 import { formatDateRange } from "@/lib/format";
@@ -2320,13 +2320,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     />
                   </div>
 
-                  {/* The one reassurance this flow never gave before committing to a ~2-minute
-                      run: that it can be stopped, and that the result isn't final. Both were
-                      already true — `GenerationScreen` takes `onCancel`, and `FeedbackLoop`
-                      exists — neither was ever said here, where a hesitating traveler needed it. */}
+                  {/* The one reassurance this flow never gave before committing to a long run:
+                      that it can be stopped, and that the result isn't final. Both were already
+                      true — `GenerationScreen` takes `onCancel`, and `FeedbackLoop` exists —
+                      neither was ever said here, where a hesitating traveler needed it.
+
+                      The duration comes from `TYPICAL_WAIT_PHRASE`, not from prose. This sentence
+                      used to read "about two minutes" against the loader's own derived "about
+                      five", so the traveler was told one number here and a different one on the
+                      very next screen. */}
                   <p className="mt-4 text-xs text-muted">
-                    Takes about two minutes. You can cancel any time, and refine the plan in plain
-                    language afterwards.
+                    Takes about {TYPICAL_WAIT_PHRASE}. You can cancel any time, and refine the plan
+                    in plain language afterwards.
                   </p>
                   <label className="mt-2 flex items-center gap-2 text-xs text-muted">
                     <input

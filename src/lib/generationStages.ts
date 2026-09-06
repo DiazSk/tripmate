@@ -277,3 +277,34 @@ export function stepGroupState(
 export function isStepTerminal(state: StepState): boolean {
   return state === "done" || state === "failed";
 }
+
+/**
+ * How long a generation takes, in words, derived from `STAGE_SECONDS` above.
+ *
+ * **This is the only place the app is allowed to say how long the wait is.** It lived in
+ * `GenerationScreen` and three surfaces disagreed with each other and with the data: the loader
+ * said "about five minutes" (derived, correct), the review step said "about two minutes", and the
+ * landing page's How-it-works said "about two and a half minutes". A traveler could read all
+ * three inside one flow, and the two written ones were the stale pre-2026-08-21 estimate that
+ * `STAGE_SECONDS`' own comment records as understating the wait by ~2x.
+ *
+ * Derived rather than written, so re-deriving `STAGE_SECONDS` from `llm_traces` moves every
+ * surface at once and none of them can rot separately. Read the caveats on `STAGE_SECONDS`
+ * before adjusting it downward — timed-out rows are censored observations and bias any quantile
+ * over them low, so those numbers are floors.
+ */
+export const TYPICAL_WAIT_MINUTES =
+  Math.round((Object.values(STAGE_SECONDS).reduce((a, b) => a + b, 0) / 60) * 2) / 2;
+
+/** "2.5" reads as an instrument reading; a wait is spoken, not measured. */
+export function spellMinutes(n: number): string {
+  const whole = Math.floor(n);
+  const half = n - whole >= 0.5;
+  const words = ["zero", "one", "two", "three", "four", "five"];
+  const w = words[whole] ?? String(whole);
+  if (!half) return `${w} minute${whole === 1 ? "" : "s"}`;
+  return whole === 0 ? "half a minute" : `${w} and a half minutes`;
+}
+
+/** The spoken wait, e.g. "five minutes". Every surface that quotes a duration uses this. */
+export const TYPICAL_WAIT_PHRASE = spellMinutes(TYPICAL_WAIT_MINUTES);
