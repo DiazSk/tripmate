@@ -70,3 +70,8 @@ Trace-*.json
 
 # git worktree scratch space (superpowers subagent-driven-development)
 .worktrees/
+
+# scratch renders dropped into the served public/ dir while working on the export
+# (`/api/trips/<id>/export` regenerates any of them). They are reachable at a public URL
+# the moment they exist, so they must never be committed by accident.
+/public/__tmp-*
