@@ -5,10 +5,16 @@ import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
 import "./globals.css";
 
 /**
- * The trace viewer is a development tool: a fixed z-50 FAB on every route that
- * opens the raw prompt and raw model response, drawn in the light stone palette
- * this design system replaced. Useful while building, and both a second visual
- * language and an information leak in front of an actual traveller.
+ * The trace viewer is a development tool: a fixed z-50 FAB on every route that opens the raw
+ * prompt and raw model response. It stays gated because that is an information leak in front of
+ * an actual traveller, whatever it looks like.
+ *
+ * It no longer carries the second visual language it used to. This comment used to read "drawn in
+ * the light stone palette this design system replaced", and that was true — a white card with
+ * stone borders floating over the dark product. It has since been moved onto the system's own
+ * tokens (`glass-control`, `surface-deep`, `card-border`, tinted-on-dark status badges), because
+ * `dev` is the mode the app is demoed in, and a light-mode panel in the corner of a demo is a
+ * visible seam even when it is only ever seen by us.
  */
 const SHOW_LLM_TRACES = process.env.NODE_ENV === "development";
 
@@ -78,9 +84,46 @@ const rajdhani = Rajdhani({
   weight: ["500", "600"],
 });
 
+/**
+ * Where this deploy lives, for the absolute URLs Open Graph requires — a social crawler cannot
+ * resolve `/opengraph-image.png`, it needs the origin in front of it.
+ *
+ * Env-driven rather than hardcoded because the same build serves localhost and Railway. Falling
+ * back to localhost is deliberate: a wrong absolute URL in a share card is harder to notice than
+ * a localhost one, which is obviously unset the first time anybody looks at a preview.
+ */
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+const DESCRIPTION =
+  "Day-by-day itineraries planned against your real dates — weather, public holidays, opening " +
+  "hours and travel times checked before a single word is written.";
+
+/**
+ * `opengraph-image.png` sits beside this file and Next picks it up by convention, emitting
+ * `og:image` and `twitter:image` for every route. It is a committed static render rather than an
+ * `ImageResponse` route: this card never varies per request, and generating it at runtime would
+ * mean shipping a font loader for a picture that is identical every time.
+ *
+ * `/trip/[id]` sets its own title and description on top of these; it inherits this image, which
+ * is why its long-standing `twitter: { card: "summary_large_image" }` declaration finally has an
+ * image behind it instead of rendering an empty card.
+ */
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "TripMate — Plan your trip",
-  description: "AI-planned itineraries with real weather, budget tracking, and maps.",
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "TripMate",
+    title: "TripMate — Plan your trip",
+    description: DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TripMate — Plan your trip",
+    description: DESCRIPTION,
+  },
 };
 
 // Matches --canvas in globals.css. manifest.ts's own theme_color covers the installed app; this
