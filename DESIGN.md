@@ -395,8 +395,33 @@ is preserved in the `.blue-hour-scene` entry, which is the rule it was arguing a
 
 ## Typography
 
+**Display, body, UI and poster: Archivo.** One family for all of it — see **The One Face Rule**
+below, which is the governing entry. `.font-display` is weight 600 at `-0.06em`;
+`.font-scene-display` weight 600 at `-0.076em`; the poster weight 900 at `-0.075em`. Every step in
+the ramp is size, weight and tracking on the one face.
+
+**The two exceptions are the marker layer's**, and only the marker layer's: Orbitron
+(`--font-map-display`) for the day badge, Rajdhani (`--font-map-label`) for stop names. The
+boundary is stated under **The One Face Rule**.
+
+<details><summary>Eliminated — 2026-09-06 (Claude). The three-face declaration this section opened with.</summary>
+
+Superseded by **The One Face Rule** further down this same section, which retired Source Serif 4
+and Manrope. This block outlived it and kept contradicting it: it named a serif display face and a
+separate body face as the system, and quoted `.font-display` at `-0.01em` when the shipped rule is
+`-0.06em` on the sans stack, and `.font-scene-display` at `-0.03em` italic when it ships at
+`-0.076em` upright. `layout.tsx` loads Archivo, Orbitron and Rajdhani and nothing else — neither
+retired face is fetched, so the "load the italic" note guarded a font that is not there.
+
+Left readable rather than deleted because the *reasoning* is still the record of how the face count
+came down from five, and because the tracking rationale ("tracking is an optical correction rather
+than a constant: what reads as normal spacing at 18px reads as gaps at 60px") is the principle the
+current Archivo-only ramp still follows — only its numbers and its subject changed.
+
 **Display Font:** Source Serif 4 (weights 500/600/700, upright *and italic*, via `--font-display`, falling back to `ui-serif, Georgia, serif`)
+
 **Body Font:** Manrope (weights 400/500/600, via `--font-body`, wired to Tailwind's `--font-sans`; the system sans stack behind it is a load fallback, not the design)
+
 **Poster Font:** Archivo variable, width axis loaded (via `--font-hero`)
 
 **Two faces and a poster — that is the whole set.** It was five: these two, plus Playfair Display and a bare system stack, with the Blue Hour scene running its own face family. Playfair is retired — Source Serif 4's italic does the same job, and two high-contrast serifs splitting the display role *by route* was the single clearest reason the landing and the app read as different products. Manrope was the scene's body face and is now the app's; a platform default is not a typographic choice, and it was the one face here nobody had picked. Adding a fourth family needs a reason that survives being asked "which of the three can't do this."
@@ -405,9 +430,13 @@ is preserved in the `.blue-hour-scene` entry, which is the rule it was arguing a
 
 **Tracking is on the serif now, and it is small on purpose.** `.font-display` carries `-0.01em` — the value this document has specified since it was written, and which the stylesheet never actually implemented; the serif shipped at the browser's default 0. `.font-scene-display` takes three times that, `-0.03em`, because it only ever runs at 30–63px and tracking is an optical correction rather than a constant: what reads as normal spacing at 18px reads as gaps at 60px. Neither goes near the reference site's `-0.078em`-to-`-0.106em` ramp. That is grotesk logic — a high-contrast serif's own stroke contrast and bracketed serifs already close its counters, and copying those numbers onto Source Serif 4 collides the serifs into each other. The poster face carries the large negative tracking in this system, and it is the one that should.
 
+**Load the italic; never synthesise it.** `Source_Serif_4` is loaded with `style: ["normal", "italic"]` because `.font-scene-display` sets `font-style: italic` at 60px+. A browser with no italic cut shears the upright instead, and at that size a faux italic's even stroke weights and unchanged letterforms are obvious next to a drawn one.
+
+</details>
+
+
 **Scene prose leading (`.scene-prose`, 1.8).** The reference runs body copy at 1.85 against 1.0 headings, and that contrast is a real part of why it reads as a magazine. It is also a marketing page made of short paragraphs. This app's other surfaces are dense instrument panels — day rows, budget tiles, stop lists — where the same leading costs a screenful of scanning and buys nothing, so this is a class applied to the three prose blocks on the Persuade surface (both hero sublines and the `HowItWorks` step bodies), not a change to the Body step. The headings it plays against sit at 0.88–1.2, so the contrast lands at 1.8 without needing the full 1.85.
 
-**Load the italic; never synthesise it.** `Source_Serif_4` is loaded with `style: ["normal", "italic"]` because `.font-scene-display` sets `font-style: italic` at 60px+. A browser with no italic cut shears the upright instead, and at that size a faux italic's even stroke weights and unchanged letterforms are obvious next to a drawn one.
 
 **The root grows; it never shrinks.** `html { font-size: clamp(16px, 1.13vw, 20px) }` is the one measurement every step below hangs off. Tailwind's whole scale is rem, so moving the root moves type, padding, gaps and radii *together* and the composition scales rather than reflows — which is what a fixed 16px root was costing: past roughly 1400px the interface stayed the same physical size and occupied a shrinking fraction of the screen, reading as a boxed web app sitting on a full-bleed globe. The `16px` floor is not a taste call and is not negotiable downward: below it the `min-h-11` targets fall under the 44px touch minimum and iOS Safari zooms the viewport on input focus, which is the same constraint the Field step already exists to satisfy. Every viewport narrower than ~1416px therefore renders exactly as it did before this rule existed; the rule only ever adds size. Sizes quoted in this section are at the 16px floor.
 
