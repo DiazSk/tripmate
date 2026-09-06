@@ -350,6 +350,43 @@ export function listChatTurns(tripId: string): ChatTurnRow[] {
     .all(tripId) as ChatTurnRow[];
 }
 
+export interface MapGeometryRow {
+  box: string;
+  context_json: string;
+  created_at: string;
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS map_geometry (
+    box TEXT PRIMARY KEY,
+    context_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`);
+
+/**
+ * Road and water geometry for one map frame, keyed by its rounded bounding box so two trips in the
+ * same city share one row.
+ *
+ * Deliberately **without a TTL**, unlike `trip_stories` above. The public Overpass instances
+ * rate-limit by IP across every user of this deployment, and they do it abruptly — a session of
+ * testing was enough to have all three refuse outright, which shipped exports whose map was an
+ * empty grey box. Major road geometry does not meaningfully change, so re-asking is pure cost.
+ * Clear the table if a city ever needs re-fetching.
+ */
+export function getMapGeometry(box: string): MapGeometryRow | undefined {
+  return db.prepare(`SELECT * FROM map_geometry WHERE box = ?`).get(box) as
+    | MapGeometryRow
+    | undefined;
+}
+
+export function saveMapGeometry(box: string, contextJson: string): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO map_geometry (box, context_json, created_at)
+     VALUES (?, ?, ?)`
+  ).run(box, contextJson, new Date().toISOString());
+}
+
 export function setTripChatSession(id: string, sessionId: string | null): void {
   db.prepare(`UPDATE trips SET chat_session_id = ? WHERE id = ?`).run(sessionId, id);
 }
