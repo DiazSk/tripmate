@@ -6,8 +6,8 @@ import { createPortal } from "react-dom";
 import { devLabel } from "@/lib/devInspector";
 import { formatMoney } from "@/lib/format";
 import {
-  STAGE_SECONDS,
   STEP_GROUPS,
+  TYPICAL_WAIT_PHRASE,
   type StageProgress,
   generationProgress,
   isStepTerminal,
@@ -73,20 +73,6 @@ const MAX_WEEK_COLUMNS = 7;
 /** ~150s of waiting at this interval is ~21 facts. `destinationFacts` is capped above that so the
  *  feed does not loop back to the first while the traveller is still reading. */
 const FACT_INTERVAL_MS = 7000;
-
-/** Measured, not guessed: `STAGE_SECONDS` sums to ~151s. Stated once as a range rather than
- *  counted down — a ticking estimate that stalls at "10 seconds" is worse than no estimate. */
-const TYPICAL_MINUTES = Math.round((Object.values(STAGE_SECONDS).reduce((a, b) => a + b, 0) / 60) * 2) / 2;
-
-/** "2.5" reads as an instrument reading; a wait is spoken, not measured. */
-function spellMinutes(n: number): string {
-  const whole = Math.floor(n);
-  const half = n - whole >= 0.5;
-  const words = ["zero", "one", "two", "three", "four", "five"];
-  const w = words[whole] ?? String(whole);
-  if (!half) return `${w} minute${whole === 1 ? "" : "s"}`;
-  return whole === 0 ? "half a minute" : `${w} and a half minutes`;
-}
 
 /** "2026-08-20" → "Thu 20", using UTC accessors. A date-only string parses as UTC midnight, so
  *  local accessors roll it back a day anywhere west of Greenwich — this app has shipped that bug
@@ -313,7 +299,7 @@ export default function GenerationScreen({
 
           <div className="flex shrink-0 items-center gap-4">
             <p className="text-xs text-muted">
-              {complete ? "Opening your plan…" : `Usually about ${spellMinutes(TYPICAL_MINUTES)}.`}
+              {complete ? "Opening your plan…" : `Usually about ${TYPICAL_WAIT_PHRASE}.`}
             </p>
             {onCancel && cancelReady && !complete && (
               <button
