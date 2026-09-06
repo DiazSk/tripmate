@@ -30,10 +30,10 @@ export function useLlmTraceWidget(): LlmTraceWidgetApi {
 }
 
 const RUN_STATUS_STYLES: Record<string, string> = {
-  success: "bg-green-50 text-green-700 border-green-200",
-  partial_failure: "bg-amber-50 text-amber-700 border-amber-200",
-  failed: "bg-red-50 text-red-700 border-red-200",
-  pending: "bg-stone-100 text-stone-600 border-stone-200",
+  success: "bg-emerald-400/15 text-emerald-300 border-emerald-400/30",
+  partial_failure: "bg-amber-400/15 text-amber-300 border-amber-400/30",
+  failed: "bg-red-400/15 text-red-300 border-red-400/30",
+  pending: "bg-tile text-muted border-card-border",
 };
 
 const RUN_STATUS_LABELS: Record<string, string> = {
@@ -130,9 +130,9 @@ function RunList({
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p className="p-4 text-sm text-stone-500">Loading…</p>;
+  if (loading) return <p className="p-4 text-sm text-muted">Loading…</p>;
   if (runs.length === 0 && ungroupedTraces.length === 0)
-    return <p className="p-4 text-sm text-stone-500">No calls logged yet.</p>;
+    return <p className="p-4 text-sm text-muted">No calls logged yet.</p>;
 
   return (
     <div className="space-y-2 overflow-y-auto p-3">
@@ -140,19 +140,19 @@ function RunList({
         <button
           key={run.id}
           onClick={() => onSelectRun(run.id)}
-          className="flex w-full flex-col gap-1.5 rounded-xl border border-stone-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50"
+          className="flex w-full flex-col gap-1.5 rounded-xl border border-card-border bg-surface-deep p-3 text-left shadow-sm transition-colors hover:border-accent/50 hover:bg-accent/10"
         >
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="truncate font-medium text-stone-900">{run.destination}</div>
-              <div className="text-xs text-stone-500">{KIND_LABELS[run.kind] ?? run.kind}</div>
+              <div className="truncate font-medium text-foreground">{run.destination}</div>
+              <div className="text-xs text-muted">{KIND_LABELS[run.kind] ?? run.kind}</div>
             </div>
             <RunStatusBadge status={run.status} />
           </div>
-          <div className="truncate text-xs text-stone-500">
+          <div className="truncate text-xs text-muted">
             {run.stepTypes.map((t) => STEP_LABELS[t] ?? t).join(" ➔ ")}
           </div>
-          <div className="flex items-center gap-2 text-xs text-stone-400">
+          <div className="flex items-center gap-2 text-xs text-muted">
             <span>{new Date(run.createdAt).toLocaleString()}</span>
             <span>·</span>
             <span>{formatMs(run.totalDurationMs)} total</span>
@@ -166,18 +166,18 @@ function RunList({
 
       {ungroupedTraces.length > 0 && (
         <>
-          <div className="pt-2 text-xs font-medium uppercase tracking-wide text-stone-400">
+          <div className="pt-2 text-xs font-medium uppercase tracking-wide text-muted">
             Ungrouped (legacy)
           </div>
           {ungroupedTraces.map((trace) => (
             <button
               key={trace.id}
               onClick={() => onSelectLegacy(trace.id)}
-              className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50"
+              className="flex w-full items-center justify-between gap-3 rounded-xl border border-card-border bg-surface-deep p-3 text-left shadow-sm transition-colors hover:border-accent/50 hover:bg-accent/10"
             >
               <div className="min-w-0">
-                <div className="font-medium capitalize text-stone-900">{trace.type}</div>
-                <div className="truncate text-xs text-stone-500">
+                <div className="font-medium capitalize text-foreground">{trace.type}</div>
+                <div className="truncate text-xs text-muted">
                   {new Date(trace.createdAt).toLocaleString()}
                   {trace.durationMs != null && ` · ${trace.durationMs}ms`}
                 </div>
@@ -196,14 +196,14 @@ function StepDetail({ step, onBack }: { step: RunStep; onBack: () => void }) {
     <div className="flex h-full flex-col overflow-y-auto p-3">
       <button
         onClick={onBack}
-        className="mb-2 flex items-center gap-1.5 self-start text-sm font-medium text-stone-600 hover:text-stone-900"
+        className="mb-2 flex items-center gap-1.5 self-start text-sm font-medium text-muted hover:text-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Back to pipeline
       </button>
 
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
-          <span className="font-medium text-stone-900">{STEP_LABELS[step.type] ?? step.type}</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span className="font-medium text-foreground">{STEP_LABELS[step.type] ?? step.type}</span>
           <span>·</span>
           <span>{step.model}</span>
           <span>·</span>
@@ -214,27 +214,27 @@ function StepDetail({ step, onBack }: { step: RunStep; onBack: () => void }) {
           <TransportBadge transport={step.usage.transport} />
         </div>
 
-        <div className="flex flex-wrap gap-3 text-xs text-stone-600">
+        <div className="flex flex-wrap gap-3 text-xs text-muted">
           <span>In: {step.usage.inputTokens ?? "—"} tok</span>
           <span>Out: {step.usage.outputTokens ?? "—"} tok</span>
           <span>Cost: {step.usage.costUsd != null ? `$${step.usage.costUsd.toFixed(4)}` : "—"}</span>
         </div>
 
         {step.errorMessage && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">
             {step.errorMessage}
           </div>
         )}
 
         <div>
-          <h3 className="mb-1.5 text-xs font-semibold text-stone-700">Prompt sent to Claude</h3>
-          <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800">
+          <h3 className="mb-1.5 text-xs font-semibold text-tile-foreground">Prompt sent to Claude</h3>
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-card-border bg-tile p-3 text-xs text-foreground">
             {step.prompt}
           </pre>
         </div>
         <div>
-          <h3 className="mb-1.5 text-xs font-semibold text-stone-700">Raw response</h3>
-          <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800">
+          <h3 className="mb-1.5 text-xs font-semibold text-tile-foreground">Raw response</h3>
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-card-border bg-tile p-3 text-xs text-foreground">
             {step.rawResponse ?? "(no response captured)"}
           </pre>
         </div>
@@ -277,24 +277,24 @@ function RunView({
     <div className="flex h-full flex-col overflow-y-auto p-3">
       <button
         onClick={onBack}
-        className="mb-2 flex items-center gap-1.5 self-start text-sm font-medium text-stone-600 hover:text-stone-900"
+        className="mb-2 flex items-center gap-1.5 self-start text-sm font-medium text-muted hover:text-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Back to list
       </button>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">{error}</div>
       )}
-      {!run && !error && <p className="text-sm text-stone-500">Loading…</p>}
+      {!run && !error && <p className="text-sm text-muted">Loading…</p>}
 
       {run && (
         <div className="space-y-3">
-          <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+          <div className="rounded-xl border border-card-border bg-tile p-3">
             <div className="flex items-center justify-between gap-2">
-              <div className="font-medium text-stone-900">{run.destination}</div>
+              <div className="font-medium text-foreground">{run.destination}</div>
               <RunStatusBadge status={run.status} />
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
               <span>{KIND_LABELS[run.kind] ?? run.kind}</span>
               <span>·</span>
               <span>{new Date(run.createdAt).toLocaleString()}</span>
@@ -303,7 +303,7 @@ function RunView({
             </div>
             <button
               onClick={() => onCompare(run.id)}
-              className="mt-2 flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 transition-colors hover:border-orange-300 hover:bg-orange-50"
+              className="mt-2 flex items-center gap-1.5 rounded-full border border-white/20 bg-surface-deep px-2.5 py-1 text-xs font-medium text-tile-foreground transition-colors hover:border-accent/50 hover:bg-accent/10"
             >
               <GitCompare className="h-3 w-3" /> Compare with previous run
             </button>
@@ -345,20 +345,20 @@ function LegacyDetail({ id, onBack }: { id: string; onBack: () => void }) {
     <div className="flex h-full flex-col overflow-y-auto p-3">
       <button
         onClick={onBack}
-        className="mb-2 flex items-center gap-1.5 self-start text-sm font-medium text-stone-600 hover:text-stone-900"
+        className="mb-2 flex items-center gap-1.5 self-start text-sm font-medium text-muted hover:text-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Back to list
       </button>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">{error}</div>
       )}
-      {!trace && !error && <p className="text-sm text-stone-500">Loading…</p>}
+      {!trace && !error && <p className="text-sm text-muted">Loading…</p>}
 
       {trace && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
-            <span className="font-medium capitalize text-stone-900">{trace.type}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+            <span className="font-medium capitalize text-foreground">{trace.type}</span>
             <span>·</span>
             <span>{trace.model}</span>
             <span>·</span>
@@ -373,20 +373,20 @@ function LegacyDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
 
           {trace.errorMessage && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">
               {trace.errorMessage}
             </div>
           )}
 
           <div>
-            <h3 className="mb-1.5 text-xs font-semibold text-stone-700">Prompt sent to Claude</h3>
-            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800">
+            <h3 className="mb-1.5 text-xs font-semibold text-tile-foreground">Prompt sent to Claude</h3>
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-card-border bg-tile p-3 text-xs text-foreground">
               {trace.prompt}
             </pre>
           </div>
           <div>
-            <h3 className="mb-1.5 text-xs font-semibold text-stone-700">Raw response</h3>
-            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800">
+            <h3 className="mb-1.5 text-xs font-semibold text-tile-foreground">Raw response</h3>
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-card-border bg-tile p-3 text-xs text-foreground">
               {trace.rawResponse ?? "(no response captured)"}
             </pre>
           </div>
@@ -432,7 +432,17 @@ function LlmTraceFab({
             transition={{ type: "spring", stiffness: 260, damping: 22 }}
             // `print:hidden` because this mounts as a sibling of `.app-shell`, outside the reach
             // of the print block's chrome rule in globals.css. It printed as a black dot.
-            className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-stone-900 text-white shadow-lg transition-transform hover:scale-105 print:hidden"
+            //
+            // `glass-control` rather than a bespoke fill: this is a floating control over the map
+            // canvas exactly like `MapControls`' zoom and compass in the opposite corner, and it
+            // was the one that didn't look like them.
+            //
+            // `bottom-24 sm:bottom-5` because at 390px the 48px button sat on top of the landing
+            // page's full-width "Plan a trip" CTA — a measured overlap, the FAB covering the right
+            // end of the most important button in the product. That CTA is a bottom-anchored bar
+            // below `sm`, so the FAB clears it by lifting; from `sm` up the CTA is inline and the
+            // original corner position is free again.
+            className="glass-control fixed right-5 bottom-24 z-50 flex h-12 w-12 items-center justify-center rounded-full text-foreground transition-transform hover:scale-105 sm:bottom-5 print:hidden"
             aria-label="Open LLM trace viewer"
             title="LLM trace viewer"
           >
@@ -449,18 +459,21 @@ function LlmTraceFab({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 16 }}
             transition={{ type: "spring", stiffness: 260, damping: 24 }}
-            className="fixed bottom-5 right-5 z-50 flex h-[32rem] w-[23rem] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+            // Width is capped to the viewport because 23rem + the 20px inset is 388px, which
+            // overflowed a 390px phone by a hair and clipped the run rows' right edge.
+            // Height likewise, so the panel can't run off the top of a short screen.
+            className="fixed right-5 bottom-5 z-50 flex h-[min(32rem,calc(100dvh-6rem))] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-card-border bg-surface-deep shadow-2xl"
           >
-            <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
-                <Terminal className="h-4 w-4 text-stone-500" />
+            <div className="flex items-center justify-between border-b border-card-border px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Terminal className="h-4 w-4 text-muted" />
                 LLM pipelines
               </div>
               <button
                 onClick={onClose}
                 aria-label="Collapse LLM trace viewer"
                 title="Collapse"
-                className="rounded-md p-1 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
+                className="rounded-md p-1 text-muted transition-colors hover:bg-white/10 hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
