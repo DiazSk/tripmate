@@ -1,5 +1,23 @@
 # Four things on `dev-aryan` that `feat/ui-optimization` doesn't have
 
+> **Resolved 2026-09-06 (Claude). All four gaps are closed on `development`.** Re-checked one by
+> one against the merged branch, not assumed from the merge landing:
+>
+> | # | Gap | Where it is closed now |
+> |---|---|---|
+> | 1 | Accessibility never collected | `HomeView.tsx` has the `accessibility` state, the "Getting around" controls, and it reaches `currentAnswers()` |
+> | 2 | `stayBooked` never collected | `HomeView.tsx` collects it and sends `stayBooked: stayBooked \|\| null` in the payload |
+> | 3 | Day ✨ opened the day-scoped window | Both entry points call `focus.open(dayIndex, "trip")` — `HomeView.tsx` and `trip/[id]/TripView.tsx` |
+> | 4 | `ItineraryCard` got no `trip` prop on `/` | Passed as `trip={{ id: "preview", destination, startDate, endDate, budget }}`, the exact shape this doc prescribed. `ArrangeBoard` has since been replaced by `SplitEditor`, which takes the same prop |
+>
+> Kept rather than deleted for the merge-direction section at the foot, which is still the live
+> question, and because "these type-check while doing nothing" is the failure mode worth
+> remembering — none of the four would have been caught by `tsc`, `eslint` or the suite.
+>
+> **Everything below this line is the original 2026-08-23 note, left as written.**
+
+---
+
 Written 2026-08-23, checked against `origin/feat/ui-optimization` @ `67e77f1`.
 
 Not a complaint about the merge — `d55e394` took `dev-aryan` at `b727d49`, and every one of
