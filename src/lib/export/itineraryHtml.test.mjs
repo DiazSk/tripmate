@@ -47,7 +47,7 @@ const trip = (over = {}) => ({
   ...over,
 });
 
-const noAssets = { photos: { cover: null, days: [] }, fontDataUri: null };
+const noAssets = { fontDataUri: null };
 
 test("the document is a complete standalone page", () => {
   const html = renderItineraryHtml(trip(), noAssets);
@@ -134,18 +134,13 @@ test("a free stop reads Free and never $0", () => {
   assert.ok(!/\$0\b/.test(html), "no bare $0 anywhere");
 });
 
-test("missing photos do not take the document with them", () => {
-  const html = renderItineraryHtml(trip(), noAssets);
+test("the document carries no imagery at all", () => {
+  // Photography was removed outright: the map is the artifact's one visual anchor now, and the
+  // cover was the only thing that ever made this file need a network walk besides the geometry.
+  const html = renderItineraryHtml(trip(), { ...noAssets, map: someMap });
   assert.ok(html.includes("Kunsthaus Zurich"));
-  assert.doesNotMatch(html, /<img[^>]+src=""/, "an absent photo renders no img at all");
-});
-
-test("a supplied cover is inlined as a data URI", () => {
-  const html = renderItineraryHtml(trip(), {
-    photos: { cover: "data:image/jpeg;base64,AAAA", days: [null, null] },
-    fontDataUri: null,
-  });
-  assert.ok(html.includes('src="data:image/jpeg;base64,AAAA"'));
+  assert.doesNotMatch(html, /<img/, "no img element may reach the document");
+  assert.doesNotMatch(html, /data:image\//, "and no inlined bitmap either");
 });
 
 test("a day with no title falls back to its stripped summary, then to nothing", () => {
@@ -197,4 +192,159 @@ test("the runtime compares calendar dates as strings, never by parsing them", ()
   const html = renderItineraryHtml(trip(), noAssets);
   assert.doesNotMatch(html, /new Date\(\s*[a-zA-Z_$][\w$]*\.dataset/, "must not parse a day's date");
   assert.ok(html.includes("getFullYear()"), "today's key is built from local parts");
+});
+
+/* ---------- the offline map ---------- */
+
+const someMap = {
+  width: 1000,
+  height: 680,
+  x0: 0.5237,
+  y0: 0.3521,
+  spanX: 0.0004,
+  spanY: 0.000272,
+  unitsPerMetre: 0.028,
+  mode: "city",
+  roads: "M10 10L900 640",
+  waterFill: "",
+  waterLine: "M5 600L995 610",
+  days: [
+    { index: 0, date: "2026-08-20", d: "M100 100L300 200", stops: [{ x: 100, y: 100, name: "Kunsthaus Zurich" }] },
+    { index: 1, date: "2026-08-21", d: "M400 300L600 500", stops: [{ x: 400, y: 300, name: "Rietberg" }] },
+  ],
+};
+
+test("a document with no map is complete and carries none of the map's weight", () => {
+  // `noAssets` deliberately omits `map` entirely — the absent-map and failed-fetch paths are one.
+  const html = renderItineraryHtml(trip(), noAssets);
+  assert.doesNotMatch(html, /<svg class="map"/, "no map element");
+  assert.doesNotMatch(html, /offline map/, "no dead stylesheet");
+  assert.doesNotMatch(html, /navigator\.geolocation/, "no runtime with nothing to bind to");
+});
+
+test("a supplied map is inlined and stays a standalone document", () => {
+  const html = renderItineraryHtml(trip(), { ...noAssets, map: someMap });
+  assert.match(html, /<svg class="map"/);
+  assert.match(html, /class="mroute" data-day="0"/);
+  // The blanket rule again, this time with every map layer, both buttons and the runtime present.
+  assert.doesNotMatch(html, /https?:\/\//, "no absolute URL may reach the artifact");
+  assert.doesNotMatch(html, /<script[^>]+src=/);
+  assert.doesNotMatch(html, /xmlns/, "inline SVG is namespaced by the parser");
+});
+
+test("the map ships as a second runtime, leaving the check-off script alone", () => {
+  const html = renderItineraryHtml(trip(), { ...noAssets, map: someMap });
+  assert.equal(html.split("<script>").length - 1, 2, "two independent IIFEs");
+  assert.match(html, /tripmate:" \+ trip \+ ":done/, "check-off is untouched");
+  // The date trap the first runtime documents applies to the second one too.
+  assert.doesNotMatch(html, /new Date\(\s*[a-zA-Z_$][\w$]*\.dataset/);
+});
+
+test("the map sits between the masthead and the days", () => {
+  const html = renderItineraryHtml(trip(), { ...noAssets, map: someMap });
+  assert.ok(
+    html.indexOf('class="mast"') < html.indexOf('<svg class="map"'),
+    "the map follows the destination heading",
+  );
+  assert.ok(
+    html.indexOf('<svg class="map"') < html.indexOf('<section class="days">'),
+    "and precedes the day list it frames — which is what lets it pin above them",
+  );
+});
+
+test("the trip-line strip and its station thumbnails are gone", () => {
+  const html = renderItineraryHtml(trip(), { ...noAssets, map: someMap });
+  // Exact class, not a prefix — "st" is a substring of the "stop" and "stay" that both survive.
+  for (const dead of ["tripline", 'class="st"', "savenote", "renderStation"]) {
+    assert.ok(!html.includes(dead), `${dead} was replaced by the map and must not linger`);
+  }
+  assert.ok(html.includes('class="stop"'), "the day's own stop rows are untouched");
+});
+
+test("the title and the map ride in one bar pinned to the top", () => {
+  const html = renderItineraryHtml(trip(), { ...noAssets, map: someMap });
+  assert.match(html, /body\.js \.topbar\{position:sticky;top:0/);
+  assert.ok(
+    html.indexOf('<div class="topbar">') < html.indexOf('<h1>') &&
+      html.indexOf('<h1>') < html.indexOf('<svg class="map"'),
+    "the map sits below the title, inside the pinned bar",
+  );
+  assert.ok(
+    html.indexOf('<svg class="map"') < html.indexOf('<section class="days">'),
+    "and the days scroll underneath both",
+  );
+});
+
+test("the title animates between two sizes rather than tracking scrollY", () => {
+  const html = renderItineraryHtml(trip(), noAssets);
+  assert.match(html, /transition:font-size \.26s/, "the movement is a transition, not a per-frame write");
+  assert.match(html, /body\.shrunk h1\{font-size:1\.7rem\}/);
+  assert.doesNotMatch(html, /--shrink/, "a scrubbed size feeds the bar's own collapse back into itself");
+  assert.match(html, /requestAnimationFrame/, "the scroll handler is throttled to a frame");
+  assert.match(html, /\{ passive: true \}/, "and never blocks scrolling");
+});
+
+test("the collapse latches, so a slow drag cannot flip it back and forth", () => {
+  const html = renderItineraryHtml(trip(), noAssets);
+  // Collapsing shortens the document, which moves the scroll position that decides to collapse.
+  // The gap between them must exceed the ~126px the collapse itself removes, or the bar chases
+  // its own scroll position: measured at 31 flips a second with 56/20.
+  assert.match(html, /SHRINK_AT = 220/);
+  assert.match(html, /GROW_AT = 24/);
+  assert.match(html, /shrunk \? y > GROW_AT : y > SHRINK_AT/, "two thresholds, not one");
+  assert.match(html, /scrollHeight - window\.innerHeight > 420/, "and no collapse without room for it");
+});
+
+test("the moving parts hold still for a reader who asked them to", () => {
+  assert.match(renderItineraryHtml(trip(), noAssets),
+    /@media \(prefers-reduced-motion: reduce\)\{h1,\.mast,\.trmeta\{transition:none\}\}/);
+});
+
+test("a day heading pins directly below the bar, by measurement", () => {
+  const html = renderItineraryHtml(trip(), { ...noAssets, map: someMap });
+  assert.match(html, /body\.js \.day>summary\{position:sticky;top:var\(--stick,0px\)/);
+  assert.match(html, /setProperty\(\s*"--stick"/, "the bar's height is measured, not assumed");
+  assert.match(html, /ResizeObserver/, "and re-measured when the bar reflows");
+  assert.match(html, /scroll-margin-top:var\(--stick/, "a scrolled-to day clears it too");
+});
+
+test("without the script the document is not a broken sticky one", () => {
+  // Both sticky rules are gated on the js class, so no-JS degrades to one plain column.
+  const html = renderItineraryHtml(trip(), { ...noAssets, map: someMap });
+  assert.doesNotMatch(html, /(?<!body\.js )\.topbar\{position:sticky/);
+  assert.doesNotMatch(html, /(?<!body\.js )\.day>summary\{position:sticky/);
+  assert.match(html, /body\.classList\.add\("js"\)/);
+});
+
+test("every stop in the day list wears its number and category", () => {
+  // This is the other half of the map's dots: the number is the only thing tying a coloured dot
+  // to the place it marks, so the two have to be generated from the same index.
+  const t = trip();
+  t.itinerary.days[0].stops[1].category = "food";
+  const html = renderItineraryHtml(t, noAssets);
+  assert.match(html, /<b class="snode" data-cat="entry">1<\/b>/, "the fixture's first stop is a sight");
+  assert.match(html, /<b class="snode" data-cat="food">2<\/b>/, "and the second is now a meal");
+});
+
+test("the day list numbers restart at one each day, as the map's dots do", () => {
+  const html = renderItineraryHtml(trip(), noAssets);
+  const days = html.split('<details class="day"');
+  assert.match(days[1], /<b class="snode"[^>]*>1<\/b>/, "day 1 starts at 1");
+  assert.match(days[2], /<b class="snode"[^>]*>1<\/b>/, "and so does day 2");
+});
+
+test("an unknown category falls to the neutral slot rather than colouring at random", () => {
+  const t = trip();
+  t.itinerary.days[0].stops[0].category = "brunch";
+  delete t.itinerary.days[0].stops[1].category;
+  const html = renderItineraryHtml(t, noAssets);
+  assert.doesNotMatch(html, /data-cat="brunch"/);
+  assert.equal((html.match(/data-cat="other"/g) || []).length, 2);
+});
+
+test("the category palette is defined once, for the list and the map alike", () => {
+  const html = renderItineraryHtml(trip(), noAssets);
+  for (const v of ["--cat-food:#B4650E", "--cat-entry:#31699E", "--cat-transit:#357F52", "--cat-other:#0d2e37"]) {
+    assert.ok(html.includes(v), `${v} must ship even when there is no map`);
+  }
 });

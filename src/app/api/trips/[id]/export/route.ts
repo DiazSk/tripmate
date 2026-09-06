@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getTrip } from "@/lib/db";
-import { collectExportPhotos } from "@/lib/export/exportPhotos";
 import { loadExportFont } from "@/lib/export/exportFont";
+import { collectExportMap } from "@/lib/export/exportMapData";
 import { exportFilename, renderItineraryHtml } from "@/lib/export/itineraryHtml";
 import { toTripDetail } from "@/lib/tripPayload";
 
 /**
- * The traveler's copy of one trip: a single self-contained .html file, drawn as a transit line,
- * that renders identically with no network.
+ * The traveler's copy of one trip: a single self-contained .html file — a map of the trip over the
+ * day it belongs to — that renders identically with no network.
  *
  * Distinct from `/trip/[id]/print`, which is a reviewer document — it labels every stop
  * "Day 2 · Stop 3" for bug reports and ends with critique questions. That route keeps its job.
@@ -25,11 +25,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const trip = toTripDetail(row);
 
-  // Photos are the only failure surface here, and `collectExportPhotos` swallows its own — an
-  // export with no imagery is a complete document, so there is no error path to add.
-  const [photos, fontDataUri] = await Promise.all([collectExportPhotos(trip), loadExportFont()]);
+  // Map geometry is the only failure surface here and it swallows its own — an export with no map
+  // is a complete document, so there is no error path to add.
+  const [fontDataUri, map] = await Promise.all([loadExportFont(), collectExportMap(trip)]);
 
-  const html = renderItineraryHtml(trip, { photos, fontDataUri });
+  const html = renderItineraryHtml(trip, { fontDataUri, map });
 
   return new NextResponse(html, {
     headers: {

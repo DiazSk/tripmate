@@ -2,17 +2,17 @@ import { formatDateRange, formatDateWithWeekday, formatMoney } from "../format";
 import { dayPlanned } from "../itinerary";
 import type { DayPlan, Stop, Trip } from "../types";
 import { costLabel, dayLegs, escapeHtml, slugify, stripEmoji } from "./exportPrimitives";
-
-export interface ExportPhotos {
-  cover: string | null;
-  /** Index-aligned with `trip.itinerary.days`. A `null` entry renders a plain station node. */
-  days: (string | null)[];
-}
+import type { ExportMap } from "./exportMapData";
+import { MAP_CSS, MAP_RUNTIME, renderMapSection } from "./mapSvg";
 
 export interface ExportAssets {
-  photos: ExportPhotos;
   /** A `data:font/woff2;base64,...` URI, or null to fall back to the system stack. */
   fontDataUri: string | null;
+  /** The offline map, or absent/null for a document without one. Optional rather than
+   *  required-nullable so "the geometry could not be fetched" and "this caller wants no map" stay
+   *  one code path — and so the fixtures that prove the document survives with no assets at all
+   *  keep proving exactly that. */
+  map?: ExportMap | null;
 }
 
 /** THESIS / OWN-WORLD / STORY / FIRST VIEWPORT / FORM / FINISH — see the design spec. Emitted as
@@ -38,6 +38,13 @@ const CSS = `
   --paper:#F5F7F7; --card:#fff; --ink:#0B2A32; --deep:#0d2e37;
   --muted:#5B7178; --hair:rgba(11,42,50,.14); --accent:#fb9826; --accent-ink:#A85C05;
   --trunk:8px;
+  /* Stop categories. Three hues carrying identity, validated all-pairs (the pairlist a map of
+     dots needs, since any two marks can sit side by side) against both #E9EEEF and #fff:
+     lightness band, chroma floor, normal-vision floor 15.5 and contrast all pass; CVD sits at
+     dE 6.2, which is legal only because every mark also carries its number. The 'other' slot is
+     deliberately achromatic — it is the absence of a category, not a fourth one competing for
+     identity, and it is 24% of real stops. */
+  --cat-food:#B4650E; --cat-entry:#31699E; --cat-transit:#357F52; --cat-other:#0d2e37;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{
@@ -46,37 +53,40 @@ body{
   font-size:.9375rem; line-height:1.6; letter-spacing:-.04em;
   -webkit-font-smoothing:antialiased;
 }
-/* ---------- cover ---------- */
-.cover{position:relative;height:44svh;min-height:250px;overflow:hidden}
-.cover img{width:100%;height:100%;object-fit:cover;object-position:50% 45%}
-.mast{padding:24px 22px 0}
-h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.88;letter-spacing:-.078em}
+/* ---------- the pinned bar: title + map ---------- */
+/* Both sticky rules are gated on the js class, which the runtime adds. Without it --stick is 0
+   day heading would pin underneath the map covering it — so with no script the file stays the
+   plain single-column document it promises to be, rather than a broken sticky one. */
+body.js .topbar{position:sticky;top:0;z-index:20;background:var(--paper)}
+body.shrunk .topbar{box-shadow:0 12px 16px -14px rgba(11,42,50,.55)}
+.mast{padding:26px 22px 0;transition:padding-top .26s cubic-bezier(.4,0,.2,1)}
+/* Two states with a transition between them, rather than a size scrubbed from scrollY.
+   Scrubbing was tried and is a feedback loop: the bar collapsing shortens the document, which
+   moves scrollY, which feeds back into the size — measured settling at 0.24 where it should have
+   been 1. A latched state cannot chase itself, and the transition is what makes it read as one
+   continuous movement. */
+h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.9;letter-spacing:-.078em;
+  transition:font-size .26s cubic-bezier(.4,0,.2,1)}
+.trmeta{overflow:hidden;max-height:3.6rem;opacity:1;
+  transition:max-height .26s cubic-bezier(.4,0,.2,1),opacity .18s linear}
+body.shrunk h1{font-size:1.7rem}
+body.shrunk .trmeta{max-height:0;opacity:0}
+body.shrunk .mast{padding-top:11px}
 .dates{margin-top:12px;font-size:.9375rem;font-weight:500;color:var(--muted)}
 .budget{margin-top:4px;font-size:.9375rem;font-weight:500;color:var(--muted)}
 .budget b{color:var(--ink);font-weight:600}
-
-/* ---------- the trip line (all days as stations on one line) ---------- */
-.tripline{margin:30px 0 6px;padding:0 22px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.tl{position:relative;display:flex;min-width:max-content;padding-top:26px}
-.tl::before{content:"";position:absolute;left:14px;right:14px;top:32px;height:var(--trunk);
-  background:var(--deep);border-radius:999px}
-.savenote{margin:0 22px 6px;font-size:.75rem;font-weight:500;color:var(--muted)}
-.st{position:relative;width:76px;flex:none;display:flex;flex-direction:column;align-items:center}
-.st i{width:17px;height:17px;border-radius:50%;background:var(--card);
-  border:4px solid var(--deep);position:relative;z-index:1;margin-top:1.5px}
-.st img{width:17px;height:17px;border-radius:50%;object-fit:cover;background:var(--card);
-  border:4px solid var(--deep);position:relative;z-index:1;margin-top:1.5px}
-.st.on i,.st.on img{border-color:var(--accent-ink);background:var(--accent);
-  box-shadow:0 0 0 5px rgba(251,152,38,.22)}
-.st b{margin-top:11px;font-size:1.0625rem;font-weight:700;letter-spacing:-.06em;line-height:1}
-.st span{margin-top:4px;font-size:.6875rem;font-weight:600;letter-spacing:-.03em;color:var(--muted)}
-.st.on b{color:var(--accent-ink)}
+@media (prefers-reduced-motion: reduce){h1,.mast,.trmeta{transition:none}}
 
 /* ---------- day index ---------- */
 .days{padding:14px 0 48px}
-.day{border-top:1px solid var(--hair);background:var(--paper)}
+.day{border-top:1px solid var(--hair);background:var(--paper);scroll-margin-top:var(--stick,0px)}
 .day>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:34px 1fr 18px;
-  gap:14px;align-items:center;padding:16px 22px}
+  gap:14px;align-items:center;padding:16px 22px;background:var(--paper)}
+/* --stick is the measured height of the pinned bar, so the heading locks flush under the map
+   instead of overlapping it. Its sticky container is its own <details>, which is exactly the
+   scope wanted: Day 1's heading rides along while Day 1 is on screen and leaves with it. */
+body.js .day>summary{position:sticky;top:var(--stick,0px);z-index:10;
+  border-top:1px solid var(--hair);margin-top:-1px}
 .day>summary::-webkit-details-marker{display:none}
 .dnum{width:30px;height:30px;border-radius:50%;border:3px solid var(--deep);background:var(--card);
   display:grid;place-items:center;font-size:.8125rem;font-weight:700;letter-spacing:-.04em}
@@ -101,13 +111,16 @@ h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.88;letter-spac
 .stop{position:relative;display:grid;grid-template-columns:44px 1fr;gap:34px;padding-bottom:2px}
 .time{font-size:.8125rem;font-weight:700;letter-spacing:-.05em;color:var(--muted);
   text-align:right;padding-top:2px;font-variant-numeric:tabular-nums}
-.stop::before{content:"";position:absolute;left:64px;top:4px;width:16px;height:16px;border-radius:50%;
-  background:var(--card);border:4px solid var(--deep);transform:translateX(-50%);z-index:1}
-.stop.on::before{background:var(--accent);border-color:var(--accent-ink);
-  box-shadow:0 0 0 5px rgba(251,152,38,.2)}
+.snode{position:absolute;left:64px;top:1px;width:24px;height:24px;border-radius:50%;
+  transform:translateX(-50%);z-index:1;display:flex;align-items:center;justify-content:center;
+  font-size:.6875rem;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;
+  color:#fff;background:var(--cat-other);border:3px solid var(--paper)}
+.snode[data-cat="food"]{background:var(--cat-food)}
+.snode[data-cat="entry"]{background:var(--cat-entry)}
+.snode[data-cat="transit"]{background:var(--cat-transit)}
 .stop[data-stop]{cursor:pointer}
 .stop.done .sname{opacity:.55}
-.stop.done::before{background:var(--deep)}
+.stop.done .snode{opacity:.4}
 .sname{font-size:1.0625rem;font-weight:700;letter-spacing:-.055em;line-height:1.24}
 .smeta{margin-top:4px;font-size:.8125rem;font-weight:500;color:var(--muted)}
 .swhy{margin-top:8px;font-size:.875rem;color:var(--ink);opacity:.82;line-height:1.55}
@@ -137,8 +150,17 @@ h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.88;letter-spac
 `;
 
 /**
- * The whole client. It does two things and neither is load-bearing: without it the file is still
- * a complete, readable itinerary, because days are native <details> and check-off is additive.
+ * The whole client. Nothing here is load-bearing: without it the file is still a complete,
+ * readable itinerary, because days are native <details>, check-off is additive, and both sticky
+ * rules are gated behind the `js` class this adds.
+ *
+ * It owns the document's chrome — the pinned bar's scrub and its measured height — while
+ * `MAP_RUNTIME` owns the map. They share only the DOM.
+ *
+ * The bar's height is *measured* into `--stick` rather than assumed, because a day heading pins
+ * against it: guess low and the heading overlaps the map, guess high and it floats. The title
+ * shrinking changes that height on every frame of a scroll, so it is re-read on each one, and a
+ * ResizeObserver catches the rest (a rotation, a wrapped legend, the map's own aspect).
  *
  * Dates are compared as strings. `new Date("2026-08-20")` parses as UTC midnight and formatting
  * it with local accessors rolls it back a day anywhere west of Greenwich — the trap that has
@@ -147,6 +169,45 @@ h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.88;letter-spac
  */
 const RUNTIME = `<script>
 (function(){
+  var root = document.documentElement;
+  var body = document.body;
+  body.classList.add("js");
+
+  var topbar = document.querySelector(".topbar");
+  // Collapsing the bar removes its own height from the document, which drags the scroll position
+  // back toward the top — the very position that decided to collapse it. Measured at 31 class
+  // flips a second with the thresholds 56/20. So the gap between them has to be wider than the
+  // collapse itself: the bar sheds at most the title's 5rem-to-1.7rem, the trip meta's 3.6rem and
+  // 15px of padding, about 126px, so shrinking at 220 leaves the post-collapse position near 94
+  // and nowhere near the 24 that would grow it back.
+  var SHRINK_AT = 220;
+  var GROW_AT = 24;
+  var shrunk = false;
+  var queued = 0;
+
+  function measure() {
+    if (topbar) root.style.setProperty("--stick", Math.round(topbar.getBoundingClientRect().height) + "px");
+  }
+
+  function onScroll() {
+    if (queued) return;
+    queued = requestAnimationFrame(function () {
+      queued = 0;
+      var y = window.scrollY;
+      // A page with barely anything to scroll cannot afford the collapse: removing that much
+      // height would drag the scroll position back past the threshold and oscillate.
+      var room = root.scrollHeight - window.innerHeight > 420;
+      shrunk = room && (shrunk ? y > GROW_AT : y > SHRINK_AT);
+      body.classList.toggle("shrunk", shrunk);
+      measure();
+    });
+  }
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  if (window.ResizeObserver && topbar) new ResizeObserver(measure).observe(topbar);
+  onScroll();
+
   var pad = function(n){ return n < 10 ? "0" + n : "" + n; };
   var now = new Date();
   var today = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
@@ -158,9 +219,6 @@ const RUNTIME = `<script>
       days[i].scrollIntoView({ block: "start" });
     }
   }
-
-  var st = document.querySelector('.st[data-date="' + today + '"]');
-  if (st) st.classList.add("on");
 
   var trip = document.body.dataset.trip;
   var key = "tripmate:" + trip + ":done";
@@ -209,16 +267,13 @@ export function exportFilename(destination: string): string {
 /** "Thu, Aug 20" (formatDateWithWeekday's own shape) -> "Thu 20": the short label the trip line's
  *  station wears. Derived from formatDateWithWeekday rather than re-parsing the ISO date, so this
  *  still routes through format.ts for the actual date math. */
-function stationLabel(iso: string): string {
-  const full = formatDateWithWeekday(iso);
-  const [weekday, monthDay] = full.split(", ");
-  const day = (monthDay ?? "").split(" ")[1] ?? monthDay ?? full;
-  return `${weekday} ${day}`;
-}
-
 function pluralStops(count: number): string {
   return `${count} stop${count === 1 ? "" : "s"}`;
 }
+
+/** The four values `Stop.category` is declared with. An itinerary saved before the field existed —
+ *  or a model answer that invented a fifth — falls through to the neutral `other`. */
+const STOP_CATEGORIES: readonly string[] = ["food", "entry", "transit", "other"];
 
 function renderStop(stop: Stop, dayIndex: number, stopIndex: number): string {
   const why = stop.why ? `<p class="swhy">${escapeHtml(stop.why)}</p>` : "";
@@ -226,7 +281,9 @@ function renderStop(stop: Stop, dayIndex: number, stopIndex: number): string {
   const meta = [stop.durationLabel ? escapeHtml(stop.durationLabel) : null, costLabel(stop.cost)]
     .filter(Boolean)
     .join(" · ");
+  const category = STOP_CATEGORIES.includes(stop.category) ? stop.category : "other";
   return `<li class="stop" data-stop="${dayIndex}:${stopIndex}">
+          <b class="snode" data-cat="${category}">${stopIndex + 1}</b>
           <span class="time">${stop.time ? escapeHtml(stop.time) : ""}</span>
           <span>
             <span class="sname">${escapeHtml(stop.name)}</span>
@@ -259,12 +316,6 @@ function renderRoute(stops: Stop[], dayIndex: number): string {
   return `<ol class="route">
         ${parts.join("\n        ")}
       </ol>`;
-}
-
-function renderStation(day: DayPlan, index: number, thumb: string | null): string {
-  // Decorative: the day number and date label right beside it already carry the meaning.
-  const node = thumb ? `<img src="${escapeHtml(thumb)}" alt="">` : "<i></i>";
-  return `<div class="st" data-date="${escapeHtml(day.date)}">${node}<b>${index + 1}</b><span>${escapeHtml(stationLabel(day.date))}</span></div>`;
 }
 
 function renderDay(day: DayPlan, index: number): string {
@@ -314,15 +365,11 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
     ? `@font-face{font-family:Archivo;src:url(${assets.fontDataUri}) format('woff2');font-weight:100 900;font-display:swap}\n`
     : "";
 
-  const cover = assets.photos.cover
-    ? `<header class="cover">
-  <img src="${escapeHtml(assets.photos.cover)}" alt="${escapeHtml(cityName)}">
-</header>`
-    : "";
-
-  const tripline = days
-    .map((day, i) => renderStation(day, i, assets.photos.days[i] ?? null))
-    .join("\n    ");
+  // Both are omitted entirely without a map, rather than shipping dead CSS and a script that
+  // would find no `.map` to bind to.
+  const mapSection = assets.map ? `\n${renderMapSection(assets.map)}\n` : "";
+  const mapCss = assets.map ? MAP_CSS : "";
+  const mapRuntime = assets.map ? `\n${MAP_RUNTIME}` : "";
 
   const dayList = days.map((day, i) => renderDay(day, i)).join("\n\n  ");
 
@@ -333,26 +380,22 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${escapeHtml(cityName)} — TripMate</title>
 <style>
-${fontFace}${CSS}
+${fontFace}${CSS}${mapCss}
 </style>
 </head>
 <body data-trip="${escapeHtml(trip.id)}">
 ${DIRECTION_CONTRACT}
 
-${cover}
-
+<div class="topbar">
 <div class="mast">
   <h1>${escapeHtml(cityName)}</h1>
+  <div class="trmeta">
   <p class="dates">${escapeHtml(formatDateRange(trip.startDate, trip.endDate))} · ${days.length} day${days.length === 1 ? "" : "s"} · ${pluralStops(totalStops)}</p>
   <p class="budget"><b>${costLabel(tripTotal)}</b> planned of a ${formatMoney(trip.budget)} budget</p>
-</div>
-
-<nav class="tripline">
-  <div class="tl">
-    ${tripline}
   </div>
-</nav>
-<p class="savenote">Ticking a stop is saved on this phone only — it doesn't reach the app.</p>
+</div>
+${mapSection}
+</div>
 
 <section class="days">
 
@@ -360,7 +403,7 @@ ${cover}
 
 </section>
 
-${RUNTIME}
+${RUNTIME}${mapRuntime}
 </body>
 </html>`;
 }
