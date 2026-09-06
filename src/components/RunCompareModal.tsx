@@ -37,18 +37,20 @@ function formatTokenDelta(delta: number | null): string {
 }
 
 function WordDiff({ before, after }: { before: string; after: string }) {
-  if (!before && !after) return <p className="text-xs text-stone-400">Nothing to diff.</p>;
+  if (!before && !after) return <p className="text-xs text-muted">Nothing to diff.</p>;
   const parts = diffWords(before, after);
   return (
-    <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800">
+    <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-card-border bg-tile p-3 text-xs text-foreground">
       {parts.map((part, i) => (
         <span
           key={i}
           className={
+            // Diff highlights, tinted on dark like the badges. These were `-100` fills with
+            // `-800` text — a light-mode diff, invisible once the panel stopped being white.
             part.added
-              ? "bg-green-100 text-green-800"
+              ? "bg-emerald-400/20 text-emerald-200"
               : part.removed
-                ? "bg-red-100 text-red-700 line-through"
+                ? "bg-red-400/20 text-red-200 line-through"
                 : ""
           }
         >
@@ -62,21 +64,21 @@ function WordDiff({ before, after }: { before: string; after: string }) {
 function RoleCard({ role }: { role: RunComparisonRole }) {
   if (!role.stepA && !role.stepB) return null;
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-3">
+    <div className="rounded-xl border border-card-border bg-surface-deep p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-stone-900">{ROLE_LABELS[role.role]}</span>
-        <span className="text-xs font-medium text-stone-500">
+        <span className="text-sm font-medium text-foreground">{ROLE_LABELS[role.role]}</span>
+        <span className="text-xs font-medium text-muted">
           {formatDurationDelta(role.durationDeltaMs)}
         </span>
       </div>
-      <div className="mt-1 flex flex-wrap gap-3 text-xs text-stone-500">
+      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
         <span>In: {formatTokenDelta(role.inputTokenDelta)}</span>
         <span>Out: {formatTokenDelta(role.outputTokenDelta)}</span>
       </div>
       {role.stepA && role.stepB && (
         <div className="mt-2 space-y-2">
           <details>
-            <summary className="cursor-pointer text-xs font-medium text-stone-600">
+            <summary className="cursor-pointer text-xs font-medium text-muted">
               Prompt diff
             </summary>
             <div className="mt-1.5">
@@ -84,7 +86,7 @@ function RoleCard({ role }: { role: RunComparisonRole }) {
             </div>
           </details>
           <details>
-            <summary className="cursor-pointer text-xs font-medium text-stone-600">
+            <summary className="cursor-pointer text-xs font-medium text-muted">
               Response diff
             </summary>
             <div className="mt-1.5">
@@ -97,7 +99,7 @@ function RoleCard({ role }: { role: RunComparisonRole }) {
         </div>
       )}
       {(!role.stepA || !role.stepB) && (
-        <p className="mt-1.5 text-xs text-stone-400">Only present in one run — nothing to diff.</p>
+        <p className="mt-1.5 text-xs text-muted">Only present in one run — nothing to diff.</p>
       )}
     </div>
   );
@@ -105,13 +107,13 @@ function RoleCard({ role }: { role: RunComparisonRole }) {
 
 function RunMetaCard({ run, label }: { run: RunDetail; label: string }) {
   return (
-    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-stone-400">{label}</div>
-      <div className="mt-0.5 font-medium text-stone-900">{run.destination}</div>
-      <div className="mt-1 text-xs text-stone-500">
+    <div className="rounded-xl border border-card-border bg-tile p-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className="mt-0.5 font-medium text-foreground">{run.destination}</div>
+      <div className="mt-1 text-xs text-muted">
         {KIND_LABELS[run.kind] ?? run.kind} · {new Date(run.createdAt).toLocaleString()}
       </div>
-      <div className="mt-1 text-xs text-stone-500">
+      <div className="mt-1 text-xs text-muted">
         {formatMs(run.totalDurationMs)} total · {run.stepCount} step
         {run.stepCount === 1 ? "" : "s"}
       </div>
@@ -172,14 +174,14 @@ export default function RunCompareModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-stone-100 px-5 py-3">
-          <div className="text-sm font-semibold text-stone-900">Compare pipeline runs</div>
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-surface-deep shadow-2xl">
+        <div className="flex items-center justify-between border-b border-card-border px-5 py-3">
+          <div className="text-sm font-semibold text-foreground">Compare pipeline runs</div>
           <button
             onClick={onClose}
             aria-label="Close comparison"
             title="Close"
-            className="rounded-md p-1 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
+            className="rounded-md p-1 text-muted transition-colors hover:bg-white/10 hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
@@ -187,20 +189,20 @@ export default function RunCompareModal({
 
         <div className="flex-1 overflow-y-auto p-5">
           {error && (
-            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-3 rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">
               {error}
             </div>
           )}
-          {!baseRun && !error && <p className="text-sm text-stone-500">Loading…</p>}
+          {!baseRun && !error && <p className="text-sm text-muted">Loading…</p>}
 
           {baseRun && !candidateRun && (
             <div className="space-y-3">
-              <p className="text-sm text-stone-600">
+              <p className="text-sm text-muted">
                 Pick a previous run for <span className="font-medium">{baseRun.destination}</span> to
                 compare against:
               </p>
               {candidates.length === 0 && (
-                <p className="text-sm text-stone-500">
+                <p className="text-sm text-muted">
                   No other runs for this destination yet.
                 </p>
               )}
@@ -210,12 +212,12 @@ export default function RunCompareModal({
                     key={c.id}
                     onClick={() => selectCandidate(c.id)}
                     disabled={loadingCandidate}
-                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white p-2.5 text-left text-sm shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50 disabled:opacity-50"
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-card-border bg-surface-deep p-2.5 text-left text-sm shadow-sm transition-colors hover:border-accent/50 hover:bg-accent/10 disabled:opacity-50"
                   >
-                    <span className="font-medium text-stone-800">
+                    <span className="font-medium text-foreground">
                       {KIND_LABELS[c.kind] ?? c.kind}
                     </span>
-                    <span className="text-xs text-stone-500">
+                    <span className="text-xs text-muted">
                       {new Date(c.createdAt).toLocaleString()}
                     </span>
                   </button>
@@ -228,7 +230,7 @@ export default function RunCompareModal({
             <div className="space-y-4">
               <button
                 onClick={() => setCandidateRun(null)}
-                className="text-xs font-medium text-stone-500 hover:text-stone-800"
+                className="text-xs font-medium text-muted hover:text-foreground"
               >
                 ← Choose a different run
               </button>
@@ -236,10 +238,10 @@ export default function RunCompareModal({
                 <RunMetaCard run={older} label="Previous" />
                 <RunMetaCard run={newer} label="Current" />
               </div>
-              <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm">
-                <span className="font-medium text-stone-900">Total duration: </span>
+              <div className="rounded-xl border border-card-border bg-tile p-3 text-sm">
+                <span className="font-medium text-foreground">Total duration: </span>
                 {formatDurationDelta(comparison.totalDurationDeltaMs)}
-                <span className="ml-3 text-stone-500">
+                <span className="ml-3 text-muted">
                   Place-detail steps: {comparison.placeDetailCountA} → {comparison.placeDetailCountB}
                 </span>
               </div>
