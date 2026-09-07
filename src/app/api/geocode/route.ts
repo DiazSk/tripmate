@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { geocodeDestination } from "@/lib/weather";
+import { geocodeDestinationCached } from "@/lib/serverFetchCached";
 
 export async function GET(req: NextRequest) {
   const destination = req.nextUrl.searchParams.get("destination");
@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const geo = await geocodeDestination(destination);
+    const geo = await geocodeDestinationCached(destination);
     if (!geo) {
       return NextResponse.json({ error: "Couldn't find that destination" }, { status: 404 });
     }

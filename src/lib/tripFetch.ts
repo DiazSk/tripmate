@@ -1,8 +1,13 @@
 import { buildDateContext } from "./dateContext";
 import { probeTransitAvailable } from "./routeMatrix";
 import { getPublicHolidays } from "./holidays";
-import { getCandidatePois } from "./pois";
-import { geocodeDestination, getWeatherWithMeta } from "./weather";
+
+import { geocodeDestination } from "./weather";
+import {
+  geocodeDestinationCached,
+  getCandidatePoisCached,
+  getWeatherWithMetaCached,
+} from "./serverFetchCached";
 import type { RawFetch } from "./types";
 
 /**
@@ -22,7 +27,7 @@ export async function fetchRawTrip(params: {
 
   let geo: Awaited<ReturnType<typeof geocodeDestination>> = null;
   try {
-    geo = await geocodeDestination(destination);
+    geo = await geocodeDestinationCached(destination);
   } catch {
     geo = null;
   }
@@ -30,9 +35,9 @@ export async function fetchRawTrip(params: {
   const dateContext = buildDateContext(startDate, endDate, geo?.lat ?? null);
 
   const [weatherResult, holidaysResult, poisResult, transitResult] = await Promise.allSettled([
-    geo ? getWeatherWithMeta(geo.lat, geo.lon, startDate, endDate) : Promise.resolve(null),
+    geo ? getWeatherWithMetaCached(geo.lat, geo.lon, startDate, endDate) : Promise.resolve(null),
     geo?.countryCode ? getPublicHolidays(geo.countryCode, startDate, endDate) : Promise.resolve(null),
-    geo ? getCandidatePois(geo.lat, geo.lon) : Promise.resolve(null),
+    geo ? getCandidatePoisCached(geo.lat, geo.lon) : Promise.resolve(null),
     probeTransitAvailable(),
   ]);
 

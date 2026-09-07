@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "./claude";
-import { geocodeDestination, getWeatherForDates, DayWeather } from "./weather";
+import { getWeatherForDates, DayWeather } from "./weather";
+import { geocodeDestinationCached } from "./serverFetchCached";
 import { fetchPoiOsmTags, resolveNamedPlaceCoords } from "./poiDetails";
 import { buildPlaceFacts } from "./placeFacts";
 import {
@@ -182,7 +183,7 @@ export async function runGeneration(
     dayCount = tripDays(startDate, endDate);
     onStage({ stage: "geocode", status: "start" });
     try {
-      const geo = await geocodeDestination(destination);
+      const geo = await geocodeDestinationCached(destination);
       if (geo) {
         geoPoint = { lat: geo.lat, lon: geo.lon };
         weather = await getWeatherForDates(geo.lat, geo.lon, startDate, endDate);
