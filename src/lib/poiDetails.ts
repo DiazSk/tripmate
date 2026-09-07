@@ -1,10 +1,10 @@
+import { askOverpass } from "./overpass";
 import type { PoiOsmTags } from "./types";
 
-/** Longer than the other upstreams because Overpass queues under load. NOTE the `[timeout:N]`
- *  inside each query is an instruction to *Overpass* about its own execution budget, not a cap on
- *  how long this process waits for an answer — only the abort signal is that. */
+/** Longer than the shared default because this batches every POI in a trip into one query and
+ *  Overpass queues under load. NOTE the `[timeout:N]` inside the query is an instruction to
+ *  *Overpass* about its own execution budget, not a cap on how long this process waits. */
 const OVERPASS_TIMEOUT_MS = 45_000;
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 /** POIs are matched by name near their own known coordinates, so this only has to absorb the
  *  drift between OpenTripMap's centroid and OSM's — not city-scale search like roads.ts. */
 const MATCH_RADIUS_M = 300;
@@ -55,16 +55,13 @@ export async function fetchPoiOsmTags(
   const query = `[out:json][timeout:30];(${clauses});out center tags;`;
 
   try {
-    const res = await fetch(OVERPASS_URL, {
-      method: "POST",
-      // Same header set as roads.ts — Overpass's front-end 406s a bare fetch() without Accept.
-      headers: { "Content-Type": "text/plain", Accept: "*/*", "User-Agent": "TripMate/1.0" },
-      body: query,
-      signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const elements: OverpassPoiElement[] = Array.isArray(data?.elements) ? data.elements : [];
+    // `null` from here means no mirror answered, which is exactly this function's own `null`:
+    // "the fetch failed", as distinct from `{}` for "asked, matched nothing". The caller needs
+    // that difference — see the fail-soft note in CLAUDE.md.
+    const elements = (await askOverpass(query, { timeoutMs: OVERPASS_TIMEOUT_MS })) as
+      | OverpassPoiElement[]
+      | null;
+    if (elements === null) return null;
 
     const byName: Record<string, PoiOsmTags> = {};
     for (const el of elements) {
@@ -165,15 +162,13 @@ export async function resolveNamedPlaceCoords(
     `nwr["name:en"~"^(${union})$"](around:${radiusM},${near.lat},${near.lon});`;
 
   try {
-    const res = await fetch(OVERPASS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain", Accept: "*/*", "User-Agent": "TripMate/1.0" },
-      body: `[out:json][timeout:40];(${clauses});out center tags;`,
-      signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
-    });
-    if (!res.ok) return {};
-    const data = await res.json();
-    const elements: OverpassPoiElement[] = Array.isArray(data?.elements) ? data.elements : [];
+    // `{}` on failure here rather than `null`, unchanged: this is the coordinate-correction pass,
+    // and "no correction available" is a fine answer — the model's own lat/lng is kept. Only the
+    // opening-hours lookup above needs to distinguish "could not ask" from "nothing matched".
+    const elements = (await askOverpass(`[out:json][timeout:40];(${clauses});out center tags;`, {
+      timeoutMs: OVERPASS_TIMEOUT_MS,
+    })) as OverpassPoiElement[] | null;
+    if (elements === null) return {};
 
     const byName: Record<string, { lat: number; lon: number }> = {};
     for (const el of elements) {

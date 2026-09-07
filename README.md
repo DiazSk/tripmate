@@ -47,10 +47,28 @@ using an HTTP SDK, so that needs to be installed and authenticated.
 |---|---|
 | `OPENTRIPMAP_API_KEY` | No POI suggestions. Generation still works |
 | `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Globe falls back to free OpenStreetMap raster tiles |
-| `YELP_API_KEY` | No dietary-matched venue examples in generated notes. Generation still works |
 | `BRAVE_API_KEY` | No destination festival/event suggestions. Generation still works |
 
 Weather, geocoding, public holidays and OSM data need no key.
+
+### Two integrations deliberately not used
+
+`YELP_API_KEY` and `GOOGLE_PLACES_API_KEY` are both read by the code and neither will be set. Both
+are paid, and this is a student project — the decision (2026-09-06, Zaid) is to run without them
+rather than bill them personally. They are documented here rather than deleted because the code
+paths are written, tested and correct; setting either key turns the feature on with no other work.
+
+Each costs something real, and the second one costs more than it looks:
+
+- **Yelp** (`dietaryVenues.ts`) supplied *verified* venue examples matching a dietary need. Without
+  it the plan still answers a dietary constraint, but the specific restaurant names in a stop's
+  notes are **written by the model rather than looked up** — they are plausible and frequently
+  real, and they are not checked against anything. Treat a named venue as a suggestion to verify,
+  not as a fetched fact, and say so if anyone asks during a demo.
+- **Google Places** (`placeSearch.ts`) was the alternative provider for the map's search box.
+  Without it every search goes to Overpass — the free community OSM service, which rate-limits
+  exactly the bursty traffic a search box generates and is the least reliable upstream this app
+  has. See `src/lib/overpass.ts` for what that costs and how the failover handles it.
 
 ## Sharing a plan for review
 

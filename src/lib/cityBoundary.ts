@@ -11,6 +11,8 @@
  * the same question — what the places just outside the line are called.
  */
 
+import { askOverpass } from "./overpass";
+
 export interface CityBoundary {
   /**
    * The boundary as OSM stores it: a list of *way fragments*, not closed rings.
@@ -35,12 +37,6 @@ export interface NearbyPlace {
   /** OSM's own `place` value — city, town, suburb, village. Used to rank and to size the label. */
   kind: string;
 }
-
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
-/** Longer than the other upstreams because Overpass queues under load. The `[timeout:N]` inside
- *  each query is an instruction to *Overpass* about its own budget, not a cap on how long this
- *  process waits — only the abort signal is that. */
-const OVERPASS_TIMEOUT_MS = 30_000;
 
 /** How far out to look for neighbours. Wide enough to catch the ring of towns a city commutes
  *  with, tight enough that the answer is still "around here" rather than a region. */
@@ -71,18 +67,13 @@ interface OverpassGeomElement {
   lon?: number;
 }
 
+/** Falls across the Overpass mirrors via `askOverpass`, then keeps this module's existing
+ *  throw-on-unreachable contract — every caller below already treats a throw as "no outline",
+ *  and returning `[]` instead would render "this city has no boundary" for "we could not ask". */
 async function overpass(query: string): Promise<OverpassGeomElement[]> {
-  const res = await fetch(OVERPASS_URL, {
-    method: "POST",
-    // Overpass's Apache front-end 406s a bare fetch(): undici sends no `Accept` header by
-    // default and the server reads that as "no acceptable representation" rather than "any".
-    headers: { "Content-Type": "text/plain", Accept: "*/*", "User-Agent": "TripMate/1.0" },
-    body: query,
-    signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`Overpass API returned ${res.status}`);
-  const data = await res.json();
-  return Array.isArray(data?.elements) ? data.elements : [];
+  const elements = await askOverpass(query);
+  if (elements === null) throw new Error("Overpass unavailable on every mirror");
+  return elements as OverpassGeomElement[];
 }
 
 /**
