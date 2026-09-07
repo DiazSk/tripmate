@@ -11,6 +11,7 @@
  * the same question — what the places just outside the line are called.
  */
 
+import { TTL, cached } from "./fetchCache";
 import { askOverpass } from "./overpass";
 
 export interface CityBoundary {
@@ -90,6 +91,24 @@ async function overpass(query: string): Promise<OverpassGeomElement[]> {
  * the destination.
  */
 export async function fetchCityBoundary(
+  lat: number,
+  lng: number,
+  searchedName?: string
+): Promise<CityBoundary | null> {
+  // **`searchedName` has to be in the key.** The candidate ranking below branches on
+  // `matchesSearch`, so the same coordinates with a different name legitimately resolve to a
+  // different boundary ("Lisbon" vs "Lisboa" vs "Área Metropolitana"). Keying on coordinates
+  // alone would serve one search's answer to another's — and this function's judgement is the
+  // one most worth being able to re-ask, since a bad pick would otherwise sit for ninety days.
+  // Re-searching under a different spelling is therefore also the escape hatch.
+  const key = `cityb:${lat.toFixed(2)}:${lng.toFixed(2)}:${searchedName ?? ""}`;
+  // Already returns `null` for both "could not ask" and "no relation here", so it needs no
+  // contract repair — but that conflation is why a genuinely boundary-less city re-asks each
+  // time rather than caching the negative. Cheap, and the alternative is freezing a refusal.
+  return cached(key, TTL.STATIC, () => fetchCityBoundaryUncached(lat, lng, searchedName));
+}
+
+async function fetchCityBoundaryUncached(
   lat: number,
   lng: number,
   searchedName?: string
@@ -196,6 +215,33 @@ export async function fetchNearbyPlaces(
   limit = 12,
   excludeName?: string
 ): Promise<NearbyPlace[]> {
+  // Its own key, separate from the boundary's. The two are fetched concurrently and either can
+  // fail alone — sharing a key would mean a successful outline being thrown away because the
+  // neighbour query happened to be the one that got throttled.
+  //
+  // `excludeName` and `limit` are both in the key because both change the returned list.
+  const key = `citynear:${lat.toFixed(2)}:${lng.toFixed(2)}:${limit}:${excludeName ?? ""}`;
+
+  const places = await cached(key, TTL.STATIC, () => fetchNearbyPlacesUncached(lat, lng, limit, excludeName));
+  // The public contract stays `NearbyPlace[]` — every caller renders a list and an empty one is
+  // simply fewer labels. The `null` matters one layer down, where it decides what gets stored.
+  return places ?? [];
+}
+
+/**
+ * The fetch itself, returning `null` for "could not ask".
+ *
+ * That distinction is the whole reason this is a separate function. It used to `catch { return [] }`
+ * inline, which read fine while nothing cached it and became a trap the moment something did:
+ * an Overpass refusal would have been written down as "this city has no neighbouring towns" and
+ * frozen there for ninety days.
+ */
+async function fetchNearbyPlacesUncached(
+  lat: number,
+  lng: number,
+  limit: number,
+  excludeName?: string
+): Promise<NearbyPlace[] | null> {
   try {
     const elements = await overpass(
       `[out:json][timeout:25];` +
@@ -225,6 +271,7 @@ export async function fetchNearbyPlaces(
       .filter((p) => !excludeName || normalise(p.name) !== normalise(excludeName))
       .slice(0, limit);
   } catch {
-    return [];
+    // `overpass()` throws when no mirror answered. `null`, not `[]` — see the note above.
+    return null;
   }
 }

@@ -70,14 +70,6 @@ export interface OverpassElement {
 }
 
 /**
- * Run a query, falling across the mirrors. Returns the `elements` array, or `null` when no mirror
- * could answer — a timeout, a rate limit, a refused connection or a non-JSON reply all collapse to
- * `null`, because none of them are distinguishable to a caller and all of them mean the same
- * thing: we could not ask.
- *
- * `[]` is a real answer: the query ran and matched nothing.
- */
-/**
  * Index into `OVERPASS_URLS` of the last mirror that answered, tried first next time.
  *
  * Not a cache and not an optimisation for its own sake — it is what stops a dead primary being
@@ -94,6 +86,14 @@ export interface OverpassElement {
  */
 let preferredMirror = 0;
 
+/**
+ * Run a query, falling across the mirrors. Returns the `elements` array, or `null` when no mirror
+ * could answer — a timeout, a rate limit, a refused connection or a non-JSON reply all collapse to
+ * `null`, because none of them are distinguishable to a caller and all of them mean the same
+ * thing: we could not ask.
+ *
+ * `[]` is a real answer: the query ran and matched nothing.
+ */
 export async function askOverpass(
   body: string,
   { timeoutMs = DEFAULT_TIMEOUT_MS }: { timeoutMs?: number } = {}

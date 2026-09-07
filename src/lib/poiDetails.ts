@@ -1,3 +1,4 @@
+import { TTL, cached } from "./fetchCache";
 import { askOverpass } from "./overpass";
 import type { PoiOsmTags } from "./types";
 
@@ -54,6 +55,21 @@ export async function fetchPoiOsmTags(
     .join("");
   const query = `[out:json][timeout:30];(${clauses});out center tags;`;
 
+  // Keyed on the whole batch, sorted so callers passing the same POIs in a different order share
+  // a row. Any change to the set is a full miss, which is the lazy version and the right one here:
+  // the callers fire per-run with a stable set. Shortest TTL in the app — `opening_hours` is the
+  // one Overpass payload that genuinely churns.
+  const key =
+    "osmtags:" +
+    pois
+      .map((p) => `${p.name}@${p.lat.toFixed(4)},${p.lon.toFixed(4)}`)
+      .sort()
+      .join("|");
+
+  return cached(key, TTL.CHURNING, () => fetchPoiOsmTagsUncached(query));
+}
+
+async function fetchPoiOsmTagsUncached(query: string): Promise<Record<string, PoiOsmTags> | null> {
   try {
     // `null` from here means no mirror answered, which is exactly this function's own `null`:
     // "the fetch failed", as distinct from `{}` for "asked, matched nothing". The caller needs
@@ -161,14 +177,30 @@ export async function resolveNamedPlaceCoords(
     `nwr["name"~"^(${union})$"](around:${radiusM},${near.lat},${near.lon});` +
     `nwr["name:en"~"^(${union})$"](around:${radiusM},${near.lat},${near.lon});`;
 
+  // Same whole-batch key shape as the tags lookup, but a separate namespace and a long TTL: this
+  // resolves a *coordinate*, which does not move, where `opening_hours` does.
+  const key =
+    `osmcoords:${near.lat.toFixed(2)}:${near.lon.toFixed(2)}:${radiusM}:` +
+    [...unique].sort().join("|");
+
+  // `{}` is this function's public "no corrections available" — the model's own lat/lng is then
+  // kept — so the cache miss and the empty answer look the same to every caller. The `null`
+  // matters one layer down, where it decides whether an Overpass refusal gets written down as
+  // "none of these places exist" and freezes every stop's wrong coordinates for ninety days.
+  return (await cached(key, TTL.STATIC, () => resolveNamedPlaceCoordsUncached(clauses, near, unique))) ?? {};
+}
+
+async function resolveNamedPlaceCoordsUncached(
+  clauses: string,
+  near: { lat: number; lon: number },
+  /** The de-duplicated request names, needed to key results back to what the caller asked for. */
+  unique: string[]
+): Promise<Record<string, { lat: number; lon: number }> | null> {
   try {
-    // `{}` on failure here rather than `null`, unchanged: this is the coordinate-correction pass,
-    // and "no correction available" is a fine answer — the model's own lat/lng is kept. Only the
-    // opening-hours lookup above needs to distinguish "could not ask" from "nothing matched".
     const elements = (await askOverpass(`[out:json][timeout:40];(${clauses});out center tags;`, {
       timeoutMs: OVERPASS_TIMEOUT_MS,
     })) as OverpassPoiElement[] | null;
-    if (elements === null) return {};
+    if (elements === null) return null;
 
     const byName: Record<string, { lat: number; lon: number }> = {};
     for (const el of elements) {
@@ -181,6 +213,6 @@ export async function resolveNamedPlaceCoords(
     }
     return byName;
   } catch {
-    return {};
+    return null;
   }
 }

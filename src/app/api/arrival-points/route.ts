@@ -4,6 +4,7 @@ import {
   buildArrivalPointsQuery,
   parseArrivalPoints,
 } from "@/lib/arrivalPoints";
+import { TTL, cached } from "@/lib/fetchCache";
 import { askOverpass } from "@/lib/overpass";
 
 /** Longer than the shared default, and measured rather than guessed: this query came back in 18s
@@ -37,12 +38,29 @@ export async function GET(req: NextRequest) {
     // and every other caller was accepting that as a real empty answer. Moving it into the shared
     // client fixed it for all five of them and made a remark fall through to the next mirror
     // rather than straight to the catch below.
-    const elements = (await askOverpass(buildArrivalPointsQuery(lat, lon), {
-      timeoutMs: OVERPASS_TIMEOUT_MS,
-    })) as OverpassArrivalElement[] | null;
-    if (elements === null) throw new Error("Overpass unavailable on every mirror");
+    // Parsed before caching, not raw: the points are what every caller wants, and the raw
+    // element list for a wide airport/station query is far larger than the handful of names it
+    // reduces to. 2dp on the key ≈ 1.1km, well inside this query's radius.
+    const points = await cached(
+      `arrive:${lat.toFixed(2)}:${lon.toFixed(2)}`,
+      TTL.STATIC,
+      async () => {
+        const elements = (await askOverpass(buildArrivalPointsQuery(lat, lon), {
+          timeoutMs: OVERPASS_TIMEOUT_MS,
+        })) as OverpassArrivalElement[] | null;
+        if (elements === null) return null;
 
-    return NextResponse.json({ points: parseArrivalPoints(elements, { lat, lon }) });
+        const parsed = parseArrivalPoints(elements, { lat, lon });
+        // `null` rather than `[]` on an empty result. Somewhere genuinely has no airport or
+        // station within range, but so does a throttled query, and the two are indistinguishable
+        // here — so the cheap read is re-asking next time rather than freezing "nowhere to
+        // arrive" for ninety days. This field is optional and free-text either way.
+        return parsed.length ? parsed : null;
+      }
+    );
+    if (points === null) throw new Error("Overpass unavailable on every mirror, and nothing cached");
+
+    return NextResponse.json({ points });
   } catch (err) {
     console.error("[arrival-points] Overpass lookup failed", err);
     return NextResponse.json({ points: [] });
