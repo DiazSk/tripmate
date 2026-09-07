@@ -17,6 +17,8 @@
  * "nothing found here", which is a true statement either way.
  */
 
+import { askOverpass } from "./overpass";
+
 export interface FoundPlace {
   /** Stable within one result set — used as a React key and to match a pin to a row. */
   id: string;
@@ -77,14 +79,14 @@ const GOOGLE_TYPES: Record<Exclude<PlaceCategory, "place">, string> = {
  * start refusing connections outright, at which point the feature is correct, honest and useless.
  *
  * The mirrors run the same software over the same planet data, so failing across them costs
- * nothing but a little latency. `roads.ts` and `cityBoundary.ts` still use the primary alone —
- * they fire once per destination, which is nothing like this.
+ * nothing but a little latency.
+ *
+ * That failover lives in `overpass.ts` now, shared with the other four callers. The note that
+ * stood here — that `roads.ts` and `cityBoundary.ts` "fire once per destination, which is nothing
+ * like this", so they could stay on the primary alone — was right about rate limiting and wrong
+ * about availability: firing once at a host that is down fails every time, not rarely. See
+ * `overpass.ts` for the measurement that settled it.
  */
-const OVERPASS_URLS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
-];
 /** Longer than the other upstreams because Overpass queues under load. The `[timeout:N]` inside
  *  the query is Overpass's own budget; this is the wall clock on the request carrying it. */
 const OVERPASS_TIMEOUT_MS = 25_000;
@@ -240,7 +242,7 @@ async function searchOverpass({
   const clauses = selectors.map((f) => `nwr${f}${nameFilter}${around};`).join("");
   const body = `[out:json][timeout:20];(${clauses});out center ${MAX_RESULTS * 3};`;
 
-  const elements = await askOverpass(body);
+  const elements = await askOverpass(body, { timeoutMs: OVERPASS_TIMEOUT_MS });
   if (elements === null) return null;
 
   const seen = new Set<string>();
@@ -292,37 +294,7 @@ function escapeForOverpassRegex(text: string): string {
  * such. A 429 (rate limit) or a 504 (the server's own queue timing out) is a reason to try the
  * next mirror, not a reason to tell the traveler their neighbourhood has no cafés.
  */
-async function askOverpass(body: string): Promise<OverpassElement[] | null> {
-  for (const url of OVERPASS_URLS) {
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        // Overpass's Apache front-end 406s a bare fetch() — undici sends no `Accept` header by
-        // default and the front-end reads that as "accepts nothing". Same header set `roads.ts`
-        // uses, and the `User-Agent` is the courtesy these instances ask for in their usage
-        // policies.
-        headers: { "Content-Type": "text/plain", Accept: "*/*", "User-Agent": "TripMate/1.0" },
-        body,
-        signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
-      });
-      if (!res.ok) continue;
-      const data = (await res.json()) as { elements?: OverpassElement[] };
-      return data.elements ?? [];
-    } catch {
-      // Refused, timed out, or answered something that is not JSON. Next mirror.
-    }
-  }
-  return null;
-}
 
-interface OverpassElement {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
 
 function categoryFromTags(tags: Record<string, string>, fallback?: PlaceCategory): PlaceCategory {
   const amenity = tags.amenity ?? "";
