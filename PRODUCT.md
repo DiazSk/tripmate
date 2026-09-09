@@ -44,16 +44,32 @@ lockup beyond that.
 
 The visual identity is "Kiln", shipped 2026-09-08 and documented in DESIGN.md: a warm near-neutral
 near-black ground with translucent glass floating over the persistent globe, and **three named colour
-roles rather than one accent** — jade for action, gold for money, coral for alert. Display and text
-in Wix Madefor, every figure in a monospace. Edges follow one rule: round what you touch, square what
-you read.
+roles rather than one accent** — jade for action, gold for money, coral for alert. Edges follow one
+rule: round what you touch, square what you read.
+
+**The type system is Melodrama + Switzer + Tabular, shipped 2026-09-09**, replacing the Wix Madefor
+superfamily Kiln launched with. See DESIGN.md § Typography; the short version is a high-contrast
+display serif at a single light weight against a neutral grotesk, with the landing price re-set as
+the serif's own moment rather than as a monospace figure.
 
 **Standing preference, recorded because it governs future design work: the arrangement is
 conventional on purpose.** Offered a choice between four distinct visual worlds and the category
-standard played straight, the user chose the standard, and named **Airbnb and Vercel** as the craft
-bar. So this product competes on execution rather than on concept: a photo hero, a marketing scroll
-page, a search capsule in the first viewport. Do not "differentiate" the arrangement on a later pass
-— sharpen the execution instead.
+standard played straight, the user chose the standard. So this product competes on execution rather
+than on concept: a photo hero, a marketing scroll page, a search capsule in the first viewport. Do
+not "differentiate" the arrangement on a later pass — sharpen the execution instead. **That
+instruction stands. The bar it is measured against has moved.**
+
+**The craft bar is now Aman, Belmond, Loro Piana and Aesop — not Airbnb and Vercel.** Changed
+2026-09-09 at the user's direction, and the distinction is the whole point: Airbnb and Vercel are a
+bar for *competence*, and the build cleared it while still reading as well-made SaaS. The luxury
+references are a bar for *restraint* — fewer weights, more space, a figure treated as the subject
+rather than as metadata.
+
+**One tension, stated once so nobody resolves it by accident.** This product's thesis is budget
+realism — "a trip that costs what you said it would", with a $900 Jaipur plan on the landing.
+Luxury *language* on a budget-honest product reads as a mismatch, and chasing expensive would be the
+wrong move. The target is **considered**: precision, restraint, material quality. Every reference
+above is on the list for restraint, not for price.
 
 Kiln superseded three earlier looks: a steel-blue glass treatment, a warm cream/teal split-pane
 system, and "The Lit Cockpit Over a Turning Earth" (teal-black, one amber accent, a single Archivo

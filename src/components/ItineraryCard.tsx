@@ -712,8 +712,10 @@ export default function ItineraryCard({
               palette had — on this one screen the same paint marked the primary button, this
               badge, the budget fill, the download control and the selected day tab, and a visitor
               had no way to tell which of them wanted a click. A stamp on a photograph needs
-              contrast, not colour, so it gets an opaque dark ground and the figure face. */}
-          <span className="font-mono mb-1 inline-block w-fit -rotate-2 rounded bg-black/60 px-2 py-1 text-xs font-semibold tracking-wide text-on-deep uppercase tabular-nums">
+              contrast, not colour, so it gets an opaque dark ground. Set in the text face, not the
+              figure face: "Day 2 of 5" has two numerals and nothing to align them against, and
+              the narrowed rule is tabular mono *in a column* — this is a stamp, not a column. */}
+          <span className="mb-1 inline-block w-fit -rotate-2 rounded bg-black/60 px-2 py-1 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-on-deep uppercase">
             Day {dayIndex + 1} of {dayCount}
           </span>
           {/* Both actions live on the photograph now, which is what lets the day panel below start
@@ -723,7 +725,11 @@ export default function ItineraryCard({
               the neutral wash it already had in the body, keeping its amber to the glyph. Two
               solid amber circles would read as two primaries, which is one more than there is. */}
           <div className="flex items-start justify-between gap-3">
-            <h1 className="font-display text-2xl font-semibold italic">
+            {/* Not italic. DESIGN.md records the display italic being deliberately cut from the
+                system — "an oblique display face was the last thing making the landing read as a
+                different product" — and this heading, on the most-seen screen in the app, kept it
+                anyway. */}
+            <h1 className="font-display text-2xl font-semibold">
               {cityName(destination)}: {dayCount} day{dayCount > 1 ? "s" : ""}
             </h1>
             <div className="flex shrink-0 items-center gap-2">
@@ -950,11 +956,11 @@ export default function ItineraryCard({
           )}
         </div>
 
-        {/* Same box either way: `mb-3 text-sm italic text-muted`, so the line under the heading
+        {/* Same box either way: `mb-3 text-sm text-muted`, so the line under the heading
             keeps its height and the stops below it do not shift. Editing offers the field even
             when the day has no summary yet — a plan generated before the field existed should be
             able to gain one — while reading still renders nothing rather than an empty line. */}
-        {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
+        {day.summary && <p className="mb-3 text-sm text-muted">{day.summary}</p>}
 
         {/* `py-2` and `leading-snug`, not the `p-3`/normal leading this had. Measured at 88px tall
             against a 44px input, so the height was never the control — it was a 24px name over a

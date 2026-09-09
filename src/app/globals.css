@@ -354,9 +354,33 @@ html {
      `--font-display` sets headings and the hero; `--font-sans` sets everything a visitor reads
      as prose or a control; `--font-mono` sets figures. The system stack behind each is a
      fallback for the seconds before the webfont lands, not the design. */
-  --font-display: var(--font-display-stack), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-sans: var(--font-sans-stack), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* Money, times, distances, counts. `tabular-nums` was already on 36 sites across 12 files
+  /* **Tracking as a function of size, not twenty literals.**
+     A census found 20 distinct letter-spacing values in this codebase — including six different
+     values (+0.11 / +0.12 / +0.14 / +0.16 / +0.05 / +0.025em) on uppercase labels 10-13px apart,
+     no two derived from each other, and `-0.0357em` and `-0.035em` written separately for the same
+     number. That is not a system, it is a pile.
+
+     Four steps, and the rule behind them: optical tracking closes as type grows and opens as it
+     shrinks. Melodrama is a high-contrast serif and needs *less* negative tracking than the low
+     contrast grotesk it replaces — its own thick-thin modulation already does the work that
+     tightening was faking, so `--tracking-display` is -0.018em where the old face ran -0.076em. */
+  --tracking-display: -0.018em;
+  --tracking-heading: -0.012em;
+  --tracking-body: 0em;
+  --tracking-label: 0.18em;
+
+  /* **No `--font-display` here, deliberately.** A `--font-*` key in this block makes Tailwind emit
+     a matching utility, so `--font-display` produced a layered `.font-display { font-family: … }`
+     — colliding by name with the *unlayered* `.font-display` class below, which is the app's
+     heading step and resolves to the text face. Two rules, one selector, different values, decided
+     by layer order rather than by anyone. The classes reference `--font-display-stack` directly and
+     never needed the bridge; `font-sans` and `font-mono` below are real utilities and stay. */
+  /* The fallback tail matches every other declaration in this file. It used to carry
+     `-apple-system, "Segoe UI", Roboto` as well — three named faces that were never reachable:
+     `next/font/local` emits a metric-matched "textFace Fallback" ahead of them, so the browser
+     resolves there and stops. Named faces nobody can see are a type system nobody can audit. */
+  --font-sans: var(--font-sans-stack), ui-sans-serif, system-ui, sans-serif;
+  /* Money, times, distances, counts. `tabular-nums` was already on 38 sites across 16 files
      before this face existed — that set *is* the figure surface, and it needed no hunting. */
   --font-mono: var(--font-mono-stack), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -938,11 +962,17 @@ body {
      it goes.
      Tracked-out uppercase at 13px is what turns "DAY 1" into a readout — that was always the
      mechanism, and it does not need a novelty face to work. */
-  font-family: var(--font-display-stack), ui-sans-serif, system-ui, sans-serif;
+  /* **The text face, not the display one.** This is the last place the display face reached into
+     dense UI — 13px uppercase, tracked out, standing on a live map — and it survived the previous
+     pass because a low-contrast grotesk at 13px is merely small. Melodrama at 13px is *thin*: its
+     hairlines fall below a pixel over aerial imagery and the badge reads as damaged. The rule that
+     kept a techno face off this label is the same rule that keeps a didone off it. */
+  font-family: var(--font-sans-stack), ui-sans-serif, system-ui, sans-serif;
   font-weight: 700;
-  /* 0.16em rather than Orbitron's 0.18em: Wix Madefor's letterforms are narrower and less square,
-     so they need slightly less air to read as separated characters rather than as a word. */
-  letter-spacing: 0.16em;
+  /* The label step, same as every other uppercase label in the product. This used to carry its own
+     0.16em, justified in a comment against Wix Madefor's letterform width — a face the app stopped
+     shipping. A value tuned to an absent typeface is not a value, so it goes on the token. */
+  letter-spacing: var(--tracking-label);
   /* Tracking is added after the last glyph as well as between, so the chip gains a sliver of extra
      padding on the right; indenting by the tracking value re-centres the label in its own box. */
   text-indent: 0.16em;
@@ -1286,9 +1316,69 @@ body {
    is carried by size, weight and tracking alone. Tracking tightens as type grows, which is the
    reference's signature and the inverse of the -0.01em this used to run at. */
 .font-display {
-  font-family: var(--font-display-stack), ui-sans-serif, system-ui, sans-serif;
+  /* **The sans, not the serif, and this is the split the old system was missing.**
+     A census found this one class doing six different sizes from 16px to 72px across 22 call
+     sites — the navbar wordmark, panel headings, day headings, and two page H1s, all on one
+     declaration. That is survivable with a low-contrast grotesk and fatal with a high-contrast
+     serif: Melodrama's thin strokes vanish below about 28px, and the first build of this pass put
+     a spindly serif wordmark in the navbar to prove it.
+
+     So the range is split by job rather than by surface. This is the **heading** step — 16 to
+     24px, panels and page furniture — and it stays in the text face. `.font-display-xl` below is
+     the serif, for type that is genuinely display-sized. */
+  font-family: var(--font-sans-stack), ui-sans-serif, system-ui, sans-serif;
   font-weight: 600;
-  letter-spacing: -0.06em;
+  letter-spacing: var(--tracking-heading);
+}
+
+/* --- The price ---------------------------------------------------------------------------
+   The product's hero content, and until now the least considered type on the page.
+
+   It shipped at 17px in a monospace, the same size as the body beside it, which made the one
+   number a visitor is actually deciding on read as *data*. No luxury house sets a price that way,
+   and a census found the wider rule ("mono for every figure") honoured in 5 of 19 money renders
+   anyway. So the rule is now split by what the number is *for*:
+
+   - a price a visitor is meant to **feel** → display face, display scale, proportional lining
+     figures, currency mark subordinated. This class.
+   - a value a visitor is meant to **compare** → tabular mono, in its column. `font-mono`.
+
+   The currency mark is the detail that does the work: at 0.42em and 60% opacity, raised off the
+   baseline, `$` stops being the first character of the number and becomes a unit hanging beside
+   it — which is how a menu, a lot listing and an auction result all set money.
+
+   Old-style figures were the other half of the plan and are **not available**: neither Melodrama
+   nor Switzer ships `onum`, verified by rendering `font-variant-numeric: oldstyle-nums` against
+   lining in both and getting identical glyphs. Recorded so nobody re-derives the idea and quietly
+   ships a declaration that does nothing. */
+.price-display {
+  font-family: var(--font-display-stack), ui-serif, Georgia, serif;
+  font-weight: 400;
+  font-variant-numeric: proportional-nums lining-nums;
+  letter-spacing: -0.005em;
+  line-height: 1;
+  color: var(--money);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.16em;
+}
+
+.price-display .price-currency {
+  font-size: 0.42em;
+  opacity: 0.6;
+  transform: translateY(-0.62em);
+}
+
+/* The serif at display size, reachable from any surface.
+   `.font-scene-display` and `.font-scene-hero` are the landing's; this is the same face for the
+   two places the *app* legitimately runs display type — `/trips`' "My memories" at 72px and its
+   empty state at 60px. Without it those would have to borrow a scene class, which is precisely
+   the Persuade-class-on-an-Operate-surface mistake `/profile` shipped for two days. */
+.font-display-xl {
+  font-family: var(--font-display-stack), ui-serif, Georgia, serif;
+  font-weight: 400;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.04;
 }
 
 /* The scene's display voice. It was Playfair Display, then Source Serif 4 italic; it is now the
@@ -1299,7 +1389,6 @@ body {
    -0.04em tracking floor, deliberately: at 3.75rem the floor is tuned for a size this never runs
    at, and packing the line into one shape is the whole effect. */
 .font-scene-display {
-  font-family: var(--font-display-stack), ui-sans-serif, system-ui, sans-serif;
   /* The size lives here now, not at the five call sites that each repeated the same clamp.
      **This had to be one commit, and the reason is a trap this project has already been caught
      by.** These are *unlayered* rules; Tailwind emits `text-[...]` inside `@layer utilities`; an
@@ -1308,10 +1397,11 @@ body {
      not — including ones on other routes you would never think to check while editing a landing
      class. Hero.tsx records the same rule being met on `line-height`. The clamps were deleted in
      the same change that added this. */
+  font-family: var(--font-display-stack), ui-serif, Georgia, serif;
   font-size: clamp(2rem, 5vw, 3.75rem);
-  line-height: 1.05;
-  font-weight: 600;
-  letter-spacing: -0.076em;
+  line-height: 1.08;
+  font-weight: 400;
+  letter-spacing: var(--tracking-display);
 }
 
 /* --- The landing's band rhythm -------------------------------------------------------------
@@ -1419,23 +1509,21 @@ body {
    instead. -0.075em is its measured display value. Weight 900 stays: that part was never the
    problem. */
 .font-scene-hero {
-  font-family: var(--font-display-stack), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-display-stack), ui-serif, Georgia, serif;
   /* Same move as `.font-scene-display` above, and the ceiling came down with it: this used to be
      `clamp(3rem, 11vw, 13rem)` for a one-word poster that filled the viewport. The headline is now
      a sentence a visitor is meant to read, and 13rem of it is a wall. */
   font-size: clamp(2.5rem, 6.2vw, 5.25rem);
-  line-height: 1.02;
-  /* 600, not 900, and the hero is now the same weight as every other display step.
-     900 was a poster weight inherited from a one-word headline that filled the viewport; the
-     headline is a sentence now, and at 84px a sentence set at 900 reads as shouting rather than as
-     scale. Six shipped design systems were checked and four cap display weight below 600 outright —
-     one of them states the rule as "do not use weight 700 or higher for headlines", another as
-     "hierarchy through size, not weight". Two of the six do run 700, so this was a judgement call
-     rather than a correction, taken on a side-by-side at 1440 and 390.
-     The difference is a desktop one: at 390 the two weights are nearly indistinguishable, because
-     the clamp has already dropped the size to 40px where stroke contrast barely registers. */
-  font-weight: 600;
-  letter-spacing: -0.075em;
+  line-height: 1.04;
+  /* 400 — and the journey there is worth keeping, because it went 900 → 600 → 400 in three days
+     and only the last step was about the face rather than the taste. 900 was a poster weight
+     inherited from a one-word headline that filled the viewport. 600 came from a side-by-side once
+     the headline became a sentence. 400 is not a further softening: Melodrama's whole argument is
+     thick-to-thin modulation, and weight closes that gap — at 600 the thin strokes thicken toward
+     the thick ones and the face stops being the reason it was chosen. For a high-contrast serif,
+     weight and contrast trade against each other. */
+  font-weight: 400;
+  letter-spacing: var(--tracking-display);
 }
 
 /* Landing hero legibility over live satellite imagery of arbitrary brightness — the globe
@@ -1895,7 +1983,7 @@ body {
   display: block;
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.11em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: rgb(18 17 16 / 0.55);
 }
@@ -2000,7 +2088,7 @@ body {
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--tracking-body);
   padding: 12px 26px;
   white-space: nowrap;
   cursor: pointer;

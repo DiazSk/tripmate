@@ -47,7 +47,7 @@ const MENU_ITEMS = [
 // `inline-flex`, not `flex`: the hit area is the words, not the panel's full width. A full-bleed row
 // means a tap on empty space to the right of "Profile" navigates, which is not what anyone aimed at.
 const menuItemBase =
-  "group inline-flex items-baseline text-[clamp(2rem,10vw,2.81rem)] leading-[1.1] font-semibold tracking-[-0.085em] transition-colors duration-150 hover:text-accent focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none";
+  "group inline-flex items-baseline text-[clamp(2rem,10vw,2.81rem)] leading-[1.1] font-semibold tracking-[var(--tracking-display)] transition-colors duration-150 hover:text-accent focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none";
 
 /** Swapped rather than appended, for the same reason as `navLink` below. */
 const menuItem = (active = false) =>
@@ -512,7 +512,7 @@ export default function Navbar() {
               opacity: menuOpen ? 1 : 0,
               transitionDelay: `${MENU_ITEMS.length * 60}ms`,
             }}
-            className="mt-auto inline-flex w-full items-center justify-center gap-4 rounded-full bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground transition-[opacity,background-color] duration-300 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
+            className="mt-auto inline-flex w-full items-center justify-center gap-4 rounded-full bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[var(--tracking-body)] text-accent-foreground transition-[opacity,background-color] duration-300 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
           >
             Plan a trip
             <ButtonMark />

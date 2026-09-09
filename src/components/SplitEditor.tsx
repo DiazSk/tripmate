@@ -267,7 +267,7 @@ export default function SplitEditor({
         )}
         <div className="relative z-10 flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold tracking-wide text-accent-foreground uppercase">
+            <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[0.6875rem] font-semibold tracking-wide text-accent-foreground uppercase">
               Editing
             </span>
             <h2 className="mt-1.5 truncate font-display text-xl font-semibold text-on-deep">
@@ -766,7 +766,7 @@ function EditableStopCard({
               onChange={(e) => onMoveToDay(Number(e.target.value))}
               onClick={(e) => e.stopPropagation()}
               aria-label={`Move ${stop.name} to another day`}
-              className="rounded border border-card-border bg-transparent px-1 py-0.5 text-[10px] text-muted focus:outline-none"
+              className="rounded border border-card-border bg-transparent px-1 py-0.5 text-[0.6875rem] text-muted focus:outline-none"
             >
               {Array.from({ length: dayCount }, (_, d) => (
                 <option key={d} value={d} className="bg-[color:var(--surface-deep,#1c1a18)]">

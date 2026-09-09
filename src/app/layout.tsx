@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Sometype_Mono, Wix_Madefor_Display, Wix_Madefor_Text } from "next/font/google";
+import localFont from "next/font/local";
 import AppShell from "@/components/AppShell";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
 import "./globals.css";
@@ -19,49 +19,64 @@ import "./globals.css";
 const SHOW_LLM_TRACES = process.env.NODE_ENV === "development";
 
 /**
- * Three faces, each with exactly one job.
+ * Three faces, each with exactly one job — and, unlike the set they replace, chosen rather than
+ * arrived at.
  *
- * This is a deliberate reversal. The system this replaces ran on **one** face (Archivo) for
- * display, body, UI and poster alike, and reached every other register through scale, weight and
- * negative tracking — a move it had adopted wholesale from an external reference. Collapsing to
- * one face is a real and defensible strategy; it was not, here, *this project's* strategy, and
- * the thing it cost was the one register this product most needs to get right: a figure.
+ * Wix Madefor Display / Text / Sometype Mono got here by elimination: avoid the training-default
+ * faces, avoid Geist because Vercel was the named craft bar, ship. Competent, and it read as
+ * well-made SaaS. The bar is now luxury travel and quiet-luxury retail, and that is a different
+ * problem — one these faces could not solve by being set better.
  *
- * A trip plan is mostly numbers — times, durations, distances, per-stop costs, day totals,
- * a budget against a target. Thirty-six sites across twelve files already carried
- * `tabular-nums` before a monospace face existed, which is the codebase saying out loud that it
- * wanted one. Proportional tabular figures line up; they do not *read* as a readout, and a
- * column of prices in the same face as the prose beside it is a column you have to look for.
+ * **The mechanism is contrast in the face, not weight in the type.** A bold grotesk is loud; a
+ * light didone is expensive. Melodrama carries high thick-to-thin modulation at weight 400, which
+ * is the couture move and the thing no amount of extra weight buys. Everything dense stays in a
+ * neutral grotesk, because a display serif in a day row is a costume.
  *
- * So: --font-display sets headings and the hero, --font-sans sets everything read as prose or
- * operated as a control, --font-mono sets every figure. Bridged into Tailwind in globals.css's
- * `@theme inline` block, so `font-display` / `font-sans` / `font-mono` are ordinary utilities.
+ * Self-hosted from `public/fonts` via `next/font/local`, not `next/font/google` — these are
+ * Fontshare faces (Indian Type Foundry). Licence checked directly before committing them: free for
+ * personal and commercial use, self-hosting explicitly permitted.
  *
- * Cost is close to flat despite going from one family to three: none of these pass a `weight`
- * array, so next/font fetches the **variable** file — one request per family. The outgoing
- * Archivo declared five static weights and therefore fetched five files.
+ * **Payload went down, not up.** Three variable files totalling 108KB, against roughly 115KB for
+ * the three Google families they replace — and the single Archivo file still committed for the
+ * export is 90KB on its own.
  */
-const displayFace = Wix_Madefor_Display({
+const displayFace = localFont({
+  src: "../../public/fonts/melodrama-variable.woff2",
   variable: "--font-display-stack",
-  subsets: ["latin"],
+  weight: "300 700",
+  display: "swap",
 });
 
-const textFace = Wix_Madefor_Text({
+const textFace = localFont({
+  src: "../../public/fonts/switzer-variable.woff2",
   variable: "--font-sans-stack",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
 /**
- * Figures only, and the reason it is a *warm* mono rather than a neutral one: it sits inches from
- * Wix Madefor's text on the same card, and a cold grotesque mono beside a warm humanist text face
- * reads as a paste-in from another document. Sometype Mono is drawn with enough humanist warmth to
- * belong to the same page while still holding a column.
+ * Figures, and only in a column.
  *
- * Never set prose in this. A "why we chose this stop" sentence in monospace is a receipt.
+ * This is the rule that changed. The previous system said "mono for every figure" and a census
+ * found it honoured in about a quarter of cases: 5 of 19 money renders, and **no date, time,
+ * duration or temperature anywhere**. A whole variable family was being preloaded on every route
+ * for eight spans.
+ *
+ * So the rule is narrower and now actually true: **tabular mono where values are compared** — the
+ * dl columns, the stop-time gutter, the day totals, the budget readout. A price a visitor is meant
+ * to feel rather than compare is set in the display face at display scale, which is what a menu or
+ * a lot listing does and what a monospace can never do. Never prose.
  */
-const monoFace = Sometype_Mono({
+const monoFace = localFont({
+  src: "../../public/fonts/tabular-variable.woff2",
   variable: "--font-mono-stack",
-  subsets: ["latin"],
+  weight: "300 700",
+  display: "swap",
+  // Five sites: the dl columns, the stop-time gutter, the day totals, the budget readout, and the
+  // how-it-works step numbers. Only the last is on a landing route, and it is in the third band —
+  // so the face is still fetched there, just not in the preload that competes with the hero
+  // photograph and the two faces the first viewport actually paints.
+  preload: false,
 });
 
 

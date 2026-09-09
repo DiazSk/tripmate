@@ -59,7 +59,7 @@ export default function SiteFooter() {
       </div>
 
       <div className="flex flex-col gap-12 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
-        <p className="text-2xl font-semibold tracking-[-0.106em] text-foreground">TripMate</p>
+        <p className="text-2xl font-semibold tracking-[var(--tracking-heading)] text-foreground">TripMate</p>
 
         <nav aria-label="Footer">
           <ul className="space-y-1">
@@ -67,7 +67,7 @@ export default function SiteFooter() {
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className="group inline-flex items-baseline text-[clamp(1.75rem,4vw,2.81rem)] font-semibold leading-[1.1] tracking-[-0.085em] text-foreground transition-colors duration-150 hover:text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                  className="group inline-flex items-baseline text-[clamp(1.75rem,4vw,2.81rem)] font-semibold leading-[1.1] tracking-[var(--tracking-display)] text-foreground transition-colors duration-150 hover:text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
                 >
                   <span aria-hidden className="text-white/45 transition-colors duration-150 group-hover:text-accent/60">
                     +

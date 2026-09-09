@@ -123,7 +123,7 @@ function DayColumn({
       <header className="mb-2">
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-sm font-semibold text-foreground">Day {dayIndex + 1}</h3>
-          <span className="text-[11px] text-muted">{formatItineraryDate(day.date)}</span>
+          <span className="text-[0.6875rem] text-muted">{formatItineraryDate(day.date)}</span>
         </div>
         {editable && onRename ? (
           <input
@@ -152,7 +152,7 @@ function DayColumn({
         ) : (
           day.title && <p className="mt-1 truncate px-1 text-xs text-muted">{day.title}</p>
         )}
-        <div className="mt-1 px-1 text-[11px] text-muted/70">
+        <div className="mt-1 px-1 text-[0.6875rem] text-muted/70">
           {day.stops.length} {day.stops.length === 1 ? "stop" : "stops"}
           {day.stops.length > 0 && ` · ${formatMoney(dayPlanned(day))}`}
         </div>
@@ -164,7 +164,7 @@ function DayColumn({
           {findings.map((finding, i) => (
             <li
               key={i}
-              className="flex gap-1 rounded-md bg-alert-soft px-1.5 py-1 text-[11px] leading-snug text-alert/75"
+              className="flex gap-1 rounded-md bg-alert-soft px-1.5 py-1 text-[0.6875rem] leading-snug text-alert/75"
             >
               <span aria-hidden="true">⚠️</span>
               <span>{finding.message}</span>

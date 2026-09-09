@@ -463,7 +463,7 @@ export default function FocusEditMode({
               </div>
               {/* Always rendered, whatever it says: swapping this line in and out mid-drag would
                   change the header's height and shift every drop target above the list. */}
-              <p className="mt-1 truncate text-center text-[11px] text-muted/80">
+              <p className="mt-1 truncate text-center text-[0.6875rem] text-muted/80">
                 {dragging !== null ? (
                   <span className="text-accent">Hold over a day to open it, then drop where you want</span>
                 ) : (

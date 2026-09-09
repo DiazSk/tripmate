@@ -127,10 +127,15 @@ export default function ImageRow() {
               and in a grid whose whole premise is a shared rhythm, a row that does not align is
               the failure. */}
           <div className="min-h-[4.5rem] border-t border-card-border pt-4 [transition:var(--scene-hover)] [transition-property:transform] group-hover:-translate-y-1">
-            <p className="font-mono line-clamp-2 text-[0.8125rem] leading-snug font-medium text-money tabular-nums">
+            {/* The text face, not the figure face. Three of the four beats carry no digit at all
+                ("Lodging, food, and transit — itemized"), and the fourth has one — so this was a
+                whole sentence set in mono with `tabular-nums` on it, aligning nothing. The money
+                colour stays, because the line is still the beat's value; the face and the column
+                alignment go, because there is no column and no figure. */}
+            <p className="line-clamp-2 text-[0.875rem] leading-snug font-medium text-money">
               {beat.stat}
             </p>
-            <p className="mt-1.5 text-[0.6875rem] font-semibold tracking-[0.12em] text-muted uppercase">
+            <p className="mt-1.5 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase">
               {beat.label}
             </p>
           </div>
