@@ -64,10 +64,12 @@ export default function Hero({ onPlan }: { onPlan: (prefill?: PlanPrefill) => vo
         <Image src={HERO_PHOTO.src} alt="" fill priority sizes="100vw" className="hero-photo object-cover" />
       </div>
 
-      {/* Darken toward the ground, never lighten — the house rule for type over photography. Two
-          stops rather than one: a light top wash so the fixed navbar has something to sit on, and a
-          deep bottom wash the headline and capsule stand in. The bottom stop lands on `--canvas`
-          exactly, so the hero dissolves into the next beat with no seam to find. */}
+      {/* Darken toward the ground, never lighten — the house rule for type over photography. One
+          stop, not two: the deep bottom wash the headline and capsule stand in, landing on
+          `--canvas` exactly so the hero dissolves into the next beat with no seam to find.
+          There was a top wash as well, whose only job was giving a transparent navbar something to
+          sit on. The bar is a real surface on every route now, so it was darkening the brightest
+          part of the frame for nobody. See `.hero-scrim` in globals.css. */}
       <div aria-hidden className="hero-scrim absolute inset-0 z-[1]" />
 
       {/* The one ambient loop: a slow warm pass across the composition. Over the photograph and

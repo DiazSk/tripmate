@@ -503,7 +503,7 @@ every one of them is soft and non-directional. There are no hard offset shadows 
 product.
 
 Alpha and blur rise with how much content a surface carries: control pills at 0.55 / 20px, the nav bar
-at 0.86 / 16px, the itinerary and card panels at 0.62 / 56px, full-viewport surfaces at alpha 1 with
+at 0.72 / 16px, the itinerary and card panels at 0.62 / 56px, full-viewport surfaces at alpha 1 with
 no blur at all — because nothing shows through an opaque surface and a 56px blur of nothing is a
 render surface for no reason.
 
@@ -644,28 +644,40 @@ the button keeps its own pill, because the button is still the thing you press.
 ### Navigation
 A single fixed, frosted `Navbar` spanning every route at `z-20` and `h-[var(--nav-h)]`.
 
-- **`.glass-nav` is the one slate at 0.86 under a 16px blur, and the alpha is a legibility fix rather
-  than a taste one.** It used to be 0.15 under 12px — defensible over a photograph you chose, wrong
-  over a live map. **MapLibre is the default engine, so the ordinary case is white vector tiles, not
-  dark satellite imagery.** Composited, 0.15 of the one slate over a white tile renders
-  `rgb(219,224,225)` and the white nav links on it measure **1.33:1** (1.51:1 over a pale road fill,
-  13.79:1 over dark satellite). The bar was legible in exactly the configuration nobody sees by
-  default, and "My memories" and "Profile" were effectively invisible on `/trip/[id]`. At 0.86 the
-  same tile renders `rgb(68,66,64)` and the links measure 15.3:1. It still blurs, so it still reads
-  as glass over the map rather than a slab dropped on it.
-- **`.glass-nav.is-over-hero` is transparent, and only on the landing.** There the background is a
-  photograph we chose and darkened ourselves, and the hero's own top scrim is what gives the bar
-  something to sit on. Every other route puts the bar over a map whose brightness is not ours to
-  choose.
+- **One bar, every route — no route branch of any kind.** This is the rule the others serve. The
+  header is the one component a visitor carries between pages, so it is the last thing that should
+  redraw itself underneath them. Nothing about its ground, blur, rules or cell structure varies by
+  path; only the middle cell's *contents* do, which is navigation rather than design.
+- **`.glass-nav` is the one slate at 0.72 under a 16px blur, and the alpha is a legibility floor
+  rather than a taste one.** It was 0.15 under 12px once — defensible over a photograph you chose,
+  wrong over a live map. **MapLibre is the default engine, so the ordinary case is white vector
+  tiles, not dark satellite.** Composited, 0.15 over a white tile renders `rgb(219,224,225)` and the
+  white links measure **1.33:1** (1.51:1 over a pale road fill, 13.79:1 over dark satellite) — the
+  bar was legible in exactly the configuration nobody sees by default. It went to 0.86, which was
+  unarguably safe and heavier than it needed to be, and then to 0.72 when the landing's transparent
+  variant was removed and one value had to serve every ground. **0.72 measures 6.86:1 over a white
+  tile and 9.33:1 over the hero photograph's brightest band.** Do not go below 0.60 — that is 4.54:1
+  over white, passing with nothing spare, and those tiles are not ours to control.
+- **There was a transparent variant on the landing, and removing it is what set the alpha.**
+  `.glass-nav.is-over-hero` gave the landing a groundless bar on the argument that its first
+  viewport is a photograph we chose and darkened ourselves. The argument was true and the outcome
+  was a header that changed what it *was* depending on the route. Its removal paid for itself twice:
+  the bar became consistent, and the hero's top scrim — which existed solely to give a groundless
+  bar something to sit on — went with it, returning roughly 140px of the photograph's brightest,
+  most detailed band.
 - **The bar is a ruled grid, not a padded strip.** A bottom hairline under the whole bar, a vertical
   one closing the wordmark off from the links, and a trailing cell that is never empty and never
   holds two things. The bar carries no horizontal padding; the two cells do, and the bar is
   `items-stretch` — a rule can only span the bar's full height if the box carrying it is that tall.
-- **The route table is an explicit list, not a negation.** Cells render on
-  `isUserFacing = isHome || /trips || isTripDetail || isProfile`. A `!isInternal` catch-all reads
-  cleaner and silently sweeps in `/backend`, `/backend/pipeline`, `/bench` and Next's built-in 404 —
-  a nav predicate that describes where a link *belongs* survives a new route; one that describes
-  where it doesn't quietly adopts every future route.
+- **There is no route table.** There was: `isUserFacing = isHome || /trips || isTripDetail ||
+  isProfile` gated both vertical rules and the trailing cell, so `/offline`, `/backend`,
+  `/backend/pipeline`, `/bench` and Next's built-in 404 rendered a bare wordmark on an empty bar —
+  a second bar *shape*, shipped to defend a content argument ("an internal dashboard has no business
+  carrying a Profile link"). The content argument is answered by content: those routes have nowhere
+  to navigate to, so their middle cell is empty. The frame does not change. A 404 is the worst place
+  of all to hand someone a smaller, different header than the one they arrived with — it is the page
+  they most need a way out of. The two dashboards are dev-only and 404 in production, so the Profile
+  link they now inherit is only ever seen by us.
 - **Mobile menu: a full-screen surface, not a dropdown.** `fixed inset-x-0 top-[var(--nav-h)] bottom-0`,
   always mounted, `inert` plus `pointer-events-none` when closed. The bar and the panel become one
   field while it is open (`.glass-nav.is-menu-open` goes opaque and drops its blur), so the only line
