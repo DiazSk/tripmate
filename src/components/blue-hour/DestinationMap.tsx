@@ -90,11 +90,11 @@ export default function DestinationMap() {
   return (
     <section
       id="destinations"
-      className="pointer-events-auto scroll-mt-[var(--nav-h)] px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band is-quiet has-rule pointer-events-auto"
       {...devLabel("DestinationMap")}
     >
       <SectionOpener label="Reach" headingRef={headingRef}>
-        <h2 className="font-scene-display text-foreground">
+        <h2 className="font-scene-display is-quiet text-foreground">
           Anywhere you can name
         </h2>
       </SectionOpener>
@@ -104,7 +104,7 @@ export default function DestinationMap() {
           under the heading rather than under the label. The opener no longer has a left column, so
           the indent had nothing to line up with and was simply pushing the copy 217px right of
           every other paragraph on the page. */}
-      <p className="scene-prose mt-6 max-w-xl text-sm text-muted">
+      <p className="scene-prose mt-6 max-w-xl text-muted">
         The planner geocodes the destination you type, then pulls that place&rsquo;s real forecast,
         public holidays and opening hours. There is no list of supported cities to be missing from.
       </p>

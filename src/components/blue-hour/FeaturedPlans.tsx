@@ -58,7 +58,7 @@ export default function FeaturedPlans({
   return (
     <section
       id="featured"
-      className="pointer-events-auto scroll-mt-[var(--nav-h)] px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band is-dense has-rule pointer-events-auto"
       {...devLabel("FeaturedPlans")}
     >
       {/* `headingRef` goes on the h2, not on SectionOpener's wrapper. The wrapper holds the
@@ -75,7 +75,7 @@ export default function FeaturedPlans({
           {/* The reference puts support copy in the header's right half rather than beneath the
               heading. It keeps the heading a single object and gives the paragraph somewhere to be
               that is not directly under it. */}
-          <p className="scene-prose max-w-sm text-sm text-muted">
+          <p className="scene-prose max-w-sm text-muted">
             Every figure below is what the planner returns for those dates and that budget —
             not a starting price with the real one further in.
           </p>
@@ -135,9 +135,15 @@ export default function FeaturedPlans({
               <h3 className="text-[1.75rem] font-semibold leading-[1.2] tracking-[-0.09em] text-foreground">
                 {plan.title}
               </h3>
-              <p className="mt-2 text-sm text-muted">
+              {/* The figure in the money colour and the figure face. It shipped as
+                  `text-foreground` — plain body white — on the one section whose heading is "Four
+                  trips, already priced", which meant the proof of this product's central claim was
+                  the least distinguished thing on the card. Gold appeared exactly once on the whole
+                  landing before this. A colour role that is defined and then not used where it
+                  applies is not a role, it is a swatch. */}
+              <p className="mt-2 text-[0.9375rem] text-muted">
                 from{" "}
-                <span className="text-base font-semibold text-foreground">
+                <span className="font-mono text-[1.0625rem] font-semibold text-money tabular-nums">
                   {formatMoney(plan.budgetUsd)}
                 </span>
               </p>

@@ -32,7 +32,7 @@ const LINKS = [
 export default function SiteFooter() {
   return (
     <footer
-      className="pointer-events-auto border-t border-white/10 px-5 pt-16 pb-8 sm:px-6 sm:pt-24"
+      className="scene-band has-rule pointer-events-auto pt-16 pb-8 sm:pt-24"
       {...devLabel("SiteFooter")}
     >
       {/* The closing image, which the footer was missing.

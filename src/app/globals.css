@@ -847,11 +847,18 @@ body {
      the day, but `#ffb340`, the amber from the palette *before* the one this replaced. It was
      justified by a real constraint ("`--accent` is a hex and `rgb()` cannot take it") that stopped
      being true once `color-mix` was in use elsewhere in this file. A hardcoded accent survives two
-     palette changes without anyone noticing, which is exactly what happened here. */
+     palette changes without anyone noticing, which is exactly what happened here.
+
+     **And that fix was only half applied**, which is the more useful lesson: the border below was
+     moved onto the token while the glow on the shadow line kept the literal, so this rule went on
+     painting a two-palettes-old amber halo underneath a correctly-tinted border. The comment said
+     it was fixed. Grep for the value, not for the comment. */
   border-color: color-mix(in oklab, var(--accent) 55%, transparent);
-  box-shadow:
-    0 2px 14px rgb(0 0 0 / 0.6),
-    0 0 16px rgb(255 179 64 / 0.28);
+  /* One offset shadow. The coloured bloom that used to sit here is gone for the same reason the day
+     badge's did: a zero-offset coloured halo is decoration, and six shipped design systems
+     independently ban it — "use hairline borders and inner inset shadows instead", "let the photo
+     provide depth", "no shadows heavier than 0.02-0.04 opacity". The border carries the tint now. */
+  box-shadow: 0 2px 14px rgb(0 0 0 / 0.6);
 }
 
 .marker-title-card:hover::after,
@@ -1035,13 +1042,13 @@ body {
 .marker-day-label:focus-visible {
   color: var(--on-deep);
   border-color: var(--day-color, var(--route-day-1));
-  box-shadow:
-    0 2px 14px rgb(0 0 0 / 0.6),
-    0 0 28px color-mix(in oklab, var(--day-glow, var(--route-day-1-glow)) 52%, transparent),
-    inset 0 0 14px color-mix(in oklab, var(--day-glow, var(--route-day-1-glow)) 20%, transparent);
-  text-shadow:
-    0 0 2px rgb(0 0 0 / 0.85),
-    0 0 10px color-mix(in oklab, var(--day-color, var(--route-day-1)) 80%, transparent);
+  /* De-glowed to match the resting state. The badge stopped being lit when the ramp was
+     re-derived; its hover and focus states kept a 28px coloured bloom, a 14px inner bloom and a
+     coloured text glow, so pointing at a day still fired the emissive register the rest of the
+     badge had left behind. Feedback is the brighter border and the brighter ink, which is what the
+     resting state already establishes. */
+  box-shadow: 0 2px 14px rgb(0 0 0 / 0.6);
+  text-shadow: 0 0 2px rgb(0 0 0 / 0.85);
 }
 
 .marker-day-label:hover::after,
@@ -1309,6 +1316,80 @@ body {
   letter-spacing: -0.076em;
 }
 
+/* --- The landing's band rhythm -------------------------------------------------------------
+   Four consecutive full-page bands used to share one className: same unpainted ground, same
+   `py-16 sm:py-24`, same gutters, same opener, and four byte-identical `<h2>`s. Strip the copy and
+   the only variable the CSS moved was grid arity. That is a template rendered four times, not a
+   composition.
+
+   Six shipped design systems were read for how they solve this, and they split: two alternate the
+   ground between bands, two hold one ground and separate with large gaps and hairlines. We took the
+   second, which is the harder one to get right — whitespace only separates if it actually varies,
+   and uniform whitespace is what we already had. So the rhythm is asymmetric on purpose.
+
+   **A dense band pushes off tight and leaves air behind it; a quiet band takes air in front and
+   closes tight.** The seams that fall out alternate rather than repeat — measured at desktop:
+   160px after the hero, then 208, 144, 208. No two consecutive seams match, which is the whole
+   point and the thing to preserve if these values are ever retuned. */
+.scene-band {
+  scroll-margin-top: var(--nav-h);
+  padding-inline: 1.25rem;
+}
+
+@media (width >= 40rem) {
+  .scene-band {
+    padding-inline: 1.5rem;
+  }
+}
+
+/* Dense: the four-up photo row and the two-up card grid. */
+.scene-band.is-dense {
+  padding-block: 4rem 6rem;
+}
+
+/* Quiet: the ruled step list and the single map figure. */
+.scene-band.is-quiet {
+  padding-block: 5rem 3.5rem;
+}
+
+@media (width >= 40rem) {
+  .scene-band.is-dense {
+    padding-block: 5rem 7rem;
+  }
+  .scene-band.is-quiet {
+    padding-block: 6rem 4rem;
+  }
+}
+
+/* The hairline between bands — the structural separator this landing had exactly once, on the
+   footer. Not on the first band: it follows the hero, whose bottom scrim already resolves to
+   `--canvas`, and a rule immediately under a photograph interrupts a dissolve that is doing the
+   same job better. */
+.scene-band.has-rule {
+  border-top: 1px solid var(--card-border);
+}
+
+/* **The ultrawide ceiling, and a deliberate deviation from "match the hero's 72rem".**
+   The hero caps its *text block* at 72rem while its section stays full-bleed. Capping these bands
+   at 72rem would flatten ImageRow's four-up row, which is full-bleed by an explicit earlier
+   decision. This is the other half of the hero's arrangement instead: full-bleed section, ceilinged
+   content. 110rem changes nothing below ~1760px — so 1440 is untouched — and stops HowItWorks'
+   rules running 2512px at 2560 with 58ch of text at one end. */
+.scene-band > * {
+  margin-inline: auto;
+  max-width: 110rem;
+}
+
+/* A second display step, so the four bands do not all open at the same 60px.
+   **A class, not a `text-[...]` utility.** `.font-scene-display` is unlayered and now carries its
+   own `font-size`, so an arbitrary utility at the call site would be emitted inside
+   `@layer utilities` and lose to it regardless of specificity — the trap this file already records
+   at `.font-scene-display`. Two classes beat one, in the same layer, which is the only arrangement
+   that holds. */
+.font-scene-display.is-quiet {
+  font-size: clamp(1.75rem, 3.6vw, 2.75rem);
+}
+
 /* Prose leading for the landing sequence, and only there. The reference runs its body copy at
    1.85 against 1.0 headings, and that contrast is a real part of why it reads as a magazine —
    but it is a marketing page made of short paragraphs. This app's other surfaces are dense
@@ -1316,8 +1397,22 @@ body {
    screenful of scanning for nothing, so this is a class on the Persuade surface rather than a
    change to the Body step. The headings it plays against sit at 0.88–1.2, so the contrast
    lands even at 1.8 rather than the reference's 1.85. */
+/* The landing's one prose step, and the one place its size lives.
+   It used to set `line-height` only, so every call site carried its own `text-sm` — and the landing
+   ended up with **14px doing all of it**: all three section standfirsts and the one long-form body,
+   against headings at 32-60px. That is a 2.3x-4.3x jump with almost nothing in between, and 14px is
+   an *interface* step, not a reading step. Comparable shipped systems put marketing body at 16-18px
+   and treat the spaciousness as a signature; the one that does run 14px does it on a dense light
+   analytics UI, which this is not.
+
+   16px, and the size is on the class so the next standfirst cannot pick its own. The leading comes
+   down from 1.8 with it: 1.8 was chosen against 14px, and at 16px it opens the lines further than
+   the measure wants. 1.65 holds the airiness without the lines drifting apart.
+   The landing was also running three different body leadings (1.8 here, 1.625 from
+   `leading-relaxed` in ImageRow, 1.5 by default elsewhere); this is the one they settle on. */
 .scene-prose {
-  line-height: 1.8;
+  font-size: 1rem;
+  line-height: 1.65;
 }
 
 /* The two one-word posters: the opening "Somewhere." and the closing "Elsewhere.".
@@ -1332,7 +1427,16 @@ body {
      a sentence a visitor is meant to read, and 13rem of it is a wall. */
   font-size: clamp(2.5rem, 6.2vw, 5.25rem);
   line-height: 1.02;
-  font-weight: 900;
+  /* 600, not 900, and the hero is now the same weight as every other display step.
+     900 was a poster weight inherited from a one-word headline that filled the viewport; the
+     headline is a sentence now, and at 84px a sentence set at 900 reads as shouting rather than as
+     scale. Six shipped design systems were checked and four cap display weight below 600 outright —
+     one of them states the rule as "do not use weight 700 or higher for headlines", another as
+     "hierarchy through size, not weight". Two of the six do run 700, so this was a judgement call
+     rather than a correction, taken on a side-by-side at 1440 and 390.
+     The difference is a desktop one: at 390 the two weights are nearly indistinguishable, because
+     the clamp has already dropped the size to 40px where stroke contrast barely registers. */
+  font-weight: 600;
   letter-spacing: -0.075em;
 }
 
@@ -1744,7 +1848,21 @@ body {
   padding: 6px;
   border-radius: 9999px;
   background: rgb(247 245 242 / 0.97);
-  box-shadow: 0 24px 58px rgb(0 0 0 / 0.55);
+  /* **The heaviest shadow this system shipped, taken down.** It was `0 24px 58px rgb(0 0 0 / 0.55)`
+     — the largest blur, the largest offset and the highest alpha of any offset shadow in the file,
+     on the one light surface in the product, sitting on a photograph. Six shipped design systems
+     independently rule against exactly this; one of them states our case outright: "float product
+     UI cards over photographic backgrounds with **no drop shadow** — let the photo provide depth."
+
+     Not removed, because unlike those references this capsule sits on an *arbitrary* photograph
+     rather than an art-directed one, and it has to hold its edge whatever lands behind it. Reduced
+     instead, and the work is redistributed: a short offset shadow for contact, and an inset
+     hairline for the edge — which is the substitution Linear makes ("use hairline borders and inner
+     inset shadows instead"). The capsule reads as resting on the photograph now rather than
+     hovering a foot above it. */
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 0.28),
+    inset 0 0 0 1px rgb(18 17 16 / 0.06);
 }
 
 .hero-search-cell {

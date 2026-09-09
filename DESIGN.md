@@ -57,7 +57,7 @@ typography:
   hero:
     fontFamily: "Wix Madefor Display, ui-sans-serif, system-ui, sans-serif"
     fontSize: "clamp(2.5rem, 6.2vw, 5.25rem)"
-    fontWeight: 900
+    fontWeight: 600
     lineHeight: 1.02
     letterSpacing: "-0.075em"
   display:
@@ -66,6 +66,13 @@ typography:
     fontWeight: 600
     lineHeight: 1.05
     letterSpacing: "-0.076em"
+  display-quiet:
+    fontFamily: "Wix Madefor Display, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "clamp(1.75rem, 3.6vw, 2.75rem)"
+    fontWeight: 600
+    lineHeight: 1.05
+    letterSpacing: "-0.076em"
+    note: "`.font-scene-display.is-quiet` — the second display step, so four consecutive landing bands do not all open at the same size. A class rather than a `text-[...]` utility, because `.font-scene-display` is unlayered and carries its own font-size; an arbitrary utility would be emitted inside @layer utilities and lose to it. Carried by the two quiet bands (HowItWorks, DestinationMap)."
   headline:
     fontFamily: "Wix Madefor Display, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.5rem"
@@ -87,7 +94,7 @@ typography:
     fontSize: "1.0625rem"
     fontWeight: 500
     lineHeight: 1.55
-    note: "The hero support line and the landing's persuade copy. `.scene-prose` opens leading to 1.8 on marketing paragraphs only."
+    note: "The hero support line and the landing's persuade copy. `.scene-prose` now carries the *size* as well as the leading — 1rem / 1.65 — so a standfirst cannot pick its own. It previously set leading alone, and every call site chose `text-sm`, which left all three section standfirsts and the one long-form body at 14px against 32-60px headings. 14px is an interface step, not a reading step. The 1.8 leading came down with it: 1.8 was tuned against 14px and opens too far at 16px."
   field:
     fontFamily: "Wix Madefor Text, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1rem"
@@ -396,7 +403,7 @@ before a monospace face existed, which is the codebase asking for one out loud.
 - **Title** (600, 1.125rem, 1.3): row and section titles inside a panel.
 - **Body** (400, 0.875rem, 1.625): dense product copy — day rows, stop notes, descriptions.
 - **Prose** (500, 1.0625–1.25rem, 1.55): the hero support line and the landing's persuade copy.
-  `.scene-prose` opens leading to 1.8 on marketing paragraphs only; the app's own panels stay dense.
+  `.scene-prose` sets 1rem / 1.65 on marketing paragraphs only; the app's own panels stay dense. It owns the size as well as the leading deliberately — when it set leading alone, the landing ended up running body at 14px and three different leadings (1.8, 1.625, 1.5) because every call site decided for itself.
 - **Field** (500, 1rem, 1.4): every input. 16px is a hard floor.
 - **Label** (600, 0.6875rem, `0.11em`, uppercase): section openers and the entry capsule's cell
   labels. This is a *label on a control or a rule*, never a line above a headline.
