@@ -154,9 +154,21 @@ why (LinkedIn demo needed a public deploy link, which the CLI-only mechanism blo
 ### Two generation paths coexist
 
 1. **Legacy single-shot:** `POST /api/itinerary` → `buildGeneratePrompt()` in `src/lib/itineraryPrompt.ts` → strict-JSON `Itinerary` (`{ tier, days[] }`), saved to `trips.itinerary_json`. This is what the current UI uses.
-2. **Staged pipeline** (newer, built step-by-step, not yet wired into the UI): `trip-submit` (validate) → `trip-fetch` (2a, preference-independent data) ∥ Q&A in `page.tsx` (2b) → `trip-prepare` (barrier/reconcile + POI enrichment) → `trip-generate` (digest facts into `trip-context.md`, then one LLM call combining skill + context + a fixed ask). Emits **markdown**, persisted to `trip_artifacts` keyed by `run_id`.
+2. **Staged pipeline:** `trip-submit` (validate) → `trip-fetch` (2a, preference-independent data) ∥ Q&A in `HomeView.tsx` (2b) → `trip-prepare` (barrier/reconcile + POI enrichment) → `trip-generate` (digest facts into `trip-context.md`, then one LLM call combining skill + context + a fixed ask). Emits **markdown**, persisted to `trip_artifacts` keyed by `run_id`.
 
 The pipeline's governing separation: the **skill** (`.claude/skills/itinerary-planner/SKILL.md`) holds planning *rules*, `trip-context.md` holds *facts only* (no instructions), and `src/lib/generationPrompt.ts` holds the *ask* with no trip data. Don't duplicate rules into the prompt or facts into the skill.
+
+**Which one wins, and why the other still exists.** `/api/itinerary` is the incumbent and owns the traveller-facing path: `generate()` in `HomeView.tsx` posts to it with `?stream=1`, and a plan a visitor actually sees always came from there. The staged pipeline is the **intended direction** — it is where the skill/facts/ask separation lives, and it is the one to extend when generation logic changes. Treat `/api/itinerary` as legacy that has not been retired yet, not as the design.
+
+What blocks the migration is a data contract, not missing work: the staged path emits **markdown** into `trip_artifacts`, while every rendering surface (`ItineraryCard`, the day panel, the export, `applyPatch`) reads a strict-JSON `Itinerary` off `trips.itinerary_json`. Switching the wizard needs either a markdown renderer or a converter, and until one exists both paths stay.
+
+**The staged pipeline is not dead code, and it is easy to conclude that it is.** Its callers live under `src/components/backend/` and `src/app/backend/`, so a non-recursive grep over `src/app/*.tsx src/components/*.tsx` finds nothing and reports it unwired — that mistake has been made. What is actually true:
+
+- `trip-fetch` runs on the **traveller path**. `HomeView.tsx` fires it unawaited when the traveller leaves the basics step, to warm the cache and fill `rawFetch` for the profile step's POI picker and the generation loader's facts. It is not optional.
+- `trip-submit` / `trip-prepare` / `trip-generate` are driven by `StagedPipelineConsole`, rendered at `/backend/pipeline`, whose `page.tsx` calls `notFound()` unless `NODE_ENV === "development"` — the same check `devLabel` uses. It is already unreachable in production, so it needs no further flagging.
+- `generateItinerary()` is shared by `/api/trip-generate` and `src/lib/bench/runBenchmark.ts`, deliberately, so the benchmark measures the same function the route calls.
+
+So: don't flag these off, and keep `src/lib/stagedFlow.ts` in step when a route moves — the `/backend/pipeline` diagram is generated from it.
 
 ### Fail-soft is the house convention
 
