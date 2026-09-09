@@ -42,6 +42,30 @@ const nextConfig: NextConfig = {
     config.resolve.alias = { ...config.resolve.alias, "@spz-loader/core": SPZ_SHIM_ABSOLUTE };
     return config;
   },
+
+  async headers() {
+    return [
+      {
+        // The hero's frame sequence — 80 files the landing requests on every visit. Next serves
+        // `public/` at `max-age=0` by default, which for this one directory means a reload costs
+        // 80 conditional requests before a single frame can be drawn.
+        //
+        // **`immutable` is only safe because the path carries a content hash.** These URLs look
+        // like `/scenes/petra/<hash>/land-001.webp`, where the hash covers the frame window, the
+        // count, the tier config and the source archive — see `VERSION` in
+        // `scripts/build-frame-sequence.mjs`. An earlier version of this header shipped against
+        // unversioned filenames on the reasoning that the build script rewrites the whole
+        // directory anyway. That is not what `immutable` means: it tells the browser never to
+        // revalidate, so re-cutting the footage left returning visitors serving the previous
+        // cut's bytes from an unchanged URL — caught in dev at 74,022 cached bytes against 77,002
+        // on disk. Unversioned, the production failure is a visitor seeing a *mixture* of two
+        // edits, and only visitors who had been before. **Never point `immutable` at a path whose
+        // contents can change.**
+        source: "/scenes/petra/:file*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

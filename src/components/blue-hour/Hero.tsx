@@ -1,112 +1,167 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
+import { useState, useSyncExternalStore } from "react";
+
+import { prefersReducedMotion, subscribeReducedMotion } from "@/lib/reducedMotion";
 import HeroSearch from "./HeroSearch";
-import { HERO_PHOTO } from "./heroScene";
+import { HERO_SEQUENCE } from "./heroSequence";
 import type { PlanPrefill } from "./planExamples";
 
+/** Lazy and `ssr: false` so a visitor who asked for reduced motion never downloads the engine at
+ *  all — the gate below decides before this is ever referenced. */
+const HeroFrames = dynamic(() => import("./HeroFrames"), { ssr: false });
+
 /**
- * The landing's first viewport: one photograph, a stated proposition, and the trip entry itself.
+ * The landing's first viewport: a scroll-scrubbed film of Petra, a stated proposition, and the
+ * trip entry itself.
  *
  * **What this replaced, and why.** The previous hero was a single enormous word ("Somewhere.")
  * over two interlocking alpha-cut photographs, with a "Plan a trip" button that opened a form on
  * the next screen. Every load-bearing measurement in it came from an external reference site and
- * was recorded as such in this file's own comments: the 1440/922 and 375/812 aspect ratios, the
- * layer-widening trick, the 858px-hero-with-the-button-26px-off-the-floor geometry, the button's
- * type and padding. It was a good composition. It was not this product's composition, and the
- * word at the centre of it said nothing a traveller could act on.
+ * was recorded as such in this file's own comments. It was a good composition. It was not this
+ * product's composition, and the word at the centre of it said nothing a traveller could act on.
+ * That collapsed to one `object-cover` photograph on a CSS parallax, which is what this beat was
+ * until the frame sequence landed.
  *
- * Three structural changes:
+ * ## The structure, and why it is two elements rather than one
  *
- * 1. **One photograph, not two.** The old scene interlocked a back layer torn along its lower edge
- *    with a front layer whose sky was removed, so the headline could be sandwiched between them
- *    and cut by the horizon. That effect cost four alpha-channel assets, `LAYER_WIDTH`, and four
- *    separately documented workarounds (Tailwind's sorted-utility race, inclusive media-query
- *    boundaries colliding at exactly 3/5, `max-w-none` against Preflight, and intrinsic width on
- *    absolutely positioned replaced elements) whose only job was to keep two images meeting. One
- *    `object-cover` image needs none of them, and it means new photography is a file swap rather
- *    than a masking job.
+ * `.hero-track` owns the height. `.hero-stage` is `position: sticky` and owns the
+ * `overflow-hidden`. **They cannot be the same element**, and the failure mode if they are is
+ * silent: `overflow: hidden` makes an element a scroll container, so a sticky box inside one
+ * resolves against a scrollport that never scrolls and pins at its start offset forever, which
+ * looks exactly like sticky never having been applied. This is the same trap `globals.css`
+ * documents for `scroll(nearest block)` on the `--story` timeline, met from the other direction.
  *
- * 2. **`min-h-dvh`, which the old composition could not use.** It was tried there and opened a
- *    378px band of bare canvas at 768x1024, because both layers sat at natural size with no crop.
- *    The stated fix was `object-cover`, deliberately absent so the scene read uncropped. With a
- *    single image that tension is gone: the photograph crops, the section is exactly one screen,
- *    and the primary action is above the fold at every size — which the old hero admitted it was
- *    not, on phones, and accepted because the reference did the same.
+ * `.hero-section` stays on the stage so every rule already written against it — notably the
+ * ultrawide `padding-bottom: 12vh` — keeps applying untouched.
  *
- * 3. **The parallax stays, and is now the photograph's own.** `.hero-parallax` drives the image
- *    slower than the scroll off the same named `--story` timeline `.hero-dusk` already uses. No
- *    JavaScript, no scroll listener, and it degrades to a static image where scroll-driven
- *    animation is unsupported or where the visitor asked for reduced motion.
+ * ## The pin is back, and it is not the pin that was deleted
  *
- * `useLineReveal` is gone with the one-word headline it existed for: it masks line *boxes*, which
- * presupposes a headline that is the composition. The ambient `.hero-light` pass and the
- * `.hero-dusk` exit wash both survive untouched.
+ * A `ScrollTrigger({ pin: true, scrub: true })` hero shipped here for one commit and was removed
+ * for five reasons. Three of them were properties of GSAP's pin rather than of pinning: it
+ * resolved `pinType: "transform"` because the scroller is an element and held the section by
+ * rewriting `translateY` every frame; its pin spacer changed the scroller's `scrollHeight`
+ * mid-gesture; and `refreshPriority: -1` sorted it *last* (ScrollTrigger's key is
+ * `refreshPriority * -1e6`), so every trigger below it measured against a layout with no spacer
+ * and fired a full viewport early. CSS `position: sticky` has none of those: no spacer, no
+ * scrollHeight mutation, no per-frame transform, and it never enters ScrollTrigger's refresh sort.
+ * **Do not reintroduce `pin: true` here.**
+ *
+ * The fourth reason was the real one — "the first thing a visitor does to the page is discover it
+ * does not move" — and it is answered by the premise rather than by a workaround: that pin held a
+ * *still* photograph, so nothing moved. Here every pixel of scroll advances the film.
+ *
+ * The fifth was that the composition you were left looking at was a flat rectangle, because
+ * `.hero-dusk`'s wash reached full opacity a third of the way through the pinned run. That one is
+ * a live hazard, not history: `--story` offsets are absolute scroll lengths, so the wash has to be
+ * re-ranged for the taller track or it completes early and the film plays behind it, unseen. See
+ * `.hero-dusk` in globals.css.
+ *
+ * ## The 400vh is opt-in, and that is what makes every fallback correct
+ *
+ * The track is one viewport until `data-seq` is set, which happens only once the sequence is known
+ * to be able to run. No JavaScript, reduced motion, or a decode failure all leave the hero exactly
+ * one screen tall — nobody is ever made to scroll three empty viewports past a still image. The
+ * attribute lands before any scroll and growing the page's scroll height shifts no visible
+ * element, so it costs no CLS.
  */
 export default function Hero({ onPlan }: { onPlan: (prefill?: PlanPrefill) => void }) {
+  // `useSyncExternalStore` rather than a read in an effect: the *rendered output* depends on this
+  // answer, so it belongs in render. The server snapshot is `false`, so the server emits the same
+  // one-viewport hero that shipped before this feature — with the poster as its LCP element — and
+  // the client upgrades on hydration. It also tracks the setting being changed mid-session, which
+  // an effect that reads once cannot.
+  const motionOk = useSyncExternalStore(
+    subscribeReducedMotion,
+    () => !prefersReducedMotion(),
+    () => false,
+  );
+  const [live, setLive] = useState(false);
+
+  /** `undefined` → one viewport, no canvas. `"on"` → track grown, canvas mounted but transparent.
+   *  `"live"` → enough frames decoded to scrub, canvas opaque. */
+  const seq = !motionOk ? undefined : live ? "live" : "on";
+
   return (
-    <section className="hero-section pointer-events-auto relative flex min-h-[100dvh] flex-col justify-end overflow-hidden px-5 pb-14 sm:px-8 sm:pb-20">
-      {/* The photograph. `fill` + `object-cover` rather than a fixed intrinsic box: the section is
-          viewport-sized, so the image's job is to cover an unknown rectangle, and its own ratio is
-          only a hint to the srcset. `priority` because this is the LCP element on the site's
-          entry route — without it Next lazy-loads the largest thing on the page.
+    <div className="hero-track relative" data-seq={seq}>
+      <section className="hero-section hero-stage pointer-events-auto sticky top-0 flex h-[100dvh] flex-col justify-end overflow-hidden px-5 pb-14 sm:px-8 sm:pb-20">
+        {/* The film. Above the poster, below the scrim, so everything layered over the old
+            photograph keeps working against this without changing. */}
+        {seq && <HeroFrames onLive={() => setLive(true)} />}
 
-          The wrapper is what moves, not the `<img>`: `next/image` writes its own `position` and
-          sizing onto the element, and a transform on it fights that. The wrapper is also 120% tall
-          and offset upward, so there is real image to travel into — a parallax on an exactly
-          viewport-sized element reveals the canvas behind it at the end of the run. */}
-      <div aria-hidden className="hero-parallax absolute inset-x-0 top-[-10%] z-0 h-[120%]">
-        {/* The crop is in CSS (`.hero-photo`), not an inline `objectPosition`, because it has to
-            change with the viewport: the warm wall this photograph was chosen for sits on the left,
-            and a single focus point that holds it on a 2560 landscape frame loses it entirely on a
-            390 portrait one — measured, the phone crop put cold dusk sky behind both lines of the
-            headline and reduced the warm wall to a left-edge sliver. */}
-        <Image src={HERO_PHOTO.src} alt="" fill priority sizes="100vw" className="hero-photo object-cover" />
-      </div>
+        {/* The poster, and the reason it is frame 1 of the sequence rather than the terracotta
+            street photograph this beat used to open on: cross-fading two *different* photographs
+            is a visible dissolve on every load, which reads as a glitch. The canvas's first draw
+            is this exact frame at this exact crop, so the hand-off is a visual no-op.
 
-      {/* Darken toward the ground, never lighten — the house rule for type over photography. One
-          stop, not two: the deep bottom wash the headline and capsule stand in, landing on
-          `--canvas` exactly so the hero dissolves into the next beat with no seam to find.
-          There was a top wash as well, whose only job was giving a transparent navbar something to
-          sit on. The bar is a real surface on every route now, so it was darkening the brightest
-          part of the frame for nobody. See `.hero-scrim` in globals.css. */}
-      <div aria-hidden className="hero-scrim absolute inset-0 z-[1]" />
+            `priority` because this is the LCP element on the site's entry route. Plain
+            `object-cover` and *not* `.hero-photo` — that class carries an art-directed
+            `object-position: 54% 44%` chosen for the street photograph's terracotta wall, and the
+            poster has to register with the canvas's centred cover-fit to the pixel or the
+            hand-off shows a jump. `.hero-photo` is untouched and still used by `SceneBackdrop`.
 
-      {/* The one ambient loop: a slow warm pass across the composition. Over the photograph and
-          under the type — it is weather, not a scrim. */}
-      <div aria-hidden className="hero-light z-[2]" />
+            No `.hero-parallax` wrapper any more. It was 120% tall and offset -10% so the image
+            had somewhere to travel; the poster has to sit at exactly `inset-0` to register, and a
+            camera dolly is a better parallax than translating a layer by 8%. */}
+        {/* The wrapper is not decoration: `next/image` with `fill` requires a containing block
+            whose `position` is `relative`, `absolute` or `fixed`, and the stage is `sticky`. A
+            sticky box does establish a containing block, so this rendered correctly either way —
+            but Next warns on it, and a standing console warning on the entry route is a warning
+            nobody will read by the third time they see it. */}
+        <div aria-hidden className="hero-poster absolute inset-0 z-0">
+          <Image
+            src={HERO_SEQUENCE.poster}
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+        </div>
 
-      {/* `hero-block` carries the ultrawide anchor — see globals.css. `mx-auto` alone centred the
-          whole composition into a small island at 2560; past 100rem it anchors left on a
-          viewport-relative inset so the shape survives the frame getting wider. */}
-      <div className="hero-block relative z-[4] mx-auto w-full max-w-[72rem]">
-        {/* Two lines, not one word. The proposition is the product's actual claim and the one thing
-            that separates it from every other planner: the plan costs what you said it would.
+        {/* Darken toward the ground, never lighten — the house rule for type over photography. One
+            stop, not two: the deep bottom wash the headline and capsule stand in, landing on
+            `--canvas` exactly so the hero dissolves into the next beat with no seam to find. */}
+        <div aria-hidden className="hero-scrim absolute inset-0 z-[1]" />
 
-            `.hero-legible` carries the contrast, as it did before — a three-layer text-shadow that
-            hugs the glyphs rather than a box behind them. It is doing less work now than it used
-            to: this type sits in the deep end of `.hero-scrim` rather than mid-photograph. */}
-        <h1
-          className="hero-rise hero-legible font-scene-hero max-w-[18ch] text-on-deep"
-        >
-          Plan a trip that costs what you said it would.
-        </h1>
+        {/* The one ambient loop: a slow warm pass across the composition. Over the image and under
+            the type — it is weather, not a scrim. Paused while the film is live, because a 24s
+            infinite transform under the navbar's blur panel re-rasters that panel at refresh rate
+            for as long as the hero is on screen, and the hero is now on screen four times longer. */}
+        <div aria-hidden className="hero-light z-[2]" />
 
-        <p
-          className="hero-rise hero-legible mt-5 max-w-[46ch] text-[1.0625rem] leading-[1.55] font-medium text-on-deep/85 sm:text-[1.125rem]"
-          style={{ animationDelay: "150ms" }}
-        >
-          Day by day, priced against real lodging and real weather — not a top-ten list with the
-          budget bolted on afterwards.
-        </p>
+        {/* `hero-block` carries the ultrawide anchor — see globals.css. `mx-auto` alone centred the
+            whole composition into a small island at 2560; past 100rem it anchors left on a
+            viewport-relative inset so the shape survives the frame getting wider. */}
+        <div className="hero-block relative z-[4] mx-auto w-full max-w-[72rem]">
+          {/* Two lines, not one word. The proposition is the product's actual claim and the one
+              thing that separates it from every other planner: the plan costs what you said it
+              would.
 
-        <HeroSearch onPlan={onPlan} />
-      </div>
+              `.hero-legible` carries the contrast — a three-layer text-shadow that hugs the glyphs
+              rather than a box behind them. */}
+          <h1 className="hero-rise hero-legible font-scene-hero max-w-[18ch] text-on-deep">
+            Plan a trip that costs what you said it would.
+          </h1>
 
-      {/* The exit wash — see `.hero-dusk`. Last child and `z-10` so it covers the type as well as
-          the photograph: the composition has to dim as one image, or the headline survives its own
-          ground and reads as text pasted onto a dark rectangle. No JavaScript. */}
-      <div aria-hidden className="hero-dusk pointer-events-none absolute inset-0 z-10" />
-    </section>
+          <p
+            className="hero-rise hero-legible mt-5 max-w-[46ch] text-[1.0625rem] leading-[1.55] font-medium text-on-deep/85 sm:text-[1.125rem]"
+            style={{ animationDelay: "150ms" }}
+          >
+            Day by day, priced against real lodging and real weather — not a top-ten list with the
+            budget bolted on afterwards.
+          </p>
+
+          <HeroSearch onPlan={onPlan} />
+        </div>
+
+        {/* The exit wash — see `.hero-dusk`. Last child and `z-10` so it covers the type as well as
+            the image: the composition has to dim as one thing, or the headline survives its own
+            ground and reads as text pasted onto a dark rectangle. No JavaScript. */}
+        <div aria-hidden className="hero-dusk pointer-events-none absolute inset-0 z-10" />
+      </section>
+    </div>
   );
 }

@@ -75,3 +75,10 @@ Trace-*.json
 # (`/api/trips/<id>/export` regenerates any of them). They are reachable at a public URL
 # the moment they exist, so they must never be committed by accident.
 /public/__tmp-*
+
+# Source footage for the hero frame sequence: ~1.2GB of raw PNG frames and the MP4 renders they
+# came from. `scripts/build-frame-sequence.mjs` turns them into the ~8MB of WebP under
+# public/scenes/petra/, and *that* is what gets committed. Kept out of public/ as well as out of
+# git: `next build` copies all of public/ into the deployment, so a zip left in there is a live
+# multi-hundred-megabyte download from any production start.
+/assets/scene-source/
