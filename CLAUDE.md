@@ -12,6 +12,7 @@ npm run build    # next build, then verify-build.mjs (see below)
 npm run lint     # eslint (no path arg needed)
 npx tsc --noEmit -p tsconfig.json   # typecheck — not wired to a script
 node scripts/browser-matrix.mjs     # cross-engine boot check against a running server
+npm run verify-hero                 # asserts the hero film works (needs a running server)
 ```
 
 **`npm run build` fails the build if any emitted chunk cannot be parsed.** That second step is
@@ -22,6 +23,19 @@ escape. Production served a 200 and rendered the whole interface **with no globe
 Chromium, Firefox and WebKit alike. `next dev` never showed it because dev does not minify, and
 neither `tsc`, `eslint` nor `node --test` can see a bundler's output. `shims/spz-loader-core.ts`
 is the fix (aliased in `next.config.ts`); `scripts/verify-build.mjs` is the guard.
+
+**`npm run verify-hero` is the manual gate for the landing hero, and it is manual for a reason.**
+Every defect the hero film shipped with was *silent*: `position: sticky` inside an
+`overflow-hidden` ancestor renders identically to sticky never being applied; `img.decode()`'s
+promise never settling looks like slow footage; `Cache-Control: immutable` on unversioned filenames
+serves a stale cut to returning visitors only. None threw, none logged, none failed a build. The
+script asserts nine properties whose failure is invisible by eye on a fast machine, and it is
+proven to catch them — adding `overflow: hidden` to `.hero-track` fails it with exit 1 while
+`getComputedStyle(stage).position` still reads `sticky`.
+
+It needs a browser and a running server, and Playwright is deliberately not a dependency here (see
+`scripts/browser-matrix.mjs` for why). So it is not wired into `npm run build`. Run it by hand after
+touching `Hero`, `HeroFrames`, the `.hero-*` rules, or `scripts/build-frame-sequence.mjs`.
 
 **Node ≥ 22 is mandatory.** `better-sqlite3`'s native binding silently kills the dev server on Node 20 the moment any DB-touching route is hit. `.nvmrc` pins 22 — run `nvm use` if the shell drifts.
 
