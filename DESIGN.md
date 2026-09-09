@@ -781,12 +781,11 @@ A single fixed, frosted `Navbar` spanning every route at `z-20` and `h-[var(--na
 Six beats composed by `ScrollStory` inside a wrapper that cancels `<main>`'s padding so every section
 reaches all four viewport edges, including the top behind the transparent nav.
 
-- **`Hero`** — one full-bleed photograph, a two-line proposition, and the entry capsule. The
-  photograph runs a scroll parallax: `.hero-parallax` is 120% tall and offset `-10%` so there is real
-  image either side of the travel, translating `-8%` across the first viewport. A parallax on an
-  exactly viewport-sized element runs out of photograph and reveals the canvas behind it, which is
-  the failure mode that makes parallax look cheap; and past about a tenth of travel it stops reading
-  as distance and starts reading as the background sliding. `.hero-scrim` is two stacked gradients
+- **`Hero`** — a scroll-scrubbed film, a two-line proposition, and the entry capsule. See **The
+  Hero Film** below for the sequence itself; what matters here is the structure it needs.
+  `.hero-track` owns the height (one viewport, or 400dvh once the film can run) and **must never own
+  `overflow`**; `.hero-stage` inside it is `position: sticky` and owns the `overflow-hidden`.
+  `.hero-scrim` is two stacked gradients
   doing two jobs — a top wash giving the transparent navbar something to sit on, and a bottom wash
   that is the ground the headline and capsule stand in, landing on `--canvas` exactly at 100% so the
   hero dissolves into the next beat with no seam. `.hero-dusk` is a scroll-driven wash of the one
@@ -794,10 +793,13 @@ reaches all four viewport edges, including the top behind the transparent nav.
   timeline and **`Hero` runs no JavaScript at all**: a Chrome trace found scrolling frames resolving
   on the main thread, and stripping this component's five GSAP tweens and its pointer parallax was
   the fix.
-- **`.hero-photo` crop is viewport-dependent, and this is currently partial.** `object-position:
-  54% 44%` at landscape, `26% 56%` below `48rem`. The frame was chosen for a terracotta wall in its
-  left third and a street of people at its base; the phone crop at the landscape position landed on
-  cold dusk sky behind both headline lines and pushed the warm wall to a left-edge sliver. See
+- **`.hero-photo` is no longer the hero's, and its crop is `SceneBackdrop`'s now.**
+  `object-position: 54% 44%` at landscape, `26% 56%` below `48rem`. The frame was chosen for a
+  terracotta wall in its left third and a street of people at its base; the phone crop at the
+  landscape position landed on cold dusk sky behind both headline lines and pushed the warm wall to
+  a left-edge sliver. The hero's own poster is frame 1 of the film at a plain centred `object-cover`
+  and must stay that way — it has to register with the canvas's cover-fit to the pixel, and an
+  art-directed offset there shows as a jump at the hand-off. See
   **Open Items**.
 - **`SectionOpener`** — a right-aligned uppercase label at `0.6875rem` / `0.14em` against a bottom
   hairline, with the asterisk mark in jade. One row, one rule; there is no two-column opener.
@@ -813,6 +815,154 @@ reaches all four viewport edges, including the top behind the transparent nav.
   form's `min={todayISO()}` rejects.
 - **`DestinationMap`** — the world map beat.
 - **`HeroSearch`** — the entry capsule, documented above.
+
+### The Hero Film (signature)
+100 AVIF frames of a camera dolly out of a cave toward Al-Khazneh, drawn to a `<canvas>` at
+whatever frame the scroll position asks for. `HeroFrames.tsx` is the engine;
+`scripts/build-frame-sequence.mjs` produces the frames from footage kept out of the repo, and
+`scripts/extract-frames.swift` pulls them from the source video via AVFoundation.
+
+**Frames come out of the MP4 losslessly, not through a web converter.** The first two cuts read a
+zip of PNGs exported by ezgif, which had written 24fps source into a 30fps container: 60 of 300
+frames were byte-identical repeats on a 5n+3 stride, and every frame carried an extra compression
+generation. AVFoundation decodes the original H.264 once and returns the exact frame at the exact
+presentation time. `requestedTimeTolerance` is pinned to zero at both ends — without it the
+generator returns the nearest *keyframe*, so asking for frame 37 can hand back frame 24, silently,
+and the result looks exactly like footage that stalls.
+
+**The arc is the whole point: you start inside the cave and it opens onto the temple.** All 240
+frames of the source are used, with **nothing excluded** — see the rigidity rule below for why the
+current footage needs no surgery where its predecessor did. Measured frame-by-frame on the
+*previous* clip, kept because it is the reason the metric changed:
+
+| unique | edge energy (27.2 median) | luminance | what it is |
+|---|---|---|---|
+| 1-57 | **34.4-35.5 — the crispest in the reel** | 88 → 99 | inside the cave, slow push |
+| 59-71 | 34.2 → 22.2 | 97 → 80 | into the dark passage |
+| **72-78** | **20.4-21.4** | 77 → 69 | **the double-exposure artifact — excluded** |
+| 79-147 | 21.9 → 33 | 66 → 125 | out of the dark, brightening |
+| 149-163 | 32 → 28 | sky peaks 12.1% | the reveal |
+| 165-239 | 27.7 → 21.4 | 119 → 98 | closing on the facade |
+
+**A cut that dropped frames 1-85 was shipped and reverted, and the reason is worth keeping.** It
+was justified on the camera being nearly static through 1-57 — true, difference 1-6 against a 6.8
+median — so those frames bought little scroll travel per byte. But that section *is* the cave,
+which is the reason for using this footage, and it is also the highest edge energy in the reel. A
+motion metric said "cheap" about the most valuable material in the shot. **If this window is ever
+narrowed again, narrow it from the end.**
+
+**The Rigidity Rule, and it exists because edge energy was the wrong metric.** The previous
+footage had a zone where the render morphed and the canyon walls changed identity mid-shot. Finding
+it took three attempts, because the metric in use — edge energy — is structurally blind to it:
+morphing geometry keeps its *texture* sharp while its *structure* drifts, so the broken frames
+scored 34-35 against a 27 median, i.e. the crispest in the reel.
+
+The metric that sees it is rigidity. Block-match consecutive frames, fit a radial expansion (which
+is what a forward dolly produces), and measure the residual. Run on both clips at identical
+spacing: the old footage came in at a **median 0.541px with 94 of 120 pairs above 0.4px**, this one
+at **median 0.095px with 0 of 120** — 5.7x more rigid, which is why nothing is excluded now.
+**After any new footage lands, run rigidity, not edge energy.**
+
+**Geometry.** A 400dvh `.hero-track` containing a 100dvh `position: sticky` `.hero-stage`, so the
+travel is exactly 300dvh and scroll progress maps 0→1 across precisely the pinned run — the film
+starts as the hero pins and finishes as it unpins, rather than approximately. At ~27px of scroll per
+frame it reads as continuous.
+
+**The 400dvh is opt-in, and that is the whole fallback story.** The track is one viewport until
+`data-seq` is set, which `Hero` does only once it knows the film can run. No JavaScript, reduced
+motion, or a frame that fails to load all leave the hero exactly one screen tall showing the poster.
+Nobody is ever made to scroll three empty viewports past a still image.
+
+**Named Rules**
+
+**The Track-Owns-Height, Stage-Owns-Overflow Rule.** They cannot be one element. `overflow: hidden`
+makes an element a scroll container, so a sticky box inside one resolves against a scrollport that
+never scrolls and pins at its start offset forever — indistinguishable from sticky never having
+been applied, with nothing logged. The corollary is that the whole chain from `.hero-track` up to
+`.content-overlay` must stay free of `overflow`, `contain` and `content-visibility`. **Adding any of
+those three to `<main>` or to `ScrollStory`'s wrapper silently unpins the hero.**
+`scripts/browser-matrix.mjs` asserts the pin per route per engine because the failure is invisible.
+
+**The Sticky-Is-Not-The-Deleted-Pin Rule.** A `ScrollTrigger({ pin: true, scrub: true })` hero
+shipped here once and was removed for five reasons. Three were properties of GSAP's pin, not of
+pinning: `pinType: "transform"` rewriting `translateY` every frame because the scroller is an
+element, a pin spacer mutating the scroller's `scrollHeight` mid-gesture, and `refreshPriority: -1`
+sorting the pin *last* so every trigger below measured against a spacer-less layout and fired a
+viewport early. CSS `position: sticky` has none of them. **Do not reintroduce `pin: true` here.**
+
+**The Draw-On-Change Rule.** The rAF loop eases a float index toward the target but only calls
+`drawImage` when `Math.round()` of it changes, and it terminates itself once settled. Measured: **0
+draws over 3 seconds idle, and exactly one draw per frame index the scroll crosses** (36 draws for
+36.6 indices), so the rate tracks scroll speed rather than refresh rate. That is the actual
+mitigation for the navbar's `backdrop-filter` re-rastering, and it is why `.hero-light`'s 24s
+infinite loop is *paused* while the film is live — two ambient motions at once was never the intent,
+and that one kept the navbar re-rasterising at refresh rate whether or not anyone was scrolling.
+
+**The Readiness-Is-`onload` Rule.** Not `img.decode()`. Measured in this app's own preview engine,
+`decode()`'s promise **never settles** — not detached, not attached, not even after `onload` has
+fired with `complete === true`. A promise that never settles deadlocks the load queue and sticks the
+film near frame 1, which is the exact defect the technique exists to avoid. `onload` is the signal;
+a one-pixel draw into a scratch canvas forces the decode off the scroll path.
+
+**The Equal-Visual-Change Rule.** Frames are sampled so each carries the same amount of picture
+change, not at an even frame index. The camera does not travel at a constant rate: consecutive-frame
+difference across the raw sequence swings **14×**, so an even-index sample mapped linearly to scroll
+crawls where the camera crawls and rips where it accelerates — most of what read as awkward.
+Sampling along a cumulative-change curve leaves exactly one step above 1.6× the median, and that
+one is the deliberate exclusion seam. Through the cave the sampler runs out of frames to skip and
+lands *below* target, so that section is smoother than asked for rather than steppier.
+
+**Never blank, never stuck.** If the frame the scroll asks for is not decoded, the nearest decoded
+frame within ±8 is drawn instead and the last good frame is held otherwise. Frames load in a
+stride-halving order (every 16th, then 8th, 4th…), so after eight requests the entire run is
+coarsely scrubbable rather than being sharp at the start and empty everywhere else.
+
+**Two tiers, and the portrait one is a different crop.** 1600×900 landscape (9.76 MB, 100 KB/frame
+at q44) and 540×960 portrait (4.33 MB at q50); a visitor downloads one. No blur.
+
+**AVIF, and the decision reversed on measurement.** AVIF was tested and rejected on the previous
+footage, where it only beat WebP below q52 and was *larger* at q60 — because that clip was
+noise-dominated, and noise is the one thing AVIF has no advantage on. This footage carries real
+detail instead (edge energy 36 against the old 27 median), which is exactly where AVIF wins: 37%
+smaller at matched quality, and at 1:1 against a q88 reference the carved frieze, the capitals and
+the rock striations are indistinguishable. **Re-measure the format per clip rather than inheriting
+the verdict.** The `browserslist` floor is Safari 16.4 / iOS 16.4, precisely the release AVIF landed
+in, so every browser this project declares support for can decode these; one that cannot degrades
+down the same path reduced-motion takes — frames fail, `data-seq` never reaches "live", the track
+stays one viewport and the poster is the hero. A 16:9 frame cover-fitted into a 9:16 viewport keeps
+27% of the source width, which on a phone is canyon wall and no Treasury — so portrait gets its own
+centre crop, which the shot's dead-centre subject makes safe. Backing store is capped at DPR 1.25 — see above; raising it buys
+no sharpness once the source is the limit and only costs fill rate.
+
+**No pre-blur, and the version that had one is recorded because the reasoning was seductive.**
+Quality alone cannot compress this footage — q72 to q36 saves only 33%, the signature of a noisy
+render spending its bits on grain — so an earlier cut pre-blurred 1.0px and took 1152×648 from
+123KB/frame to 44KB. A 3× win, and it read as mush, because it compounded with the canvas
+upscaling a 1152px source into a 2160px retina backing store: **1.88×**. The rule out of it:
+**sharpen the source and match the backing store; never soften the source to save bytes.** 1600px
+against a `DPR_CAP` of 1.25 gives a 1.13× upscale at 1440 CSS — those two numbers are a pair, and
+moving one alone reintroduces the problem.
+
+**The scrim is a touch deeper while the film is live, and that is a measured fix rather than a
+preference.** The film is brighter than the photograph the scrim was tuned against, and brightest
+exactly where the headline sits. On the untouched scrim the worst pixel behind the headline ran
+**1.92:1, with 36 of 80 frames below the 2.38:1 the outgoing photograph measured** — concentrated
+in frames 23-64, the stretch a visitor reads longest. Three deeper ramps were measured and the
+shallowest that clears the bar ships; the next two reach 3.33 and 4.25 but bury the imagery. Re-run
+against the restored cave arc it still holds unchanged — **2.56:1 worst, 3.17:1 mean, 0 of 100 below
+baseline** — so the ramp was not retuned. 41 of 100 sit below the 3:1 AA-large threshold at the
+single worst pixel, which is the standing condition of type over photography on this beat and was
+true of the photograph before it too. Scoped to `[data-seq="live"]`, so the poster and
+every fallback keep the original. The mechanism carrying type over photography is unchanged —
+`.hero-legible`'s three-layer text-shadow, which contrast-ratio maths does not model.
+
+**The Frame-URLs-Are-Content-Addressed Rule.** Frames are served from `/scenes/petra/<hash>/`,
+where the hash covers the window, the frame count, the tier config and the source archive. This is
+not tidiness: `next.config.ts` serves that path `immutable`, and `immutable` means the browser
+never revalidates. An earlier cut shipped `immutable` against fixed filenames on the reasoning that
+the build rewrites the whole directory; the next run disproved it, serving 74,022 cached bytes
+against 77,002 on disk. In production that is a returning visitor scrubbing a *mixture* of two
+edits. **Never point `immutable` at a path whose contents can change.**
 
 ### Map Controls
 Apple-Maps-grade chrome, and the only place `.glass-control` is used: a vertical stack of 44px targets

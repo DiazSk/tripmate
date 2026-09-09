@@ -108,6 +108,33 @@ function probe() {
         ? [...last.querySelectorAll("a,button")].filter((e) => e.getClientRects().length > 0).length
         : null;
     })(),
+    // The hero's sticky pin, and this belongs here rather than in a unit test because its
+    // failure is *silent* and cross-engine. `.hero-stage` pins against `.content-overlay`, and
+    // that only works while no element between them sets `overflow`, `contain` or
+    // `content-visibility` — add any of those to `<main>` or to ScrollStory's wrapper and the
+    // stage simply scrolls away with nothing logged anywhere. This harness exists to answer "did
+    // the CSS actually take effect", which is exactly the shape of that question.
+    //
+    // `heroPinned` is the real assertion: after scrolling a third of the way into the track, the
+    // stage's top must still be flush with the scroller's top. A 2px tolerance absorbs subpixel
+    // rounding. `null` means the sequence is not running (no `data-seq`), which is the correct
+    // state for a reduced-motion run rather than a failure.
+    heroStagePosition: (() => {
+      const stage = document.querySelector(".hero-stage");
+      return stage ? getComputedStyle(stage).position : null;
+    })(),
+    heroPinned: (() => {
+      const track = document.querySelector(".hero-track");
+      const stage = document.querySelector(".hero-stage");
+      const scroller = document.querySelector(".content-overlay");
+      if (!track || !stage || !scroller || !track.dataset.seq) return null;
+      const before = scroller.scrollTop;
+      scroller.scrollTop = Math.round(track.offsetHeight / 3);
+      const flush =
+        Math.abs(stage.getBoundingClientRect().top - scroller.getBoundingClientRect().top) < 2;
+      scroller.scrollTop = before;
+      return flush;
+    })(),
     errors: err.slice(0, 6),
   };
 }
@@ -144,9 +171,9 @@ for (const [name, engine] of ENGINES) {
 
 const yn = (v) => (v === true ? "yes" : v === false ? "NO" : v ?? "—");
 console.log(
-  "\nengine    route         title/note                    glass  :has  webgl   cesium  nav   FCP"
+  "\nengine    route         title/note                    glass  :has  webgl   cesium  nav   pin   FCP"
 );
-console.log("-".repeat(110));
+console.log("-".repeat(116));
 for (const r of rows) {
   if (r.note) {
     console.log(`${r.engine.padEnd(9)} ${String(r.route).padEnd(13)} ${r.note}`);
@@ -156,7 +183,10 @@ for (const r of rows) {
     `${r.engine.padEnd(9)} ${r.route.padEnd(13)} ${String(r.title).slice(0, 28).padEnd(28)} ` +
       `${(r.glassApplied ? "yes" : "NO").padEnd(6)} ${yn(r.hasSelector).padEnd(5)} ` +
       `${yn(r.webgl).padEnd(7)} ${yn(r.cesiumBooted).padEnd(7)} ` +
-      `${`${r.navCells ?? "?"}/${r.navTrailing ?? "?"}`.padEnd(5)} ${r.fcpMs}ms`
+      `${`${r.navCells ?? "?"}/${r.navTrailing ?? "?"}`.padEnd(5)} ` +
+      // "—" means the sequence is not running on this route, which is correct everywhere but `/`.
+      // "NO" is a real failure: the stage exists, the track is grown, and it did not stick.
+      `${(r.heroPinned === null ? "—" : r.heroPinned ? "yes" : "NO").padEnd(5)} ${r.fcpMs}ms`
   );
   if (r.errors?.length) r.errors.forEach((e) => console.log(`${" ".repeat(10)}  ! ${e.slice(0, 88)}`));
 }

@@ -1822,55 +1822,80 @@ body {
   background: rgb(var(--surface-deep-rgb));
 }
 
-/* The hero photograph's parallax: the image travels slower than the page, so the composition has
-   depth without a second layer cut out of it.
+/* ---- The hero's scroll-scrubbed film -----------------------------------------------------
+   120 WebP frames of a dolly down the Siq to Al-Khazneh, drawn to a canvas at whatever frame the
+   scroll position asks for. See `HeroFrames.tsx` for the engine and `Hero.tsx` for why the pin is
+   back after being deleted.
 
-   This is what replaced the two interlocking alpha-cut photographs. That construction bought depth
-   by masking one image out of another; this buys it by moving one image against the page, which is
-   what a camera actually does. Same intent, no assets, and swapping the photograph is a filename.
+   **`.hero-track` owns the height and must never own `overflow`.** `.hero-stage` inside it is the
+   sticky box and owns the `overflow-hidden` that `.hero-light`'s -25%/-45% bleed needs. They
+   cannot be one element: `overflow: hidden` makes an element a scroll container, so a sticky box
+   inside one resolves against a scrollport that never scrolls and pins at its start offset
+   forever — which looks exactly like sticky never having been applied, with no error anywhere.
+   The same fact is why the `--story` timeline is declared on `.content-overlay` rather than
+   reached with `scroll(nearest block)`.
 
-   Bound to the same named `--story` timeline `.hero-dusk` uses, for the same reason — the document
-   does not scroll, `.content-overlay` does, and `scroll(nearest block)` would resolve to the hero's
-   own `overflow-hidden` box. See the note on `--story` above.
+   That also makes the whole ancestor chain load-bearing, and it is verified rather than assumed:
+   `.hero-track` -> ScrollStory's negative-margin wrapper -> `<main>` -> `.content-overlay`, none of
+   which set `overflow`, `contain` or `content-visibility`. **Adding any of those three to any of
+   them silently unpins this hero.** `scripts/browser-matrix.mjs` asserts the pin cross-engine
+   precisely because the failure is invisible.
 
-   The element is 120% tall and offset -10%, so there is real image either side of the travel. A
-   parallax on an exactly viewport-sized element runs out of photograph and reveals the canvas
-   behind it, which is the failure mode that makes parallax look cheap.
-
-   `will-change` is deliberately absent: the transform already promotes this to its own layer under
-   a scroll-driven animation, and a standing `will-change` on a full-viewport image is a permanent
-   compositor allocation for an effect that only runs in the first viewport. Every map frame in
-   this app re-blurs every backdrop-filter panel above the canvas, so idle GPU memory is not free
-   here the way it is in a document. */
-.hero-parallax {
-  transform: translate3d(0, 0, 0);
+   The height is opt-in. One viewport until `data-seq` is set, which `Hero` does only once it knows
+   the sequence can run — so no-JS, reduced-motion and decode-failure all get the hero exactly one
+   screen tall rather than three empty viewports past a still image. Retuning the pin length is
+   this one number. */
+.hero-track {
+  height: 100dvh;
 }
 
-@supports (animation-timeline: scroll()) {
-  /* Same gate, same reason as `.hero-dusk`: the blanket reduced-motion rule sets
-     `animation-duration`, which a progress-based timeline ignores outright. This is the only thing
-     honouring the preference here, and a visitor who asked for less motion gets a still image. */
-  @media (prefers-reduced-motion: no-preference) {
-    .hero-parallax {
-      animation: hero-parallax linear both;
-      animation-timeline: --story;
-      /* Starts at zero rather than after a beat, unlike the wash. Depth that begins late reads as
-         a jolt; dimming that begins late reads as restraint. Ends at one viewport, past which the
-         hero is off screen and the remaining travel would be spent unseen. */
-      animation-range: 0 100vh;
-    }
-  }
+.hero-track[data-seq] {
+  height: 400dvh;
 }
 
-/* 8% of the element's own height over a full viewport of scroll — the image ends up roughly 96px
-   behind the page on a 1200px screen. Deliberately small: parallax is a depth cue, and past about
-   a tenth it stops reading as distance and starts reading as the background sliding, which is the
-   tell of a template. */
-@keyframes hero-parallax {
-  to {
-    transform: translate3d(0, -8%, 0);
-  }
+/* `inset: -1px` is a one-pixel overscan against iOS rounding `dvh` to a fractional height, which
+   would otherwise show a hairline of the page's ground down an edge of the canvas.
+
+   The canvas is transparent until enough frames have decoded to scrub, then crossfades over the
+   poster it is drawing anyway — so the hand-off is invisible rather than a dissolve between two
+   different pictures. */
+.hero-frames {
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Same warm near-black as the page, so the one frame before the first draw is seamless with the
+     ground rather than a black rectangle. `alpha: false` on the 2D context paints opaque, and this
+     is what it paints over. */
+  background: var(--canvas);
+  opacity: 0;
 }
+
+.hero-track[data-seq="live"] .hero-frames {
+  opacity: 1;
+  transition: opacity 600ms linear;
+}
+
+/* Dropped out of raster once the canvas is fully opaque — a full-viewport image layer nobody can
+   see is still a layer the compositor pays for. `visibility` rather than `display` so no layout
+   is touched, and delayed past the crossfade so it never uncovers the ground mid-transition. */
+.hero-track[data-seq="live"] .hero-poster {
+  visibility: hidden;
+  transition: visibility 0ms linear 600ms;
+}
+
+/* The film is the parallax now.
+
+   What was here: `.hero-parallax`, a wrapper 120% tall and offset -10% carrying the photograph,
+   translated -8% of its own height across one viewport on the `--story` timeline. It went for
+   three reasons, in order of weight. A camera dolly *is* a parallax, so the effect was
+   duplicated. The poster has to sit at exactly `inset: 0` to register with the canvas's centred
+   cover-fit, which a 120%-tall offset wrapper forbids — and a mismatch there is a visible jump at
+   the hand-off. And translating a layer that lives underneath an opaque full-viewport canvas is
+   work with no output. Nothing regressed for reduced-motion visitors: that rule already sat inside
+   `@media (prefers-reduced-motion: no-preference)`, so they never had it. */
 
 /* The hero's own darkening, and the reason the headline needs no box behind it.
 
@@ -1909,6 +1934,32 @@ body {
       rgb(18 17 16 / 0) 34%,
       rgb(18 17 16 / 0.55) 66%,
       rgb(18 17 16 / 0.88) 88%,
+      var(--canvas) 100%
+    );
+}
+
+/* A touch deeper while the film is live, because the film is brighter than the photograph this
+   scrim was tuned against — and it is brightest exactly where the headline sits.
+
+   Measured, all 80 frames, worst pixel behind the headline composited through the scrim: the
+   outgoing photograph was 2.38:1, and the film on the untouched scrim ran **1.92:1 with 36 of 80
+   frames below that baseline**, concentrated in frames 23-64 where the canyon opens onto the
+   Treasury. That is the stretch a visitor spends longest reading. With these stops: **2.56:1
+   worst, 3.22:1 mean, 0 of 80 below baseline** — better than the photograph at every frame.
+
+   The ramp starts 6% earlier and reaches 0.62 rather than 0.55; three candidates were measured and
+   this is the shallowest that clears the bar. The next two up (0.68 and 0.72) reach 3.33 and 4.25
+   but bury the imagery, which is the wrong trade on the one surface whose job is the photography.
+
+   Scoped to the live film deliberately, like `.hero-dusk`'s re-range and `.hero-light`'s pause:
+   the poster and every fallback path keep the original scrim, which was correct for them. */
+.hero-track[data-seq="live"] .hero-scrim {
+  background:
+    linear-gradient(
+      to bottom,
+      rgb(18 17 16 / 0) 28%,
+      rgb(18 17 16 / 0.62) 64%,
+      rgb(18 17 16 / 0.9) 88%,
       var(--canvas) 100%
     );
 }
@@ -2213,6 +2264,25 @@ body {
          at the top of the screen, so the tail of the ramp would play behind it, unseen. */
       animation-range: 25vh 85vh;
     }
+
+    /* Re-ranged for the pinned track, and this is not a nicety — it is the fifth reason the
+       previous pin was deleted, live again. `--story` offsets are absolute scroll lengths from
+       the scroller's origin, so `25vh 85vh` against a 400dvh track completes the wash **one
+       fifth of the way into the run** and then holds: the visitor scrolls the remaining three
+       viewports watching the film play behind an 80% black rectangle. Nothing errors, nothing
+       logs, it just looks broken.
+
+       A 400dvh track with a 100dvh sticky stage gives 300dvh of travel, so the film finishes at
+       300dvh and the hero starts leaving there. The wash therefore belongs at 290-370dvh: it
+       begins as the last frames settle and completes while the hero is on its way out, which is
+       the original stated intent — collapse into the band below rather than hard-cut to it.
+
+       Two static declarations rather than one derived with `calc()` from a track variable.
+       `animation-range` does accept `calc()`, but a parse failure there is invisible, and this is
+       not a number that moves. */
+    .hero-track[data-seq] .hero-dusk {
+      animation-range: 290dvh 370dvh;
+    }
   }
 }
 
@@ -2267,6 +2337,20 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .hero-light {
     animation: hero-light-pass 24s ease-in-out infinite alternate;
+  }
+
+  /* Paused while the film is running, and this is how the feature pays for its own frame budget.
+     `.hero-light` is a 24s **infinite** transform on a full-viewport radial gradient sitting under
+     the navbar's `backdrop-filter: blur(16px)` panel — so the panel's backdrop source changes
+     every display frame and the panel re-rasters at refresh rate for as long as the hero is on
+     screen, scrolling or idle. Pinning the hero made that window four times longer.
+
+     `scripts/frame-probe.js` exists to assert that an idle page paints ~0fps, and this is the
+     rule that keeps it true here. Freezing a very soft warm wash at an arbitrary offset is
+     indistinguishable from running it, and it hands back more idle frame budget than the canvas
+     spends. The film is the ambient motion now; two at once was never the intent. */
+  .hero-track[data-seq="live"] .hero-light {
+    animation-play-state: paused;
   }
 }
 
