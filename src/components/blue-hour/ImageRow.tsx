@@ -74,7 +74,7 @@ export default function ImageRow() {
       id="journey"
       // scroll-mt: Navbar's anchor links call scrollIntoView({block:"start"}), which
       // would otherwise land this section's top edge flush under the fixed nav.
-      className="pointer-events-auto scroll-mt-[var(--nav-h)] overflow-hidden px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band is-dense pointer-events-auto overflow-hidden"
     >
       <SectionOpener label="Journey">
         <h2 className="font-scene-display text-foreground">
@@ -167,7 +167,7 @@ export default function ImageRow() {
               entirely. Below the frame it is legible at every width and the image is never
               obstructed — which is also what the reference does, where no card sets type over its
               own photo. */}
-          <p className="mt-3 text-xs leading-relaxed text-muted">{beat.detail}</p>
+          <p className="mt-3 text-[0.875rem] leading-[1.65] text-muted">{beat.detail}</p>
         </div>
       ))}
       </div>

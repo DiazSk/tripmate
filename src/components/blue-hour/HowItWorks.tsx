@@ -68,7 +68,7 @@ export default function HowItWorks() {
     <section
       id="how-it-works"
       // scroll-mt: see the matching comment in ImageRow.tsx.
-      className="pointer-events-auto scroll-mt-[var(--nav-h)] px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band is-quiet has-rule pointer-events-auto"
     >
       {/* This section used to skip the opener label entirely, on the recorded reasoning that "that
           is the reference's own arrangement" — its equivalent section drops the label and splits
@@ -85,11 +85,11 @@ export default function HowItWorks() {
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
           <h2
             ref={headingRef}
-            className="font-scene-display text-foreground"
+            className="font-scene-display is-quiet text-foreground"
           >
             How it actually works
           </h2>
-          <p className="scene-prose max-w-sm text-sm text-muted">
+          <p className="scene-prose max-w-sm text-muted">
             Four steps, about {TYPICAL_WAIT_PHRASE}. Most of it is the plan being checked rather
             than written.
           </p>
@@ -127,7 +127,7 @@ export default function HowItWorks() {
             </span>
             <div>
               <p className="text-base font-medium text-foreground sm:text-lg">{label}</p>
-              <p className="scene-prose mt-1.5 max-w-[58ch] text-sm text-muted">{body}</p>
+              <p className="scene-prose mt-1.5 max-w-[58ch] text-muted">{body}</p>
             </div>
             {/* Right-aligned and hidden on phones: at this size the icon is an ornament on a row
                 that already reads perfectly without it, and a third column on a 390px screen would
