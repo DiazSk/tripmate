@@ -350,7 +350,7 @@ function MemoryCard({
         // permanently destroys data. It needs no `content` because Tailwind's `before:` variant
         // supplies `content: ""`, and the button is already `absolute`, so it is its own containing
         // block.
-        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm before:absolute before:-inset-1 hover:bg-red-600 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
+        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm before:absolute before:-inset-1 hover:bg-alert focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
       >
         <Trash2 className="h-4 w-4" strokeWidth={2.25} />
       </button>

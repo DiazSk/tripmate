@@ -403,7 +403,7 @@ export default function SplitEditor({
 
         <DragOverlay dropAnimation={null}>
           {dragging && (
-            <div className="pointer-events-none rounded-xl border border-accent/50 bg-[color:var(--surface-deep,#0f172a)] px-3 py-2 text-sm font-medium text-foreground shadow-2xl">
+            <div className="pointer-events-none rounded-xl border border-accent/50 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-2 text-sm font-medium text-foreground shadow-2xl">
               {dragging.stop.name}
             </div>
           )}
@@ -415,7 +415,7 @@ export default function SplitEditor({
           {findings
             .filter((f) => f.dayIndex === null)
             .map((f, i) => (
-              <p key={i} className="flex gap-1.5 text-xs text-amber-200">
+              <p key={i} className="flex gap-1.5 text-xs text-alert/75">
                 <span aria-hidden="true">⚠️</span>
                 {f.message}
               </p>
@@ -488,11 +488,11 @@ function DayTab({
  *  here; the tokens themselves still live only in globals.css. Keep the order in step with
  *  `DAY_PALETTES` or the panel's dots and the globe's ribbons drift apart. */
 const DAY_TOKENS = [
-  "--route-neon-cyan",
-  "--route-neon-magenta",
-  "--route-neon-amber",
-  "--route-neon-lime",
-  "--route-neon-violet",
+  "--route-day-1",
+  "--route-day-2",
+  "--route-day-3",
+  "--route-day-4",
+  "--route-day-5",
 ];
 const dayColorTokenFor = (day: number) => DAY_TOKENS[day % DAY_TOKENS.length];
 
@@ -548,7 +548,7 @@ function AddStopBar({
         </button>
       </div>
       {searching && <p className="mt-1.5 text-xs text-muted">Looking that up…</p>}
-      {error && <p className="mt-1.5 text-xs text-amber-200">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-alert/75">{error}</p>}
     </div>
   );
 }
@@ -769,7 +769,7 @@ function EditableStopCard({
               className="rounded border border-card-border bg-transparent px-1 py-0.5 text-[10px] text-muted focus:outline-none"
             >
               {Array.from({ length: dayCount }, (_, d) => (
-                <option key={d} value={d} className="bg-[color:var(--surface-deep,#0f172a)]">
+                <option key={d} value={d} className="bg-[color:var(--surface-deep,#1c1a18)]">
                   D{d + 1}
                 </option>
               ))}
@@ -782,7 +782,7 @@ function EditableStopCard({
               onDelete();
             }}
             aria-label={`Delete ${stop.name}`}
-            className="text-muted transition-colors hover:text-amber-200"
+            className="text-muted transition-colors hover:text-alert/75"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

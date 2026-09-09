@@ -68,7 +68,7 @@ export default function FeaturedPlans({
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
           <h2
             ref={headingRef}
-            className="font-scene-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground"
+            className="font-scene-display text-foreground"
           >
             Four trips, already priced
           </h2>

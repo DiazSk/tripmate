@@ -264,7 +264,7 @@ async function buildStyle(): Promise<StyleSpecification | string> {
     id: BASEMAP_TINT_LAYER_ID,
     type: "background" as const,
     paint: {
-      "background-color": "#0f172a",
+      "background-color": "#12110f",
       "background-opacity": 0.34,
     },
   };
@@ -493,7 +493,7 @@ function addTripLayers(map: MapLibreMap) {
       "circle-color": cssColor("--accent"),
       "circle-radius": ["case", ["get", "selected"], 8, 5.5],
       "circle-stroke-width": 2,
-      "circle-stroke-color": "#0f172a",
+      "circle-stroke-color": "#12110f",
     },
   });
   map.addLayer({
@@ -513,8 +513,8 @@ function addTripLayers(map: MapLibreMap) {
       "text-optional": true,
     },
     paint: {
-      "text-color": "#f4f7fa",
-      "text-halo-color": "#0f172a",
+      "text-color": "#f7f5f2",
+      "text-halo-color": "#12110f",
       "text-halo-width": 1.4,
       // The same rule the trip's own stop names follow, in the vocabulary a symbol layer speaks:
       // nothing at a distance, fading in as the ground comes up. 13.5 → 14.8 is the zoom band
@@ -568,7 +568,7 @@ function addTripLayers(map: MapLibreMap) {
       "circle-radius": 5,
       "circle-opacity": ["get", "opacity"],
       "circle-stroke-width": 1.5,
-      "circle-stroke-color": "#0f172a",
+      "circle-stroke-color": "#12110f",
       "circle-stroke-opacity": ["get", "opacity"],
     },
   });

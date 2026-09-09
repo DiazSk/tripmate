@@ -147,9 +147,20 @@ export default function DestinationSearch({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [open]);
 
+  // **The "bare" branch inherits its colour; it does not choose one.** It used to hardcode
+  // `text-foreground` with a `placeholder:text-white/65` — correct for the one caller it had, a
+  // dark glass trough on the plan step, and invisible the moment a second caller appeared with a
+  // light ground. The hero's entry capsule is a near-white pill, and this field rendered as warm
+  // off-white ink on it: a search box you could not see you were typing into.
+  //
+  // `text-current` and `placeholder:text-current` take whatever `color` the host cell computes, so
+  // the plan step still gets `--foreground` by inheritance from `body` and the capsule gets its own
+  // dark ink, with no branch here for either. `bare` means "the container styles me", and colour is
+  // part of that bargain. The placeholder rides the same colour at half strength rather than at a
+  // fixed white alpha, so its contrast tracks the ground instead of assuming one.
   const inputClassName =
     variant === "bare"
-      ? "w-full bg-transparent pl-6 text-base font-medium text-foreground outline-none placeholder:font-normal placeholder:text-white/65"
+      ? "w-full bg-transparent pl-6 text-base font-medium text-current outline-none placeholder:font-normal placeholder:text-current placeholder:opacity-50"
       : // Focus is the accent ring, matching every other field in the app. This branch used to
         // focus to `#00F2FE` with a cyan glow — a leftover from the palette that predates "The
         // Lit Cockpit", and a direct contradiction of the One Accent Rule, which names focus
@@ -162,7 +173,9 @@ export default function DestinationSearch({
         "w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pr-4 pl-11 text-base text-white transition-colors duration-200 placeholder:text-white/55 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none";
   const iconClassName =
     variant === "bare"
-      ? "pointer-events-none absolute top-1/2 left-0 h-3.5 w-3.5 -translate-y-1/2 text-muted"
+      // Same bargain as the input above: `currentColor` at reduced opacity rather than `--muted`,
+      // which is authored as warm-off-white-on-dark and disappears on a light ground.
+      ? "pointer-events-none absolute top-1/2 left-0 h-3.5 w-3.5 -translate-y-1/2 text-current opacity-55"
       : "pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-white/45";
 
   return (

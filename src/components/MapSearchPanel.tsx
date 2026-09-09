@@ -180,7 +180,7 @@ export default function MapSearchPanel() {
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {state === "throttled" && (
-              <p className="px-3 py-4 text-xs text-amber-200">
+              <p className="px-3 py-4 text-xs text-alert/75">
                 Search is busy right now — the free places index rate-limits. Try again in a moment.
               </p>
             )}

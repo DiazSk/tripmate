@@ -164,7 +164,7 @@ function DayColumn({
           {findings.map((finding, i) => (
             <li
               key={i}
-              className="flex gap-1 rounded-md bg-amber-400/10 px-1.5 py-1 text-[11px] leading-snug text-amber-200"
+              className="flex gap-1 rounded-md bg-alert-soft px-1.5 py-1 text-[11px] leading-snug text-alert/75"
             >
               <span aria-hidden="true">⚠️</span>
               <span>{finding.message}</span>
@@ -266,7 +266,7 @@ export default function ArrangeBoard({
       role="dialog"
       aria-modal="true"
       aria-label="Arrange itinerary"
-      className="fixed inset-0 z-[70] flex flex-col bg-[color:var(--surface-deep,#0f172a)]/97 backdrop-blur-xl"
+      className="fixed inset-0 z-[70] flex flex-col bg-[color:var(--surface-deep,#1c1a18)]/97 backdrop-blur-xl"
       {...devLabel("ArrangeBoard")}
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-card-border px-4 py-3 sm:px-6">
@@ -329,7 +329,7 @@ export default function ArrangeBoard({
 
         <DragOverlay dropAnimation={null}>
           {dragging && (
-            <div className="pointer-events-none rounded-xl border border-accent/50 bg-[color:var(--surface-deep,#0f172a)] px-3 py-2 text-sm font-medium text-foreground shadow-2xl">
+            <div className="pointer-events-none rounded-xl border border-accent/50 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-2 text-sm font-medium text-foreground shadow-2xl">
               {dragging.stop.name}
             </div>
           )}
@@ -342,7 +342,7 @@ export default function ArrangeBoard({
           {findings
             .filter((f) => f.dayIndex === null)
             .map((f, i) => (
-              <p key={i} className="flex gap-1.5 text-xs text-amber-200">
+              <p key={i} className="flex gap-1.5 text-xs text-alert/75">
                 <span aria-hidden="true">⚠️</span>
                 {f.message}
               </p>

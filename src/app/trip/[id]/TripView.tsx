@@ -331,9 +331,9 @@ export default function TripView({
               style={{ borderColor: "rgba(239, 68, 68, 0.3)" }}
             >
               <div className="flex items-start gap-3">
-                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-400" strokeWidth={2} />
+                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-alert" strokeWidth={2} />
                 <div>
-                  <p className="font-semibold text-red-400 tabular-nums">
+                  <p className="font-semibold text-alert tabular-nums">
                     Day {overspendDayIndex + 1} ran{" "}
                     {formatMoney(
                       daySpend(itinerary.days[overspendDayIndex]) -
@@ -349,7 +349,7 @@ export default function TripView({
                   type="button"
                   onClick={() => setDismissedDays((prev) => new Set(prev).add(overspendDayIndex))}
                   disabled={rebalancingDay === overspendDayIndex}
-                  className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-alert transition-colors hover:bg-alert-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-alert/60 disabled:opacity-50"
                 >
                   Dismiss
                 </button>
@@ -357,7 +357,7 @@ export default function TripView({
                   type="button"
                   onClick={() => handleRebalance(overspendDayIndex)}
                   disabled={rebalancingDay === overspendDayIndex}
-                  className="inline-flex min-h-11 items-center rounded-full bg-red-600 px-3 text-sm font-medium text-white transition-all duration-150 hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 active:scale-[0.98] disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center rounded-full bg-alert px-3 text-sm font-medium text-white transition-all duration-150 hover:bg-alert/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-alert/60 active:scale-[0.98] disabled:opacity-50"
                 >
                   {rebalancingDay === overspendDayIndex ? "Rebalancing…" : "Rebalance"}
                 </button>

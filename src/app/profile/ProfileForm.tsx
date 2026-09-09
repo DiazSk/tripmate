@@ -362,7 +362,7 @@ export default function ProfileForm({
                 subline below does not take `.scene-prose`: its own comment reserves that 1.8
                 leading for the landing and warns it costs a screenful of scanning on a dense
                 panel. */}
-            <h1 className="font-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground">
+            <h1 className="font-scene-display text-foreground">
               Your travel profile
             </h1>
             <p className="max-w-md pt-4 text-sm leading-relaxed text-muted">
