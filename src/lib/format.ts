@@ -40,6 +40,21 @@ export function formatMoney(amount: number): string {
   return `$${Math.round(n).toLocaleString("en-US")}`;
 }
 
+/**
+ * The same money string, split so the currency mark can be set apart from the figure.
+ *
+ * Only for the display-scale price — see `.price-display` in globals.css. At 44px a `$` set at the
+ * figure's own size is the first thing read and the least interesting thing there; subordinated,
+ * it becomes a unit hanging beside the number, which is how a menu or a lot listing sets money.
+ *
+ * Derived from `formatMoney` rather than reimplemented: the rounding and the locale grouping have
+ * exactly one definition, and a second one would drift the first time either changed.
+ */
+export function splitMoney(amount: number): { currency: string; figure: string } {
+  const formatted = formatMoney(amount);
+  return { currency: formatted.slice(0, 1), figure: formatted.slice(1) };
+}
+
 /** Date-only ISO strings parse as UTC midnight, which renders as the previous day
  *  anywhere west of Greenwich. Build the date in local time instead. */
 function parseISO(iso: string): Date | null {

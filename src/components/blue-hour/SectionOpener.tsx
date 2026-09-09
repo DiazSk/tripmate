@@ -58,7 +58,7 @@ export default function SectionOpener({
         // rule stays an unbroken boundary rather than a line with a gap punched in it.
         <div className="mb-8 flex items-baseline justify-end gap-2 border-b border-card-border pb-3">
           <SectionMark />
-          <span className="text-[0.6875rem] font-semibold tracking-[0.14em] text-muted uppercase">
+          <span className="text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase">
             {label}
           </span>
         </div>

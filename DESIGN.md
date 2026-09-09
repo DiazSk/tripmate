@@ -54,88 +54,117 @@ typography:
   root:
     fontSize: "16px"
     note: "A flat 16px root. Fluidity lives in the two display classes' own clamp(), not in html."
+  tracking:
+    display: "-0.018em"
+    heading: "-0.012em"
+    body: "0em"
+    label: "0.18em"
+    note: "Four tokens, replacing 20 literals. Tracking belongs to the face, so every literal in the codebase was invalidated the day the face changed — the display negatives were still at -0.085em/-0.106em, tuned for Wix Madefor. Three literals survive on purpose and are documented at their declaration: 0.02em and 0.05em on map labels over imagery, -0.005em on .price-display."
   hero:
-    fontFamily: "Wix Madefor Display, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Melodrama, ui-serif, Georgia, serif"
     fontSize: "clamp(2.5rem, 6.2vw, 5.25rem)"
-    fontWeight: 600
-    lineHeight: 1.02
-    letterSpacing: "-0.075em"
+    fontWeight: 400
+    lineHeight: 1.04
+    letterSpacing: "var(--tracking-display)"
   display:
-    fontFamily: "Wix Madefor Display, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Melodrama, ui-serif, Georgia, serif"
     fontSize: "clamp(2rem, 5vw, 3.75rem)"
-    fontWeight: 600
-    lineHeight: 1.05
-    letterSpacing: "-0.076em"
+    fontWeight: 400
+    lineHeight: 1.08
+    letterSpacing: "var(--tracking-display)"
   display-quiet:
-    fontFamily: "Wix Madefor Display, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Melodrama, ui-serif, Georgia, serif"
     fontSize: "clamp(1.75rem, 3.6vw, 2.75rem)"
-    fontWeight: 600
-    lineHeight: 1.05
-    letterSpacing: "-0.076em"
+    fontWeight: 400
+    lineHeight: 1.08
+    letterSpacing: "var(--tracking-display)"
     note: "`.font-scene-display.is-quiet` — the second display step, so four consecutive landing bands do not all open at the same size. A class rather than a `text-[...]` utility, because `.font-scene-display` is unlayered and carries its own font-size; an arbitrary utility would be emitted inside @layer utilities and lose to it. Carried by the two quiet bands (HowItWorks, DestinationMap)."
+  display-xl:
+    fontFamily: "Melodrama, ui-serif, Georgia, serif"
+    fontWeight: 400
+    lineHeight: 1.04
+    letterSpacing: "var(--tracking-display)"
+    note: "`.font-display-xl` — the serif at whatever size the caller sets (the /trips and /profile mastheads). Declares no font-size, so a `text-*` utility beside it is live; it DOES declare line-height, so a `leading-*` utility beside it is dead."
   headline:
-    fontFamily: "Wix Madefor Display, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 600
     lineHeight: 1.2
-    letterSpacing: "-0.06em"
+    letterSpacing: "var(--tracking-heading)"
+    note: "`.font-display` — the SANS heading class, despite the name. It and `.font-display-xl` were one class until Melodrama landed and the 20px navbar wordmark came out spindly in a display serif. Declares no font-size: `text-base` through `text-2xl` beside it are live."
   title:
-    fontFamily: "Wix Madefor Text, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.125rem"
     fontWeight: 600
     lineHeight: 1.3
   body:
-    fontFamily: "Wix Madefor Text, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.625
-  prose:
-    fontFamily: "Wix Madefor Text, ui-sans-serif, system-ui, sans-serif"
+  standfirst:
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.0625rem"
+    fontSizeSm: "1.125rem"
     fontWeight: 500
     lineHeight: 1.55
-    note: "The hero support line and the landing's persuade copy. `.scene-prose` now carries the *size* as well as the leading — 1rem / 1.65 — so a standfirst cannot pick its own. It previously set leading alone, and every call site chose `text-sm`, which left all three section standfirsts and the one long-form body at 14px against 32-60px headings. 14px is an interface step, not a reading step. The 1.8 leading came down with it: 1.8 was tuned against 14px and opens too far at 16px."
+    maxWidth: "46ch"
+    note: "Hero.tsx only — the one line under the hero, and the only body step above `prose`. It steps up at `sm` because the hero headline steps up with the viewport and the gap between them has to stay readable; every other body role holds a stable size. 46ch, not 58ch: this sits under a 5.25rem headline capped at 18ch and a longer measure under it reads as two unrelated blocks."
+  prose:
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 400
+    lineHeight: 1.65
+    maxWidth: "58ch"
+    note: "`.scene-prose` carries the size as well as the leading, so a standfirst cannot pick its own. 58ch is the one measure value in the system — HowItWorks, /trips and the print page all use it; nothing else runs uncapped."
   field:
-    fontFamily: "Wix Madefor Text, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1rem"
     fontWeight: 500
     lineHeight: 1.4
     note: "16px is a floor, not a step: below it iOS Safari zooms the viewport on focus."
   label:
-    fontFamily: "Wix Madefor Text, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.6875rem"
     fontWeight: 600
-    letterSpacing: "0.11em"
-    note: "Uppercase. Section openers, the entry capsule's cell labels."
+    letterSpacing: "var(--tracking-label)"
+    note: "Uppercase. THE label step — one size, one tracking, one spelling (`text-[0.6875rem]`). Replaced six sizes in a 3px range (9.92/10/11/11.2/12/13px) written four ways, at four tracking values. Section openers, entry-capsule cells, map day badges, the DAY n OF m stamp."
+  caption:
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 400
+    note: "12px, and deliberately distinct from `label`: no uppercase, no tracking. dl keys, footnotes, third-party chrome. The smallest step that sets real words rather than a tracked-out label."
+  price:
+    fontFamily: "Melodrama, ui-serif, Georgia, serif"
+    fontWeight: 400
+    fontFeature: "proportional-nums lining-nums"
+    letterSpacing: "-0.005em"
+    note: "`.price-display`, landing prices and the export's day total. The currency mark is a child span at 0.42em / 60% opacity / translateY(-0.62em), so the figure is what gets read. Proportional, not tabular — nothing is being compared in a column here."
   figure:
-    fontFamily: "Sometype Mono, ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontFamily: "Tabular, ui-monospace, SFMono-Regular, Menlo, monospace"
     fontSize: "0.875rem"
     fontWeight: 600
     fontFeature: "tabular-nums"
-    note: "Every money figure, time, duration, distance and count. Never prose."
+    note: "Values compared IN A COLUMN, and nothing else — five sites: the dl columns, the stop-time gutter, the day totals, the budget readout, the how-it-works step numbers. Only the last is on a landing route and it sits in the third band, so the face ships preload: false rather than competing with the first viewport. Never a sentence, never a stamp, never a price meant to be felt."
   cardTitle:
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.75rem"
     fontWeight: 600
     lineHeight: 1.2
-    letterSpacing: "-0.09em"
+    letterSpacing: "var(--tracking-heading)"
     note: "Plan-card titles on the landing's featured row. A step above `headline` and below the section display."
-  caption:
-    fontSize: "0.75rem"
-    fontWeight: 500
-    letterSpacing: "0.05em"
-    note: "12px. Map place labels and third-party chrome overrides (the Cesium credits line). The smallest step that sets real words rather than a tracked-out label."
   map-day-label:
-    fontFamily: "Wix Madefor Display, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.8125rem"
     fontWeight: 700
-    letterSpacing: "0.16em"
-    note: "`.marker-day-label` only — uppercase day badges standing on the globe. The product's own display face: there is no map-native typeface any more."
+    letterSpacing: "var(--tracking-label)"
+    note: "`.marker-day-label` only — uppercase day badges standing on the globe. The product's own text face: there is no map-native typeface any more."
   map-stop-label:
-    fontFamily: "Wix Madefor Text, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.9375rem"
     fontWeight: 600
     letterSpacing: "0.02em"
-    note: "Map-native. `.marker-title-card` and `.marker-place-label` only."
+    note: "Map-native. `.marker-title-card` and `.marker-place-label` only. Keeps a literal tracking value: this is a legibility register over imagery, not the interface one."
 rounded:
   node: "4px"
   surface-sm: "5px"
@@ -376,57 +405,125 @@ a stop still fires, the feedback simply disappears.
 
 ## Typography
 
-**Display Font:** Wix Madefor Display (`--font-display-stack`)
-**Body Font:** Wix Madefor Text (`--font-sans-stack`)
-**Figure Font:** Sometype Mono (`--font-mono-stack`)
+**Display Font:** Melodrama (`--font-display-stack`), self-hosted variable woff2, 39.6KB
+**Body Font:** Switzer (`--font-sans-stack`), self-hosted variable woff2, 42.2KB
+**Figure Font:** Tabular (`--font-mono-stack`), self-hosted variable woff2, 22.3KB, `preload: false`
 **Map-native faces:** none. Three faces ship, and the globe uses the same three.
 
-**Character:** A humanist grotesk pair tuned tight — the display cut packs a headline into one shape
-at heavy negative tracking, the text cut sets prose and controls upright and plainly. Sometype Mono
-is a *warm* mono rather than a neutral one, because it sits inches from Wix Madefor's text on the
-same card and a cold grotesque mono beside a warm humanist face reads as a paste-in from another
-document. Nothing is italic and nothing is a serif.
+All three are Fontshare (Indian Type Foundry), free for commercial use with self-hosting permitted,
+delivered through `next/font/local` from committed files in `public/fonts/` rather than a CDN.
 
-This is a deliberate reversal of the system it replaced, which ran one face for display, body, UI
-and poster alike and reached every register through scale and negative tracking. That is a
-defensible strategy; it was not this product's, and what it cost was the register this product most
-needs to get right — a figure. Thirty-six sites across twelve files already carried `tabular-nums`
-before a monospace face existed, which is the codebase asking for one out loud.
+**Character:** A high-contrast display serif against a neutral grotesk — the pairing a hotel folio
+or an auction catalogue uses, and the reason the product reads as considered rather than as
+well-made SaaS. Melodrama carries thin-to-thick modulation and appears at exactly one weight, 400;
+its restraint is the point, and a bold cut of it would undo the whole effect. Switzer is upright and
+unremarkable on purpose. Nothing is italic.
+
+This replaced Wix Madefor Display + Text + Sometype Mono, chosen three days earlier by elimination
+and competent at everything except the one thing this surface has to do in its first second.
 
 ### Hierarchy
-- **Hero** (900, `clamp(2.5rem, 6.2vw, 5.25rem)`, 1.02, `-0.075em`): `.font-scene-hero`, the landing
-  proposition and nothing else. No width axis — widening a heavy grotesk was the single strongest
-  template tell on the page; density comes from tracking.
-- **Display** (600, `clamp(2rem, 5vw, 3.75rem)`, 1.05, `-0.076em`): `.font-scene-display`, every
-  landing section heading and the destination name on the generation screen.
-- **Headline** (600, 1.5rem, 1.2, `-0.06em`): `.font-display`, panel and card headings.
-- **Title** (600, 1.125rem, 1.3): row and section titles inside a panel.
-- **Body** (400, 0.875rem, 1.625): dense product copy — day rows, stop notes, descriptions.
-- **Prose** (500, 1.0625–1.25rem, 1.55): the hero support line and the landing's persuade copy.
-  `.scene-prose` sets 1rem / 1.65 on marketing paragraphs only; the app's own panels stay dense. It owns the size as well as the leading deliberately — when it set leading alone, the landing ended up running body at 14px and three different leadings (1.8, 1.625, 1.5) because every call site decided for itself.
-- **Field** (500, 1rem, 1.4): every input. 16px is a hard floor.
-- **Label** (600, 0.6875rem, `0.11em`, uppercase): section openers and the entry capsule's cell
-  labels. This is a *label on a control or a rule*, never a line above a headline.
-- **Figure** (600, mono, `tabular-nums`): every money amount, time, duration, distance and count.
+- **Hero** (Melodrama 400, `clamp(2.5rem, 6.2vw, 5.25rem)`, 1.04, `--tracking-display`):
+  `.font-scene-hero`, the landing proposition and nothing else.
+- **Display** (Melodrama 400, `clamp(2rem, 5vw, 3.75rem)`, 1.08, `--tracking-display`):
+  `.font-scene-display`, every landing section heading and the destination on the generation screen.
+- **Display at any size** (Melodrama 400, 1.04, `--tracking-display`): `.font-display-xl`, the serif
+  where the caller sets the size — `/trips` and `/profile` mastheads. Owns `line-height`, so a
+  `leading-*` utility beside it is dead; see the Unlayered-Beats-Utility rule below.
+- **Heading** (Switzer 600, `--tracking-heading`): `.font-display`, panel and card headings at the
+  app's 16–24px step. **This is the sans class, not the serif one** — they were one class until
+  Melodrama landed and the 20px navbar wordmark came out spindly. The serif is `.font-display-xl`.
+- **Body** (Switzer 400, 1rem / 0.875rem, 1.6): product copy — day rows, stop notes, descriptions.
+- **Standfirst** (Switzer 500, 1.0625rem → 1.125rem at `sm`, 1.55, capped 46ch): the hero support
+  line and nothing else. The only body step above `prose`, and the only one that scales with the
+  viewport — it has to hold its distance from a headline that does.
+- **Prose** (Switzer 400–500, 1rem, 1.65): `.scene-prose` on marketing paragraphs; the app's own
+  panels stay dense. Capped at **58ch** wherever it runs long — `HowItWorks`, `/trips`, the print
+  page. That is the one measure value; there is not a second.
+- **Field** (Switzer 500, 1rem, 1.4): every input. 16px is a hard floor.
+- **Label** (Switzer 500–600, **0.6875rem**, **`--tracking-label`**, uppercase): section openers,
+  entry-capsule cell labels, map day badges, the `DAY n OF m` stamp. One size, one tracking, one
+  spelling.
+- **Caption** (Switzer 400, 0.75rem): the distinct quieter role — dl keys, footnotes. Not a label:
+  no uppercase, no tracking.
+- **Price** (Melodrama 400, `proportional-nums lining-nums`, `-0.005em`): `.price-display`. The
+  currency mark is subordinated to `0.42em` at 60% opacity and raised `-0.62em`, so what a visitor
+  reads is the figure. Landing prices only.
+- **Figure** (Tabular 600, `tabular-nums`): values compared **in a column**. Five sites.
 
 ### Named Rules
 
-**The Three Faces Rule.** Display sets headings and the hero, Text sets everything read as prose or
-operated as a control, Mono sets every figure. A fourth interface face needs a fourth job, and there
-isn't one. The system stack behind each is a fallback for the seconds before the webfont lands, not
-part of the design.
+**The Three Faces Rule.** Melodrama sets headings, the hero and the landing price. Switzer sets
+everything read as prose or operated as a control. Tabular sets figures in columns. A fourth
+interface face needs a fourth job, and there isn't one.
 
-**The Figure Rule.** If it is a number a traveller compares — a price, a total, a time, a distance, a
-count — it is Sometype Mono with `tabular-nums`. If it is a sentence, it is never Sometype Mono: a
-"why we chose this stop" line in monospace is a receipt.
+**The Figure Rule, narrowed — and this is the version that is actually true.** A census found the
+previous rule ("mono for every figure") honoured in about a quarter of cases: 5 of 19 money renders,
+and no date, time, duration or temperature anywhere. So the rule is now **tabular mono where values
+are compared in a column** — the dl columns, the stop-time gutter, the day totals, the budget
+readout, the how-it-works step numbers. Everything else that used to reach for mono goes elsewhere:
+
+- A price a visitor is meant to *feel* rather than compare is `.price-display`, at display scale in
+  the serif. That is what a menu or a lot listing does and what a monospace can never do.
+- A sentence is never mono. Three of `ImageRow`'s four "stat" lines contain no digit at all
+  ("Lodging, food, and transit — itemized") and were set in mono with `tabular-nums` on them,
+  aligning nothing.
+- A stamp is not a column. `DAY 2 OF 5` has two numerals and nothing to align them against.
+
+Mono reaches the landing at exactly one place — the how-it-works step numbers, in the third band —
+which is why it ships `preload: false` rather than being dropped: nothing in the first viewport
+paints it, so it should not compete with the hero photograph and the two faces that do.
+
+**The Tracking-Is-A-Token Rule.** Four values, and no fifth:
+
+| Token | Value | Where |
+|---|---|---|
+| `--tracking-display` | `-0.018em` | the serif at display scale |
+| `--tracking-heading` | `-0.012em` | headings and card titles |
+| `--tracking-body` | `0em` | prose, controls, buttons, small text |
+| `--tracking-label` | `0.18em` | every uppercase label |
+
+The census that preceded this found **20 distinct letter-spacing values**, six of them on uppercase
+labels 10–13px apart with no two derived from each other. Worse, the display negatives ran to
+`-0.085em` and `-0.106em` — numbers tuned for Wix Madefor and never revisited when the face changed,
+which at the footer's 45px links meant −3.8px per gap and letters touching in Switzer. **Tracking
+belongs to the face, so a face swap invalidates every literal in the codebase.** Tokens are how that
+stops being true.
+
+Three literal values survive on purpose, all documented at their declaration: `0.02em` and `0.05em`
+on map labels over imagery (a legibility register, not the interface one) and `-0.005em` on
+`.price-display` (optical, for the serif's figure widths).
+
+**Where the Unlayered-Beats-Utility Rule bites hardest.** That rule is stated in full under
+Elevation & Depth; type is where it is met most often, so the type-specific half is here. Every
+class above is declared unlayered in `globals.css`, so a `leading-`, `text-`, or `font-` utility
+beside a class that already declares that property **does nothing**, in silence. Which property each
+class owns:
+
+| Class | Owns | So a utility beside it that is dead |
+|---|---|---|
+| `.font-display` | family, weight, letter-spacing | `font-semibold` (18 inert sites, left alone) |
+| `.font-display-xl` | family, weight, letter-spacing, **line-height** | `leading-*` |
+| `.font-scene-hero` / `.font-scene-display` | all of the above **and font-size** | `text-*`, `leading-*` |
+| `.scene-prose` | font-size, line-height | `text-*`, `leading-*` |
+
+It has bitten four times: line-height, font-size, display utilities, and a `--font-display` key in
+`@theme inline` whose generated utility collided **by name** with the unlayered `.font-display`
+class — two rules on one selector, resolved by layer order rather than by anyone. That key was
+removed; `--font-sans` and `--font-mono` are real utilities and stay.
+
+**The Fluid-Type-Is-Scoped Rule.** `html` is a flat `16px`. A viewport-derived root
+(`clamp(16px, 1.13vw, 20px)`) was removed deliberately: `clamp()` with absolute px bounds overrides
+the visitor's own browser font-size at every width, so someone who set their default to 20px was
+served 16px regardless. Fluidity lives in `.font-scene-display` and `.font-scene-hero`, where it can
+be reasoned about, while body copy and dense instrument panels hold a stable step.
 
 **The World-Face Boundary is retired, and deliberately.** There used to be two typefaces reachable
 only from the marker layer — Orbitron for the day badges, Rajdhani for stop names — fenced by a rule
 that said labels standing on the globe are objects in the *world* rather than surfaces in the
 interface. The argument was real. The result was not: a square techno face with a glowing chip read
-as a sci-fi HUD dropped into a restrained product, which is the exact register DESIGN.md had already
-recorded trying and rejecting for the stop markers, and which a finish review flagged on the day
-badges. Both faces are gone; the globe sets its labels in the product's own display and text faces.
+as a sci-fi HUD dropped into a restrained product. Both faces are gone; the globe sets its labels in
+the product's own display and text faces.
 
 **What that cost, recorded so nobody rediscovers it.** Rajdhani was *condensed*, and the marker
 declutter budget (`MIN_SEPARATION_X_PX` in `StopMarkerLayer`) is measured in the horizontal pixels a
@@ -437,12 +534,6 @@ fourth typeface for it.
 The **colour** half of the boundary stands unchanged: route colour is map-native and must never
 appear in a panel, chip or button, and interface colour stays off the globe — with `--accent`
 marking a hovered or selected stop as the one documented exception.
-
-**The Fluid-Type-Is-Scoped Rule.** `html` is a flat `16px`. A viewport-derived root
-(`clamp(16px, 1.13vw, 20px)`) was removed deliberately: `clamp()` with absolute px bounds overrides
-the visitor's own browser font-size at every width, so someone who set their default to 20px was
-served 16px regardless. Fluidity lives in `.font-scene-display` and `.font-scene-hero`, where it can
-be reasoned about, while body copy and dense instrument panels hold a stable step.
 
 ## Layout
 
@@ -1027,15 +1118,24 @@ both the trip-wide line and every day's own route line. The day index and the da
 device at two scales, not two different metaphors.
 
 ### Typography
-**Display / Body Font:** Archivo, self-hosted as a base64 `woff2` data URI via `exportFont.ts`, falling
-back to `ui-sans-serif, system-ui, sans-serif` if the file is missing at build time — the *only* family
-in this document. A downloaded, single-column document reads as one voice at varying weight, not as a
-heading face plus a body face. (This is the app's *previous* display face; see Open Items.)
+**Display Font:** Melodrama · **Body Font:** Switzer — the app's own two, inlined as base64 `woff2`
+data URIs by `exportFont.ts`, each degrading independently to the system stack if its file is
+missing. ~84KB against ~420KB of photographs in the same file.
 
-- **Destination headline** (900, `clamp(3.2rem, 17vw, 5rem)`, .88, `-.078em`): the one large moment.
-- **Stop name** (700, `1.0625rem`, `-.055em`): the transit-map station label.
-- **Body** (400, `.9375rem`, 1.6, `-.04em`): day summaries, stop notes.
-- **Label / caption** (600–700, `.6875rem`–`.8125rem`): dates, meta, leg pills, the save note.
+This was Archivo alone until 2026-09-09 — the face the app removed — with its own nine-size,
+five-weight ramp topping out at 900, and every tracking value tuned for it. The export is the one
+artifact a traveler keeps and forwards, so it looking like a different product than the one that
+made it was the worst possible place for that drift. The ramp below is now the app's.
+
+- **Destination headline** (Melodrama 400, `clamp(3.2rem, 17vw, 5rem)`, .95, `-.018em`): the one
+  large moment, and the same serif that sets the app's hero.
+- **Day total** (Melodrama 400, `1.5rem`, `proportional-nums lining-nums`): the document's one price,
+  given the app's price treatment.
+- **Stop name** (Switzer 600, `1.0625rem`, `-.012em`): the transit-map station label.
+- **Body** (Switzer 400, `.9375rem`, 1.6, `0`): day summaries, stop notes.
+- **Label / caption / figure** (Switzer 600, `.6875rem`–`.8125rem`, `0`, `tabular-nums` where a
+  column exists): dates, meta, leg pills, times, the save note. No negative tracking at these sizes
+  — Archivo's `-.03em` to `-.05em` at 11–13px was a legibility loss the whole time.
 
 ### Layout
 Single column, no breakpoints. `.mast` sits above `.tripline` — a horizontally-scrollable strip with one
@@ -1230,12 +1330,29 @@ rules, and nothing here should be inherited by a new surface.
 3. **The export still carries the previous system's amber.** `The Trip Line` was byte-verified faithful
    to its own approved comp before the Kiln palette landed, and its `#fb9826` / `#A85C05` pair has not
    been re-hued to jade. The *rule* transfers (one colour, marking only what is active); the value has
-   not. Re-authoring it is a scoped piece of work on one template string.
+   not. Re-authoring it is a scoped piece of work on one template string. **The type half of this item
+   closed 2026-09-09** — the export was still entirely in Archivo, the removed face, and now ships the
+   app's Melodrama + Switzer on the app's tracking steps. `public/fonts/archivo-latin-var.woff2` (88KB)
+   was its last reference and is deleted. The colour half stands.
 4. **Radius drift on incumbent panels.** The Kiln edge rule is 5–8px on surfaces; `.glass-itinerary` and
    its descendants are still at 16px from the previous system. Recorded as `{rounded.panel}` so the
    frontmatter tells the truth about what the build is, not as a second doctrine.
 
 ## History
+
+- **Kiln II type revision** (current; 2026-09-09). Kiln II's colour, layout and component decisions
+  stand unchanged; only the type system moved. Three strategies were comped at 1440 and 390 against
+  the real hero, a real price and a real day row — 1 *Quiet* (Switzer alone, hierarchy from size and
+  space), 2 *Contrast* (a display serif at a light weight against a neutral grotesk), 3
+  *Numerals-first* (a restrained sans with every figure re-set by role). The user took **2 + 3**.
+
+  A role-by-role census ran first and changed the order of work: **the ramp was not coherent enough
+  for any face choice to read as premium.** It found 20 letter-spacing values, six label sizes in a
+  3px range written four ways, five body sizes, `.font-display` spanning 16→72px on one tracking
+  value while its own comment claimed the opposite, and prose running to 96–110ch in three places.
+  It also found the figure rule honoured in about a quarter of cases. Phase 1 fixed the foundation;
+  the faces landed on top of it. Face payload went 115KB (three Google families) to 104KB, of which
+  22KB no longer preloads, and `archivo-latin-var.woff2` (88KB) left the repo with the export.
 
 - **"Kiln II"** (current; approved 2026-09-08, comp `.impeccable/comps/2026-09-08-kiln-ii-APPROVED.md`,
   direction seed `02f66ad0`). Three systems were comped first — A Basalt (cool graphite / azure), B Clay

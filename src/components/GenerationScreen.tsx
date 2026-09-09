@@ -221,7 +221,7 @@ export default function GenerationScreen({
               is the margin worth having on the one element people actually read while waiting. */}
           <div className="grid gap-x-10 gap-y-5 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
             <div>
-              <p className="text-[0.62rem] font-semibold tracking-[0.14em] text-accent uppercase">
+              <p className="text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-accent uppercase">
                 {mode === "refine" ? "Reworking" : "Planning"} {city}
               </p>
               {/* `key` on the index restarts the entrance, so a change reads as a new line
@@ -230,7 +230,7 @@ export default function GenerationScreen({
                   otherwise shove the whole band up and down every seven seconds. */}
               <p
                 key={factIndex}
-                className="mt-2 min-h-[4rem] text-[clamp(1rem,1.7vw,1.375rem)] leading-[1.3] tracking-[-0.035em] text-foreground motion-safe:[animation:value-in_520ms_cubic-bezier(0.16,1,0.3,1)_backwards]"
+                className="mt-2 min-h-[4rem] text-[clamp(1rem,1.7vw,1.375rem)] leading-[1.3] tracking-[var(--tracking-heading)] text-foreground motion-safe:[animation:value-in_520ms_cubic-bezier(0.16,1,0.3,1)_backwards]"
               >
                 {facts[factIndex] ?? `Reading everything we can find about ${city}.`}
               </p>
@@ -243,7 +243,7 @@ export default function GenerationScreen({
                 return (
                   <div key={step.id} className="flex items-start gap-2">
                     <span
-                      className={`text-[0.62rem] font-semibold leading-none ${
+                      className={`text-[0.6875rem] font-semibold leading-none ${
                         state === "waiting" || state === "failed" ? "text-white/40" : "text-accent"
                       }`}
                     >
@@ -305,7 +305,7 @@ export default function GenerationScreen({
               <button
                 type="button"
                 onClick={onCancel}
-                className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
+                className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold tracking-[var(--tracking-body)] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
               >
                 Cancel
               </button>

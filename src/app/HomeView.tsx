@@ -261,7 +261,7 @@ function Field({
       }`}
       {...devLabel(`Field.${label}`)}
     >
-      <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.025em] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
+      <span className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
         {label}
         {optional && (
@@ -342,7 +342,7 @@ function Screen({
           way to tell whether you were one screen from a plan or ten. Stated once, quietly, above
           the heading rather than as a progress bar — four steps is short enough that the count is
           the reassurance and a bar would be furniture. */}
-      <p className="text-[0.7rem] font-medium tracking-[0.16em] text-muted uppercase">
+      <p className="text-[0.6875rem] font-medium tracking-[var(--tracking-label)] text-muted uppercase">
         Step {position} of {PLAN_ORDER.length}
       </p>
       <h2
@@ -377,7 +377,7 @@ function ReviewRow({
   return (
     <div className="flex items-start justify-between gap-3 py-2.5">
       <div>
-        <div className="text-xs font-semibold tracking-[0.025em] text-muted uppercase">
+        <div className="text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase">
           {label}
         </div>
         <div className="mt-0.5 text-sm text-foreground">{value}</div>
