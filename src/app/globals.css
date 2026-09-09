@@ -1155,39 +1155,37 @@ body {
    configuration nobody sees by default, and "My memories" and "Profile" were effectively
    invisible on /trip/[id].
 
-   0.86 is a real surface: over the same white tile it renders rgb(68,66,64) and the links measure
-   15.3:1. It still blurs, so it still reads as glass over the map rather than as a solid slab
-   dropped on top, but its legibility no longer depends on what the map happens to be showing.
-   The landing keeps the transparent bar through `.is-over-hero` below, because there the
-   background is a photograph we chose and darkened ourselves.
+   A real surface fixed it: legibility no longer depends on what the map happens to be showing. It
+   still blurs, so it still reads as glass over the map rather than as a solid slab dropped on top.
+   The value has since come down from 0.86 to 0.72 — see the note on the rule itself.
 
    The bottom rule makes the bar read as a cell in a drawn grid rather than as floating chrome.
    It also replaces the mobile menu's own `border-t`: the menu is `top-[var(--nav-h)]` and this
    border occupies the last pixel of that height, so the two abutted exactly and drew one hairline
    twice. At 0.86 the rule is now reliable everywhere rather than fading out over a bright map,
    which is a limitation this comment used to have to record and no longer does. */
+/* **One bar, every route.** The landing used to carry `.is-over-hero` — fully transparent, no blur,
+   no bottom rule — on the argument that its first viewport is a photograph we chose and darkened
+   ourselves, so the bar could float on it. The argument was sound and the result was not: the
+   landing's bar had no ground while every other route's was a solid surface, which is a header that
+   changes what it *is* depending on where you are. Navigation is the one component a visitor
+   carries between pages; it should be the last thing that moves under them.
+
+   0.72 rather than the 0.86 that variant left behind. 0.86 was picked to be unarguably safe over a
+   white MapLibre tile; 0.72 measures 6.86:1 there — still AA with real headroom, still AA over the
+   hero photograph's brightest band at 9.33:1 — and it keeps the bar reading as glass rather than as
+   a slab dropped on the page. Do not go below 0.60: that is 4.54:1 over white, which passes with
+   nothing to spare, and the tiles behind it are not ours to control.
+
+   The hero's top scrim went with the transparent variant. It existed only to give a groundless bar
+   something to sit on, and with a real surface above it, it was darkening 140px of photograph for
+   no one. */
 .glass-nav {
-  background: rgb(var(--surface-deep-rgb) / 0.86);
+  background: rgb(var(--surface-deep-rgb) / 0.72);
   backdrop-filter: blur(16px) saturate(1.1);
   border-bottom: 1px solid var(--card-border);
 }
 
-/* The landing only. Its first viewport is a photograph chosen and darkened by us, so the bar can
-   float on it the way a marketing header should; the wash inside the hero is what carries the
-   contrast there. Every other route puts the bar over a live map whose brightness is not ours to
-   choose, which is what the rule above exists for. */
-.glass-nav.is-over-hero {
-  background: transparent;
-  backdrop-filter: none;
-  border-bottom-color: transparent;
-}
-
-/* An open mobile menu is a surface in its own right on every route, landing included. */
-.glass-nav.is-over-hero.is-menu-open {
-  background: rgb(var(--surface-deep-rgb) / 0.86);
-  backdrop-filter: blur(16px) saturate(1.1);
-  border-bottom-color: var(--card-border);
-}
 
 /* The mobile menu panel, not the bar itself. It used to be a dropdown at 0.85 of the one
    slate — the more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` take over
@@ -1788,11 +1786,14 @@ body {
 
 /* The hero's own darkening, and the reason the headline needs no box behind it.
 
-   Two stops doing two different jobs. The top wash gives the fixed navbar something to sit on —
-   the bar is transparent on this one route (`.glass-nav.is-over-hero`) precisely because this
-   exists. The bottom wash is the ground the headline, the subline and the entry capsule stand in,
-   and it lands on `--canvas` exactly at 100%, so the hero dissolves into the next beat with no
-   seam to find rather than meeting it at a step.
+   **One stop now, not two.** There used to be a top wash as well, and its only job was giving a
+   transparent navbar something to sit on. The bar is a real surface on every route now, so the wash
+   was darkening roughly 140px of photograph for nobody — the brightest, most detailed part of the
+   frame, at the top. Deleting it is the second-order win of making the bar consistent.
+
+   The bottom wash is the ground the headline, the subline and the entry capsule stand in, and it
+   lands on `--canvas` exactly at 100%, so the hero dissolves into the next beat with no seam to
+   find rather than meeting it at a step.
 
    Authored on `--canvas` rather than `--surface-deep-rgb`: this is the page's floor showing
    through, not a panel material, and the two must not drift apart at the join. */
@@ -1815,7 +1816,6 @@ body {
 
 .hero-scrim {
   background:
-    linear-gradient(to bottom, rgb(18 17 16 / 0.55) 0%, rgb(18 17 16 / 0) 22%),
     linear-gradient(
       to bottom,
       rgb(18 17 16 / 0) 34%,
