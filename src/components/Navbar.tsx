@@ -240,9 +240,13 @@ export default function Navbar() {
 
   return (
     <nav
+      /* `is-over-hero` is the only state that gets a transparent bar, and it is scoped to the one
+         surface that has earned it: the landing, whose first viewport is a photograph the bar is
+         meant to float on. Everywhere else the bar is a real surface — see `.glass-nav` in
+         globals.css for the contrast measurements that forced the split. */
       className={`glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-stretch ${
-        menuOpen ? "is-menu-open" : ""
-      }`}
+        isHome ? "is-over-hero" : ""
+      } ${menuOpen ? "is-menu-open" : ""}`}
     >
       {/* Mark then wordmark, which is the reference's own header arrangement. `gap-2.5` and
           `h-[1.1em]` size the mark off the wordmark rather than in pixels, so the two stay in

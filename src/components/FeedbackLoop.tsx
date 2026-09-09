@@ -32,7 +32,7 @@ function DraftNote({ state }: { state: DraftState }) {
   return (
     <p
       role="status"
-      className={`mt-0.5 text-xs ${failed ? "text-red-400" : "text-muted"}`}
+      className={`mt-0.5 text-xs ${failed ? "text-alert" : "text-muted"}`}
     >
       {state === "pending" && "Saving a draft…"}
       {state === "saved" && "Saved as a draft — find it under Drafts in My memories."}

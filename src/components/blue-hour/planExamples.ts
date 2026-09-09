@@ -61,9 +61,17 @@ export type PlanPrefill = {
   destination: string;
   startDate: string;
   endDate: string;
-  budgetUsd: number;
-  adults: number;
-  children: number;
+  /** Optional so a *partial* prefill cannot overwrite a returning traveller's saved profile.
+   *
+   *  A featured-plan card knows all six values and sends all six. The hero's entry capsule knows
+   *  three — where and when — and deliberately does not ask for money or party size in the first
+   *  viewport. Were these required, the capsule would have to invent them, and `startPlanning`
+   *  derives `group` from the party counts, so passing a polite-looking `adults: 2, children: 0`
+   *  would silently reclassify a solo traveller as a couple and discard the answer they had
+   *  already given on /profile. Absent means "not asked", which is not the same as zero. */
+  budgetUsd?: number;
+  adults?: number;
+  children?: number;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");

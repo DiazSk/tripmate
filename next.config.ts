@@ -12,9 +12,20 @@ const nextConfig: NextConfig = {
   images: {
     // Lets next/image optimize the real destination photos usePlacePhoto resolves
     // (Memory postcards, the /trips hero collage) instead of shipping them as raw,
-    // unoptimized CSS background-images — the exact host /api/place-photo already
+    // unoptimized CSS background-images — the exact hosts /api/place-photo already
     // resolves photo URLs from.
-    remotePatterns: [{ protocol: "https", hostname: "upload.wikimedia.org" }],
+    //
+    // Both hosts are required, and missing the second one is a *runtime crash*, not a
+    // degraded image: an unconfigured host makes next/image throw `Invalid src prop`,
+    // which took down the whole of /trip/[id] rather than dropping one photograph.
+    // /api/place-photo returns `data.thumbnail.source` verbatim from Wikipedia's REST
+    // summary API, and Wikipedia serves thumbnails from `thumb.wikimedia.org` as well as
+    // `upload.wikimedia.org` — which host you get is theirs to decide, so allowlisting
+    // only the one we happened to see first fails on an arbitrary subset of destinations.
+    remotePatterns: [
+      { protocol: "https", hostname: "upload.wikimedia.org" },
+      { protocol: "https", hostname: "thumb.wikimedia.org" },
+    ],
   },
 
   // Replaces Cesium's Gaussian-splat decoder with a throwing stub. Without this every

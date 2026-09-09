@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Orbitron, Rajdhani } from "next/font/google";
+import { Sometype_Mono, Wix_Madefor_Display, Wix_Madefor_Text } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
 import "./globals.css";
@@ -19,70 +19,51 @@ import "./globals.css";
 const SHOW_LLM_TRACES = process.env.NODE_ENV === "development";
 
 /**
- * One face for the entire product — display, body, UI, the landing poster, all of it.
+ * Three faces, each with exactly one job.
  *
- * It was three (Source Serif 4, Archivo, Manrope), and before that five. The cut to one is the
- * central move of the Vita-derived system: every bit of expression now comes from scale, weight
- * and negative tracking rather than from a second family. Three webfonts became one, which is
- * also the cheapest performance win on the page.
+ * This is a deliberate reversal. The system this replaces ran on **one** face (Archivo) for
+ * display, body, UI and poster alike, and reached every other register through scale, weight and
+ * negative tracking — a move it had adopted wholesale from an external reference. Collapsing to
+ * one face is a real and defensible strategy; it was not, here, *this project's* strategy, and
+ * the thing it cost was the one register this product most needs to get right: a figure.
  *
- * What this deliberately gives up: Source Serif 4's italic was the app's voice on `/trip/[id]`
- * and `/trips`, and DESIGN.md defended it as the thing that separated "a real plan to look at"
- * from the marketing surface. That distinction is gone on purpose — landing and app now speak
- * once. Reversible in one commit if the itinerary views read worse for it.
+ * A trip plan is mostly numbers — times, durations, distances, per-stop costs, day totals,
+ * a budget against a target. Thirty-six sites across twelve files already carried
+ * `tabular-nums` before a monospace face existed, which is the codebase saying out loud that it
+ * wanted one. Proportional tabular figures line up; they do not *read* as a readout, and a
+ * column of prices in the same face as the prose beside it is a column you have to look for.
  *
- * No `axes: ["wdth"]` any more. The width axis existed solely for `font-stretch: 125%` on the
- * poster, and widening a heavy grotesk was the single strongest template tell on the page.
- * Loading the axis with nothing using it would ship bytes for a property no rule sets.
+ * So: --font-display sets headings and the hero, --font-sans sets everything read as prose or
+ * operated as a control, --font-mono sets every figure. Bridged into Tailwind in globals.css's
+ * `@theme inline` block, so `font-display` / `font-sans` / `font-mono` are ordinary utilities.
+ *
+ * Cost is close to flat despite going from one family to three: none of these pass a `weight`
+ * array, so next/font fetches the **variable** file — one request per family. The outgoing
+ * Archivo declared five static weights and therefore fetched five files.
  */
-const archivo = Archivo({
+const displayFace = Wix_Madefor_Display({
+  variable: "--font-display-stack",
+  subsets: ["latin"],
+});
+
+const textFace = Wix_Madefor_Text({
   variable: "--font-sans-stack",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "900"],
 });
 
 /**
- * The second face, and the narrow exception to the one-face rule above: the day badges standing
- * on the globe, and nothing else in the product.
+ * Figures only, and the reason it is a *warm* mono rather than a neutral one: it sits inches from
+ * Wix Madefor's text on the same card, and a cold grotesque mono beside a warm humanist text face
+ * reads as a paste-in from another document. Sometype Mono is drawn with enough humanist warmth to
+ * belong to the same page while still holding a column.
  *
- * The rule it breaks is real, so the boundary is drawn tightly. `.marker-day-label` is the only
- * selector allowed to reach this variable — it must never appear in a panel, a chip, a heading
- * or a button, for the same reason `--route-neon-*` must not: those labels are objects in the
- * *world*, drawn over aerial photography alongside the route geometry, not surfaces in the
- * interface. The globe already has its own colour palette on exactly that argument; this is the
- * typographic half of the same separation.
- *
- * Orbitron rather than Rajdhani/Exo/Space Grotesk because of what these labels actually contain:
- * "Day 1", uppercased and tracked out to 0.18em. Orbitron is a geometric, square-ish display
- * face that is genuinely poor at running text and excellent at four tracked-out characters over
- * a satellite image — which is the entire corpus it will ever set here. Two weights only (600
- * for the badge, 700 held in reserve), latin subset, so the exception costs one small woff2.
+ * Never set prose in this. A "why we chose this stop" sentence in monospace is a receipt.
  */
-const orbitron = Orbitron({
-  variable: "--font-map-display",
+const monoFace = Sometype_Mono({
+  variable: "--font-mono-stack",
   subsets: ["latin"],
-  weight: ["600", "700"],
 });
 
-/**
- * The marker layer's working face: stop names and neighbouring place names — the two labels that
- * carry real words rather than a four-character readout.
- *
- * It exists because Orbitron cannot do this job. "Private car to Crawford Market" set in a square
- * geometric display face at 0.875rem is a wall, and the marker layer's whole decluttering budget
- * is measured in the horizontal pixels a name occupies (`MIN_SEPARATION_X_PX`). Rajdhani is the
- * answer to both: it is squarish and technical enough to belong beside Orbitron, and condensed
- * enough that a long stop name takes visibly less screen than Archivo did — so more names survive
- * the separation scan at the same zoom.
- *
- * Same boundary as Orbitron's: `--font-map-label` is reachable from the marker layer and nowhere
- * else in the product. See The One Face Rule in DESIGN.md.
- */
-const rajdhani = Rajdhani({
-  variable: "--font-map-label",
-  subsets: ["latin"],
-  weight: ["500", "600"],
-});
 
 /**
  * Where this deploy lives, for the absolute URLs Open Graph requires — a social crawler cannot
@@ -129,16 +110,64 @@ export const metadata: Metadata = {
 // Matches --canvas in globals.css. manifest.ts's own theme_color covers the installed app; this
 // covers the browser chrome (address bar / status bar tint) before it's installed.
 export const viewport: Viewport = {
-  themeColor: "#091b20",
+  themeColor: "#121110",
 };
+
+/**
+ * The direction contract for this visual system, emitted as a real HTML comment in the served
+ * markup rather than left as a JSX comment.
+ *
+ * The distinction is the whole point: JSX comments are compiled away, so a contract written as one
+ * exists in the repo and the source map and nowhere a running page can be audited against. This is
+ * the record of what was decided, in a place where anyone can check the shipped thing against it.
+ * `grep 02f66ad0` over the built output is the audit.
+ */
+const DIRECTION_CONTRACT = `<!--
+KILN · direction seed 02f66ad0
+
+THESIS: A travel planner that shows you the real ground and the real price at the finish level of a
+shipped consumer product. It refuses the awwwards move of one enormous word posing over a stock
+mountain; the first viewport does work.
+
+OWN-WORLD: Warm near-neutral near-black (#121110), card #1C1A18, warm off-white type. Three named
+roles, each meaning one thing: jade #28B981 action, gold #E9B44C money, coral #E4553F alert. Wix
+Madefor Display / Text with Sometype Mono for every figure. Round what you touch, square what you
+read — pills on controls, 5-8px on surfaces. One light surface in the whole product: the hero's
+entry capsule.
+
+THE WORLD ON THE GLOBE: three faces, no exceptions. Orbitron and Rajdhani are gone, and so is the
+five-hue neon route ramp they belonged to — a finish review named them a surviving foreign register
+on the product's core screen and the user funded the re-derivation. The day ramp is now five earth
+pigments (--route-day-1..5) at a tight luminance band, none of which falls inside the accent's hue
+band, and the day badge is printed rather than lit: no coloured bloom, no inner glow, one offset
+shadow. Route colour is still map-native and still must never appear in a panel, chip or button;
+interface colour still stays off the globe, with --accent marking a hovered or selected stop as the
+one documented exception.
+
+STORY: The visitor sees a real place, understands within seconds that this plans a costed
+day-by-day trip against real weather, and starts entering their trip without leaving the first
+viewport.
+
+FIRST VIEWPORT: One full-bleed photograph on a scroll parallax, a two-line proposition, and a
+destination-plus-dates capsule that opens the wizard already filled in.
+
+FORM: The category standard, taken as the standing exit from direction seed 02f66ad0, executed at
+the craft level of Airbnb and Vercel.
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the
+verdict, and DESIGN.md.
+-->`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${archivo.variable} ${orbitron.variable} ${rajdhani.variable} h-full antialiased`}
+      className={`${displayFace.variable} ${textFace.variable} ${monoFace.variable} h-full antialiased`}
     >
       <body className="min-h-full">
+        {/* The direction contract — see DIRECTION_CONTRACT above. Emitted as a real HTML
+            comment so it can be audited in the served page, not just in source. */}
+        <div hidden dangerouslySetInnerHTML={{ __html: DIRECTION_CONTRACT }} />
         {SHOW_LLM_TRACES ? (
           <LlmTraceFabProvider>
             <AppShell>{children}</AppShell>

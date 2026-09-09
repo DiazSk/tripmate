@@ -10,7 +10,7 @@ export default function ErrorNote({ children }: { children: React.ReactNode }) {
   return (
     <div
       role="alert"
-      className="value-in pointer-events-auto rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400"
+      className="value-in pointer-events-auto rounded-xl border border-alert/30 bg-alert-soft p-3 text-sm text-alert"
     >
       {children}
     </div>
