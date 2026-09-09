@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useState, useSyncExternalStore } from "react";
 
+import { prefersReducedData, subscribeReducedData } from "@/lib/reducedData";
 import { prefersReducedMotion, subscribeReducedMotion } from "@/lib/reducedMotion";
 import HeroSearch from "./HeroSearch";
 import { HERO_SEQUENCE } from "./heroSequence";
@@ -62,27 +63,38 @@ const HeroFrames = dynamic(() => import("./HeroFrames"), { ssr: false });
  * ## The 400vh is opt-in, and that is what makes every fallback correct
  *
  * The track is one viewport until `data-seq` is set, which happens only once the sequence is known
- * to be able to run. No JavaScript, reduced motion, or a decode failure all leave the hero exactly
- * one screen tall — nobody is ever made to scroll three empty viewports past a still image. The
+ * to be able to run. No JavaScript, reduced motion, **a request to move less data**, or a decode
+ * failure all leave the hero exactly one screen tall — nobody is ever made to scroll three empty
+ * viewports past a still image, and nobody on a metered plan pays 9.76MB for decoration. The
  * attribute lands before any scroll and growing the page's scroll height shifts no visible
  * element, so it costs no CLS.
  */
 export default function Hero({ onPlan }: { onPlan: (prefill?: PlanPrefill) => void }) {
-  // `useSyncExternalStore` rather than a read in an effect: the *rendered output* depends on this
-  // answer, so it belongs in render. The server snapshot is `false`, so the server emits the same
-  // one-viewport hero that shipped before this feature — with the poster as its LCP element — and
-  // the client upgrades on hydration. It also tracks the setting being changed mid-session, which
-  // an effect that reads once cannot.
+  // `useSyncExternalStore` rather than a read in an effect: the *rendered output* depends on these
+  // answers, so they belong in render. Both server snapshots say "do not play", so the server emits
+  // the same one-viewport hero that shipped before this feature — with the poster as its LCP
+  // element — and the client upgrades on hydration. Both also track their setting changing
+  // mid-session, which an effect that reads once cannot.
+  //
+  // Two stores rather than one combined predicate: motion and bandwidth are separate questions
+  // that happen to gate the same element, and each subscribes to its own sources.
   const motionOk = useSyncExternalStore(
     subscribeReducedMotion,
     () => !prefersReducedMotion(),
+    () => false,
+  );
+  // The film is 9.76MB and decorative. Somebody on a metered plan should not pay for it to look
+  // nice, and declining costs nothing because the poster hero is already the fallback.
+  const dataOk = useSyncExternalStore(
+    subscribeReducedData,
+    () => !prefersReducedData(),
     () => false,
   );
   const [live, setLive] = useState(false);
 
   /** `undefined` → one viewport, no canvas. `"on"` → track grown, canvas mounted but transparent.
    *  `"live"` → enough frames decoded to scrub, canvas opaque. */
-  const seq = !motionOk ? undefined : live ? "live" : "on";
+  const seq = !(motionOk && dataOk) ? undefined : live ? "live" : "on";
 
   return (
     <div className="hero-track relative" data-seq={seq}>

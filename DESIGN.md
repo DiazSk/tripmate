@@ -870,8 +870,19 @@ frame it reads as continuous.
 
 **The 400dvh is opt-in, and that is the whole fallback story.** The track is one viewport until
 `data-seq` is set, which `Hero` does only once it knows the film can run. No JavaScript, reduced
-motion, or a frame that fails to load all leave the hero exactly one screen tall showing the poster.
-Nobody is ever made to scroll three empty viewports past a still image.
+motion, **a request to move less data**, or a frame that fails to load all leave the hero exactly
+one screen tall showing the poster. Nobody is ever made to scroll three empty viewports past a
+still image.
+
+**The Decoration-Is-Not-Worth-Ten-Megabytes Rule.** The film is 9.76MB and it is ornament — so it
+is gated on bandwidth as well as on motion. `prefers-reduced-data: reduce`, `navigator.connection.
+saveData`, and an `effectiveType` of `2g`/`slow-2g` each decline it, and declining costs nothing
+because the poster hero is already the fallback. The first two are the visitor *asking*; the third
+is inferred, and it is included anyway because the error is asymmetric — a false positive costs a
+decorative film with a good fallback, a false negative saturates a connection somebody is trying to
+use for the actual page. `3g` is deliberately excluded: the film loads progressively and is
+scrubbable from a quarter of its frames, so a 3G visitor gets something rather than nothing.
+`npm run verify-hero` asserts the collapse.
 
 **Named Rules**
 
