@@ -158,11 +158,11 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
     return (
       <section className="pointer-events-auto relative flex min-h-dvh items-center justify-center overflow-hidden p-5 text-center sm:p-6">
         {/* No photo to collage, so the base system's own material carries the beat instead of
-            reaching for stock imagery. `.scene-void` — shared with the landing's closing poster,
-            which is the same problem: an empty beat carrying one amber CTA. */}
+            reaching for stock imagery. `.scene-void` — shared with `/profile`'s zero-trips frame
+            (ProfileForm's `Memories`), which is the same problem: an empty beat with no photo. */}
         <div aria-hidden="true" className="scene-void absolute inset-0" />
         <div className="relative z-10 max-w-lg">
-          <h1 className="font-display text-4xl text-foreground sm:text-6xl">
+          <h1 className="font-display-xl text-4xl text-foreground sm:text-6xl">
             Your memories start here
           </h1>
           <p className="mt-3 text-base text-muted">
@@ -224,7 +224,7 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
             markup could not back rather than changing a weight. Byte-identical render. */}
         <h1
           ref={headingRef}
-          className="font-display text-5xl leading-[0.98] text-foreground sm:text-7xl"
+          className="font-display-xl text-5xl text-foreground sm:text-7xl"
         >
           My memories
         </h1>
@@ -310,7 +310,7 @@ function MemoryCard({
             on the card worth pointing at, and it sits on an arbitrary photograph — so it darkens
             (the Darken-Never-Lighten Rule) like every other chip on this surface. */}
         {draft && (
-          <span className="absolute top-3 right-3 rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] px-2.5 py-1 text-[11px] font-medium tracking-wide text-white uppercase backdrop-blur-sm">
+          <span className="absolute top-3 right-3 rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] px-2.5 py-1 text-[0.6875rem] font-medium tracking-wide text-white uppercase backdrop-blur-sm">
             Draft
           </span>
         )}
@@ -350,7 +350,7 @@ function MemoryCard({
         // permanently destroys data. It needs no `content` because Tailwind's `before:` variant
         // supplies `content: ""`, and the button is already `absolute`, so it is its own containing
         // block.
-        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm before:absolute before:-inset-1 hover:bg-red-600 focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
+        className="memory-card-delete pointer-events-auto absolute top-[22px] left-[22px] flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--surface-deep-rgb)/0.72)] text-white backdrop-blur-sm before:absolute before:-inset-1 hover:bg-alert focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
       >
         <Trash2 className="h-4 w-4" strokeWidth={2.25} />
       </button>
@@ -534,7 +534,7 @@ export default function TripsView({
               asking for them, so the one thing this strip has to answer is why a plan is here that
               the traveler never saved — and that it will not sit here forever. */}
           {activeTab === "drafts" && (
-            <p className="mb-5 max-w-2xl text-sm text-muted">
+            <p className="mb-5 max-w-[58ch] text-sm text-muted">
               Plans you generated but haven&apos;t kept. Open one to carry on where you left off —
               unkept drafts are cleared after {DRAFT_TTL_DAYS} days.
             </p>
@@ -559,7 +559,7 @@ export default function TripsView({
             // Only reachable on the memories tab with drafts in hand — the drafts tab doesn't
             // exist at zero. Says what turns a draft into a memory, since that is the one move
             // this traveler hasn't made yet.
-            <p className="max-w-2xl text-sm text-muted">
+            <p className="max-w-[58ch] text-sm text-muted">
               Nothing kept yet. Open a draft and press <em>Keep this trip</em>, and it becomes a
               memory here.
             </p>

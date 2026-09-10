@@ -44,9 +44,15 @@ const DOTS: { name: string; lat: number; lon: number; featured?: boolean }[] = [
   { name: "Vancouver", lat: 49.3, lon: -123.1 },
 ];
 
-/** The reference runs a slightly warmer orange on its map than in its nav, and the difference is
- *  visible against this cold ground, so it is kept rather than normalised to `--accent`. */
-const DOT_COLOR = "#fba13a";
+/** The accent, read from the token rather than held as a near-copy of it.
+ *
+ *  This used to be a literal `#fba13a` — a *slightly different* orange from the accent of the day
+ *  (`#fb9826`), kept on the reasoning that the reference site runs a warmer orange on its map than
+ *  in its nav. Two hues four values apart is not a distinction anyone can see; it is just a value
+ *  that no longer moves when the palette does, and it duly went stale the moment the accent left
+ *  the orange family entirely. An SVG `fill` cannot take a CSS variable through `stopColor` in all
+ *  engines, so it is read once here rather than inlined per element. */
+const DOT_COLOR = "var(--accent)";
 
 export default function DestinationMap() {
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -84,16 +90,21 @@ export default function DestinationMap() {
   return (
     <section
       id="destinations"
-      className="pointer-events-auto scroll-mt-[var(--nav-h)] px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band is-quiet has-rule pointer-events-auto"
       {...devLabel("DestinationMap")}
     >
       <SectionOpener label="Reach" headingRef={headingRef}>
-        <h2 className="font-scene-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground">
+        <h2 className="font-scene-display is-quiet text-foreground">
           Anywhere you can name
         </h2>
       </SectionOpener>
 
-      <p className="scene-prose mt-6 max-w-xl text-sm text-muted lg:ml-[calc(11rem+2.5rem)]">
+      {/* The `lg:ml-[calc(11rem+2.5rem)]` that used to be here is gone with the thing it aligned
+          to: the opener's old 11rem label column plus its 2.5rem gutter, which put this paragraph
+          under the heading rather than under the label. The opener no longer has a left column, so
+          the indent had nothing to line up with and was simply pushing the copy 217px right of
+          every other paragraph on the page. */}
+      <p className="scene-prose mt-6 max-w-xl text-muted">
         The planner geocodes the destination you type, then pulls that place&rsquo;s real forecast,
         public holidays and opening hours. There is no list of supported cities to be missing from.
       </p>

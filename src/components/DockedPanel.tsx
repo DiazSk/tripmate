@@ -289,7 +289,7 @@ function Capsule({
           </span>
         )}
         {summary?.step && (
-          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-white/75">
+          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[0.6875rem] font-medium whitespace-nowrap text-white/75">
             {summary.step}
           </span>
         )}

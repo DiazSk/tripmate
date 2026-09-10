@@ -180,7 +180,7 @@ export default function MapSearchPanel() {
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {state === "throttled" && (
-              <p className="px-3 py-4 text-xs text-amber-200">
+              <p className="px-3 py-4 text-xs text-alert/75">
                 Search is busy right now — the free places index rate-limits. Try again in a moment.
               </p>
             )}
@@ -219,7 +219,7 @@ export default function MapSearchPanel() {
                     onClick={() => addPlace(place)}
                     aria-label={`Add ${place.name} to ${dayLabel}`}
                     title={`Add to ${dayLabel}`}
-                    className={`mt-0.5 flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${
+                    className={`mt-0.5 flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[0.6875rem] font-medium transition-colors ${
                       addedId === place.id
                         ? "bg-accent/20 text-accent"
                         : "bg-white/10 text-muted hover:bg-white/20 hover:text-foreground"
@@ -241,7 +241,7 @@ export default function MapSearchPanel() {
 
           {/* Attribution, and an honest statement of which index answered. Both providers require
               it, and it is also the fastest way to tell whether a key is actually in play. */}
-          <p className="shrink-0 border-t border-card-border px-3 py-1.5 text-[10px] text-white/40">
+          <p className="shrink-0 border-t border-card-border px-3 py-1.5 text-[0.6875rem] text-white/40">
             {provider === "google" ? "Places by Google" : "Places by OpenStreetMap"}
           </p>
         </div>

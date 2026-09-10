@@ -5,9 +5,10 @@ export type SceneBeat = {
   photo?: { src: string; alt: string };
   /** Bold identifier, always visible above the card. */
   label: string;
-  /** Muted qualifier, always visible beneath the label — Vita Travels' own
-   *  "Label / Stat" pattern ("Introvert Retreats / 78+ Countries"), grounded in a
-   *  real product fact rather than a mood phrase, so the label isn't standing alone. */
+  /** The concrete fact this beat is actually claiming, and the card's headline since the borrowed
+   *  "Label / Stat" head was replaced (see ImageRow). It leads rather than trails, and it is set
+   *  in the figure face — so it must stay a *measurement*, not a mood phrase. "One 20-minute
+   *  window, every evening" earns that face; "Unforgettable evenings" would not. */
   stat: string;
   /** Full sentence, revealed inside the card on hover. Was a dangling fragment
    *  ("Not lowball guesses", "Built into the plan") — reads as half a thought with

@@ -5,7 +5,7 @@ import { useRef } from "react";
 
 import ButtonMark from "@/components/ButtonMark";
 import { devLabel } from "@/lib/devInspector";
-import { formatDateRange, formatMoney } from "@/lib/format";
+import { formatDateRange, splitMoney } from "@/lib/format";
 import { useLineReveal } from "@/lib/lineReveal";
 import {
   formatExampleParty,
@@ -58,7 +58,7 @@ export default function FeaturedPlans({
   return (
     <section
       id="featured"
-      className="pointer-events-auto scroll-mt-[var(--nav-h)] px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band is-dense has-rule pointer-events-auto"
       {...devLabel("FeaturedPlans")}
     >
       {/* `headingRef` goes on the h2, not on SectionOpener's wrapper. The wrapper holds the
@@ -68,14 +68,14 @@ export default function FeaturedPlans({
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
           <h2
             ref={headingRef}
-            className="font-scene-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground"
+            className="font-scene-display text-foreground"
           >
             Four trips, already priced
           </h2>
           {/* The reference puts support copy in the header's right half rather than beneath the
               heading. It keeps the heading a single object and gives the paragraph somewhere to be
               that is not directly under it. */}
-          <p className="scene-prose max-w-sm text-sm text-muted">
+          <p className="scene-prose max-w-sm text-muted">
             Every figure below is what the planner returns for those dates and that budget —
             not a starting price with the real one further in.
           </p>
@@ -132,13 +132,26 @@ export default function FeaturedPlans({
                 card and the CTA at the bottom of every card, so the spec list absorbs the slack
                 instead of each card ending wherever its own copy happened to stop. */}
             <div className="flex h-full flex-col justify-between">
-              <h3 className="text-[1.75rem] font-semibold leading-[1.2] tracking-[-0.09em] text-foreground">
+              <h3 className="text-[1.75rem] font-semibold leading-[1.2] tracking-[var(--tracking-heading)] text-foreground">
                 {plan.title}
               </h3>
-              <p className="mt-2 text-sm text-muted">
-                from{" "}
-                <span className="text-base font-semibold text-foreground">
-                  {formatMoney(plan.budgetUsd)}
+              {/* The figure in the money colour and the figure face. It shipped as
+                  `text-foreground` — plain body white — on the one section whose heading is "Four
+                  trips, already priced", which meant the proof of this product's central claim was
+                  the least distinguished thing on the card. Gold appeared exactly once on the whole
+                  landing before this. A colour role that is defined and then not used where it
+                  applies is not a role, it is a swatch. */}
+              {/* The price at display scale in the display face — see `.price-display`. It was
+                  17px monospace, the same size as the body beside it, on the one section headed
+                  "Four trips, already priced": the proof of this product's central claim, set as
+                  though it were a row in a log. */}
+              <p className="mt-3 flex items-center gap-3">
+                <span className="text-[0.6875rem] font-medium tracking-[var(--tracking-label)] text-muted uppercase">
+                  from
+                </span>
+                <span className="price-display text-[2.25rem] sm:text-[2.75rem]">
+                  <span className="price-currency">{splitMoney(plan.budgetUsd).currency}</span>
+                  <span>{splitMoney(plan.budgetUsd).figure}</span>
                 </span>
               </p>
 
@@ -190,7 +203,7 @@ export default function FeaturedPlans({
               <button
                 type="button"
                 onClick={() => onPlan(toPrefill(plan, todayISO()))}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98] sm:w-fit sm:justify-start"
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface-deep px-5 py-2.5 text-sm font-semibold tracking-[var(--tracking-body)] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98] sm:w-fit sm:justify-start"
               >
                 Plan a trip like this
                 {/* Kept at this button's own `gap-2` rather than the reference's `1rem` — that is

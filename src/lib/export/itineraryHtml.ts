@@ -7,7 +7,10 @@ import { MAP_CSS, MAP_RUNTIME, renderMapSection } from "./mapSvg";
 
 export interface ExportAssets {
   /** A `data:font/woff2;base64,...` URI, or null to fall back to the system stack. */
+  /** The text face (Switzer), inlined. */
   fontDataUri: string | null;
+  /** The display face (Melodrama), inlined. Sets the destination only. */
+  displayFontDataUri?: string | null;
   /** The offline map, or absent/null for a document without one. Optional rather than
    *  required-nullable so "the geometry could not be fetched" and "this caller wants no map" stay
    *  one code path — and so the fixtures that prove the document survives with no assets at all
@@ -20,10 +23,11 @@ export interface ExportAssets {
 const DIRECTION_CONTRACT = `<!--
   THESIS: A day is a route, not a list. Refuses the itinerary-app default of stacked cards.
   OWN-WORLD: Transit-diagram grammar on #F5F7F7. 8px trunk in TripMate's own #0d2e37; stops are
-    interchange nodes; #fb9826 marks only the active stop, per the app's reserved-accent rule.
+    interchange nodes; jade #28b981 (fills) / #0D6042 (strokes) marks only what is active, per the
+    app's reserved-accent rule.
   STORY: The traveler sees the trip as one line, taps into a day, and reads it like a metro map.
-  FIRST VIEWPORT: Destination photo ~44svh, destination at clamp(3.2rem,17vw,5rem)/900, dates and
-    budget beneath, then the trip line with one station per day.
+  FIRST VIEWPORT: Destination photo ~44svh, destination in Melodrama 400 at
+    clamp(3.2rem,17vw,5rem), dates and budget beneath, then the trip line with one station per day.
   FORM: Route-as-spine, candidate 7 of 7, seed key e57fcfdf.
   FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the
     verdict, and DESIGN.md.
@@ -33,10 +37,43 @@ const DIRECTION_CONTRACT = `<!--
  *  authority (.impeccable/comps/comp-b-linemap.html), not re-derived here. The one addition the
  *  comp doesn't need to show — a per-day thumbnail sitting where its plain node (`.st i`) would
  *  go — mirrors that node's own size, border and "on" treatment exactly. */
+/**
+ * Why the export's accent is jade, and why it is two shades.
+ *
+ * Kept out of the CSS template literal on purpose: everything in there ships inside the `.html`
+ * file a traveler keeps and forwards, and the first version of this note put ~1.5KB of rationale
+ * about a superseded hex into every export. The `DIRECTION_CONTRACT` ships deliberately because a
+ * reader of the artifact can audit it; a changelog cannot be audited from the artifact and does
+ * not belong there.
+ *
+ * This carried the previous system's amber (`#fb9826` / `#A85C05`) through two palettes, purely
+ * because the file had been byte-verified against its own approved comp and nobody wanted to
+ * disturb it. DESIGN.md tracked it as an open item rather than aligning it quietly.
+ *
+ * **Re-hued by measurement, not by copying the app's hex.** The export's marks are validated
+ * *all-pairs*, because on the map any two of them can sit side by side. Against the category hues
+ * jade's worst pair is dE2000 18.7 (jade/transit) on a 15.5 floor, where amber was 18.5 — a small
+ * improvement rather than a risk — and the worst CVD pair is `food/transit` at 10.9 either way, so
+ * the accent does not touch it. Coral was rejected outright at dE 4.0 against transit under
+ * simulated protanopia. Gold separated best but had the worst contrast, and gold means money here.
+ *
+ * **Two shades, split by fills versus strokes.** On a light ground one mid-tone cannot do both
+ * jobs. `--accent` fills, where dark ink sits on it (6:1 for the day number) and a white ring
+ * separates it. `--accent-ink` strokes and rims, where the mark *is* the colour and has to carry
+ * itself against paper: 7.58:1 on white for the 1.9px stay icon, 3.01:1 against the jade fill for
+ * the open day's rim.
+ *
+ * That split is also a fix. The map's active route line used the fill shade, which as a 2.6px
+ * stroke measured 1.86:1 on land and 1.65:1 over water — under the 3:1 floor for a graphical
+ * object. On the ink shade it is 6.48:1 and 5.72:1, and still 4.69:1 against the inactive lines,
+ * which composite to #c4cdd0 at their 17% opacity.
+ */
 const CSS = `
 :root{
   --paper:#F5F7F7; --card:#fff; --ink:#0B2A32; --deep:#0d2e37;
-  --muted:#5B7178; --hair:rgba(11,42,50,.14); --accent:#fb9826; --accent-ink:#A85C05;
+  --muted:#5B7178; --hair:rgba(11,42,50,.14);
+  /* One colour, marking only what is active. Jade fills, dark jade strokes. */
+  --accent:#28b981; --accent-ink:#0D6042;
   --trunk:8px;
   /* Stop categories. Three hues carrying identity, validated all-pairs (the pairlist a map of
      dots needs, since any two marks can sit side by side) against both #E9EEEF and #fff:
@@ -49,8 +86,8 @@ const CSS = `
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{
   background:var(--paper); color:var(--ink);
-  font-family:Archivo,ui-sans-serif,system-ui,sans-serif;
-  font-size:.9375rem; line-height:1.6; letter-spacing:-.04em;
+  font-family:Switzer,ui-sans-serif,system-ui,sans-serif;
+  font-size:.9375rem; line-height:1.6; letter-spacing:0;
   -webkit-font-smoothing:antialiased;
 }
 /* ---------- the pinned bar: title + map ---------- */
@@ -65,7 +102,8 @@ body.shrunk .topbar{box-shadow:0 12px 16px -14px rgba(11,42,50,.55)}
    moves scrollY, which feeds back into the size — measured settling at 0.24 where it should have
    been 1. A latched state cannot chase itself, and the transition is what makes it read as one
    continuous movement. */
-h1{font-size:clamp(3.2rem,17vw,5rem);font-weight:900;line-height:.9;letter-spacing:-.078em;
+h1{font-family:Melodrama,ui-serif,Georgia,serif;
+  font-size:clamp(3.2rem,17vw,5rem);font-weight:400;line-height:.95;letter-spacing:-.018em;
   transition:font-size .26s cubic-bezier(.4,0,.2,1)}
 .trmeta{overflow:hidden;max-height:3.6rem;opacity:1;
   transition:max-height .26s cubic-bezier(.4,0,.2,1),opacity .18s linear}
@@ -89,9 +127,10 @@ body.js .day>summary{position:sticky;top:var(--stick,0px);z-index:10;
   border-top:1px solid var(--hair);margin-top:-1px}
 .day>summary::-webkit-details-marker{display:none}
 .dnum{width:30px;height:30px;border-radius:50%;border:3px solid var(--deep);background:var(--card);
-  display:grid;place-items:center;font-size:.8125rem;font-weight:700;letter-spacing:-.04em}
+  display:grid;place-items:center;font-size:.8125rem;font-weight:600;letter-spacing:0;
+  font-variant-numeric:tabular-nums}
 .day[open] .dnum{background:var(--accent);border-color:var(--accent-ink)}
-.dtitle{font-size:1rem;font-weight:600;letter-spacing:-.045em;line-height:1.25}
+.dtitle{font-size:1rem;font-weight:600;letter-spacing:-.012em;line-height:1.25}
 .ddate{display:block;margin-top:2px;font-size:.8125rem;font-weight:400;color:var(--muted)}
 .chev{width:16px;height:16px;stroke:var(--muted);stroke-width:2.2;fill:none;transition:transform .18s}
 .day[open] .chev{transform:rotate(90deg)}
@@ -100,7 +139,7 @@ body.js .day>summary{position:sticky;top:var(--stick,0px);z-index:10;
 .dbody{padding:0 22px 32px}
 .wx{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--hair);
   border-radius:999px;padding:6px 13px 6px 10px;font-size:.75rem;font-weight:600;
-  letter-spacing:-.045em;color:var(--muted)}
+  letter-spacing:0;color:var(--muted)}
 .wx svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8}
 .dsum{margin-top:12px;font-size:.9375rem;color:var(--muted);line-height:1.55}
 
@@ -109,11 +148,11 @@ body.js .day>summary{position:sticky;top:var(--stick,0px);z-index:10;
 .route::before{content:"";position:absolute;left:64px;top:9px;bottom:34px;width:var(--trunk);
   background:var(--deep);border-radius:999px;transform:translateX(-50%)}
 .stop{position:relative;display:grid;grid-template-columns:44px 1fr;gap:34px;padding-bottom:2px}
-.time{font-size:.8125rem;font-weight:700;letter-spacing:-.05em;color:var(--muted);
+.time{font-size:.8125rem;font-weight:600;letter-spacing:0;color:var(--muted);
   text-align:right;padding-top:2px;font-variant-numeric:tabular-nums}
 .snode{position:absolute;left:64px;top:1px;width:24px;height:24px;border-radius:50%;
   transform:translateX(-50%);z-index:1;display:flex;align-items:center;justify-content:center;
-  font-size:.6875rem;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;
+  font-size:.6875rem;font-weight:600;letter-spacing:0;font-variant-numeric:tabular-nums;
   color:#fff;background:var(--cat-other);border:3px solid var(--paper)}
 .snode[data-cat="food"]{background:var(--cat-food)}
 .snode[data-cat="entry"]{background:var(--cat-entry)}
@@ -121,7 +160,7 @@ body.js .day>summary{position:sticky;top:var(--stick,0px);z-index:10;
 .stop[data-stop]{cursor:pointer}
 .stop.done .sname{opacity:.55}
 .stop.done .snode{opacity:.4}
-.sname{font-size:1.0625rem;font-weight:700;letter-spacing:-.055em;line-height:1.24}
+.sname{font-size:1.0625rem;font-weight:600;letter-spacing:-.012em;line-height:1.24}
 .smeta{margin-top:4px;font-size:.8125rem;font-weight:500;color:var(--muted)}
 .swhy{margin-top:8px;font-size:.875rem;color:var(--ink);opacity:.82;line-height:1.55}
 .snote{margin-top:5px;font-size:.875rem;color:var(--muted);line-height:1.55}
@@ -130,19 +169,20 @@ body.js .day>summary{position:sticky;top:var(--stick,0px);z-index:10;
 .leg{position:relative;display:grid;grid-template-columns:44px 1fr;gap:34px;padding:13px 0 17px}
 .legpill{display:inline-flex;align-items:center;gap:7px;background:var(--paper);
   border:1px solid var(--hair);border-radius:999px;padding:4px 11px 4px 9px;
-  font-size:.6875rem;font-weight:700;letter-spacing:-.03em;color:var(--muted)}
+  font-size:.6875rem;font-weight:600;letter-spacing:0;color:var(--muted)}
 .legpill svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2}
 
 /* stay + total */
 .stay{margin-top:22px;display:flex;gap:11px;align-items:flex-start;background:var(--card);
   border:1px solid var(--hair);border-radius:14px;padding:14px 15px}
 .stay svg{width:17px;height:17px;flex:none;margin-top:1px;fill:none;stroke:var(--accent-ink);stroke-width:1.9}
-.stay b{display:block;font-size:.9375rem;font-weight:700;letter-spacing:-.05em}
+.stay b{display:block;font-size:.9375rem;font-weight:600;letter-spacing:0}
 .stay span{display:block;margin-top:3px;font-size:.8125rem;color:var(--muted)}
 .dtotal{margin-top:16px;display:flex;justify-content:space-between;align-items:baseline;
-  border-top:2px solid var(--deep);padding-top:12px;font-size:.8125rem;font-weight:700;
-  letter-spacing:-.045em;color:var(--muted)}
-.dtotal b{font-size:1.25rem;font-weight:700;letter-spacing:-.07em;color:var(--ink)}
+  border-top:2px solid var(--deep);padding-top:12px;font-size:.8125rem;font-weight:600;
+  letter-spacing:0;color:var(--muted)}
+.dtotal b{font-family:Melodrama,ui-serif,Georgia,serif;font-size:1.5rem;font-weight:400;
+  letter-spacing:-.005em;font-variant-numeric:proportional-nums lining-nums;color:var(--ink)}
 
 /* inline spans used as block rows */
 .sname,.smeta,.dtitle,.ddate,.stop>span:last-child,.st b,.st span{display:block}
@@ -361,9 +401,15 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
   const totalStops = days.reduce((sum, d) => sum + d.stops.length, 0);
   const tripTotal = days.reduce((sum, d) => sum + dayPlanned(d), 0);
 
-  const fontFace = assets.fontDataUri
-    ? `@font-face{font-family:Archivo;src:url(${assets.fontDataUri}) format('woff2');font-weight:100 900;font-display:swap}\n`
-    : "";
+  // One rule per face. Both are optional and independently so: a missing display face drops the
+  // destination to the text face rather than to the system stack, which is the better fallback.
+  const fontFace =
+    (assets.fontDataUri
+      ? `@font-face{font-family:Switzer;src:url(${assets.fontDataUri}) format('woff2');font-weight:100 900;font-display:swap}\n`
+      : "") +
+    (assets.displayFontDataUri
+      ? `@font-face{font-family:Melodrama;src:url(${assets.displayFontDataUri}) format('woff2');font-weight:300 700;font-display:swap}\n`
+      : "");
 
   // Both are omitted entirely without a map, rather than shipping dead CSS and a script that
   // would find no `.map` to bind to.

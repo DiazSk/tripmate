@@ -150,8 +150,8 @@ function MemoryThumb({ trip }: { trip: TripSummary }) {
  * way through to the rest. `My memories` stays a top-level route and a top-level nav link.
  *
  * With nothing saved there is no photography to show, so the frame takes `.scene-void` — the
- * app's existing answer to a beat with no photograph to collage (`HeroPoster`, `/trips`' own empty
- * state) — rather than an empty grey box pretending a picture failed to load.
+ * app's existing answer to a beat with no photograph to collage (`/trips`' own empty state) —
+ * rather than an empty grey box pretending a picture failed to load.
  */
 function Memories({ trips }: { trips: TripSummary[] }) {
   const [lead, ...rest] = trips;
@@ -356,13 +356,20 @@ export default function ProfileForm({
                 the spacing belongs to this arrangement, not to the component. */}
             <div className="pb-10">
             <SectionOpener label="Profile" rule={false}>
-            {/* `.font-display`, the app's own display step — not `.font-scene-display`. They are
-                the same face at the same weight and differ only in tracking, but the scene classes
-                are scoped to the Persuade surface, and this is an Operate one. Same reason the
-                subline below does not take `.scene-prose`: its own comment reserves that 1.8
-                leading for the landing and warns it costs a screenful of scanning on a dense
-                panel. */}
-            <h1 className="font-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground">
+            {/* `.font-display-xl` — the display serif at a size this page picks. **Not**
+                `.font-scene-display`: the scene classes carry the landing's own fluid clamp and are
+                scoped to the Persuade surface, and this is an Operate one. **Not** `.font-display`
+                either, which since the Melodrama split is the *sans* heading step for panels and
+                cards, two registers below a page masthead. `/trips` sets its masthead the same way,
+                and these two account pages sitting in different faces was the tell.
+
+                Same reason the subline below does not take `.scene-prose`: that class reserves its
+                open leading for the landing and costs a screenful of scanning on a dense panel.
+
+                Three classes with overlapping names is a real trap, so: if you change this line,
+                change this note. The last two people who touched it did not, and both times the
+                comment above ended up describing something the code was not doing. */}
+            <h1 className="font-display-xl text-[clamp(2rem,4vw,3rem)] text-foreground">
               Your travel profile
             </h1>
             <p className="max-w-md pt-4 text-sm leading-relaxed text-muted">

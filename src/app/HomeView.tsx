@@ -261,7 +261,7 @@ function Field({
       }`}
       {...devLabel(`Field.${label}`)}
     >
-      <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.025em] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
+      <span className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
         {label}
         {optional && (
@@ -342,7 +342,7 @@ function Screen({
           way to tell whether you were one screen from a plan or ten. Stated once, quietly, above
           the heading rather than as a progress bar — four steps is short enough that the count is
           the reassurance and a bar would be furniture. */}
-      <p className="text-[0.7rem] font-medium tracking-[0.16em] text-muted uppercase">
+      <p className="text-[0.6875rem] font-medium tracking-[var(--tracking-label)] text-muted uppercase">
         Step {position} of {PLAN_ORDER.length}
       </p>
       <h2
@@ -377,7 +377,7 @@ function ReviewRow({
   return (
     <div className="flex items-start justify-between gap-3 py-2.5">
       <div>
-        <div className="text-xs font-semibold tracking-[0.025em] text-muted uppercase">
+        <div className="text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase">
           {label}
         </div>
         <div className="mt-0.5 text-sm text-foreground">{value}</div>
@@ -1701,11 +1701,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       setDestination(prefill.destination);
       setStartDate(prefill.startDate);
       setEndDate(prefill.endDate);
-      setBudget(prefill.budgetUsd);
-      setParty({ adults: prefill.adults, children: prefill.children, infants: 0 });
-      setGroup(
-        prefill.children > 0 ? "family_with_kids" : prefill.adults === 1 ? "solo" : "couple"
-      );
+      // Each guarded independently, because a partial prefill must leave everything it did not
+      // ask about exactly as the traveller's saved profile left it. See PlanPrefill for why the
+      // three money/party fields are optional rather than defaulted at the call site.
+      if (prefill.budgetUsd !== undefined) setBudget(prefill.budgetUsd);
+      if (prefill.adults !== undefined || prefill.children !== undefined) {
+        const adults = prefill.adults ?? 1;
+        const children = prefill.children ?? 0;
+        setParty({ adults, children, infants: 0 });
+        setGroup(children > 0 ? "family_with_kids" : adults === 1 ? "solo" : "couple");
+      }
     }
     // Always the first sub-step, even fully prefilled: the card is a suggestion and the traveller
     // should see what it filled in before it prices anything.
@@ -1798,9 +1803,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               whatever the container gives them. Proximity is the strongest grouping cue there is
               and a full screen-width sweep from a label to its own control breaks it. Each step now
               gets the width its content asks for. Measured at 1280: the label/stepper gap goes
-              1054px -> ~590px, and the lone input stops being a rule with a cursor in it. */}
+              1054px -> ~590px, and the lone input stops being a rule with a cursor in it.
+
+              **105rem, not the 84rem this carried, and the change is a no-op in pixels.** The cap
+              was written in `rem` on the explicit reasoning that the root was fluid — 84rem was
+              1680px once the root reached its 20px ceiling. The root is a flat 16px now (see
+              globals.css), so 84rem would have quietly become 1344px and left 288px of dead canvas
+              down each side of the widest step in the product, on a 1920 display, on the screen a
+              demo spends the most time on. 105rem restores the same 1680px against the new root.
+              It is a plain cap now rather than a fluid one, which is what the surrounding
+              measurements were always tuned against anyway. */}
           <div
-            className={`w-full space-y-4 ${planStep === "basics" ? "max-w-[84rem]" : "max-w-3xl"}`}
+            className={`w-full space-y-4 ${planStep === "basics" ? "max-w-[105rem]" : "max-w-3xl"}`}
           >
             {/* Same hero-rise as the landing block, so the step reads as one move in both
                 directions rather than an instant swap forward and an animated one back. */}

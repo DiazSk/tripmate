@@ -30,9 +30,9 @@ export function useLlmTraceWidget(): LlmTraceWidgetApi {
 }
 
 const RUN_STATUS_STYLES: Record<string, string> = {
-  success: "bg-emerald-400/15 text-emerald-300 border-emerald-400/30",
-  partial_failure: "bg-amber-400/15 text-amber-300 border-amber-400/30",
-  failed: "bg-red-400/15 text-red-300 border-red-400/30",
+  success: "bg-accent/15 text-accent border-accent/30",
+  partial_failure: "bg-alert-soft text-alert/75 border-alert/30",
+  failed: "bg-alert-soft text-alert border-alert/30",
   pending: "bg-tile text-muted border-card-border",
 };
 
@@ -221,7 +221,7 @@ function StepDetail({ step, onBack }: { step: RunStep; onBack: () => void }) {
         </div>
 
         {step.errorMessage && (
-          <div className="rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">
+          <div className="rounded-lg border border-alert/30 bg-alert-soft p-3 text-sm text-alert">
             {step.errorMessage}
           </div>
         )}
@@ -283,7 +283,7 @@ function RunView({
       </button>
 
       {error && (
-        <div className="rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">{error}</div>
+        <div className="rounded-lg border border-alert/30 bg-alert-soft p-3 text-sm text-alert">{error}</div>
       )}
       {!run && !error && <p className="text-sm text-muted">Loading…</p>}
 
@@ -351,7 +351,7 @@ function LegacyDetail({ id, onBack }: { id: string; onBack: () => void }) {
       </button>
 
       {error && (
-        <div className="rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">{error}</div>
+        <div className="rounded-lg border border-alert/30 bg-alert-soft p-3 text-sm text-alert">{error}</div>
       )}
       {!trace && !error && <p className="text-sm text-muted">Loading…</p>}
 
@@ -373,7 +373,7 @@ function LegacyDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
 
           {trace.errorMessage && (
-            <div className="rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">
+            <div className="rounded-lg border border-alert/30 bg-alert-soft p-3 text-sm text-alert">
               {trace.errorMessage}
             </div>
           )}
@@ -437,12 +437,19 @@ function LlmTraceFab({
             // canvas exactly like `MapControls`' zoom and compass in the opposite corner, and it
             // was the one that didn't look like them.
             //
-            // `bottom-24 sm:bottom-5` because at 390px the 48px button sat on top of the landing
-            // page's full-width "Plan a trip" CTA — a measured overlap, the FAB covering the right
-            // end of the most important button in the product. That CTA is a bottom-anchored bar
-            // below `sm`, so the FAB clears it by lifting; from `sm` up the CTA is inline and the
-            // original corner position is free again.
-            className="glass-control fixed right-5 bottom-24 z-50 flex h-12 w-12 items-center justify-center rounded-full text-foreground transition-transform hover:scale-105 sm:bottom-5 print:hidden"
+            // **Not rendered below `sm` at all**, which is a retreat rather than another offset.
+            // This button has now lost the bottom-right corner twice on a phone: first to the old
+            // full-width "Plan a trip" bar, which `bottom-24` cleared, and then to the entry
+            // capsule that replaced it — a stacked three-cell light pill roughly 430px tall that is
+            // the whole point of the first viewport. Raising the offset to `bottom-44` just moved
+            // the disc from the capsule's bottom edge to its middle. There is no free corner on a
+            // 390px landing, because the landing deliberately fills it.
+            //
+            // It is a development tool. `dev` is the mode the app is demoed in, which is exactly
+            // why a dark disc parked on the one light surface in the system matters — and also why
+            // losing it on a phone costs nothing: nobody reads a raw model response at 390px. The
+            // desktop position is unchanged and unobstructed.
+            className="glass-control fixed right-5 bottom-5 z-50 hidden h-12 w-12 items-center justify-center rounded-full text-foreground transition-transform hover:scale-105 sm:flex print:hidden"
             aria-label="Open LLM trace viewer"
             title="LLM trace viewer"
           >

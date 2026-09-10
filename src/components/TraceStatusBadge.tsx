@@ -6,9 +6,9 @@
  * the same hue at a middling alpha.
  */
 const STYLES: Record<string, string> = {
-  ok: "bg-emerald-400/15 text-emerald-300 border-emerald-400/30",
-  error: "bg-red-400/15 text-red-300 border-red-400/30",
-  timeout: "bg-amber-400/15 text-amber-300 border-amber-400/30",
+  ok: "bg-accent/15 text-accent border-accent/30",
+  error: "bg-alert-soft text-alert border-alert/30",
+  timeout: "bg-alert-soft text-alert/75 border-alert/30",
   pending: "bg-tile text-muted border-card-border",
 };
 
