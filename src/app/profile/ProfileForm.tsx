@@ -150,8 +150,8 @@ function MemoryThumb({ trip }: { trip: TripSummary }) {
  * way through to the rest. `My memories` stays a top-level route and a top-level nav link.
  *
  * With nothing saved there is no photography to show, so the frame takes `.scene-void` — the
- * app's existing answer to a beat with no photograph to collage (`HeroPoster`, `/trips`' own empty
- * state) — rather than an empty grey box pretending a picture failed to load.
+ * app's existing answer to a beat with no photograph to collage (`/trips`' own empty state) —
+ * rather than an empty grey box pretending a picture failed to load.
  */
 function Memories({ trips }: { trips: TripSummary[] }) {
   const [lead, ...rest] = trips;

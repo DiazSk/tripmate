@@ -158,8 +158,8 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
     return (
       <section className="pointer-events-auto relative flex min-h-dvh items-center justify-center overflow-hidden p-5 text-center sm:p-6">
         {/* No photo to collage, so the base system's own material carries the beat instead of
-            reaching for stock imagery. `.scene-void` — shared with the landing's closing poster,
-            which is the same problem: an empty beat carrying one amber CTA. */}
+            reaching for stock imagery. `.scene-void` — shared with `/profile`'s zero-trips frame
+            (ProfileForm's `Memories`), which is the same problem: an empty beat with no photo. */}
         <div aria-hidden="true" className="scene-void absolute inset-0" />
         <div className="relative z-10 max-w-lg">
           <h1 className="font-display-xl text-4xl text-foreground sm:text-6xl">
