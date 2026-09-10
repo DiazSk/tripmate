@@ -8,8 +8,12 @@ import { useScrollContainer } from "@/lib/scrollContainer";
 import { sceneBeats } from "./sceneBeats";
 import SectionOpener from "./SectionOpener";
 
-// Rotates through the two net-new scene hues so a beat without a photo yet still
-// reads as part of one graded sequence rather than four identical blocks.
+// Alternates the ground and the one slate so a beat without a photograph yet still reads as part
+// of one graded sequence rather than four identical blocks. It used to say "the two net-new scene
+// hues", which described tokens that no longer exist: `.blue-hour-scene` carried its own cobalt
+// pair until that block was emptied to "one timing token, no colour", and these gradients have run
+// on the app's own tokens ever since. Every shipped beat now has a photograph, so this is the path
+// a *future* beat takes before one is sourced.
 const PLACEHOLDER_GRADIENTS = [
   "linear-gradient(160deg, rgb(var(--surface-deep-rgb)), var(--canvas))",
   "linear-gradient(160deg, var(--canvas), rgb(var(--surface-deep-rgb)))",

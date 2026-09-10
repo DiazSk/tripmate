@@ -807,6 +807,19 @@ reaches all four viewport edges, including the top behind the transparent nav.
   pass blurred every photo at rest and cleared it on hover, which at 2x read as four out-of-focus
   images and got the *source files* blamed for it. What survives is a flat 0.16 darkening tint that
   keeps the labels legible, faded on hover and never shown on touch at all.
+  - **The photographs were re-sourced 2026-09-09, and the earlier suspicion of the source files
+    turned out to be half right.** The blur was the bug, but the pictures were weak too: a stock
+    skyline, a cluttered night food stall, a busy rain-street and a generic palm sunset, as four
+    2400px JPEGs totalling 2.3MB **with no recorded origin anywhere in the repo** — so they could
+    not be re-cropped, re-encoded, or shown to be licensed. Now Vernazza at true blue hour, spice
+    barrels ranked in a market window, storm cloud over a forested ridge, and a room opening onto
+    its own view; all Pexels, all credited in `sceneBeats.ts`, all 1200×1309 WebP at 649KB total.
+    Each frame states its beat rather than gesturing at its topic — the outgoing skyline had a sky
+    already gone black, which argues against a caption whose whole claim is that for twenty minutes
+    the town and the sky are the same brightness. **The last one is deliberately not the prettier
+    picture**: a riad courtyard was shortlisted and rejected because a tier photograph must not take
+    a side, and PRODUCT.md's one standing tension is that luxury imagery on a budget-honest product
+    reads as a mismatch. A room with a view is what all three tiers buy.
 - **`HowItWorks`** — the mechanism explainer, no photos, a line-masked heading reveal.
 - **`FeaturedPlans`** — four worked examples, text left and photograph right with zero gap and
   adjacent cells sharing one hairline. Every budget is grounded in `estimateTierTotal` within $50 of
