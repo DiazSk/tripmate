@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Maximize2 } from "lucide-react";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 
@@ -77,7 +77,7 @@ const CONTENT_FADE = { duration: 0.14, ease: "linear" as const };
  *
  * The shrink is a CSS transition between two fully-resolved geometries rather than a Framer layout
  * animation; see the note on the container below for why, which is measured rather than assumed.
- * `motion-reduce:transition-none` holds it still for anyone who asked for less motion.
+ * Reduced motion is handled entirely by the blanket rule in globals.css, not by anything here.
  */
 export default function DockedPanel({
   collapsible = false,
@@ -121,7 +121,6 @@ export default function DockedPanel({
     else setUncontrolledCollapsed(next);
   };
   const isCollapsed = collapsible && collapsed;
-  const reducedMotion = useReducedMotion();
   /**
    * A percentage plus a `max-width`, and both of those choices are load-bearing.
    *
@@ -163,10 +162,24 @@ export default function DockedPanel({
       // utilities: the property list, the duration and the curve are one decision, and splitting
       // them across three classes in a file where unlayered rules already outrank utilities (see
       // globals.css) is three chances to lose one of them silently.
+      //
+      // **Unconditional, and reduced motion is why it can be — not something it forgot.** This was
+      // `useReducedMotion() ? undefined : "…"`, which hydration-mismatched on every render: that
+      // hook reads `prefersReducedMotion.current`, which motion-dom's own comment documents as
+      // "`null` server-side". So the server, having no media query to read, always took the
+      // falsy branch and emitted this string, while a reduced-motion client's first render wanted
+      // no `style` attribute at all — React reconciles that as a mismatch and the branch that
+      // loses is not knowable from here.
+      //
+      // The check bought nothing anyway. globals.css sets `transition-duration: 0.01ms !important`
+      // on `*` under `prefers-reduced-motion: reduce`, and an important author declaration outranks
+      // a normal inline one, so this duration is already flattened. Measured on the mounted panel:
+      // 0.3s normally, `1e-05s` with that rule in scope. The setting can also change mid-session,
+      // which the media query tracks and the hook does not — it reads once into `useState` and
+      // never updates (framer-motion's own source says as much).
       style={{
-        transition: reducedMotion
-          ? undefined
-          : "width 300ms ease-in-out, height 300ms ease-in-out, left 300ms ease-in-out, right 300ms ease-in-out",
+        transition:
+          "width 300ms ease-in-out, height 300ms ease-in-out, left 300ms ease-in-out, right 300ms ease-in-out",
       }}
       className={`docked-panel fixed z-10 m-0 flex flex-col ${
         busy ? "pointer-events-none" : "pointer-events-auto"
