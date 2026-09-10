@@ -1262,12 +1262,22 @@ day cards and draws the whole trip, and each day inside it, as a transit map: an
   line share this exact colour and weight, never two different "line" colours.
 - **Muted** (`#5B7178`): dates, metadata, captions — the export's only secondary text tone.
 - **Hairline** (`rgba(11,42,50,.14)`): day-row dividers, pill borders.
-- **Accent** (`#fb9826`) / **Accent Ink** (`#A85C05`): the one warm colour, marking only the thing
-  currently active. It is re-authored as its own hex rather than referencing the app's `--accent`,
-  because this file cannot read the app's CSS variables and does not try to. **This export still
-  carries the previous system's amber**, which is a known divergence from the app's jade — recorded in
-  Open Items rather than quietly aligned, because the export was byte-verified faithful to its own
-  approved comp and re-hueing it is a separate piece of work.
+- **Accent** (`#28b981`) / **Accent Ink** (`#0D6042`): jade, marking only the thing currently
+  active. Re-authored as its own hex rather than referencing the app's `--accent`, because this file
+  cannot read the app's CSS variables and does not try to. It carried the previous system's amber
+  (`#fb9826` / `#A85C05`) through two palettes, and was **re-hued by measurement rather than by
+  copying the app's hex** — the export's marks are validated *all-pairs*, since on the map any two
+  can sit side by side. Jade's worst pair is dE2000 18.7 (jade/transit) against a 15.5 floor where
+  amber was 18.5, and the worst CVD pair (`food`/`transit`, 10.9) is untouched by the accent. Coral
+  was rejected at dE 4.0 against transit under simulated protanopia; gold separated best but had the
+  worst contrast, and gold means money in this system.
+
+  **The two shades split by fills versus strokes**, and that split is also a fix. `--accent` fills,
+  where dark ink sits on it (6:1 for the day number) and a white ring separates it. `--accent-ink`
+  strokes and rims, where the mark *is* the colour: 7.58:1 on white for the 1.9px stay icon, 3.01:1
+  against the jade fill for the open day's rim. The map's active route line used the fill shade and
+  measured 1.86:1 on land as a 2.6px stroke — under the 3:1 floor for a graphical object. On the ink
+  shade it is **6.48:1**, and still 4.69:1 against the inactive lines at their 17% opacity.
 
 ### Named Rules
 **The Reserved-Accent Rule, re-authored.** The export's accent marks only the open day and the active
@@ -1488,13 +1498,15 @@ rules, and nothing here should be inherited by a new surface.
    landscape, `26% 56%` below `48rem`) to fix the phone case, where the warm terracotta wall the
    photograph was sourced for was cropped to a left-edge sliver. The desktop split remains. Partial,
    open.
-3. **The export still carries the previous system's amber.** `The Trip Line` was byte-verified faithful
-   to its own approved comp before the Kiln palette landed, and its `#fb9826` / `#A85C05` pair has not
-   been re-hued to jade. The *rule* transfers (one colour, marking only what is active); the value has
-   not. Re-authoring it is a scoped piece of work on one template string. **The type half of this item
-   closed 2026-09-09** — the export was still entirely in Archivo, the removed face, and now ships the
-   app's Melodrama + Switzer on the app's tracking steps. `public/fonts/archivo-latin-var.woff2` (88KB)
-   was its last reference and is deleted. The colour half stands.
+3. ~~**The export still carries the previous system's amber.**~~ **Closed 2026-09-09, both halves.**
+   The type half went first: the export was entirely in Archivo, the face the app had removed, and now
+   ships Melodrama + Switzer on the app's tracking steps (`archivo-latin-var.woff2`, 88KB, was its last
+   reference and is deleted). The colour half followed: `#fb9826` / `#A85C05` became jade `#28b981` /
+   `#0D6042`, re-hued by re-running the export's own all-pairs and CVD validation rather than by
+   copying the app's hex — and the fills/strokes split it introduced lifted the map's active route line
+   from 1.86:1 to 6.48:1, fixing a graphical-object contrast shortfall the amber had. See
+   **The Trip Line → Colors**. Kept in this list as a record of how a divergence was tracked rather
+   than quietly aligned.
 4. **Radius drift on incumbent panels.** The Kiln edge rule is 5–8px on surfaces; `.glass-itinerary` and
    its descendants are still at 16px from the previous system. Recorded as `{rounded.panel}` so the
    frontmatter tells the truth about what the build is, not as a second doctrine.

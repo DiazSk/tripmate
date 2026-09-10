@@ -23,10 +23,11 @@ export interface ExportAssets {
 const DIRECTION_CONTRACT = `<!--
   THESIS: A day is a route, not a list. Refuses the itinerary-app default of stacked cards.
   OWN-WORLD: Transit-diagram grammar on #F5F7F7. 8px trunk in TripMate's own #0d2e37; stops are
-    interchange nodes; #fb9826 marks only the active stop, per the app's reserved-accent rule.
+    interchange nodes; jade #28b981 (fills) / #0D6042 (strokes) marks only what is active, per the
+    app's reserved-accent rule.
   STORY: The traveler sees the trip as one line, taps into a day, and reads it like a metro map.
-  FIRST VIEWPORT: Destination photo ~44svh, destination at clamp(3.2rem,17vw,5rem)/900, dates and
-    budget beneath, then the trip line with one station per day.
+  FIRST VIEWPORT: Destination photo ~44svh, destination in Melodrama 400 at
+    clamp(3.2rem,17vw,5rem), dates and budget beneath, then the trip line with one station per day.
   FORM: Route-as-spine, candidate 7 of 7, seed key e57fcfdf.
   FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the
     verdict, and DESIGN.md.
@@ -36,10 +37,43 @@ const DIRECTION_CONTRACT = `<!--
  *  authority (.impeccable/comps/comp-b-linemap.html), not re-derived here. The one addition the
  *  comp doesn't need to show — a per-day thumbnail sitting where its plain node (`.st i`) would
  *  go — mirrors that node's own size, border and "on" treatment exactly. */
+/**
+ * Why the export's accent is jade, and why it is two shades.
+ *
+ * Kept out of the CSS template literal on purpose: everything in there ships inside the `.html`
+ * file a traveler keeps and forwards, and the first version of this note put ~1.5KB of rationale
+ * about a superseded hex into every export. The `DIRECTION_CONTRACT` ships deliberately because a
+ * reader of the artifact can audit it; a changelog cannot be audited from the artifact and does
+ * not belong there.
+ *
+ * This carried the previous system's amber (`#fb9826` / `#A85C05`) through two palettes, purely
+ * because the file had been byte-verified against its own approved comp and nobody wanted to
+ * disturb it. DESIGN.md tracked it as an open item rather than aligning it quietly.
+ *
+ * **Re-hued by measurement, not by copying the app's hex.** The export's marks are validated
+ * *all-pairs*, because on the map any two of them can sit side by side. Against the category hues
+ * jade's worst pair is dE2000 18.7 (jade/transit) on a 15.5 floor, where amber was 18.5 — a small
+ * improvement rather than a risk — and the worst CVD pair is `food/transit` at 10.9 either way, so
+ * the accent does not touch it. Coral was rejected outright at dE 4.0 against transit under
+ * simulated protanopia. Gold separated best but had the worst contrast, and gold means money here.
+ *
+ * **Two shades, split by fills versus strokes.** On a light ground one mid-tone cannot do both
+ * jobs. `--accent` fills, where dark ink sits on it (6:1 for the day number) and a white ring
+ * separates it. `--accent-ink` strokes and rims, where the mark *is* the colour and has to carry
+ * itself against paper: 7.58:1 on white for the 1.9px stay icon, 3.01:1 against the jade fill for
+ * the open day's rim.
+ *
+ * That split is also a fix. The map's active route line used the fill shade, which as a 2.6px
+ * stroke measured 1.86:1 on land and 1.65:1 over water — under the 3:1 floor for a graphical
+ * object. On the ink shade it is 6.48:1 and 5.72:1, and still 4.69:1 against the inactive lines,
+ * which composite to #c4cdd0 at their 17% opacity.
+ */
 const CSS = `
 :root{
   --paper:#F5F7F7; --card:#fff; --ink:#0B2A32; --deep:#0d2e37;
-  --muted:#5B7178; --hair:rgba(11,42,50,.14); --accent:#fb9826; --accent-ink:#A85C05;
+  --muted:#5B7178; --hair:rgba(11,42,50,.14);
+  /* One colour, marking only what is active. Jade fills, dark jade strokes. */
+  --accent:#28b981; --accent-ink:#0D6042;
   --trunk:8px;
   /* Stop categories. Three hues carrying identity, validated all-pairs (the pairlist a map of
      dots needs, since any two marks can sit side by side) against both #E9EEEF and #fff:
