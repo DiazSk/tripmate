@@ -37,7 +37,7 @@ export default function ScrollStory({
       <ImageRow />
       <HowItWorks />
       <FeaturedPlans onPlan={onPlan} />
-      <DestinationMap />
+      <DestinationMap onPlan={onPlan} />
       <SiteFooter />
     </div>
   );
