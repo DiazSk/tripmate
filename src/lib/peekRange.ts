@@ -46,7 +46,7 @@ const EARTH_RADIUS_M = 6_371_000;
  * 0m, and left in it would drag the local scale to zero and ask for a range no zoom can justify:
  * two stops at one point cannot be separated by looking harder.
  */
-const COINCIDENT_M = 25;
+export const COINCIDENT_M = 25;
 
 /**
  * The rings, innermost first: how far away the nearest other stop is, and the range that answers.

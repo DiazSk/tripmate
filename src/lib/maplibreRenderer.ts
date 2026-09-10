@@ -603,10 +603,12 @@ function addTripLayers(map: MapLibreMap) {
  * The deliberate differences from `CesiumRenderer`, all of them consequences of a vector renderer
  * having no true globe camera and no 3D-tile mesh to sample:
  *
- * - **Routes are draped, not arched.** Cesium lifts each hop onto a raised great circle so two
- *   trips over the same ground read as separate. Here they are lines on the terrain. Nothing above
- *   this file depends on the arc — `frameRoute` simply stops reserving room for apexes that don't
- *   exist.
+ * - **Routes are arched here too now, by a different mechanism.** This once read "draped, not
+ *   arched": Cesium lifts each hop onto a raised great circle and these were lines on the terrain.
+ *   `maplibreArcLayer` supersedes that — MapLibre has no elevated-line primitive, so the arcs are a
+ *   custom WebGL layer rather than a style layer. What is still true is the second half:
+ *   `frameRoute` reserves no room for apexes, because the arc radius is camera-derived rather than
+ *   part of the geometry it frames.
  * - **Altitude is always 0.** `drawRoute` resolves 0 rather than a sampled surface height, because
  *   the geometry sits *on* the terrain rather than floating above an ellipsoid. `routeAltitudeRef`
  *   then makes the marker layer lift cards by `STEM_HEIGHT_M` alone, which is correct here.
@@ -959,18 +961,24 @@ export class MapLibreRenderer implements MapRenderer {
 
     // --- The neighbourhood framing: a box around the stop, not a dive onto it.
     if (options.contextRadiusM) {
-      const [west, south] = offsetMetres(
-        options.lat,
-        options.lng,
-        -options.contextRadiusM,
-        -options.contextRadiusM
-      );
-      const [east, north] = offsetMetres(
-        options.lat,
-        options.lng,
-        options.contextRadiusM,
-        options.contextRadiusM
-      );
+      // **De-rotate the box before fitting it.** `cameraForBounds` fits an *axis-aligned* lat/lng
+      // box as seen from the camera, so a rotated camera needs `|cos| + |sin|` more extent to
+      // contain the same box — measured here at exactly √2 (1.414x) at 45°, tapering to 1.0 at 0°
+      // and 90°. Cesium derives its range from `contextRadiusM` with no heading term at all, so
+      // without this the same stop is framed up to 41% further out on one engine than the other,
+      // varying per stop, the moment anything passes a heading — which the stop tour now does.
+      // That would undo the thing the two `cubicInOut` eases exist for: the Map/Satellite toggle
+      // must not change how arriving at a stop feels.
+      //
+      // Shrinking the requested box by the same factor makes the *visible ground* rotation-
+      // invariant instead, and still honours what `contextRadiusM` promises: the 800m radius is
+      // the inscribed circle of the framed box, which is what "frame at least this much ground
+      // around the point" means.
+      const headingSpread =
+        Math.abs(Math.cos(options.headingRad ?? 0)) + Math.abs(Math.sin(options.headingRad ?? 0));
+      const contextRadiusM = options.contextRadiusM / headingSpread;
+      const [west, south] = offsetMetres(options.lat, options.lng, -contextRadiusM, -contextRadiusM);
+      const [east, north] = offsetMetres(options.lat, options.lng, contextRadiusM, contextRadiusM);
       // `fitBounds` and not a computed zoom, because the two answer different questions. A zoom is
       // "how far back"; bounds are "keep this much ground in the clear part of the frame", and the
       // clear part is what the padding below describes. The `maxZoom` cap is what actually stops
