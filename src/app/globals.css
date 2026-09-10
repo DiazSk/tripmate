@@ -1824,6 +1824,114 @@ body {
   color: var(--money);
 }
 
+/* The budget bar's per-day spans — one gold fill cut into days.
+
+   **No hue is introduced.** The separator is the panel's own slate at an alpha, cutting through
+   the fill: The One Meaning Rule's "if the answer is none, it is the one slate at an alpha", and
+   the same move `.destination-places` makes to stack three layers out of one token. Days are not
+   categories — every one of them is the same verb — so nothing here is colour-coded.
+
+   **`border-right` rather than a flex `gap`, and that is load-bearing.** A gap is *layout*, so
+   twenty-nine of them across a thirty-day trip would shorten a full bar by roughly 29px of a 470px
+   track, and the fill's end would stop meaning `spend / budget`. A border sits inside the
+   border-box, so it costs a pixel of gold rather than a pixel of the bar's length. The end position
+   is the number; nothing may move it.
+
+   **Nothing here may be set inline at the call site.** The span carries only its width, which is
+   data. An inline `background` would beat the hover and active rules below — the inverse of the
+   unlayered-beats-utility trap this file records at `.glass-nav`, `.font-scene-display` and
+   `.focus-ring`, and the same outcome. */
+.budget-seg {
+  border-right: 1px solid rgb(var(--surface-deep-rgb) / 0.6);
+  background: var(--money);
+  /* The house curve, replacing the `ease-out` this bar used to run — that is the browser default
+     dressed up, and it reads as drift where the house curve reads as a figure landing. Only the
+     edited day's span animates; the days after it are carried by flow as its width interpolates,
+     so a cost entry costs one animated element rather than thirty. One-shot, never a loop: the
+     Blur-Of-Nothing Rule is satisfied by terminating, and the reduced-motion blanket near the top
+     of this file zeroes the duration outright. */
+  transition:
+    width 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* No trailing hairline, and the fill keeps the rounded data-end it has always had. The radius
+   clamps proportionally, so even a 3px final span degrades to a nub rather than to a defect. */
+.budget-seg:last-child {
+  border-right: 0;
+  border-radius: 0 9999px 9999px 0;
+}
+
+/* **Alternating days, one step darker.** The hairline alone gets thin against a thirty-day trip,
+   where a span is about 15px. This is zebra striping and it is read the way table zebra striping is
+   read — as *structure*, not as data — precisely because it alternates on a strict parity. An
+   irregular lightness ramp would be a quantitative channel and would invite "darker means less";
+   a regular one cannot encode anything, so it does not. Lightness rather than hue keeps the fill a
+   single colour that means a single thing. */
+.budget-seg.is-alt {
+  background: color-mix(in oklab, var(--money) 88%, black);
+}
+
+/* Over budget the whole fill turns, not the day that crossed: the overage belongs to the trip
+   rather than to whichever day happened to be the one that tipped it. */
+.budget-seg.is-over {
+  background: var(--alert);
+}
+
+.budget-seg.is-over.is-alt {
+  background: color-mix(in oklab, var(--alert) 88%, black);
+}
+
+/* The day being read in the tabs below, one step *brighter*. Lightness again, and the direction is
+   what disambiguates it: the zebra only ever goes darker, so nothing else on the bar moves toward
+   white and the highlight cannot be mistaken for a stripe. Declared after the zebra because both
+   are two-class selectors and order is what decides them. */
+.budget-seg.is-active {
+  background: color-mix(in oklab, var(--money) 74%, white);
+}
+
+.budget-seg.is-over.is-active {
+  background: color-mix(in oklab, var(--alert) 74%, white);
+}
+
+/* The hovered day, boxed in the separator's own slate rather than tinted, so the tip has a visible
+   source without a second colour entering the bar. **No transition on this one**: dragging across
+   a thirty-day trip re-hits it thirty times, and thirty overlapping fades would re-raster
+   `.glass-itinerary`'s 56px backdrop-filter for the whole sweep. A snap is also what a cartographic
+   readout does. */
+.budget-seg:hover {
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-deep-rgb) / 0.55);
+}
+
+/* The hovered day's figure. Same vocabulary as the destination map's tip — this is the same kind
+   of object, a callout naming one mark — in the panel's own material rather than the landing's. */
+.budget-tip {
+  position: absolute;
+  bottom: calc(100% + 0.4rem);
+  z-index: 2;
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--card-border);
+  /* Square what you read: 6px sits inside the small-radius band, not the pill the bar itself is. */
+  border-radius: 6px;
+  background: rgb(var(--surface-deep-rgb) / 0.92);
+  color: var(--foreground);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-tip.is-center {
+  translate: -50% 0;
+}
+.budget-tip.is-end {
+  translate: -100% 0;
+}
+.budget-tip.is-start {
+  translate: 0 0;
+}
+
 /* The two one-word posters: the opening "Somewhere." and the closing "Elsewhere.".
    `font-stretch: 125%` is gone. Widening a heavy grotesk was the single strongest template tell
    on the page — the reference never touches the width axis, and gets its density from tracking

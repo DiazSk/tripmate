@@ -104,6 +104,63 @@ export function tripSpend(days: DayPlan[]): number {
   return days.reduce((sum, day) => sum + daySpend(day), 0);
 }
 
+export type BudgetSegment = {
+  dayIndex: number;
+  /** This day's spend — the figure the tip prints, always the true total even where the span
+   *  drawing it has been truncated by the budget running out. */
+  spend: number;
+  /** Percent of the track this day occupies. */
+  width: number;
+  /** Percent offset of its left edge. Only the tip needs this; the spans themselves are laid
+   *  out by flow. */
+  left: number;
+};
+
+/**
+ * The budget bar's fill, cut into one span per day.
+ *
+ * **Here rather than in `BudgetBar.tsx`, for the reason this whole section exists.** The docblock
+ * above records three independent summations that disagreed on screen; the fix was making every
+ * figure come from one place. Splitting the bar adds another reading of the same numbers, so it
+ * belongs beside them — and `npm test` can only reach pure modules, so arithmetic left inside a
+ * component is arithmetic nothing checks.
+ *
+ * **It is not a fourth summation.** Each width is `daySpend(day) / budget`, and the bar's own total
+ * is `tripSpend`, which is *defined* as the sum of `daySpend`. The spans therefore add up to the
+ * bar's fill by construction rather than by coincidence.
+ *
+ * **One denominator, always the budget.** A span's length means the same thing under, at and over
+ * budget. Over budget the days fill in order and the day that crosses is drawn partial; days after
+ * it get nothing. That truncation is not a fallback, it is the honest reading — *the budget ran out
+ * on day four* — and it is why the spans sum to exactly 100 with no rounding slack.
+ *
+ * The rejected alternative was rescaling every span by `budget / spent` so all days stay visible.
+ * It keeps the last day hoverable and it quietly swaps the denominator to the spend the moment you
+ * cross, so a span would mean "share of budget" on Monday and "share of spend" on Tuesday. One
+ * length with two meanings, on the surface whose entire argument is that money means one thing.
+ *
+ * Zero-spend days are dropped rather than returned at zero width: a zero-width span still draws its
+ * separator, which is a hairline sitting on the bar marking nothing.
+ */
+export function budgetSegments(days: DayPlan[], budget: number): BudgetSegment[] {
+  if (!(budget > 0)) return [];
+
+  const out: BudgetSegment[] = [];
+  let used = 0;
+  days.forEach((day, dayIndex) => {
+    // Clamped at zero because a negative cost off the model would otherwise *give back* room to
+    // the days after it. The tip still prints the true `daySpend`.
+    const spend = Math.max(0, daySpend(day));
+    const width = Math.min(100 - used, (spend / budget) * 100);
+    // Drops zero-spend days and every day past the point the budget ran out, and keeps `used`
+    // honest for the days that remain.
+    if (width <= 0) return;
+    out.push({ dayIndex, spend, width, left: used });
+    used += width;
+  });
+  return out;
+}
+
 /* ---------------------------------------------------------------------------
    Parse boundary
    --------------------------------------------------------------------------- */

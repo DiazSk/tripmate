@@ -816,10 +816,44 @@ reaches all four viewport edges, including the top behind the transparent nav.
   — whose art-directed `object-position` had been measured against a terracotta wall in a frame
   nothing renders any more. A crop tuned for a retired picture is worse than no crop, because it
   silently art-directs the wrong one.
+- **The budget bar reads by day.** `BudgetBar` said how much and never when. It is now one gold
+  fill cut into a span per day, and no hue is introduced to do it — the separator is the panel's own
+  slate at an alpha cutting through the fill, per **The One Meaning Rule**'s "if the answer is none,
+  it is the one slate at an alpha", plus an alternating lightness step so adjacent days stay legible
+  where a thirty-day trip makes the spans narrow. **Days are deliberately not colour-coded**, and the
+  question is worth answering once because it will be asked again. Hue encodes categories with no
+  natural order; days have both an order and a position, and they are already laid left to right in
+  sequence. Two concrete reasons beyond the rule: `MAX_TRIP_DAYS` is 30 and no thirty-hue palette
+  stays distinguishable, so any scheme cycles and day 1 shares a colour with day 8 — worse than
+  none; and the per-day breakdown lower on the same card *is* categorical (Food / Entry / Transit /
+  Other / Stay), so a multi-coloured bar directly above it would invite exactly the wrong reading.
+  The zebra is safe where an arbitrary ramp would not be, because a strict parity alternation reads
+  as structure rather than as data — the same reason table zebra striping works. The stripe only
+  ever goes *darker* and the active day only ever goes *lighter*, so the two cannot be confused.
+  Three
+  decisions worth keeping: the denominator is **always the budget**, so a span's length means the
+  same thing under, at and over it; over budget the days fill in order and the one that crosses is
+  drawn partial, which is both the honest reading (*it ran out on day four*) and why the spans sum
+  to exactly 100 with no rounding slack; and the separator is a `border-right` rather than a flex
+  `gap`, because a gap is layout and twenty-nine of them would shorten a full bar by ~29px of a
+  470px track, making the fill's end stop meaning `spend / budget`. The arithmetic lives in
+  `budgetSegments` in `lib/itinerary.ts` beside the other money functions — the file whose docblock
+  records three summations that once disagreed on screen — because a calculation inside a component
+  is one `npm test` cannot reach. The rejected alternative was rescaling every span so all days stay
+  visible: it silently swaps the denominator to the spend the moment you cross, so a span would mean
+  "share of budget" on Monday and "share of spend" on Tuesday.
 - **`ImageRow`** — four photo cards on a scene band. The photographs are never veiled: an earlier
   pass blurred every photo at rest and cleared it on hover, which at 2x read as four out-of-focus
   images and got the *source files* blamed for it. What survives is a flat 0.16 darkening tint that
   keeps the labels legible, faded on hover and never shown on touch at all.
+  - **The frames open; the cards no longer fly in.** The entrance was an 80px slide from the left on
+    `power3.out` — the only non-house easing among the scene tweens, and a generic reveal under a
+    heading that says "What a plan actually knows". The band's claim is *evidence*, so the material
+    is a wipe rather than travel: each photograph is uncovered from its own bottom edge on a
+    `clip-path` inset while its card settles the last 14px, on `expo.out` at a 0.09 stagger matching
+    `useLineReveal` on the heading directly above. Nothing travels horizontally any more, which
+    retires the reason `overflow-hidden` was called load-bearing on this band — the attribute stays,
+    because it is now doing a different job and removing it is its own change.
   - **The photographs were re-sourced 2026-09-09, and the earlier suspicion of the source files
     turned out to be half right.** The blur was the bug, but the pictures were weak too: a stock
     skyline, a cluttered night food stall, a busy rain-street and a generic palm sunset, as four
@@ -834,6 +868,12 @@ reaches all four viewport edges, including the top behind the transparent nav.
     a side, and PRODUCT.md's one standing tension is that luxury imagery on a budget-honest product
     reads as a mismatch. A room with a view is what all three tiers buy.
 - **`HowItWorks`** — the mechanism explainer, no photos, a line-masked heading reveal.
+- **`FeaturedPlans` had no entrance at all** until 2026-09-09 — the heading revealed and four
+  fully-formed cards were simply already there, which on a page where every other beat arrives read
+  as the one section that had not loaded. The authored moment is the **figure**, not the card: these
+  four exist to evidence "a trip that costs what you said it would", so the cards arrive on the house
+  entrance and each price settles 0.12s behind its own card. A second-level offset rather than one
+  blanket reveal, which is the difference between a list appearing and a claim being made.
 - **`FeaturedPlans`** — four worked examples, text left and photograph right with zero gap and
   adjacent cells sharing one hairline. Every budget is grounded in `estimateTierTotal` within $50 of
   a real tier estimate, and each card stores a **season** (`startMonthDay` plus `days`, resolved to
