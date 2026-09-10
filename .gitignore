@@ -63,6 +63,13 @@ Trace-*.json
 .claude/*
 !.claude/skills/
 
+# Agent-tooling mirror of .claude/skills/, written by whichever assistant is running. Ignored
+# where .claude/skills/ above is deliberately tracked, and the difference is the whole reason to
+# say so: skills/ is tracked because `loadSkill()` reads `.claude/skills/<name>/SKILL.md` at
+# runtime, so losing it breaks production. Nothing reads this copy — verified, no reference to it
+# anywhere in src/, scripts/ or the config — so it is regenerable scratch.
+.agents/
+
 # Impeccable
 .impeccable/
 # superpowers brainstorming companion
