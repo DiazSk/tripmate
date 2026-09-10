@@ -48,9 +48,9 @@ function WordDiff({ before, after }: { before: string; after: string }) {
             // Diff highlights, tinted on dark like the badges. These were `-100` fills with
             // `-800` text — a light-mode diff, invisible once the panel stopped being white.
             part.added
-              ? "bg-emerald-400/20 text-emerald-200"
+              ? "bg-accent/20 text-accent"
               : part.removed
-                ? "bg-red-400/20 text-red-200 line-through"
+                ? "bg-alert-soft text-alert line-through"
                 : ""
           }
         >
@@ -189,7 +189,7 @@ export default function RunCompareModal({
 
         <div className="flex-1 overflow-y-auto p-5">
           {error && (
-            <div className="mb-3 rounded-lg border border-red-400/30 bg-red-400/15 p-3 text-sm text-red-300">
+            <div className="mb-3 rounded-lg border border-alert/30 bg-alert-soft p-3 text-sm text-alert">
               {error}
             </div>
           )}

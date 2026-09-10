@@ -39,7 +39,46 @@ Two distinct moments of use: (1) planning — fill in trip details, pick a spend
 
 ## Brand Commitments
 
-Product name is "TripMate." No logo. The visual identity is shipped and documented in DESIGN.md as "The Lit Cockpit Over a Turning Earth": dark frosted slate glass floating over the persistent globe, with one warm amber accent reserved for interaction, Source Serif 4 for headings and a wide Archivo poster face reserved for the landing headline. This superseded two earlier looks (a steel-blue glass treatment, then a warm cream/teal split-pane system) — treat DESIGN.md, not this section, as the source of truth for anything visual; this section exists only to record that the identity is settled, not in progress.
+Product name is "TripMate." No logo — a drawn six-point asterisk mark beside the wordmark, no wordmark
+lockup beyond that.
+
+The visual identity is "Kiln", shipped 2026-09-08 and documented in DESIGN.md: a warm near-neutral
+near-black ground with translucent glass floating over the persistent globe, and **three named colour
+roles rather than one accent** — jade for action, gold for money, coral for alert. Edges follow one
+rule: round what you touch, square what you read.
+
+**The type system is Melodrama + Switzer + Tabular, shipped 2026-09-09**, replacing the Wix Madefor
+superfamily Kiln launched with. See DESIGN.md § Typography; the short version is a high-contrast
+display serif at a single light weight against a neutral grotesk, with the landing price re-set as
+the serif's own moment rather than as a monospace figure.
+
+**Standing preference, recorded because it governs future design work: the arrangement is
+conventional on purpose.** Offered a choice between four distinct visual worlds and the category
+standard played straight, the user chose the standard. So this product competes on execution rather
+than on concept: a photo hero, a marketing scroll page, a search capsule in the first viewport. Do
+not "differentiate" the arrangement on a later pass — sharpen the execution instead. **That
+instruction stands. The bar it is measured against has moved.**
+
+**The craft bar is now Aman, Belmond, Loro Piana and Aesop — not Airbnb and Vercel.** Changed
+2026-09-09 at the user's direction, and the distinction is the whole point: Airbnb and Vercel are a
+bar for *competence*, and the build cleared it while still reading as well-made SaaS. The luxury
+references are a bar for *restraint* — fewer weights, more space, a figure treated as the subject
+rather than as metadata.
+
+**One tension, stated once so nobody resolves it by accident.** This product's thesis is budget
+realism — "a trip that costs what you said it would", with a $900 Jaipur plan on the landing.
+Luxury *language* on a budget-honest product reads as a mismatch, and chasing expensive would be the
+wrong move. The target is **considered**: precision, restraint, material quality. Every reference
+above is on the list for restraint, not for price.
+
+Kiln superseded three earlier looks: a steel-blue glass treatment, a warm cream/teal split-pane
+system, and "The Lit Cockpit Over a Turning Earth" (teal-black, one amber accent, a single Archivo
+face). The last of those had its palette, root scale, type system and several landing devices
+measured off an external reference site and adopted verbatim; replacing that layer is what Kiln is
+for, and `docs/design-history.md` records it.
+
+Treat DESIGN.md, not this section, as the source of truth for anything visual; this section exists
+only to record that the identity is settled, not in progress.
 
 ## Evidence on Hand
 

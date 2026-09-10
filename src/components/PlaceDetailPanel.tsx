@@ -84,7 +84,7 @@ export default function PlaceDetailPanel({
           </>
         )}
 
-        {error && !loading && <p className="text-sm text-red-400">{error}</p>}
+        {error && !loading && <p className="text-sm text-alert">{error}</p>}
 
         {detail && !loading && (
           <>

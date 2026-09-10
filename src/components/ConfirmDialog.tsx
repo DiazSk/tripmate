@@ -92,7 +92,7 @@ export default function ConfirmDialog({
           type="button"
           onClick={onConfirm}
           disabled={pending}
-          className="inline-flex min-h-11 items-center rounded-full bg-red-600 px-4 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
+          className="inline-flex min-h-11 items-center rounded-full bg-alert px-4 text-sm font-medium text-white transition-colors hover:bg-alert disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-alert focus-visible:outline-none"
         >
           {pending ? "Deleting…" : confirmLabel}
         </button>

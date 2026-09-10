@@ -16,14 +16,21 @@ const PLACEHOLDER_GRADIENTS = [
 ];
 
 /**
- * The "images together" row — Vita Travels' own pattern for a set of related
- * photos: side by side, sharp/compact, a one-line caption above each, never a
- * paragraph on the image. These four are square-cornered, unlike every other card
- * in the app: the 16px radius belongs to glass floating over the globe, and these
- * are content sitting on a solid band. Rounding them made four photographs read as
- * four UI cards. Replaces the earlier
- * per-beat full-viewport "Framed Card" sections — four full-screen stops was the
- * reason the landing didn't hit hard; this is one compact moment instead.
+ * Four things the planner knows, shown side by side.
+ *
+ * A compact row rather than four full-viewport beats — that earlier arrangement was the reason the
+ * landing did not land: four full-screen stops for four facts made the page long without making it
+ * dense, and a visitor scrolled past all of them looking for the point.
+ *
+ * Two rules hold this row together. Nothing is set over a photograph: every caption is above or
+ * below its image, never on it, so no frame has to be darkened to stay legible and no copy is
+ * hostage to what the picture happens to be doing in that corner. And the frames are
+ * square-cornered while the rest of the app is not — this system rounds what you press and squares
+ * what you read, so a photograph you are looking at gets a hard edge and a button you are about to
+ * click gets a pill.
+ *
+ * The card head above each photograph used to be a borrowed "Label / Stat" pair on a hairline; see
+ * the comment at the head element itself for what replaced it and why.
  */
 export default function ImageRow() {
   const container = useScrollContainer();
@@ -67,10 +74,10 @@ export default function ImageRow() {
       id="journey"
       // scroll-mt: Navbar's anchor links call scrollIntoView({block:"start"}), which
       // would otherwise land this section's top edge flush under the fixed nav.
-      className="pointer-events-auto scroll-mt-[var(--nav-h)] overflow-hidden px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band is-dense pointer-events-auto overflow-hidden"
     >
       <SectionOpener label="Journey">
-        <h2 className="font-scene-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground">
+        <h2 className="font-scene-display text-foreground">
           What a plan actually knows
         </h2>
       </SectionOpener>
@@ -99,28 +106,37 @@ export default function ImageRow() {
           key={beat.id}
           className="image-row-item group border-white/10 px-4 py-4 [&:nth-child(n+2)]:border-t sm:[&:nth-child(n+2)]:border-t-0 sm:[&:not(:nth-child(2n+1))]:border-l md:px-5 md:[&:not(:nth-child(4n+1))]:border-l"
         >
-          {/* Label + stat on a hairline — Vita Travels' own card head ("Introvert Retreats"
-              left, "/ 78+ Countries" right, rule beneath). The rule is what makes the pair
-              read as a caption belonging to the photograph below it rather than as two loose
-              lines of text floating above it.
-              The split to one line is `lg` and up only, because this copy is not Vita's: their
-              stats are three words, ours run to "Lodging, food, and transit — itemized", which
-              needs roughly 200px beside an 80px label. That fits in a card at 1024px and wider
-              and wraps into a mess below it, so narrow viewports keep the stacked shape.
-              min-h-14 reserves room for a 2-line stat, at every width including `lg`. It used to be
-              dropped at `lg` on the reasoning that the row is one line by definition up there —
-              which stopped being true once the cards gained their own padding: "One 20-minute
-              window, every evening" wraps beside "The Blue Hour", and that one card's rule and
-              photo then sat lower than the other three. In a grid whose whole premise is shared
-              rules, a row that does not align is the failure. The cost is a little air under the
-              single-line heads; alignment is worth more. line-clamp-2 is the matching upper bound. */}
-          <div className="min-h-14 border-b border-white/10 pb-2 [transition:var(--scene-hover)] [transition-property:transform] group-hover:-translate-y-1 lg:flex lg:items-baseline lg:justify-between lg:gap-4">
-            <p className="text-sm font-medium text-foreground">{beat.label}</p>
-            {/* The leading slash is the reference's, and it does more than it looks like: it
-                marks the right-hand run as metadata about the left rather than a second label. */}
-            <p className="mt-0.5 line-clamp-2 text-xs text-muted lg:mt-0 lg:text-right">
-              <span aria-hidden>/ </span>
+          {/* The card head. **This replaced a borrowed one**: a bold label at the left, a
+              slash-prefixed stat pushed to the right, and a hairline ruled beneath the pair —
+              lifted from an external reference, whose own cards read "Introvert Retreats /
+              78+ Countries". Two things were wrong with keeping it beyond its provenance. The
+              right-hand run only fitted at `lg` and above, because the reference's stats are
+              three words and ours run to "Lodging, food, and transit — itemized"; below that the
+              pair stacked and the slash became a bullet floating at the start of a line. And the
+              stat is a *fact about the product*, not metadata about the label, so subordinating it
+              to a slash undersold the only concrete number on the card.
+
+              Now: the fact leads, in the figure face, at a size that reads as a readout — because
+              it is one. The label sits beneath it as the quiet half, and the rule moved to the top
+              of the card, so the four cards are separated by their own edges rather than each
+              carrying an underline. No slash, no right-alignment, no breakpoint where the
+              arrangement changes shape.
+
+              `min-h-[4.5rem]` still reserves two lines. It is not decoration: the four heads must
+              agree on a baseline or the photographs below them start at four different heights,
+              and in a grid whose whole premise is a shared rhythm, a row that does not align is
+              the failure. */}
+          <div className="min-h-[4.5rem] border-t border-card-border pt-4 [transition:var(--scene-hover)] [transition-property:transform] group-hover:-translate-y-1">
+            {/* The text face, not the figure face. Three of the four beats carry no digit at all
+                ("Lodging, food, and transit — itemized"), and the fourth has one — so this was a
+                whole sentence set in mono with `tabular-nums` on it, aligning nothing. The money
+                colour stays, because the line is still the beat's value; the face and the column
+                alignment go, because there is no column and no figure. */}
+            <p className="line-clamp-2 text-[0.875rem] leading-snug font-medium text-money">
               {beat.stat}
+            </p>
+            <p className="mt-1.5 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase">
+              {beat.label}
             </p>
           </div>
           {/* 11:12 rather than 3:4 — near-square, matching the reference's own 0.92. At 3:4 four
@@ -156,7 +172,7 @@ export default function ImageRow() {
               entirely. Below the frame it is legible at every width and the image is never
               obstructed — which is also what the reference does, where no card sets type over its
               own photo. */}
-          <p className="mt-3 text-xs leading-relaxed text-muted">{beat.detail}</p>
+          <p className="mt-3 text-[0.875rem] leading-[1.65] text-muted">{beat.detail}</p>
         </div>
       ))}
       </div>

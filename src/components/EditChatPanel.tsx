@@ -280,7 +280,7 @@ export default function EditChatPanel({
                 {m.warnings.map((w, wi) => (
                   <li
                     key={wi}
-                    className="flex gap-1.5 rounded-lg bg-amber-400/10 px-2 py-1.5 text-xs text-amber-200"
+                    className="flex gap-1.5 rounded-lg bg-alert-soft px-2 py-1.5 text-xs text-alert/75"
                   >
                     <span aria-hidden="true">⚠️</span>
                     <span>{w}</span>
@@ -289,10 +289,10 @@ export default function EditChatPanel({
               </ul>
             )}
             {m.role === "assistant" && m.knockOn && (
-              <p className="mt-1 text-xs text-amber-300/80">Also: {m.knockOn}</p>
+              <p className="mt-1 text-xs text-alert/75">Also: {m.knockOn}</p>
             )}
             {m.role === "assistant" && m.rejected && m.rejected.length > 0 && (
-              <p className="mt-1 text-xs text-red-400/80">
+              <p className="mt-1 text-xs text-alert/80">
                 {m.rejected.length === 1 ? "1 change" : `${m.rejected.length} changes`} couldn&rsquo;t
                 be applied ({m.rejected.join("; ")}) — ask again to retry.
               </p>
@@ -319,7 +319,7 @@ export default function EditChatPanel({
 
         {busy && <p className="text-xs text-muted">Thinking…</p>}
         {error && (
-          <p role="alert" className="text-xs text-red-400">
+          <p role="alert" className="text-xs text-alert">
             {error}
           </p>
         )}

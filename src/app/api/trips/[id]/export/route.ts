@@ -27,9 +27,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   // Map geometry is the only failure surface here and it swallows its own — an export with no map
   // is a complete document, so there is no error path to add.
-  const [fontDataUri, map] = await Promise.all([loadExportFont(), collectExportMap(trip)]);
+  const [fonts, map] = await Promise.all([loadExportFont(), collectExportMap(trip)]);
 
-  const html = renderItineraryHtml(trip, { fontDataUri, map });
+  const html = renderItineraryHtml(trip, {
+    fontDataUri: fonts.text,
+    displayFontDataUri: fonts.display,
+    map,
+  });
 
   return new NextResponse(html, {
     headers: {
