@@ -1503,6 +1503,327 @@ body {
   line-height: 1.65;
 }
 
+/* The destination map — `DestinationMap`'s stippled land, its four plan markers and their labels.
+   Four marks, not the twelve pins this beat shipped with, and each one is a control that opens the
+   wizard prefilled. See the component for why the count changed; what belongs here is why the
+   properties do.
+
+   **All of it is unlayered, and that is the point.** `.destination-dot` used to exist only as a
+   GSAP selector — every visual property came from Tailwind utilities at the call site, and there
+   were no hover or focus states to lose because the dots were not controls. Now that they are, a
+   `hover:border-accent` or a `ring-2` here would be emitted inside `@layer utilities` and lose to
+   any unlayered rule touching the same property, whatever its specificity. This file records the
+   same trap at `.font-scene-display` (font-size), `.glass-nav` (background) and `.focus-ring`
+   (outline). Everything the marks look like lives in this block instead.
+
+   Nothing in here animates on a loop. The fixed navbar's `backdrop-filter: blur(16px)` is on
+   screen at every scroll position, so a pulse on a marker would re-raster that panel at refresh
+   rate for as long as this band were in view — the same reason `.hero-light` is paused while the
+   hero film runs. The entrance is a single GSAP timeline that terminates; the only other motion is
+   a hover transition, which by definition costs nothing until a pointer arrives. */
+.destination-map {
+  position: relative;
+  margin-top: 3rem;
+  /* Reserves the box before the SVG has laid out. The four marks are absolutely positioned in
+     percentages of this element, so it has to match the viewBox exactly — 1200 x 480 — or every
+     coordinate lands off its coastline. It also means the band's height never shifts as the SVG
+     resolves. */
+  aspect-ratio: 1200 / 480;
+}
+
+.destination-map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The destination marks. One slate at an alpha, per **The One Slate Rule** — they are doing none
+   of jade's, gold's or coral's three verbs, so they take no hue. The alpha is the whole design of
+   this layer: it has to sit clearly above the stipple beneath it (a 0.115 mark on a 0.028 wash) and
+   clearly below the four jade plan markers over it, or the map has two competing sets of points and
+   no answer to which one you are meant to press. Radius is in user units and so scales with the
+   viewBox — 1.9 is 2.8px at the band's 110rem ceiling and half a pixel on a phone, which is correct
+   in both places: the marks are texture at the small end and points at the large one. */
+.destination-places .place-core {
+  fill: var(--foreground);
+  opacity: 0.62;
+  /* The ring is the hover target; a core that also hit-tested would make the event target depend on
+     which pixel the pointer happened to be on. */
+  pointer-events: none;
+}
+
+.destination-places .place-ring {
+  fill: none;
+  stroke: var(--foreground);
+  stroke-opacity: 0.3;
+  stroke-width: 0.7;
+  /* **Load-bearing.** `fill: none` means only the 0.7px stroke hit-tests by default, and a 0.7px
+     hover target does not exist in practice. `all` makes the ring's whole disc catch the pointer —
+     7.9px at 1440 — without a third invisible circle per place. */
+  pointer-events: all;
+}
+
+/* Brightens the mark under the pointer, so the tooltip has a visible source. Two properties only,
+   both cheap, and no transition: sweeping across Europe re-hits this twenty times a second, and
+   anything animated would be twenty overlapping fades re-rastering the navbar's blur panel. */
+.destination-places .place-ring:hover {
+  stroke-opacity: 0.75;
+}
+
+/* **The clamp, and the measurement that forced it.** These marks are SVG, so their radius scales
+   with the viewBox; the four plan markers are HTML, so theirs is fixed at 13px. Over the map's
+   335px-to-1760px range that is a 5.25x scale against a constant, and it closes: the destination
+   ring measured 2.0px at 390, 7.9px at 1440 and **10px at 2560, a ratio of only 1.3x** against the
+   plan ring. At that point the two layers are separated by colour and label alone, and "the four
+   you can press are unmistakable" is the claim that makes jade legal here under The One Meaning
+   Rule — it does not get to weaken on a wide monitor.
+
+   The band's content ceiling is 110rem, so the map stops growing at about 113rem of viewport; one
+   step below that holds the mark near its 1440 size for every width above. Measured across the
+   breakpoint: **8.8px at 1599 and 6.7px at 1600**, so there is a real 2px step there — the ratio
+   goes 1.5x to 1.9x. A step-free version needs the radius to track the map continuously, and a
+   single scaling value cannot: hitting ~7.9px at both 1440 and 2560 means one radius serving a
+   1.26x map-width range, so any clamp either steps or pulls 1440 down with it. 2px on a decorative
+   mark, at a width crossed only by someone dragging a window edge, is the cheaper side of that
+   trade. Worst ratio anywhere above `lg` is **1.5x**, which was the thing being protected.
+
+   `r` as a **CSS property**, which is the part worth knowing: SVG geometry properties are settable
+   in CSS in every engine above this project's browserslist floor, and where they are not, the `r`
+   *attribute* in the markup still applies — so an engine without them renders the unclamped mark,
+   which is the previous behaviour rather than a broken one. Verified live before relying on it
+   (`CSS.supports("r", "3")` plus an actual `getBoundingClientRect` before and after), because
+   "parses" and "takes effect" are different questions for this property family. Deliberately not
+   scaled down on the small end too: on a 335px map the whole world is a thumbnail, and 91 marks at
+   a fixed 8px would cover it — shrinking with the map is correct there, which is exactly why this
+   is a ceiling rather than a fixed size. */
+@media (width >= 100rem) {
+  .destination-places .place-ring {
+    r: 2.6;
+  }
+  .destination-places .place-core {
+    r: 1.15;
+  }
+}
+
+.destination-dot {
+  position: absolute;
+  /* **The marks are a `lg`-and-up affordance in full, not just their labels**, and the breakpoint
+     is measured rather than assumed. Three of the four plans are in western Eurasia: at 375px the
+     map is 335px wide and Val d'Orcia, Sinaia and Wadi Rum land inside a 22x17px box. Three 13px
+     rings in that space are a smudge rather than three places, and three 26px targets 13px apart
+     fail WCAG 2.2's target-spacing rule outright. `display: none` — rather than
+     `pointer-events: none` — is what takes them out of the tab order too, which is the half a
+     visual hide would have left behind.
+
+     Below `lg` the band is the stipple field and the paragraph, which is the claim this beat exists
+     to make and is already more than the twelve haloed pins it replaced. Nothing actionable is lost:
+     all four plans are full cards with their own buttons in `FeaturedPlans`, one band above. */
+  display: none;
+  /* 26px, centred by negative margin rather than by `translate`. GSAP writes the whole `transform`
+     property on the entrance tween, so a transform used for *layout* is dropped on the tween's
+     first frame — the mark would jump a half-box down and right as it faded in. Margins leave
+     `transform` entirely to the animation. 26px also clears WCAG 2.2's 24px target minimum. */
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  place-items: center;
+  border-radius: 999px;
+  cursor: pointer;
+  transform-origin: center;
+  /* **No `clip-path: circle(50%)` here, and the reason is worth keeping.** This 26px box hit-tests
+     as a square, so its corners reach 18.4px and blanket any destination mark within that — Cairo
+     sits 14 units from the Wadi Rum marker, visually well clear of its ring, and
+     `elementFromPoint` returned this button. `clip-path` fixes that, since it clips hit-testing as
+     well as painting, and it was tried: it also **clips the label and the leader line**, which are
+     absolutely-positioned descendants sitting well outside the box, so all four plan markers lost
+     their names. Recovering a hover tooltip on four of eighty-seven decorative marks does not pay
+     for restructuring the label out of the control to get its own clipping context — and the marks
+     it shadows (Cairo, Luxor, Istanbul, Zermatt) each lose their tooltip to a marker that is
+     permanently labelled and priced 14 to 18px away. */
+}
+
+/* Hairline ring, small solid core. Explicitly **not** a radial-gradient halo behind the core:
+   DESIGN.md records removing exactly that from the app's own day badges as "the clearest
+   AI-dashboard tell there is", and this map was still doing it twice per dot on twelve dots. */
+.destination-ring {
+  width: 13px;
+  height: 13px;
+  border: 1px solid color-mix(in oklab, var(--accent) 78%, transparent);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  /* The house curve at an interface duration. `--scene-hover`'s 700ms is right for a photograph
+     easing under a cursor and far too slow for a 13px target acknowledging one. */
+  transition:
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.destination-ring::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.destination-dot:hover .destination-ring,
+.destination-dot:focus-visible .destination-ring {
+  border-color: var(--accent);
+  transform: scale(1.3);
+}
+
+/* Label anchors are hand-placed because the collisions are real, and measured at the `lg` floor
+   (a 976px map): Wadi Rum and Jaipur are 11.2% of the map's width apart, or 110px, which fits a
+   label going right from each. Val d'Orcia and Sinaia are 3.9% apart, or 38px, which fits one —
+   hence Val d'Orcia leaving left and Sinaia leaving up, on different axes and different rows.
+   Verified at 1440: no two label boxes intersect, closest approach 40px. */
+@media (width >= 64rem) {
+  .destination-dot {
+    display: grid;
+  }
+
+  .destination-leader {
+    display: block;
+    position: absolute;
+    background: var(--card-border);
+  }
+
+  .destination-label {
+    display: grid;
+    gap: 0.2rem;
+    position: absolute;
+    white-space: nowrap;
+    line-height: 1;
+    /* The type's own ground, in the glyphs' shadow rather than in a panel behind them — the same
+       device `.hero-legible` uses over the globe, and needed here for the same reason: the label
+       sits on a field of ninety marks and there is no arrangement of four anchors that avoids all
+       of them. **Measured, not assumed** — with the marks in, a mark landed inside all four label
+       boxes and one sat mid-glyph on Val d'Orcia's price, which reads as punctuation rather than
+       as a place.
+
+       Two layers, both **centred**, where the hero's three are offset downward. The hero sits over
+       a photograph, where a downward shadow reads as light from above; the interference here is a
+       scatter coming from every direction, so an offset pool leaves marks showing above the type.
+       And both radii are tight: a 2.8px mark needs 3px to disappear, while the hero's 44px halo
+       across a 78px label would read as a dark lozenge on the map rather than as depth. */
+    text-shadow:
+      0 0 3px rgb(var(--surface-deep-rgb) / 0.95),
+      0 0 8px rgb(var(--surface-deep-rgb) / 0.8);
+  }
+
+  .destination-dot.is-right .destination-leader {
+    inset-inline-start: 100%;
+    top: 50%;
+    width: 10px;
+    height: 1px;
+  }
+  .destination-dot.is-right .destination-label {
+    inset-inline-start: calc(100% + 15px);
+    top: 50%;
+    transform: translateY(-50%);
+    text-align: start;
+  }
+
+  .destination-dot.is-left .destination-leader {
+    inset-inline-end: 100%;
+    top: 50%;
+    width: 10px;
+    height: 1px;
+  }
+  .destination-dot.is-left .destination-label {
+    inset-inline-end: calc(100% + 15px);
+    top: 50%;
+    transform: translateY(-50%);
+    text-align: end;
+  }
+
+  .destination-dot.is-up .destination-leader {
+    bottom: 100%;
+    inset-inline-start: 50%;
+    width: 1px;
+    height: 10px;
+  }
+  .destination-dot.is-up .destination-label {
+    bottom: calc(100% + 15px);
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+  }
+}
+
+/* The hovered destination's name. Same type step and same shadow device as a plan marker's label,
+   deliberately: it is the same kind of object — a callout naming a point — and the thing that
+   separates the two is that a plan marker's label is *always* there and carries a price, because
+   its place is one you can actually buy. This one is the map answering "what is that dot".
+
+   `translate` does the anchoring and there is no GSAP on this element, so unlike `.destination-dot`
+   it is safe to use transforms for layout here. Positioned in percentages off the same viewBox the
+   marks are projected into, so it lands on its mark at every width. */
+.destination-tip {
+  position: absolute;
+  z-index: 2;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--foreground);
+  pointer-events: none;
+  text-shadow:
+    0 0 3px rgb(var(--surface-deep-rgb) / 0.95),
+    0 0 8px rgb(var(--surface-deep-rgb) / 0.8);
+}
+
+/* Which way it leaves, picked from the anchor rather than fixed — Nadi is at 99.3% of the map's
+   width, Bora Bora at 7.8%, so a centred callout hangs off the frame at both ends. */
+.destination-tip.is-center {
+  translate: -50% 0;
+}
+.destination-tip.is-end {
+  translate: -100% 0;
+}
+.destination-tip.is-start {
+  translate: 0 0;
+}
+.destination-tip.is-above {
+  margin-top: -1.35rem;
+}
+/* Flipped below for the far north — Tromsø sits at 10% of the map's height, where "above" is the
+   standfirst paragraph rather than the map. */
+.destination-tip.is-below {
+  margin-top: 0.75rem;
+}
+
+/* The label step, the same one `SectionOpener` runs on its folio line — a letterspaced small cap
+   is how a printed map annotates a place, and reusing the step means this beat adds no type size
+   to the system. */
+.destination-place {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  transition: color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.destination-dot:hover .destination-place,
+.destination-dot:focus-visible .destination-place {
+  color: var(--foreground);
+}
+
+/* Gold, because it counts, and mono because these four are meant to be *compared* — the split
+   `.price-display` documents. The display serif is for a price a visitor should feel; four figures
+   read across a map at 10px are a column that happens to be laid on a coastline. */
+.destination-price {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--money);
+}
+
 /* The two one-word posters: the opening "Somewhere." and the closing "Elsewhere.".
    `font-stretch: 125%` is gone. Widening a heavy grotesk was the single strongest template tell
    on the page — the reference never touches the width axis, and gets its density from tracking

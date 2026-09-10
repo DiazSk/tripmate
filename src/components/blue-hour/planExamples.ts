@@ -21,6 +21,17 @@ export type PlanExample = {
   /** Inclusive day count. Nights are always `days - 1`, so the card's "N days, M nights" row is
    *  derived rather than stored — two numbers that must agree are one number. */
   days: number;
+  /** Where the place is, in degrees. Here rather than in a lookup table beside the map, because a
+   *  second list keyed by name is a second thing to forget: `DestinationMap` used to hold its own
+   *  twelve cities with a `featured` flag, and the four it flagged (Kyoto, Lisbon, Reykjavík,
+   *  Marrakesh) had **zero overlap** with the four plans this file actually ships. A coordinate
+   *  that lives with the plan cannot drift from it.
+   *
+   *  Town centres, not the wider region, and only ever read through `projectToMap()` — nothing
+   *  here is precise enough to navigate by, and nothing needs to be: one degree is under four
+   *  pixels on a 1200-unit world. */
+  lat: number;
+  lon: number;
   /** Party, as counts rather than prose. `"2 adults, 1 child"` is derived for display, and
    *  `GroupType` is derived for the form (1 adult → solo, 2 → couple, any children →
    *  family_with_kids), so neither can drift from the other. */
@@ -181,6 +192,8 @@ export const planExamples: PlanExample[] = [
     destination: "Val d'Orcia, Italy",
     startMonthDay: "09-12",
     days: 9,
+    lat: 43.03,
+    lon: 11.62,
     adults: 2,
     children: 0,
     photo: { src: "/scenes/tuscany-cypress-road.webp", alt: "" },
@@ -192,6 +205,8 @@ export const planExamples: PlanExample[] = [
     destination: "Jaipur, India",
     startMonthDay: "11-07",
     days: 7,
+    lat: 26.92,
+    lon: 75.82,
     adults: 1,
     children: 0,
     photo: { src: "/scenes/jaipur-amber-fort-elephant.webp", alt: "" },
@@ -203,6 +218,8 @@ export const planExamples: PlanExample[] = [
     destination: "Sinaia, Romania",
     startMonthDay: "02-06",
     days: 6,
+    lat: 45.36,
+    lon: 25.55,
     adults: 2,
     children: 1,
     photo: { src: "/scenes/peles-castle-romania-snow.webp", alt: "" },
@@ -214,6 +231,8 @@ export const planExamples: PlanExample[] = [
     destination: "Wadi Rum, Jordan",
     startMonthDay: "03-20",
     days: 7,
+    lat: 29.58,
+    lon: 35.42,
     adults: 2,
     children: 0,
     photo: { src: "/scenes/wadi-rum-desert.webp", alt: "" },

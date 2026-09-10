@@ -801,7 +801,7 @@ reaches all four viewport edges, including the top behind the transparent nav.
   and must stay that way — it has to register with the canvas's cover-fit to the pixel, and an
   art-directed offset there shows as a jump at the hand-off. See
   **Open Items**.
-- **`SectionOpener`** — a right-aligned uppercase label at `0.6875rem` / `0.14em` against a bottom
+- **`SectionOpener`** — a right-aligned uppercase label at `0.6875rem` / `--tracking-label` against a bottom
   hairline, with the asterisk mark in jade. One row, one rule; there is no two-column opener.
 - **`ImageRow`** — four photo cards on a scene band. The photographs are never veiled: an earlier
   pass blurred every photo at rest and cleared it on hover, which at 2x read as four out-of-focus
@@ -813,7 +813,92 @@ reaches all four viewport edges, including the top behind the transparent nav.
   a real tier estimate, and each card stores a **season** (`startMonthDay` plus `days`, resolved to
   the next occurrence at or after today) rather than a date, so a card can never prefill a value the
   form's `min={todayISO()}` rejects.
-- **`DestinationMap`** — the world map beat.
+- **`DestinationMap`** — the world map beat, and the one band where the *density* of the drawing is
+  the argument. The heading is "Anywhere you can name" and the standfirst says there is no list of
+  supported cities to be missing from; the band shipped for a week with **exactly twelve pins**,
+  which states the opposite, four of them flagged `featured` and none of those four the same place
+  as any plan the site actually sells. Every one of the twelve also wore an accent radial glow while
+  doing nothing, against **The One Meaning Rule**'s "jade acts".
+  - **The land is a stipple**, not a flat alpha: one SVG `<pattern>` (14-unit cell, a 0.028 wash
+    plus a `r=1.35` mark at 0.115) used as the existing Natural Earth path's `fill`, which clips to
+    the continents for free. Hundreds of faint marks across every landmass is "anywhere" stated in
+    the artifact rather than only in the heading — and it needs no generated geometry, which is why
+    it beat the costed alternative of rasterising the path offline to sample a grid. The hairline
+    coastline stays, so the continents keep their edges rather than dissolving into texture.
+  - **Ninety-odd destination marks**, from `mapPlaces.ts`, on every inhabited continent — a real
+    point symbol each (hairline ring plus solid core, the same geometry as a plan marker) in the one
+    slate rather than jade, unlabelled and non-interactive. The first cut carried only the four
+    plans, and four marks on a world map reads as half-finished, which is the twelve-pin defect seen
+    from the other side. **Quantity is what resolves it**: twelve is a countable set and reads as an
+    inventory; ninety is not counted and reads as "the world is full of places". The cut after that
+    drew them as faint 4px dots to avoid re-inventing `featured: true`, and **that was the wrong
+    reading** — at that weight they were texture, not places, so the map still said "four locations
+    plus a speckle". `featured`'s sin was flagging four *arbitrary* cities as special; the four
+    shipped plans genuinely differ, by being the ones you can press. So the separation is hue, label
+    and size (**ratio 1.6x at 1440, never below 1.5x above `lg`**), and nothing inside the
+    destination layer is ranked: one radius, one alpha, all ninety. Its radius is **clamped above
+    100rem** via CSS `r`, because SVG scales with the viewBox while the plan markers are fixed at
+    13px — unclamped the ring reached 10px at 2560 and the ratio fell to 1.3x. Where CSS geometry
+    properties are unsupported the `r` *attribute* still applies, so the fallback is the unclamped
+    mark rather than a broken one. Four of them sit in open water on purpose — Natural Earth
+    110m cannot carry Santorini, Malé, the Galápagos or Bora Bora, and dropping French Polynesia
+    from a travel map to satisfy a coastline dataset has the priority backwards. The layer renders
+    at every width, which is what stops the phone getting a bare stipple.
+  - **Hovering a destination names it**, in the same type step and shadow as a plan marker's label,
+    from one delegated listener rather than eighty-seven. **The name is all it says, and that is a
+    decision rather than an omission**: there is no destination-level cost data anywhere in this
+    codebase — `estimateTierTotal` is destination-independent, so a 7-day budget trip computes to
+    $730 whether it is Hanoi or Zurich — so a per-city "from $X" would either be identical on every
+    mark or invented. Neither belongs on the page headed "Plan a trip that costs what you said it
+    would." The four real prices stay the only figures on the map, which is what makes them mean
+    something. Hover-only and hover-only on purpose: these marks are `aria-hidden` decoration, and
+    making them focusable would put 87 tab stops between the heading and the footer to reveal names
+    a screen reader gains nothing from. No transition on the tooltip either — sweeping across
+    Europe re-anchors it twenty times a second, and a fade on each is both jitter and twenty
+    navbar-blur re-rasters.
+  - **Four destinations are filtered out where a plan marker already occupies the pixel** — Rome
+    (4.8 units from Val d'Orcia), Agra (7.4 from Jaipur), Jerusalem (7.4 from Wadi Rum), Venice
+    (8.4). A plan ring is 6.5 in radius and a destination ring 4, so anything under 10.5 is two
+    rings drawn through each other, which reads as a rendering fault. The threshold is that sum and
+    it is **computed from `planExamples`**, not applied by deleting rows: a plan's coordinates can
+    move, and a hand-pruned list would silently start colliding again or leave a hole where a plan
+    used to be.
+  - **Four plan marks, and each one is a control.** They are the four `planExamples` read straight from
+    the data module — the coordinates now live on `PlanExample`, so the `featured` fiction cannot
+    come back — and clicking one opens the wizard prefilled through the same `toPrefill` path
+    `FeaturedPlans` uses one band above. Hairline jade ring, 4px solid core, place name in the label
+    step, price in **gold tabular mono** because these four are read across the map to be compared.
+    No halo: zero-offset coloured glow is the tell this system already records removing from the
+    app's own day badges. Accent-bearing elements in the band go **24 → 4** (measured, plus
+    `SectionOpener`'s asterisk either way), and all four are now buttons with accessible names —
+    the only accent-bearing and only interactive things on the field, which is what keeps the two
+    layers legible as "places exist" and "these four you can press". The labels carry
+    `.hero-legible`'s device at a tighter radius, and that is measured rather than precautionary:
+    with the destination layer in, a mark landed inside all four label boxes and one sat mid-glyph
+    on Val d'Orcia's price, reading as punctuation. Both layers of the shadow are **centred**, not
+    offset downward like the hero's — the hero sits over a photograph where a downward shadow reads
+    as light from above, while the interference here arrives from every direction.
+  - **The marks are `lg`-and-up in full, and the breakpoint is measured.** Three of the four plans
+    are in western Eurasia: at 375px the map is 335px wide and Val d'Orcia, Sinaia and Wadi Rum land
+    inside a 22×17px box, where three rings are a smudge and three tap targets 13px apart fail WCAG
+    2.2's target spacing outright. `display: none` rather than a visual hide, so they leave the tab
+    order too. Below `lg` the band is the field and the paragraph. Label anchors are hand-placed for
+    the same reason a solver was not written for four things — Val d'Orcia leaves left, Sinaia up,
+    the other two right; closest approach between label boxes is 48px at 1440 and 62px at 2560.
+  - **Motion is one pass and it terminates.** A GSAP `ScrollTrigger` timeline resolves the field's
+    opacity, then staggers the marks on **`expo.out`**, which deletes the app's only
+    `back.out(1.7)` — an overshoot that ran two inches under a heading revealing on `expo.out`, and
+    the wrong gesture for a claim about coverage. Deliberately **not** on the `--story` timeline:
+    its offsets are absolute scroll lengths from the scroller's origin and this band is fifth of
+    six, so any `animation-range` here would shift whenever a band above it changed height.
+    `trigger` + `start` is element-relative and immune. Nothing loops, per **The Blur-Of-Nothing
+    Rule** — the fixed navbar's `backdrop-filter` is on screen at every scroll position, so a
+    pulsing marker would re-raster it at refresh rate for as long as the band were in view.
+  - Its `.destination-*` rules are **unlayered in `globals.css`**, and that is deliberate rather
+    than incidental: `.destination-dot` existed for a year as a GSAP selector only, with no hover or
+    focus state to lose because the dots were not controls. Now that they are, a `hover:` or
+    `ring-*` utility here would be emitted inside `@layer utilities` and lose to any unlayered rule
+    touching the same property. Focus is `.focus-ring`, per **The Focus-Ring Rule**.
 - **`HeroSearch`** — the entry capsule, documented above.
 
 ### The Hero Film (signature)
