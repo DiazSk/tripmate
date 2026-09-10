@@ -1,12 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import ButtonMark from "@/components/ButtonMark";
 import { devLabel } from "@/lib/devInspector";
 import { formatDateRange, splitMoney } from "@/lib/format";
+import { gsap } from "@/lib/gsap";
 import { useLineReveal } from "@/lib/lineReveal";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
+import { useScrollContainer } from "@/lib/scrollContainer";
 import {
   formatExampleParty,
   formatExampleSpan,
@@ -53,10 +56,52 @@ export default function FeaturedPlans({
   onPlan: (prefill?: PlanPrefill) => void;
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const container = useScrollContainer();
   useLineReveal(headingRef);
+
+  useEffect(() => {
+    if (prefersReducedMotion() || !sectionRef.current) return;
+    const ctx = gsap.context(() => {
+      // **This band had no entrance at all** — the heading revealed and four fully-formed cards
+      // were simply already there, which on a page where every other beat arrives read as the one
+      // section that had not loaded yet.
+      //
+      // The authored moment is the *figure*, not the card. These four exist to evidence "a trip
+      // that costs what you said it would", and the price is already the serif's own moment on
+      // this page. So the cards arrive on the house entrance and each price settles a beat after
+      // its own card — a second-level offset rather than one blanket reveal, which is the
+      // difference between a list appearing and a claim being made.
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          scroller: container?.current ?? undefined,
+          // Matches `useLineReveal`'s default so the heading and the cards agree about when this
+          // band has arrived, rather than firing a viewport apart.
+          start: "top 85%",
+        },
+      });
+      tl.fromTo(
+        ".featured-card",
+        { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, duration: 0.6, ease: "expo.out", stagger: 0.09 },
+        0,
+      ).fromTo(
+        ".featured-price",
+        { opacity: 0, y: 4 },
+        { opacity: 1, y: 0, duration: 0.4, ease: "expo.out", stagger: 0.09 },
+        // 0.12 behind its card: long enough to read as the figure landing *into* a card that has
+        // arrived, short enough that nobody waits for it. This is `.value-in`'s 4px and its job —
+        // "a figure just recalculated" — borrowed for a figure being stated.
+        0.12,
+      );
+    }, sectionRef);
+    return () => ctx.revert();
+  }, [container]);
 
   return (
     <section
+      ref={sectionRef}
       id="featured"
       className="scene-band is-dense has-rule pointer-events-auto"
       {...devLabel("FeaturedPlans")}
@@ -126,7 +171,7 @@ export default function FeaturedPlans({
           return (
           <article
             key={plan.id}
-            className="group grid h-full gap-5 border-white/10 py-8 sm:grid-cols-2 sm:gap-6 max-xl:[&:nth-child(n+2)]:border-t xl:px-6 xl:[&:nth-child(2n)]:border-l xl:[&:nth-child(n+3)]:border-t"
+            className="featured-card group grid h-full gap-5 border-white/10 py-8 sm:grid-cols-2 sm:gap-6 max-xl:[&:nth-child(n+2)]:border-t xl:px-6 xl:[&:nth-child(2n)]:border-l xl:[&:nth-child(n+3)]:border-t"
           >
             {/* `justify-between` against the row's shared height: the title sits at the top of every
                 card and the CTA at the bottom of every card, so the spec list absorbs the slack
@@ -149,7 +194,7 @@ export default function FeaturedPlans({
                 <span className="text-[0.6875rem] font-medium tracking-[var(--tracking-label)] text-muted uppercase">
                   from
                 </span>
-                <span className="price-display text-[2.25rem] sm:text-[2.75rem]">
+                <span className="featured-price price-display text-[2.25rem] sm:text-[2.75rem]">
                   <span className="price-currency">{splitMoney(plan.budgetUsd).currency}</span>
                   <span>{splitMoney(plan.budgetUsd).figure}</span>
                 </span>

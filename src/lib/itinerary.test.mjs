@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  budgetSegments,
   carryOverDaySummaries,
   dayActiveSpan,
   dayPlanned,
@@ -198,4 +199,87 @@ test("nothing to carry over is not an error", () => {
   const revised = [day("2026-05-01")];
   carryOverDaySummaries(revised, []);
   assert.equal(revised[0].summary, undefined);
+});
+
+/* budgetSegments — the budget bar's per-day split. Same reason as the asserts above: it is
+ * another reading of numbers that already appear on screen, so the thing worth pinning is that it
+ * cannot disagree with them. */
+
+/** Percentages are floating-point ratios; a bit-exact assert would be testing IEEE 754, not this
+ *  module. A millionth of a percent is far below one device pixel on any bar. */
+const closeTo = (actual, expected, what) =>
+  assert.ok(Math.abs(actual - expected) < 1e-6, `${what}: expected ~${expected}, got ${actual}`);
+
+const dayCosting = (n) => ({
+  date: "2026-09-01",
+  weather: "",
+  stops: n > 0 ? [stop({ cost: n })] : [],
+});
+
+const totalWidth = (segments) => segments.reduce((t, s) => t + s.width, 0);
+
+test("budgetSegments: widths are shares of the budget, not of the spend", () => {
+  // 300 spent of a 1200 budget: the fill is a quarter of the track and the two days split it.
+  const segments = budgetSegments([dayCosting(100), dayCosting(200)], 1200);
+  assert.equal(segments.length, 2);
+  closeTo(segments[0].width, 100 / 12, "day 1 width");
+  closeTo(segments[1].width, 200 / 12, "day 2 width");
+  // The unfilled remainder is what "left to spend" means, so the spans must not fill the track.
+  closeTo(totalWidth(segments), 25, "spans sum to the fill");
+});
+
+test("budgetSegments: the fill can never disagree with tripSpend", () => {
+  const days = [dayCosting(120), dayCosting(0), dayCosting(75), dayCosting(310)];
+  closeTo(totalWidth(budgetSegments(days, 1000)), (tripSpend(days) / 1000) * 100, "fill");
+});
+
+test("budgetSegments: zero-spend days are dropped, and the rest stay contiguous", () => {
+  const segments = budgetSegments([dayCosting(50), dayCosting(0), dayCosting(50)], 500);
+  assert.deepEqual(
+    segments.map((s) => s.dayIndex),
+    [0, 2]
+  );
+  // The surviving days butt against each other — a dropped day must not leave a gap in the fill.
+  closeTo(segments[1].left, segments[0].left + segments[0].width, "no gap where day 2 was");
+});
+
+test("budgetSegments: over budget truncates chronologically and fills exactly", () => {
+  // 300 of the 400 budget is gone after day 2; day 3 takes the last 100 and day 4 gets nothing.
+  const segments = budgetSegments(
+    [dayCosting(100), dayCosting(200), dayCosting(400), dayCosting(50)],
+    400
+  );
+  assert.deepEqual(
+    segments.map((s) => s.dayIndex),
+    [0, 1, 2],
+    "the day the budget ran out is the last one drawn"
+  );
+  // Exact, not approximate: the crossing day is given precisely the remaining width, so there is
+  // no rounding slack to accumulate.
+  assert.equal(totalWidth(segments), 100);
+  // The truncated day still reports its true spend — the width is capped, the number is not.
+  assert.equal(segments[2].spend, 400);
+  assert.equal(segments[2].width, 25);
+});
+
+test("budgetSegments: a negative cost cannot give width back to later days", () => {
+  const segments = budgetSegments([dayCosting(-500), dayCosting(100)], 1000);
+  assert.deepEqual(
+    segments.map((s) => s.dayIndex),
+    [1]
+  );
+  assert.equal(segments[0].left, 0);
+});
+
+test("budgetSegments: no budget, or no days, yields nothing", () => {
+  for (const budget of [0, -1, Number.NaN]) {
+    assert.deepEqual(budgetSegments([dayCosting(100)], budget), []);
+  }
+  assert.deepEqual(budgetSegments([], 1000), []);
+});
+
+test("budgetSegments: a one-day trip is a single span with no separator to draw", () => {
+  const segments = budgetSegments([dayCosting(250)], 1000);
+  assert.equal(segments.length, 1);
+  assert.deepEqual(segments[0], { dayIndex: 0, spend: 250, width: 25, left: 0 });
 });

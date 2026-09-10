@@ -49,21 +49,32 @@ export default function ImageRow() {
     // appeared. fromTo states both ends explicitly; ctx.revert() clears the inline
     // styles so a re-run always starts from a clean slate.
     const ctx = gsap.context(() => {
-      gsap.fromTo(
-        ".image-row-item",
-        { opacity: 0, x: -80 },
-        {
-          opacity: 1,
-          x: 0,
-          duration: 0.7,
-          ease: "power3.out",
-          stagger: 0.12,
-          scrollTrigger: {
-            trigger: sectionRef.current,
-            scroller: container?.current ?? undefined,
-            start: "top 85%",
-          },
+      // **The frames open; the cards do not fly in.** This used to slide each card 80px from the
+      // left on `power3.out`, which was two things at once: the only non-house easing among the
+      // scene tweens, and a generic reveal under a heading that says "What a plan actually knows".
+      // The band's claim is *evidence*, so the material is a wipe rather than travel — each
+      // photograph is uncovered from its own bottom edge while its card settles the last few
+      // pixels. `expo.out` is the curve every other beat on this page uses, and the stagger drops
+      // to 0.09 to match `useLineReveal`, which is running on the heading directly above.
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          scroller: container?.current ?? undefined,
+          start: "top 85%",
         },
+      });
+      tl.fromTo(
+        ".image-row-item",
+        { opacity: 0, y: 14 },
+        { opacity: 1, y: 0, duration: 0.6, ease: "expo.out", stagger: 0.09 },
+        0,
+      ).fromTo(
+        ".image-row-frame",
+        { clipPath: "inset(100% 0 0 0)" },
+        { clipPath: "inset(0% 0 0 0)", duration: 0.85, ease: "expo.out", stagger: 0.09 },
+        // A beat behind the card so the frame opens into a card that has already arrived, rather
+        // than the two resolving as one flat fade.
+        0.08,
       );
     }, sectionRef);
     return () => ctx.revert();
@@ -71,8 +82,14 @@ export default function ImageRow() {
 
   return (
     // The band spans the full viewport width; only the content inside it is constrained.
-    // overflow-hidden is load-bearing, not cosmetic: the cards animate in from negative X
-    // and would otherwise widen the page.
+    //
+    // `overflow-hidden` used to be load-bearing for the entrance — the cards flew in from negative
+    // X and would have widened the page. That is no longer true: nothing here travels horizontally
+    // any more. It is left in place deliberately rather than deleted, because it is now doing a
+    // *different* job and removing it is its own change with its own verification: the shared
+    // dividers are drawn with a border on each cell precisely to avoid the negative-margin
+    // technique that fights this clip, and globals.css cites this element when explaining why the
+    // `--story` timeline had to be named rather than resolved with `nearest`.
     <section
       ref={sectionRef}
       id="journey"
@@ -145,7 +162,7 @@ export default function ImageRow() {
           </div>
           {/* 11:12 rather than 3:4 — near-square, matching the reference's own 0.92. At 3:4 four
               portraits side by side ran taller than the viewport once the row went full-bleed. */}
-          <div className="relative mt-3 aspect-[11/12] transform-gpu overflow-hidden [transition:var(--scene-hover)] [transition-property:box-shadow] group-hover:shadow-2xl group-hover:shadow-black/40">
+          <div className="image-row-frame relative mt-3 aspect-[11/12] transform-gpu overflow-hidden [transition:var(--scene-hover)] [transition-property:box-shadow] group-hover:shadow-2xl group-hover:shadow-black/40">
             {beat.photo ? (
               <Image
                 src={beat.photo.src}

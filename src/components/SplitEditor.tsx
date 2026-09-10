@@ -292,7 +292,7 @@ export default function SplitEditor({
       {/* The same budget bar the result page carries, reading the same numbers off the same
           itinerary — so a stop deleted here moves the bar the traveller was watching there. */}
       <div className="shrink-0 border-b border-card-border px-5 py-3 sm:px-6">
-        <BudgetBar days={itinerary.days} budget={trip.budget} />
+        <BudgetBar days={itinerary.days} budget={trip.budget} activeDayIndex={activeDay} />
       </div>
 
       {/* Day tabs, in the result page's arrow-clipped shape rather than the pills this used to
