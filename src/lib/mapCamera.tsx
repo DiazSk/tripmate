@@ -108,7 +108,14 @@ interface MapCameraContextValue {
    */
   setRouteFramingSuspended: (suspended: boolean) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
-  flyToPlace: (lat: number, lng: number, label?: string) => void;
+  /** `motion` is the tour's facing and pacing; every other caller omits it and stays north-up.
+   *  See the implementation for why they are deliberately not the same. */
+  flyToPlace: (
+    lat: number,
+    lng: number,
+    label?: string,
+    motion?: { headingRad?: number; durationS?: number }
+  ) => void;
   /** Wipe every trip overlay and fly back to the hero pose. The map lives above the route
    *  boundary and never unmounts, so without this a trip's route and markers survive a navigation
    *  back to the landing page. No-ops before the renderer exists. */
@@ -218,7 +225,7 @@ interface MapCameraContextValue {
    * Returns false when there is no route to go back to, so a caller can fall back to something
    * else — the home page can have a stop detail open with no trip drawn behind it yet.
    */
-  reframeRoute: () => boolean;
+  reframeRoute: (override?: { focusDay?: number | null; durationS?: number }) => boolean;
 }
 
 /** Where a hover came from — see `setHoveredIndex`. */
@@ -445,8 +452,19 @@ export function MapCameraProvider({
        *  aiming below the street; a stop flight passes its card's height instead. */
       centreHeightM = 0,
       /** How the renderer should frame it — see `FlyToPointOptions`. A stop asks for its
-       *  neighbourhood; a destination is already a city-wide view and asks for nothing. */
-      framing: { contextRadiusM?: number; minRangeM?: number } = {}
+       *  neighbourhood; a destination is already a city-wide view and asks for nothing.
+       *
+       *  `headingRad` and `durationS` ride along here rather than as their own parameters because
+       *  this bag is already spread straight into `flyToPoint` *and* already stored in
+       *  `pendingRef`, so a flight queued before the renderer exists replays with its facing and
+       *  its timing intact. Both are optional the whole way down: omitting `headingRad` is not the
+       *  same as passing 0, which is a claim that north is the direction of travel. */
+      framing: {
+        contextRadiusM?: number;
+        minRangeM?: number;
+        headingRad?: number;
+        durationS?: number;
+      } = {}
     ) => {
       // A real flight supersedes any hover peek, including one still waiting out its dwell.
       cancelPeek();
@@ -1011,11 +1029,26 @@ export function MapCameraProvider({
    * and centred a patch of road instead, which is what made both the Play tour and a marker click
    * look like they were zooming to the bottom of the marker.
    *
-   * Every stop flight goes through here — the tour, a marker click, and an itinerary row — so
-   * they all arrive the same way.
+   * Every stop flight goes through here — the tour, a marker click, and an itinerary row — so they
+   * arrive at the same range, the same pitch, centred on the same card, framed in the same
+   * neighbourhood.
+   *
+   * **They do not all arrive facing the same way, and that is deliberate.** The tour passes a
+   * `headingRad` so each stop is framed along the direction of travel, which is what makes a
+   * sequence of stops read as a journey. A marker click and an itinerary row pass nothing and stay
+   * north-up, because a single click has no next stop to face — and a searched place has no route
+   * at all. So the same stop is framed differently depending on how you arrived at it. That is a
+   * real inconsistency rather than an oversight; the alternative is inventing a direction for a
+   * lone click, which would be a claim about a journey nobody is on.
    */
   const flyToPlace = useCallback(
-    (lat: number, lng: number, label?: string) =>
+    (
+      lat: number,
+      lng: number,
+      label?: string,
+      /** The tour's facing and pacing. Omitted everywhere else. */
+      motion: { headingRad?: number; durationS?: number } = {}
+    ) =>
       flyTo(lat, lng, PLACE_HEIGHT_M, -35, label, routeAltitudeRef.current + STEM_HEIGHT_M, {
         // `PLACE_HEIGHT_M` is 600m, which puts the camera on the pavement outside the building
         // with nothing else in frame. That answers "where exactly is this" and not "where is this
@@ -1024,6 +1057,7 @@ export function MapCameraProvider({
         // no longer allowed to reach.
         contextRadiusM: STOP_CONTEXT_RADIUS_M,
         minRangeM: STOP_MIN_RANGE_M,
+        ...motion,
       }),
     [flyTo]
   );
@@ -1064,22 +1098,33 @@ export function MapCameraProvider({
    * `activeIndex` and `hoveredIndex`, so going back to the itinerary would drop the selection that
    * lights the row and holds the day/night tint.
    */
-  const reframeRoute = useCallback(() => {
-    const request = lastRouteRef.current;
-    if (!request) return false;
-    cancelPeek();
-    const renderer = rendererRef.current;
-    if (!renderer?.isAlive()) return false;
-    // `routeAltitudeRef` is the real sampled altitude by now, rather than the previous route's
-    // stand-in that the first draw had to make do with — so this framing is the better of the two.
-    renderer.frameRoute({
-      days: request.days,
-      focusDay: request.focusedDay,
-      panelVisible: request.panelVisible,
-      routeAltitudeM: routeAltitudeRef.current,
-    });
-    return true;
-  }, [cancelPeek]);
+  const reframeRoute = useCallback(
+    (
+      /** Frame a *different* day of the same drawn route, or take a different flight time.
+       *  Omitted — the way back out of a stop — replays the framing exactly as it was, which is
+       *  every existing caller. The tour uses it to walk the days of a collapsed trip without
+       *  redrawing anything: the geometry on screen stays the whole trip, and only the camera
+       *  moves from day to day. */
+      override?: { focusDay?: number | null; durationS?: number }
+    ) => {
+      const request = lastRouteRef.current;
+      if (!request) return false;
+      cancelPeek();
+      const renderer = rendererRef.current;
+      if (!renderer?.isAlive()) return false;
+      // `routeAltitudeRef` is the real sampled altitude by now, rather than the previous route's
+      // stand-in that the first draw had to make do with — so this framing is the better of the two.
+      renderer.frameRoute({
+        days: request.days,
+        focusDay: override && "focusDay" in override ? override.focusDay ?? null : request.focusedDay,
+        panelVisible: request.panelVisible,
+        routeAltitudeM: routeAltitudeRef.current,
+        ...(override?.durationS !== undefined ? { durationS: override.durationS } : {}),
+      });
+      return true;
+    },
+    [cancelPeek]
+  );
 
   const setRouteFramingSuspended = useCallback((suspended: boolean) => {
     routeFramingSuspendedRef.current = suspended;

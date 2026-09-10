@@ -1187,6 +1187,35 @@ a 2287KB chunk, 33 `/cesium/` asset requests and a live WebGL2 context to put a 
 settings form. The gate is `globeWanted` in `mapCamera.tsx`, declared by the components that own those
 surfaces — never a pathname.
 
+**The Tour Faces Where It Is Going.** A stop tour that arrives at every place due north is a
+slideshow: the same frame every few seconds, and nothing on screen says a journey happened. Each
+step is now framed along its **leg bearing** — the direction of the next stop — so a place arrives
+ahead of you. Three things this rule has to keep straight, because they look alike and are not:
+
+- **A leg bearing is not `routeViewHeadingDeg`.** That one returns a day's principal axis ±90°,
+  tie-broken toward north: "which way do I stand to see this day laid out", which is right for
+  framing a whole day and wrong for travelling through it. Reusing it per-stop is also what once
+  made the camera appear to spin on the spot during streaming, because a route's long axis changes
+  every time a stop lands on it.
+- **Only the tour gets a facing.** A marker click and an itinerary row stay north-up, because a lone
+  click has no next stop and a searched place has no route at all. The same stop is therefore framed
+  differently depending on how you reached it — a real inconsistency, kept because the alternative is
+  inventing a direction for a journey nobody is on.
+- **Distance belongs in the flight, not the hold.** The hold is reading time for a card naming a place
+  and a time; it does not get more interesting because you travelled 12km. The old fixed 6.5s step was
+  1.2s of flight and ~5.3s of stillness whatever the leg — and that stillness *was* the slideshow.
+
+**Rotation is not free on a mercator map, and the two engines must still agree.** `cameraForBounds`
+fits an *axis-aligned* box as seen from the camera, so a rotated MapLibre camera needs `|cos| + |sin|`
+more extent for the same box — measured at exactly **1.414x at 45°**, tapering to 1.0 at 0° and 90°.
+Cesium derives its range from `contextRadiusM` with no heading term at all. Left alone, the moment
+anything passes a heading the same stop is framed up to 41% further out on one engine than the other,
+varying per stop — which would undo what the two matched `cubicInOut` eases exist for: the
+Map/Satellite toggle must not change how arriving at a stop *feels*. MapLibre therefore shrinks the
+requested box by that factor before fitting, which makes the visible ground rotation-invariant
+(verified: identical zoom at 0/30/45/60/90°) and still honours what `contextRadiusM` promises, since
+the radius is the inscribed circle of the framed box.
+
 **Two engines, one contract.** `src/lib/mapRenderer.ts` is the interface both CesiumJS and MapLibre
 implement, and nothing above it imports either engine. The contract is in metres, degrees and CSS
 pixels: no `Cartesian3` and no `LngLat` crosses it, camera aim is a target point plus a *range* rather
