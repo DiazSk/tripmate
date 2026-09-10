@@ -14,11 +14,6 @@ import SiteFooter from "@/components/SiteFooter";
  * strip say what the planner knows; **FeaturedPlans** shows four trips it has actually produced,
  * with the prices stated; **DestinationMap** answers "will it know where I mean"; **SiteFooter**
  * ends the page.
- *
- * The closing `HeroPoster` beat is gone. It existed to withhold "Plan a trip" until the very end,
- * which was the story's organising idea when the page was four beats — but once four more sections
- * of evidence landed in front of it, one word on an empty ground was the least substantial screen
- * on the page, arriving last. See `Hero` for the full reasoning.
  */
 export default function ScrollStory({
   onPlan,
