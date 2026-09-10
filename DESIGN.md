@@ -803,6 +803,19 @@ reaches all four viewport edges, including the top behind the transparent nav.
   **Open Items**.
 - **`SectionOpener`** — a right-aligned uppercase label at `0.6875rem` / `--tracking-label` against a bottom
   hairline, with the asterisk mark in jade. One row, one rule; there is no two-column opener.
+- **`SiteFooter`'s closing banner and `SceneBackdrop`** — re-sourced 2026-09-09, and the second one
+  was a defect rather than a refresh. The footer's Val di Funes frame had no recorded origin at all;
+  it is now the Engadin from above (Pexels 34451716, Oskar Gross), chosen because it *recedes* —
+  a page about going somewhere should close on distance — and deliberately over a better-looking
+  Tuscan dawn, since Vernazza already opens `ImageRow` and Val d'Orcia is the first plan card, and a
+  third Italian landscape argues against "anywhere you can name". `SceneBackdrop` meanwhile had been
+  contradicting its own rule — "the same photograph, not a matching one" — ever since the hero
+  became a film: it showed a Seattle street behind the wizard while the hero showed Petra. It now
+  renders `HERO_SEQUENCE.poster`, frame one of the film, so pressing Plan keeps the traveller in the
+  canyon they were already in. That retired `heroScene.ts`, a 652KB photograph, and **`.hero-photo`**
+  — whose art-directed `object-position` had been measured against a terracotta wall in a frame
+  nothing renders any more. A crop tuned for a retired picture is worse than no crop, because it
+  silently art-directs the wrong one.
 - **`ImageRow`** — four photo cards on a scene band. The photographs are never veiled: an earlier
   pass blurred every photo at rest and cleared it on hover, which at 2x read as four out-of-focus
   images and got the *source files* blamed for it. What survives is a flat 0.16 darkening tint that

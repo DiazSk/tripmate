@@ -109,10 +109,11 @@ export default function Hero({ onPlan }: { onPlan: (prefill?: PlanPrefill) => vo
             is this exact frame at this exact crop, so the hand-off is a visual no-op.
 
             `priority` because this is the LCP element on the site's entry route. Plain
-            `object-cover` and *not* `.hero-photo` — that class carries an art-directed
-            `object-position: 54% 44%` chosen for the street photograph's terracotta wall, and the
-            poster has to register with the canvas's centred cover-fit to the pixel or the
-            hand-off shows a jump. `.hero-photo` is untouched and still used by `SceneBackdrop`.
+            `object-cover` and deliberately no `object-position`: the poster has to register with
+            the canvas's centred cover-fit to the pixel, or the hand-off shows a jump. `.hero-photo`
+            used to carry an art-directed `54% 44%` for the street photograph this beat opened on,
+            and that rule is now gone entirely — `SceneBackdrop` was its last caller and it renders
+            this same poster, so both surfaces are centred and there is nothing left to diverge.
 
             No `.hero-parallax` wrapper any more. It was 120% tall and offset -10% so the image
             had somewhere to travel; the poster has to sit at exactly `inset-0` to register, and a

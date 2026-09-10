@@ -2231,22 +2231,14 @@ body {
 
    Authored on `--canvas` rather than `--surface-deep-rgb`: this is the page's floor showing
    through, not a panel material, and the two must not drift apart at the join. */
-/* The hero photograph's crop, viewport-dependent by necessity.
-   The frame was chosen for a terracotta wall that occupies its left third and a street of people at
-   its base. A landscape viewport can hold both, so it sits just right of centre and slightly high,
-   keeping the warm mass on the left where the headline stands and the people visible at the base.
-   A portrait viewport cannot: at `58% 46%` the phone crop landed on cold dusk sky behind both lines
-   of the headline and pushed the warm wall to a left-edge sliver — the exact warmth the photograph
-   was sourced for, cropped out. Narrow viewports hold the left of the frame instead. */
-.hero-photo {
-  object-position: 54% 44%;
-}
-
-@media (width < 48rem) {
-  .hero-photo {
-    object-position: 26% 56%;
-  }
-}
+/* `.hero-photo` lived here and is gone. It carried a viewport-dependent `object-position`
+   (`54% 44%`, and `26% 56%` below 48rem) measured against one specific frame — a street photograph
+   with a terracotta wall in its left third and people at its base — so that a phone crop would not
+   land on cold dusk sky behind the headline. That photograph was retired with `heroScene.ts` when
+   `SceneBackdrop` went back to the hero's own poster, and a crop tuned for a frame nothing renders
+   is worse than no crop: it silently art-directs the wrong picture. Both consumers now use plain
+   centred `object-cover`. Recorded rather than deleted quietly, because "why is this image not
+   art-directed" is a reasonable question to ask later. */
 
 .hero-scrim {
   background:
