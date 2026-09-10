@@ -1882,7 +1882,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                       below this whole row, and this console is short enough (one row of fields)
                       that the dropdown would get clipped at its bottom edge otherwise. The rounded
                       corners don't need the clip — nothing in here has a background/transform that
-                      would poke past them (contrast the hero-photo bands elsewhere, which do).
+                      would poke past them, unlike the full-bleed photographic bands elsewhere.
                       Destination gets its own full-width row rather than sharing one with the three
                       fixed-width figures — it's the field the geocoder dropdown hangs off of, and
                       splitting it out is what lets that dropdown span the whole console instead of

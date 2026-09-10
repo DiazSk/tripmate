@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { HERO_PHOTO } from "./heroScene";
+import { HERO_SEQUENCE } from "./heroSequence";
 
 /**
  * The landing hero's photograph, carried behind the trip form.
@@ -17,6 +17,18 @@ import { HERO_PHOTO } from "./heroScene";
  * the same place they were a moment ago, deciding where to go. An unrelated image here (this
  * component shipped with one) reads as a scene change and quietly costs the flow its continuity,
  * which is the whole reason the hero is a photograph rather than a gradient.
+ *
+ * **That rule broke silently when the hero became a film, and this is the repair.** The hero used
+ * to be a street photograph and this pointed at the same file; when the Petra sequence landed, the
+ * hero changed and this did not, so the wizard cut from a Jordanian canyon to a street in Seattle —
+ * exactly the scene change the paragraph above forbids, with the comment still sitting here
+ * claiming otherwise. It now renders `HERO_SEQUENCE.poster`, which is frame one of the film and
+ * therefore literally the image the traveller was looking at. Three things fell out of that: the
+ * file is genuinely in cache from the landing, so the note below about bandwidth became true again
+ * rather than aspirational; `heroScene.ts` and its 652KB photograph had no other caller and are
+ * deleted; and `.hero-photo` went with them, its art-directed `object-position` having been
+ * measured against a terracotta wall in a frame nothing renders any more. Plain centred
+ * `object-cover` is right here for the same reason `Hero` gives for its own poster.
  *
  * Rendered as a sibling *behind* the form rather than as a CSS background on it, because
  * `backdrop-filter` on the panels needs a real painted layer beneath them to sample.
@@ -41,7 +53,7 @@ export default function SceneBackdrop() {
       {/* `priority` deliberately absent, unlike Hero's. This mounts after a click, on a screen the
           traveller is already reading — it must not compete with the form's own work for
           bandwidth, and the file is in cache from the landing anyway. */}
-      <Image src={HERO_PHOTO.src} alt="" fill sizes="100vw" className="hero-photo object-cover" />
+      <Image src={HERO_SEQUENCE.poster} alt="" fill sizes="100vw" className="object-cover" />
 
       {/*
         The dimming — the "opacity decreases" half of the effect. The hero wears this photograph at

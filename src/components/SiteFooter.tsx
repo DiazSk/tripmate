@@ -42,9 +42,26 @@ export default function SiteFooter() {
           it is the Darken-Never-Lighten Rule doing its job over arbitrary imagery.
           `aria-hidden` with an empty alt: this is atmosphere at the end of a page, and announcing
           it would interrupt a screen-reader user on their way to the navigation below. */}
+      {/* **Re-sourced 2026-09-09, for provenance rather than for looks.** The outgoing frame was
+          Santa Maddalena in Val di Funes and it was a fine picture; what it had no record of was
+          where it came from. The only reference to `footer_scenic.webp` anywhere in the repo was
+          the `src` below, so it could not be re-cropped, re-encoded, or shown to be licensed —
+          the failure `planExamples.ts` documents learning the expensive way.
+
+          The replacement is the Engadin from above: golden larches on both slopes, a lakeside
+          town, the valley receding to snow. Two reasons it is the better closing note. It
+          *recedes* — a page about going somewhere should end on distance rather than on a wall of
+          mountain — and it is 4:3 at source, so the 4.29:1 banner is a deliberate band cut out of
+          a landscape rather than a squeeze. Also, deliberately not the Tuscan dawn that beat it on
+          pure looks: Vernazza already opens `ImageRow` and Val d'Orcia is the first plan card, and
+          a third Italian landscape on a page claiming "anywhere you can name" argues the other way.
+
+          Pexels 34451716 (Oskar Gross), 4024x3018 source. The licence permits commercial use
+          without attribution, so nothing renders that name — it is here so the next person can
+          find the original. */}
       <div className="relative mb-16 aspect-[1200/280] w-full overflow-hidden">
         <Image
-          src="/scenes/footer_scenic.webp"
+          src="/scenes/graubunden-autumn-valley.webp"
           alt=""
           aria-hidden
           fill
