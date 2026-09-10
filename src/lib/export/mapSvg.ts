@@ -55,7 +55,10 @@ body.shrunk .mapcredit{display:none}
    whole trip rather than as one day with the rest greyed out. */
 .map[data-day] .mroute{opacity:.17}
 .map[data-day] .mroute.mon{opacity:1}
-.mroute.mon .mline{stroke:var(--accent)}
+/* The ink shade, not the fill shade: as a 2.6px stroke the fill shade measures 2.15:1 on the
+   map ground, under the 3:1 floor for a graphical object. This is 6.48:1, and still 4.69:1
+   against the inactive lines, which composite to #c4cdd0 at their 17% opacity. */
+.mroute.mon .mline{stroke:var(--accent-ink)}
 .mhalo{fill:rgba(251,152,38,.16);stroke:none}
 .mdot{fill:var(--accent);stroke:#fff;stroke-width:2.4}
 .mhide{display:none}
