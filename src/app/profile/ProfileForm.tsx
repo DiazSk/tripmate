@@ -448,8 +448,13 @@ export default function ProfileForm({
         {/* Cancels this `<main>`'s horizontal and bottom padding, the same technique ScrollStory
             and `/trips`' hero already use: the footer is a full-bleed band with its own gutters
             and its own `pb-8`, so it has to reach all three edges rather than sit inside the
-            column the form occupies. */}
-        <div className="-mx-5 -mb-16 sm:-mx-6 sm:-mb-24">
+            column the form occupies.
+
+            `mt-14 sm:mt-16` matches `/trips` and is measured off the landing — see the longer note
+            at that call site. The short version: `SiteFooter`'s hairline needs the closing interval
+            a `.scene-band` would have given it, and the form grid above has no bottom padding of
+            its own, so the rule was landing flush on the last field. */}
+        <div className="mt-14 -mx-5 -mb-16 sm:mt-16 sm:-mx-6 sm:-mb-24">
           <SiteFooter />
         </div>
       </div>

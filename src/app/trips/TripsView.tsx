@@ -569,12 +569,16 @@ export default function TripsView({
 
       {/* Same conditional bleed as the hero above, and for the same reason: with trips saved this
           `<main>` carries `p-5 sm:p-6` that a full-bleed band has to cancel, and in the empty state
-          it carries no padding at all so there is nothing to cancel. */}
-      <div
-        className={
-          hasContent ? "-mx-5 -mb-5 sm:-mx-6 sm:-mb-6" : ""
-        }
-      >
+          it carries no padding at all so there is nothing to cancel.
+
+          **`mt-14 sm:mt-16` is the closing interval, and it is measured off the landing rather than
+          chosen.** `SiteFooter` is a `.scene-band.has-rule`, so it draws a hairline along its top
+          edge. On the landing that rule lands below a `.scene-band.is-quiet`, whose own
+          `padding-block: 5rem 3.5rem` (6rem 4rem at `sm`) leaves the rule room to sit in. Here the
+          element above is a plain card grid with no bottom padding, so the hairline was drawn
+          flush against the last card — measured at 0px. These two values are that band's closing
+          padding, so the rule gets the same air on every page that carries it. */}
+      <div className={`mt-14 sm:mt-16 ${hasContent ? "-mx-5 -mb-5 sm:-mx-6 sm:-mb-6" : ""}`}>
         <SiteFooter />
       </div>
 
