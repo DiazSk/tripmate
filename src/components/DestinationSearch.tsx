@@ -7,6 +7,16 @@ import { devLabel } from "@/lib/devInspector";
 
 const DEBOUNCE_MS = 300;
 
+/** The list's own geometry, in pixels, because a `getBoundingClientRect` cannot read a Tailwind
+ *  class and the two have to agree. A suggestion row measures 52px, so the 240px ceiling seats 4.6
+ *  of them — the half row is the affordance that says the list scrolls. `LIST_MIN_PX` is three
+ *  rows: the point below which opening downward stops being worth it. */
+const LIST_ROW_PX = 52;
+const LIST_MAX_PX = 240;
+const LIST_MIN_PX = LIST_ROW_PX * 3;
+/** The `1.5` (6px) gap the list holds off the field, on whichever side it opens. */
+const LIST_GAP_PX = 6;
+
 /**
  * Embedded city/country typeahead — currently the plan-step's own Destination field, its one
  * call site. An older exploratory search above ItineraryCard's day-tab row used to be a second
@@ -52,10 +62,65 @@ export default function DestinationSearch({
   const [suggestions, setSuggestions] = useState<GeoSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  /**
+   * Which side the list opens on, and how tall it is allowed to be there.
+   *
+   * **Both, because deciding only the side produced a worse defect than the one it fixed.** The
+   * hero's entry capsule sits low in the first viewport, so the list had nowhere to go and every
+   * suggestion fell off the bottom of the screen. Flipping it upward stopped that and put a dark
+   * panel across the display headline and the standfirst instead — legible, but ugly, and over the
+   * one piece of type the landing exists to show.
+   *
+   * So the list now *fits the space it has* rather than choosing a side and hoping. Below is
+   * preferred whenever it can seat three rows; the height shrinks to whatever is actually free,
+   * capped at the full 240px. A 1440x700 laptop has 210px under the capsule — enough for four rows
+   * downward, and not enough to justify covering the headline. Flipping survives as the last
+   * resort it should always have been.
+   *
+   * Shortening the hero copy is not an alternative and was measured: with `justify-content:
+   * flex-end` the capsule's *bottom* edge is fixed, so shorter copy moves only the block's top and
+   * the clearance stays identical. Lifting the block is what creates the room — see the
+   * `.hero-section` padding rule in globals.css.
+   */
+  const [placement, setPlacement] = useState<{ up: boolean; maxHeight: number }>({
+    up: false,
+    maxHeight: LIST_MAX_PX,
+  });
   const requestIdRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+
+  /**
+   * Decide the side and the height, at the moment the list opens.
+   *
+   * Measured in the open handlers rather than in an effect on purpose. The list renders only when
+   * `open` flips true, so an effect would paint it in the wrong place for one frame and then move
+   * it — a visible jump on every keystroke that changes the result count. Both callers are events,
+   * so reading layout here is synchronous and settled.
+   *
+   * **Three rows is the bar for staying downward**, not the full height. Demanding all 240px sent
+   * an ordinary laptop upward over the headline when it had 210px free — four perfectly good rows.
+   * Below one row the list is a scroll gesture rather than a list, which is when the other side is
+   * worth the intrusion.
+   */
+  const measurePlacement = (): { up: boolean; maxHeight: number } => {
+    const el = rootRef.current;
+    if (!el) return { up: false, maxHeight: LIST_MAX_PX };
+    const { top, bottom } = el.getBoundingClientRect();
+    const below = window.innerHeight - bottom - LIST_GAP_PX;
+    const above = top - LIST_GAP_PX;
+
+    if (below >= LIST_MIN_PX || below >= above) {
+      return { up: false, maxHeight: Math.min(LIST_MAX_PX, Math.max(below, 0)) };
+    }
+    return { up: true, maxHeight: Math.min(LIST_MAX_PX, Math.max(above, 0)) };
+  };
+
+  const openList = (next: boolean) => {
+    if (next) setPlacement(measurePlacement());
+    setOpen(next);
+  };
   const listId = useId();
   const activeId =
     activeIndex >= 0 && suggestions[activeIndex] ? `${listId}-${activeIndex}` : undefined;
@@ -88,7 +153,7 @@ export default function DestinationSearch({
       const results = await suggestDestinations(trimmed);
       if (requestId !== requestIdRef.current) return; // a newer keystroke superseded this request
       setSuggestions(results);
-      setOpen(results.length > 0);
+      openList(results.length > 0);
     }, DEBOUNCE_MS);
   }
 
@@ -196,7 +261,7 @@ export default function DestinationSearch({
         aria-label={ariaLabel}
         value={query}
         onChange={(e) => handleChange(e.target.value)}
-        onFocus={() => setOpen(suggestions.length > 0)}
+        onFocus={() => openList(suggestions.length > 0)}
         onBlur={onBlur}
         placeholder={placeholder}
         autoComplete="off"
@@ -209,7 +274,12 @@ export default function DestinationSearch({
           id={listId}
           role="listbox"
           aria-label={ariaLabel}
-          className="geo-suggest-dropdown absolute inset-x-0 top-full mt-1.5 max-h-60 overflow-y-auto py-1"
+          // `maxHeight` inline and no `max-h-*` utility: the height is measured, not authored, and
+          // two sources for one value is how they drift apart.
+          style={{ maxHeight: placement.maxHeight }}
+          className={`geo-suggest-dropdown absolute inset-x-0 overflow-y-auto py-1 ${
+            placement.up ? "bottom-full mb-1.5" : "top-full mt-1.5"
+          }`}
         >
           {/* `role="option"` on the row itself, not a <button> inside it. A button is a focusable
               tab stop, so five suggestions used to insert five stops between the field and the

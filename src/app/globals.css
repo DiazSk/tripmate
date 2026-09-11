@@ -1939,10 +1939,15 @@ body {
    problem. */
 .font-scene-hero {
   font-family: var(--font-display-stack), ui-serif, Georgia, serif;
-  /* Same move as `.font-scene-display` above, and the ceiling came down with it: this used to be
-     `clamp(3rem, 11vw, 13rem)` for a one-word poster that filled the viewport. The headline is now
-     a sentence a visitor is meant to read, and 13rem of it is a wall. */
-  font-size: clamp(2.5rem, 6.2vw, 5.25rem);
+  /* **A one-word poster again, so the scale comes back up — but not all the way.** The history
+     here is a loop worth stating: this was `clamp(3rem, 11vw, 13rem)` for a single enormous word,
+     came down to `clamp(2.5rem, 6.2vw, 5.25rem)` when the headline became a sentence ("13rem of a
+     sentence is a wall"), and the headline is one word again. 13rem is still not the answer — that
+     value belonged to a composition with no entry capsule under it, where the word *was* the
+     viewport. The capsule is the mass at the centre now, and a word that fills the frame competes
+     with the thing a visitor came to type into. 8rem reads as a poster and leaves the pill its
+     weight. */
+  font-size: clamp(3rem, 9vw, 8rem);
   line-height: 1.04;
   /* 400 — and the journey there is worth keeping, because it went 900 → 600 → 400 in three days
      and only the last step was about the face rather than the taste. 900 was a poster weight
@@ -2609,19 +2614,40 @@ body {
    not: the composition's shape is "type standing in the bottom-left of a photograph", and that
    shape has to survive the viewport getting wider. Anchored left with a viewport-relative inset
    instead, so the margin grows and the block does not drift to the middle. */
-@media (width >= 100rem) {
-  .hero-block {
-    margin-left: 6vw;
-    margin-right: auto;
-  }
+/* **The group rides the bottom, and how far off it depends on the screen — because the subject of
+   the photograph moves with the crop.**
 
-  /* Vertical placement is the other half, and it was the weaker axis once the horizontal anchor
-     landed: at 2560 the block sat ~90px off the bottom edge with the top two thirds of the frame
-     empty, which reads as content that fell down the page rather than as a composition. Lifting it
-     puts the mass in the lower-middle third, where the comp has it, and gives the photograph the
-     bottom margin a full-bleed image wants. */
+   `.hero-section` is `justify-end` (Hero.tsx), so the block hangs off the bottom edge and this rule
+   decides by how much. Dead centre was tried and is wrong on both ends: the Treasury's upper facade
+   sits near the middle of the frame at every width, so a centred pill lands squarely on the
+   monument.
+
+   - **Phone:** no rule here at all — the element's own `pb-14` (56px) is the whole answer. The
+     portrait crop puts the Treasury low and large, and the stacked capsule is ~245px tall, so
+     anything but a hard bottom anchor buries the facade. Sitting the group on the floor of the
+     frame is what leaves the temple clear above it.
+   - **`sm` and up:** `clamp(5rem, 26vh, 24rem)` — a shade below centre. The landscape crop pulls
+     the Treasury up and smaller, so the group has room to sit under it without a hard anchor, and
+     26vh is where it clears the columns while still reading as placed rather than dropped. The
+     24rem ceiling is set off a measurement, not rounded: at 18rem it bit on a 1440px-tall screen
+     and let the block fall to 72% of the frame — the "content that fell down the page" state this
+     file has diagnosed once before.
+
+   The number is also load-bearing for the destination field: at 26vh the pill keeps ~250px of clear
+   photograph beneath it, which is what its suggestion list wants, so the list opens downward
+   instead of flipping up over the headline. Lower this and the flip comes back — see
+   `DestinationSearch`, which measures at open time and will tell you by moving.
+
+   **The ultrawide left anchor is gone, and it went with the sentence it existed for.** It read:
+   "the composition's shape is 'type standing in the bottom-left of a photograph', and that shape
+   has to survive the viewport getting wider" — correct for a two-line proposition plus a standfirst,
+   which is a block of text and wants an edge to stand against. The hero is now one centred word
+   over a centred pill, a symmetrical composition on the frame's own axis, and an asymmetric inset
+   at 100rem would break exactly the thing it used to protect. `mx-auto` on `.hero-block` now holds
+   at every width, and the `max-w-[72rem]` measure cap it was guarding is still doing its job. */
+@media (width >= 40rem) {
   .hero-section {
-    padding-bottom: 12vh;
+    padding-bottom: clamp(5rem, 26vh, 24rem);
   }
 }
 

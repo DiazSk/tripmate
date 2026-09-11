@@ -41,8 +41,13 @@ export default function HeroSearch({ onPlan }: { onPlan: (prefill?: PlanPrefill)
 
   return (
     <form
-      className="hero-search hero-rise pointer-events-auto mt-8 w-full max-w-[46rem]"
-      style={{ animationDelay: "300ms" }}
+      // `mx-auto` centres the pill under the one-word headline. The block above it is `text-center`,
+      // which centres inline content but does nothing for a `max-w` block box like this form.
+      className="hero-search hero-rise pointer-events-auto mx-auto mt-8 w-full max-w-[46rem] text-left"
+      // 150ms, down from 300. The stagger used to be three steps — headline at 0, standfirst at
+      // 150, pill at 300 — and the standfirst is gone, so 300 left a visible hole where the middle
+      // beat used to be. Two elements want one interval, not the sum of two.
+      style={{ animationDelay: "150ms" }}
       onSubmit={(e) => {
         e.preventDefault();
         // Validation lands here rather than on the button's appearance. The button is the page's
