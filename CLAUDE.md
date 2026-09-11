@@ -189,6 +189,14 @@ tubes **and** the line draped on the terrain beneath them, since hiding only the
 rope one dimension down. The per-day "DAY 1" cluster badge goes too, by the `data-story-mode` CSS
 lever — the capsule already says which day is playing.
 
+**The film's camera inherits the retired tour's facing and pacing.** `legBearingRad` frames each
+stop along the direction of travel, so the next place is ahead of you as you arrive — without it
+every arrival is due north and four in a row are the same frame, which is what made the old tour
+read as a slideshow. `tourFlightSeconds` puts the distance in the *flight* rather than the hold, and
+`prefers-reduced-motion` drops the flight to zero while the beat keeps its length. All of that is
+`tourPacing.ts`, written for the Play tour this replaced; `TOUR_HOLD_MS` is the only part that does
+not transfer, because a film already has a hold — the sentence.
+
 **The film's camera is `flyToStoryStop`, not `flyToPlace`.** `flyToPlace` pulls back to
 `STOP_CONTEXT_RADIUS_M` and refuses to come nearer than `STOP_MIN_RANGE_M` (3.5km, ~zoom 14.5),
 because a reader is asking "where is this *in the city*". A film is not: at that floor the flight

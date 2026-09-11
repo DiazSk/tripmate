@@ -1135,9 +1135,23 @@ export function MapCameraProvider({
 
   /** See `flyToStoryStop` on the context — a straight dive to `STORY_RANGE_M`, with none of
    *  `flyToPlace`'s context radius or range floor. */
+  /** See `flyToStoryStop` on the context. `motion` carries the leg bearing and the flight time,
+   *  the two things the retired Play tour got right and a narrated walk through a day wants for
+   *  exactly the same reason. */
   const flyToStoryStop = useCallback(
-    (lat: number, lng: number) =>
-      flyTo(lat, lng, STORY_RANGE_M, STORY_PITCH_DEG, undefined, routeAltitudeRef.current + STEM_HEIGHT_M),
+    (lat: number, lng: number, motion: { headingRad?: number; durationS?: number } = {}) =>
+      flyTo(
+        lat,
+        lng,
+        STORY_RANGE_M,
+        STORY_PITCH_DEG,
+        undefined,
+        routeAltitudeRef.current + STEM_HEIGHT_M,
+        // `motion` and nothing else: a story beat wants the facing and pacing the tour worked out,
+        // and none of `flyToPlace`'s neighbourhood framing — see this function's note on the
+        // context.
+        motion
+      ),
     [flyTo]
   );
 

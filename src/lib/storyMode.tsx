@@ -13,6 +13,9 @@ import {
 
 import { useMapCamera } from "@/lib/mapCamera";
 import { fallbackScript, type StoryScript } from "@/lib/storyScript";
+import { legBearingRad, tourFlightSeconds } from "@/lib/tourPacing";
+import { metresBetween } from "@/lib/peekRange";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 import type { NaturalVoiceStatus } from "@/lib/kokoroVoice";
 import { loadNaturalVoice, naturalVoiceSupported } from "@/lib/kokoroVoice";
 import {
@@ -310,7 +313,42 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       const stop = day.stops[beat.stopIndex];
       if (stop) {
         setActiveIndex(dayOffset + beat.stopIndex);
-        flyToStoryStop(stop.lat, stop.lng);
+        /**
+         * Face the way the day is going, and take longer over a longer leg.
+         *
+         * Both of these are the retired Play tour's work (`tourPacing.ts`), inherited rather than
+         * re-derived. They were written for a silent walk through a day's stops, and a narrated
+         * one is the same journey: without a heading every stop is framed due north and four
+         * arrivals in a row are the same frame, which is what made the tour read as a slideshow;
+         * without distance in the flight, a twelve-kilometre hop is the same whip pan as a
+         * two-hundred-metre one.
+         *
+         * `TOUR_HOLD_MS` is the one part that does not transfer, and it is the difference between
+         * the two features: a tour needs to invent a hold, where a film already has one — the beat
+         * lasts exactly as long as the sentence takes to say.
+         *
+         * A `null` bearing (a single-stop day, or a day at one coordinate) is left *undefined*
+         * rather than sent as 0, which is due north and a claim; omitting it keeps the renderers'
+         * existing `?? 0` fallback without pretending it was a decision.
+         */
+        const stops = day.stops;
+        const heading = legBearingRad(stops, beat.stopIndex) ?? undefined;
+        const previous = beat.stopIndex > 0 ? stops[beat.stopIndex - 1] : undefined;
+        const previousHeading =
+          beat.stopIndex > 0 ? legBearingRad(stops, beat.stopIndex - 1) : null;
+        flyToStoryStop(stop.lat, stop.lng, {
+          headingRad: heading,
+          // Zero under `prefers-reduced-motion`: the camera arrives cut rather than flown, and the
+          // beat keeps its full length, so the film runs the same wall-clock time with more
+          // stillness. The same trade `useTripCamera` makes for the streaming camera — the framing
+          // is the information, the flight is the decoration.
+          durationS: prefersReducedMotion()
+            ? 0
+            : tourFlightSeconds(
+                previous ? metresBetween(previous, stop) : 0,
+                heading !== undefined && previousHeading !== null ? heading - previousHeading : 0
+              ),
+        });
       }
     } else if (beat.kind === "opening") {
       // The day alone, centred, with no panel to aim beside — the film's establishing shot. This
