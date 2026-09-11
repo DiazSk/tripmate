@@ -199,7 +199,7 @@ export function hoursForWeekday(
 // --- geo_coherence -----------------------------------------------------------------------------
 
 /** Same door-to-door speeds the app's own travel-time estimator uses, so the two are comparable. */
-const SPEED_KMH: Record<string, number> = { walk: 4.5, transit: 18, drive: 30 };
+const SPEED_KMH: Record<string, number> = { walk: 4.5, bike: 13, transit: 18, drive: 30 };
 const ROUTE_CIRCUITY_FACTOR = 1.3;
 
 /**

@@ -286,6 +286,10 @@ const WALK_ICON =
   '<svg viewBox="0 0 24 24"><path d="M13 4.5a1.5 1.5 0 1 0 0-.01M11 21l1.5-5.5L9.5 13l1-4.5 3 2 3 .8"/><path d="m7.5 21 2.2-4.6M9 8.5 6 10"/></svg>';
 const TRANSIT_ICON =
   '<svg viewBox="0 0 24 24"><rect x="6" y="3.5" width="12" height="13" rx="2.5"/><path d="M6 10h12M9.5 20.5 8 22.5M14.5 20.5 16 22.5"/></svg>';
+/** Two wheels, a frame and bars — drawn in the same 24px box and single-stroke style as its
+ *  siblings so the leg rail stays one family at export scale. */
+const BIKE_ICON =
+  '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="17" r="3.5"/><circle cx="18.5" cy="17" r="3.5"/><path d="M5.5 17l4-8h5l-3 8h7M14 6.5h2.5"/></svg>';
 const STAY_ICON =
   '<svg viewBox="0 0 24 24"><path d="M3 21V8.5L12 3l9 5.5V21"/><path d="M9.5 21v-6h5v6"/></svg>';
 const CHEV_ICON = '<svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>';
@@ -335,8 +339,12 @@ function renderStop(stop: Stop, dayIndex: number, stopIndex: number): string {
 }
 
 function renderLeg(leg: { mode: string; minutes: number; distanceKm: number }): string {
+  // Not a `switch`, and not exhaustive over `TransportMode` — `leg.mode` is a plain string here
+  // because the export reads legs it did not build. A mode with no case falls through to its own
+  // name and the transit icon, which is the honest default; `"bike"` gets a real case because
+  // labelling a cycle leg with a tram is a straightforwardly wrong picture.
   const modeLabel = leg.mode === "transit" ? "tram" : leg.mode;
-  const icon = leg.mode === "walk" ? WALK_ICON : TRANSIT_ICON;
+  const icon = leg.mode === "walk" ? WALK_ICON : leg.mode === "bike" ? BIKE_ICON : TRANSIT_ICON;
   return `<li class="leg"><span></span>
           <span class="legpill">
             ${icon}
