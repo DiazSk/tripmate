@@ -26,8 +26,8 @@ test("day 1 opens the pool on cyber cyan", () => {
   // Anchored rather than merely "some token": day 1 is the palette a one-day trip is drawn in,
   // and the pool's whole premise is that it opens on a hue no satellite imagery contains.
   assert.deepEqual(dayPalette(0), {
-    core: "--route-neon-cyan",
-    glow: "--route-neon-cyan-glow",
+    core: "--route-day-1",
+    glow: "--route-day-1-glow",
   });
 });
 
@@ -68,26 +68,41 @@ test("consecutive days never share a palette", () => {
 /** Cesium's Color, near enough for `emphasisColorFor` — it reads red/green/blue only. */
 const rgb = (red, green, blue) => ({ red, green, blue });
 
-test("emphasis stays amber on a day that is not itself amber", () => {
-  const accent = rgb(1, 0.7, 0.25);
-  const white = rgb(1, 1, 1);
-  // Cyan, magenta, lime, violet — every palette outside the accent's hue band.
-  for (const core of [rgb(0, 0.95, 1), rgb(1, 0, 0.5), rgb(0, 1, 0.4), rgb(0.71, 0, 1)]) {
-    assert.equal(emphasisColorFor(core, accent, white), accent);
+/** The live accent, jade #28b981 at hue 156.8. The band it owns is 135-180. */
+const ACCENT = rgb(0.157, 0.725, 0.506);
+const WHITE = rgb(1, 1, 1);
+
+test("no shipped day palette falls inside the accent's hue band", () => {
+  // The regression this replaced a narrower test with. Under the previous neon ramp exactly one
+  // day (Verdant Drift, 155.4 degrees) collided with the accent and relied on `emphasisColorFor`
+  // swapping to white. The re-derived earth-pigment ramp is spaced so that none of the five does:
+  // 190.4, 318.9, 22.3, 89.0, 244.4, against a band of 135-180. That is strictly better than a
+  // handled collision, and it is the property worth guarding — if a future ramp edit walks a day
+  // into the band, the mitigation still fires but it has exactly one fallback colour to spend.
+  for (const core of [
+    rgb(0.306, 0.549, 0.6),   // --route-day-1 #4e8c99  190.4
+    rgb(0.643, 0.431, 0.576), // --route-day-2 #a46e93  318.9
+    rgb(0.769, 0.471, 0.294), // --route-day-3 #c4784b   22.3
+    rgb(0.494, 0.612, 0.369), // --route-day-4 #7e9c5e   89.0
+    rgb(0.482, 0.467, 0.682), // --route-day-5 #7b77ae  244.4
+  ]) {
+    assert.equal(emphasisColorFor(core, ACCENT, WHITE), ACCENT);
   }
 });
 
-test("emphasis falls back to white on the amber day", () => {
-  // Electric Amber (#FF6B00, hue ~25) sits inside the band --accent owns, so pointing at one of
-  // its stops would tint it a colour it is already drawn in and the hover would read as nothing
-  // happening at all. This is the guard for that, and the reason a second warm palette must not
-  // be added — white is the only fallback and it is spent here.
-  const accent = rgb(1, 0.7, 0.25);
-  const white = rgb(1, 1, 1);
-  assert.equal(emphasisColorFor(rgb(1, 0.42, 0), accent, white), white);
-  // The glow half of that palette (#FF0055, hue ~340) is *outside* the band and must not trip
-  // the guard — only the core decides, because the core is what emphasis replaces.
-  assert.equal(emphasisColorFor(rgb(1, 0, 0.33), accent, white), accent);
+test("the guard still fires for a colour inside the band", () => {
+  // Kept as a live test even though no shipped palette reaches it: it is the mitigation, and a
+  // mitigation nothing exercises is a mitigation nobody notices breaking. A day drawn near the
+  // accent's own hue would tint on hover to a colour it is already drawn in, so the feedback would
+  // read as nothing happening; white is the fallback and there is only one of it.
+  assert.equal(emphasisColorFor(rgb(0.247, 0.639, 0.478), ACCENT, WHITE), WHITE);
+});
+
+test("the accent's own hue sits inside the band it owns", () => {
+  // ACCENT_HUE_BAND is a .ts literal, so a palette sweep through globals.css cannot move it, and
+  // getting it wrong fails silently — hover keeps firing and simply stops being visible. If
+  // --accent changes and this fails, move the band.
+  assert.equal(emphasisColorFor(ACCENT, ACCENT, WHITE), WHITE);
 });
 
 test("a cluster sits at the mean of its day's stops", () => {

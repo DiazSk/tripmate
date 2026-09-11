@@ -9,8 +9,11 @@ import {
   STAGE_ORDER,
   STAGE_SECONDS,
   STEP_GROUPS,
+  TYPICAL_WAIT_MINUTES,
+  TYPICAL_WAIT_PHRASE,
   generationProgress,
   isStepTerminal,
+  spellMinutes,
   stageMeta,
   stepGroupState,
 } from "./generationStages.ts";
@@ -241,6 +244,27 @@ test("STAGE_SECONDS states a wait that matches what the calls actually take", ()
   assert.ok(total > 250, `sum is ${total}s — under 250s means someone reverted to a stale estimate`);
   assert.equal(STAGE_SECONDS.generate, 145);
   assert.equal(STAGE_SECONDS.critique, 150);
-  // The number the loader actually speaks, computed exactly as GenerationScreen does.
-  assert.equal(Math.round((total / 60) * 2) / 2, 5);
+  // The number the app actually speaks. Imported, not re-derived: this assertion used to carry
+  // its own copy of the formula, which is the same duplication that let three surfaces drift.
+  assert.equal(TYPICAL_WAIT_MINUTES, 5);
+  assert.equal(TYPICAL_WAIT_PHRASE, "five minutes");
+});
+
+test("the spoken wait tracks STAGE_SECONDS rather than a written-down number", () => {
+  // The guard that matters: TYPICAL_WAIT_MINUTES must be a function of STAGE_SECONDS, so
+  // re-deriving the stage medians moves the landing page, the review step and the loader
+  // together. If someone replaces it with a literal, this fails.
+  const total = Object.values(STAGE_SECONDS).reduce((a, b) => a + b, 0);
+  assert.equal(TYPICAL_WAIT_MINUTES, Math.round((total / 60) * 2) / 2);
+});
+
+test("spellMinutes speaks a wait instead of reading it off an instrument", () => {
+  assert.equal(spellMinutes(0.5), "half a minute");
+  assert.equal(spellMinutes(1), "one minute");
+  assert.equal(spellMinutes(2), "two minutes");
+  assert.equal(spellMinutes(2.5), "two and a half minutes");
+  assert.equal(spellMinutes(5), "five minutes");
+  // Past the word list it degrades to a numeral rather than throwing or printing "undefined".
+  assert.equal(spellMinutes(7), "7 minutes");
+  assert.equal(spellMinutes(7.5), "7 and a half minutes");
 });

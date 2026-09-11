@@ -463,8 +463,8 @@ export const HIGHWAY_CASING = "#8A5A00";
 
 /** Mirrors --on-deep / --surface-deep. Label builders want plain colour strings, so these can't
  *  be `var()` — update both here if those tokens move. */
-export const LABEL_COLOR = "#f4f7fa";
-export const LABEL_OUTLINE = "#0f172a";
+export const LABEL_COLOR = "#f7f5f2";
+export const LABEL_OUTLINE = "#12110f";
 
 // Cesium's PinBuilder only draws its own squat rounded-square marker, so the classic teardrop
 // comes from an inline SVG instead. `encodeURIComponent` rather than `btoa` — this module is

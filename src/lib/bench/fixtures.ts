@@ -6,6 +6,7 @@ import { BASE_ITINERARIES } from "./baseItineraries";
 import type { CandidatePoi } from "../pois";
 import type { Holiday } from "../holidays";
 import type { DayWeather } from "../weather";
+import type { BikeshareSystem } from "../bikeshare";
 import type {
   DateContext,
   EnrichedPoi,
@@ -120,6 +121,10 @@ interface FixtureSpec {
   weatherHistorical?: boolean;
   holidays: Holiday[] | null;
   transportModes: TransportMode[] | null;
+  /** Optional, and `undefined` means "the lookup found nothing", which is the ordinary case and
+   *  the state every fixture predating this field was written in. Set it only where a fixture is
+   *  meant to exercise the bikeshare path. */
+  bikeshare?: BikeshareSystem;
   /** Everything the fetch surfaced. Grounding scores against this set. */
   candidates: PoiSpec[];
   /** The subset the traveler pinned as anchors — indices into `candidates`. */
@@ -156,6 +161,9 @@ function buildFixture(spec: FixtureSpec): BenchFixture {
       available: spec.transportModes !== null,
       modes: spec.transportModes ?? [],
     },
+    // `available: true` throughout: a fixture is a world where every lookup ran and answered.
+    // A fixture with no `bikeshare` is therefore "this city has none", not "we could not tell".
+    bikeshare: { available: true, system: spec.bikeshare ?? null },
     candidatePois: { available: true, pois: spec.candidates.map(candidate) },
   };
 
@@ -230,6 +238,11 @@ const SPECS: FixtureSpec[] = [
       weather("2026-10-18", 17, 23, 20, "08:05", "19:26"),
     ],
     holidays: [{ date: "2026-10-17", name: "Fiesta Nacional observed", localName: "Fiesta Nacional" }],
+    // The one fixture exercising the bikeshare path. Real values: Bicing resolves for Barcelona
+    // with 542 capacity-bearing docks. `dayPass` is null on purpose and is not an omission — its
+    // live feed prices every plan in "CLP", so `readDayPass` refuses it, and a fixture that
+    // invented a clean euro fare would test a world that does not exist.
+    bikeshare: { name: "Bicing", systemId: "bicing", stationsNearby: 542, dayPass: null },
     transportModes: ["walk", "transit"],
     candidates: [
       { name: "Sagrada Família", lat: 41.4036, lon: 2.1744, kinds: "religion,architecture", openingHours: "Mo-Su 09:00-18:00", wheelchair: "yes" },

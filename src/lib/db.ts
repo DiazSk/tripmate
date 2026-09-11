@@ -400,11 +400,18 @@ db.exec(`
  * Road and water geometry for one map frame, keyed by its rounded bounding box so two trips in the
  * same city share one row.
  *
- * Deliberately **without a TTL**, unlike `trip_stories` above. The public Overpass instances
- * rate-limit by IP across every user of this deployment, and they do it abruptly — a session of
- * testing was enough to have all three refuse outright, which shipped exports whose map was an
- * empty grey box. Major road geometry does not meaningfully change, so re-asking is pure cost.
- * Clear the table if a city ever needs re-fetching.
+ * Deliberately **without a TTL**. The public Overpass instances rate-limit by IP across every user
+ * of this deployment, and they do it abruptly — a session of testing was enough to have all three
+ * refuse outright, which shipped exports whose map was an empty grey box. Major road geometry does
+ * not meaningfully change, so re-asking is pure cost. Clear the table if a city ever needs
+ * re-fetching.
+ *
+ * (The comment here used to say "unlike `trip_stories` above". No such table has ever existed in
+ * this schema — it was the only mention of the name anywhere in the repo.)
+ *
+ * Kept separate from `fetch_cache` below rather than folded into it: `box` is a real structured
+ * key with its own exported, unit-tested key function (`boxKey` in `export/exportMapData.ts`), and
+ * this table's no-TTL-ever rule is a deliberate difference from that one's freshness window.
  */
 export function getMapGeometry(box: string): MapGeometryRow | undefined {
   return db.prepare(`SELECT * FROM map_geometry WHERE box = ?`).get(box) as
@@ -448,6 +455,55 @@ export function saveStoryScript(params: {
     scriptJson: JSON.stringify(params.script),
     createdAt: new Date().toISOString(),
   });
+}
+
+export interface FetchCacheRow {
+  key: string;
+  payload_json: string;
+  created_at: string;
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS fetch_cache (
+    key TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`);
+
+/**
+ * One answer from a third-party API, keyed by a namespaced string.
+ *
+ * These two functions are deliberately dumb: a row in, a row out, no freshness logic. **All of
+ * that lives in `src/lib/fetchCache.ts`**, in JS, for the reason `destinationContext.ts` puts it
+ * there too — every timestamp in this database is `new Date().toISOString()`, and comparing that
+ * against SQLite's own `datetime()` silently misbehaves (see the gotcha in CLAUDE.md and the long
+ * note on `staleDraftCutoff`). Nothing here touches `datetime()`.
+ *
+ * The connection stays in this file. A second `new Database()` on the same path would be a second
+ * write lock with no WAL configured, which is why `fetchCache.ts` imports these rather than
+ * opening its own handle.
+ *
+ * **Keys are namespaced (`roads:`, `wikisum:`, `cityb:` …) and that is load-bearing** — it is what
+ * makes the manual escape hatch work when a destination caches a bad answer:
+ *
+ *     DELETE FROM fetch_cache WHERE key LIKE 'cityb:%';
+ *
+ * There is no sweep, on purpose. An expired row here is not garbage, it is the fallback served
+ * when the upstream is unreachable — see the stale-if-error rule in `fetchCache.ts`. Deleting
+ * expired rows would throw away exactly the copy you want on the day Overpass is down.
+ */
+export function getFetchCache(key: string): FetchCacheRow | undefined {
+  return db.prepare(`SELECT * FROM fetch_cache WHERE key = ?`).get(key) as
+    | FetchCacheRow
+    | undefined;
+}
+
+export function saveFetchCache(key: string, payloadJson: string): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO fetch_cache (key, payload_json, created_at)
+     VALUES (?, ?, ?)`
+  ).run(key, payloadJson, new Date().toISOString());
 }
 
 export function setTripChatSession(id: string, sessionId: string | null): void {

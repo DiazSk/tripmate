@@ -267,7 +267,7 @@ export default function SplitEditor({
         )}
         <div className="relative z-10 flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold tracking-wide text-accent-foreground uppercase">
+            <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[0.6875rem] font-semibold tracking-wide text-accent-foreground uppercase">
               Editing
             </span>
             <h2 className="mt-1.5 truncate font-display text-xl font-semibold text-on-deep">
@@ -292,7 +292,7 @@ export default function SplitEditor({
       {/* The same budget bar the result page carries, reading the same numbers off the same
           itinerary — so a stop deleted here moves the bar the traveller was watching there. */}
       <div className="shrink-0 border-b border-card-border px-5 py-3 sm:px-6">
-        <BudgetBar days={itinerary.days} budget={trip.budget} />
+        <BudgetBar days={itinerary.days} budget={trip.budget} activeDayIndex={activeDay} />
       </div>
 
       {/* Day tabs, in the result page's arrow-clipped shape rather than the pills this used to
@@ -403,7 +403,7 @@ export default function SplitEditor({
 
         <DragOverlay dropAnimation={null}>
           {dragging && (
-            <div className="pointer-events-none rounded-xl border border-accent/50 bg-[color:var(--surface-deep,#0f172a)] px-3 py-2 text-sm font-medium text-foreground shadow-2xl">
+            <div className="pointer-events-none rounded-xl border border-accent/50 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-2 text-sm font-medium text-foreground shadow-2xl">
               {dragging.stop.name}
             </div>
           )}
@@ -415,7 +415,7 @@ export default function SplitEditor({
           {findings
             .filter((f) => f.dayIndex === null)
             .map((f, i) => (
-              <p key={i} className="flex gap-1.5 text-xs text-amber-200">
+              <p key={i} className="flex gap-1.5 text-xs text-alert/75">
                 <span aria-hidden="true">⚠️</span>
                 {f.message}
               </p>
@@ -488,11 +488,11 @@ function DayTab({
  *  here; the tokens themselves still live only in globals.css. Keep the order in step with
  *  `DAY_PALETTES` or the panel's dots and the globe's ribbons drift apart. */
 const DAY_TOKENS = [
-  "--route-neon-cyan",
-  "--route-neon-magenta",
-  "--route-neon-amber",
-  "--route-neon-lime",
-  "--route-neon-violet",
+  "--route-day-1",
+  "--route-day-2",
+  "--route-day-3",
+  "--route-day-4",
+  "--route-day-5",
 ];
 const dayColorTokenFor = (day: number) => DAY_TOKENS[day % DAY_TOKENS.length];
 
@@ -548,7 +548,7 @@ function AddStopBar({
         </button>
       </div>
       {searching && <p className="mt-1.5 text-xs text-muted">Looking that up…</p>}
-      {error && <p className="mt-1.5 text-xs text-amber-200">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-alert/75">{error}</p>}
     </div>
   );
 }
@@ -766,10 +766,10 @@ function EditableStopCard({
               onChange={(e) => onMoveToDay(Number(e.target.value))}
               onClick={(e) => e.stopPropagation()}
               aria-label={`Move ${stop.name} to another day`}
-              className="rounded border border-card-border bg-transparent px-1 py-0.5 text-[10px] text-muted focus:outline-none"
+              className="rounded border border-card-border bg-transparent px-1 py-0.5 text-[0.6875rem] text-muted focus:outline-none"
             >
               {Array.from({ length: dayCount }, (_, d) => (
-                <option key={d} value={d} className="bg-[color:var(--surface-deep,#0f172a)]">
+                <option key={d} value={d} className="bg-[color:var(--surface-deep,#1c1a18)]">
                   D{d + 1}
                 </option>
               ))}
@@ -782,7 +782,7 @@ function EditableStopCard({
               onDelete();
             }}
             aria-label={`Delete ${stop.name}`}
-            className="text-muted transition-colors hover:text-amber-200"
+            className="text-muted transition-colors hover:text-alert/75"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

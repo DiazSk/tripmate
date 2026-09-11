@@ -2,6 +2,7 @@
 // between this module being reachable from a `.test.mjs` and not (see CLAUDE.md). `TIERS` and
 // the two formatters are real values and keep ordinary imports.
 import type { DayWeather } from "./weather";
+import type { BikeshareSystem } from "./bikeshare";
 import type {
   DestinationContext,
   Itinerary,
@@ -113,6 +114,26 @@ export function formatContextInsight(context: DestinationContext): string {
   return lines.join("\n");
 }
 
+/**
+ * What the destination's bikeshare lets the model do, or nothing at all.
+ *
+ * Returns "" when no system resolved, and that is the important case: an absent block means the
+ * model plans exactly as it did before this existed. It must never be told "this city has no
+ * bikeshare", because `bikeshare.ts` cannot tell an unmatched city from a bikeless one.
+ *
+ * The fare line is conditional for the same reason. GBFS rarely publishes a legible day pass —
+ * Vélib' and BIXI publish no pricing feed at all, Citi Bike publishes only a per-minute e-bike
+ * rate — so the usual instruction is to send the traveler to the operator rather than to invent a
+ * number that would land in the budget.
+ */
+function formatBikeshare(system?: BikeshareSystem | null): string {
+  if (!system) return "";
+  const fare = system.dayPass
+    ? `A day pass costs about ${system.dayPass.amount} ${system.dayPass.currency} — use that figure for any bike leg you add.`
+    : `Its fare is not published in a form worth quoting, so don't state a price: put the cost at 0 and say in the note that passes are bought from the operator.`;
+  return `\nGetting around: this city has a public bikeshare, ${system.name}, with roughly ${system.stationsNearby} docking stations near the centre. ${fare} Where two consecutive stops are between 1.5km and 8km apart, a shared bike is usually the pleasanter option and worth preferring over the metro — say so in the stop's note. Don't force it: ignore the bike for a traveler whose profile says limited mobility or low energy, in heavy rain, or where the stops are walkable anyway.\n`;
+}
+
 const CONTEXT_USE_INSTRUCTION = `If a festival's dates overlap the trip, include it as a stop on the relevant day. Weigh the safety notes when choosing areas and timing. Include at least one shopping stop from the list if it fits the budget and tier.`;
 
 function formatContextBlock(insight?: string): string {
@@ -140,7 +161,7 @@ const FOOD_STOP_INSTRUCTION = `For "food" stops, prefer an AREA over a specific 
 // (hostel, B&B, apartment, camp, houseboat, farmstay) and often the memorable part of
 // a trip — so pick the type from the traveler + destination first, and offer an
 // alternative rather than presenting one property as settled.
-const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD (0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM") — times across a day's stops must be sequential and non-overlapping; a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category" — "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs, "other" for everything else.`;
+const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD (0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM") — times across a day's stops must be sequential and non-overlapping; a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category" — "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs (including a bikeshare hop, when the destination has one), "other" for everything else.`;
 
 export function buildGeneratePrompt(params: {
   destination: string;
@@ -154,6 +175,7 @@ export function buildGeneratePrompt(params: {
   resolvedFlags?: ResolvedFlags | null;
   dietary?: DietaryNeeds | null;
   logistics?: TripLogistics | null;
+  bikeshare?: BikeshareSystem | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -161,7 +183,7 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
+${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
 Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${lodgingInstruction()}

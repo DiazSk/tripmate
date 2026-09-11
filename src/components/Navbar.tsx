@@ -47,7 +47,7 @@ const MENU_ITEMS = [
 // `inline-flex`, not `flex`: the hit area is the words, not the panel's full width. A full-bleed row
 // means a tap on empty space to the right of "Profile" navigates, which is not what anyone aimed at.
 const menuItemBase =
-  "group inline-flex items-baseline text-[clamp(2rem,10vw,2.81rem)] leading-[1.1] font-semibold tracking-[-0.085em] transition-colors duration-150 hover:text-accent focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none";
+  "group inline-flex items-baseline text-[clamp(2rem,10vw,2.81rem)] leading-[1.1] font-semibold tracking-[var(--tracking-display)] transition-colors duration-150 hover:text-accent focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none";
 
 /** Swapped rather than appended, for the same reason as `navLink` below. */
 const menuItem = (active = false) =>
@@ -156,25 +156,23 @@ export default function Navbar() {
   const isHome = pathname === "/";
   const isTripDetail = pathname.startsWith("/trip/");
   const isProfile = pathname === "/profile";
-  /** Whether this route gets the full three-cell bar — wordmark │ links │ Profile — or the bare
-   *  wordmark alone. The bare case is `/backend`, `/backend/pipeline`, `/bench`, and any unmatched
-   *  URL: Next renders its built-in 404 *inside* the root layout, so this nav mounts there too.
-   *  None of those has business carrying a user-facing profile link — two are internal dashboards
-   *  over their own stone-50 ground, and the third is a dead end.
+  /* **There is no route predicate here any more, and that is the point.**
    *
-   *  Still an explicit list of where the cells *belong*, and deliberately not `!isInternal`. The
-   *  negation reads shorter and is wrong for exactly the reason the route table below already
-   *  gives: a predicate that describes where something does *not* belong silently adopts every
-   *  route added after it — the 404 included, which would get a Profile link on a dead end. This
-   *  one only ever gains a route on purpose.
+   *  This used to be `isUserFacing = isHome || "/trips" || isTripDetail || isProfile`, gating both
+   *  vertical rules and the trailing cell. Everything it excluded — `/offline`, `/backend`,
+   *  `/backend/pipeline`, `/bench`, and the 404 Next renders inside this same layout — got a bare
+   *  wordmark on an otherwise empty bar. Two bar *shapes* shipped, and the reasoning for the split
+   *  (an internal dashboard has no business carrying a Profile link) was a content argument used to
+   *  justify a structural one.
    *
-   *  It gates both vertical rules and the trailing cell. What it no longer gates is whether there
-   *  is anything to the right of the wordmark at all: `/profile` carries no outbound links and
-   *  never will (`BackButton` is how you leave), but it does carry the Profile cell, marked as the
-   *  current page. That is the whole point of the shape. The predecessor of this constant gated the
-   *  wordmark's rule on there being links to divide from, which made `/profile` the one route
-   *  rendering a bare strip while every sibling rendered a grid — the inconsistency this fixes. */
-  const isUserFacing = isHome || pathname === "/trips" || isTripDetail || isProfile;
+   *  The content argument is still true and is answered by content: the middle cell is empty on
+   *  those routes, because they have nowhere to navigate to. The frame does not change. A visitor
+   *  carries the header between pages; it is the last component that should redraw itself
+   *  underneath them, and a 404 in particular is the worst place to hand someone a different,
+   *  smaller header than the one they arrived with — it is the page they most need a way out of.
+   *
+   *  The two dashboards are dev-only (they 404 in production), so the Profile link they now inherit
+   *  is only ever seen by us. */
   // Focus goes back here when the menu closes. Without it, dismissing a full-screen panel with
   // Escape leaves focus on a node that is now `inert` — the caret vanishes and the next Tab
   // restarts from the top of the document.
@@ -240,6 +238,8 @@ export default function Navbar() {
 
   return (
     <nav
+      /* One class, no route branch. The landing used to get a transparent variant; see `.glass-nav`
+         in globals.css for why it does not any more. */
       className={`glass-nav pointer-events-auto fixed inset-x-0 top-0 z-20 flex h-[var(--nav-h)] items-stretch ${
         menuOpen ? "is-menu-open" : ""
       }`}
@@ -277,11 +277,7 @@ export default function Navbar() {
           toggle. Drawing both below `sm` put two hairlines either side of a middle cell that is
           empty on `/` — three divisions in a 375px bar, two of them fencing nothing. The trailing
           rule is the one that survives because it is the one with a control against it. */}
-      <div
-        className={`flex items-center px-5 sm:px-6 ${
-          isUserFacing ? "sm:border-r sm:border-card-border" : ""
-        }`}
-      >
+      <div className="flex items-center px-5 sm:px-6 sm:border-r sm:border-card-border">
         <Link
           href="/"
           className="inline-flex min-h-11 items-center gap-2.5 font-display text-xl font-semibold text-foreground focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
@@ -297,15 +293,16 @@ export default function Navbar() {
           `grow`, not `flex-1`, for one edge case: `flex-1` sets `flex-basis: 0`, so this cell asks
           for the leftover space rather than for its content's width, and near 320px `New trip` gets
           squeezed toward min-content and wraps to two lines inside a 64px bar. `grow` starts from
-          content width and only expands. Empty on `/profile` and on the dashboards, which costs
-          nothing: with no content there is nothing for the padding to push, so both rules still
-          land against real content on their outer side.
+          content width and only expands. Empty on the dashboards, which costs nothing: with no
+          content there is nothing for the padding to push, so both rules still land against real
+          content on their outer side.
 
-          No `gap` any more. The three route gates below are mutually exclusive — `/` vs `/trips` vs
-          `/trip/*`, and `"/trips".startsWith("/trip/")` is false — and both of this cell's former
-          trailing items (`Profile`, the toggle) now live in the trailing cell, so it holds at most
-          one child on every route and the gap had nothing left to separate. `/`'s own group keeps
-          its `gap-6`. */}
+          No `gap` any more. The four route gates below are mutually exclusive — `/` vs `/trips` vs
+          `/trip/*` vs `/profile`, and `"/trips".startsWith("/trip/")` is false — and both of this
+          cell's former trailing items (`Profile`, the toggle) now live in the trailing cell, so it
+          holds at most one child on every route and the gap had nothing left to separate. The two
+          routes that show more than one link (`/` and `/profile`) each wrap theirs in a group with
+          its own `gap-6`, which is what keeps that true. */}
       <div className="flex grow items-center justify-end px-5 sm:px-6">
         {/* Section anchors + My memories, desktop: inline in the bar itself. On mobile all four
             destinations move into the panel below instead of one staying pinned in the bar beside
@@ -341,15 +338,44 @@ export default function Navbar() {
             My memories
           </Link>
         )}
+        {/* `/profile` used to be the one route with an empty bar, and it paid for that with a
+            `Back` button inside the page — a control that popped history, so where it went depended
+            on how you arrived. Both ways out are named here instead, which is the same answer the
+            other routes already give.
+
+            Two links, so they carry their own `gap-6` on a wrapper rather than on the parent. The
+            parent deliberately has no gap (see above); this keeps its "at most one child" shape
+            true while still spacing these two, exactly as `/`'s own group does. */}
+        {isProfile && (
+          <div className="flex items-center gap-6">
+            {/* `New trip` is the one that drops on a phone, and dropping one was not optional:
+                with both shown the bar measured 393px against a 375px viewport, which wrapped both
+                labels onto two lines and clipped `Profile` off the right edge. This is the link to
+                lose because the wordmark beside it already goes to `/` — the same destination — so
+                a narrow bar keeps both routes reachable with one fewer item.
+
+                The breakpoint rides on a wrapper for the reason the trailing cell documents at
+                length: `navLinkBase` already sets `inline-flex`, and appending `hidden` to it loses
+                to Tailwind's alphabetical output order. Here the `sm:` variant is media-gated, so
+                the pair is unambiguous. */}
+            <span className="hidden sm:inline-flex">
+              <Link href="/" className={navLink()}>
+                New trip
+              </Link>
+            </span>
+            <Link href="/trips" className={navLink()}>
+              My memories
+            </Link>
+          </div>
+        )}
       </div>
-      {isUserFacing && (
-        /* The trailing cell, mirroring the wordmark's. It holds exactly one control at any width,
+      {/* The trailing cell, mirroring the wordmark's. It holds exactly one control at any width,
            never two and never none, and on `/` which one it holds is a breakpoint question:
            `MENU_ITEMS` already carries `Profile` into the full-screen panel, so below `sm` on `/`
            this cell showing it too would put the same destination in the bar and behind the toggle
            at once. Below `sm` on `/` this cell is the toggle; everywhere else, at every width, it
-           is `Profile`. */
-        <div className="flex items-center border-l border-card-border px-5 sm:px-6">
+           is `Profile`. */}
+      <div className="flex items-center border-l border-card-border px-5 sm:px-6">
           {/* The breakpoint rides on a wrapper, and it has to. `navLinkBase` already sets
               `inline-flex`, and appending `hidden` to it does nothing: Tailwind emits the display
               utilities alphabetically — `.block`, `.flex`, `.hidden`, `.inline`, `.inline-flex` —
@@ -416,8 +442,7 @@ export default function Navbar() {
               </span>
             </button>
           )}
-        </div>
-      )}
+      </div>
       {isHome && (
         /**
          * The menu, full-bleed below the bar.
@@ -518,7 +543,7 @@ export default function Navbar() {
               opacity: menuOpen ? 1 : 0,
               transitionDelay: `${MENU_ITEMS.length * 60}ms`,
             }}
-            className="mt-auto inline-flex w-full items-center justify-center gap-4 rounded-full bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[-0.0357em] text-accent-foreground transition-[opacity,background-color] duration-300 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
+            className="mt-auto inline-flex w-full items-center justify-center gap-4 rounded-full bg-white px-8 py-5 text-sm leading-[0.9] font-semibold tracking-[var(--tracking-body)] text-accent-foreground transition-[opacity,background-color] duration-300 hover:bg-accent focus-visible:outline-2 focus-visible:outline-accent-foreground active:scale-[0.98]"
           >
             Plan a trip
             <ButtonMark />

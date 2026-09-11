@@ -268,7 +268,7 @@ async function buildStyle(): Promise<StyleSpecification | string> {
     id: BASEMAP_TINT_LAYER_ID,
     type: "background" as const,
     paint: {
-      "background-color": "#0f172a",
+      "background-color": "#12110f",
       "background-opacity": 0.34,
     },
   };
@@ -498,6 +498,9 @@ function addTripLayers(map: MapLibreMap) {
     type: "circle",
     source: SEARCH_SOURCE_ID,
     paint: {
+      // Per-category colour, not the single accent this carried before the search panel grew a
+      // palette — `searchPalette.ts` is what the row's own dot reads, and a pin that does not
+      // match it is a pin the traveler has to match by position.
       "circle-color": ["get", "color"],
       "circle-radius": ["case", ["get", "hovered"], 9.5, ["get", "selected"], 8, 5.5],
       // The highlight. Pointing at a row holds that pin at full strength and drops every other one
@@ -506,7 +509,9 @@ function addTripLayers(map: MapLibreMap) {
       // to stay recognisably the same object, and a hue change reads as a different kind of thing.
       "circle-opacity": ["case", ["get", "dimmed"], 0.3, 1],
       "circle-stroke-width": ["case", ["get", "hovered"], 2.5, 2],
-      "circle-stroke-color": "#0f172a",
+      // `#12110f`, the redesign's near-black, not the slate `#0f172a` this used to carry — the
+      // palette moved warm and a cool stroke reads as a different system on the same canvas.
+      "circle-stroke-color": "#12110f",
       "circle-stroke-opacity": ["case", ["get", "dimmed"], 0.3, 1],
     },
   });
@@ -527,8 +532,8 @@ function addTripLayers(map: MapLibreMap) {
       "text-optional": true,
     },
     paint: {
-      "text-color": "#f4f7fa",
-      "text-halo-color": "#0f172a",
+      "text-color": "#f7f5f2",
+      "text-halo-color": "#12110f",
       "text-halo-width": 1.4,
       // The same rule the trip's own stop names follow, in the vocabulary a symbol layer speaks:
       // nothing at a distance, fading in as the ground comes up. 13.5 → 14.8 is the zoom band
@@ -584,7 +589,7 @@ function addTripLayers(map: MapLibreMap) {
       "circle-radius": 5,
       "circle-opacity": ["get", "opacity"],
       "circle-stroke-width": 1.5,
-      "circle-stroke-color": "#0f172a",
+      "circle-stroke-color": "#12110f",
       "circle-stroke-opacity": ["get", "opacity"],
     },
   });
@@ -619,10 +624,12 @@ function addTripLayers(map: MapLibreMap) {
  * The deliberate differences from `CesiumRenderer`, all of them consequences of a vector renderer
  * having no true globe camera and no 3D-tile mesh to sample:
  *
- * - **Routes are draped, not arched.** Cesium lifts each hop onto a raised great circle so two
- *   trips over the same ground read as separate. Here they are lines on the terrain. Nothing above
- *   this file depends on the arc — `frameRoute` simply stops reserving room for apexes that don't
- *   exist.
+ * - **Routes are arched here too now, by a different mechanism.** This once read "draped, not
+ *   arched": Cesium lifts each hop onto a raised great circle and these were lines on the terrain.
+ *   `maplibreArcLayer` supersedes that — MapLibre has no elevated-line primitive, so the arcs are a
+ *   custom WebGL layer rather than a style layer. What is still true is the second half:
+ *   `frameRoute` reserves no room for apexes, because the arc radius is camera-derived rather than
+ *   part of the geometry it frames.
  * - **Altitude is always 0.** `drawRoute` resolves 0 rather than a sampled surface height, because
  *   the geometry sits *on* the terrain rather than floating above an ellipsoid. `routeAltitudeRef`
  *   then makes the marker layer lift cards by `STEM_HEIGHT_M` alone, which is correct here.
@@ -1061,18 +1068,24 @@ export class MapLibreRenderer implements MapRenderer {
 
     // --- The neighbourhood framing: a box around the stop, not a dive onto it.
     if (options.contextRadiusM) {
-      const [west, south] = offsetMetres(
-        options.lat,
-        options.lng,
-        -options.contextRadiusM,
-        -options.contextRadiusM
-      );
-      const [east, north] = offsetMetres(
-        options.lat,
-        options.lng,
-        options.contextRadiusM,
-        options.contextRadiusM
-      );
+      // **De-rotate the box before fitting it.** `cameraForBounds` fits an *axis-aligned* lat/lng
+      // box as seen from the camera, so a rotated camera needs `|cos| + |sin|` more extent to
+      // contain the same box — measured here at exactly √2 (1.414x) at 45°, tapering to 1.0 at 0°
+      // and 90°. Cesium derives its range from `contextRadiusM` with no heading term at all, so
+      // without this the same stop is framed up to 41% further out on one engine than the other,
+      // varying per stop, the moment anything passes a heading — which the stop tour now does.
+      // That would undo the thing the two `cubicInOut` eases exist for: the Map/Satellite toggle
+      // must not change how arriving at a stop feels.
+      //
+      // Shrinking the requested box by the same factor makes the *visible ground* rotation-
+      // invariant instead, and still honours what `contextRadiusM` promises: the 800m radius is
+      // the inscribed circle of the framed box, which is what "frame at least this much ground
+      // around the point" means.
+      const headingSpread =
+        Math.abs(Math.cos(options.headingRad ?? 0)) + Math.abs(Math.sin(options.headingRad ?? 0));
+      const contextRadiusM = options.contextRadiusM / headingSpread;
+      const [west, south] = offsetMetres(options.lat, options.lng, -contextRadiusM, -contextRadiusM);
+      const [east, north] = offsetMetres(options.lat, options.lng, contextRadiusM, contextRadiusM);
       // `fitBounds` and not a computed zoom, because the two answer different questions. A zoom is
       // "how far back"; bounds are "keep this much ground in the clear part of the frame", and the
       // clear part is what the padding below describes. The `maxZoom` cap is what actually stops

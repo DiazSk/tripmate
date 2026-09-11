@@ -1,3 +1,5 @@
+import { TTL, cached } from "./fetchCache";
+
 export interface Holiday {
   date: string;
   name: string;
@@ -24,16 +26,7 @@ export async function getPublicHolidays(
   const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
 
   try {
-    const perYear = await Promise.all(
-      years.map(async (year) => {
-        const res = await fetch(
-          `https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`,
-          { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
-        );
-        if (!res.ok) return null;
-        return (await res.json()) as Holiday[];
-      })
-    );
+    const perYear = await Promise.all(years.map((year) => holidaysForYear(countryCode, year)));
     if (perYear.every((y) => y === null)) return null;
     return perYear
       .filter((y): y is Holiday[] => y !== null)
@@ -42,4 +35,34 @@ export async function getPublicHolidays(
   } catch {
     return null;
   }
+}
+
+/**
+ * One country-year, cached.
+ *
+ * **The cache sits here rather than around `getPublicHolidays`, and the reshaping is the point.**
+ * Keyed on `(countryCode, startDate, endDate)` a cache would almost never hit — every trip has
+ * different dates. Keyed on the country-year, two unrelated trips to France in different months
+ * share one row, and a trip spanning a new year reuses whichever half it already has.
+ *
+ * The axis for holidays is *publication*, not freshness: Nager has final data for any year up to
+ * the current one and may have nothing at all for a year two out. Returning `null` on `!res.ok`
+ * **and** on an empty list is what makes that fall out for free — `cached()` never writes a
+ * `null`, so an unpublished year simply re-asks next time instead of being frozen as "this
+ * country has no public holidays". No country has no public holidays.
+ */
+async function holidaysForYear(countryCode: string, year: number): Promise<Holiday[] | null> {
+  return cached(`holidays:${countryCode}:${year}`, TTL.STATIC, async () => {
+    try {
+      const res = await fetch(
+        `https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`,
+        { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
+      );
+      if (!res.ok) return null;
+      const holidays = (await res.json()) as Holiday[];
+      return Array.isArray(holidays) && holidays.length ? holidays : null;
+    } catch {
+      return null;
+    }
+  });
 }

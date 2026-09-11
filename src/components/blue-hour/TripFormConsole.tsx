@@ -79,7 +79,7 @@ function Field({
         onActivate ? "cursor-pointer" : "cursor-text"
       }`}
     >
-      <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.025em] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
+      <span className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
         {label}
         {badge}
@@ -165,8 +165,14 @@ export default function TripFormConsole({
         >
           {/* The step had no heading of any kind — it opened straight onto four
               fields, so neither the page nor a screen reader named what you were
-              doing. Same display step as "Choose your style" below it. */}
-          <h1 className="mb-4 font-scene-display text-xl font-semibold text-foreground">
+              doing.
+
+              **This rendered at 60px, not the 20px it asked for.** `.font-scene-display` is
+              unlayered and carries its own `font-size`, so the `text-xl` beside it was emitted
+              into `@layer utilities` and lost — the exact trap documented on that class. The
+              `font-semibold` was dead too; the class already sets 600. A wizard step heading is
+              not a landing headline, so it takes the app's own display step instead. */}
+          <h1 className="mb-4 font-display text-xl text-foreground">
             Plan your trip
           </h1>
 

@@ -62,7 +62,7 @@ import { devLabel } from "@/lib/devInspector";
 import { clearUnseenDay, changedDayNumbers, markUnseenDays } from "@/lib/unseenChanges";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
-import { STAGE_ORDER, StageEvent } from "@/lib/generationStages";
+import { STAGE_ORDER, StageEvent, TYPICAL_WAIT_PHRASE } from "@/lib/generationStages";
 import type { StageProgress } from "@/lib/generationStages";
 import { buildDestinationFacts } from "@/lib/destinationFacts";
 import { formatDateRange } from "@/lib/format";
@@ -261,7 +261,7 @@ function Field({
       }`}
       {...devLabel(`Field.${label}`)}
     >
-      <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.025em] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
+      <span className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase transition-colors duration-300 group-focus-within:text-accent">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
         {label}
         {optional && (
@@ -314,11 +314,13 @@ function openNativePicker(cell: HTMLLabelElement, target: EventTarget | null) {
  *  context, and doing both makes a screen reader say the step name twice. */
 function Screen({
   name,
+  step,
   title,
   subtitle,
   children,
 }: {
   name: string;
+  step: PlanStep;
   title: string;
   subtitle?: string;
   children: ReactNode;
@@ -328,12 +330,25 @@ function Screen({
     headingRef.current?.focus();
   }, []);
 
+  // Derived from PLAN_ORDER rather than written per screen, because the landing page promises
+  // "Four steps" and a hand-numbered wizard is a second place for that count to be wrong. `step`
+  // is typed as PlanStep, so a screen cannot be added without appearing here — the alternative,
+  // matching on the display `name`, would have failed silently the first time one was reworded.
+  const position = PLAN_ORDER.indexOf(step) + 1;
+
   return (
     <div className="value-in" style={{ animationDelay: "80ms" }} {...devLabel(`PlanStep.${name}`)}>
+      {/* The wizard gave no sense of length: four screens of questions with a Next button and no
+          way to tell whether you were one screen from a plan or ten. Stated once, quietly, above
+          the heading rather than as a progress bar — four steps is short enough that the count is
+          the reassurance and a bar would be furniture. */}
+      <p className="text-[0.6875rem] font-medium tracking-[var(--tracking-label)] text-muted uppercase">
+        Step {position} of {PLAN_ORDER.length}
+      </p>
       <h2
         ref={headingRef}
         tabIndex={-1}
-        className="font-display text-xl font-semibold text-foreground outline-none"
+        className="mt-1.5 font-display text-xl font-semibold text-foreground outline-none"
       >
         {title}
       </h2>
@@ -362,7 +377,7 @@ function ReviewRow({
   return (
     <div className="flex items-start justify-between gap-3 py-2.5">
       <div>
-        <div className="text-xs font-semibold tracking-[0.025em] text-muted uppercase">
+        <div className="text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-muted uppercase">
           {label}
         </div>
         <div className="mt-0.5 text-sm text-foreground">{value}</div>
@@ -1686,11 +1701,16 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       setDestination(prefill.destination);
       setStartDate(prefill.startDate);
       setEndDate(prefill.endDate);
-      setBudget(prefill.budgetUsd);
-      setParty({ adults: prefill.adults, children: prefill.children, infants: 0 });
-      setGroup(
-        prefill.children > 0 ? "family_with_kids" : prefill.adults === 1 ? "solo" : "couple"
-      );
+      // Each guarded independently, because a partial prefill must leave everything it did not
+      // ask about exactly as the traveller's saved profile left it. See PlanPrefill for why the
+      // three money/party fields are optional rather than defaulted at the call site.
+      if (prefill.budgetUsd !== undefined) setBudget(prefill.budgetUsd);
+      if (prefill.adults !== undefined || prefill.children !== undefined) {
+        const adults = prefill.adults ?? 1;
+        const children = prefill.children ?? 0;
+        setParty({ adults, children, infants: 0 });
+        setGroup(children > 0 ? "family_with_kids" : adults === 1 ? "solo" : "couple");
+      }
     }
     // Always the first sub-step, even fully prefilled: the card is a suggestion and the traveller
     // should see what it filled in before it prices anything.
@@ -1783,9 +1803,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               whatever the container gives them. Proximity is the strongest grouping cue there is
               and a full screen-width sweep from a label to its own control breaks it. Each step now
               gets the width its content asks for. Measured at 1280: the label/stepper gap goes
-              1054px -> ~590px, and the lone input stops being a rule with a cursor in it. */}
+              1054px -> ~590px, and the lone input stops being a rule with a cursor in it.
+
+              **105rem, not the 84rem this carried, and the change is a no-op in pixels.** The cap
+              was written in `rem` on the explicit reasoning that the root was fluid — 84rem was
+              1680px once the root reached its 20px ceiling. The root is a flat 16px now (see
+              globals.css), so 84rem would have quietly become 1344px and left 288px of dead canvas
+              down each side of the widest step in the product, on a 1920 display, on the screen a
+              demo spends the most time on. 105rem restores the same 1680px against the new root.
+              It is a plain cap now rather than a fluid one, which is what the surrounding
+              measurements were always tuned against anyway. */}
           <div
-            className={`w-full space-y-4 ${planStep === "basics" ? "max-w-[84rem]" : "max-w-3xl"}`}
+            className={`w-full space-y-4 ${planStep === "basics" ? "max-w-[105rem]" : "max-w-3xl"}`}
           >
             {/* Same hero-rise as the landing block, so the step reads as one move in both
                 directions rather than an instant swap forward and an animated one back. */}
@@ -1841,6 +1870,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {planStep === "basics" && (
                 <Screen
                   name="Basics"
+                  step="basics"
                   title="Where and when"
                   subtitle="Destination, dates and what you want to spend in total."
                 >
@@ -1852,7 +1882,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                       below this whole row, and this console is short enough (one row of fields)
                       that the dropdown would get clipped at its bottom edge otherwise. The rounded
                       corners don't need the clip — nothing in here has a background/transform that
-                      would poke past them (contrast the hero-photo bands elsewhere, which do).
+                      would poke past them, unlike the full-bleed photographic bands elsewhere.
                       Destination gets its own full-width row rather than sharing one with the three
                       fixed-width figures — it's the field the geocoder dropdown hangs off of, and
                       splitting it out is what lets that dropdown span the whole console instead of
@@ -2119,6 +2149,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {planStep === "group" && (
                 <Screen
                   name="Group"
+                  step="group"
                   title="Who's going?"
                   subtitle="This changes trip to trip, so we ask every time."
                 >
@@ -2160,6 +2191,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {planStep === "preferences" && (
                 <Screen
                   name="Preferences"
+                  step="preferences"
                   title="What you're after"
                   subtitle="Occasion, pace and what to prioritise. All optional, and specific to this trip."
                 >
@@ -2255,6 +2287,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
               {planStep === "review" && (
                 <Screen
                   name="Review"
+                  step="review"
                   title="Review your trip"
                   subtitle="Here's everything before we start planning."
                 >
@@ -2320,13 +2353,18 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     />
                   </div>
 
-                  {/* The one reassurance this flow never gave before committing to a ~2-minute
-                      run: that it can be stopped, and that the result isn't final. Both were
-                      already true — `GenerationScreen` takes `onCancel`, and `FeedbackLoop`
-                      exists — neither was ever said here, where a hesitating traveler needed it. */}
+                  {/* The one reassurance this flow never gave before committing to a long run:
+                      that it can be stopped, and that the result isn't final. Both were already
+                      true — `GenerationScreen` takes `onCancel`, and `FeedbackLoop` exists —
+                      neither was ever said here, where a hesitating traveler needed it.
+
+                      The duration comes from `TYPICAL_WAIT_PHRASE`, not from prose. This sentence
+                      used to read "about two minutes" against the loader's own derived "about
+                      five", so the traveler was told one number here and a different one on the
+                      very next screen. */}
                   <p className="mt-4 text-xs text-muted">
-                    Takes about two minutes. You can cancel any time, and refine the plan in plain
-                    language afterwards.
+                    Takes about {TYPICAL_WAIT_PHRASE}. You can cancel any time, and refine the plan
+                    in plain language afterwards.
                   </p>
                   <label className="mt-2 flex items-center gap-2 text-xs text-muted">
                     <input
@@ -2372,7 +2410,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 </button>
                 {planStep === PLAN_ORDER[PLAN_ORDER.length - 1] ? (
                   // The terminal button, deliberately unlike every "Next" before it: no arrow —
-                  // there's nowhere further to imply — and wider, so committing to a ~2-minute
+                  // there's nowhere further to imply — and wider, so committing to a multi-minute
                   // generation doesn't sit in a pill sized and shaped like the three-times-
                   // repeated "keep going" button that trained the traveler's muscle memory to
                   // press it without reading it.

@@ -84,7 +84,7 @@ export default function PlaceDetailPanel({
           </>
         )}
 
-        {error && !loading && <p className="text-sm text-red-400">{error}</p>}
+        {error && !loading && <p className="text-sm text-alert">{error}</p>}
 
         {detail && !loading && (
           <>
@@ -166,6 +166,10 @@ export default function PlaceDetailPanel({
                   min={0}
                   step={1}
                   inputMode="decimal"
+                  // Same reasoning as the lodging field in `ItineraryCard`: the wrapping label's
+                  // "Actual" is a name, not a useful one, and the `$` beside it is aria-hidden.
+                  aria-label={`Actual cost in dollars for ${stop.name}`}
+                  title="What you actually paid. Replaces the estimate in this trip's budget total."
                   defaultValue={actualCost}
                   onBlur={(e) =>
                     onActualCostChange(e.target.value === "" ? undefined : Number(e.target.value))

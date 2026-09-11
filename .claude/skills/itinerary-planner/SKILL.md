@@ -400,8 +400,14 @@ dedicated field for it; a from-scratch generation puts it in the affected stop's
 
 Consecutive stops must be reachable in the gap between them. Estimate the leg from the
 coordinates and the destination's normal way of getting around, then check it fits: roughly
-15 min/km on foot, and for transit or taxi across a city, rarely under 20-30 minutes door to
-door once waiting and walking at both ends are counted. Two stops 8km apart with 20 minutes
+15 min/km on foot, about 5 min/km by shared bike once docking at both ends is counted, and for
+transit or taxi across a city, rarely under 20-30 minutes door to door once waiting and walking at
+both ends are counted.
+
+Only route a leg by bike where the prompt has told you the destination has a bikeshare — it names
+the system when one exists, and says nothing when it does not, which is not the same as saying
+there is none. Skip the bike regardless for a traveler with limited mobility or low energy, in
+heavy rain, and for stops close enough to walk. Two stops 8km apart with 20 minutes
 between them is not a schedule, and back-to-back stops that cross the city and come back are
 worth restructuring rather than warning about.
 

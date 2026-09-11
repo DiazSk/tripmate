@@ -322,7 +322,7 @@ export default function FocusEditMode({
 
       {/* Discarding real work should take a deliberate second action, not a stray click on ✕. */}
       {confirmingCancel && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-500/30 bg-red-500/10 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-alert/30 bg-alert-soft px-4 py-2.5">
           <p className="text-sm text-foreground">
             Discard the changes you made to {scope === "trip" ? "this trip" : "this day"}?
           </p>
@@ -337,7 +337,7 @@ export default function FocusEditMode({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-full bg-red-500/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+              className="rounded-full bg-alert/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-alert"
             >
               Discard
             </button>
@@ -463,7 +463,7 @@ export default function FocusEditMode({
               </div>
               {/* Always rendered, whatever it says: swapping this line in and out mid-drag would
                   change the header's height and shift every drop target above the list. */}
-              <p className="mt-1 truncate text-center text-[11px] text-muted/80">
+              <p className="mt-1 truncate text-center text-[0.6875rem] text-muted/80">
                 {dragging !== null ? (
                   <span className="text-accent">Hold over a day to open it, then drop where you want</span>
                 ) : (
@@ -489,7 +489,7 @@ export default function FocusEditMode({
                 {findings.map((finding, i) => (
                   <li
                     key={i}
-                    className="flex gap-1.5 rounded-lg bg-amber-400/10 px-2.5 py-2 text-xs text-amber-200"
+                    className="flex gap-1.5 rounded-lg bg-alert-soft px-2.5 py-2 text-xs text-alert/75"
                   >
                     <span aria-hidden="true">⚠️</span>
                     <span>{finding.message}</span>
@@ -504,7 +504,7 @@ export default function FocusEditMode({
       {/* Portalled so the dragged row isn't clipped by the preview pane's own scroll box. */}
       <DragOverlay dropAnimation={null}>
         {dragging && (
-          <div className="pointer-events-none rounded-lg border border-accent/40 bg-[color:var(--surface-deep,#0f172a)] px-3 py-1.5 text-sm font-medium text-foreground shadow-2xl">
+          <div className="pointer-events-none rounded-lg border border-accent/40 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-1.5 text-sm font-medium text-foreground shadow-2xl">
             {dragging.stop.name}
           </div>
         )}
