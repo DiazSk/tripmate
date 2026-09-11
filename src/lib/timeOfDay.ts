@@ -74,7 +74,7 @@ export interface StopGroup {
    *  for a value that isn't there. */
   label: TimeOfDay | null;
   /** The stops in this group, each carrying the index it had in the day's own `stops` array —
-   *  which is the index the map camera, the tour and the hover highlight all speak in. */
+   *  which is the index the map camera, Story mode and the hover highlight all speak in. */
   stops: { stop: Stop; index: number }[];
 }
 

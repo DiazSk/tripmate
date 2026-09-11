@@ -233,21 +233,32 @@ const WORLD_TILE_PX = 512;
  * the centre, which is the only place this is measured, and the residual at the edges is far below
  * the size of the card being centred.
  *
- * Capped at a third of the viewport: an extreme pitch with a tall anchor would otherwise drive the
- * ground point clean off the bottom of the screen, which trades a card slightly high in frame for
- * a stop that isn't in it at all.
+ * **Uncapped, deliberately, and that is the whole point of the function.** This was clamped to a
+ * third of the viewport for a while, on the reasoning that an extreme pitch with a tall anchor
+ * would otherwise drive the ground point clean off the bottom of the screen. What the clamp
+ * actually bought was the failure it was meant to prevent: truncating the lift does not move the
+ * stop back into frame, it moves the *card* out of centre and up towards the top edge, so a close
+ * peek showed a name stranded at the top of the screen with its stop still down at the bottom —
+ * both halves badly placed instead of one. Measured on a 900px viewport at a 250m peek, where a
+ * 150m stem projects to ~664px: the clamp put the card at y=92 and the stop at y=750.
+ *
+ * Cesium has no equivalent clamp — it aims at the real 3D point and lands the card's bottom edge
+ * on centre at every range — and the satellite view is the one that reads correctly. This is the
+ * flat-map arithmetic for the same aim, so it matches rather than second-guesses it. Where the
+ * column is genuinely taller than the frame the stop does leave the bottom, exactly as it does on
+ * Cesium; the name is what a hover is asking to be shown, and the stem still runs down out of
+ * frame to say where it points.
  */
 export function centreHeightOffsetPx(
   heightM: number,
   zoom: number,
   lat: number,
-  maplibrePitchDeg: number,
-  viewHeightPx: number
+  maplibrePitchDeg: number
 ): [number, number] | undefined {
   if (!(heightM > 0)) return undefined;
   const metresPerPixel =
     (EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (WORLD_TILE_PX * 2 ** zoom);
   const px = (heightM * Math.sin((maplibrePitchDeg * Math.PI) / 180)) / metresPerPixel;
   if (!(px > 0.5)) return undefined;
-  return [0, Math.min(px, viewHeightPx / 3)];
+  return [0, px];
 }

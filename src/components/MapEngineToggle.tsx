@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { useMapCamera } from "@/lib/mapCamera";
 import { setStoredMapEngine, type MapEngine } from "@/lib/mapEngine";
 
@@ -21,8 +22,14 @@ import { setStoredMapEngine, type MapEngine } from "@/lib/mapEngine";
  * The choice is also written to storage, so the next page load opens on it. That is deliberate and
  * not merely convenient: rebuilding Cesium's tileset costs seconds and 800 requests, so a traveler
  * who prefers satellite should not pay for the vector map first on every navigation.
+ *
+ * `locked` fades it out and takes it out of the pointer and focus paths while the map search is
+ * open. Search is a Map-only surface — its results are pins on the vector map and Satellite has
+ * nothing to say about them — so offering the switch mid-search offers a button whose only effect
+ * is to throw the search away. Faded rather than unmounted: the search panel morphs out of the
+ * space directly below this control, and a sibling vanishing on the same frame reads as a glitch.
  */
-export default function MapEngineToggle() {
+export default function MapEngineToggle({ locked = false }: { locked?: boolean } = {}) {
   const { engine, setEngine, globeWanted } = useMapCamera();
 
   // Nothing to toggle where there is no map. The same predicate the engines themselves use, so
@@ -41,14 +48,25 @@ export default function MapEngineToggle() {
     // `MapControls` — this is map chrome, and map chrome sits above the world it describes.
     // Hidden below `sm`, where the panel goes full-bleed and there is no map to look at anyway.
     <div className="pointer-events-none fixed top-[calc(var(--nav-h)+1.5rem)] left-6 z-20 hidden sm:block print:hidden">
-      <div
+      <motion.div
+        animate={{ opacity: locked ? 0 : 1, scale: locked ? 0.9 : 1 }}
+        // `pointerEvents` in `style` rather than in `animate`: it is not an animatable value, and
+        // putting it in `animate` leaves it applied only once the tween settles — which is exactly
+        // the window where a click must already be refused.
+        style={{ pointerEvents: locked ? "none" : "auto" }}
+        transition={{ type: "spring", stiffness: 320, damping: 32 }}
+        // Out of the tab order too. Opacity 0 is invisible to the eye and fully present to the
+        // keyboard, and a control that cannot be seen but can be triggered is worse than one that
+        // is simply disabled.
+        inert={locked || undefined}
+        aria-hidden={locked || undefined}
         className="glass-control pointer-events-auto flex overflow-hidden rounded-full p-1"
         role="group"
         aria-label="Map view"
       >
         <Choice label="Map" active={engine === "maplibre"} onClick={() => choose("maplibre")} />
         <Choice label="Satellite" active={engine === "cesium"} onClick={() => choose("cesium")} />
-      </div>
+      </motion.div>
     </div>
   );
 }

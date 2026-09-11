@@ -21,6 +21,8 @@ import {
   STEM_HEIGHT_M,
 } from "@/lib/mapRoute";
 import {
+  SEARCH_CONTEXT_RADIUS_M,
+  SEARCH_MIN_RANGE_M,
   STOP_CONTEXT_RADIUS_M,
   STOP_MIN_RANGE_M,
   type CameraPose,
@@ -107,8 +109,45 @@ interface MapCameraContextValue {
    * the camera over for the length of a run and gives it back on the way out.
    */
   setRouteFramingSuspended: (suspended: boolean) => void;
+  /**
+   * Draw the trip's stops without the arcs between them. Set only by Story mode.
+   *
+   * A mode switch rather than an argument to `showTripRoute`, and for the reason
+   * `setRouteFramingSuspended` above is one: the call already carries four positional parameters,
+   * three of them booleans, and a fifth would be unreadable at every call site for the benefit of
+   * the one caller that wants it. Read when a route is drawn *and* when it is replayed onto a
+   * freshly-toggled engine, so switching Map/Satellite mid-film keeps the arcs away.
+   *
+   * See `connectors` on `RouteDrawRequest` for what the flag means to a renderer and why it covers
+   * both the elevated arc and the draped line.
+   */
+  setRouteConnectorsHidden: (hidden: boolean) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   flyToPlace: (lat: number, lng: number, label?: string) => void;
+  /**
+   * Frame a **search result**: the candidate plus enough of its surroundings to judge whether it
+   * belongs in the plan.
+   *
+   * Separate from `flyToPlace` rather than a parameter on it, because the two are asking different
+   * questions and drifting them together would quietly change one when the other was tuned. A stop
+   * is already in the plan and its framing answers "where is this"; a search result is a candidate
+   * and the only useful question is "is this near anything else I am doing", which a frame holding
+   * nothing but the candidate cannot answer. See `SEARCH_CONTEXT_RADIUS_M`.
+   */
+  flyToSearchResult: (lat: number, lng: number) => void;
+  /**
+   * Arrive on a stop the way a film arrives on it — close, low and with no neighbourhood framing.
+   *
+   * Deliberately **not** `flyToPlace`, whose whole design is the opposite trade: that one pulls
+   * back to `STOP_CONTEXT_RADIUS_M` and refuses to come nearer than `STOP_MIN_RANGE_M` (3.5km,
+   * ~zoom 14.5), because somebody reading a plan is asking "where is this *in the city*". Story
+   * mode is not asking that. Its camera *is* the narration's subject, and at a 3.5km floor the
+   * flight from a day's framing to a stop is a few hundred metres of range — measured, it read as
+   * the map not moving at all, which is the one thing a film cannot do.
+   *
+   * No label, so no pin: the caption panel names the place, and the stop already has a marker.
+   */
+  flyToStoryStop: (lat: number, lng: number) => void;
   /** Wipe every trip overlay and fly back to the hero pose. The map lives above the route
    *  boundary and never unmounts, so without this a trip's route and markers survive a navigation
    *  back to the landing page. No-ops before the renderer exists. */
@@ -199,14 +238,14 @@ interface MapCameraContextValue {
    * caller that opts out.
    */
   setHoveredIndex: (index: number | null, source?: HoverSource) => void;
-  /** Index of the selected stop — clicked, or stepped onto by the tour. Outlives hover. */
+  /** Index of the selected stop — clicked, or stepped onto by a story beat. Outlives hover. */
   activeIndex: number | null;
   setActiveIndex: (index: number | null) => void;
   /**
    * Select a stop given the stop *object* rather than its index into `routeStops`.
    *
-   * For the callers that legitimately do not have that index. `StopMarkerLayer` and `useStopTour`
-   * both do and should keep using `setActiveIndex` — this is for the itinerary rows and the
+   * For the callers that legitimately do not have that index. `StopMarkerLayer` and Story mode's
+   * controller (`storyMode.tsx`) both do and should keep using `setActiveIndex` — this is for the itinerary rows and the
    * "up next" list inside the place detail, which reach a stop through `useTripCamera.selectStop`
    * and only ever hold an `Itinerary` stop. Threading a flat index down to both would mean a new
    * prop on `StopList`, on `PlaceDetailPanel`, and on whatever opens a stop next.
@@ -228,6 +267,17 @@ const MapCameraContext = createContext<MapCameraContextValue | null>(null);
 
 const DESTINATION_HEIGHT_M = 15000;
 const PLACE_HEIGHT_M = 600;
+/**
+ * Story mode's arrival: camera-to-stop distance and pitch.
+ *
+ * 1200m puts the building and the two or three streets around it in frame — near enough that the
+ * flight in from a day's framing is unmistakably a *dive*, far enough that MapLibre's extruded
+ * blocks and Cesium's tiles both still read as a place rather than as a roof. -30 is shallower
+ * than every other flight here (a stop is -35, a destination -45) because a film wants facades and
+ * a horizon, not a plan view.
+ */
+const STORY_RANGE_M = 1200;
+const STORY_PITCH_DEG = -30;
 /**
  * The hover peek is a *relative* zoom, not a destination.
  *
@@ -361,9 +411,10 @@ export function MapCameraProvider({
    * redraw the entire route the moment it flipped.
    */
   const routeFramingSuspendedRef = useRef(false);
+  const connectorsHiddenRef = useRef(false);
   /** Every stop of every day, flattened, each carrying its own `day`. Flat rather than nested
    *  because `hoveredIndex`/`activeIndex` index into it and always have — keeping one index
-   *  space means StopMarkerLayer, useStopTour and the peek logic needed no reworking when the
+   *  space means StopMarkerLayer, Story mode and the peek logic needed no reworking when the
    *  globe went from one day to all of them. */
   const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
   /** The same list, for `setActiveStop` to search without becoming a new function every time a
@@ -528,6 +579,7 @@ export function MapCameraProvider({
           focusDay,
           soloFocus,
           altitudeHintM: routeAltitudeRef.current,
+          connectors: !connectorsHiddenRef.current,
           stateFor: (day) => dayVisualState(day, focusDay, hoveredDayRef.current),
         })
         .then((altitude) => {
@@ -893,6 +945,9 @@ export function MapCameraProvider({
         focusDay: route.focusedDay,
         soloFocus: route.soloFocus,
         altitudeHintM: routeAltitudeRef.current,
+        // Carried across the swap like everything else here: pressing Map/Satellite mid-film must
+        // not hand the incoming engine a set of arcs the film had put away.
+        connectors: !connectorsHiddenRef.current,
         stateFor: (day) => dayVisualState(day, route.focusedDay, hoveredDayRef.current),
       })
       .then((altitude) => {
@@ -1008,10 +1063,10 @@ export function MapCameraProvider({
    *
    * The card is the thing that names the place, so it is what the camera should arrive on. Aiming
    * at the default ground surface put the card near the top edge of the frame — or out of it —
-   * and centred a patch of road instead, which is what made both the Play tour and a marker click
+   * and centred a patch of road instead, which is what made both a camera flight and a marker click
    * look like they were zooming to the bottom of the marker.
    *
-   * Every stop flight goes through here — the tour, a marker click, and an itinerary row — so
+   * Every stop flight goes through here — a story beat, a marker click, and an itinerary row — so
    * they all arrive the same way.
    */
   const flyToPlace = useCallback(
@@ -1027,6 +1082,27 @@ export function MapCameraProvider({
       }),
     [flyTo]
   );
+  /** See `flyToSearchResult` on the context. Same shape as `flyToPlace` and deliberately not
+   *  sharing its constants — on MapLibre the context radius is what selects the `fitBounds` path
+   *  over a computed zoom, so this is the call that frames a result in the panel's clear strip
+   *  rather than diving onto its roof. */
+  const flyToSearchResult = useCallback(
+    (lat: number, lng: number) =>
+      flyTo(lat, lng, PLACE_HEIGHT_M, -35, undefined, routeAltitudeRef.current + STEM_HEIGHT_M, {
+        contextRadiusM: SEARCH_CONTEXT_RADIUS_M,
+        minRangeM: SEARCH_MIN_RANGE_M,
+      }),
+    [flyTo]
+  );
+
+  /** See `flyToStoryStop` on the context — a straight dive to `STORY_RANGE_M`, with none of
+   *  `flyToPlace`'s context radius or range floor. */
+  const flyToStoryStop = useCallback(
+    (lat: number, lng: number) =>
+      flyTo(lat, lng, STORY_RANGE_M, STORY_PITCH_DEG, undefined, routeAltitudeRef.current + STEM_HEIGHT_M),
+    [flyTo]
+  );
+
   /**
    * Find a stop in the flat route list and select it.
    *
@@ -1085,6 +1161,13 @@ export function MapCameraProvider({
     routeFramingSuspendedRef.current = suspended;
   }, []);
 
+  /** A ref, not state: it is read at draw time, and the caller always redraws right after setting
+   *  it. Putting it in state would re-render every consumer of this context for a value only the
+   *  renderer reads. */
+  const setRouteConnectorsHidden = useCallback((hidden: boolean) => {
+    connectorsHiddenRef.current = hidden;
+  }, []);
+
   const resetToHome = useCallback(() => {
     cancelPeek();
     const renderer = rendererRef.current;
@@ -1139,8 +1222,11 @@ export function MapCameraProvider({
       peekSuspended,
       setPeekSuspended,
       setRouteFramingSuspended,
+      setRouteConnectorsHidden,
       flyToDestination,
       flyToPlace,
+      flyToSearchResult,
+      flyToStoryStop,
       resetToHome,
       showTripRoute,
       showHighways,
@@ -1168,6 +1254,8 @@ export function MapCameraProvider({
       globeWanted,
       flyToDestination,
       flyToPlace,
+      flyToSearchResult,
+      flyToStoryStop,
       resetToHome,
       showTripRoute,
       showHighways,
@@ -1188,6 +1276,7 @@ export function MapCameraProvider({
       reframeRoute,
       setHoveredIndex,
       setRouteFramingSuspended,
+      setRouteConnectorsHidden,
     ]
   );
 

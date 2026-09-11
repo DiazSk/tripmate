@@ -30,6 +30,8 @@ export type ClaudeCallType =
   | "critique"
   | "chat"
   | "element-edit"
+  /** Story mode's narration script — one day of a finished plan, re-voiced for playback. */
+  | "story"
   /** Dev-only: the blinded quality judge in the model benchmark harness (src/lib/bench). */
   | "judge";
 
@@ -141,6 +143,22 @@ export function chatModel(): string {
 }
 
 /**
+ * Story mode's narrator.
+ *
+ * Cheap tier by default, and for the reason the tier exists rather than to save money: the call is
+ * bounded work against facts that already exist — a finished day in, one short beat per stop out,
+ * no new facts permitted (see `buildStoryPrompt`). It is also the most latency-sensitive call in
+ * the app, because a person has just pressed Play and is watching a map.
+ *
+ * `LLM_MODEL_STORY=claude-sonnet-5` is the knob if the prose reads flat. Prose quality is the one
+ * thing this call is judged on, so unlike chat's escape hatch this one is a matter of taste rather
+ * than of correctness — turn it up if the narration sounds like a listing being read out.
+ */
+export function storyModel(): string {
+  return envModel("LLM_MODEL_STORY", cheapModel());
+}
+
+/**
  * Which model serves a given call on the **API path**.
  *
  * The CLI path does NOT consult this — it stays pinned to `MODEL` (`claude-sonnet-4-5`), whose
@@ -167,6 +185,8 @@ export function apiModelFor(type: ClaudeCallType): string {
       return strongModel();
     case "chat":
       return chatModel();
+    case "story":
+      return storyModel();
     case "element-edit":
     case "place-detail":
     case "context":
@@ -231,6 +251,9 @@ export function maxTokensFor(type: ClaudeCallType): number {
     case "chat":
       return 16_000;
     case "element-edit":
+      return 8_000;
+    // A dozen beats of at most 55 words each, plus the JSON around them.
+    case "story":
       return 8_000;
     // Four short fields.
     case "place-detail":

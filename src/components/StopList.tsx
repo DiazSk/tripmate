@@ -19,8 +19,12 @@ const CATEGORY_ICON: Record<StopCategory, typeof FoodIcon> = {
 
 /** The category tile is the base layer and never unmounts; the photo resolves over it on
  *  `.value-in`. Swapping one for the other made every avatar in the list jump at whatever
- *  moment its Wikipedia lookup happened to land. */
-function StopAvatar({ name, category }: { name: string; category: StopCategory }) {
+ *  moment its Wikipedia lookup happened to land.
+ *
+ *  Exported for `StoryStage`, which shows the same stops in the same visual language while the
+ *  film plays — and gets the already-warm `usePlacePhoto` cache entry for free, since the panel it
+ *  replaced had just looked the same names up. */
+export function StopAvatar({ name, category }: { name: string; category: StopCategory }) {
   const photo = usePlacePhoto(name);
   const [failed, setFailed] = useState(false);
   const Icon = CATEGORY_ICON[category ?? "other"];
@@ -148,7 +152,7 @@ export default function StopList({
   revealAnimation?: boolean;
   /** Index of the stop currently hovered or selected on the globe, or null. */
   highlightedIndex?: number | null;
-  /** Index of the *selected* stop — clicked on the globe, or stepped onto by Play tour. Scrolled
+  /** Index of the *selected* stop — clicked on the globe, or stepped onto by a story-mode beat. Scrolled
    *  to; see the effect below for why this is separate from `highlightedIndex`. */
   activeIndex?: number | null;
   onHoverStop?: (index: number | null) => void;
@@ -156,12 +160,12 @@ export default function StopList({
   const listRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Follow the selected stop, so Play tour reads as one gesture instead of two.
+   * Follow the selected stop, so a camera flight and the list read as one gesture instead of two.
    *
-   * The tour already lit the matching row — it has called `setActiveIndex` since it was written —
-   * but nothing moved the list, so on a day of eight stops the camera flew to stop 6 while the
-   * panel still showed stops 1-3 and you had to scroll to find out where you were. A globe click
-   * on an off-screen stop had the same problem.
+   * Play tour, which Story mode replaced, already lit the matching row — it had called
+   * `setActiveIndex` since it was written — but nothing moved the list, so on a day of eight stops
+   * the camera flew to stop 6 while the panel still showed stops 1-3 and you had to scroll to find
+   * out where you were. A globe click on an off-screen stop had the same problem.
    *
    * **Driven by `activeIndex`, never `highlightedIndex`.** Hover is the other half of that value,
    * and scrolling on hover would fight the person doing the scrolling: sweeping the pointer down
@@ -179,7 +183,7 @@ export default function StopList({
    * sticky and *shrinks* as the panel scrolls (`--hero-p`), so the row's own position is a
    * function of the scroll offset: a `scrollTo({behavior: "smooth"})` toward a target measured
    * before the jump overshoots by the whole height the header gives up on the way. Measured, that
-   * put the tour's last stop clean off the bottom of the panel — the list scrolled past the row it
+   * put the last stop clean off the bottom of the panel — the list scrolled past the row it
    * was chasing and landed on the spend summary. Easing toward a freshly measured target each
    * frame converges regardless, and would survive any other layout shift above the row too.
    */

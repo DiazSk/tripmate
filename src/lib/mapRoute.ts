@@ -944,7 +944,10 @@ export function buildRouteGeometry(
   Cesium: CesiumModule,
   stops: RouteStop[],
   altitude: number,
-  palette: DayPalette = DAY_PALETTES[0]
+  palette: DayPalette = DAY_PALETTES[0],
+  /** Draw the arcs between stops. False in Story mode — see `connectors` on `RouteDrawRequest`.
+   *  Defaulted so every existing caller is unchanged. */
+  connectors = true
 ): RouteGeometry {
   const positionsAt = (h: number) =>
     stops.map((s) => Cesium.Cartesian3.fromDegrees(s.lng, s.lat, h));
@@ -974,7 +977,11 @@ export function buildRouteGeometry(
     from: number;
     to: number;
   }[] = [];
-  for (let i = 1; i < stops.length; i++) {
+  // Leaving `segments` empty is the whole of "no connectors", and that is why the flag is applied
+  // here rather than at the four places arcs are added to the scene: `arcs`, `arcGlowTints`, the
+  // pulses and `applyTints`'s arc loop are all derived from this array, so they all become empty
+  // together and cannot drift out of step with each other.
+  for (let i = 1; connectors && i < stops.length; i++) {
     // Measured on the drawn positions rather than via the geodesic, because constructing a
     // geodesic is the thing being guarded against.
     if (Cesium.Cartesian3.distance(positions[i - 1], positions[i]) < MIN_ARC_LENGTH_M) continue;

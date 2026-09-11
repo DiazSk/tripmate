@@ -350,6 +350,38 @@ export function listChatTurns(tripId: string): ChatTurnRow[] {
     .all(tripId) as ChatTurnRow[];
 }
 
+/**
+ * One cached narration script per (trip, day) — Story mode's spoken version of a day.
+ *
+ * Keyed by trip and day with the day's content **fingerprint alongside** rather than inside the
+ * key, so a re-narration after an edit replaces the stale script instead of accumulating a row per
+ * revision. Nobody ever wants yesterday's narration of a day that has since changed, and a table
+ * that grows one row per keystroke-era edit is a table that needs a sweeper.
+ *
+ * A miss is the ordinary case, not an error: an unsaved plan has no trip row to key on (the result
+ * view passes no id), so those scripts are generated per press and cached in the browser only.
+ */
+export interface StoryScriptRow {
+  trip_id: string;
+  day_index: number;
+  /** Hash of `compactDay()` — the same view the prompt showed. Changes exactly when something the
+   *  narration could see changed; see the note on `compactDay` for what is deliberately excluded. */
+  fingerprint: string;
+  script_json: string;
+  created_at: string;
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS trip_stories (
+    trip_id TEXT NOT NULL,
+    day_index INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    script_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (trip_id, day_index)
+  )
+`);
+
 export interface MapGeometryRow {
   box: string;
   context_json: string;
@@ -385,6 +417,37 @@ export function saveMapGeometry(box: string, contextJson: string): void {
     `INSERT OR REPLACE INTO map_geometry (box, context_json, created_at)
      VALUES (?, ?, ?)`
   ).run(box, contextJson, new Date().toISOString());
+}
+
+/** The cached script for this day, or undefined if there is none *for this version of the day*. */
+export function getStoryScript(
+  tripId: string,
+  dayIndex: number,
+  fingerprint: string
+): StoryScriptRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM trip_stories WHERE trip_id = ? AND day_index = ? AND fingerprint = ?`
+    )
+    .get(tripId, dayIndex, fingerprint) as StoryScriptRow | undefined;
+}
+
+export function saveStoryScript(params: {
+  tripId: string;
+  dayIndex: number;
+  fingerprint: string;
+  script: unknown;
+}): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO trip_stories (trip_id, day_index, fingerprint, script_json, created_at)
+     VALUES (@tripId, @dayIndex, @fingerprint, @scriptJson, @createdAt)`
+  ).run({
+    tripId: params.tripId,
+    dayIndex: params.dayIndex,
+    fingerprint: params.fingerprint,
+    scriptJson: JSON.stringify(params.script),
+    createdAt: new Date().toISOString(),
+  });
 }
 
 export function setTripChatSession(id: string, sessionId: string | null): void {

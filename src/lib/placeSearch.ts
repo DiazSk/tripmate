@@ -1,3 +1,8 @@
+// Relative, not the `@/lib` alias. `scripts/ts-resolve.mjs` only retries *relative* specifiers, so
+// one aliased import here is enough to make this whole module — and anything importing it —
+// unreachable from a `.test.mjs`. That is not hypothetical: it is how `searchPalette.test.mjs`
+// broke the moment this line was added, since it reads `PLACE_CATEGORIES` from here.
+import { enclosingCircle, pointInPolygon, type LatLng } from "./searchArea";
 /**
  * "What cafés are around here?" — the lookup behind the map's search control.
  *
@@ -91,14 +96,38 @@ const OVERPASS_TIMEOUT_MS = 25_000;
 const GOOGLE_TIMEOUT_MS = 10_000;
 /** Default search radius. A walk, not a city — the question is "what is near where I am looking". */
 export const DEFAULT_SEARCH_RADIUS_M = 1800;
-const MAX_RESULTS = 24;
+/** Hard cap on what comes back. Fifteen is what a 320px list can present without becoming a
+ *  scroll-hunt, and it is also the point past which an Overpass answer stops being worth the
+ *  bytes: the results are ordered nearest-first, so the sixteenth is by construction the least
+ *  relevant thing in the area. */
+const MAX_RESULTS = 15;
 
 export interface PlaceSearchRequest {
   lat: number;
   lng: number;
+  /**
+   * The area to search, as a ring of coordinates — the buffered hull of what the traveler can see
+   * (`searchArea.ts`). Optional: without it the search falls back to `radiusM` around `lat`/`lng`,
+   * which is what every non-map caller wants and what this endpoint did before.
+   *
+   * **Both providers end up honouring it, by different routes.** Overpass takes a `poly:` filter
+   * natively. Google takes a circle and nothing else, so it is given the polygon's enclosing
+   * circle and its answers are then filtered back to the shape here — otherwise the two providers
+   * would return visibly different areas for the same request.
+   */
+  area?: LatLng[];
   /** Free text. Matched against the name; ignored by the category-only path when empty. */
   query?: string;
-  category?: PlaceCategory;
+  /**
+   * Categories to search, as a union — cafés *and* bars, not cafés narrowed by bars.
+   *
+   * Was a single optional category. Multi-select made the plural the real shape: a traveler
+   * planning an evening wants bars and restaurants on the map at once, and running that as two
+   * sequential searches would both double the load on a rate-limited shared index and make the
+   * second answer replace the first. Empty or absent means "every category this control offers",
+   * which is what a free-text search wants.
+   */
+  categories?: PlaceCategory[];
   radiusM?: number;
 }
 
@@ -139,27 +168,47 @@ export async function searchPlaces(request: PlaceSearchRequest): Promise<PlaceSe
  * money on data nothing renders.
  */
 async function searchGoogle(
-  { lat, lng, query, category, radiusM = DEFAULT_SEARCH_RADIUS_M }: PlaceSearchRequest,
+  { lat, lng, query, categories, radiusM = DEFAULT_SEARCH_RADIUS_M, area }: PlaceSearchRequest,
   key: string
 ): Promise<FoundPlace[] | null> {
   const text = query?.trim();
+  // Google has no polygon input, so the shape becomes the smallest circle containing it and the
+  // results are trimmed back to the real area below. Over-asking is the safe direction: a circle
+  // inscribed *inside* the polygon would silently miss the corners.
+  const circle = area?.length ? enclosingCircle(area) : null;
+  const originLat = circle?.lat ?? lat;
+  const originLng = circle?.lng ?? lng;
+  const searchRadiusM = circle ? Math.min(Math.max(circle.radiusM, 200), 50_000) : radiusM;
   const endpoint = text
     ? "https://places.googleapis.com/v1/places:searchText"
     : "https://places.googleapis.com/v1/places:searchNearby";
   const body: Record<string, unknown> = {
     maxResultCount: MAX_RESULTS,
     locationBias: {
-      circle: { center: { latitude: lat, longitude: lng }, radius: radiusM },
+      circle: { center: { latitude: originLat, longitude: originLng }, radius: searchRadiusM },
     },
   };
+  // Both this field and the `Accept-Language` header below are set: the header covers the
+  // transport and
+  // `languageCode` is what the Places v1 body documents, and which of the two wins has changed
+  // between API revisions. Setting both costs nothing and is stable across either.
+  body.languageCode = PREFERRED_LANGUAGE;
   if (text) body.textQuery = text;
   else {
     // `searchNearby` takes a hard restriction rather than a bias, and no free text.
     delete body.locationBias;
     body.locationRestriction = {
-      circle: { center: { latitude: lat, longitude: lng }, radius: radiusM },
+      circle: { center: { latitude: originLat, longitude: originLng }, radius: searchRadiusM },
     };
-    body.includedTypes = [GOOGLE_TYPES[(category ?? "cafe") as Exclude<PlaceCategory, "place">]];
+    // Every selected category in one call. `includedTypes` is already a list — the single-element
+    // array this used to build was the only thing making it a single-category search.
+    const picked = (categories ?? []).filter(
+      (c): c is Exclude<PlaceCategory, "place"> => c !== "place" && c in GOOGLE_TYPES
+    );
+    body.includedTypes = (picked.length
+      ? picked
+      : (Object.keys(GOOGLE_TYPES) as Exclude<PlaceCategory, "place">[])
+    ).map((c) => GOOGLE_TYPES[c]);
   }
 
   try {
@@ -170,6 +219,11 @@ async function searchGoogle(
         "X-Goog-Api-Key": key,
         "X-Goog-FieldMask":
           "places.id,places.displayName,places.location,places.formattedAddress,places.rating,places.primaryType",
+        // Names and addresses in English. Without it the API answers in the language of the place
+        // — 京都国立博物館, Museo del Novecento — which is correct data and unreadable next to an
+        // English itinerary. Google falls back to the local name when it has no English one, so
+        // this never blanks a result, it only prefers a translation where one exists.
+        "Accept-Language": PREFERRED_LANGUAGE,
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
@@ -187,12 +241,20 @@ async function searchGoogle(
     };
     return (data.places ?? [])
       .filter((p) => p.displayName?.text && p.location)
+      // Back to the shape that was actually asked for. Without this the Google path answers with a
+      // circle's worth of results while the OSM path answers with the polygon's, and which one a
+      // traveler got would depend on whether a key happened to be configured.
+      .filter(
+        (p) =>
+          !area?.length ||
+          pointInPolygon({ lat: p.location!.latitude!, lng: p.location!.longitude! }, area)
+      )
       .map((p) => ({
         id: p.id ?? `${p.location!.latitude},${p.location!.longitude}`,
         name: p.displayName!.text!,
         lat: p.location!.latitude!,
         lng: p.location!.longitude!,
-        category: normaliseGoogleType(p.primaryType, category),
+        category: normaliseGoogleType(p.primaryType),
         address: p.formattedAddress,
         rating: p.rating,
       }));
@@ -224,19 +286,36 @@ function normaliseGoogleType(type: string | undefined, fallback?: PlaceCategory)
 async function searchOverpass({
   lat,
   lng,
+  area,
   query,
-  category,
+  categories,
   radiusM = DEFAULT_SEARCH_RADIUS_M,
 }: PlaceSearchRequest): Promise<FoundPlace[] | null> {
   const text = query?.trim();
-  const around = `(around:${Math.round(radiusM)},${lat},${lng})`;
+  // `poly:` when there is a shape, `around:` when there is not. Overpass wants the ring as
+  // space-separated `lat lon` pairs in one string, and it must not repeat the first point at the
+  // end — the server closes the ring itself and a duplicate vertex is a parse error.
+  const around = area?.length
+    ? `(poly:"${area.map((p) => `${p.lat.toFixed(6)} ${p.lng.toFixed(6)}`).join(" ")}")`
+    : `(around:${Math.round(radiusM)},${lat},${lng})`;
   // Escaped for the Overpass regex literal, which is delimited by double quotes.
-  const nameFilter = text ? `["name"~"${escapeForOverpassRegex(text)}",i]` : "";
+  // Matched against **every** name tag this search can render, not just `name`. Overpass's
+  // `[~"keyRegex"~"valueRegex"]` form is what makes that one filter rather than a second set of
+  // clauses. Without it, typing "Kyoto National Museum" in Kyoto matches nothing at all: the venue
+  // is tagged `name=京都国立博物館` with the English only on `name:en`, so the list the traveler is
+  // reading — which this change makes English — could not be searched in the language it is
+  // written in.
+  const nameFilter = text
+    ? `[~"^(name|name:en|int_name)$"~"${escapeForOverpassRegex(text)}",i]`
+    : "";
 
   // With a category, ask for that category. Without one, ask for the union of every category the
   // control offers — which is what "search by name" should mean: any of these kinds of place
   // whose name matches, not every tagged object in the neighbourhood.
-  const selectors = category && category !== "place" ? [OSM_FILTERS[category]] : Object.values(OSM_FILTERS);
+  const chosen = (categories ?? []).filter(
+    (c): c is Exclude<PlaceCategory, "place"> => c !== "place" && c in OSM_FILTERS
+  );
+  const selectors = chosen.length ? chosen.map((c) => OSM_FILTERS[c]) : Object.values(OSM_FILTERS);
   const clauses = selectors.map((f) => `nwr${f}${nameFilter}${around};`).join("");
   const body = `[out:json][timeout:20];(${clauses});out center ${MAX_RESULTS * 3};`;
 
@@ -246,7 +325,7 @@ async function searchOverpass({
   const seen = new Set<string>();
   const places: FoundPlace[] = [];
   for (const el of elements) {
-    const name = el.tags?.name;
+    const name = englishName(el.tags);
     const lat2 = el.lat ?? el.center?.lat;
     const lon2 = el.lon ?? el.center?.lon;
     if (!name || lat2 === undefined || lon2 === undefined) continue;
@@ -261,7 +340,10 @@ async function searchOverpass({
       name,
       lat: lat2,
       lng: lon2,
-      category: categoryFromTags(el.tags ?? {}, category),
+      // No fallback category any more. With one selected category the request *was* the answer,
+      // so falling back to it was right; with several, the tags are the only thing that says which
+      // of them this venue is — and that answer is now what picks the pin's colour.
+      category: categoryFromTags(el.tags ?? {}),
       address: addressFromTags(el.tags ?? {}),
     });
     if (places.length >= MAX_RESULTS) break;
@@ -336,6 +418,37 @@ function categoryFromTags(tags: Record<string, string>, fallback?: PlaceCategory
 }
 
 /** House number and street, when OSM has both. Anything less is not an address worth showing. */
+/**
+ * The language search results are asked for and rendered in.
+ *
+ * The itinerary around this panel is written in English, and a result list that answers half in
+ * Japanese is not bilingual, it is unreadable — the traveler cannot match "京都国立博物館" against
+ * the "Kyoto National Museum" three lines above it in their own plan. Both providers can be asked
+ * for English and both fall back to the local name when there is no English one, so this never
+ * costs a result; it only prefers a translation where the data has one.
+ */
+const PREFERRED_LANGUAGE = "en";
+
+/**
+ * An OSM element's name, in English where OSM has one.
+ *
+ * Three tags in priority order, and the order is the interesting part. `name:en` is an actual
+ * English name and always wins. `int_name` is the "international" name, which in practice is a
+ * romanisation — "Kiyomizu-dera" rather than "Pure Water Temple" — and is the right second choice,
+ * because a romanised name is at least pronounceable and matchable against a plan written in
+ * English. `name` is the local-language default and the last resort, which is what the panel showed
+ * for every result before this existed.
+ *
+ * Deliberately *not* a transliteration of `name` when all three are missing: guessing a romanisation
+ * client-side gets Japanese and Arabic wrong in ways that look authoritative, and an unfamiliar
+ * script the traveler can at least photograph and match is better than a confident mistransliteration.
+ */
+function englishName(tags: Record<string, string> | undefined): string | undefined {
+  if (!tags) return undefined;
+  const candidate = tags["name:en"] ?? tags.int_name ?? tags.name;
+  return candidate?.trim() || undefined;
+}
+
 function addressFromTags(tags: Record<string, string>): string | undefined {
   const street = tags["addr:street"];
   if (!street) return undefined;

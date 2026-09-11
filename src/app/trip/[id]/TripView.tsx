@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
-import { useStopTour } from "@/lib/useStopTour";
+import { useStoryControls } from "@/lib/storyMode";
 import { PauseIcon, PlayIcon } from "@/components/icons";
 import FocusEditMode from "@/components/FocusEditMode";
 import { useFocusEdit } from "@/lib/useFocusEdit";
@@ -55,10 +55,10 @@ export default function TripView({
    *  the plan is one click away. Owned here because `ItineraryCard` reads it too — see the
    *  `panelCollapsed` prop. */
   const [planCollapsed, setPlanCollapsed] = useState(true);
-  // The stop tour lives here rather than inside ItineraryCard so the capsule's play button
-  // and the card's share one timer. `useStopTour` holds `playing` in local state, so two
-  // call sites would be two intervals and two booleans that disagree the moment either runs.
-  const tour = useStopTour();
+  // Story mode, for the capsule's Play button. Read from context rather than owned here — there
+  // is one film at a time and it belongs to the app (`storyMode.tsx`), so this and the card's own
+  // Play button are the same control reached from two places.
+  const story = useStoryControls();
   /** 0-based days a chat turn changed while the traveler was reading a different one. Owned here
    *  rather than in the card because the chat that produces them lives beside it, not inside it. */
   const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
@@ -266,22 +266,46 @@ export default function TripView({
           every "content over the globe" surface visually consistent. */}
       <DockedPanel
         collapsible
+        // The panel stays on screen through the film, shut to its capsule — that single clean line
+        // is the film's own header (destination, length, day) and its play/pause button, and
+        // `StoryStage` docks directly beneath it. Its body is already `display: none` while
+        // collapsed, so there is nothing to hide.
         capsuleAction={
           itinerary?.days.length
-            ? {
-                label: tour.playing ? "Stop tour" : "Play tour",
-                onClick: tour.toggle,
-                icon: tour.playing ? (
-                  <PauseIcon className="h-4 w-4" />
-                ) : (
-                  <PlayIcon className="h-4 w-4" />
-                ),
-              }
+            ? story.active
+              ? {
+                  label: story.phase === "playing" ? "Pause the story" : "Resume the story",
+                  onClick: story.togglePlay,
+                  icon:
+                    story.phase === "playing" ? (
+                      <PauseIcon className="h-4 w-4" />
+                    ) : (
+                      <PlayIcon className="h-4 w-4" />
+                    ),
+                }
+              : {
+                  label: `Play day ${activeDayIndex + 1} as a story`,
+                  onClick: () =>
+                    trip &&
+                    itinerary &&
+                    story.start({
+                      itinerary,
+                      dayIndex: activeDayIndex,
+                      destination: trip.destination,
+                      tripId: trip.id,
+                    }),
+                  icon: <PlayIcon className="h-4 w-4" />,
+                }
             : undefined
         }
         wide={!!focus.target}
         collapsed={planCollapsed}
-        onCollapsedChange={setPlanCollapsed}
+        // Opening the plan mid-film ends the film. The two are alternatives for the same column,
+        // and a full itinerary sliding over a camera that is still flying is neither.
+        onCollapsedChange={(next) => {
+          if (!next && story.active) story.exit();
+          setPlanCollapsed(next);
+        }}
         // What the capsule carries while the panel is shut — the trip at a glance, so
         // "which day was I reading" survives a look at the map.
         capsule={
@@ -402,14 +426,13 @@ export default function TripView({
             />
           )}
 
-          {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the active
-              day, this panel's scroll position and the stop tour's interval all survive the
-              round trip instead of resetting when ItineraryCard remounts. */}
+          {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the active day
+              and this panel's scroll position both survive the round trip instead of resetting
+              when ItineraryCard remounts. */}
           {!focus.target && (
             <div className={selectedStop ? "hidden" : "space-y-4"}>
               {trip && itinerary && (
                 <ItineraryCard
-                  tour={tour}
                   itinerary={itinerary}
                   budget={trip.budget}
                   destination={trip.destination}

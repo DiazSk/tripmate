@@ -5,10 +5,16 @@ import {
   searchPlaces,
   type PlaceCategory,
 } from "@/lib/placeSearch";
+import { decodePolygon } from "@/lib/searchArea";
 
 /**
- * `GET ?lat=&lng=&q=&category=&radius=` → named places around a point, for the map's search
- * control.
+ * `GET ?lat=&lng=&q=&category=&radius=&area=` → named places in an area, for the map's search
+ * control. `category` takes a comma-separated list and is a **union**: `cafe,bar` is both, not the
+ * intersection of the two (nothing is both).
+ *
+ * `area` is the shape to search — `lat,lng;lat,lng;…`, the buffered hull of what the traveler can
+ * see. When it is present `lat`/`lng`/`radius` are only a fallback the providers no longer reach;
+ * they stay required because every other caller of this endpoint passes them and nothing else.
  *
  * Distinct from `/api/nearby-pois`, which answers "what is standing at this exact coordinate" for
  * a click and searches 250m of top-rated attractions. This one is a browse: a neighbourhood's
@@ -27,10 +33,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "lat and lng are required" }, { status: 400 });
   }
 
-  const rawCategory = params.get("category");
-  const category = (PLACE_CATEGORIES as readonly string[]).includes(rawCategory ?? "")
-    ? (rawCategory as PlaceCategory)
-    : undefined;
+  // `category=cafe,bar,museum`. Comma-separated rather than a repeated key: it reads in a URL bar,
+  // and the panel builds it from a set where order carries no meaning. Unknown names are dropped
+  // silently rather than 400-ing the whole request — one stale name in a bookmarked URL should
+  // narrow the search, not break it.
+  const categories = (params.get("category") ?? "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter((c): c is PlaceCategory => (PLACE_CATEGORIES as readonly string[]).includes(c));
 
   // `params.get` before `Number`, and that ordering is the whole point: `Number(null)` is **0**,
   // which is finite, so reading it the other way round silently clamped every request with no
@@ -46,12 +56,23 @@ export async function GET(req: NextRequest) {
     ? Math.min(Math.max(parsedRadius, 200), 8000)
     : DEFAULT_SEARCH_RADIUS_M;
 
+  // Rejected whole rather than repaired. This is a public query string feeding a `poly:` filter on
+  // a shared community Overpass instance — a half-parsed ring is a query nobody asked for, and the
+  // circle fallback below is a perfectly good answer to give instead.
+  const area = decodePolygon(params.get("area")) ?? undefined;
+  // A shape with more vertices than this is not a hull of a day's stops, it is someone hand-rolling
+  // a request. The panel's own polygons top out well under this — a convex hull drops collinear
+  // points, so even a fifteen-stop day rarely exceeds eight vertices.
+  const MAX_AREA_VERTICES = 32;
+  const boundedArea = area && area.length <= MAX_AREA_VERTICES ? area : undefined;
+
   const result = await searchPlaces({
     lat,
     lng,
     query: params.get("q") ?? undefined,
-    category,
+    categories: categories.length ? categories : undefined,
     radiusM,
+    area: boundedArea,
   });
   return NextResponse.json(result);
 }

@@ -144,6 +144,102 @@ why (LinkedIn demo needed a public deploy link, which the CLI-only mechanism blo
 
 The pipeline's governing separation: the **skill** (`.claude/skills/itinerary-planner/SKILL.md`) holds planning *rules*, `trip-context.md` holds *facts only* (no instructions), and `src/lib/generationPrompt.ts` holds the *ask* with no trip data. Don't duplicate rules into the prompt or facts into the skill.
 
+### Story mode owns the camera, and the beat is the clock
+
+Pressing Play on a day narrates it: the camera flies to each stop while a voice reads a story-format
+script and the matching line lights up. `src/lib/storyMode.tsx` is the controller, `StoryStage.tsx`
+the only thing that draws it, both mounted in `AppShell` beside the map chrome.
+
+**The plan panel stays; it shuts to its capsule.** That single clean line — photo, destination,
+length, day in focus — *is* the film's header, and its one action slot becomes the play/pause. So
+`StoryStage` deliberately repeats none of it and docks directly beneath, its geometry copied from
+`DockedPanel`'s collapsed branch (same insets, same `sm:w-96`/`max-w-[520px]`, offset by the
+capsule's `h-14` plus a gap) so the two read as one stack in the column the plan already owned. An
+earlier revision hid the whole panel and floated the narration bottom-centre over the map; that put
+the film's controls nowhere near the control that started it and covered the ground the camera had
+just flown to. What *is* hidden is chrome — the navbar, the map search box, the zoom/2D/tilt/compass
+stack and the install prompt, by `display: none` on a wrapper so each keeps its own state. The
+Map/Satellite toggle stays: it chooses the world being filmed rather than acting on the page.
+`LlmTraceFab` mounts as a sibling of `.app-shell`, above the provider, so no context reaches it —
+`data-story-mode` on `<html>` plus one rule in globals.css is its lever.
+
+**The film draws stops, not a route.** `connectors: false` on `RouteDrawRequest` (set through
+`setRouteConnectorsHidden`, the same shape as `setRouteFramingSuspended` and for the same reason —
+`showTripRoute` already takes three booleans) drops the line between one stop and the next. The
+arcs are what make a day read as an *order*, which is the most useful thing on the map while you
+are reading a plan and a spoiler drawn across the shot while you are being told about one place.
+What stays is the stop: its pool, its ring, its stem and its name. On Cesium the flag empties
+`segments` in `buildRouteGeometry`, so the arcs, their glows, their pulses and the emphasis loop all
+become empty together rather than being suppressed in four places; on MapLibre it drops the arc
+tubes **and** the line draped on the terrain beneath them, since hiding only the tubes leaves a flat
+rope one dimension down. The per-day "DAY 1" cluster badge goes too, by the `data-story-mode` CSS
+lever — the capsule already says which day is playing.
+
+**The film's camera is `flyToStoryStop`, not `flyToPlace`.** `flyToPlace` pulls back to
+`STOP_CONTEXT_RADIUS_M` and refuses to come nearer than `STOP_MIN_RANGE_M` (3.5km, ~zoom 14.5),
+because a reader is asking "where is this *in the city*". A film is not: at that floor the flight
+from a day's framing to a stop is a few hundred metres of range, and it read as the map not moving
+at all. The film dives straight to 1200m at -30°, shallower than any other flight here, because it
+wants facades and a horizon rather than a plan view.
+
+**The beat is the clock, and that is why the old Play tour could not be extended.** `useStopTour`
+stepped stops on a fixed 6.5s interval; a narrated beat lasts exactly as long as it takes to say,
+which is known only when the voice reports it finished. So the camera, the audio and the row
+highlight are all derived from one beat index, `Next` cancels the sentence rather than nudging a
+timer the audio then talks over, and the hook is deleted rather than kept beside this.
+
+**While a film runs, the card stops driving the map.** `ItineraryCard`'s route effect takes
+`story.active` as a **dependency, not just a guard** — leaving story mode re-runs it, which is what
+pulls the view back to the day framed beside the panel that just came back. Without the dependency
+the map would keep the film's centred, panel-less framing.
+
+**Two narrators behind one seam.** Everything above `src/lib/storyVoice.ts` calls `speakOn(engine,
+…)` and knows nothing else — the same shape `placeSearch.ts` puts in front of Google Places and
+Overpass. `browser` is the platform's `speechSynthesis`: free, instant, offline, and it sounds like
+an OS voice because it is one. `natural` is **Kokoro-82M in the browser** (`kokoroVoice.ts`), an
+opt-in toggle that costs an 88MB model download once. Both are free — no key, no quota, no per-use
+cost. A per-sentence failure on the natural voice (an error, or a device slower than
+`SYNTHESIS_DEADLINE_MS`) hands *that same beat* to the platform voice mid-beat, so the caller gets
+one `onEnd` either way and never learns it happened.
+
+**The pacing is engine-independent, and it is the larger half of sounding like a story.** A
+synthesiser pauses about the same 180ms at a comma as at a full stop, which is why one utterance per
+beat is a recitation. There is no parameter for it — the Web Speech spec allows SSML and no browser
+implements `<break>`. So `splitForSpeech` cuts each beat at *sentence* boundaries (never clauses:
+that loses the intonation contour) and the beat is spoken as a queue with silence this module times
+— 700ms after the first sentence, which names the place the camera is arriving on, 420ms between the
+rest, and the final sentence a shade slower as a cadence fall. **The prompt and the player are one
+design**: `buildStoryPrompt`'s "writing for the ear" rules exist because the model's full stops
+*are* the narration's breaths. Change either and re-read the other, and bump
+`STORY_PROMPT_VERSION` — it is in the cache key, and without it a prompt improvement is invisible on
+every day that already has a script.
+
+Five `speechSynthesis` realities are handled in `storyVoice.ts` and must not be "simplified" back:
+`cancel()` immediately followed by `speak()` drops the utterance in Chromium (hence `LEAD_IN_MS`); a
+cancelled utterance still fires `onend` in WebKit (hence the `done` latch, or Next would advance
+twice); `onend` sometimes never arrives (hence the 2.5x watchdog); a platform can present a complete
+API that **never speaks** — a headless browser, a desktop with no speech-dispatcher — so
+`START_GUARD_MS` puts a 2s deadline on `onstart` and the controller latches `voiceBroken` and
+replays that beat as a timed one; and macOS ships ~25 *novelty* voices that Chrome exposes as
+ordinary English ones (`Bad News` sings the text to a funeral march), so `pickVoice` carries a deny
+list — nothing in a voice's `lang`, `localService` or `default` distinguishes them.
+
+Pause/resume **re-speaks the current beat from its start** rather than picking up mid-sentence.
+`speechSynthesis.pause()`/`resume()` exist and are unreliable across engines in the way that matters
+here — a pause that does not take leaves the voice talking over a stopped camera.
+
+**Kokoro is loaded from a CDN at runtime and synthesises in a Blob worker, and both are structural.**
+`kokoro-js` pulls in `onnxruntime-web`, which embeds a WASM runtime as bytes — the exact class of
+dependency whose minified re-encoding once shipped this app with no globe at all (see the
+`@spz-loader/core` note above). So it is never in `package.json` and never in a chunk: it is fetched
+as a real ES module when the toggle is pressed, which also means people who never press it download
+nothing. And the model runs in a worker built from a Blob, not a worker *file* — measured, one
+sentence on the WASM backend blocked the main thread for **16.9s** (the map froze; a Next press took
+18.4s), against **840ms** worst-case in the worker; and a `new URL("./x.worker.ts",
+import.meta.url)` worker is the thing MapLibre's note above records Turbopack silently failing to
+serve. `webgpuUsable()` probes `requestAdapter()` rather than `"gpu" in navigator`, which is true in
+contexts where no adapter can be had and was how this first failed.
+
 ### Fail-soft is the house convention
 
 External fetches degrade rather than throw. Two idioms to match:

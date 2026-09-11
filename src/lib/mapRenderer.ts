@@ -93,6 +93,21 @@ export interface MapRenderer {
    */
   showSearchResults(places: SearchPin[]): void;
 
+  /**
+   * The ground the camera can currently see, as a polygon in visit order.
+   *
+   * Four corners in the ordinary case — the viewport's quadrilateral projected onto the ground,
+   * which under pitch is a trapezoid rather than a rectangle. Empty when the engine cannot answer
+   * (no canvas yet, a degenerate viewport).
+   *
+   * **Clamped to something finite.** Above the horizon a screen ray never meets the ground, and a
+   * tilted camera puts the top of the viewport there routinely; the naive answer is a coordinate
+   * at infinity, or a wrap-around that reads as the far side of the planet. Each engine walks the
+   * sample point down the screen until the ray lands within `MAX_FOOTPRINT_M` of the centre, so
+   * the polygon is always a real, bounded piece of ground.
+   */
+  visibleFootprint(): { lat: number; lng: number }[];
+
   /** Route, highways, city outline and pin — everything a trip put on the map. */
   clearOverlays(): void;
 
@@ -233,6 +248,21 @@ export interface SearchPin {
   lng: number;
   name: string;
   selected?: boolean;
+  /**
+   * The colour this pin is drawn in — `#rrggbb`, resolved by the caller from the result's category.
+   *
+   * On the pin rather than derived in the renderer, and that is deliberate: which colour a category
+   * gets is a *design* fact with a proof attached (`searchPalette.ts` asserts every one of them is
+   * perceptually clear of the trip's own day colours), and burying a second copy of that mapping in
+   * a paint expression is how the two would drift. The renderer's job is to draw the colour it is
+   * handed. Optional, and the layer falls back to the accent, so an older caller still renders.
+   */
+  colorHex?: string;
+  /** The row the pointer is on in the results list. At most one pin carries this, and every other
+   *  pin recedes while it does — the list and the map are two views of one set, and a hover is how
+   *  the traveler asks "which of these is that one". Distinct from `selected`, which is a choice
+   *  that persists and survives the pointer leaving. */
+  hovered?: boolean;
 }
 
 export interface RouteDrawRequest {
@@ -247,6 +277,21 @@ export interface RouteDrawRequest {
   altitudeHintM: number;
   /** How present each day should be, resolved by the caller from focus and hover. */
   stateFor: (day: number) => DayVisualState;
+  /**
+   * Draw the line between one stop and the next. True everywhere except Story mode.
+   *
+   * The connectors are what make a day read as an *order* — this then this then this — and while
+   * you are reading a plan that is the most useful thing on the map. A film is not reading a plan:
+   * it is standing in one place at a time, being told about it, and the arc sweeping off toward
+   * somewhere the narration has not reached yet is a spoiler drawn across the shot. So Story mode
+   * asks for the stops alone, and the sequence is carried by the narration instead.
+   *
+   * "Connectors" covers both forms each engine draws, which is deliberate: on MapLibre that is the
+   * elevated arc tube *and* the line draped on the terrain beneath it, and hiding only the tube
+   * would leave a flat rope snaking between the stops. Nothing about a stop itself is affected —
+   * its pool, its ring, its stem and its label are what the film is pointing at.
+   */
+  connectors?: boolean;
 }
 
 export interface FlyToPointOptions {
@@ -359,6 +404,29 @@ export const HERO_VIEW = {
  * next door are in frame and the stop reads as somewhere rather than as a pin on a texture.
  */
 export const STOP_CONTEXT_RADIUS_M = 800;
+
+/**
+ * The same idea for a **searched** place, and deliberately wider than a stop's 800m.
+ *
+ * The two answer different questions. A stop is already in the plan, so framing it asks "where is
+ * this thing I am about to visit" — its own street, near enough to read. A search result is a
+ * *candidate*, and the question is "is this near anything else I am doing" — which cannot be
+ * answered by a frame that holds nothing but the candidate. 1500m is roughly a twenty-minute walk,
+ * which is the radius over which "near" is a real claim about a day plan, and it is usually enough
+ * to bring a neighbouring stop into the same frame where one exists.
+ *
+ * Paired with `SEARCH_MIN_RANGE_M` rather than `STOP_MIN_RANGE_M` for the same reason: `fitBounds`
+ * would otherwise honour the box and then be overruled by a floor set for a tighter question.
+ */
+/** How far from the camera centre a footprint corner is allowed to land. Past this the ray was
+ *  effectively at the horizon, and what it hit is not "visible ground" in any useful sense. */
+export const MAX_FOOTPRINT_M = 150_000;
+
+export const SEARCH_CONTEXT_RADIUS_M = 1500;
+
+/** The floor under a search result's framing. Above `STOP_MIN_RANGE_M` because the box it pairs
+ *  with is larger; a floor below the box's own solved range is a floor that never binds. */
+export const SEARCH_MIN_RANGE_M = 5000;
 
 /**
  * The closest the camera goes to a single stop, in metres. Equivalent to MapLibre zoom ~14.5 at

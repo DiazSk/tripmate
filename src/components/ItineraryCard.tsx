@@ -7,7 +7,7 @@ import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
-import { useStopTour } from "@/lib/useStopTour";
+import { useStoryControls } from "@/lib/storyMode";
 import { daySpendByCategory } from "@/lib/itinerary";
 import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
 import { formatMoney } from "@/lib/format";
@@ -36,7 +36,6 @@ import {
   EntryIcon,
   FoodIcon,
   LodgingIcon,
-  PauseIcon,
   PinIcon,
   PlayIcon,
   TransitIcon,
@@ -155,7 +154,6 @@ export default function ItineraryCard({
   unseenChangedDays,
   panelCollapsed = false,
   onMinimize,
-  tour,
 }: {
   itinerary: Itinerary;
   budget: number;
@@ -208,12 +206,6 @@ export default function ItineraryCard({
    * It is handed to `showTripRoute` twice, for two different questions: as the focus (collapsed
    * means no day is singled out) and as `panelVisible` (whether there is a panel to aim beside).
    */
-  /** The stop tour, hoisted to the host so the collapsed capsule's play button and this card's
-   *  drive one timer instead of two. `useStopTour` keeps `playing` in local state, so a second
-   *  call site is a second interval and a second boolean that disagree the moment either is used.
-   *  Optional, and falling back to a private instance, so a caller with no capsule (the arrange
-   *  board's preview) still gets a working tour without wiring one. */
-  tour?: ReturnType<typeof useStopTour>;
   panelCollapsed?: boolean;
   /** Shuts the panel to its capsule. Given, the header image grows a grab line along its top
    *  edge — the handle belongs on the picture rather than on a bar of chrome above it. */
@@ -292,11 +284,15 @@ export default function ItineraryCard({
   /** Read by the one-shot stagger interval, which must not re-run when the panel opens — the
    *  stagger is mounted once and a dep on `panelCollapsed` would restart it on every collapse. */
   const panelCollapsedRef = useRef(panelCollapsed);
-  // The fallback instance is created unconditionally (hooks cannot be conditional) but never
-  // plays when `tour` is supplied: nothing calls its `toggle`, so its `playing` stays false and
-  // its interval effect returns on the first line. One live timer either way.
-  const fallbackTour = useStopTour();
-  const { playing: touring, toggle: toggleTour, stop: stopTour } = tour ?? fallbackTour;
+  /**
+   * Story mode, read from context rather than taken as a prop.
+   *
+   * There is exactly one film at a time and it belongs to the app, not to this card — so the
+   * capsule's Play button and this one reach the same controller without either host threading it
+   * down. Outside `AppShell` (a card rendered with no map behind it) this is inert and the button
+   * does nothing, which is the honest behaviour: there is nothing to fly.
+   */
+  const story = useStoryControls();
   const heroRef = useRef<HTMLDivElement>(null);
   const dayTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const dayTabStripRef = useRef<HTMLDivElement>(null);
@@ -481,7 +477,13 @@ export default function ItineraryCard({
     // In edit mode it is false: a stop dragged toward another day is a decision about two days,
     // and hiding one of them hides half the question. This is the one thing about the map that
     // edit mode does change, and it is a change in *what is drawn*, not in the panel's layout.
-    showTripRoute(routeDays, panelCollapsed ? null : dayIndex, !panelCollapsed, true);
+    // Story mode draws and aims the map itself for as long as it runs (`storyMode.tsx`), so this
+    // stands aside rather than fighting it for the camera. `story.active` is a dependency, not
+    // just a guard: leaving the film re-runs this effect, which is what pulls the view back to
+    // the day framed beside the panel that just came back.
+    if (!story.active) {
+      showTripRoute(routeDays, panelCollapsed ? null : dayIndex, !panelCollapsed, true);
+    }
     // `routeShape` and not `routeDays`, and `day` is deliberately absent — both change identity
     // on every keystroke. See the long note on `routeShape` for what that would cost and what it
     // defers. `editing` is here so entering and leaving the mode redraws once, which is what
@@ -492,7 +494,7 @@ export default function ItineraryCard({
     // this render's own fresh array. A ref was used here first and is not needed — it also trips
     // the "no refs during render" rule, which is what made the simpler reading obvious.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeShape, dayIndex, panelCollapsed, showTripRoute]);
+  }, [routeShape, dayIndex, panelCollapsed, story.active, showTripRoute]);
 
   // Staggered reveal, played once on mount when animateReveal is true: every REVEAL_STEP_MS,
   // one more stop card mounts (with its own slide-down + typewriter, see StopRow) and its map
@@ -597,13 +599,7 @@ export default function ItineraryCard({
     dayTabRefs.current[clamped]?.focus();
   };
 
-  const selectStop = (stop: Stop) => {
-    // The card stays mounted behind the place detail, so the tour's interval survives with it —
-    // and a camera that keeps flying every few seconds while someone reads about one place is
-    // worse than the old accidental stop.
-    stopTour();
-    onSelectStop(stop);
-  };
+  const selectStop = (stop: Stop) => onSelectStop(stop);
 
   const arrowClass =
     "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-30";
@@ -707,7 +703,7 @@ export default function ItineraryCard({
           {/* Both actions live on the photograph now, which is what lets the day panel below start
               at the stops. Two circles rather than two pills, and deliberately at different
               weights: amber is the reserved accent, so exactly one control here may wear it as a
-              fill. Download takes it (it is the terminal action on the whole trip); the tour takes
+              fill. Download takes it (it is the terminal action on the whole trip); Play takes
               the neutral wash it already had in the body, keeping its amber to the glyph. Two
               solid amber circles would read as two primaries, which is one more than there is. */}
           <div className="flex items-start justify-between gap-3">
@@ -715,20 +711,34 @@ export default function ItineraryCard({
               {cityName(destination)}: {dayCount} day{dayCount > 1 ? "s" : ""}
             </h1>
             <div className="flex shrink-0 items-center gap-2">
-              {/* The same and only gate the pill carried in the day panel: a tour needs more than
-                  one place to move between. The arrange board is a separate overlay over this
-                  card rather than a mode of it, so there is nothing to gate against here. */}
-              {day.stops.length > 1 && (
+              {/* Play *this day* as a film. The gate is one place to fly to rather than the two
+                  the old silent tour needed — a single-stop day is still a narrated arrival, and
+                  the opening and closing beats are about the day either way.
+
+                  Day-scoped because the card is: whichever day's tab is selected is the day that
+                  plays, which is what the traveller means by pressing Play while reading it. */}
+              {day.stops.length > 0 && (
                 <HeroAction
-                  label={touring ? "Stop tour" : "Play tour"}
+                  label={`Play day ${dayIndex + 1} as a story`}
                   tone="glass"
-                  onClick={toggleTour}
+                  onClick={() => {
+                    // Shut the panel to its capsule on the way in, which is where the film's own
+                    // header and play/pause live (`StoryStage` docks under it). `onMinimize` is
+                    // the host's existing `setPlanCollapsed(true)` — reused rather than given a
+                    // second prop, since "the plan panel closes" is exactly what it means.
+                    onMinimize?.();
+                    story.start({
+                      itinerary,
+                      dayIndex,
+                      destination,
+                      // `"preview"` is the pre-save placeholder and is filtered server-side — see
+                      // the note in /api/trip-story. Passed as-is rather than branched on here, so
+                      // one place decides what a cacheable trip is.
+                      tripId: trip?.id,
+                    });
+                  }}
                 >
-                  {touring ? (
-                    <PauseIcon className="h-4 w-4" />
-                  ) : (
-                    <PlayIcon className="h-4 w-4" />
-                  )}
+                  <PlayIcon className="h-4 w-4" />
                 </HeroAction>
               )}
               {trip?.id && trip.id !== "preview" && (
@@ -1012,11 +1022,11 @@ export default function ItineraryCard({
             revealedCount={revealedCount}
             onSelect={selectStop}
             // Bidirectional highlight: a row lights up when its marker card on the globe
-            // is hovered or stepped onto by the tour, and hovering a row lights its
+            // is hovered or stepped onto by a story beat, and hovering a row lights its
             // marker. Both surfaces read and write the same context index, so neither
             // knows the other exists.
             highlightedIndex={highlightedRow}
-            // Separate from the highlight so Play tour and a globe click pull the list along
+            // Separate from the highlight so a story beat and a globe click pull the list along
             // with the camera, without a pointer sweep down the rows doing the same.
             activeIndex={activeRow}
             onHoverStop={(index) => setHoveredIndex(index === null ? null : dayOffset + index)}

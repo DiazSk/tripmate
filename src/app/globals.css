@@ -341,7 +341,7 @@ body {
 /* --- Day and night on the globe ----------------------------------------------------------
 
    The world lights itself for whichever stop is selected: click a 9 PM dinner and the city goes
-   to night, step Play tour back to a 7 AM breakfast and it comes up again.
+   to night, step a story-mode film back to a 7 AM breakfast and it comes up again.
 
    `mix-blend-mode: multiply` for every phase, with only `background-color` changing between
    them. That is deliberate: `mix-blend-mode` is not an animatable property — it snaps — so a
@@ -417,7 +417,7 @@ body {
    trap documented above that left four controls with dead hovers.
 
    What is left here is only what a utility cannot say. The body is hidden rather than unmounted,
-   at every width: the active day, the scroll position, the stop tour's interval and the reveal
+   at every width: the active day, the scroll position and the reveal
    stagger all live in that subtree, and unmounting them would reset the panel on every glance at
    the map. `display: none` and not `opacity: 0`, so it costs no paint and leaves the accessibility
    tree — the capsule is the whole interface while it is shut.
@@ -504,7 +504,7 @@ body {
   visibility: hidden;
 }
 
-/* The secondary control on the header photograph (Play tour). Slate rather than the white wash a
+/* The secondary control on the header photograph (Play, which opens Story mode). Slate rather than the white wash a
    chip on a panel would take — see the note at its call site in ItineraryCard. Here rather than
    inline so the hover alpha is reachable at all: an inline `background` outranks every utility. */
 .hero-action-glass {
@@ -522,6 +522,29 @@ body {
   .itinerary-hero-full {
     transform: none;
   }
+}
+
+/* Story mode takes the app's chrome off screen. Most of it is hidden from inside `AppShell`,
+   which can read the story context; this rule is for the one widget that cannot be — `LlmTraceFab`
+   mounts as a sibling of `.app-shell` from the root layout, so it is an *ancestor* of the story
+   provider and no context reaches it. `storyMode.tsx` sets `data-story-mode` on <html> for exactly
+   this. Same escape hatch, same reason, as the `print:hidden` already on that button.
+
+   Not `:has()`, though this file uses it elsewhere: the flag is on the document element, which is
+   an ancestor of the widget, so a plain descendant selector is both sufficient and cheaper. */
+html[data-story-mode="true"] .llm-trace-fab {
+  display: none;
+}
+
+/* The per-day cluster badge, off during a film. The capsule above the narration already says
+   which day is playing, and on the map a floating "DAY 1" is neither of the two things the film
+   leaves on the world — the stop's point, and the stop's name. Same `data-story-mode` lever as
+   above rather than a prop: `StopMarkerLayer` is mounted by `AppShell` beside the map chrome and
+   renders from `routeClusters`, so this is a presentation decision about markup the film does not
+   own. The arcs between stops are gone by a different route entirely — `connectors` on
+   `RouteDrawRequest`, since geometry a renderer never builds costs nothing to hide. */
+html[data-story-mode="true"] .marker-day-label {
+  display: none;
 }
 
 /* Hands pointer events back to the content overlay, whose `pointer-events-none` (see AppShell)
@@ -2050,5 +2073,21 @@ body {
     background: #fff;
     color: #000;
     color-scheme: light;
+  }
+}
+
+/* The toast's entrance. Kept here rather than as a Tailwind arbitrary keyframe because the
+   `motion-safe:` variant on the element is what gates it — a reduced-motion profile gets the
+   toast with no travel at all, which is the correct degradation for a thing that appears at the
+   bottom of the screen unbidden. Short and small: a confirmation that slides a long way reads as
+   more important than it is. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
