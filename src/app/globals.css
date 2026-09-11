@@ -3261,3 +3261,101 @@ body {
     color-scheme: light;
   }
 }
+
+/* --- The footer's arrival ---------------------------------------------------------------------
+   The footer had no entrance on any route: the banner, the wordmark, both links and the small
+   print all arrived flat and at once, on a landing whose opening beat scrubs a hundred frames of
+   Petra. The close was the one part of the page that did not move.
+
+   Five beats now, in reading order — banner, wordmark, links, tagline, small print. No JavaScript
+   and no library: two named view timelines and two keyframes.
+
+   **A full-bleed reveal was tried and rejected, and the measurement is the reason.** The obvious
+   version scales the whole footer as scroll uncovers it. Scaling anything that touches the page
+   edge un-bleeds it: the closing photograph started 30px inset from each gutter and slid out to
+   its proper 24px as the animation finished, so for most of the scroll the image was not touching
+   the frame. Sampled across one scroll: gutters 54px -> 42px -> 30px -> 24px. Everything below is
+   built so that nothing touching a gutter is ever animated. */
+
+/* The banner leads, and it scales *inside* its frame rather than with it. The frame is
+   `overflow-hidden` and full-bleed; the image is `fill`-positioned inside it, so animating the
+   image opens the crop while the frame's edges never move. Measured across the whole scroll on
+   both breakpoints: gutters held at 24/24 desktop and 20/20 mobile.
+
+   **The timeline is named on the frame, and a bare `view()` on the image does not work here.**
+   This is the trap this file documents for `scroll(nearest block)`, met a third time: `view()`
+   resolves against the nearest *scrollport*, `overflow: hidden` makes an element one, and this
+   frame is `overflow-hidden` by necessity — it is the thing doing the cropping. The image's
+   timeline therefore resolved to a box that never scrolls, and the animation sat inert, rendering
+   at its un-animated state at every offset. It looked exactly like the CSS had not applied;
+   `getComputedStyle` reported `animation-name: footer-banner-in` throughout. Declaring the
+   timeline on the frame fixes it, because the *frame's* own nearest scrollport is
+   `.content-overlay`, the real scroller — a named timeline resolves by name, not by proximity.
+
+   1.06, not more: this is a settle, not a Ken Burns. */
+.footer-banner-frame {
+  view-timeline: --footer-banner block;
+}
+
+@keyframes footer-banner-in {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+}
+
+/* The copy follows, offset along one shared progress. `--rise-step` shifts each part later, which
+   is how a scroll-driven animation staggers: `animation-delay` is a *time*, and a timeline-driven
+   animation has no time to delay.
+
+   **Bound to the copy, not to the footer, and that distinction is the whole feature.** Keyed to
+   the footer's own entry the cascade finished before the words were on screen — the footer is
+   ~680px tall and the banner plus its margin take the top ~344px of that, so by the time the type
+   scrolled into view every part was already at rest. Measured: at 80% of the scroll the copy was
+   still below the fold and all four sat at opacity 1. The animation ran perfectly, for nobody.
+   Bound here, `entry` means "the words are arriving", which is the thing being animated.
+
+   32px of travel, and 14 was not enough: at 14 the cascade crossed 375px of scrolling, which is
+   one wheel flick, so each part moved too little over a gesture long enough to hide it. Amplitude
+   is the fix, not duration — a longer range only makes the same small movement slower. The offsets
+   are 9% against a 32% span, so adjacent parts overlap by about two thirds and the group reads as
+   a sequence; the first cut used 6% against 40% and the four were effectively one fade. */
+.footer-copy {
+  view-timeline: --footer-view block;
+}
+
+@keyframes footer-rise {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .footer-banner {
+      animation: footer-banner-in linear both;
+      animation-timeline: --footer-banner;
+      animation-range: entry 5% entry 65%;
+    }
+
+    .footer-rise {
+      animation: footer-rise linear both;
+      animation-timeline: --footer-view;
+      animation-range: entry calc(10% + var(--rise-step, 0%)) entry calc(42% + var(--rise-step, 0%));
+    }
+  }
+}
+
+/* **Reduced motion needs its own switch here, and the blanket rule does not cover it.** That rule
+   flattens `animation-duration` to 0.01ms, which does nothing to a scroll-driven animation: a
+   timeline-driven animation ignores duration entirely and takes its progress from the scroller.
+   Without this the footer would still rise and scale for someone who asked it not to. Both
+   keyframes are written `from`, so the resting state is the finished one and suppressing them
+   loses the movement and nothing else. */
+@media (prefers-reduced-motion: reduce) {
+  .footer-banner,
+  .footer-rise {
+    animation: none;
+  }
+}
