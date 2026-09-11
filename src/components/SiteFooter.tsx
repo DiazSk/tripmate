@@ -59,14 +59,14 @@ export default function SiteFooter() {
           Pexels 34451716 (Oskar Gross), 4024x3018 source. The licence permits commercial use
           without attribution, so nothing renders that name — it is here so the next person can
           find the original. */}
-      <div className="relative mb-16 aspect-[1200/280] w-full overflow-hidden">
+      <div className="footer-banner-frame relative mb-16 aspect-[1200/280] w-full overflow-hidden">
         <Image
           src="/scenes/graubunden-autumn-valley.webp"
           alt=""
           aria-hidden
           fill
           sizes="100vw"
-          className="object-cover object-center"
+          className="footer-banner object-cover object-center"
         />
         <div
           aria-hidden
@@ -75,10 +75,24 @@ export default function SiteFooter() {
         />
       </div>
 
-      <div className="flex flex-col gap-12 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
-        <p className="text-2xl font-semibold tracking-[var(--tracking-heading)] text-foreground">TripMate</p>
+      {/* The banner carries `footer-banner`, not `footer-rise`, and the difference is the whole
+          reason it can be animated at all: `footer-rise` translates, and translating a full-bleed
+          element pulls it off the page edge. The banner instead scales *inside* its own
+          `overflow-hidden` frame, so the crop opens while the frame's gutters never move.
 
-        <nav aria-label="Footer">
+          **`footer-copy` is what the timeline keys off, and it exists because keying off the
+          footer did not work.** The footer is ~680px tall and the banner plus its margin take the
+          top ~344px of that, so by the time this type scrolled into view the footer's own `entry`
+          range was long finished and every part was already at rest. The animation was running
+          and nobody could see it. Bound to this group instead, `entry` means "the words are
+          arriving", which is the thing being animated. */}
+      <div className="footer-copy">
+      <div className="flex flex-col gap-12 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
+        <p className="footer-rise text-2xl font-semibold tracking-[var(--tracking-heading)] text-foreground">
+          TripMate
+        </p>
+
+        <nav aria-label="Footer" className="footer-rise" style={{ "--rise-step": "9%" } as React.CSSProperties}>
           <ul className="space-y-1">
             {LINKS.map((link) => (
               <li key={link.href}>
@@ -96,15 +110,19 @@ export default function SiteFooter() {
           </ul>
         </nav>
 
-        <div className="text-sm text-muted">
+        <div className="footer-rise text-sm text-muted" style={{ "--rise-step": "18%" } as React.CSSProperties}>
           <p>Plans priced against real dates.</p>
           <p className="mt-1 text-muted">Weather, holidays and opening hours included.</p>
         </div>
       </div>
 
-      <div className="mt-16 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-white/55 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className="footer-rise mt-16 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-white/55 sm:flex-row sm:items-center sm:justify-between"
+        style={{ "--rise-step": "27%" } as React.CSSProperties}
+      >
         <p>© {new Date().getFullYear()} TripMate</p>
         <p>Built with real data, not guesses.</p>
+      </div>
       </div>
     </footer>
   );
