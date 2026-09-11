@@ -153,7 +153,7 @@ export default function MapLibreBackground({
       <div className="globe-tint pointer-events-none absolute inset-0" data-phase={phase} />
       {/* OpenFreeMap and the DEM both want attribution, and MapLibre's own control is disabled so
           the app can place it in the same corner Cesium's credit container uses. */}
-      <div className={`pointer-events-auto text-[10px] text-white/45 ${creditClassName}`}>
+      <div className={`pointer-events-auto text-[0.6875rem] text-white/45 ${creditClassName}`}>
         {failed ? (
           "Map unavailable"
         ) : (

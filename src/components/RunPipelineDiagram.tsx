@@ -16,7 +16,7 @@ const STEP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
 };
 
 function Connector() {
-  return <ArrowDown className="mx-auto my-1 h-4 w-4 shrink-0 text-stone-300" aria-hidden />;
+  return <ArrowDown className="mx-auto my-1 h-4 w-4 shrink-0 text-muted" aria-hidden />;
 }
 
 /** A real, trace-backed step — clickable, same data the flat list used to show. */
@@ -25,15 +25,15 @@ function StepNode({ step, onSelect }: { step: RunStep; onSelect: () => void }) {
   return (
     <button
       onClick={onSelect}
-      className="flex w-full items-center justify-between gap-2 rounded-lg border border-stone-200 bg-white p-2.5 text-left text-xs shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50"
+      className="flex w-full items-center justify-between gap-2 rounded-lg border border-card-border bg-surface-deep p-2.5 text-left text-xs shadow-sm transition-colors hover:border-accent/50 hover:bg-accent/10"
     >
       <span className="flex min-w-0 items-center gap-1.5">
-        <Icon className="h-3.5 w-3.5 shrink-0 text-stone-500" />
-        <span className="truncate font-medium text-stone-800">
+        <Icon className="h-3.5 w-3.5 shrink-0 text-muted" />
+        <span className="truncate font-medium text-foreground">
           {STEP_LABELS[step.type] ?? step.type}
         </span>
       </span>
-      <span className="flex shrink-0 items-center gap-2 text-stone-400">
+      <span className="flex shrink-0 items-center gap-2 text-muted">
         <span>{formatMs(step.durationMs)}</span>
         <TraceStatusBadge status={step.status} />
       </span>
@@ -54,7 +54,7 @@ function StaticNode({
   note: string;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-lg border border-dashed border-stone-300 bg-stone-50/60 p-2.5 text-xs text-stone-400">
+    <div className="flex flex-col gap-0.5 rounded-lg border border-dashed border-white/20 bg-tile/60 p-2.5 text-xs text-muted">
       <span className="flex items-center gap-1.5">
         <Icon className="h-3.5 w-3.5 shrink-0" />
         <span className="font-medium">{label}</span>
@@ -99,8 +99,8 @@ export default function RunPipelineDiagram({
     <div className="space-y-1">
       {contextStep && showParallelBranch && (
         <>
-          <div className="rounded-xl border border-dashed border-stone-300 p-2">
-            <div className="mb-1.5 text-center text-[10px] font-medium tracking-wide text-stone-400 uppercase">
+          <div className="rounded-xl border border-dashed border-white/20 p-2">
+            <div className="mb-1.5 text-center text-[10px] font-medium tracking-wide text-muted uppercase">
               Fetched concurrently
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -130,7 +130,7 @@ export default function RunPipelineDiagram({
 
       {placeDetailSteps.length > 0 && (
         <div className="mt-3 space-y-1.5">
-          <div className="text-[10px] font-medium tracking-wide text-stone-400 uppercase">
+          <div className="text-[10px] font-medium tracking-wide text-muted uppercase">
             Place detail lookups
           </div>
           {placeDetailSteps.map((step) => (

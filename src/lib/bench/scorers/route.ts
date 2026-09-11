@@ -24,7 +24,7 @@ import type {
 const ROUTE_CIRCUITY_FACTOR = 1.3;
 
 /** Door-to-door speeds, matching src/lib/travelTime.ts so numbers here are comparable to the app's. */
-const SPEED_KMH: Record<string, number> = { walk: 4.5, transit: 18, drive: 30 };
+const SPEED_KMH: Record<string, number> = { walk: 4.5, bike: 13, transit: 18, drive: 30 };
 
 /** A meal more than this far from the preceding stop is a detour, not a stop on the way. */
 export const MEAL_PROXIMITY_CAP_MIN = 20;

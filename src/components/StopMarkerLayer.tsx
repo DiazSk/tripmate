@@ -482,7 +482,7 @@ export default function StopMarkerLayer() {
               // object: `--day-color` is the core, which draws the badge's border and text
               // exactly as it draws the ribbons and ring cores, and `--day-glow` is the bloom
               // around it, exactly as it is the halo around the arcs. This is the one place a
-              // --route-neon-* token leaves the globe geometry, and it is still on the globe —
+              // --route-day-* token leaves the globe geometry, and it is still on the globe —
               // never in a panel, chip or button.
               style={
                 {

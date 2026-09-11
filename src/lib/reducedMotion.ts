@@ -20,3 +20,23 @@
 export const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * Subscribe form, for `useSyncExternalStore`.
+ *
+ * The one-shot read above is right for a decision made once (a tilt gate, a tween's config). It is
+ * wrong for anything whose *rendered output* depends on the answer: reading it in an effect and
+ * calling `setState` is the pattern React 19's `react-hooks/set-state-in-effect` rule exists to
+ * flag, and it also silently ignores the visitor changing the setting mid-session — which this
+ * module's own note says can happen.
+ *
+ * Pair it with a `false` server snapshot so the server renders the reduced-motion layout and the
+ * client upgrades. That direction matters: the motion-free version is the one that has to be
+ * correct without JavaScript.
+ */
+export function subscribeReducedMotion(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}

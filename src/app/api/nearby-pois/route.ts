@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCandidatePois } from "@/lib/pois";
+import { getCandidatePoisCached } from "@/lib/serverFetchCached";
 
 /**
  * `GET ?lat=&lng=` → real named places within a short walk of a point on the globe.
@@ -30,6 +30,6 @@ export async function GET(req: NextRequest) {
   // tight enough that the list is places the traveler can see from where they pointed.
   // `minRate: 0` because a rating floor answers "what is this city known for", and this is
   // asking "what is here" — the cafe being pointed at is unrated.
-  const pois = await getCandidatePois(lat, lng, 8, { radiusM: 250, minRate: 0 });
+  const pois = await getCandidatePoisCached(lat, lng, 8, { radiusM: 250, minRate: 0 });
   return NextResponse.json({ pois });
 }

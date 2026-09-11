@@ -64,7 +64,7 @@ function TimelineRow({
       <div className="relative flex w-4 shrink-0 justify-center pt-1.5">
         {!isLast && <span aria-hidden className="absolute top-4 bottom-[-1rem] w-px bg-white/15" />}
         <span
-          className={`relative z-10 h-2.5 w-2.5 rounded-full ring-4 ring-[color:var(--surface-deep,#0f172a)] ${
+          className={`relative z-10 h-2.5 w-2.5 rounded-full ring-4 ring-[color:var(--surface-deep,#1c1a18)] ${
             changed ? "bg-accent" : "bg-white/35"
           }`}
         />
@@ -78,7 +78,7 @@ function TimelineRow({
         <div className="flex items-baseline justify-between gap-2">
           <span className="truncate text-sm font-medium text-foreground">{stop.name}</span>
           {changed && (
-            <span className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-foreground">
+            <span className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[0.6875rem] font-semibold text-accent-foreground">
               updated
             </span>
           )}

@@ -4,7 +4,9 @@ import { MapPin, CloudSun, ScanSearch, Compass } from "lucide-react";
 import type { ComponentType } from "react";
 import { useRef } from "react";
 
+import { TYPICAL_WAIT_PHRASE } from "@/lib/generationStages";
 import { useLineReveal } from "@/lib/lineReveal";
+import SectionOpener from "./SectionOpener";
 
 /**
  * What actually happens when a plan is generated.
@@ -13,13 +15,21 @@ import { useLineReveal } from "@/lib/lineReveal";
  * names five measured stages — `geocode`, `context`, `generate`, `critique`, `placing` — and two of
  * them are things this product does that nothing on the landing previously mentioned:
  *
- *  - **critique** is a second model call (~50s of the ~150s run) that reviews the finished plan,
- *    lists its issues, and can return revised days which replace the originals.
+ *  - **critique** is a second model call (150s of the ~311s run — nearly half of it) that reviews
+ *    the finished plan, lists its issues, and can return revised days which replace the originals.
+ *    That is what makes "most of it is the plan being checked rather than written" literally true
+ *    rather than a turn of phrase.
  *  - **placing** corrects the model's coordinates against OSM, because it writes lat/lng from
  *    memory and gets them wrong — measured at 11km off for Fushimi Inari, 3km for Nishiki Market.
  *
  * Those are the interesting claims, and they are true. The previous three steps ("real prices",
  * "weather", "three tiers") described the inputs three times and the machinery not at all.
+ *
+ * The duration in the standfirst is `TYPICAL_WAIT_PHRASE`, not prose. It read "two and a half
+ * minutes" here while the loader said "five" and the review step said "two" — three numbers for
+ * one wait, two of them the stale pre-2026-08-21 estimate. A landing page that under-promises the
+ * wait is worse than one that states it: the traveler finds out either way, and only one version
+ * of them is still trusting the plan when they do.
  */
 const STEPS: { number: string; label: string; body: string; Icon: ComponentType<{ className?: string; strokeWidth?: number }> }[] = [
   {
@@ -58,59 +68,77 @@ export default function HowItWorks() {
     <section
       id="how-it-works"
       // scroll-mt: see the matching comment in ImageRow.tsx.
-      className="pointer-events-auto scroll-mt-[var(--nav-h)] border-t border-white/10 px-5 py-16 sm:px-6 sm:py-24"
+      className="scene-band is-quiet has-rule pointer-events-auto"
     >
-      {/* No section-opener label here, unlike the beats either side of it.
-          That is the reference's own arrangement, not an oversight: its "How Vita Works" section
-          drops the label and instead splits the header — heading left, one line of support copy
-          right. Using the label on every section would make it wallpaper; skipping it here is what
-          keeps it meaning "a new movement began". */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
-        <h2
-          ref={headingRef}
-          className="font-scene-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground"
-        >
-          How it actually works
-        </h2>
-        <p className="scene-prose max-w-sm text-sm text-muted lg:pt-2">
-          Four steps, about two and a half minutes. Most of it is the plan being checked rather
-          than written.
-        </p>
-      </div>
+      {/* This section used to skip the opener label entirely, on the recorded reasoning that "that
+          is the reference's own arrangement" — its equivalent section drops the label and splits
+          the header instead, heading left and a line of support copy right. The reasoning that
+          followed ("using the label on every section would make it wallpaper") is sound on its own
+          merits, but it was reached by copying rather than by deciding, and the folio line the
+          openers now draw is a section boundary rather than a kicker — so there is no longer a
+          wallpaper argument against having one here. Every section gets its line. */}
+      {/* `headingRef` goes on the h2, **not** on SectionOpener — see its own prop doc. `useLineReveal`
+          masks every line box inside the element it is handed, so pointing it at this wrapper caught
+          the standfirst paragraph too and split it into spread-out fragments across the full width.
+          FeaturedPlans records the same trap for the same reason. */}
+      <SectionOpener label="Method">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
+          <h2
+            ref={headingRef}
+            className="font-scene-display is-quiet text-foreground"
+          >
+            How it actually works
+          </h2>
+          <p className="scene-prose max-w-sm text-muted">
+            Four steps, about {TYPICAL_WAIT_PHRASE}. Most of it is the plan being checked rather
+            than written.
+          </p>
+        </div>
+      </SectionOpener>
 
-      {/* Four columns: icon at the top, a deliberate run of air, then the text.
-          The air is a fixed gap rather than `justify-between` on a min-height. Pinning the text to
-          the bottom of an equal-height cell is what the reference does, and it works there because
-          all four of its bodies run to exactly two lines — ours run two to three, so the same rule
-          left one column's text sitting a line lower than its neighbours. A fixed gap aligns every
-          text block's top edge and keeps the proportion.
+      {/* **Four ruled rows, not four columns.** The column arrangement this replaced was the
+          reference's: icon at the top of each cell, a deliberate 56px run of air, then the text
+          pinned below it. It needed two separate workarounds to survive contact with this
+          product's copy — the air had to be a fixed gap rather than `justify-between`, because the
+          reference's four bodies all run to exactly two lines and ours run two to three; and the
+          air had to be switched off below `lg`, because once the grid stacked, 56px inside a step
+          against 40px between steps put every icon nearer the *previous* step's body than its own
+          heading. Two fixes for a shape that never fitted the content.
 
-          **That air is `lg` and up only, where the steps sit side by side.** Below `lg` the grid
-          stacks, and 56px inside a step against the 40px between steps put every icon closer to
-          the *previous* step's body copy than to its own heading — proximity said the icons
-          belonged to the wrong text. Anything below the step gap restores the grouping; 20px reads
-          as one object without collapsing onto the 8px heading-to-body step. */}
-      <div className="mt-16 grid gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
+          A numbered row does fit it. A process is a sequence, and a sequence reads down a page
+          rather than across one; each step gets the full measure, so a three-line body is no
+          longer a defect; and the arrangement is identical at every width, which removes the
+          proximity bug rather than gating it behind a breakpoint. It also gives the page a change
+          of density — the beats above are a four-up grid, and a dense passage earns a quieter one.
+
+          The number leads, in the figure face, at the left. It is a genuine index and now looks
+          like one: `01` in mono against a hairline is a spec sheet's numbering, and the tiny
+          0.62rem index beside an icon that this replaces was small precisely because at display
+          size it competed with the section heading. Given its own column it can be legible without
+          competing with anything. */}
+      <ol className="mt-14 border-t border-card-border">
         {STEPS.map(({ number, label, body, Icon }) => (
-          <div key={number} className="flex flex-col gap-5 lg:gap-14">
-            <div className="flex items-start gap-2">
-              {/* Drawn line icons at the app's own lucide stroke, matching the reference's thin
-                  outline set. */}
-              <Icon className="h-8 w-8 text-foreground" strokeWidth={1.25} />
-              {/* 0.62rem, not the 2.81rem this used to be. The reference sets its step numbers
-                  tiny and beside the icon — the number is an index, not a headline, and at display
-                  size it was competing with the section heading for the same job. */}
-              <span className="text-[0.62rem] font-semibold leading-none text-white/50">
-                {number}
-              </span>
-            </div>
+          <li
+            key={number}
+            className="grid grid-cols-[2.5rem_1fr] items-start gap-x-4 gap-y-2 border-b border-card-border py-6 sm:grid-cols-[3.5rem_1fr_auto] sm:gap-x-8 sm:py-8"
+          >
+            <span className="font-mono pt-0.5 text-sm font-semibold text-muted tabular-nums">
+              {number}
+            </span>
             <div>
-              <p className="text-base font-medium text-foreground">{label}</p>
-              <p className="scene-prose mt-2 text-sm text-muted">{body}</p>
+              <p className="text-base font-medium text-foreground sm:text-lg">{label}</p>
+              <p className="scene-prose mt-1.5 max-w-[58ch] text-muted">{body}</p>
             </div>
-          </div>
+            {/* Right-aligned and hidden on phones: at this size the icon is an ornament on a row
+                that already reads perfectly without it, and a third column on a 390px screen would
+                cost the body copy more measure than the icon is worth. */}
+            <Icon
+              className="col-start-3 row-start-1 hidden self-center text-muted sm:block sm:h-7 sm:w-7"
+              strokeWidth={1.25}
+            />
+          </li>
         ))}
-      </div>
+      </ol>
     </section>
   );
 }

@@ -41,11 +41,18 @@ export async function generateMetadata({
       ? "Preview trip · TripMate"
       : "Your trip itinerary · TripMate";
 
+  // `images` has to be restated here. The root's `opengraph-image.png` file convention supplies
+  // one for every route that does *not* declare its own `openGraph`, and this route does — so
+  // declaring it silently replaced the parent's images with nothing, and the `summary_large_image`
+  // card below rendered empty. Verified against the served HTML, not assumed: without this line
+  // `/trip/<id>` emits no `og:image` at all while `/` emits it fine.
+  const image = { url: "/opengraph-image.png", width: 1200, height: 630 };
+
   return {
     title,
     description: DESCRIPTION,
-    openGraph: { title, description: DESCRIPTION, type: "website" },
-    twitter: { card: "summary_large_image", title, description: DESCRIPTION },
+    openGraph: { title, description: DESCRIPTION, type: "website", images: [image] },
+    twitter: { card: "summary_large_image", title, description: DESCRIPTION, images: [image] },
   };
 }
 

@@ -48,7 +48,7 @@ const ZOOM_FLIGHT_SECONDS = 0.45;
  * back is indistinguishable from never having left.
  */
 export default function MapControls() {
-  const { rendererRef, ready } = useMapCamera();
+  const { rendererRef, ready, globeWanted } = useMapCamera();
   const [flat, setFlat] = useState(false);
   const needleRef = useRef<HTMLSpanElement>(null);
   const sliderRef = useRef<HTMLInputElement>(null);
@@ -85,7 +85,14 @@ export default function MapControls() {
     });
   }, [ready, rendererRef]);
 
-  if (!ready) return null;
+  // **`globeWanted`, not just `ready`.** This gated on `ready` alone, which is true for the whole
+  // lifetime of the mounted-once renderer — so the controls rendered on every route including the
+  // ones that deliberately never boot a globe. On `/trips` the compass badge sat on top of the "My
+  // memories" heading and ate the first characters of its subline: chrome for a map that is not on
+  // screen, covering content that is. `MapEngineToggle` and `MapSearchPanel` are siblings in
+  // AppShell and both already gate on `globeWanted`; this brings the third into line rather than
+  // pushing it out of the way with a bottom offset.
+  if (!ready || !globeWanted) return null;
 
   function withRenderer(fn: (renderer: NonNullable<typeof rendererRef.current>) => void) {
     const renderer = rendererRef.current;

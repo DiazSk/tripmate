@@ -1,6 +1,9 @@
 import { randomUUID } from "crypto";
 import { CRITIQUE_TIMEOUT_MS, itineraryTimeoutMs, parseJsonResponse, runClaude } from "./claude";
-import { geocodeDestination, getWeatherForDates, DayWeather } from "./weather";
+import { getWeatherForDates, DayWeather } from "./weather";
+import { fetchBikeshare } from "./bikeshare";
+import type { BikeshareSystem } from "./bikeshare";
+import { geocodeDestinationCached } from "./serverFetchCached";
 import { fetchPoiOsmTags, resolveNamedPlaceCoords } from "./poiDetails";
 import { buildPlaceFacts } from "./placeFacts";
 import {
@@ -111,6 +114,7 @@ export async function runGeneration(
   let dayCount: number;
   let weather: DayWeather[] = [];
   let geoPoint: { lat: number; lon: number } | null = null;
+  let bikeshare: BikeshareSystem | null = null;
   const isRefine = Boolean(previousItinerary && feedback);
 
   // The wizard has always sent these; the route simply never read them, so six
@@ -182,10 +186,19 @@ export async function runGeneration(
     dayCount = tripDays(startDate, endDate);
     onStage({ stage: "geocode", status: "start" });
     try {
-      const geo = await geocodeDestination(destination);
+      const geo = await geocodeDestinationCached(destination);
       if (geo) {
         geoPoint = { lat: geo.lat, lon: geo.lon };
-        weather = await getWeatherForDates(geo.lat, geo.lon, startDate, endDate);
+        // Alongside weather rather than after it, so the bikeshare lookup costs no added wall
+        // clock. It cannot join the `contextInsightPromise` above instead: that one is fired
+        // *before* the geocode on purpose (see its comment), and this needs the coordinates the
+        // geocode produces. `Promise.all` is safe because `fetchBikeshare` never rejects.
+        const [days, system] = await Promise.all([
+          getWeatherForDates(geo.lat, geo.lon, startDate, endDate),
+          fetchBikeshare(geo),
+        ]);
+        weather = days;
+        bikeshare = system;
       }
     } catch {
       weather = [];
@@ -217,6 +230,11 @@ export async function runGeneration(
       resolvedFlags,
       dietary,
       logistics,
+      // Generate only. A refine deliberately skips the geocode (it reuses the previous plan's
+      // coordinates), so it has no point to look a bikeshare up from and would always pass null —
+      // which reads to the model as "no bikeshare here" rather than "not asked". The previous
+      // itinerary it is handed already carries whatever bike legs the first pass wrote.
+      bikeshare,
     }));
   }
 

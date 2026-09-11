@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { geocodeDestination } from "@/lib/weather";
+import { geocodeDestinationCached } from "@/lib/serverFetchCached";
 
 /**
  * Step 1 of the pipeline: validates a freshly-submitted { destination, startDate, endDate }
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   let destinationResolved = false;
   try {
-    destinationResolved = Boolean(await geocodeDestination(destination));
+    destinationResolved = Boolean(await geocodeDestinationCached(destination));
   } catch {
     destinationResolved = false;
   }

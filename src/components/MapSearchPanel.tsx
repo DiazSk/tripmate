@@ -527,7 +527,7 @@ export default function MapSearchPanel({
           <div className="min-h-0 flex-1 overflow-y-auto">
             {!hasQuery && state !== "searching" && emptyState}
             {hasQuery && state === "throttled" && (
-              <p className="px-3 py-4 text-xs text-amber-200">
+              <p className="px-3 py-4 text-xs text-alert/75">
                 Search is busy right now — the free places index rate-limits. Try again in a moment.
               </p>
             )}
@@ -673,7 +673,7 @@ export default function MapSearchPanel({
 
           {/* Attribution, and an honest statement of which index answered. Both providers require
               it, and it is also the fastest way to tell whether a key is actually in play. */}
-          <p className="shrink-0 border-t border-card-border px-3 py-1.5 text-[10px] text-white/40">
+          <p className="shrink-0 border-t border-card-border px-3 py-1.5 text-[0.6875rem] text-white/40">
             {provider === "google" ? "Places by Google" : "Places by OpenStreetMap"}
           </p>
           </motion.div>

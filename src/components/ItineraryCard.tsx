@@ -687,7 +687,11 @@ export default function ItineraryCard({
             <span className="truncate text-sm font-semibold text-on-deep">
               {cityName(destination)}
             </span>
-            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent-foreground uppercase">
+            {/* Same correction as the "DAY N OF M" stamp on the photograph above: this is a label, not a
+                control, so it does not wear the action colour. It also sat at 10px, below the smallest
+                documented step — 0.6875rem is the `label` step and the 1px is invisible on an uppercase
+                bold chip, so the system loses a size rather than gaining one. */}
+            <span className="shrink-0 rounded bg-tile px-1.5 py-0.5 text-[0.6875rem] font-bold tracking-wide text-tile-foreground uppercase">
               Day {dayIndex + 1}
             </span>
           </div>
@@ -696,8 +700,18 @@ export default function ItineraryCard({
           className={`relative z-10 flex flex-col gap-1 ${headerPhoto ? "itinerary-hero-full" : ""}`}
         >
           {/* The active day, not the trip's day count — a "where am I right now" stamp, so
-              it moves with dayIndex rather than staying fixed. */}
-          <span className="mb-1 inline-block w-fit -rotate-2 rounded bg-accent px-2 py-1 text-xs font-bold tracking-wide text-accent-foreground uppercase">
+              it moves with dayIndex rather than staying fixed.
+
+              **Not the accent.** This is a label: it reports where you are and there is nothing to
+              press. It shipped as a filled `bg-accent` chip because under the previous single-hue
+              palette the accent was the only colour there was, which is exactly the failure that
+              palette had — on this one screen the same paint marked the primary button, this
+              badge, the budget fill, the download control and the selected day tab, and a visitor
+              had no way to tell which of them wanted a click. A stamp on a photograph needs
+              contrast, not colour, so it gets an opaque dark ground. Set in the text face, not the
+              figure face: "Day 2 of 5" has two numerals and nothing to align them against, and
+              the narrowed rule is tabular mono *in a column* — this is a stamp, not a column. */}
+          <span className="mb-1 inline-block w-fit -rotate-2 rounded bg-black/60 px-2 py-1 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-on-deep uppercase">
             Day {dayIndex + 1} of {dayCount}
           </span>
           {/* Both actions live on the photograph now, which is what lets the day panel below start
@@ -707,7 +721,11 @@ export default function ItineraryCard({
               the neutral wash it already had in the body, keeping its amber to the glyph. Two
               solid amber circles would read as two primaries, which is one more than there is. */}
           <div className="flex items-start justify-between gap-3">
-            <h1 className="font-display text-2xl font-semibold italic">
+            {/* Not italic. DESIGN.md records the display italic being deliberately cut from the
+                system — "an oblique display face was the last thing making the landing read as a
+                different product" — and this heading, on the most-seen screen in the app, kept it
+                anyway. */}
+            <h1 className="font-display text-2xl font-semibold">
               {cityName(destination)}: {dayCount} day{dayCount > 1 ? "s" : ""}
             </h1>
             <div className="flex shrink-0 items-center gap-2">
@@ -760,7 +778,7 @@ export default function ItineraryCard({
       </div>
 
       <div className="p-5 sm:p-6">
-        <BudgetBar days={itinerary.days} budget={budget} />
+        <BudgetBar days={itinerary.days} budget={budget} activeDayIndex={dayIndex} />
       </div>
 
       <div className="flex items-center gap-2 px-5 pb-3 sm:px-6" {...devLabel("ItineraryCard.DayTabs")}>
@@ -948,11 +966,11 @@ export default function ItineraryCard({
           )}
         </div>
 
-        {/* Same box either way: `mb-3 text-sm italic text-muted`, so the line under the heading
+        {/* Same box either way: `mb-3 text-sm text-muted`, so the line under the heading
             keeps its height and the stops below it do not shift. Editing offers the field even
             when the day has no summary yet — a plan generated before the field existed should be
             able to gain one — while reading still renders nothing rather than an empty line. */}
-        {day.summary && <p className="mb-3 text-sm italic text-muted">{day.summary}</p>}
+        {day.summary && <p className="mb-3 text-sm text-muted">{day.summary}</p>}
 
         {/* `py-2` and `leading-snug`, not the `p-3`/normal leading this had. Measured at 88px tall
             against a 44px input, so the height was never the control — it was a 24px name over a
@@ -968,9 +986,15 @@ export default function ItineraryCard({
                   "·" and so was the first thing to fall off the end of a long one. It is a figure,
                   not prose: it belongs beside the name, right-aligned and `tabular-nums` like
                   every other cost in this system. */}
+              {/* `line-clamp-2`, not `truncate`. On one line the name lost its tail to an ellipsis
+                  — "Boutique agriturismo in Pien…" — directly above its own note wrapping freely
+                  to three lines, so the card was spending vertical room on the note while refusing
+                  it to the thing being named. Two lines is the cap rather than none, so a
+                  pathological name still can't push the stops off the card. `items-baseline`
+                  keeps the cost on the first line's baseline either way. */}
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate font-medium text-foreground">{day.lodging.name}</span>
-                <span className="shrink-0 text-sm tabular-nums text-muted">
+                <span className="line-clamp-2 font-medium text-foreground">{day.lodging.name}</span>
+                <span className="shrink-0 font-mono text-sm tabular-nums text-money">
                   {formatMoney(day.lodging.cost)}
                 </span>
               </div>
@@ -993,6 +1017,15 @@ export default function ItineraryCard({
                     min={0}
                     step={1}
                     inputMode="decimal"
+                    // The wrapping label already names this "Actual", which is enough to pass a
+                    // name check and not enough to be useful: read aloud it is "Actual, spin
+                    // button" with no unit (the `$` beside it is aria-hidden), no subject, and no
+                    // way to tell one day's field from another's in a list of nine. The explicit
+                    // label overrides the wrapper with all three.
+                    aria-label={`Actual lodging cost in dollars for day ${dayIndex + 1}, ${day.lodging.name}`}
+                    // Sighted travellers had the same question in a shorter form: the field
+                    // appears next to an estimate with nothing saying what typing in it does.
+                    title="What you actually paid. Replaces the estimate in this trip's budget total."
                     defaultValue={day.lodging.actualCost}
                     onBlur={(e) =>
                       onLodgingActualCostChange(
@@ -1042,7 +1075,7 @@ export default function ItineraryCard({
             {dayFindings.map((finding, i) => (
               <li
                 key={i}
-                className="flex gap-1.5 rounded-lg bg-amber-400/10 px-2.5 py-2 text-xs text-amber-200"
+                className="flex gap-1.5 rounded-lg bg-alert-soft px-2.5 py-2 text-xs text-alert/75"
               >
                 <span aria-hidden="true">⚠️</span>
                 <span>{finding.message}</span>
@@ -1107,7 +1140,7 @@ export default function ItineraryCard({
                 >
                   <tile.Icon className="h-4 w-4" />
                   <div className="mt-1 text-xs opacity-90">{tile.label}</div>
-                  <div className="font-semibold tabular-nums">
+                  <div className="font-mono font-semibold tabular-nums text-money">
                     {animateReveal ? (
                       <Typewriter key={`${dayIndex}-${tile.label}`} text={formatMoney(tile.amount)} />
                     ) : (
@@ -1119,11 +1152,17 @@ export default function ItineraryCard({
             </div>
           )}
           {/* Total is the sum of the row above it, so it reads as a rule beneath them rather
-              than as a sixth peer. Amber is opaque, so unlike the black-tinted tiles it is
-              unaffected by whatever photo lands behind the band. */}
-          <div className="flex items-baseline justify-between gap-3 rounded-xl bg-accent px-4 py-3 text-accent-foreground">
+              than as a sixth peer.
+
+              **It is no longer a filled slab in the action colour.** It used to be `bg-accent` with
+              `text-accent-foreground` — a solid button-coloured bar whose entire content is a number
+              you cannot press. That was defensible under a palette with one accent and no money
+              role; it is not under this one. Now it reads as a total: an opaque ground so it is
+              still unaffected by whatever photograph lands behind the band, a hairline above it,
+              and the figure itself in the money colour and the figure face. */}
+          <div className="flex items-baseline justify-between gap-3 rounded-xl border-t border-money/25 bg-black/40 px-4 py-3 text-on-deep">
             <span className="text-sm font-medium">Total</span>
-            <span className="font-semibold tabular-nums">
+            <span className="font-mono font-semibold tabular-nums text-money">
               {animateReveal ? (
                 <Typewriter key={`${dayIndex}-total`} text={formatMoney(total)} />
               ) : (

@@ -16,6 +16,12 @@ const eslintConfig = defineConfig([
     "public/cesium/**",
     // Same, for MapLibre's tile-parsing worker — scripts/copy-maplibre-assets.mjs.
     "public/maplibre/**",
+    // Git worktree scratch space. `.gitignore` already excludes this, but a flat config does not
+    // read `.gitignore` — so the moment anyone runs `git worktree add` here, `npm run lint` starts
+    // linting a second full copy of the app and reports thousands of problems in files that are
+    // not in this branch. Measured: one worktree turned a clean run into 39,438 problems, which
+    // makes the gate useless exactly when someone is running it to check their own work.
+    ".worktrees/**",
   ]),
 ]);
 

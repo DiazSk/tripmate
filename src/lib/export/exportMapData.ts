@@ -216,9 +216,21 @@ export function parseMapContext(elements: OverpassElement[]): MapContext {
 /**
  * Asks each mirror in turn. `null` only when every one of them failed.
  *
- * The other four Overpass callers in this repo use the primary alone, because they fire while the
- * traveler is doing something else. This one blocks a Download button they just pressed, so it
- * gets `placeSearch.ts`'s failover instead.
+ * **Deliberately still its own loop, not `src/lib/overpass.ts`'s.** The comment here used to say
+ * the other callers "use the primary alone" — that stopped being true when `overpass.ts` gave all
+ * five of them the shared failover. What keeps this copy separate now is a genuinely different
+ * contract, not neglect:
+ *
+ *  - a **deadline** shared across the whole walk, because this blocks a Download button the
+ *    traveler just pressed, where the others fire while they are doing something else;
+ *  - a 7s per-attempt cap derived from that deadline (see `OVERPASS_TIMEOUT_MS` above);
+ *  - a `content-length` guard against an oversized bbox response;
+ *  - a fourth mirror the shared list does not carry;
+ *  - a one-line `console.warn` naming every mirror that refused.
+ *
+ * It does carry the `remark` check, independently of the shared client — a server-side Overpass
+ * timeout arrives as HTTP 200 and is the likely failure on a wide bbox, not the exceptional one.
+ * If these two ever need to converge, the deadline is the thing to lift into `overpass.ts`.
  */
 async function askOverpass(body: string, deadline: number): Promise<OverpassElement[] | null> {
   const failures: string[] = [];

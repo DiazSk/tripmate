@@ -3,6 +3,7 @@ import type { TierId } from "./tiers";
 import type { Holiday } from "./holidays";
 import type { CandidatePoi } from "./pois";
 import type { DietaryNeeds } from "./travelerProfile";
+import type { BikeshareSystem } from "./bikeshare";
 
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
@@ -138,10 +139,16 @@ export interface RawFetch {
   destination: DestinationBasics;
   weather: { available: boolean; historical: boolean; days: DayWeather[] };
   holidays: { available: boolean; events: Holiday[] };
-  /** No reliable free data source exists for this yet — always `available: false` today.
-   *  See the itinerary-planner Step 2a audit; kept as an explicit gap rather than fabricated
-   *  data or an LLM call (2a is plain fetching, not generation). */
+  /** Was a permanent `available: false` from the day the pipeline shipped — there was no free
+   *  source for it, and the gap was left explicit rather than filled with fabricated data. GBFS
+   *  closes the *bike* half of it (`bikeshare.ts`), so this now goes `available: true` for a
+   *  destination with a resolved bikeshare system. Transit is still unproven: `routeMatrix.ts`
+   *  remains a stub, so `walk` here is still an assumption rather than a finding. */
   transportModes: { available: boolean; modes: string[] };
+  /** The city's bikeshare, or `available: false` for "we could not tell". Deliberately NOT
+   *  "this city has none" — `bikeshare.ts` cannot distinguish an unmatched city from a bikeless
+   *  one, and only one of those is safe to tell a traveler. */
+  bikeshare: { available: boolean; system: BikeshareSystem | null };
   candidatePois: { available: boolean; pois: CandidatePoi[] };
 }
 
@@ -315,7 +322,14 @@ export interface ResolvedFlags {
 
 // --- Step 3: join / barrier ------------------------------------------------------------------
 
-export type TransportMode = "walk" | "transit" | "drive";
+/** How you get between two stops. Distinct from `StopCategory`, which also contains the literal
+ *  `"transit"` but classifies what a stop *is* rather than how you reach it — the two are never
+ *  converted into each other.
+ *
+ *  `"bike"` only ever enters a mode list on evidence: `bikeshare.ts` has to resolve a real system
+ *  with real docks near the destination first. `DEFAULT_MODES` does not include it, so a city with
+ *  no bikeshare plans exactly as it did before. */
+export type TransportMode = "walk" | "bike" | "transit" | "drive";
 
 /** Why a field is the value it is: fetched for real, degraded to a flagged default, or absent
  *  entirely. Downstream steps read this instead of guessing from empty arrays. */

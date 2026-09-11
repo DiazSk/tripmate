@@ -1,7 +1,9 @@
+/** Tinted-on-dark, matching `TraceStatusBadge` — see the note there on why the `-50`/`-700`
+ *  light-mode pair had to go. */
 const STYLES: Record<string, string> = {
-  cli: "bg-sky-50 text-sky-700 border-sky-200",
-  api: "bg-violet-50 text-violet-700 border-violet-200",
-  unknown: "bg-stone-100 text-stone-600 border-stone-200",
+  cli: "bg-sky-400/15 text-sky-300 border-sky-400/30",
+  api: "bg-violet-400/15 text-violet-300 border-violet-400/30",
+  unknown: "bg-tile text-muted border-card-border",
 };
 
 const LABELS: Record<string, string> = {

@@ -6,8 +6,8 @@ import { createPortal } from "react-dom";
 import { devLabel } from "@/lib/devInspector";
 import { formatMoney } from "@/lib/format";
 import {
-  STAGE_SECONDS,
   STEP_GROUPS,
+  TYPICAL_WAIT_PHRASE,
   type StageProgress,
   generationProgress,
   isStepTerminal,
@@ -73,20 +73,6 @@ const MAX_WEEK_COLUMNS = 7;
 /** ~150s of waiting at this interval is ~21 facts. `destinationFacts` is capped above that so the
  *  feed does not loop back to the first while the traveller is still reading. */
 const FACT_INTERVAL_MS = 7000;
-
-/** Measured, not guessed: `STAGE_SECONDS` sums to ~151s. Stated once as a range rather than
- *  counted down — a ticking estimate that stalls at "10 seconds" is worse than no estimate. */
-const TYPICAL_MINUTES = Math.round((Object.values(STAGE_SECONDS).reduce((a, b) => a + b, 0) / 60) * 2) / 2;
-
-/** "2.5" reads as an instrument reading; a wait is spoken, not measured. */
-function spellMinutes(n: number): string {
-  const whole = Math.floor(n);
-  const half = n - whole >= 0.5;
-  const words = ["zero", "one", "two", "three", "four", "five"];
-  const w = words[whole] ?? String(whole);
-  if (!half) return `${w} minute${whole === 1 ? "" : "s"}`;
-  return whole === 0 ? "half a minute" : `${w} and a half minutes`;
-}
 
 /** "2026-08-20" → "Thu 20", using UTC accessors. A date-only string parses as UTC midnight, so
  *  local accessors roll it back a day anywhere west of Greenwich — this app has shipped that bug
@@ -235,7 +221,7 @@ export default function GenerationScreen({
               is the margin worth having on the one element people actually read while waiting. */}
           <div className="grid gap-x-10 gap-y-5 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
             <div>
-              <p className="text-[0.62rem] font-semibold tracking-[0.14em] text-accent uppercase">
+              <p className="text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-accent uppercase">
                 {mode === "refine" ? "Reworking" : "Planning"} {city}
               </p>
               {/* `key` on the index restarts the entrance, so a change reads as a new line
@@ -244,7 +230,7 @@ export default function GenerationScreen({
                   otherwise shove the whole band up and down every seven seconds. */}
               <p
                 key={factIndex}
-                className="mt-2 min-h-[4rem] text-[clamp(1rem,1.7vw,1.375rem)] leading-[1.3] tracking-[-0.035em] text-foreground motion-safe:[animation:value-in_520ms_cubic-bezier(0.16,1,0.3,1)_backwards]"
+                className="mt-2 min-h-[4rem] text-[clamp(1rem,1.7vw,1.375rem)] leading-[1.3] tracking-[var(--tracking-heading)] text-foreground motion-safe:[animation:value-in_520ms_cubic-bezier(0.16,1,0.3,1)_backwards]"
               >
                 {facts[factIndex] ?? `Reading everything we can find about ${city}.`}
               </p>
@@ -257,7 +243,7 @@ export default function GenerationScreen({
                 return (
                   <div key={step.id} className="flex items-start gap-2">
                     <span
-                      className={`text-[0.62rem] font-semibold leading-none ${
+                      className={`text-[0.6875rem] font-semibold leading-none ${
                         state === "waiting" || state === "failed" ? "text-white/40" : "text-accent"
                       }`}
                     >
@@ -313,13 +299,13 @@ export default function GenerationScreen({
 
           <div className="flex shrink-0 items-center gap-4">
             <p className="text-xs text-muted">
-              {complete ? "Opening your plan…" : `Usually about ${spellMinutes(TYPICAL_MINUTES)}.`}
+              {complete ? "Opening your plan…" : `Usually about ${TYPICAL_WAIT_PHRASE}.`}
             </p>
             {onCancel && cancelReady && !complete && (
               <button
                 type="button"
                 onClick={onCancel}
-                className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold tracking-[-0.045em] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
+                className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold tracking-[var(--tracking-body)] text-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:scale-[0.98]"
               >
                 Cancel
               </button>

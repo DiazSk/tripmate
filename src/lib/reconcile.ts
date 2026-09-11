@@ -81,6 +81,17 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
     });
   }
 
+  // Shaped like the `holidays` rule rather than the `transportModes` one directly above: that
+  // rule has a safe default to fall back to, and "assume a bikeshare exists" is not one. An
+  // unresolved lookup has to read as unknown, never as absent.
+  if (!rawFetch.bikeshare.available) {
+    notes.push({
+      field: "bikeshare",
+      status: "unavailable",
+      detail: "Bikeshare coverage unknown — don't plan a leg around a shared bike.",
+    });
+  }
+
   if (!rawFetch.destination.resolved) {
     notes.push({
       field: "destination",

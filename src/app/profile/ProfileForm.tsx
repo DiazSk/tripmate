@@ -3,9 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import BackButton from "@/components/BackButton";
 import SiteFooter from "@/components/SiteFooter";
 import SectionOpener from "@/components/blue-hour/SectionOpener";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
@@ -150,8 +148,8 @@ function MemoryThumb({ trip }: { trip: TripSummary }) {
  * way through to the rest. `My memories` stays a top-level route and a top-level nav link.
  *
  * With nothing saved there is no photography to show, so the frame takes `.scene-void` — the
- * app's existing answer to a beat with no photograph to collage (`HeroPoster`, `/trips`' own empty
- * state) — rather than an empty grey box pretending a picture failed to load.
+ * app's existing answer to a beat with no photograph to collage (`/trips`' own empty state) —
+ * rather than an empty grey box pretending a picture failed to load.
  */
 function Memories({ trips }: { trips: TripSummary[] }) {
   const [lead, ...rest] = trips;
@@ -216,7 +214,6 @@ export default function ProfileForm({
    *  state (nothing saved yet), not a loading one — the server read is synchronous. */
   recentTrips: TripSummary[];
 }) {
-  const router = useRouter();
   // Seeded from the server read rather than fetched on mount. There is no loading state left to
   // model: the page component reads SQLite synchronously, so by the time this renders the profile
   // is either here or genuinely absent (nothing saved yet), and `DEFAULTS` is the right answer for
@@ -291,17 +288,6 @@ export default function ProfileForm({
           globe canvas instead of reaching any picker or the Save button. Same pattern
           trips/page.tsx and TripView.tsx already use on their own outermost box. */}
       <div className="pointer-events-auto">
-        {/* `/profile` is reachable from both the home page and a trip detail, so a fixed
-            destination would be wrong from one of them — this pops history instead. The
-            fallback covers a direct link or a refresh, where there is no entry to pop and
-            `back()` would silently do nothing. */}
-        <BackButton
-          onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
-          className="mb-6"
-        >
-          Back
-        </BackButton>
-
         {/* The reference's contact-page split: photography one side, the form the other. Single
             column until `lg` — two columns on a phone would give the photo a strip too narrow to
             be a photograph and the pickers too little room to stay tappable.
@@ -356,13 +342,20 @@ export default function ProfileForm({
                 the spacing belongs to this arrangement, not to the component. */}
             <div className="pb-10">
             <SectionOpener label="Profile" rule={false}>
-            {/* `.font-display`, the app's own display step — not `.font-scene-display`. They are
-                the same face at the same weight and differ only in tracking, but the scene classes
-                are scoped to the Persuade surface, and this is an Operate one. Same reason the
-                subline below does not take `.scene-prose`: its own comment reserves that 1.8
-                leading for the landing and warns it costs a screenful of scanning on a dense
-                panel. */}
-            <h1 className="font-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.05] text-foreground">
+            {/* `.font-display-xl` — the display serif at a size this page picks. **Not**
+                `.font-scene-display`: the scene classes carry the landing's own fluid clamp and are
+                scoped to the Persuade surface, and this is an Operate one. **Not** `.font-display`
+                either, which since the Melodrama split is the *sans* heading step for panels and
+                cards, two registers below a page masthead. `/trips` sets its masthead the same way,
+                and these two account pages sitting in different faces was the tell.
+
+                Same reason the subline below does not take `.scene-prose`: that class reserves its
+                open leading for the landing and costs a screenful of scanning on a dense panel.
+
+                Three classes with overlapping names is a real trap, so: if you change this line,
+                change this note. The last two people who touched it did not, and both times the
+                comment above ended up describing something the code was not doing. */}
+            <h1 className="font-display-xl text-[clamp(2rem,4vw,3rem)] text-foreground">
               Your travel profile
             </h1>
             <p className="max-w-md pt-4 text-sm leading-relaxed text-muted">
@@ -441,8 +434,13 @@ export default function ProfileForm({
         {/* Cancels this `<main>`'s horizontal and bottom padding, the same technique ScrollStory
             and `/trips`' hero already use: the footer is a full-bleed band with its own gutters
             and its own `pb-8`, so it has to reach all three edges rather than sit inside the
-            column the form occupies. */}
-        <div className="-mx-5 -mb-16 sm:-mx-6 sm:-mb-24">
+            column the form occupies.
+
+            `mt-14 sm:mt-16` matches `/trips` and is measured off the landing — see the longer note
+            at that call site. The short version: `SiteFooter`'s hairline needs the closing interval
+            a `.scene-band` would have given it, and the form grid above has no bottom padding of
+            its own, so the rule was landing flush on the last field. */}
+        <div className="mt-14 -mx-5 -mb-16 sm:mt-16 sm:-mx-6 sm:-mb-24">
           <SiteFooter />
         </div>
       </div>

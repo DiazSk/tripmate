@@ -133,19 +133,28 @@ export interface DayPalette {
  * clusters are labelled and usually nowhere near each other. It is not safe as an identifier,
  * which is why every cluster carries a "Day N" label rather than relying on colour alone.
  *
- * **Solar Ember is a knowing exception to a standing rule.** The 0-50 degree amber/red band
- * belongs to `--accent` ("you are pointing at this") and `--map-pin-red` (the destination pin),
- * and every other entry stays out of it for that reason. This one is in it by explicit request.
- * The collision it creates is handled in `emphasisColorFor` below rather than left to chance —
- * read that before adding a second warm entry, because the mitigation has exactly one fallback
- * colour and this palette already spends it.
+ * **One entry always collides with `--accent`, and which one changed when the accent did.**
+ * The accent owns a hue band on the globe ("you are pointing at this"), and any day drawn inside
+ * that band would show no visible change on hover — the interaction still fires, the feedback is
+ * simply gone. `emphasisColorFor` below handles it by returning white for that day, and the
+ * mitigation has exactly one fallback colour, so at most one entry may sit in the band.
+ *
+ * Under the previous amber accent the band was 0-50° and the colliding day was Solar Ember
+ * (`--route-day-3`, 22.1°), in it by explicit request. The accent is now jade at 156.8°, so
+ * the band moved to 135-180° and the colliding day is **Verdant Drift**
+ * (`--route-day-4`, 155.4°) — 1.4° away, about as direct a collision as this can get.
+ * Solar Ember is now comfortably outside and gets the ordinary accent tint back.
+ *
+ * The ramp itself is deliberately unchanged. It is map-native, it was never derived from the
+ * external reference the interface palette was, and its five hues are spaced against each other
+ * rather than against the interface — so a new accent moves the band, not the ramp.
  */
 export const DAY_PALETTES: readonly DayPalette[] = [
-  { core: "--route-neon-cyan", glow: "--route-neon-cyan-glow" },
-  { core: "--route-neon-magenta", glow: "--route-neon-magenta-glow" },
-  { core: "--route-neon-amber", glow: "--route-neon-amber-glow" },
-  { core: "--route-neon-lime", glow: "--route-neon-lime-glow" },
-  { core: "--route-neon-violet", glow: "--route-neon-violet-glow" },
+  { core: "--route-day-1", glow: "--route-day-1-glow" },
+  { core: "--route-day-2", glow: "--route-day-2-glow" },
+  { core: "--route-day-3", glow: "--route-day-3-glow" },
+  { core: "--route-day-4", glow: "--route-day-4-glow" },
+  { core: "--route-day-5", glow: "--route-day-5-glow" },
 ] as const;
 
 /**
@@ -174,10 +183,22 @@ export function dayGlowToken(dayIndex: number): string {
   return dayPalette(dayIndex).glow;
 }
 
-/** Hues, in degrees, that `--accent` owns on the globe. `--accent` is around 32 and
- *  `--map-pin-red` around 4; the band is drawn wide enough to cover both plus the distance at
- *  which two saturated warm hues stop being told apart at a glance over photography. */
-const ACCENT_HUE_BAND: readonly [number, number] = [0, 50];
+/** Hues, in degrees, that `--accent` owns on the globe.
+ *
+ *  **This constant must move whenever `--accent` does, and nothing will tell you if it doesn't.**
+ *  It is a `.ts` literal, so a palette sweep through `globals.css` misses it entirely, and the
+ *  failure is silent: `emphasisColorFor` keeps returning a colour, hover keeps firing, the
+ *  feedback simply stops being visible on one day.
+ *
+ *  Accent is `#28b981` at **156.8°**. The band is 135-180 — wide enough to cover it plus the
+ *  distance at which two saturated greens stop being told apart at a glance over photography.
+ *
+ *  It used to read `[0, 50]`, sized for the previous amber accent (`#fb9826`, ~32°) *and* for
+ *  `--map-pin-red` at ~4°. Half that width was therefore justified by a token that has never
+ *  existed: `--map-pin-red` is referenced in three comments and defined nowhere, and the real
+ *  destination pin carries its `#FF3B30` as a literal in `mapRenderer.ts`/`maplibreRenderer.ts`.
+ *  The band no longer pretends otherwise — it covers the accent, and only the accent. */
+const ACCENT_HUE_BAND: readonly [number, number] = [135, 180];
 
 /** A colour's hue in degrees, 0-360. Grey returns 0, which is harmless here: a desaturated
  *  colour cannot be confused with a saturated accent whatever its hue says. */
