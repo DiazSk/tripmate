@@ -18,13 +18,18 @@ const HeroFrames = dynamic(() => import("./HeroFrames"), { ssr: false });
  * The landing's first viewport: a scroll-scrubbed film of Petra, a stated proposition, and the
  * trip entry itself.
  *
- * **What this replaced, and why.** The previous hero was a single enormous word ("Somewhere.")
- * over two interlocking alpha-cut photographs, with a "Plan a trip" button that opened a form on
- * the next screen. Every load-bearing measurement in it came from an external reference site and
- * was recorded as such in this file's own comments. It was a good composition. It was not this
- * product's composition, and the word at the centre of it said nothing a traveller could act on.
- * That collapsed to one `object-cover` photograph on a CSS parallax, which is what this beat was
- * until the frame sequence landed.
+ * **The one word is back, and the thing that made it wrong before is not.** This beat opened on a
+ * single enormous word ("Somewhere.") over two interlocking alpha-cut photographs, with a "Plan a
+ * trip" button that opened a form on the *next* screen. Every load-bearing measurement in it came
+ * from an external reference site. Two separate objections were recorded against it, and only one
+ * of them was ever about the word: the borrowed measurements (fixed — none of that geometry
+ * survives), and that "the word at the centre of it said nothing a traveller could act on".
+ *
+ * That second objection was a property of the *layout*, not of the word. With the form a screen
+ * away, the headline was the only thing on offer and had to carry the proposition. The entry
+ * capsule now sits directly under it, so the actionable thing is present and the word is free to
+ * be a mood again. The product's claim moved to where it is worth more — `HowItWorks` and the
+ * plan examples, with figures attached.
  *
  * ## The structure, and why it is two elements rather than one
  *
@@ -35,8 +40,12 @@ const HeroFrames = dynamic(() => import("./HeroFrames"), { ssr: false });
  * looks exactly like sticky never having been applied. This is the same trap `globals.css`
  * documents for `scroll(nearest block)` on the `--story` timeline, met from the other direction.
  *
- * `.hero-section` stays on the stage so every rule already written against it — notably the
- * ultrawide `padding-bottom: 12vh` — keeps applying untouched.
+ * `.hero-section` stays on the stage so every rule already written against it keeps applying
+ * untouched. It is `justify-end`, and how far the group sits off that bottom edge is decided in
+ * globals.css — a hard 56px anchor on a phone so the Treasury reads clear above the stacked
+ * capsule, and `clamp(5rem, 26vh, 18rem)` from `sm` up, which is a shade below centre. The old
+ * ultrawide `margin-left: 6vw` is gone: it anchored a left-aligned block of text, and this is one
+ * centred word over one centred pill.
  *
  * ## The pin is back, and it is not the pin that was deleted
  *
@@ -145,27 +154,25 @@ export default function Hero({ onPlan }: { onPlan: (prefill?: PlanPrefill) => vo
             for as long as the hero is on screen, and the hero is now on screen four times longer. */}
         <div aria-hidden className="hero-light z-[2]" />
 
-        {/* `hero-block` carries the ultrawide anchor — see globals.css. `mx-auto` alone centred the
-            whole composition into a small island at 2560; past 100rem it anchors left on a
-            viewport-relative inset so the shape survives the frame getting wider. */}
-        <div className="hero-block relative z-[4] mx-auto w-full max-w-[72rem]">
-          {/* Two lines, not one word. The proposition is the product's actual claim and the one
-              thing that separates it from every other planner: the plan costs what you said it
-              would.
+        {/* Centred, on the axis the whole composition now shares — see the `.hero-block` note in
+            globals.css for why the ultrawide left anchor came off with it. */}
+        <div className="hero-block relative z-[4] mx-auto w-full max-w-[72rem] text-center">
+          {/* **One word, and the pill under it is what makes that affordable.**
 
-              `.hero-legible` carries the contrast — a three-layer text-shadow that hugs the glyphs
-              rather than a box behind them. */}
-          <h1 className="hero-rise hero-legible font-scene-hero max-w-[18ch] text-on-deep">
-            Plan a trip that costs what you said it would.
-          </h1>
+              This was the product's full claim set as a two-line sentence ("Plan a trip that costs
+              what you said it would") over a standfirst. Both are gone. The argument for the
+              sentence was that a single evocative word "said nothing a traveller could act on" —
+              true when it was written, because the hero then carried only a button and the actual
+              form lived on the next screen. The entry capsule sits directly beneath now, so the
+              thing to act on is *present*: the word sets the mood and the pill takes the input.
+              A headline does not have to do both.
 
-          <p
-            className="hero-rise hero-legible mt-5 max-w-[46ch] text-[1.0625rem] leading-[1.55] font-medium text-on-deep/85 sm:text-[1.125rem]"
-            style={{ animationDelay: "150ms" }}
-          >
-            Day by day, priced against real lodging and real weather — not a top-ten list with the
-            budget bolted on afterwards.
-          </p>
+              The claim itself is not lost — `HowItWorks` and the plan examples below still make it,
+              with numbers, which is where a budget promise is worth more than in a serif.
+
+              `.hero-legible` carries the contrast: a three-layer text-shadow that hugs the glyphs
+              rather than a box behind them. No `max-w` — a single word sets its own measure. */}
+          <h1 className="hero-rise hero-legible font-scene-hero text-on-deep">Somewhere.</h1>
 
           <HeroSearch onPlan={onPlan} />
         </div>
