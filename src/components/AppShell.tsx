@@ -6,6 +6,8 @@ import { MotionConfig } from "framer-motion";
 import { MapCameraProvider } from "@/lib/mapCamera";
 import { resolveMapEngine } from "@/lib/mapEngine";
 import { ActiveItineraryProvider } from "@/lib/activeItinerary";
+import { ToastProvider } from "@/lib/toast";
+import { StoryModeProvider, useStoryControls } from "@/lib/storyMode";
 import Navbar from "@/components/Navbar";
 import InstallPrompt from "@/components/InstallPrompt";
 import { ScrollContainerContext } from "@/lib/scrollContainer";
@@ -20,6 +22,7 @@ const MapControls = dynamic(() => import("@/components/MapControls"), { ssr: fal
 const MapEngineToggle = dynamic(() => import("@/components/MapEngineToggle"), { ssr: false });
 const MapSearchPanel = dynamic(() => import("@/components/MapSearchPanel"), { ssr: false });
 const StopMarkerLayer = dynamic(() => import("@/components/StopMarkerLayer"), { ssr: false });
+const StoryStage = dynamic(() => import("@/components/StoryStage"), { ssr: false });
 
 /**
  * Every route gets the same full-bleed globe + overlay content layout — the
@@ -69,6 +72,44 @@ export default function AppShell({ children }: { children: ReactNode }) {
     <MotionConfig reducedMotion="user">
       <MapCameraProvider engine={mapEngine} onEngineChange={setMapEngine}>
         <ActiveItineraryProvider>
+        {/* Inside `ActiveItineraryProvider`, because everything that raises a toast today is an
+            action on the plan, and the confirmation should unmount with the thing it confirms. */}
+        <ToastProvider>
+        {/* Inside MapCameraProvider, because Story mode flies the camera; outside the content
+            overlay, because the film's chrome replaces the page's rather than sitting in it. */}
+        <StoryModeProvider>
+        <ShellBody mapEngine={mapEngine} scrollRef={scrollRef}>
+          {children}
+        </ShellBody>
+        </StoryModeProvider>
+        </ToastProvider>
+        </ActiveItineraryProvider>
+      </MapCameraProvider>
+    </MotionConfig>
+  );
+}
+
+/**
+ * The shell's own layout, split out only so it can read `useStoryControls()`.
+ *
+ * Story mode takes the app's chrome off screen — the navbar and the map's search box are the
+ * page's furniture, and a film has none. What stays is the Map/Satellite toggle and the camera
+ * controls, because those belong to the world being filmed and the traveller asked for them
+ * explicitly: the engine they chose keeps drawing.
+ */
+function ShellBody({
+  mapEngine,
+  scrollRef,
+  children,
+}: {
+  mapEngine: ReturnType<typeof resolveMapEngine>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  const story = useStoryControls();
+  /** True while the map search panel is expanded — see the note where `MapControls` is rendered. */
+  const [searchOpen, setSearchOpen] = useState(false);
+  return (
         <div className="app-shell relative flex h-dvh flex-col overflow-hidden bg-canvas md:flex-row">
           <div className="absolute inset-0 z-0 bg-canvas">
             {/* The background must stay mounted across route changes — Next.js already keeps
@@ -116,14 +157,37 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {/* Sibling of the content overlay, not a child of it: the nav is app chrome like
               the map controls, so it stays put no matter what shape a page's own content column
               takes. Above z-10 so the right-docked panels can't cover it. */}
-          <Navbar />
-          <MapEngineToggle />
-          <MapSearchPanel />
-          <InstallPrompt />
-          <MapControls />
+          {/* Everything the film takes off screen: the navbar, the map's search box, the zoom /
+              2D / tilt / compass stack, and the install prompt. All of it is page and map
+              *chrome* — a film has none, and the traveller asked for these specifically.
+
+              `display: none` on a wrapper rather than unmounting, so leaving the film restores
+              each one's own state (an open mobile menu, a typed search, a tilt position) instead
+              of rebuilding it. Fixed descendants are hidden along with it.
+
+              `MapEngineToggle` is the one control that stays, and deliberately: it chooses the
+              world being filmed rather than acting on the page. */}
+          <div className={story.active ? "hidden" : "contents"}>
+            <Navbar />
+            {/* Lifted here rather than held in either component, because it is a fact about the
+                map's chrome as a whole: the expanded search panel occupies the same gutter the
+                zoom / 2D / tilt stack sits in, and two controls fighting over one patch of screen
+                is worse than one of them standing down while the other is open. State in the
+                shared parent is the smallest thing that lets the search say so and the controls
+                hear it — no context, no store, and no way for the two to disagree. */}
+            <MapSearchPanel onOpenChange={setSearchOpen} />
+            <InstallPrompt />
+            {/* **Unmounted, not hidden or disabled.** A dimmed-but-present stack still occupies the
+                gutter the expanded panel needs, and greyed-out chrome under a panel reads as
+                something broken rather than something deliberately out of the way. Unlike the story
+                wrapper above — which uses `display: none` to preserve an open menu and a typed
+                query — there is no state here worth keeping: `MapControls` rebuilds its compass and
+                tilt readout from the live camera on its first frame back, so remounting costs one
+                readout tick and nothing else. */}
+            {!searchOpen && <MapControls />}
+          </div>
+          <MapEngineToggle locked={searchOpen} />
+          <StoryStage />
         </div>
-        </ActiveItineraryProvider>
-      </MapCameraProvider>
-    </MotionConfig>
   );
 }

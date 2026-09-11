@@ -12,6 +12,8 @@ import {
 } from "react";
 import type { Itinerary, Stop } from "@/lib/types";
 import { newStop } from "@/lib/itineraryEdits";
+import { planSlot } from "@/lib/daySlotting";
+import type { TimeOfDay } from "@/lib/timeOfDay";
 
 /**
  * The plan currently on screen, and how to add something to it — for surfaces that live *outside*
@@ -125,21 +127,28 @@ export function useActiveItinerary(): ActiveItinerary | null {
 }
 
 /**
- * Put a found place into a day, as a stop.
+ * Put a found place into a day, at the part of the day the traveler chose.
  *
- * Appended rather than slotted by clock time, and that is the honest choice: a searched place has
- * no time of its own, so there is nothing to sort it on, and guessing one would put a claim in the
- * plan that nobody made. It lands at the end of the day where the traveler can see it and give it
- * a time in the editor.
+ * **This used to append with no time**, on the argument that a searched place has no time of its
+ * own and guessing one would put a claim in the plan that nobody made. Half right: the guess was
+ * the problem, not the placement. "End of the day, no time" is itself a claim, and a worse one —
+ * it drops a breakfast spot after dinner and leaves the traveler to drag it back. So the search
+ * panel asks which part of the day, and `planSlot` puts it where that answer means, without moving
+ * anything already in the plan. See `daySlotting.ts` for the arithmetic and for why it is
+ * arithmetic rather than a model call.
  *
- * Everything else comes from `newStop`'s defaults for the same reason — no cost, no note, no
- * duration. The name and the coordinates are what a search actually knows; the rest is the
- * traveler's to fill in.
+ * `slot` is optional and omitting it keeps the old behaviour, which is what the callers that have
+ * no way to ask (there are none today) would need.
+ *
+ * `durationLabel` is still left blank, and that is the part of the original reasoning that stands:
+ * how long you want to spend somewhere is not something a search result knows. `DEFAULT_VISIT_MIN`
+ * is used to *space* the stop and is deliberately not written into it.
  */
 export function addPlaceToDay(
   itinerary: Itinerary,
   dayIndex: number,
-  place: { name: string; lat: number; lng: number; category?: string }
+  place: { name: string; lat: number; lng: number; category?: string },
+  slot?: TimeOfDay
 ): Itinerary {
   const day = itinerary.days[dayIndex];
   if (!day) return itinerary;
@@ -147,9 +156,19 @@ export function addPlaceToDay(
     ...newStop(place.name, place.lat, place.lng),
     category: stopCategoryFor(place.category),
   };
+
+  const stops = [...day.stops];
+  if (slot) {
+    const plan = planSlot(day.stops, slot);
+    stop.time = plan.time;
+    stops.splice(plan.index, 0, stop);
+  } else {
+    stops.push(stop);
+  }
+
   return {
     ...itinerary,
-    days: itinerary.days.map((d, i) => (i === dayIndex ? { ...d, stops: [...d.stops, stop] } : d)),
+    days: itinerary.days.map((d, i) => (i === dayIndex ? { ...d, stops } : d)),
   };
 }
 

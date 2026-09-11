@@ -180,47 +180,58 @@ test("a day with no other stops falls back to the plain halving", () => {
 
 const VIEW = 900;
 
+/** The module's own Mercator scale, recomputed here so the lift assertions check an independently
+ *  derived number rather than echoing the implementation back at itself. */
+function metresPerPixelAt(zoom, lat) {
+  return (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+}
+
 test("looking straight down needs no lift — a column projects to a point", () => {
-  assert.equal(centreHeightOffsetPx(150, 16, 19, 0, VIEW), undefined);
+  assert.equal(centreHeightOffsetPx(150, 16, 19, 0), undefined);
 });
 
 test("nothing floating means nothing to offset", () => {
-  assert.equal(centreHeightOffsetPx(0, 16, 19, 60, VIEW), undefined);
-  assert.equal(centreHeightOffsetPx(-10, 16, 19, 60, VIEW), undefined);
+  assert.equal(centreHeightOffsetPx(0, 16, 19, 60), undefined);
+  assert.equal(centreHeightOffsetPx(-10, 16, 19, 60), undefined);
 });
 
 test("the offset is positive-y, which pushes the ground point *down* the screen", () => {
-  const o = centreHeightOffsetPx(150, 16, 19, 60, VIEW);
+  const o = centreHeightOffsetPx(150, 16, 19, 60);
   assert.ok(Array.isArray(o), "expected a [x, y] pair");
   assert.equal(o[0], 0, "no horizontal component — the card floats straight up");
   assert.ok(o[1] > 0, "a card above the ground must pull the ground point below centre");
 });
 
 test("more pitch leans the column further across the screen", () => {
-  const shallow = centreHeightOffsetPx(150, 16, 19, 20, VIEW)[1];
-  const steep = centreHeightOffsetPx(150, 16, 19, 70, VIEW)[1];
+  const shallow = centreHeightOffsetPx(150, 16, 19, 20)[1];
+  const steep = centreHeightOffsetPx(150, 16, 19, 70)[1];
   assert.ok(steep > shallow, `expected ${steep} > ${shallow}`);
 });
 
 test("the offset scales with the height it is compensating for", () => {
-  const one = centreHeightOffsetPx(150, 16, 19, 60, VIEW)[1];
-  const two = centreHeightOffsetPx(300, 16, 19, 60, VIEW)[1];
+  const one = centreHeightOffsetPx(150, 16, 19, 60)[1];
+  const two = centreHeightOffsetPx(300, 16, 19, 60)[1];
   assert.ok(Math.abs(two - one * 2) < 1e-6, "doubling the anchor should double the lift");
 });
 
 test("zooming in spends more pixels per metre, so the same card lifts further", () => {
-  const far = centreHeightOffsetPx(150, 13, 19, 60, VIEW)[1];
-  const near = centreHeightOffsetPx(150, 16, 19, 60, VIEW)[1];
+  const far = centreHeightOffsetPx(150, 13, 19, 60)[1];
+  const near = centreHeightOffsetPx(150, 16, 19, 60)[1];
   assert.ok(near > far, `expected ${near} > ${far}`);
 });
 
-test("the cap keeps a steep pitch from driving the stop off the bottom of the frame", () => {
-  // 150m at z20 and 85° is far past a third of the viewport without the clamp.
-  const o = centreHeightOffsetPx(150, 20, 19, 85, VIEW);
-  assert.equal(o[1], VIEW / 3);
+test("a tall anchor at a steep pitch is lifted in full, not clamped to the viewport", () => {
+  // The regression this replaces a clamp with. 150m at z20 and 85° projects to far more than a
+  // third of a viewport, and truncating it there stranded the card near the top of the screen
+  // while leaving the stop at the bottom — the exact framing the clamp was added to avoid. Cesium
+  // aims at the real 3D point and has no equivalent limit; this is the same aim on a flat map.
+  const [, offset] = centreHeightOffsetPx(150, 20, 19, 85);
+  const columnPx = (150 * Math.sin((85 * Math.PI) / 180)) / metresPerPixelAt(20, 19);
+  assert.ok(offset > VIEW / 3, `expected the full lift, not a clamp: ${offset}`);
+  assert.ok(Math.abs(offset - columnPx) < 1e-6, `expected ${columnPx}, got ${offset}`);
 });
 
 test("sub-pixel lifts are dropped rather than passed on as noise", () => {
   // Whole-world zoom: 150m is a rounding error on screen.
-  assert.equal(centreHeightOffsetPx(150, 3, 19, 60, VIEW), undefined);
+  assert.equal(centreHeightOffsetPx(150, 3, 19, 60), undefined);
 });

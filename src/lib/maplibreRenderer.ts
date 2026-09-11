@@ -21,6 +21,7 @@ import {
 import { centreHeightOffsetPx, metresBetween } from "@/lib/peekRange";
 import { createArcTubeLayer, type ArcTube } from "@/lib/maplibreArcLayer";
 import {
+  MAX_FOOTPRINT_M,
   CameraPose,
   CameraState,
   drawnDaysOf,
@@ -67,6 +68,9 @@ const STEM_SOURCE_ID = "tripmate-stems";
 const HIGHWAY_SOURCE_ID = "tripmate-highways";
 const CITY_SOURCE_ID = "tripmate-city";
 const SEARCH_SOURCE_ID = "tripmate-search";
+/** What a search pin paints as when the caller hands over no colour. Only reachable from an older
+ *  or non-panel caller — `MapSearchPanel` always resolves one from `searchPalette.ts`. */
+const SEARCH_PIN_FALLBACK_COLOR = "#f1f5f9";
 const BUILDINGS_LAYER_ID = "tripmate-buildings";
 
 /**
@@ -479,10 +483,14 @@ function addTripLayers(map: MapLibreMap) {
     type: "circle",
     source: SEARCH_SOURCE_ID,
     paint: {
-      "circle-color": cssColor("--accent"),
-      "circle-radius": ["case", ["get", "selected"], 20, 13],
+      // Per feature now, not one accent for the whole layer — with several categories on screen at
+      // once the colour *is* which category a pin belongs to.
+      "circle-color": ["get", "color"],
+      "circle-radius": ["case", ["get", "hovered"], 24, ["get", "selected"], 20, 13],
       "circle-blur": 0.9,
-      "circle-opacity": 0.7,
+      // Three states, most specific first — `case` takes the first true branch, so hovered has to
+      // precede dimmed or a hovered pin in a dimmed set would read the wrong one.
+      "circle-opacity": ["case", ["get", "hovered"], 0.95, ["get", "dimmed"], 0.18, 0.7],
     },
   });
   map.addLayer({
@@ -490,10 +498,16 @@ function addTripLayers(map: MapLibreMap) {
     type: "circle",
     source: SEARCH_SOURCE_ID,
     paint: {
-      "circle-color": cssColor("--accent"),
-      "circle-radius": ["case", ["get", "selected"], 8, 5.5],
-      "circle-stroke-width": 2,
+      "circle-color": ["get", "color"],
+      "circle-radius": ["case", ["get", "hovered"], 9.5, ["get", "selected"], 8, 5.5],
+      // The highlight. Pointing at a row holds that pin at full strength and drops every other one
+      // to a third — "darken this, lighten those" — so the map answers "which one is that" without
+      // the traveler having to read a label. Opacity rather than a second colour: a dimmed pin has
+      // to stay recognisably the same object, and a hue change reads as a different kind of thing.
+      "circle-opacity": ["case", ["get", "dimmed"], 0.3, 1],
+      "circle-stroke-width": ["case", ["get", "hovered"], 2.5, 2],
       "circle-stroke-color": "#0f172a",
+      "circle-stroke-opacity": ["case", ["get", "dimmed"], 0.3, 1],
     },
   });
   map.addLayer({
@@ -538,9 +552,11 @@ function addTripLayers(map: MapLibreMap) {
         ["linear"],
         ["zoom"],
         13.5,
-        ["case", ["get", "selected"], 1, 0],
+        ["case", ["get", "hovered"], 1, ["get", "selected"], 1, 0],
         14.8,
-        1,
+        // Dimmed pins fade their names too, or the labels of eight receded pins go on competing
+        // with the one being pointed at — which is the clutter the dimming was for.
+        ["case", ["get", "dimmed"], 0.35, 1],
       ],
     },
   });
@@ -617,7 +633,9 @@ function addTripLayers(map: MapLibreMap) {
  *   point should land, and the screen displacement of a vertical column is computable from the
  *   pitch and the destination zoom. See `centreHeightOffsetPx`. This was previously dropped, which
  *   left the hover peek framing the road under a stop while the card naming it rode high in the
- *   frame, and on a tall anchor at a steep pitch, out of the clear area entirely.
+ *   frame, and on a tall anchor at a steep pitch, out of the clear area entirely. Uncapped, to
+ *   land the card where Cesium's true 3D aim lands it — see `centreHeightOffsetPx` for why the
+ *   clamp that used to be there made the exact framing it was added to prevent.
  */
 export class MapLibreRenderer implements MapRenderer {
   readonly engine = "maplibre" as const;
@@ -634,6 +652,10 @@ export class MapLibreRenderer implements MapRenderer {
   private soloFocus = false;
   private focusDay: number | null = null;
   private stateFor: (day: number) => DayVisualState = () => "baseline";
+  /** Whether to draw the line between stops — see `connectors` on `RouteDrawRequest`. Held on the
+   *  instance because `rebuildRoute` also runs from `applyDayStates` and `applyEmphasis`, which
+   *  carry no request of their own and must not resurrect the arcs a film has put away. */
+  private connectors = true;
   private emphasis: { day: number; index: number } | null = null;
 
   /** Zoom the arc mesh currently on the GPU was built for, and the pending coalescing frame. */
@@ -677,6 +699,7 @@ export class MapLibreRenderer implements MapRenderer {
     this.soloFocus = request.soloFocus;
     this.focusDay = request.focusDay;
     this.stateFor = request.stateFor;
+    this.connectors = request.connectors ?? true;
     this.emphasis = null;
     this.rebuildRoute();
     // Terrain-draped geometry has no float to sample. Zero is the honest answer and it is what
@@ -744,7 +767,10 @@ export class MapLibreRenderer implements MapRenderer {
         glowWidth: ROUTE_GLOW_WIDTH_PX * (active ? ACTIVE_GLOW_WIDTH_SCALE : 1),
       };
 
-      if (stops.length > 1) {
+      // Both forms of connector, together — the draped `route` line and the elevated arc tubes.
+      // Hiding only the tubes would leave a flat rope on the terrain, which is the same spoiler
+      // one dimension down. See `connectors` on `RouteDrawRequest`.
+      if (this.connectors && stops.length > 1) {
         routeFeatures.push({
           type: "Feature",
           properties: { ...base, kind: "route", emphasised: false },
@@ -858,16 +884,92 @@ export class MapLibreRenderer implements MapRenderer {
   }
 
   showSearchResults(places: SearchPin[]) {
+    const anyHovered = places.some((p) => p.hovered);
     this.setData(SEARCH_SOURCE_ID, {
       type: "FeatureCollection",
       features: places.map((place) => ({
         type: "Feature",
         // `id` on the feature as well as in the properties: MapLibre needs it for feature state
         // if this ever grows hover styling, and the properties are what the paint expressions read.
-        properties: { id: place.id, name: place.name, selected: !!place.selected },
+        // `dimmed` is computed here rather than left to the paint expression, because a paint
+        // expression can only see the feature it is drawing and this is a fact about the *set*:
+        // "some other pin is hovered". Resolving it once per update is also cheaper than the
+        // alternative of a feature-state write per pin on every pointer move.
+        properties: {
+          id: place.id,
+          name: place.name,
+          selected: !!place.selected,
+          hovered: !!place.hovered,
+          dimmed: anyHovered && !place.hovered,
+          // Resolved by the caller (see `SearchPin.colorHex`). The `??` is the layer's only say in
+          // the matter: a feature with no colour still has to paint as something.
+          color: place.colorHex ?? SEARCH_PIN_FALLBACK_COLOR,
+        },
         geometry: { type: "Point", coordinates: [place.lng, place.lat] },
       })),
     });
+  }
+
+  /**
+   * See `visibleFootprint` on `MapRenderer`.
+   *
+   * The bottom corners always hit ground. The top two may not: at this app's pitches the top of
+   * the canvas is frequently sky, and `unproject` on a ray that never meets the ground plane
+   * returns a coordinate somewhere out past the horizon. So each top corner is binary-searched
+   * *down* the screen for the highest row that still lands within `MAX_FOOTPRINT_M` of the centre.
+   *
+   * Deliberately not `map.getBounds()`, which answers a different question: it is the axis-aligned
+   * box *containing* the view, so under any rotation or pitch it includes large wedges of ground
+   * that are not on screen at all — and it is exactly those wedges that would pull stops into the
+   * hull that the traveler cannot see.
+   */
+  visibleFootprint(): { lat: number; lng: number }[] {
+    if (!this.isAlive()) return [];
+    const { width, height } = this.viewSizePx();
+    if (width < 2 || height < 2) return [];
+    const centre = this.map.getCenter();
+
+    const landsNear = (x: number, y: number) => {
+      const ll = this.map.unproject([x, y]);
+      if (!Number.isFinite(ll.lat) || !Number.isFinite(ll.lng)) return null;
+      return metresBetween({ lat: centre.lat, lng: centre.lng }, { lat: ll.lat, lng: ll.lng }) <=
+        MAX_FOOTPRINT_M
+        ? { lat: ll.lat, lng: ll.lng }
+        : null;
+    };
+
+    /** The highest point on this screen column that is still real ground. */
+    const topmostGround = (x: number) => {
+      const direct = landsNear(x, 0);
+      if (direct) return direct;
+      let lo = 0;
+      let hi = height - 1;
+      let best = landsNear(x, hi);
+      // 12 halvings resolves a 1000px column to under a pixel, which is far finer than the
+      // kilometre-scale buffer applied on top of this.
+      for (let i = 0; i < 12 && lo < hi; i++) {
+        const mid = Math.floor((lo + hi) / 2);
+        const hit = landsNear(x, mid);
+        if (hit) {
+          best = hit;
+          hi = mid;
+        } else {
+          lo = mid + 1;
+        }
+      }
+      return best;
+    };
+
+    const corners = [
+      topmostGround(0),
+      topmostGround(width - 1),
+      landsNear(width - 1, height - 1),
+      landsNear(0, height - 1),
+    ];
+    // Order matters — the ring has to stay simple. Top-left, top-right, bottom-right, bottom-left
+    // traces the viewport's outline; any other order self-intersects and breaks point-in-polygon.
+    const ring = corners.filter((c): c is { lat: number; lng: number } => c !== null);
+    return ring.length >= 3 ? ring : [];
   }
 
   clearOverlays() {
@@ -988,8 +1090,7 @@ export class MapLibreRenderer implements MapRenderer {
         options.centreHeightM ?? 0,
         fitted?.zoom ?? fitZoom,
         options.lat,
-        pitch,
-        this.viewSizePx().height
+        pitch
       );
       this.map.fitBounds(
         bounds,
@@ -1038,8 +1139,7 @@ export class MapLibreRenderer implements MapRenderer {
       options.centreHeightM ?? 0,
       zoom,
       options.lat,
-      pitch,
-      this.viewSizePx().height
+      pitch
     );
     this.map.flyTo({
       center: [options.lng, options.lat],

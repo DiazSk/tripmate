@@ -31,6 +31,7 @@ const CALL_TYPES: ClaudeCallType[] = [
   "chat",
   "element-edit",
   "place-detail",
+  "story",
   "judge",
 ];
 
@@ -50,6 +51,7 @@ function snapshot() {
       LLM_MODEL_STRONG: process.env.LLM_MODEL_STRONG?.trim() || null,
       LLM_MODEL_CHEAP: process.env.LLM_MODEL_CHEAP?.trim() || null,
       LLM_MODEL_CHAT: process.env.LLM_MODEL_CHAT?.trim() || null,
+      LLM_MODEL_STORY: process.env.LLM_MODEL_STORY?.trim() || null,
     },
     chatFallbackModel: CHAT_FALLBACK_MODEL,
   };

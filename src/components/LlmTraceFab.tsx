@@ -432,7 +432,10 @@ function LlmTraceFab({
             transition={{ type: "spring", stiffness: 260, damping: 22 }}
             // `print:hidden` because this mounts as a sibling of `.app-shell`, outside the reach
             // of the print block's chrome rule in globals.css. It printed as a black dot.
-            className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-stone-900 text-white shadow-lg transition-transform hover:scale-105 print:hidden"
+            // `llm-trace-fab` for the same reason `print:hidden` is here: this mounts as a
+            // sibling of `.app-shell`, so neither the print block nor Story mode's own chrome
+            // hiding can reach it from inside. The class is the hook both use.
+            className="llm-trace-fab fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-stone-900 text-white shadow-lg transition-transform hover:scale-105 print:hidden"
             aria-label="Open LLM trace viewer"
             title="LLM trace viewer"
           >
@@ -449,7 +452,7 @@ function LlmTraceFab({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 16 }}
             transition={{ type: "spring", stiffness: 260, damping: 24 }}
-            className="fixed bottom-5 right-5 z-50 flex h-[32rem] w-[23rem] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
+            className="llm-trace-fab fixed bottom-5 right-5 z-50 flex h-[32rem] w-[23rem] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">

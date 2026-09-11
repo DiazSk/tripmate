@@ -41,6 +41,11 @@ const ZOOM_FLIGHT_SECONDS = 0.45;
 /**
  * Apple Maps-style map chrome: zoom, a 2D/3D snap, a tilt slider and a compass. Rendered once
  * from AppShell as a sibling of the globe, so it sits outside the `pointer-events-none` overlay.
+ *
+ * **Not rendered at all while the map search is open** — `AppShell` owns that, and the note there
+ * records why unmounting beats dimming. Nothing in this component needs to know: its compass
+ * angle and tilt position are read from the live camera on the first frame after mount, so coming
+ * back is indistinguishable from never having left.
  */
 export default function MapControls() {
   const { rendererRef, ready } = useMapCamera();

@@ -109,8 +109,8 @@ export default function DockedPanel({
   /** What the capsule carries while shut. Omitted, it shuts to a bare expand pill. */
   capsule?: CapsuleSummary;
   /** An optional action alongside that summary — the trip page and the result view both pass the
-   *  stop tour, which is the one thing worth reaching while the panel is shut: you closed it to
-   *  watch the map, and the tour is a map animation. */
+   *  day's Play button, which is the one thing worth reaching while the panel is shut: you closed
+   *  it to watch the map, and Story mode is a map animation. */
   capsuleAction?: CapsuleAction;
   children: React.ReactNode;
 }) {
@@ -206,7 +206,7 @@ export default function DockedPanel({
           grows the panel past the viewport instead of scrolling inside it.
 
           `display: none` while collapsed (globals.css) rather than unmounted: the active day, the
-          scroll position, the stop tour's interval and the reveal stagger all live in this
+          scroll position and the reveal stagger all live in this
           subtree, and unmounting would reset every one of them on each glance at the map. The
           opacity animation is therefore only ever seen on the way *back* — expanding fades the
           plan in behind the opening panel, while collapsing cuts, because the capsule taking its

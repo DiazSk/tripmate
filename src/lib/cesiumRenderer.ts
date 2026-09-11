@@ -35,7 +35,9 @@ import {
   SearchPin,
   visibleMapWidthPx,
   ZoomStepOptions,
+  MAX_FOOTPRINT_M,
 } from "@/lib/mapRenderer";
+import { metresBetween } from "@/lib/peekRange";
 
 /** Cesium is only ever reached through `await import("cesium")`, so the helpers below take the
  *  module as a parameter rather than importing it — same contract as mapRoute's. */
@@ -138,7 +140,14 @@ export class CesiumRenderer implements MapRenderer {
     const geometries: RouteGeometry[] = [];
     request.days.forEach((stops, day) => {
       if (request.soloFocus && request.focusDay !== null && day !== request.focusDay) return;
-      const geometry = buildRouteGeometry(viewer, Cesium, stops, altitudeAtDraw, dayPalette(day));
+      const geometry = buildRouteGeometry(
+        viewer,
+        Cesium,
+        stops,
+        altitudeAtDraw,
+        dayPalette(day),
+        request.connectors ?? true
+      );
       geometry.setDayState(request.stateFor(day));
       geometries[day] = geometry;
     });
@@ -288,6 +297,78 @@ export class CesiumRenderer implements MapRenderer {
     // clear because nothing was ever drawn; the method exists so the contract has one shape on
     // both engines and callers never branch on which one is live.
     void places;
+  }
+
+  /**
+   * See `visibleFootprint` on `MapRenderer`.
+   *
+   * `pickEllipsoid` returns `undefined` for a screen ray that misses the globe entirely, which is
+   * every ray above the limb — so the same walk-down-the-column search MapLibre needs is needed
+   * here, for the same reason and with a different miss signal.
+   *
+   * Nothing in the app calls this on Cesium today: the search panel is Map-only, and this engine
+   * answers `showSearchResults` with a no-op. It is implemented rather than thrown from because
+   * the contract's whole value is that a caller never has to ask which engine is live — a method
+   * that works on one and throws on the other is worse than no method at all.
+   */
+  visibleFootprint(): { lat: number; lng: number }[] {
+    if (!this.isAlive()) return [];
+    const canvas = this.viewer.canvas;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (width < 2 || height < 2) return [];
+    // Destructured once: this class reaches Cesium through an injected module handle, not a
+    // top-level import (see the note on `CesiumModule`).
+    const Cesium = this.Cesium;
+    const ellipsoid = this.viewer.scene.globe.ellipsoid;
+    const camera = this.viewer.camera;
+    const centreCarto = Cesium.Cartographic.fromCartesian(camera.positionWC);
+    const centre = centreCarto
+      ? {
+          lat: Cesium.Math.toDegrees(centreCarto.latitude),
+          lng: Cesium.Math.toDegrees(centreCarto.longitude),
+        }
+      : null;
+
+    const landsNear = (x: number, y: number) => {
+      const hit = camera.pickEllipsoid(new Cesium.Cartesian2(x, y), ellipsoid);
+      if (!hit) return null;
+      const carto = Cesium.Cartographic.fromCartesian(hit);
+      if (!carto) return null;
+      const point = {
+        lat: Cesium.Math.toDegrees(carto.latitude),
+        lng: Cesium.Math.toDegrees(carto.longitude),
+      };
+      if (centre && metresBetween(centre, point) > MAX_FOOTPRINT_M) return null;
+      return point;
+    };
+
+    const topmostGround = (x: number) => {
+      const direct = landsNear(x, 0);
+      if (direct) return direct;
+      let lo = 0;
+      let hi = height - 1;
+      let best = landsNear(x, hi);
+      for (let i = 0; i < 12 && lo < hi; i++) {
+        const mid = Math.floor((lo + hi) / 2);
+        const hit = landsNear(x, mid);
+        if (hit) {
+          best = hit;
+          hi = mid;
+        } else {
+          lo = mid + 1;
+        }
+      }
+      return best;
+    };
+
+    const ring = [
+      topmostGround(0),
+      topmostGround(width - 1),
+      landsNear(width - 1, height - 1),
+      landsNear(0, height - 1),
+    ].filter((c): c is { lat: number; lng: number } => c !== null);
+    return ring.length >= 3 ? ring : [];
   }
 
   clearOverlays() {

@@ -33,7 +33,7 @@ import DestinationSearch from "@/components/DestinationSearch";
 import ScrollStory from "@/components/blue-hour/ScrollStory";
 import type { PlanPrefill } from "@/components/blue-hour/planExamples";
 import DockedPanel from "@/components/DockedPanel";
-import { useStopTour } from "@/lib/useStopTour";
+import { useStoryControls } from "@/lib/storyMode";
 import { PauseIcon, PlayIcon } from "@/components/icons";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
@@ -552,10 +552,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * and the plan is one click behind the panel's arrow.
    */
   const [planCollapsed, setPlanCollapsed] = useState(true);
-  // Owned here, not in ItineraryCard, so the capsule's play button and the card's drive one
-  // timer. `useStopTour` keeps `playing` in local state, so a second call site is a second
-  // interval and a second boolean that disagree the moment either is used.
-  const tour = useStopTour();
+  // Story mode, for the capsule's Play button. One film at a time, owned by the app rather than
+  // by this page (`storyMode.tsx`) — so this and the card's own Play button are one control
+  // reached from two places.
+  const story = useStoryControls();
   const [generating, setGenerating] = useState(false);
   const [refining, setRefining] = useState(false);
   const [notifyOnDone, setNotifyOnDone] = useState(false);
@@ -802,7 +802,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    *  gating the card's own controls: the two come apart at both ends of a run — `generating` is
    *  true for the ten-odd seconds before the first stop arrives, and stays true through the
    *  background critique after the plan is interactive — and it is the *draft* that makes an edit
-   *  or a tour a bad idea, not the run. */
+   *  or a narrated film a bad idea, not the run. */
   const streamingPlan = draftItinerary !== null;
 
   // Null until both dates are set, so the tier cards show per-day rates rather than a total
@@ -2413,24 +2413,46 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         <DockedPanel
           collapsible
           busy={refining}
+          // The panel stays through the film, shut to its capsule — see the same note in TripView.
           capsuleAction={
-            // Not offered mid-run: the tour flies a camera through stops that are still
-            // arriving, and it would fight the route replay for the same camera.
+            // Not offered mid-run: the film narrates a finished day, and a day that is still
+            // arriving has neither a script to write from nor a camera to spare — the route
+            // replay owns it until the last stop lands.
             step === "result" && !streamingPlan && itinerary?.days.length
-              ? {
-                  label: tour.playing ? "Stop tour" : "Play tour",
-                  onClick: tour.toggle,
-                  icon: tour.playing ? (
-                    <PauseIcon className="h-4 w-4" />
-                  ) : (
-                    <PlayIcon className="h-4 w-4" />
-                  ),
-                }
+              ? story.active
+                ? {
+                    label: story.phase === "playing" ? "Pause the story" : "Resume the story",
+                    onClick: story.togglePlay,
+                    icon:
+                      story.phase === "playing" ? (
+                        <PauseIcon className="h-4 w-4" />
+                      ) : (
+                        <PlayIcon className="h-4 w-4" />
+                      ),
+                  }
+                : {
+                    label: `Play day ${activeDayIndex + 1} as a story`,
+                    onClick: () =>
+                      itinerary &&
+                      story.start({
+                        itinerary,
+                        dayIndex: activeDayIndex,
+                        destination,
+                        // No trip id: the pre-save view's `trip` prop is the `"preview"`
+                        // placeholder, so its scripts are cached in the browser for the session
+                        // and not against a row.
+                      }),
+                    icon: <PlayIcon className="h-4 w-4" />,
+                  }
               : undefined
           }
           wide={!!focus.target}
           collapsed={planCollapsed}
-          onCollapsedChange={setPlanCollapsed}
+          // Opening the plan mid-film ends the film — see the same handler in TripView.
+          onCollapsedChange={(next) => {
+            if (!next && story.active) story.exit();
+            setPlanCollapsed(next);
+          }}
           // What the capsule carries while the panel is shut — the trip at a glance, so
           // "which day was I reading" survives a look at the map. Pre-save there is no trip
           // row yet, so this reads the form's own destination, the way the arrange board does.
@@ -2451,9 +2473,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 only place either error would otherwise have nowhere to render. */}
             {error && <ErrorNote>{error}</ErrorNote>}
 
-            {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the
-                active day, this panel's scroll position and the stop tour's interval all
-                survive the round trip instead of resetting when ItineraryCard remounts. */}
+            {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the active
+                day and this panel's scroll position both survive the round trip instead of
+                resetting when ItineraryCard remounts. */}
             <div className={selectedStop ? "hidden" : "space-y-6"}>
               {/* Withheld while a run streams. `backToLanding` does not abort the request, so
                   from here it would leave a five-minute model call running invisibly — Cancel in
@@ -2516,7 +2538,6 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
 
               {!focus.target && (
                 <ItineraryCard
-                  tour={tour}
                   itinerary={shownItinerary}
                   budget={budget}
                   destination={destination}
@@ -2574,8 +2595,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   not one.
 
                   **Deliberately NOT `!streamingPlan`, unlike its two neighbours above.** That
-                  term does real work on the card render and the tour, which both act on the
-                  draft. Here it could only ever fire during a refine — where `step` is already
+                  term does real work on the card render and the Play button, which both act on
+                  the draft. Here it could only ever fire during a refine — where `step` is already
                   `"result"` and `itinerary` is the *current* trip, so there is no stale-trip
                   hazard left to guard — and it would unmount this row for the whole rework,
                   losing its in-place busy state for no safety at all. Don't "fix" the
