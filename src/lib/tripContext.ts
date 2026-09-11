@@ -208,6 +208,16 @@ function transportSection(trip: ReconciledTrip): string {
   return note ? `${modes} (assumed — no transport data for this destination)` : modes;
 }
 
+function bikeshareSection(trip: ReconciledTrip): string {
+  if (noteFor(trip.notes, "bikeshare")) return "Unknown — don't plan a leg around a shared bike.";
+  const system = trip.rawFetch.bikeshare.system;
+  if (!system) return "None found for this destination.";
+  const fare = system.dayPass
+    ? `day pass ${system.dayPass.amount} ${system.dayPass.currency}`
+    : "fare not published — tell the traveler to check the operator rather than quoting a price";
+  return `${system.name} — about ${system.stationsNearby} docking stations near the centre; ${fare}.`;
+}
+
 function poiLine(p: EnrichedPoi): string {
   const bits: string[] = [];
   if (p.lat !== null && p.lon !== null) bits.push(`${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`);
@@ -298,6 +308,9 @@ ${holidaysSection(trip)}
 
 ## Transport modes
 ${transportSection(trip)}
+
+## Bikeshare
+${bikeshareSection(trip)}
 
 ## Anchor places (optional, traveler-chosen)
 ${
