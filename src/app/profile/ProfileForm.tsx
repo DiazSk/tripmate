@@ -3,9 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import BackButton from "@/components/BackButton";
 import SiteFooter from "@/components/SiteFooter";
 import SectionOpener from "@/components/blue-hour/SectionOpener";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
@@ -216,7 +214,6 @@ export default function ProfileForm({
    *  state (nothing saved yet), not a loading one — the server read is synchronous. */
   recentTrips: TripSummary[];
 }) {
-  const router = useRouter();
   // Seeded from the server read rather than fetched on mount. There is no loading state left to
   // model: the page component reads SQLite synchronously, so by the time this renders the profile
   // is either here or genuinely absent (nothing saved yet), and `DEFAULTS` is the right answer for
@@ -291,17 +288,6 @@ export default function ProfileForm({
           globe canvas instead of reaching any picker or the Save button. Same pattern
           trips/page.tsx and TripView.tsx already use on their own outermost box. */}
       <div className="pointer-events-auto">
-        {/* `/profile` is reachable from both the home page and a trip detail, so a fixed
-            destination would be wrong from one of them — this pops history instead. The
-            fallback covers a direct link or a refresh, where there is no entry to pop and
-            `back()` would silently do nothing. */}
-        <BackButton
-          onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
-          className="mb-6"
-        >
-          Back
-        </BackButton>
-
         {/* The reference's contact-page split: photography one side, the form the other. Single
             column until `lg` — two columns on a phone would give the photo a strip too narrow to
             be a photograph and the pickers too little room to stay tappable.

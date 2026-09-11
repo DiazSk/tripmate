@@ -293,15 +293,16 @@ export default function Navbar() {
           `grow`, not `flex-1`, for one edge case: `flex-1` sets `flex-basis: 0`, so this cell asks
           for the leftover space rather than for its content's width, and near 320px `New trip` gets
           squeezed toward min-content and wraps to two lines inside a 64px bar. `grow` starts from
-          content width and only expands. Empty on `/profile` and on the dashboards, which costs
-          nothing: with no content there is nothing for the padding to push, so both rules still
-          land against real content on their outer side.
+          content width and only expands. Empty on the dashboards, which costs nothing: with no
+          content there is nothing for the padding to push, so both rules still land against real
+          content on their outer side.
 
-          No `gap` any more. The three route gates below are mutually exclusive — `/` vs `/trips` vs
-          `/trip/*`, and `"/trips".startsWith("/trip/")` is false — and both of this cell's former
-          trailing items (`Profile`, the toggle) now live in the trailing cell, so it holds at most
-          one child on every route and the gap had nothing left to separate. `/`'s own group keeps
-          its `gap-6`. */}
+          No `gap` any more. The four route gates below are mutually exclusive — `/` vs `/trips` vs
+          `/trip/*` vs `/profile`, and `"/trips".startsWith("/trip/")` is false — and both of this
+          cell's former trailing items (`Profile`, the toggle) now live in the trailing cell, so it
+          holds at most one child on every route and the gap had nothing left to separate. The two
+          routes that show more than one link (`/` and `/profile`) each wrap theirs in a group with
+          its own `gap-6`, which is what keeps that true. */}
       <div className="flex grow items-center justify-end px-5 sm:px-6">
         {/* Section anchors + My memories, desktop: inline in the bar itself. On mobile all four
             destinations move into the panel below instead of one staying pinned in the bar beside
@@ -336,6 +337,36 @@ export default function Navbar() {
           <Link href="/trips" className={navLink()}>
             My memories
           </Link>
+        )}
+        {/* `/profile` used to be the one route with an empty bar, and it paid for that with a
+            `Back` button inside the page — a control that popped history, so where it went depended
+            on how you arrived. Both ways out are named here instead, which is the same answer the
+            other routes already give.
+
+            Two links, so they carry their own `gap-6` on a wrapper rather than on the parent. The
+            parent deliberately has no gap (see above); this keeps its "at most one child" shape
+            true while still spacing these two, exactly as `/`'s own group does. */}
+        {isProfile && (
+          <div className="flex items-center gap-6">
+            {/* `New trip` is the one that drops on a phone, and dropping one was not optional:
+                with both shown the bar measured 393px against a 375px viewport, which wrapped both
+                labels onto two lines and clipped `Profile` off the right edge. This is the link to
+                lose because the wordmark beside it already goes to `/` — the same destination — so
+                a narrow bar keeps both routes reachable with one fewer item.
+
+                The breakpoint rides on a wrapper for the reason the trailing cell documents at
+                length: `navLinkBase` already sets `inline-flex`, and appending `hidden` to it loses
+                to Tailwind's alphabetical output order. Here the `sm:` variant is media-gated, so
+                the pair is unambiguous. */}
+            <span className="hidden sm:inline-flex">
+              <Link href="/" className={navLink()}>
+                New trip
+              </Link>
+            </span>
+            <Link href="/trips" className={navLink()}>
+              My memories
+            </Link>
+          </div>
         )}
       </div>
       {/* The trailing cell, mirroring the wordmark's. It holds exactly one control at any width,
