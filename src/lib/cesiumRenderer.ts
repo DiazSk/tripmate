@@ -39,6 +39,7 @@ import {
   MAX_FOOTPRINT_M,
 } from "@/lib/mapRenderer";
 import { metresBetween } from "@/lib/peekRange";
+import type { TilePoi } from "@/lib/tilePlaces";
 
 /** Cesium is only ever reached through `await import("cesium")`, so the helpers below take the
  *  module as a parameter rather than importing it — same contract as mapRoute's. */
@@ -395,6 +396,19 @@ export class CesiumRenderer implements MapRenderer {
       landsNear(0, height - 1),
     ].filter((c): c is { lat: number; lng: number } => c !== null);
     return ring.length >= 3 ? ring : [];
+  }
+
+  /**
+   * See `queryVisiblePois` on `MapRenderer`. Always empty here, and not as a stub.
+   *
+   * Google's Photorealistic 3D Tiles are geometry and imagery — a mesh with textures baked on. The
+   * labels a satellite view shows come from a separate imagery layer, and there is no queryable
+   * venue data anywhere in the payload. So this is the honest answer rather than a gap: the panel
+   * that asks is Map-only anyway (`showSearchResults` above), and an empty list is the same signal
+   * MapLibre gives below z14, which the caller already handles by asking Overpass.
+   */
+  queryVisiblePois(): TilePoi[] {
+    return [];
   }
 
   clearOverlays() {
