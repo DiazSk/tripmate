@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HEADING_LOOKAHEAD_M, measurePath, sampleAt } from "./pathFollow.ts";
+import { HEADING_LOOKAHEAD_M, measurePath, sampleAt, travelEase } from "./pathFollow.ts";
 
 /** Metres per degree of latitude, near enough for building test paths. */
 const M_PER_DEG = 111_320;
@@ -101,4 +101,66 @@ test("degenerate paths produce finite numbers rather than looping or dividing by
   const empty = measurePath([]);
   assert.equal(empty.totalM, 0);
   assert.ok(Number.isFinite(sampleAt(empty, 5).lat));
+});
+
+/* --- travelEase ---
+ *
+ * The check that matters is continuity, and it is the one eyeballing a piecewise curve does not
+ * give you. The first version of this eased the ends and left the middle linear across three
+ * branches that did not meet — it stepped 7.6% of the path in a single frame at each join, twice
+ * per walk, which on a 900m leg is a 68m teleport and reads as the camera stuttering.
+ */
+
+test("the ease starts at 0, ends at 1, and never goes backwards", () => {
+  assert.equal(travelEase(0), 0);
+  assert.equal(travelEase(1), 1);
+  assert.equal(travelEase(-0.5), 0, "before the start");
+  assert.equal(travelEase(1.5), 1, "past the end");
+
+  let previous = 0;
+  for (let t = 0; t <= 1.0001; t += 0.001) {
+    const now = travelEase(t);
+    assert.ok(now >= previous - 1e-12, `went backwards at t=${t.toFixed(3)}`);
+    previous = now;
+  }
+});
+
+test("no frame moves more than a smooth profile would — the join test", () => {
+  // 1000 steps over the whole walk. A continuous profile's largest step is the peak speed times
+  // the step; a broken join shows up as a step many times that, wherever it is.
+  const STEPS = 1000;
+  let worst = 0;
+  let worstAt = 0;
+  let previous = travelEase(0);
+  for (let i = 1; i <= STEPS; i++) {
+    const t = i / STEPS;
+    const now = travelEase(t);
+    const step = now - previous;
+    if (step > worst) {
+      worst = step;
+      worstAt = t;
+    }
+    previous = now;
+  }
+  // Peak speed is 1/(1-0.18) ≈ 1.22, so the largest honest step is ≈ 1.22/1000.
+  assert.ok(
+    worst < 2 / STEPS,
+    `largest step was ${(worst * 100).toFixed(2)}% of the path at t=${worstAt.toFixed(3)} — a join does not meet`
+  );
+});
+
+test("the middle runs at a constant speed", () => {
+  // Three equal slices of the plateau must cover equal ground; that is what makes it a walk
+  // rather than a permanent accelerate-then-brake.
+  const a = travelEase(0.45) - travelEase(0.40);
+  const b = travelEase(0.55) - travelEase(0.50);
+  assert.ok(Math.abs(a - b) < 1e-9, `plateau is not flat: ${a} vs ${b}`);
+});
+
+test("the ends are genuinely slower than the middle", () => {
+  const start = travelEase(0.02) - travelEase(0.01);
+  const middle = travelEase(0.51) - travelEase(0.50);
+  const end = travelEase(0.99) - travelEase(0.98);
+  assert.ok(start < middle / 2, "it should ease in, not launch");
+  assert.ok(end < middle / 2, "and brake, not stop dead");
 });
