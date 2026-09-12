@@ -17,7 +17,7 @@ import { legBearingRad, tourFlightSeconds } from "@/lib/tourPacing";
 import { metresBetween } from "@/lib/peekRange";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import type { NaturalVoiceStatus } from "@/lib/kokoroVoice";
-import { loadNaturalVoice, naturalVoiceSupported } from "@/lib/kokoroVoice";
+import { loadNaturalVoice, naturalVoiceReady, naturalVoiceSupported } from "@/lib/kokoroVoice";
 import {
   estimateDurationMs,
   silence,
@@ -290,16 +290,56 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     [routeDays, request?.dayIndex]
   );
 
+  /**
+   * Start the natural voice's download, if this browser can run it at all.
+   *
+   * Idempotent: `loadNaturalVoice` returns the running load to a second caller rather than starting
+   * a second download, and the `naturalVoiceReady()` check keeps a completed one from having its
+   * progress bar reset to zero underneath it.
+   *
+   * Two callers, deliberately — pressing the toggle, and *starting a film while the toggle is
+   * already on*. See `openDay` for why the second one is not redundant.
+   */
+  const ensureNaturalVoice = useCallback(() => {
+    if (!naturalVoiceSupported()) {
+      setNaturalStatus("unavailable");
+      return;
+    }
+    if (naturalVoiceReady()) {
+      setNaturalStatus("ready");
+      return;
+    }
+    setNaturalStatus("loading");
+    setNaturalProgress(0);
+    void loadNaturalVoice(setNaturalProgress).then((ok) =>
+      setNaturalStatus(ok ? "ready" : "unavailable")
+    );
+  }, []);
+
   /** Every entry point into a day — the first press and the "next day" offer at the end — resets
    *  the same four pieces of state. It happens in these handlers rather than in the fetch effect
    *  below so that no render is triggered from inside an effect body. */
-  const openDay = useCallback((next: StoryRequest) => {
-    setRequest(next);
-    setScript(null);
-    setBeatIndex(0);
-    setPhase("loading");
-    setVoiceBroken(false);
-  }, []);
+  const openDay = useCallback(
+    (next: StoryRequest) => {
+      setRequest(next);
+      setScript(null);
+      setBeatIndex(0);
+      setPhase("loading");
+      setVoiceBroken(false);
+      // **The remembered preference has to be acted on, not just restored.** `voiceEngine` comes
+      // back from localStorage on mount but `naturalStatus` always starts `idle`, and the loader
+      // used to be reachable only from the toggle — so a traveller who chose the natural voice
+      // last week got the platform voice every session until they pressed the toggle twice to
+      // re-arm it. A choice this app bothered to persist should not need making again.
+      //
+      // Here rather than on mount: the weights are hundreds of megabytes and an ORT session to
+      // hold them, and a page nobody plays a film on should pay for neither. The film is the
+      // moment it is needed, and the platform voice covers the first beat or two while it
+      // initialises — the same handover `engine` above already describes.
+      if (voiceEngine === "natural") ensureNaturalVoice();
+    },
+    [voiceEngine, ensureNaturalVoice]
+  );
 
   const start = openDay;
 
@@ -549,20 +589,14 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    * it is a preference, not a state, and a traveller who turns it on and leaves should find it on
    * next time. Progress is reported into state so the toggle can count up rather than spin.
    */
-  const setVoiceEngine = useCallback((next: VoiceEngine) => {
-    setVoiceEngineState(next);
-    storeVoiceEngine(next);
-    if (next !== "natural") return;
-    if (!naturalVoiceSupported()) {
-      setNaturalStatus("unavailable");
-      return;
-    }
-    setNaturalStatus((current) => (current === "ready" ? current : "loading"));
-    setNaturalProgress(0);
-    void loadNaturalVoice(setNaturalProgress).then((ok) =>
-      setNaturalStatus(ok ? "ready" : "unavailable")
-    );
-  }, []);
+  const setVoiceEngine = useCallback(
+    (next: VoiceEngine) => {
+      setVoiceEngineState(next);
+      storeVoiceEngine(next);
+      if (next === "natural") ensureNaturalVoice();
+    },
+    [ensureNaturalVoice]
+  );
 
   /**
    * Publish "a film is running" on the document element.
