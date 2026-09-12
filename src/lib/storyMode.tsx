@@ -18,7 +18,12 @@ import {
   type CompactLeg,
   type StoryScript,
 } from "@/lib/storyScript";
-import { legBearingRad, tourFlightSeconds, travelFollowSeconds } from "@/lib/tourPacing";
+import {
+  blendHeadingRad,
+  legBearingRad,
+  tourFlightSeconds,
+  travelFollowSeconds,
+} from "@/lib/tourPacing";
 import { metresBetween } from "@/lib/peekRange";
 import {
   PROFILE_VERB,
@@ -255,22 +260,48 @@ const WARM_DWELL_MS = 1200;
  * The renderer is read every tick rather than captured once, because the Map/Satellite toggle works
  * mid-film and a driver holding the outgoing engine would be writing to a hidden canvas.
  */
+/** Over the last stretch of a leg, the tangent heading gives way to the heading the arriving stop
+ *  beat will use. A quarter of the path is long enough to read as coming to rest and short enough
+ *  that the middle of the leg still faces the way the street actually goes. */
+const HEADING_SETTLE_FRACTION = 0.25;
+
+/** The glide from the end of the walk onto the canonical stop pose. Short, because the heading
+ *  has already settled and all that is left is the framing offset between `restoreCamera` and
+ *  `flyToPoint`. */
+const ARRIVAL_SETTLE_S = 0.9;
+
 function followPath(
   rendererRef: { current: MapRenderer | null },
   points: { lat: number; lng: number }[],
-  durationS: number
+  durationS: number,
+  opts: {
+    /** The heading the *next* beat will hold. Blended into over the final stretch. */
+    arrivalHeadingRad?: number;
+    /** Called once the walk is done, to settle onto the canonical stop pose. */
+    onArrive?: () => void;
+  } = {}
 ): { cancel: () => void } {
   const path = measurePath(points);
   const cursor = { i: 0 };
   let frame = 0;
+  let done = false;
 
-  const place = (distanceM: number) => {
+  const place = (fraction: number) => {
     const renderer = rendererRef.current;
     if (!renderer?.isAlive()) return false;
-    const { lat, lng, headingRad } = sampleAt(path, distanceM, cursor);
+    const sample = sampleAt(path, fraction * path.totalM, cursor);
+    // Settle the tangent into the arrival heading over the last quarter, so the beat that follows
+    // has no swing left to make. Without this the camera arrived facing along the street and the
+    // stop beat immediately spun it to face the *next* stop — one of the two jerks that made the
+    // handoff read as the film reloading.
+    let headingRad = sample.headingRad;
+    if (opts.arrivalHeadingRad !== undefined && fraction > 1 - HEADING_SETTLE_FRACTION) {
+      const k = (fraction - (1 - HEADING_SETTLE_FRACTION)) / HEADING_SETTLE_FRACTION;
+      headingRad = blendHeadingRad(headingRad, opts.arrivalHeadingRad, k);
+    }
     renderer.restoreCamera({
-      lat,
-      lng,
+      lat: sample.lat,
+      lng: sample.lng,
       rangeM: STORY_RANGE_M,
       headingRad,
       pitchDeg: STORY_PITCH_DEG,
@@ -279,24 +310,34 @@ function followPath(
     return true;
   };
 
-  // Reduced motion: one placement at the midpoint and no frames at all. The beat keeps its full
-  // length, so the film runs the same wall-clock time with more stillness — the same trade the stop
-  // beats already make by dropping their flight to zero.
+  const arrive = () => {
+    if (done) return;
+    done = true;
+    opts.onArrive?.();
+  };
+
+  // Reduced motion: no frames at all, straight to the canonical arrival pose. The beat keeps its
+  // full length, so the film runs the same wall-clock time with more stillness — the same trade the
+  // stop beats already make by dropping their flight to zero.
   if (prefersReducedMotion() || durationS <= 0 || path.totalM === 0) {
-    place(path.totalM / 2);
+    arrive();
     return { cancel: () => {} };
   }
 
   const startedAt = performance.now();
   const tick = () => {
     const t = Math.min((performance.now() - startedAt) / (durationS * 1000), 1);
-    // The same ease both engines already use for their own flights, so a travel beat and the stop
-    // flights either side of it accelerate alike.
-    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    if (!place(eased * path.totalM)) return;
-    // Reaching the end simply stops scheduling. The camera holds where it arrived, which is a
-    // pre-arrival at the place the next beat is about — see `travelFollowSeconds`.
-    if (t < 1) frame = requestAnimationFrame(tick);
+    // Eased at the ends only — `cubicInOut` over a fifteen-second walk spends most of it either
+    // accelerating or braking, which is the opposite of the steady glide this wants. A short
+    // ease-in and ease-out around a long constant middle is how a dolly actually moves.
+    const eased = t < 0.15 ? (t * t) / 0.3 : t > 0.85 ? 1 - (1 - t) * (1 - t) / 0.3 : t;
+    if (!place(eased)) return;
+    if (t < 1) {
+      frame = requestAnimationFrame(tick);
+      return;
+    }
+    frame = 0;
+    arrive();
   };
   frame = requestAnimationFrame(tick);
 
@@ -304,6 +345,10 @@ function followPath(
     cancel: () => {
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
+      // Deliberately NOT calling `arrive()`. A cancel is Skip, Pause or Exit, and each of those
+      // has its own idea of where the camera belongs next; settling onto this leg's destination on
+      // the way out would fight it.
+      done = true;
     },
   };
 }
@@ -432,6 +477,16 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    * line the camera follows to disagree. Empty where a leg did not route, which the beat effect
    * treats as "no path to walk".
    */
+  /**
+   * The stop a travel beat actually finished arriving at, read once by the beat that follows.
+   *
+   * A ref rather than `script.beats[beatIndex - 1]?.kind === "travel"`, because the question is not
+   * "was there a walk" but "did it finish". Skip during a walk cancels the driver mid-street
+   * without arriving, and a stop beat that trusted the beat *kind* would then decline to fly and
+   * strand the camera between two places.
+   */
+  const arrivedStopRef = useRef<number | null>(null);
+
   const legPaths = useMemo(() => {
     if (!day) return undefined;
     const route = peekDayRoute(
@@ -603,10 +658,21 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     /** The fly-along, when this beat has one. Cancelled by the same cleanup that cancels the
      *  sentence, which is what makes Next, Pause and Exit all work without touching it. */
     let follow: { cancel: () => void } | undefined;
+    /** Earliest this beat may end, for a beat whose camera outlasts its words. Zero everywhere
+     *  else, which is every beat but a travel one. */
+    let holdUntilMs = 0;
+    // Read once and cleared immediately, so it can only ever excuse the single beat that follows
+    // the arrival — a replay of the same day starts with nothing owed.
+    const arrivedAt = arrivedStopRef.current;
+    arrivedStopRef.current = null;
 
     if (beat.kind === "stop" && beat.stopIndex !== undefined) {
       const stop = day.stops[beat.stopIndex];
-      if (stop) {
+      // A travel beat ends by flying to this exact stop, with this exact heading, through this
+      // exact call — so flying again here is a second trip to somewhere the camera already is.
+      // That was the visible one: the film appeared to arrive, pause, and then re-arrive.
+      const alreadyArrived = arrivedAt === beat.stopIndex;
+      if (stop && !alreadyArrived) {
         setActiveIndex(dayOffset + beat.stopIndex);
         /**
          * Face the way the day is going, and take longer over a longer leg.
@@ -644,6 +710,9 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
                 heading !== undefined && previousHeading !== null ? heading - previousHeading : 0
               ),
         });
+      } else if (stop) {
+        // Arrived already; the highlight is the only thing left to move.
+        setActiveIndex(dayOffset + beat.stopIndex);
       }
     } else if (beat.kind === "travel" && beat.legIndex !== undefined) {
       /**
@@ -659,15 +728,32 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
        */
       setActiveIndex(dayOffset + beat.legIndex);
       const points = legPaths?.[beat.legIndex] ?? [];
-      if (points.length >= 2) {
-        follow = followPath(
-          rendererRef,
-          points,
-          travelFollowSeconds(pathLengthM(points), estimateDurationMs(beat.text))
-        );
-      } else {
-        const next = day.stops[beat.legIndex + 1];
-        if (next) flyToStoryStop(next.lat, next.lng);
+      const arriving = day.stops[beat.legIndex + 1];
+      if (points.length >= 2 && arriving) {
+        // The heading the stop beat after this one would have flown to. Settling into it here is
+        // half of why that beat now has nothing to do.
+        const arrivalHeadingRad = legBearingRad(day.stops, beat.legIndex + 1) ?? undefined;
+        const walkS = travelFollowSeconds(pathLengthM(points), estimateDurationMs(beat.text));
+        // The camera is the clock here — see `travelFollowSeconds`. Holding the beat open for the
+        // walk plus its settle is what stops a short line cutting a long movement in half.
+        holdUntilMs = performance.now() + (walkS + ARRIVAL_SETTLE_S) * 1000;
+        follow = followPath(rendererRef, points, walkS, {
+          arrivalHeadingRad,
+          // The other half. The walk ends on `restoreCamera`, which clears padding and applies no
+          // centre offset; `flyToStoryStop` goes through `flyToPoint`, which applies both. Same
+          // coordinate, two different places on screen — so the stop beat used to shunt the view
+          // sideways on arrival even when the heading already matched. Ending the walk *with the
+          // canonical call* leaves one framing, glided into over a beat rather than jumped to.
+          onArrive: () => {
+            arrivedStopRef.current = beat.legIndex! + 1;
+            flyToStoryStop(arriving.lat, arriving.lng, {
+              headingRad: arrivalHeadingRad,
+              durationS: prefersReducedMotion() ? 0 : ARRIVAL_SETTLE_S,
+            });
+          },
+        });
+      } else if (arriving) {
+        flyToStoryStop(arriving.lat, arriving.lng);
       }
     } else if (beat.kind === "opening") {
       // The day alone, centred, with no panel to aim beside — the film's establishing shot. This
@@ -694,6 +780,14 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const advance = () => {
+      // Re-entrant by design: the narration finishing is permission to leave, not the instruction.
+      // A travel beat's sentence is one line and its movement is ten to twenty seconds, so the
+      // beat waits out the difference in silence rather than cutting the camera mid-street.
+      const remaining = holdUntilMs - performance.now();
+      if (remaining > 0) {
+        timer = setTimeout(advance, remaining);
+        return;
+      }
       if (beatIndex + 1 >= script.beats.length) setPhase("ended");
       else setBeatIndex(beatIndex + 1);
     };
