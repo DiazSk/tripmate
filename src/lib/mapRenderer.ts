@@ -82,6 +82,24 @@ export interface MapRenderer {
   drawCityBoundary(segments: { lat: number; lng: number }[][]): void;
 
   /**
+   * The real street path between consecutive stops of ONE day, drawn on the ground under the arcs.
+   * `null` clears.
+   *
+   * Deliberately a separate call rather than geometry riding along inside `RouteDrawRequest`. The
+   * arcs answer "in what order" and are abstract on purpose — a lifted ribbon that reads as a
+   * sequence. This answers "along which streets", and the two want opposite treatments: the arc
+   * floats clear of the buildings so it can be followed across a city, while a path that did not
+   * lie on the road would be worse than not drawing it. Keeping them apart also keeps
+   * `buildRouteGeometry` and the MapLibre arc layer untouched, which matters more than it looks:
+   * `mapRoute.ts`'s taper slices are cut from a fixed `ARC_SAMPLES` count and indexed back into at
+   * tint and emphasis time, so a variable-length vertex list does not fit through there.
+   *
+   * One day, not a `days[][]` request like `drawRoute`: every day's pavements at once is the
+   * clutter `soloFocus` exists to prevent.
+   */
+  drawLegPaths(request: LegPathDrawRequest | null): void;
+
+  /**
    * Pins for places the traveler searched for, distinct from the trip's own stops.
    *
    * **MapLibre only, by product decision rather than by capability.** Exploring is what the vector
@@ -294,6 +312,15 @@ export interface RouteDrawRequest {
   connectors?: boolean;
 }
 
+export interface LegPathDrawRequest {
+  /** Which day these belong to, so the renderer can look up the palette. Not a colour: the
+   *  day → colour mapping has exactly one home (`dayPalette`) and a second copy would drift. */
+  dayIndex: number;
+  /** One polyline per routable leg. Legs that could not be routed are omitted rather than passed
+   *  as empty arrays — there is nothing to draw and an empty array is a shape to handle twice. */
+  paths: { lat: number; lng: number }[][];
+}
+
 export interface FlyToPointOptions {
   lat: number;
   lng: number;
@@ -453,6 +480,9 @@ export const ROUTE_FRAME_PITCH_DEG = -45;
 
 /** Fixed float height for highway lines, in metres. */
 export const HIGHWAY_HEIGHT_M = 25;
+/** Below `HIGHWAY_HEIGHT_M`, so a leg running along a main road never z-fights with the ambient
+ *  highway line drawn under it. Same fixed-height-above-the-ellipsoid caveat as both neighbours. */
+export const LEG_PATH_HEIGHT_M = 20;
 /** Same reasoning: a fixed height above the ellipsoid, routinely below the real tile surface. */
 export const CITY_BOUNDARY_HEIGHT_M = 40;
 

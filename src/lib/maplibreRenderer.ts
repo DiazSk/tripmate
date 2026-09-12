@@ -29,6 +29,7 @@ import {
   FrameRouteOptions,
   HERO_VIEW,
   HIGHWAY_CASING,
+  type LegPathDrawRequest,
   HIGHWAY_COLOR,
   MapRenderer,
   MIN_ROUTE_RADIUS_M,
@@ -68,6 +69,7 @@ const STEM_SOURCE_ID = "tripmate-stems";
 const HIGHWAY_SOURCE_ID = "tripmate-highways";
 const CITY_SOURCE_ID = "tripmate-city";
 const SEARCH_SOURCE_ID = "tripmate-search";
+const LEG_SOURCE_ID = "tripmate-legs";
 /** What a search pin paints as when the caller hands over no colour. Only reachable from an older
  *  or non-panel caller — `MapSearchPanel` always resolves one from `searchPalette.ts`. */
 const SEARCH_PIN_FALLBACK_COLOR = "#f1f5f9";
@@ -409,6 +411,7 @@ function addTripLayers(map: MapLibreMap) {
     HIGHWAY_SOURCE_ID,
     CITY_SOURCE_ID,
     SEARCH_SOURCE_ID,
+    LEG_SOURCE_ID,
   ]) {
     if (!map.getSource(id)) map.addSource(id, { type: "geojson", data: emptyCollection() });
   }
@@ -433,6 +436,26 @@ function addTripLayers(map: MapLibreMap) {
     type: "line",
     source: CITY_SOURCE_ID,
     paint: { "line-color": cssColor("--city-boundary"), "line-width": 2, "line-opacity": 0.85 },
+  });
+
+  // The real street path, above the ambient highways and below the day's own ground track and
+  // arcs. Draping on terrain is automatic for a `line` layer, and here that is exactly right —
+  // the opposite of the arcs, which are a custom WebGL layer precisely *because* they must not
+  // drape. Casing then core, the same two-layer treatment the highways use.
+  map.addLayer({
+    id: `${LEG_SOURCE_ID}-casing`,
+    type: "line",
+    source: LEG_SOURCE_ID,
+    paint: { "line-color": cssColor("--route-casing"), "line-width": 6, "line-opacity": 0.7 },
+    layout: { "line-cap": "round", "line-join": "round" },
+  });
+  map.addLayer({
+    id: LEG_SOURCE_ID,
+    type: "line",
+    source: LEG_SOURCE_ID,
+    // Per-feature, so the path carries the day's own colour without this file owning the mapping.
+    paint: { "line-color": ["get", "color"], "line-width": 3.5 },
+    layout: { "line-cap": "round", "line-join": "round" },
   });
 
   // The ground track: a blurred wide line under the arc, standing in for Cesium's
@@ -877,6 +900,26 @@ export class MapLibreRenderer implements MapRenderer {
     });
   }
 
+  drawLegPaths(request: LegPathDrawRequest | null) {
+    if (!request) {
+      this.setData(LEG_SOURCE_ID, emptyCollection());
+      return;
+    }
+    // `cssColor`, not the raw palette entry: `DayPalette.core` holds a custom-property *name*
+    // (`--route-day-1`), not a colour. Passed through unresolved, MapLibre's `line-color` falls
+    // back to its default and the path draws solid black — which looks like a deliberate
+    // choice rather than a bug, and is how this shipped for one screenshot.
+    const color = cssColor(dayPalette(request.dayIndex).core);
+    this.setData(LEG_SOURCE_ID, {
+      type: "FeatureCollection",
+      features: request.paths.map((points) => ({
+        type: "Feature",
+        properties: { color },
+        geometry: { type: "LineString", coordinates: points.map((p) => [p.lng, p.lat]) },
+      })),
+    });
+  }
+
   drawCityBoundary(segments: { lat: number; lng: number }[][]) {
     // Outline only, never a fill — a translucent polygon over the map hides the city it is
     // describing, which is the one thing this must not do.
@@ -985,6 +1028,7 @@ export class MapLibreRenderer implements MapRenderer {
     this.setData(HIGHWAY_SOURCE_ID, emptyCollection());
     this.setData(CITY_SOURCE_ID, emptyCollection());
     this.setData(SEARCH_SOURCE_ID, emptyCollection());
+    this.setData(LEG_SOURCE_ID, emptyCollection());
     this.setPin(null);
   }
 

@@ -23,6 +23,8 @@ import {
   HIGHWAY_CASING,
   HIGHWAY_COLOR,
   HIGHWAY_HEIGHT_M,
+  LEG_PATH_HEIGHT_M,
+  type LegPathDrawRequest,
   LABEL_COLOR,
   LABEL_OUTLINE,
   MapRenderer,
@@ -87,6 +89,7 @@ export class CesiumRenderer implements MapRenderer {
   /** Indexed *by day index*, holes and all, so emphasis can look a day up directly. */
   private routeGeometries: RouteGeometry[] = [];
   private highwayEntities: Entity[] = [];
+  private legPathEntities: Entity[] = [];
   private cityEntities: Entity[] = [];
   /** Bumped per draw so a slow height sample from an older trip can't reposition the new one. */
   private drawGeneration = 0;
@@ -258,6 +261,51 @@ export class CesiumRenderer implements MapRenderer {
     );
   }
 
+  drawLegPaths(request: LegPathDrawRequest | null) {
+    const { viewer, Cesium } = this;
+    if (!this.isAlive()) return;
+    for (const e of this.legPathEntities) viewer.entities.remove(e);
+    this.legPathEntities = [];
+    if (!request) {
+      this.requestRender();
+      return;
+    }
+
+    // The day's own colour, so the path reads as belonging to the arcs above it rather than as a
+    // second, unrelated route. Read through `dayPalette` — the one home for that mapping.
+    // Resolved through `cssColor` first — `DayPalette.core` is a custom-property name, not a
+    // colour, and `fromCssColorString` on an unresolved token silently yields white.
+    const core = Cesium.Color.fromCssColorString(cssColor(dayPalette(request.dayIndex).core));
+    const casing = Cesium.Color.fromCssColorString(cssColor("--route-casing"));
+
+    this.legPathEntities = request.paths.map((points) =>
+      viewer.entities.add({
+        polyline: {
+          positions: points.map((p) =>
+            Cesium.Cartesian3.fromDegrees(p.lng, p.lat, LEG_PATH_HEIGHT_M)
+          ),
+          width: 4,
+          // GEODESIC rather than NONE: these vertices are dense street geometry a few metres
+          // apart, so re-tracing a great circle between adjacent pairs changes nothing visible.
+          // The arcs need NONE because their vertices describe a lifted curve Cesium would
+          // flatten; this line has no lift to lose.
+          arcType: Cesium.ArcType.GEODESIC,
+          material: new Cesium.PolylineOutlineMaterialProperty({
+            color: core,
+            outlineColor: casing,
+            outlineWidth: 1,
+          }),
+          // Full strength on depth-fail, for exactly the reason `drawHighways` gives: this is a
+          // fixed height above the *ellipsoid*, and the real tile surface is routinely tens of
+          // metres higher, so without this the path is under the ground almost everywhere and is
+          // simply never seen. Sampling terrain per vertex is not worth it for a line this dense.
+          depthFailMaterial: new Cesium.ColorMaterialProperty(core),
+        },
+      })
+    );
+    this.requestRender();
+  }
+
   drawCityBoundary(segments: { lat: number; lng: number }[][]) {
     const { viewer, Cesium } = this;
     if (!this.isAlive()) return;
@@ -379,6 +427,8 @@ export class CesiumRenderer implements MapRenderer {
     this.highwayEntities = [];
     for (const e of this.cityEntities) this.viewer.entities.remove(e);
     this.cityEntities = [];
+    for (const e of this.legPathEntities) this.viewer.entities.remove(e);
+    this.legPathEntities = [];
     this.setPin(null);
   }
 
