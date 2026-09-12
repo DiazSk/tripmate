@@ -1,6 +1,6 @@
 import { buildDateContext } from "./dateContext";
 import { fetchBikeshare } from "./bikeshare";
-import { probeTransitAvailable } from "./routeMatrix";
+import { probeTransitAvailable } from "./osrmRoute";
 import { getPublicHolidays } from "./holidays";
 
 import { geocodeDestination } from "./weather";
