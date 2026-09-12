@@ -1,5 +1,6 @@
 import type {
   FilterSpecification,
+  GeoJSONFeature,
   LngLatLike,
   Map as MapLibreMap,
   Marker,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/mapRoute";
 import { centreHeightOffsetPx, metresBetween } from "@/lib/peekRange";
 import { createArcTubeLayer, type ArcTube } from "@/lib/maplibreArcLayer";
+import type { TilePoi } from "@/lib/tilePlaces";
 import {
   MAX_FOOTPRINT_M,
   CameraPose,
@@ -69,6 +71,10 @@ const STEM_SOURCE_ID = "tripmate-stems";
 const HIGHWAY_SOURCE_ID = "tripmate-highways";
 const CITY_SOURCE_ID = "tripmate-city";
 const SEARCH_SOURCE_ID = "tripmate-search";
+/** The basemap's POI layer. Not ours to create, only to read — see `queryVisiblePois`. The
+ *  *source* it lives in is found the same way `buildStyle` finds it for the building layer:
+ *  whichever one the fetched style declares as `vector`. */
+const POI_SOURCE_LAYER = "poi";
 const LEG_SOURCE_ID = "tripmate-legs";
 /** What a search pin paints as when the caller hands over no colour. Only reachable from an older
  *  or non-panel caller — `MapSearchPanel` always resolves one from `searchPalette.ts`. */
@@ -1022,6 +1028,69 @@ export class MapLibreRenderer implements MapRenderer {
     return ring.length >= 3 ? ring : [];
   }
 
+  /**
+   * See `queryVisiblePois` on `MapRenderer` — the basemap's own POIs, read out of the tiles it
+   * already downloaded.
+   *
+   * **`querySourceFeatures`, not `queryRenderedFeatures`**, and the difference is the whole method.
+   * Rendered features are what survived styling and label collision: the Liberty style draws POIs
+   * from `minzoom: 15` and drops every label that would overlap another, so at a neighbourhood
+   * framing a rendered query returns a handful of the most prominent names. The source query reads
+   * the parsed tile directly and sees all of them — 4,727 named across the nine z14 tiles around
+   * Siena, against the dozens a rendered query returns.
+   *
+   * MapLibre already dedupes *by canonical tile* internally (it queries each `x/y/z` once however
+   * many overscaled render tiles point at it), so the duplicates left for `placesFromTiles` to
+   * remove are only the genuine ones: the `poi` layer is buffered past each tile's edge, so a venue
+   * near a boundary is in both its neighbours.
+   *
+   * Guarded rather than assumed at every step. This reaches into a style fetched from a third party
+   * at runtime: `openmaptiles` is the source id OpenFreeMap Liberty ships today and a rename
+   * upstream is a thing that can happen between two page loads. Every failure here is an empty
+   * list, and an empty list is exactly the signal the panel already handles by asking Overpass.
+   */
+  queryVisiblePois(): TilePoi[] {
+    if (!this.isAlive()) return [];
+    // Found rather than named, the same way `buildStyle` finds it to hang the extruded buildings
+    // off: the id is Liberty's to choose and a rename upstream lands between two page loads.
+    const sourceId = Object.entries(this.map.getStyle()?.sources ?? {}).find(
+      ([, source]) => source.type === "vector"
+    )?.[0];
+    if (!sourceId) return [];
+    let features: GeoJSONFeature[];
+    try {
+      features = this.map.querySourceFeatures(sourceId, { sourceLayer: POI_SOURCE_LAYER });
+    } catch {
+      return [];
+    }
+
+    const pois: TilePoi[] = [];
+    for (const feature of features) {
+      const props = (feature.properties ?? {}) as Record<string, unknown>;
+      const name = typeof props.name === "string" ? props.name.trim() : "";
+      if (!name) continue;
+      // A `poi` feature is a Point by schema, but this is third-party data reached through a
+      // `properties` bag typed as `unknown` — the narrowing costs a comparison and removes the one
+      // shape that would throw on the destructure below.
+      const geometry = feature.geometry;
+      if (geometry?.type !== "Point") continue;
+      const [lng, lat] = geometry.coordinates as [number, number];
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      // `name:latin` is the field the tilejson advertises; `name_en` is what this planet build
+      // actually populates more often. Either is a Latin spelling to match a query against.
+      const latin = props["name:latin"] ?? props.name_en;
+      pois.push({
+        name,
+        nameLatin: typeof latin === "string" && latin.trim() ? latin.trim() : undefined,
+        klass: typeof props.class === "string" ? props.class : "",
+        subclass: typeof props.subclass === "string" ? props.subclass : "",
+        lat,
+        lng,
+      });
+    }
+    return pois;
+  }
+
   clearOverlays() {
     this.drawGeneration++;
     this.clearRoute();
@@ -1555,12 +1624,32 @@ export class MapLibreRenderer implements MapRenderer {
   }
 
   /** MapLibre's own `moveend`, which already means "the gesture and its inertia are over". */
+  /**
+   * **`idle`, not `moveend`** — and that is the difference between the tile search working and
+   * never firing at all.
+   *
+   * `moveend` lands the instant the camera stops, before MapLibre has even reconciled which tiles
+   * the new view needs. Measured on a jump from Siena to Rome: `moveend` at t+0 with
+   * `areTilesLoaded()` already answering `true` (it is describing the *old* pyramid), and `idle`
+   * two seconds later with 11,730 POI features parsed and queryable. A re-search on `moveend`
+   * therefore asked the tiles a question they could not yet answer and fell through to Overpass
+   * every single time — the exact request this was built to stop spending.
+   *
+   * `idle` is defined as "no camera transition in progress and every requested tile loaded", which
+   * is precisely the moment worth asking. It fires on this app despite the terrain and the custom
+   * arc layer, which was worth checking: a layer calling `triggerRepaint` on every frame would
+   * suppress it forever.
+   *
+   * It also fires for renders the camera had nothing to do with — our own `showSearchResults`
+   * writing a source, for one. The caller's movement guard is what makes that free, and it cannot
+   * loop: a re-search records its own camera position before it does anything else.
+   */
   onCameraIdle(cb: () => void) {
     if (!this.isAlive()) return () => {};
     const handler = () => cb();
-    this.map.on("moveend", handler);
+    this.map.on("idle", handler);
     return () => {
-      if (this.isAlive()) this.map.off("moveend", handler);
+      if (this.isAlive()) this.map.off("idle", handler);
     };
   }
 

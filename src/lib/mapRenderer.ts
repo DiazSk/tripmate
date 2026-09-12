@@ -1,5 +1,6 @@
 import type { DayVisualState, RouteStop } from "@/lib/mapRoute";
 import type { MapEngine } from "@/lib/mapEngine";
+import type { TilePoi } from "@/lib/tilePlaces";
 
 /**
  * Everything `mapCamera.tsx` needs a map engine to do, and nothing about how either one does it.
@@ -125,6 +126,21 @@ export interface MapRenderer {
    * the polygon is always a real, bounded piece of ground.
    */
   visibleFootprint(): { lat: number; lng: number }[];
+
+  /**
+   * Every named POI in the vector tiles the map has already downloaded for the current view.
+   *
+   * **The one method on this contract that reads the basemap rather than drawing on it**, and it
+   * is here for the same reason `visibleFootprint` is: the panel above has a question about what
+   * the camera can see, and the answer is engine-specific. Empty on Cesium — Google's 3D tiles are
+   * geometry and imagery, with no queryable venue data at all — and empty on MapLibre below z14,
+   * where the `poi` layer is genuinely unpopulated.
+   *
+   * Cheap and synchronous by construction: the tiles are already parsed and in memory, so this is
+   * a walk over objects the map is holding anyway. It is not a substitute for `searchPlaces` —
+   * see `tilePlaces.ts` for what the tiles carry (four fields, no id) and what they do not.
+   */
+  queryVisiblePois(): TilePoi[];
 
   /** Route, highways, city outline and pin — everything a trip put on the map. */
   clearOverlays(): void;
