@@ -229,6 +229,38 @@ export interface MapRenderer {
 
   /** Clicks on the map itself, in lat/lng. Returns the unsubscribe. */
   onMapClick(cb: (lat: number, lng: number) => void): () => void;
+
+  /**
+   * Clicks that land on a **search pin**, by the id `showSearchResults` was given. Returns the
+   * unsubscribe.
+   *
+   * Separate from `onMapClick` rather than a filter over it, because the question is different:
+   * that one asks where on the ground a click landed, this one asks which of the things *we drew*
+   * was hit. Both fire for the same click and that is correct — a pin sits on ground the other
+   * caller may legitimately care about.
+   *
+   * **Satellite answers with a no-op**, the same stance it takes on `showSearchResults`: it draws
+   * no search pins, so there is nothing there to click.
+   */
+  onSearchPinClick(cb: (id: string) => void): () => void;
+
+  /**
+   * The search pin under the pointer, or `null` when it leaves one. Returns the unsubscribe.
+   *
+   * Pointing at a place is how you ask about it here — the click is the fallback for a keyboard or
+   * a finger, not the main gesture. Fires only on *change*, so a pointer travelling across one
+   * pin's halo costs one call rather than one per mousemove.
+   */
+  onSearchPinHover(cb: (id: string | null) => void): () => void;
+
+  /**
+   * The camera has stopped moving. Returns the unsubscribe.
+   *
+   * *Stopped*, not *moving* — this fires once per gesture, after inertia settles, so a caller can
+   * do something expensive (ask a server what is here now) without doing it sixty times a second.
+   * `onFrame` is the other half of that pair and answers the opposite question.
+   */
+  onCameraIdle(cb: () => void): () => void;
 }
 
 /** Opaque camera snapshot. Only the renderer that produced it can read it. */

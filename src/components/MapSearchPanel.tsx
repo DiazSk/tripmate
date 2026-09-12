@@ -2,15 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, ChevronLeft, Clock, Loader2, MapPin, Plus, Search, Sparkles, X } from "lucide-react";
+import { Check, ChevronLeft, Clock, Loader2, MapPin, Search, Sparkles, X } from "lucide-react";
 import { useMapCamera } from "@/lib/mapCamera";
+import { metresBetween } from "@/lib/peekRange";
+import type { CameraState } from "@/lib/mapRenderer";
 import { addPlaceToDay, useActiveItinerary } from "@/lib/activeItinerary";
 import { PLACE_CATEGORIES, type FoundPlace, type PlaceCategory } from "@/lib/placeSearch";
 import { suggestDayForPlace, type DayShape } from "@/lib/dayFit";
 import { planSlot, suggestTimeOfDay } from "@/lib/daySlotting";
 import { TIME_OF_DAY_ORDER, type TimeOfDay } from "@/lib/timeOfDay";
-import type { Stop } from "@/lib/types";
+import type { Itinerary, Stop } from "@/lib/types";
 import { devLabel } from "@/lib/devInspector";
+import SearchPinCard, { AddToDayButton } from "@/components/SearchPinCard";
+import { useAnchoredToMap } from "@/lib/useAnchoredToMap";
 import {
   forgetSearch,
   itineraryHighlights,
@@ -59,6 +63,21 @@ const DEBOUNCE_MS = 450;
  * end state, so this needs no `prefers-reduced-motion` branch of its own.
  */
 const SEARCH_LAYOUT_ID = "search-container";
+
+/**
+ * How long the card survives the pointer leaving its pin.
+ *
+ * 260ms was measured against a synthetic event and is nowhere near a hand: reaching the card means
+ * crossing a gap, and a person who pauses on the way — to read the thing they are reaching for —
+ * takes longer than that, so the card closed before it could be used. The gap itself is now bridged
+ * in CSS (`.search-pin-card::after`), which is the actual fix; this is the backstop for the paths
+ * the bridge does not cover, like the pointer leaving the map entirely.
+ */
+const CARD_GRACE_MS = 600;
+
+/** How far the view must travel before it is worth asking again, as a fraction of the camera's
+ *  distance to the ground — so it means the same thing over a city and over a street. */
+const MOVE_TO_RESEARCH = 0.25;
 const SEARCH_SPRING = { type: "spring", stiffness: 320, damping: 32 } as const;
 
 /**
@@ -144,6 +163,12 @@ export default function MapSearchPanel({
   const [history, setHistory] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  /** The anchored detail card's own node — the anchoring hook moves it, React only fills it. */
+  const cardRef = useRef<HTMLElement | null>(null);
+  /** The armed "pointer has left the pin" close, cancelled when the card itself is pointed at. */
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The camera position the current results describe. See the idle effect. */
+  const lastSearchedRef = useRef<CameraState | null>(null);
   /**
    * Whether the entry morph is behind us, so a later layout change can take the slower spring.
    *
@@ -214,10 +239,82 @@ export default function MapSearchPanel({
     );
   }, [visiblePlaces, selectedId, hoveredId, isOpen, rendererRef, ready]);
 
+  /**
+   * Clicking a pin selects its place, exactly as clicking its row does.
+   *
+   * `selectedId` is the whole of it — no second piece of state for "which place the card is about".
+   * The row already sets it, `runSearch` already clears it, and `showSearchResults` above already
+   * enlarges whichever pin it names, so one value keeps the map, the list and the card agreeing
+   * about which place is live, and a fresh search closes the card for free.
+   *
+   * No camera move. The traveller just clicked something they could see; flying the ground out from
+   * under a click is the one thing that reliably reads as broken, and the card places itself
+   * against whatever is on screen rather than needing the map arranged for it.
+   */
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive() || !isOpen) return;
+    return renderer.onSearchPinClick(setSelectedId);
+  }, [rendererRef, ready, isOpen]);
+
+  /**
+   * **Pointing at a pin opens its card; leaving closes it.**
+   *
+   * That is the gesture — the click above is what a keyboard and a finger get, not the main way in.
+   * It also means the card needs no dismiss control of its own: moving the pointer away *is* the
+   * dismissal, which is why there is no ✕ on it.
+   *
+   * The grace period is the whole trick. Without it the card would vanish the instant the pointer
+   * left the 13px halo, which is to say before it could ever reach the card to press anything. So
+   * leaving a pin only *arms* a close, and the card cancels it by being pointed at — see
+   * `onMouseEnter` where it is rendered. 260ms is long enough to cross the gap from a dot to the
+   * card above it and short enough that a deliberate move away feels like a dismissal.
+   */
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive() || !isOpen) return;
+    const unsubscribe = renderer.onSearchPinHover((id) => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      if (id) setSelectedId(id);
+      else closeTimerRef.current = setTimeout(() => setSelectedId(null), CARD_GRACE_MS);
+    });
+    return () => {
+      unsubscribe();
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, [rendererRef, ready, isOpen]);
+
+  /** The place the card is about, derived rather than stored — see the effect above. */
+  const selectedPlace = useMemo(
+    () => visiblePlaces.find((p) => p.id === selectedId) ?? null,
+    [visiblePlaces, selectedId]
+  );
+
+  /**
+   * Keep the card on its pin.
+   *
+   * The left edge it is given is the search panel's own right edge, so a card whose place sits
+   * behind the list slides clear of it instead of hiding underneath — the panel stays put and the
+   * card works around it, which is the one arrangement where you can read the card and keep
+   * scanning the list at the same time.
+   */
+  useAnchoredToMap(
+    cardRef,
+    rendererRef,
+    selectedPlace,
+    ready,
+    // 24px gutter (`left-6`) + the panel's 22rem, when it is on screen to be avoided.
+    24 + 22 * 16 + 12
+  );
+
   const runSearch = useCallback(async () => {
     const renderer = rendererRef.current;
     const centre = renderer?.cameraState();
     if (!centre || !renderer) return;
+    // Where this answer is *about*, so the idle handler above can tell a real move from a nudge.
+    // Written before the request rather than after it: two searches must not race into one another
+    // because the first had not recorded itself yet.
+    lastSearchedRef.current = centre;
     setState("searching");
     try {
       const params = new URLSearchParams({ lat: String(centre.lat), lng: String(centre.lng) });
@@ -275,6 +372,36 @@ export default function MapSearchPanel({
     return () => clearTimeout(timer);
   }, [isOpen, hasQuery, runSearch]);
 
+  /**
+   * **Drag the map and the suggestions follow it.**
+   *
+   * The placeholder has always said "Search near this view…", and it was half true: the *first*
+   * search was near the view, and everything after it was a set of pins stuck to wherever the
+   * camera happened to be at the time. Panning somewhere else left them behind, describing a
+   * neighbourhood no longer on screen.
+   *
+   * Two guards, and both exist because the index behind this is a shared community Overpass server
+   * that rate-limits exactly this traffic:
+   *
+   * - **`onCameraIdle`, not `onFrame`.** One request per gesture, after inertia settles, rather
+   *   than one per frame of a drag.
+   * - **A movement floor scaled to the camera's own range.** Nudging the map by a few pixels, or
+   *   the framing correction that runs when a stop is added, must not spend a request. A quarter of
+   *   the camera's distance to the ground is roughly "the view is meaningfully somewhere else" at
+   *   any zoom, which a fixed metre threshold cannot be.
+   */
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive() || !isOpen || !hasQuery) return;
+    return renderer.onCameraIdle(() => {
+      const now = rendererRef.current?.cameraState();
+      if (!now) return;
+      const last = lastSearchedRef.current;
+      if (last && metresBetween(last, now) < now.rangeM * MOVE_TO_RESEARCH) return;
+      void runSearch();
+    });
+  }, [rendererRef, ready, isOpen, hasQuery, runSearch]);
+
   /** The trip's days as shapes, for the coordinate-only day suggestion. Memoised on the itinerary
    *  because it is recomputed for every row that opens a picker. */
   const dayShapes: DayShape[] = useMemo(
@@ -293,6 +420,10 @@ export default function MapSearchPanel({
 
   if (!shown) return null;
 
+  /** The same "closest to Day N" read the result rows carry, for whichever place the card is about.
+   *  Plain arithmetic over one day's stops, so it needs no memo of its own. */
+  const cardSuggestion = selectedPlace ? suggestDayForPlace(selectedPlace, dayShapes) : null;
+
   /**
    * Empty the text box, and only the text box.
    *
@@ -310,6 +441,8 @@ export default function MapSearchPanel({
     setPickingFor(null);
     setPickedDay(null);
     setHoveredId(null);
+    // The card is anchored to a pin this is about to stop drawing, so it goes too.
+    setSelectedId(null);
   };
 
   const addPlace = (place: FoundPlace, dayIndex: number, slot: TimeOfDay) => {
@@ -499,8 +632,13 @@ export default function MapSearchPanel({
                   // not — the same two-step the rest of this row is built around, on the keyboard.
                   // Mapping it straight to dismiss would leave the keyboard with only the
                   // destructive half of a choice the pointer gets both halves of.
+                  // Three rungs now, in the order a traveller means them: the card in front of
+                  // everything, then the text, then the panel. An open card used to be skipped
+                  // entirely — Escape would clear the search behind it, or shut the whole list,
+                  // to dismiss a card sitting on top.
                   if (e.key === "Escape") {
-                    if (query) clearQuery();
+                    if (selectedId) setSelectedId(null);
+                    else if (query) clearQuery();
                     else close();
                   }
                 }}
@@ -600,7 +738,6 @@ export default function MapSearchPanel({
             {visiblePlaces.map((place) => {
               const addedTo = addedDays[place.id];
               const isAdded = addedTo !== undefined;
-              const suggestion = suggestDayForPlace(place, dayShapes);
               return (
                 <div
                   key={place.id}
@@ -643,90 +780,21 @@ export default function MapSearchPanel({
                       </span>
                     </button>
 
-                    {active &&
-                      (isAdded ? (
-                        // Terminal, and not a button. The place is in the plan; the itinerary is
-                        // where it gets moved or removed, and offering a second half-editor here
-                        // would be a second place for the same state to be wrong.
-                        <span
-                          className="mt-0.5 flex shrink-0 items-center gap-1 rounded-full bg-accent/20 px-2 py-1 text-[11px] font-medium text-accent"
-                          title={`Already added to Day ${addedTo + 1}`}
-                        >
-                          <Check className="h-3 w-3" strokeWidth={3} />
-                          Added · D{addedTo + 1}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPickingFor((current) => {
-                              setPickedDay(null);
-                              return current === place.id ? null : place.id;
-                            })
-                          }
-                          aria-expanded={pickingFor === place.id}
-                          aria-label={`Choose a day for ${place.name}`}
-                          className="mt-0.5 flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-white/20 hover:text-foreground"
-                        >
-                          <Plus className="h-3 w-3" />
-                          Add
-                        </button>
-                      ))}
+                    {/* **A readout, not an action.** Adding happens in the card the row opens, and
+                        only there — one place to choose a day means one place for that choice to be
+                        wrong, and a list of fifteen rows each carrying a collapsed two-step picker
+                        was a list that could open fifteen of them. What stays is the answer to "is
+                        this already in the plan", which a scanner needs and cannot get elsewhere. */}
+                    {active && isAdded && (
+                      <span
+                        className="mt-0.5 flex shrink-0 items-center gap-1 rounded-full bg-accent/20 px-2 py-1 text-[11px] font-medium text-accent"
+                        title={`Already added to Day ${addedTo + 1}`}
+                      >
+                        <Check className="h-3 w-3" strokeWidth={3} />
+                        Added · D{addedTo + 1}
+                      </span>
+                    )}
                   </div>
-
-                  {/* Two questions, asked one at a time: which day, then which part of it. Every
-                      option in both is pickable — each recommendation is a label on one row, never
-                      a filter over the others. */}
-                  {pickingFor === place.id && active && (
-                    <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-1">
-                      {pickedDay === null ? (
-                        <>
-                          {suggestion && (
-                            <p className="px-1.5 pt-1 pb-1.5 text-[10px] text-muted">
-                              Closest to <span className="text-accent">Day {suggestion.day + 1}</span> —{" "}
-                              {shortDistance(suggestion.distanceM)} from its other stops
-                            </p>
-                          )}
-                          <div
-                            className="flex max-h-40 flex-col overflow-y-auto"
-                            {...devLabel("MapSearchPanel.DayPicker")}
-                          >
-                            {active.itinerary.days.map((day, i) => (
-                              <button
-                                key={i}
-                                type="button"
-                                onClick={() => setPickedDay(i)}
-                                className={`flex items-center justify-between gap-2 rounded-md px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-white/10 ${
-                                  suggestion?.day === i ? "text-foreground" : "text-muted"
-                                }`}
-                              >
-                                <span className="truncate">
-                                  Day {i + 1}
-                                  <span className="ml-1.5 text-[10px] text-muted">
-                                    {day.stops.length} {day.stops.length === 1 ? "stop" : "stops"}
-                                  </span>
-                                </span>
-                                {suggestion?.day === i && (
-                                  <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-                                    <MapPin className="h-2.5 w-2.5" />
-                                    Suggested
-                                  </span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        <SlotPicker
-                          place={place}
-                          stops={active.itinerary.days[pickedDay]?.stops ?? []}
-                          dayNumber={pickedDay + 1}
-                          onBack={() => setPickedDay(null)}
-                          onPick={(slot) => addPlace(place, pickedDay, slot)}
-                        />
-                      )}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -739,6 +807,65 @@ export default function MapSearchPanel({
           </p>
           </motion.div>
         </motion.div>
+      )}
+
+      {/* **A sibling of the panel, never a child of it.** That box is `overflow-hidden` and carries
+          the framer `layoutId` projection, which writes a transform to it and counter-scales its
+          children — a `position: fixed` card inside it would be clipped, squashed, *and* positioned
+          against the panel rather than the viewport. Out here, the only ancestor is this container,
+          which sets no transform, so `fixed` means what it says and nothing clips.
+
+          Rendered on `selectedId` alone. There is no separate "card is open" state: the pin sets
+          it, the row sets it, a fresh search clears it, and `showSearchResults` already enlarges
+          whichever pin it names — so one value keeps the map, the list and the card agreeing about
+          which place is live. */}
+      {isOpen && selectedPlace && (
+        <SearchPinCard
+            cardRef={cardRef}
+            place={selectedPlace}
+            addedDay={addedDays[selectedPlace.id]}
+            suggestionText={
+              cardSuggestion && pickingFor !== selectedPlace.id
+                ? `Closest to Day ${cardSuggestion.day + 1} — ${shortDistance(
+                    cardSuggestion.distanceM
+                  )} from its other stops`
+                : undefined
+            }
+            onHoldOpen={() => {
+              if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+            }}
+            onRelease={() => {
+              if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+              closeTimerRef.current = setTimeout(() => setSelectedId(null), CARD_GRACE_MS);
+            }}
+            onClose={() => setSelectedId(null)}
+            action={
+              active && (
+                <AddToDayButton
+                  name={selectedPlace.name}
+                  expanded={pickingFor === selectedPlace.id}
+                  onClick={() => {
+                    setPickedDay(null);
+                    setPickingFor((current) =>
+                      current === selectedPlace.id ? null : selectedPlace.id
+                    );
+                  }}
+                />
+              )
+            }
+          >
+            {active && pickingFor === selectedPlace.id && (
+              <AddToDayPicker
+                place={selectedPlace}
+                itinerary={active.itinerary}
+                suggestion={cardSuggestion}
+                pickedDay={pickedDay}
+                onPickDay={setPickedDay}
+                onAdd={addPlace}
+                className="mt-2"
+              />
+            )}
+          </SearchPinCard>
       )}
     </div>
   );
@@ -759,6 +886,86 @@ export default function MapSearchPanel({
  * traveler may well want the stop there anyway and will move something else — and "tight" is the
  * honest word for what will happen.
  */
+/**
+ * Two questions, asked one at a time: which day, then which part of it.
+ *
+ * Every option in both is pickable — each recommendation is a label on one row, never a filter over
+ * the others.
+ *
+ * Extracted rather than left inline because there are now two places to add a place from: the
+ * result row and the detail card anchored to its pin. The row's own note about a second half-editor
+ * being "a second place for the same state to be wrong" applies at least as hard to the question
+ * that *creates* the state, so both hosts ask it with this.
+ */
+function AddToDayPicker({
+  place,
+  itinerary,
+  suggestion,
+  pickedDay,
+  onPickDay,
+  onAdd,
+  className = "",
+}: {
+  place: FoundPlace;
+  itinerary: Itinerary;
+  suggestion: { day: number; distanceM: number } | null;
+  pickedDay: number | null;
+  onPickDay: (day: number | null) => void;
+  onAdd: (place: FoundPlace, dayIndex: number, slot: TimeOfDay) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-lg border border-white/10 bg-black/20 p-1 ${className}`}>
+      {pickedDay === null ? (
+        <>
+          {suggestion && (
+            <p className="px-1.5 pt-1 pb-1.5 text-[10px] text-muted">
+              Closest to <span className="text-accent">Day {suggestion.day + 1}</span> —{" "}
+              {shortDistance(suggestion.distanceM)} from its other stops
+            </p>
+          )}
+          <div
+            className="flex max-h-40 flex-col overflow-y-auto"
+            {...devLabel("MapSearchPanel.DayPicker")}
+          >
+            {itinerary.days.map((day, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onPickDay(i)}
+                className={`flex items-center justify-between gap-2 rounded-md px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-white/10 ${
+                  suggestion?.day === i ? "text-foreground" : "text-muted"
+                }`}
+              >
+                <span className="truncate">
+                  Day {i + 1}
+                  <span className="ml-1.5 text-[10px] text-muted">
+                    {day.stops.length} {day.stops.length === 1 ? "stop" : "stops"}
+                  </span>
+                </span>
+                {suggestion?.day === i && (
+                  <span className="flex shrink-0 items-center gap-1 rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                    <MapPin className="h-2.5 w-2.5" />
+                    Suggested
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <SlotPicker
+          place={place}
+          stops={itinerary.days[pickedDay]?.stops ?? []}
+          dayNumber={pickedDay + 1}
+          onBack={() => onPickDay(null)}
+          onPick={(slot) => onAdd(place, pickedDay, slot)}
+        />
+      )}
+    </div>
+  );
+}
+
 function SlotPicker({
   place,
   stops,
