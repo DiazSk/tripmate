@@ -480,9 +480,7 @@ export const ROUTE_FRAME_PITCH_DEG = -45;
 
 /** Fixed float height for highway lines, in metres. */
 export const HIGHWAY_HEIGHT_M = 25;
-/** Below `HIGHWAY_HEIGHT_M`, so a leg running along a main road never z-fights with the ambient
- *  highway line drawn under it. Same fixed-height-above-the-ellipsoid caveat as both neighbours. */
-export const LEG_PATH_HEIGHT_M = 20;
+
 /** Same reasoning: a fixed height above the ellipsoid, routinely below the real tile surface. */
 export const CITY_BOUNDARY_HEIGHT_M = 40;
 

@@ -406,6 +406,8 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     reframeRoute,
     setRouteConnectorsHidden,
     rendererRef,
+    // Aliased: `engine` already means the *voice* engine throughout this file.
+    engine: mapEngine,
   } =
     useMapCamera();
 
@@ -751,7 +753,15 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
        * should not normally happen: `normaliseScript` only emits a travel beat for a routed leg.
        */
       setActiveIndex(dayOffset + beat.legIndex);
-      const points = legPaths?.[beat.legIndex] ?? [];
+      // MapLibre only, and the one-line gate is enough because everything below keys on there
+      // being a path to walk — no path means the existing single-flight fallback, no hold, no
+      // driver. Cesium is excluded for two measured reasons rather than a preference: it cannot
+      // draw the route on the ground at all (see `drawLegPaths` there), so the camera would be
+      // walking a street with nothing marking it; and `docs/map-engine-gpu.md` puts it at 798
+      // requests / 16.9MB under a drag against MapLibre's 158 / 9.2MB, where a walk along a street
+      // is a continuous drag for the length of the beat. The beat itself stays either way — the
+      // line is still worth hearing over a flight.
+      const points = mapEngine === "maplibre" ? legPaths?.[beat.legIndex] ?? [] : [];
       const arriving = day.stops[beat.legIndex + 1];
       if (points.length >= 2 && arriving) {
         // The heading the stop beat after this one would have flown to. Settling into it here is
@@ -845,6 +855,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     // routes landing after a film starts do not re-run it and cannot restart the beat in progress.
     legPaths,
     rendererRef,
+    mapEngine,
     phase,
     beatIndex,
     muted,
