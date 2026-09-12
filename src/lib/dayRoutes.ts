@@ -89,6 +89,12 @@ function loadProfile(): RouteProfile {
   return profile;
 }
 
+/** The profile right now, outside React. `legsFor` in storyMode reads it synchronously while
+ *  assembling a script call, which is not a render and has no hook to hang off. */
+export function currentRouteProfile(): RouteProfile {
+  return loadProfile();
+}
+
 export function setRouteProfile(next: RouteProfile): void {
   if (next === profile) return;
   profile = next;

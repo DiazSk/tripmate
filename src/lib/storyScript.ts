@@ -24,13 +24,24 @@ import type { DayPlan, Stop } from "./types";
  * closing would otherwise be indistinguishable — both are "a beat about no particular stop" — and
  * the difference decides whether the camera arrives or leaves.
  */
-export type StoryBeatKind = "opening" | "stop" | "closing";
+export type StoryBeatKind = "opening" | "stop" | "travel" | "closing";
 
 export interface StoryBeat {
   kind: StoryBeatKind;
   /** Index into the day's own `stops` array. Present on — and only on — a `stop` beat. */
   stopIndex?: number;
-  /** The line as it will be spoken and, simultaneously, displayed. Two to four sentences. */
+  /**
+   * The leg from `stops[legIndex]` to `stops[legIndex + 1]`. Present on — and only on — a `travel`
+   * beat.
+   *
+   * Its own field rather than a reuse of `stopIndex`, and not only to keep that invariant true.
+   * `normaliseScript` finds stop beats by `kind` while `StoryStage` used to find them by
+   * `stopIndex` being present, so a travel beat carrying `stopIndex` would have been invisible to
+   * one and rendered as a place by the other — two components disagreeing about what a beat is.
+   */
+  legIndex?: number;
+  /** The line as it will be spoken and, simultaneously, displayed. Two to four sentences — or one
+   *  short one, on a `travel` beat, which lasts only as long as the camera is moving. */
   text: string;
 }
 
@@ -62,9 +73,11 @@ export const NARRATION_WPM = 160;
  * the ear" rewrite landed and a cached Lisbon day kept reading its old flat script back.
  *
  * v1: first version. v2: the spoken-cadence rewrite (short naming first sentence, varied lengths,
- * no em-dashes, numbers as words) that `splitForSpeech`'s sentence pauses depend on.
+ * no em-dashes, numbers as words) that `splitForSpeech`'s sentence pauses depend on. v3: travel
+ * beats — a one-sentence line between two stops, played while the camera walks the real street
+ * route between them.
  */
-export const STORY_PROMPT_VERSION = 2;
+export const STORY_PROMPT_VERSION = 3;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Facts
@@ -79,7 +92,21 @@ export const STORY_PROMPT_VERSION = 2;
  * (`actualCost` is therefore left out — it moves after the trip, when nobody is watching a movie
  * of it.)
  */
-export function compactDay(day: DayPlan, dayIndex: number): string {
+export interface CompactLeg {
+  /** How the traveller is getting between these two stops — "walk", "ride", "drive". */
+  verb: string;
+  minutes: number;
+  distanceLabel: string;
+}
+
+export function compactDay(
+  day: DayPlan,
+  dayIndex: number,
+  /** Index `i` is the leg from stop `i` to stop `i + 1`; `null` where it could not be routed. A
+   *  leg with no entry produces no Travel line, so the model is never asked to narrate a journey
+   *  nothing measured. Omitting the argument entirely is the pre-travel-beat behaviour exactly. */
+  legs?: readonly (CompactLeg | null)[]
+): string {
   const lines: string[] = [];
   lines.push(`Day ${dayIndex + 1} — ${day.date}${day.title ? ` — ${day.title}` : ""}`);
   if (day.weather) lines.push(`Weather: ${day.weather}`);
@@ -103,6 +130,19 @@ export function compactDay(day: DayPlan, dayIndex: number): string {
     );
     if (stop.why) lines.push(`  Why it suits them: ${stop.why}`);
     if (stop.note) lines.push(`  Practical detail: ${stop.note}`);
+    // Between this stop and the next, when there is a measured journey to describe. Emitted here
+    // rather than in a block of their own so the model reads the day in the order it happens.
+    //
+    // The `i < last` guard is not defensive padding: a `legs` array can outlive the stop it
+    // described — deleting a stop shortens the day before the routes are re-fetched — and without
+    // it the final stop announces a journey to a place that is not in the plan. It is also what
+    // keeps this in step with `countRoutedLegs`, which states the beat count from the same rule.
+    const leg = i < day.stops.length - 1 ? legs?.[i] : undefined;
+    if (leg) {
+      lines.push(
+        `Travel ${i} -> ${i + 1}: ${leg.minutes} minute ${leg.verb}, ${leg.distanceLabel}`
+      );
+    }
   });
   return lines.join("\n");
 }
@@ -134,16 +174,41 @@ export function storyCacheKey(params: {
   dayIndex: number;
   dayCount: number;
   day: DayPlan;
+  /** Threaded through to `compactDay` for the reason this whole function is built from it: the
+   *  legs change the prompt, so they have to change the key. Without this, a script written before
+   *  a day's routes landed would be served back over the same day after they had, and the film
+   *  would keep playing without its travel beats for the rest of the session. */
+  legs?: readonly (CompactLeg | null)[];
 }): string {
   return `${params.destination}|${params.dayCount}|v${STORY_PROMPT_VERSION}\n${compactDay(
     params.day,
-    params.dayIndex
+    params.dayIndex,
+    params.legs
   )}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The ask
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How many legs of this day have a measured route to narrate.
+ *
+ * The single definition of "routed", used by the prompt to state its beat count and by
+ * `normaliseScript` to decide which travel beats to keep. If those two ever disagreed, the model
+ * would be asked for a beat that is then dropped, or would omit one that is then expected — so
+ * they read the same function rather than each counting for themselves. A leg only counts when
+ * both of its stops exist, which is what keeps the last stop from claiming a leg off the end.
+ */
+export function countRoutedLegs(
+  day: DayPlan,
+  legs?: readonly (CompactLeg | null)[]
+): number {
+  if (!legs) return 0;
+  let n = 0;
+  for (let i = 0; i < day.stops.length - 1; i++) if (legs[i]) n++;
+  return n;
+}
 
 /**
  * The narration ask. Trip data arrives through `compactDay` and nothing else.
@@ -172,14 +237,17 @@ export function buildStoryPrompt(params: {
   dayIndex: number;
   dayCount: number;
   day: DayPlan;
+  legs?: readonly (CompactLeg | null)[];
 }): string {
-  const { destination, dayIndex, dayCount, day } = params;
+  const { destination, dayIndex, dayCount, day, legs } = params;
   const stopCount = day.stops.length;
+  const routedLegs = countRoutedLegs(day, legs);
+  const beatCount = stopCount + routedLegs + 2;
   return `You are narrating one day of a trip to ${destination} as a short piece of spoken storytelling, played over a map that flies to each place as you describe it.
 
 THE DAY (day ${dayIndex + 1} of ${dayCount}). These are the only facts you have:
 
-${compactDay(day, dayIndex)}
+${compactDay(day, dayIndex, legs)}
 
 WRITE THE NARRATION.
 
@@ -187,10 +255,18 @@ Voice: second person, present tense, warm and unhurried — "You come up out of 
 
 STRUCTURE
 
-- Exactly ${stopCount + 2} beats: one "opening", then one "stop" beat for each of the ${stopCount} stops in the order given above, then one "closing".
+- Exactly ${beatCount} beats: one "opening", then one "stop" beat for each of the ${stopCount} stops in the order given above, then one "closing"${routedLegs > 0 ? `, plus ${routedLegs} "travel" beat${routedLegs === 1 ? "" : "s"} as described below` : ""}.
 - Every stop beat carries the "stopIndex" of the stop it describes (0 to ${stopCount - 1}). Do not merge, skip or reorder stops.
-- 2 to 4 sentences per beat, at most 55 words.
-- Each stop beat should carry the traveler *from the previous one* — the walk, the ride, the change of light, the shift in mood. That connective tissue is what makes this a story rather than a list.
+- 2 to 4 sentences per beat, at most 55 words.${
+    routedLegs > 0
+      ? `
+- Where a "Travel" line appears above between two stops, write one "travel" beat and place it before the second stop's beat. It carries that leg's "legIndex" — the number on the left of the arrow. Where no "Travel" line appears between two stops, write no travel beat: those two stops follow each other directly.
+- **A travel beat is ONE sentence, twenty words at most.** It plays while the map moves along the actual street route, so it is the length of the movement, not of a paragraph.
+- **Do not restate the minutes or the distance.** The plan already shows them beside the stop. Say what the going is *like* — the river you cross, the arcade you cut through, the hill, the change of neighbourhood.
+- Where a travel beat carries the traveler between two places, the stop beat after it *arrives* rather than recapping the journey. Where there is no travel beat, the stop beat carries them from the previous one itself — the walk, the change of light, the shift in mood. That connective tissue is what makes this a story rather than a list.`
+      : `
+- Each stop beat should carry the traveler *from the previous one* — the walk, the ride, the change of light, the shift in mood. That connective tissue is what makes this a story rather than a list.`
+  }
 - The opening sets the day: where they wake up, what shape the day has, what the weather is doing. The closing lands it — where the day leaves them, and (unless this is the last day) a single sentence of anticipation for tomorrow.
 
 WRITING FOR THE EAR
@@ -212,7 +288,11 @@ TRUTH
 
 Return ONLY this JSON, no prose around it and no code fence:
 
-{"beats":[{"kind":"opening","text":"..."},{"kind":"stop","stopIndex":0,"text":"..."},{"kind":"closing","text":"..."}]}`;
+${
+    routedLegs > 0
+      ? '{"beats":[{"kind":"opening","text":"..."},{"kind":"stop","stopIndex":0,"text":"..."},{"kind":"travel","legIndex":0,"text":"..."},{"kind":"stop","stopIndex":1,"text":"..."},{"kind":"closing","text":"..."}]}'
+      : '{"beats":[{"kind":"opening","text":"..."},{"kind":"stop","stopIndex":0,"text":"..."},{"kind":"closing","text":"..."}]}'
+  }`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,6 +306,7 @@ const MAX_BEAT_CHARS = 600;
 interface RawBeat {
   kind?: unknown;
   stopIndex?: unknown;
+  legIndex?: unknown;
   text?: unknown;
 }
 
@@ -240,13 +321,22 @@ interface RawBeat {
  * lockstep with the day's rows.
  *
  * The invariants callers may rely on: exactly one `opening` first, exactly one `stop` beat per
- * stop in the day's own order, at most one `closing` last, and no empty `text`.
+ * stop in the day's own order, at most one `travel` beat immediately before each stop after the
+ * first, at most one `closing` last, and no empty `text`.
  */
 export function normaliseScript(
   raw: unknown,
-  params: { day: DayPlan; dayIndex: number; dayCount: number; destination: string }
+  params: {
+    day: DayPlan;
+    dayIndex: number;
+    dayCount: number;
+    destination: string;
+    /** The same legs `buildStoryPrompt` was given. Absent means no travel beats were asked for, so
+     *  none are kept — which is this function's behaviour before travel beats existed, exactly. */
+    legs?: readonly (CompactLeg | null)[];
+  }
 ): StoryScript {
-  const { day, dayIndex } = params;
+  const { day, dayIndex, legs } = params;
   const rawBeats: RawBeat[] = Array.isArray((raw as { beats?: unknown })?.beats)
     ? ((raw as { beats: RawBeat[] }).beats as RawBeat[])
     : [];
@@ -268,9 +358,34 @@ export function normaliseScript(
       )?.text
     ) ?? stopFallback(day.stops[index]);
 
+  /**
+   * The travel beat before stop `index`, if there is one — **the only beat with no fallback.**
+   *
+   * Two conditions, and both are necessary. The leg must have routed, because there is nothing
+   * honest to say about a walk nothing measured; and the model must actually have written a beat
+   * for it, because a generic "you make your way over" is filler played over the one stretch of
+   * film where the camera is doing something. Either missing, and the two stops simply follow each
+   * other — which is the film as it played before this existed.
+   *
+   * `legIndex` must be a real `number`: a string `"0"` is dropped, the same trap `stopText` guards
+   * for `stopIndex`.
+   */
+  const travelBeat = (index: number): StoryBeat[] => {
+    if (!legs?.[index - 1]) return [];
+    const text = clean(
+      rawBeats.find(
+        (b) => b.kind === "travel" && typeof b.legIndex === "number" && b.legIndex === index - 1
+      )?.text
+    );
+    return text ? [{ kind: "travel" as const, legIndex: index - 1, text }] : [];
+  };
+
   const beats: StoryBeat[] = [
     { kind: "opening", text: opening },
-    ...day.stops.map((_, index) => ({ kind: "stop" as const, stopIndex: index, text: stopText(index) })),
+    ...day.stops.flatMap((_, index) => [
+      ...(index > 0 ? travelBeat(index) : []),
+      { kind: "stop" as const, stopIndex: index, text: stopText(index) },
+    ]),
   ];
 
   // Closing is the one beat with no fallback. A generic "and that was your day" is filler in the

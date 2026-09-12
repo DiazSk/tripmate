@@ -110,3 +110,36 @@ export function tourFlightSeconds(legM: number, turnRad = 0): number {
  * card it is holding on says a name, a time and a duration — three or four seconds of reading.
  */
 export const TOUR_HOLD_MS = 3600;
+
+/** Below this the camera reads as stopped rather than travelling, however long the line is. */
+const TRAVEL_SPEED_MIN_MPS = 25;
+/** Above this it reads as a whip pan and the ground stops being legible. */
+const TRAVEL_SPEED_MAX_MPS = 400;
+
+/**
+ * How long the camera should take to walk a leg, fitted to the narration that plays over it.
+ *
+ * **The narration wins, and that is this controller's founding rule** — the beat lasts exactly as
+ * long as the sentence takes to say. A camera allowed to set its own duration would either finish
+ * travelling while the voice was still describing the journey, or still be in transit when the next
+ * place was being introduced.
+ *
+ * So the narration's length is the target and the ground speed is what gives, clamped at both ends
+ * because a value outside this band stops reading as travel at all. Both clamps resolve themselves
+ * without further code:
+ *
+ * - **Floor hit** (a short walk, a long line): the camera arrives early and the driver stops
+ *   scheduling frames. That is not dead air — it is a pre-arrival at the place the next beat is
+ *   about, which is a better shot than a crawl.
+ * - **Ceiling hit** (a long drive, a short line): the leg is travelled fast, and if the narration
+ *   still ends first the beat advances and cancels the driver mid-path. The next stop beat flies
+ *   from wherever the camera reached, and `tourFlightSeconds` caps that at 2.8s, so it reads as an
+ *   ordinary transition rather than a jump.
+ */
+export function travelFollowSeconds(pathM: number, narrationMs: number): number {
+  const narrationS = Math.max(narrationMs, 0) / 1000;
+  if (!(pathM > 0)) return narrationS;
+  const minS = pathM / TRAVEL_SPEED_MAX_MPS;
+  const maxS = pathM / TRAVEL_SPEED_MIN_MPS;
+  return Math.min(Math.max(narrationS, minS), maxS);
+}
