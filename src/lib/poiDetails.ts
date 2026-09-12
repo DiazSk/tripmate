@@ -1,6 +1,7 @@
 import { TTL, cached } from "./fetchCache";
 import { askOverpass } from "./overpass";
 import type { PoiOsmTags } from "./types";
+import { parseWheelchair } from "./osmTags";
 
 /** Longer than the shared default because this batches every POI in a trip into one query and
  *  Overpass queues under load. NOTE the `[timeout:N]` inside the query is an instruction to
@@ -15,16 +16,6 @@ interface OverpassPoiElement {
   lon?: number;
   center?: { lat: number; lon: number };
   tags?: Record<string, string>;
-}
-
-/** OSM's `wheelchair` values in the wild include `designated`, `partial` and `limited?`. Only the
- *  three documented values are trusted; anything else reads as unknown rather than being coerced
- *  into a guess, since a wrong "yes" here sends someone to a place they can't get into. */
-function parseWheelchair(raw: string | undefined): "yes" | "limited" | "no" | null {
-  if (raw === "yes" || raw === "designated") return "yes";
-  if (raw === "limited") return "limited";
-  if (raw === "no") return "no";
-  return null;
 }
 
 function escapeForOverpass(name: string): string {

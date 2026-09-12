@@ -23,6 +23,7 @@ import { enclosingCircle, pointInPolygon, type LatLng } from "./searchArea";
  */
 
 import { askOverpass } from "./overpass";
+import { parseWheelchair, parseWikidataId, parseYesNo, tagValue } from "./osmTags";
 
 export interface FoundPlace {
   /** Stable within one result set — used as a React key and to match a pin to a row. */
@@ -36,6 +37,30 @@ export interface FoundPlace {
   address?: string;
   /** 0-5, when the provider has one. OSM has no ratings at all. */
   rating?: number;
+
+  /* --- What the detail card is made of ------------------------------------------------------
+     All optional, all OSM-only, and all absent more often than present — measured across 60 named
+     cafés in Siena: street 90%, outdoor seating 81%, phone 52%, hours 36%, wheelchair 23%, website
+     14%, cuisine 6%. 39 of those 60 carry at least one, which is what makes a card worth opening;
+     the other 21 are why the card has to look finished with none of them.
+
+     Costing nothing to collect: Overpass already returns every tag on every element, and the mapper
+     below simply never read them. */
+
+  /** `website` or `contact:website`. Rendered as a link, so it is validated before use. */
+  website?: string;
+  phone?: string;
+  /** Raw OSM `opening_hours`, which is a *grammar* and not a clock — "Mo-Sa 07:00-19:00; Su off".
+   *  Shown as written. Evaluating it into "open now" needs the venue's timezone and a real parser,
+   *  and getting that wrong tells somebody a closed door is open. */
+  openingHours?: string;
+  cuisine?: string;
+  wheelchair?: "yes" | "limited" | "no";
+  /** `true`/`false` where OSM says so, absent where nobody has. The best-covered tag of the set. */
+  outdoorSeating?: boolean;
+  /** A `Q…` item id, when tagged — the one handle that leads to a photograph. Measured 0% on cafés
+   *  and 55% on museums, attractions and parks, which is the honest shape of what gets photographed. */
+  wikidataId?: string;
 }
 
 /**
@@ -347,6 +372,7 @@ async function searchOverpass({
       // of them this venue is — and that answer is now what picks the pin's colour.
       category: categoryFromTags(el.tags ?? {}),
       address: addressFromTags(el.tags ?? {}),
+      ...detailsFromTags(el.tags ?? {}),
     });
     if (places.length >= MAX_RESULTS) break;
   }
@@ -419,6 +445,56 @@ function englishName(tags: Record<string, string> | undefined): string | undefin
   if (!tags) return undefined;
   const candidate = tags["name:en"] ?? tags.int_name ?? tags.name;
   return candidate?.trim() || undefined;
+}
+
+/**
+ * Everything the detail card reads, pulled from tags Overpass already sent.
+ *
+ * **The query is not changing to get these.** `out center N` is *body* verbosity and already
+ * carries every tag; `out center tags N` is a narrower one, and since the loop above drops any
+ * element without a coordinate, swapping verbosity here is a silent empty-results bug rather than
+ * an optimisation. These fields were on the wire the whole time and were being thrown away.
+ *
+ * Returns a sparse object on purpose: `undefined` keys spread into `FoundPlace` as absent rather
+ * than as empty strings, which is what lets the card ask `if (place.website)` and lets
+ * `DESIGN.md`'s "no heading for a value that isn't there" rule hold by construction.
+ */
+export function detailsFromTags(tags: Record<string, string>) {
+  return {
+    website: validHttpUrl(tagValue(tags, "website", "contact:website")),
+    phone: tagValue(tags, "phone", "contact:phone"),
+    openingHours: tagValue(tags, "opening_hours"),
+    cuisine: tagValue(tags, "cuisine"),
+    wheelchair: parseWheelchair(tags.wheelchair) ?? undefined,
+    outdoorSeating: parseYesNo(tags.outdoor_seating) ?? undefined,
+    wikidataId: parseWikidataId(tags.wikidata),
+  };
+}
+
+/**
+ * An `http(s)` URL, or nothing.
+ *
+ * OSM's `website` tag holds bare domains, email addresses, Facebook handles and prose. This value
+ * becomes an `href` the traveller clicks, so anything that is not parseable as http(s) is dropped
+ * rather than guessed at — in particular a bare `javascript:` or `data:` string must never reach
+ * an anchor. A bare domain is the one repair worth making, because it is common and unambiguous.
+ */
+function validHttpUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    // Credentials in a URL the traveller is about to click are never what an OSM editor meant, and
+    // they are how an email address sneaks through: `info@example.org` prefixes to a perfectly
+    // valid `https://info@example.org/` whose username is `info`. Refuse rather than repair.
+    if (url.username || url.password) return undefined;
+    // A host with no dot is a LAN name or a typo, not a website.
+    if (!url.hostname.includes(".")) return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function addressFromTags(tags: Record<string, string>): string | undefined {
