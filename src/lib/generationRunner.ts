@@ -13,7 +13,8 @@ import {
   searchableCategories,
 } from "./dietaryVenues";
 import type { DietaryVenue } from "./dietaryVenues";
-import { evaluateItinerary } from "./guardrails";
+import { type LegMinutesLookup, evaluateItinerary } from "./guardrails";
+import { routeMinutes, routePairs } from "./osrmRoute";
 import type { PlaceFacts } from "./placeFacts";
 import {
   annotateBookAhead,
@@ -519,9 +520,49 @@ export async function runGeneration(
     }
   };
 
-  /** See `travelFindings` above for why this is a call and not an initialiser. */
-  const computeTravelFindings = (): void => {
-    travelFindings = evaluateItinerary(itinerary)
+  /**
+   * See `travelFindings` above for why this is a call and not an initialiser.
+   *
+   * `realMinutes` fills a seam `guardrails.ts` has carried unfed since the OSRM path was removed:
+   * `checkLegs` already prefers a looked-up duration and already falls back to the haversine
+   * estimate on a `null`, so the whole integration is this closure. `guardrails.ts` itself stays
+   * pure, synchronous and importable from the client graph — nothing about it changes.
+   *
+   * Routing every consecutive hop is worth the wait because of *where* this sits: on the streaming
+   * path it runs after `live.onPlan`'s plan has been handed over and before the ~150s critique, so
+   * it costs the traveller nothing they are waiting on. What it buys is the critique model being
+   * told "the Louvre to the Musée d'Orsay takes about 14 min but only 5 min is left" from a
+   * measured number rather than a straight-line guess — which is exactly the class of finding it is
+   * asked to fix.
+   *
+   * Fail-soft throughout: a leg that does not route is `null`, `checkLegs` uses the estimate for
+   * it, and an OSRM outage leaves this function doing precisely what it did before.
+   */
+  const computeTravelFindings = async (): Promise<void> => {
+    const pairs = itinerary.days.flatMap((day) =>
+      day.stops.slice(1).map((to, i) => ({
+        from: { lat: day.stops[i].lat, lon: day.stops[i].lng },
+        to: { lat: to.lat, lon: to.lng },
+        key: `${day.stops[i].name.trim()}→${to.name.trim()}`,
+      }))
+    );
+
+    const byPair = new Map<string, number>();
+    try {
+      const routes = await routePairs(pairs.map(({ from, to }) => ({ from, to })));
+      routes.forEach((route, i) => {
+        if (route) byPair.set(pairs[i].key, routeMinutes(route));
+      });
+    } catch (err) {
+      // `routePairs` swallows a per-leg failure into a null, so this is structural. Leaving
+      // `byPair` empty is the estimate, which is what this produced before routing existed.
+      console.error("[generation] leg routing failed", err);
+    }
+
+    const realMinutes: LegMinutesLookup = (from, to) =>
+      byPair.get(`${from.name.trim()}→${to.name.trim()}`) ?? null;
+
+    travelFindings = evaluateItinerary(itinerary, { realMinutes })
       .filter((g) => g.rule === "travel")
       .map((g) => g.message)
       .concat(dietaryFindings);
@@ -580,7 +621,7 @@ export async function runGeneration(
     // `applyResolvedCoords`, the same way the streaming branch restores them — so nothing that
     // used to get an OSM position loses one.
     await placeStops();
-    computeTravelFindings();
+    await computeTravelFindings();
     const revision = await runCritique();
     if (revision) {
       applyResolvedCoords(revision.days);
@@ -594,7 +635,7 @@ export async function runGeneration(
   // spend the ~150s critique costs. This is the halving — interactive at ~160s rather than ~310s.
   finalizeDays(itinerary.days);
   await placeStops();
-  computeTravelFindings();
+  await computeTravelFindings();
   live.onPlan({ itinerary, traceId, runId, sessionId });
 
   const revision = await runCritique();
