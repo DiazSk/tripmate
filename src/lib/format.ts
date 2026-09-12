@@ -80,3 +80,36 @@ export function formatClockLabel(hhmm: string): string {
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
   return `${hour12}:${m[2]} ${period}`;
 }
+
+/**
+ * Metres → "940 m" or "1.2 km".
+ *
+ * The switch is at a kilometre, and below it the figure rounds to 10m rather than to the metre:
+ * a walking route's endpoints are snapped to the nearest bit of pavement, so the last digit was
+ * never real and printing it claims a precision the source does not have. Above a kilometre, 1dp
+ * — matching `TravelLeg.distanceKm`, so the panel and the planner's digest round the same way.
+ */
+export function formatDistance(metres: number): string {
+  const m = Number.isFinite(metres) ? Math.max(metres, 0) : 0;
+  // Rounded *before* the unit is chosen, not after. The other order leaves a gap: 999m rounds to
+  // "1000 m" while 1000m reads "1 km", so two distances a metre apart print in different units.
+  const rounded = Math.round(m / 10) * 10;
+  if (rounded < 1000) return `${rounded} m`;
+  return `${(Math.round(m / 100) / 10).toLocaleString("en-US")} km`;
+}
+
+/**
+ * Seconds → "12 min", or "1 hr 5 min" once it passes an hour.
+ *
+ * Floors at "1 min" for the same reason `travelLegBetween` does: "0 min" reads as "no distance at
+ * all" rather than "next door", and the two are different things to a reader deciding whether to
+ * walk. An exact hour is "1 hr", not "1 hr 0 min".
+ */
+export function formatDuration(seconds: number): string {
+  const total = Number.isFinite(seconds) ? Math.max(seconds, 0) : 0;
+  const minutes = Math.max(Math.round(total / 60), 1);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
