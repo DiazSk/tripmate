@@ -186,7 +186,11 @@ function ShellBody({
                 readout tick and nothing else. */}
             {!searchOpen && <MapControls />}
           </div>
-          <MapEngineToggle locked={searchOpen} />
+          {/* Not stood down while the search is open, unlike `MapControls` above: this pill sits in
+              the same gutter but *above* the panel's top edge, so it is never covered, and the
+              panel's own `open` state outlives an engine change — Satellite and back gives the
+              search back with its query intact. See the note in `MapEngineToggle`. */}
+          <MapEngineToggle />
           <StoryStage />
         </div>
   );
