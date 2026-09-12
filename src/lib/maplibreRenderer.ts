@@ -1520,9 +1520,87 @@ export class MapLibreRenderer implements MapRenderer {
     this.map.jumpTo({ pitch });
   }
 
+  /**
+   * Which search pin the pointer is over, by the same hit test the click uses.
+   *
+   * Edge-triggered: MapLibre fires `mousemove` for every pixel of travel, and the consumer sets
+   * React state, so a naive forward would re-render the whole panel a few hundred times crossing
+   * one café. The last id is kept and only a change is reported.
+   */
+  onSearchPinHover(cb: (id: string | null) => void) {
+    if (!this.isAlive()) return () => {};
+    const layer = `${SEARCH_SOURCE_ID}-halo`;
+    let last: string | null = null;
+    const report = (next: string | null) => {
+      if (next === last) return;
+      last = next;
+      cb(next);
+    };
+    const handler = (e: { point: { x: number; y: number } }) => {
+      if (!this.isAlive() || !this.map.getLayer(layer)) return;
+      const hit = this.map.queryRenderedFeatures([e.point.x, e.point.y], { layers: [layer] })[0];
+      const id = hit?.properties?.id;
+      report(typeof id === "string" && id ? id : null);
+    };
+    // Leaving the canvas entirely never produces a `mousemove` over empty map, so it needs its own
+    // event or the last pin stays "hovered" for as long as the pointer is off the map.
+    const leave = () => report(null);
+    this.map.on("mousemove", handler);
+    this.map.getCanvas().addEventListener("mouseleave", leave);
+    return () => {
+      if (!this.isAlive()) return;
+      this.map.off("mousemove", handler);
+      this.map.getCanvas().removeEventListener("mouseleave", leave);
+    };
+  }
+
+  /** MapLibre's own `moveend`, which already means "the gesture and its inertia are over". */
+  onCameraIdle(cb: () => void) {
+    if (!this.isAlive()) return () => {};
+    const handler = () => cb();
+    this.map.on("moveend", handler);
+    return () => {
+      if (this.isAlive()) this.map.off("moveend", handler);
+    };
+  }
+
   onMapClick(cb: (lat: number, lng: number) => void) {
     if (!this.isAlive()) return () => {};
     const handler = (e: { lngLat: { lat: number; lng: number } }) => cb(e.lngLat.lat, e.lngLat.lng);
+    this.map.on("click", handler);
+    return () => {
+      if (this.isAlive()) this.map.off("click", handler);
+    };
+  }
+
+  /**
+   * Which search pin was clicked, by hit-testing the layer we drew it into.
+   *
+   * **The halo, and only the halo.** It is `r=13` at rest and strictly larger than the dot in every
+   * state, so querying it alone is both sufficient and a free 13px tap target on a 5.5px dot —
+   * MapLibre's circle hit-test ignores `circle-blur`, so the 13 is real. The *label* layer is
+   * deliberately excluded even though symbol layers are queryable: a place's name is drawn below
+   * and beside its dot and routinely overlaps a neighbour's, so a click on text would open the
+   * wrong place while looking exactly like it had opened the right one.
+   *
+   * `properties.id` is the provider's own place id — `showSearchResults` already puts it on every
+   * feature, which is why this needed no change to what is drawn.
+   */
+  onSearchPinClick(cb: (id: string) => void) {
+    if (!this.isAlive()) return () => {};
+    const handler = (e: { point: { x: number; y: number } }) => {
+      if (!this.isAlive()) return;
+      const layer = `${SEARCH_SOURCE_ID}-halo`;
+      // `queryRenderedFeatures` throws on an absent layer id. These are added unconditionally in
+      // `addTripLayers` and nothing calls `setStyle`, so this is belt-and-braces against a future
+      // style swap rather than a case seen in the wild.
+      if (!this.map.getLayer(layer)) return;
+      // The `[x, y]` tuple form rather than `e.point` itself: MapLibre types the argument as its
+      // own `Point` class, and the event object we receive is typed structurally here.
+      const hit = this.map.queryRenderedFeatures([e.point.x, e.point.y], { layers: [layer] })[0];
+      const id = hit?.properties?.id;
+      if (typeof id === "string" && id) cb(id);
+    };
     this.map.on("click", handler);
     return () => {
       if (this.isAlive()) this.map.off("click", handler);

@@ -865,6 +865,30 @@ export class CesiumRenderer implements MapRenderer {
     });
   }
 
+  /**
+   * Nothing to click. `showSearchResults` is a no-op on this engine — search is a Map-only surface
+   * and `MapSearchPanel` never opens on Satellite — so there is no pin here to hit-test, and the
+   * honest answer is an unsubscribe that does nothing rather than a listener that never fires.
+   */
+  onSearchPinClick(_cb: (id: string) => void) {
+    void _cb;
+    return () => {};
+  }
+
+  /** Nothing to point at either — see `onSearchPinClick`. */
+  onSearchPinHover(_cb: (id: string | null) => void) {
+    void _cb;
+    return () => {};
+  }
+
+  /** Cesium's own camera event. Implemented even though search never opens on this engine, because
+   *  "the camera stopped" is not a search-specific question and the next caller should not have to
+   *  add it. `moveEnd` returns a removal function directly. */
+  onCameraIdle(cb: () => void) {
+    if (!this.isAlive()) return () => {};
+    return this.viewer.camera.moveEnd.addEventListener(cb);
+  }
+
   onMapClick(cb: (lat: number, lng: number) => void) {
     const { viewer, Cesium } = this;
     if (!this.isAlive()) return () => {};

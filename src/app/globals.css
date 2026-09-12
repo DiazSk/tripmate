@@ -3398,3 +3398,139 @@ html[data-story-mode="true"] .marker-day-label {
     animation: none;
   }
 }
+
+/* --- The searched-place card -----------------------------------------------------------------
+   A card anchored to a search pin, drawn over a map that is moving underneath it.
+
+   **Its blur is 20px and that is a measurement, not a preference.** `.glass-itinerary` sits at
+   56px, and it can afford to: it is docked and still. This card's transform is rewritten on every
+   frame the camera moves, and the note on `.marker-title-card` above already records what that
+   costs — an element with a backdrop filter owns its own render surface, and moving a render
+   surface re-rasters everything behind it. That card settled on 8px for a chip of about 130x28.
+   This one is roughly 340 wide and as tall as its content, some forty times the area, so it takes
+   the cheapest material in the system that still reads as glass: `.glass-control`'s exact recipe,
+   at the alpha that class uses for hover, because the fill is what carries the contrast and the
+   blur only makes it handsome.
+
+   Written here rather than as Tailwind utilities on the element for the usual reason — an
+   unlayered `background` beats every `@layer utilities` declaration, so a `hover:bg-*` on this
+   element would be dead on arrival, exactly as it was on four controls before it. */
+.search-pin-card {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* **Narrower than the panel it sits beside, on purpose.** The search list is 22rem because it is
+     a list you scan; this is one place you read, and at the list's width it covered the ground the
+     traveller clicked the pin to look at. 17rem holds a name, a street and four short facts at the
+     body size without wrapping any of them awkwardly, and leaves the map legible around it. */
+  width: 17rem;
+  /* **`overflow: visible`, and it is load-bearing rather than a default.** This used to cap its
+     height and scroll, which quietly clipped both the tail and the hover bridge below — an
+     `overflow-y` of anything but `visible` computes `overflow-x` to match, so the two pieces that
+     hang outside the box were being cut off exactly where they had to reach. Nothing here needs a
+     scrollbar: the facts are four short rows and the only genuinely long thing, the day list,
+     caps and scrolls itself. */
+  overflow: visible;
+  border-radius: 16px;
+  background: rgb(var(--surface-deep-rgb) / 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  /* The panel shadow rather than the control one: this reads as a surface that has arrived, and it
+     has to hold its own edge against terrain, water and a lit route all at once. */
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  /* Same reasoning as `.marker-anchor`: the render loop owns `visibility` from its first frame, and
+     a card must never flash at 0,0 before it has been projected. */
+  visibility: hidden;
+  will-change: transform;
+  /* Children inherit the dark-surface values, the way `.glass-itinerary` hands them down, so
+     `text-muted` and `border-card-border` inside the card mean what they look like. */
+  --foreground: #f7f5f2;
+  --muted: rgba(247, 245, 242, 0.72);
+  --card-border: rgba(247, 245, 242, 0.12);
+  color: var(--foreground);
+}
+
+/* The photograph, when there is one — and there usually is not. A fixed ratio rather than a fixed
+   height so the frame is the picture's shape rather than a slot the picture was poured into. */
+.search-pin-card-photo {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  /* It is the card's top edge now that nothing overlaps it, so it carries the card's radius. The
+     parent's `overflow-y: auto` would clip it anyway on most engines; saying it here means the
+     corner does not depend on that. */
+  border-radius: 16px 16px 0 0;
+  /* The Constant-Ground Rule: a permanent base under the photo layer, so a slow thumbnail arrives
+     into a correctly coloured frame instead of repainting the surface when it lands. */
+  background: var(--tile);
+}
+
+.search-pin-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 0.75rem 0.375rem;
+}
+
+/* The tail. `--tail-x` is written by the anchoring hook every frame, so it keeps pointing at the
+   dot even after the card itself has stopped following it into a screen corner — which is what
+   stops a clamped card reading as floating near nothing in particular. */
+/* **The bridge.** The card floats 14px clear of its pin, and that gap was a trap: crossing it put
+   the pointer over open map, which armed the close, and a hand that pauses on the way — to read the
+   card it is reaching for — lost it before arriving. This is an invisible extension of the card
+   across the gap, so the journey never leaves the card's own hover region and the timer is a
+   backstop rather than a race. Wider than the card on purpose: a pointer travelling diagonally
+   leaves through a corner. */
+.search-pin-card::after {
+  content: "";
+  position: absolute;
+  left: -1rem;
+  right: -1rem;
+  height: 1.5rem;
+}
+.search-pin-card[data-side="above"]::after {
+  bottom: -1.5rem;
+}
+.search-pin-card[data-side="below"]::after {
+  top: -1.5rem;
+}
+
+.search-pin-card-tail {
+  position: absolute;
+  left: var(--tail-x, 50%);
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: rgb(var(--surface-deep-rgb) / 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+.search-pin-card[data-side="above"] .search-pin-card-tail {
+  bottom: -7px;
+  /* Only the two outward edges carry the border, so the tail reads as the card's own corner rather
+     than as a diamond stuck to it. */
+  border-top: 0;
+  border-left: 0;
+}
+.search-pin-card[data-side="below"] .search-pin-card-tail {
+  top: -7px;
+  border-bottom: 0;
+  border-right: 0;
+}
+
+/* The arrival. One curve, one small distance, and gated the way every entrance here is — the
+   blanket reduced-motion rule flattens the duration, and this is a transform-and-opacity animation
+   so it costs the compositor and nothing else. */
+@keyframes search-pin-card-in {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--card-x, 0), var(--card-y, 0), 0) scale(0.96);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .search-pin-card {
+    animation: search-pin-card-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
