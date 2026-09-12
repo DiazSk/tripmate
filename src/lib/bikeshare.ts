@@ -6,7 +6,8 @@ import { haversineKm } from "./travelTime";
  *
  * **This fills a gap the codebase has carried an apology for since the staged pipeline shipped.**
  * `RawFetch.transportModes` was documented as a permanent `available: false` ("no reliable free
- * data source exists for this yet"), and `routeMatrix.ts` is still a stub that returns `false`, so
+ * data source exists for this yet"), and `probeTransitAvailable` (`osrmRoute.ts`) still returns a
+ * flat `false` because nothing publishes the transit equivalent of dock coordinates, so
  * `reconcile.ts` has always fallen through to assuming walk + transit — i.e. every plan this app
  * has ever produced assumed a metro exists. GBFS is a real, free, keyless source for the bike half
  * of that question.

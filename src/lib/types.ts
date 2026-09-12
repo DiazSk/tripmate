@@ -142,8 +142,9 @@ export interface RawFetch {
   /** Was a permanent `available: false` from the day the pipeline shipped — there was no free
    *  source for it, and the gap was left explicit rather than filled with fabricated data. GBFS
    *  closes the *bike* half of it (`bikeshare.ts`), so this now goes `available: true` for a
-   *  destination with a resolved bikeshare system. Transit is still unproven: `routeMatrix.ts`
-   *  remains a stub, so `walk` here is still an assumption rather than a finding. */
+   *  destination with a resolved bikeshare system. Transit is still unproven — `osrmRoute.ts`
+   *  serves foot, bike and car and there is no free transit router to ask — so `walk` here is
+   *  still an assumption rather than a finding. */
   transportModes: { available: boolean; modes: string[] };
   /** The city's bikeshare, or `available: false` for "we could not tell". Deliberately NOT
    *  "this city has none" — `bikeshare.ts` cannot distinguish an unmatched city from a bikeless
