@@ -61,6 +61,22 @@ const DEBOUNCE_MS = 450;
 const SEARCH_LAYOUT_ID = "search-container";
 const SEARCH_SPRING = { type: "spring", stiffness: 320, damping: 32 } as const;
 
+/**
+ * The *resize*, which is a different motion from the morph and used to borrow its spring.
+ *
+ * A morph is one object becoming another and wants to arrive: 44px circle to 352px panel in about
+ * 320ms is right. A resize is the panel already on screen changing its mind about how tall it is —
+ * unselecting a category drops it from the 640px cap to 322px — and at the morph's stiffness that
+ * is a snap. Measured on the way in: 1.37 scaleY on the first frame, back to 1.0 by 360ms, with
+ * more than half the travel spent in the first 120ms. That front-loading is what reads as a jerk.
+ *
+ * Critically damped on purpose (damping 30 against a critical 29.7 at this stiffness and mass), so
+ * it settles rather than bouncing — a bounce on a box full of text is a second thing to watch. It
+ * lands around 490ms, which is slower than the morph and should be: nothing is arriving, the panel
+ * is just taking up less room.
+ */
+const RESIZE_SPRING = { type: "spring", stiffness: 200, damping: 30, mass: 1.1 } as const;
+
 const CATEGORY_LABELS: Record<PlaceCategory, string> = {
   cafe: "Cafés",
   restaurant: "Food",
@@ -128,6 +144,22 @@ export default function MapSearchPanel({
   const [history, setHistory] = useState<string[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  /**
+   * Whether the entry morph is behind us, so a later layout change can take the slower spring.
+   *
+   * State rather than a ref, and not by preference: `transition` is read during render, and a ref
+   * read during render is what `react-hooks/refs` refuses — correctly, since the compiler is free
+   * to skip the render that would have observed the new value. One extra render when the morph
+   * lands is the whole cost.
+   *
+   * Cleared where the morph is *started* — the press that opens the panel — rather than where it
+   * ends. The panel element unmounts on close but this component does not, so the flag has to be
+   * put back somewhere, and the open press is the one place that is true by construction and needs
+   * no effect to observe it. The Satellite round trip skips it and is right to: the panel returns
+   * with no partner element on screen to morph out of, so Framer runs no layout animation there and
+   * a stale `true` governs nothing.
+   */
+  const [morphed, setMorphed] = useState(false);
 
   const shown = engine === "maplibre" && globeWanted;
   // Derived, not stored. Toggling to Satellite has to put the search away — the pins belong to a
@@ -380,6 +412,7 @@ export default function MapSearchPanel({
             // looked at. Doing it here also keeps it out of an effect, which for a plain read of
             // an external store is a cascading render for no reason.
             setHistory(recentSearches());
+            setMorphed(false);
             setOpen(true);
           }}
           aria-label="Search the map for places"
@@ -396,16 +429,33 @@ export default function MapSearchPanel({
       ) : (
         <motion.div
           layoutId={SEARCH_LAYOUT_ID}
-          transition={SEARCH_SPRING}
+          transition={morphed ? RESIZE_SPRING : SEARCH_SPRING}
+          onLayoutAnimationComplete={() => setMorphed(true)}
           className="glass-control pointer-events-auto flex max-h-[min(70vh,640px)] w-[22rem] flex-col overflow-hidden rounded-2xl"
         >
-          {/* Everything inside fades in once the box has somewhere to be. Framer scales a layout
-              child's box during the morph, so content that is fully opaque from frame one is
-              content the traveler watches get squeezed out of a 44px circle. */}
+          {/* **`layout="position"` is the scale correction, and without it everything in here is
+              drawn stretched.** Framer animates a layout change with a transform, so while the
+              panel travels from 640px to 322px it is a 322px box scaled to 1.37 on Y alone —
+              measured, on the first frame — and every child inherits that. Pills become ovals, the
+              search field grows a chin, text gains a third of its height and loses none of its
+              width. Framer only counter-scales children that are projection nodes themselves,
+              which is what this makes it: the wrapper keeps its true size and the `overflow-hidden`
+              above simply closes down over it. Position rather than full `layout` because the
+              wrapper's *size* is the thing being corrected — animating that too would re-introduce
+              the scale one level down.
+
+              The fade stays, and still earns its keep: on the way in the content is now crisp
+              instead of squeezed, but it is crisp at full size inside a 44px circle, which without
+              the fade is a panel's worth of type appearing through a keyhole. */}
           <motion.div
+            layout="position"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.16, delay: 0.06 }}
+            transition={{
+              layout: morphed ? RESIZE_SPRING : SEARCH_SPRING,
+              duration: 0.16,
+              delay: 0.06,
+            }}
             className="flex min-h-0 flex-col"
           >
           {/* The grabber. A sheet handle rather than a labelled button: it names itself by shape,
@@ -481,11 +531,23 @@ export default function MapSearchPanel({
               only by shift-wheel. Nothing signalled they were there. Wrapping shows all six at
               once in two rows, which is both the fix and one fewer interaction to discover.
 
-              **Each chip wears its own pin colour, and that is the legend.** With several
-              categories on the map at once the traveler has to be able to tell a café pin from a
-              bar pin, and a separate key somewhere else in the panel would be a second thing to
-              read and a second thing to keep in step. The control that turns a colour on is the
-              only honest place to show what that colour is. */}
+              **Each chip carries its pin colour as a swatch, and that swatch is the legend.** With
+              several categories on the map at once the traveler has to be able to tell a café pin
+              from a bar pin, and a separate key somewhere else in the panel would be a second thing
+              to read and a second thing to keep in step. The control that turns a colour on is the
+              only honest place to show what that colour is.
+
+              **The swatch is where the pin colour stops, though.** A pressed chip used to be
+              *filled* with it — a 6px dot's worth of map-native paint blown up to a 64px pill — and
+              six of those wrapped across two rows inside a glass panel turned the filter row into
+              the loudest thing on the screen, in a set of hues picked to survive aerial photography
+              rather than to sit beside `--accent`. That is the rule `globals.css` states for the
+              day palette ("never in a panel, chip or button") applied to the search palette, which
+              is the same kind of colour for the same reason. So the chip's *state* is told in the
+              interface palette — the accent fill every other multi-select in this app uses, see
+              `InterestPicker` — and the category is told by the swatch, which now stays on through
+              both states instead of disappearing exactly when its colour arrives on the map. The
+              dark hairline around it is what keeps a green park dot legible on the green accent. */}
           <div className="flex flex-wrap gap-1.5 border-b border-card-border px-3 py-2">
             {PLACE_CATEGORIES.map((c) => {
               const on = categories.includes(c);
@@ -499,25 +561,24 @@ export default function MapSearchPanel({
                     )
                   }
                   aria-pressed={on}
-                  style={
-                    on
-                      ? { backgroundColor: SEARCH_COLOURS[c], color: "#10151c" }
-                      : { boxShadow: `inset 0 0 0 1px ${SEARCH_COLOURS[c]}66` }
-                  }
                   className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                    on ? "" : "bg-white/5 text-muted hover:text-foreground"
+                    on
+                      ? "bg-accent text-accent-foreground hover:bg-accent-hover"
+                      : "bg-white/10 text-muted hover:bg-white/20 hover:text-foreground"
                   }`}
                 >
-                  {/* The swatch is what an unselected chip has instead of a fill: the colour still
-                      has to be legible before it is switched on, or picking a second category is a
-                      guess about what will appear on the map. */}
-                  {!on && (
-                    <span
-                      aria-hidden="true"
-                      className="h-1.5 w-1.5 rounded-full"
-                      style={{ backgroundColor: SEARCH_COLOURS[c] }}
-                    />
-                  )}
+                  <span
+                    aria-hidden="true"
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{
+                      backgroundColor: SEARCH_COLOURS[c],
+                      // Only on the fill, and in the chip's own ink rather than a fixed colour, so
+                      // it follows the accent if that is ever re-tuned. On the glass the swatch
+                      // needs no rim — the ground is dark and every one of these hues is vivid —
+                      // and ringing it there only dulls the colour it exists to name.
+                      boxShadow: on ? "0 0 0 1px currentColor" : undefined,
+                    }}
+                  />
                   {CATEGORY_LABELS[c]}
                 </button>
               );
