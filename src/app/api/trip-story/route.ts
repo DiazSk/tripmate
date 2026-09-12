@@ -6,6 +6,7 @@ import { getStoryScript, getTrip, insertRun, saveStoryScript } from "@/lib/db";
 import {
   buildStoryPrompt,
   compactDay,
+  type CompactLeg,
   fallbackScript,
   normaliseScript,
   STORY_PROMPT_VERSION,
@@ -49,6 +50,10 @@ export async function POST(req: NextRequest) {
     dayCount?: number;
     day?: DayPlan;
     tripId?: string;
+    /** The day's real routes, already fetched by the client (`dayRoutes.ts`). Sent rather than
+     *  looked up here so a slow routing service can never delay a Play press: whatever has landed
+     *  by then is what the film gets, and nothing waits on what has not. */
+    legs?: (CompactLeg | null)[];
   };
   try {
     body = await req.json();
@@ -64,10 +69,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "destination and day are required" }, { status: 400 });
   }
 
-  const params = { destination, day, dayIndex, dayCount };
+  // Legs reach `compactDay` and therefore the fingerprint, which is the whole point of putting
+  // them there rather than in a second field: a day whose routes have landed hashes differently
+  // from the same day before they did, so the travel-free script is not served over the top of it.
+  const legs = Array.isArray(body.legs) ? body.legs : undefined;
+  const params = { destination, day, dayIndex, dayCount, legs };
   // The prompt version is part of the key, not just the day — see `STORY_PROMPT_VERSION`.
   const fingerprint = createHash("sha256")
-    .update(`v${STORY_PROMPT_VERSION}\n${compactDay(day, dayIndex)}`)
+    .update(`v${STORY_PROMPT_VERSION}\n${compactDay(day, dayIndex, legs)}`)
     .digest("hex")
     .slice(0, 16);
 

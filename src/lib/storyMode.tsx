@@ -11,10 +11,23 @@ import {
   type ReactNode,
 } from "react";
 
-import { useMapCamera } from "@/lib/mapCamera";
-import { fallbackScript, storyCacheKey, type StoryScript } from "@/lib/storyScript";
-import { legBearingRad, tourFlightSeconds } from "@/lib/tourPacing";
+import { STORY_PITCH_DEG, STORY_RANGE_M, useMapCamera } from "@/lib/mapCamera";
+import {
+  fallbackScript,
+  storyCacheKey,
+  type CompactLeg,
+  type StoryScript,
+} from "@/lib/storyScript";
+import { legBearingRad, tourFlightSeconds, travelFollowSeconds } from "@/lib/tourPacing";
 import { metresBetween } from "@/lib/peekRange";
+import {
+  PROFILE_VERB,
+  currentRouteProfile,
+  meaningfulLeg,
+  peekDayRoute,
+} from "@/lib/dayRoutes";
+import { formatDistance } from "@/lib/format";
+import { measurePath, sampleAt } from "@/lib/pathFollow";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import type { NaturalVoiceStatus } from "@/lib/kokoroVoice";
 import { loadNaturalVoice, naturalVoiceReady, naturalVoiceSupported } from "@/lib/kokoroVoice";
@@ -29,6 +42,7 @@ import {
   type SpeakHandle,
   type VoiceEngine,
 } from "@/lib/storyVoice";
+import type { MapRenderer } from "@/lib/mapRenderer";
 import type { DayPlan, Itinerary } from "@/lib/types";
 
 /**
@@ -135,7 +149,37 @@ interface StoryPlayback {
   exit: () => void;
 }
 
-type ScriptParams = { day: DayPlan; dayIndex: number; dayCount: number; destination: string };
+type ScriptParams = {
+  day: DayPlan;
+  dayIndex: number;
+  dayCount: number;
+  destination: string;
+  legs?: (CompactLeg | null)[];
+};
+
+/**
+ * Whatever the day's real routes look like *right now*, for the script call — never awaited.
+ *
+ * `peekDayRoute` reads the settled mirror synchronously, so a routing service that is slow or dead
+ * can never delay a Play press: the legs that have landed become travel beats and the ones that
+ * have not simply do not, which is the film exactly as it played before travel beats existed. The
+ * panel fires the route fetch when a day is focused and `prefetch` waits `WARM_DWELL_MS` before
+ * asking for a script, so in practice they are there.
+ *
+ * The legs reach `compactDay` and therefore both cache keys, which is what stops a travel-free
+ * script being served over a day whose routes have since arrived.
+ */
+function legsFor(day: DayPlan): (CompactLeg | null)[] | undefined {
+  const route = peekDayRoute(currentRouteProfile(), day.stops.map((s) => ({ lat: s.lat, lng: s.lng })));
+  if (!route) return undefined;
+  const verb = PROFILE_VERB[currentRouteProfile()];
+  return route.map((leg) => {
+    const real = meaningfulLeg(leg);
+    return real
+      ? { verb, minutes: Math.max(Math.round(real.durationS / 60), 1), distanceLabel: formatDistance(real.distanceM) }
+      : null;
+  });
+}
 
 /**
  * The script for one day, from the session cache or from the route.
@@ -189,6 +233,89 @@ function loadScript(
  */
 const WARM_DWELL_MS = 1200;
 
+
+/**
+ * Walk the camera along a real street route, over `durationS`.
+ *
+ * **A `requestAnimationFrame` loop over `restoreCamera`, on both engines, with no contract change.**
+ * That method is already "put the camera exactly here, no flight and no framing correction" — it is
+ * a `flyToBoundingSphere(duration: 0)` on Cesium and a `jumpTo` on MapLibre, both in metres and
+ * degrees, both already exercised every time somebody presses Map/Satellite. A per-frame camera
+ * *setter* is exactly what a fly-along needs, and one already existed.
+ *
+ * The two engine-native options were both rejected. Cesium's `SampledPositionProperty` needs the
+ * clock running, which means undoing `requestRenderMode` and `maximumRenderTimeChange: Infinity` in
+ * `GlobeBackground` — a deliberately tuned global whose comment says nothing in this scene is
+ * time-driven. MapLibre's `freeCameraOptions` appears nowhere in this repo. Neither has an analogue
+ * on the other engine, so either would have been two implementations of one behaviour.
+ *
+ * Not `onFrame` either, despite it being the shared per-frame hook: that fires *after* a render, and
+ * this driver needs to *cause* renders. rAF drives, and each tick asks for the frame it just set up.
+ *
+ * The renderer is read every tick rather than captured once, because the Map/Satellite toggle works
+ * mid-film and a driver holding the outgoing engine would be writing to a hidden canvas.
+ */
+function followPath(
+  rendererRef: { current: MapRenderer | null },
+  points: { lat: number; lng: number }[],
+  durationS: number
+): { cancel: () => void } {
+  const path = measurePath(points);
+  const cursor = { i: 0 };
+  let frame = 0;
+
+  const place = (distanceM: number) => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive()) return false;
+    const { lat, lng, headingRad } = sampleAt(path, distanceM, cursor);
+    renderer.restoreCamera({
+      lat,
+      lng,
+      rangeM: STORY_RANGE_M,
+      headingRad,
+      pitchDeg: STORY_PITCH_DEG,
+    });
+    renderer.requestRender();
+    return true;
+  };
+
+  // Reduced motion: one placement at the midpoint and no frames at all. The beat keeps its full
+  // length, so the film runs the same wall-clock time with more stillness — the same trade the stop
+  // beats already make by dropping their flight to zero.
+  if (prefersReducedMotion() || durationS <= 0 || path.totalM === 0) {
+    place(path.totalM / 2);
+    return { cancel: () => {} };
+  }
+
+  const startedAt = performance.now();
+  const tick = () => {
+    const t = Math.min((performance.now() - startedAt) / (durationS * 1000), 1);
+    // The same ease both engines already use for their own flights, so a travel beat and the stop
+    // flights either side of it accelerate alike.
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    if (!place(eased * path.totalM)) return;
+    // Reaching the end simply stops scheduling. The camera holds where it arrived, which is a
+    // pre-arrival at the place the next beat is about — see `travelFollowSeconds`.
+    if (t < 1) frame = requestAnimationFrame(tick);
+  };
+  frame = requestAnimationFrame(tick);
+
+  return {
+    cancel: () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+    },
+  };
+}
+
+
+/** Ground length of a path, in metres. Measured rather than taken from the leg's own `distanceM`
+ *  so the flight is paced by the line actually being drawn — the two agree, but only one of them
+ *  is what the camera traverses. */
+function pathLengthM(points: { lat: number; lng: number }[]): number {
+  return measurePath(points).totalM;
+}
+
 const ControlsContext = createContext<StoryControls | null>(null);
 const PlaybackContext = createContext<StoryPlayback | null>(null);
 
@@ -203,7 +330,14 @@ const IDLE_CONTROLS: StoryControls = {
 };
 
 export function StoryModeProvider({ children }: { children: ReactNode }) {
-  const { showTripRoute, flyToStoryStop, setActiveIndex, reframeRoute, setRouteConnectorsHidden } =
+  const {
+    showTripRoute,
+    flyToStoryStop,
+    setActiveIndex,
+    reframeRoute,
+    setRouteConnectorsHidden,
+    rendererRef,
+  } =
     useMapCamera();
 
   const [request, setRequest] = useState<StoryRequest | null>(null);
@@ -289,6 +423,23 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     () => routeDays.slice(0, request?.dayIndex ?? 0).reduce((n, d) => n + d.length, 0),
     [routeDays, request?.dayIndex]
   );
+
+  /**
+   * The street geometry the camera walks on a travel beat, index-aligned with the day's legs.
+   *
+   * Read from `dayRoutes`' settled mirror, the same place the panel's travel lines and the map's
+   * drawn paths come from — one fetch, three surfaces, and no way for the line on the map and the
+   * line the camera follows to disagree. Empty where a leg did not route, which the beat effect
+   * treats as "no path to walk".
+   */
+  const legPaths = useMemo(() => {
+    if (!day) return undefined;
+    const route = peekDayRoute(
+      currentRouteProfile(),
+      day.stops.map((st) => ({ lat: st.lat, lng: st.lng }))
+    );
+    return route?.map((leg) => meaningfulLeg(leg)?.points ?? []);
+  }, [day]);
 
   /**
    * Start the natural voice's download, if this browser can run it at all.
@@ -381,6 +532,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       dayIndex: request.dayIndex,
       dayCount: request.itinerary.days.length,
       destination: request.destination,
+      legs: legsFor(day),
     };
     // A cache hit still resolves a microtask later than it strictly could, which is a frame nobody
     // can see and which keeps every path out of this effect asynchronous — so none of them renders
@@ -429,6 +581,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
           dayIndex: next.dayIndex,
           dayCount: next.itinerary.days.length,
           destination: next.destination,
+          legs: legsFor(warmDay),
         },
         next.tripId
       );
@@ -446,6 +599,10 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     if (!request || !script || !day || phase !== "playing") return;
     const beat = script.beats[beatIndex];
     if (!beat) return;
+
+    /** The fly-along, when this beat has one. Cancelled by the same cleanup that cancels the
+     *  sentence, which is what makes Next, Pause and Exit all work without touching it. */
+    let follow: { cancel: () => void } | undefined;
 
     if (beat.kind === "stop" && beat.stopIndex !== undefined) {
       const stop = day.stops[beat.stopIndex];
@@ -487,6 +644,30 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
                 heading !== undefined && previousHeading !== null ? heading - previousHeading : 0
               ),
         });
+      }
+    } else if (beat.kind === "travel" && beat.legIndex !== undefined) {
+      /**
+       * The camera walks the leg while one sentence plays over it.
+       *
+       * The highlight moves to the stop being *left*, not the one being approached: this beat is
+       * about the going, and lighting the destination before arriving there is the spoiler the
+       * film already puts the arcs away to avoid.
+       *
+       * With no path to walk — the legs never landed, or this one did not route — the beat falls
+       * through to flying to the stop ahead, which is what the film did before travel beats. It
+       * should not normally happen: `normaliseScript` only emits a travel beat for a routed leg.
+       */
+      setActiveIndex(dayOffset + beat.legIndex);
+      const points = legPaths?.[beat.legIndex] ?? [];
+      if (points.length >= 2) {
+        follow = followPath(
+          rendererRef,
+          points,
+          travelFollowSeconds(pathLengthM(points), estimateDurationMs(beat.text))
+        );
+      } else {
+        const next = day.stops[beat.legIndex + 1];
+        if (next) flyToStoryStop(next.lat, next.lng);
       }
     } else if (beat.kind === "opening") {
       // The day alone, centred, with no panel to aim beside — the film's establishing shot. This
@@ -533,11 +714,19 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       speakRef.current?.cancel();
       speakRef.current = null;
+      // Skip, Pause and Exit all reach here, because all three work by changing state and letting
+      // this effect re-run. One line covers a camera mid-flight in all of them.
+      follow?.cancel();
     };
   }, [
     request,
     script,
     day,
+    // Neither of these can churn mid-film, which is why listing them is free. `rendererRef` is a
+    // ref, and `legPaths` is memoised on `day` — it reads `peekDayRoute` *inside* the memo, so
+    // routes landing after a film starts do not re-run it and cannot restart the beat in progress.
+    legPaths,
+    rendererRef,
     phase,
     beatIndex,
     muted,

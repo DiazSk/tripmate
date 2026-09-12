@@ -207,3 +207,154 @@ test("the lyric ramp puts the spoken line first and fades behind faster than ahe
   assert.ok(beatOpacity(2, 3) < beatOpacity(4, 3));
   assert.ok(beatOpacity(0, 3) < beatOpacity(2, 3));
 });
+
+/* --- Travel beats (v3) ---
+ *
+ * A travel beat is the one beat with no fallback, and that is the whole of its degradation story.
+ * Every path below has to end with "the film plays exactly as it did before travel beats existed",
+ * because a routing service being slow, down, or simply unable to route a pair is the ordinary
+ * case — not the exceptional one.
+ */
+
+const LEG = { verb: "walk", minutes: 12, distanceLabel: "940 m" };
+const threeStops = day([stop("Belém Tower"), stop("Jerónimos"), stop("Time Out Market")]);
+
+test("compactDay emits a Travel line only where a leg routed", () => {
+  const text = compactDay(threeStops, 0, [LEG, null]);
+  assert.match(text, /Travel 0 -> 1: 12 minute walk, 940 m/);
+  assert.doesNotMatch(text, /Travel 1 -> 2/, "an unrouted leg must not be described to the model");
+  // Absent entirely is the pre-travel-beat behaviour, byte for byte.
+  assert.equal(compactDay(threeStops, 0), compactDay(threeStops, 0, undefined));
+});
+
+test("legs reach the cache key, so a script written before the routes landed is not reused after", () => {
+  const before = storyCacheKey(params(threeStops));
+  const after = storyCacheKey({ ...params(threeStops), legs: [LEG, null] });
+  assert.notEqual(before, after, "compactDay is the key, which is exactly why legs belong in it");
+});
+
+test("a travel beat is emitted only where the leg routed AND the model wrote one", () => {
+  const raw = {
+    beats: [
+      { kind: "opening", text: "The morning opens over the river." },
+      { kind: "stop", stopIndex: 0, text: "Belém Tower." },
+      { kind: "travel", legIndex: 0, text: "You follow the water west, past the rowing sheds." },
+      { kind: "stop", stopIndex: 1, text: "Jerónimos." },
+      { kind: "travel", legIndex: 1, text: "A tram carries you into the centre." },
+      { kind: "stop", stopIndex: 2, text: "Time Out Market." },
+    ],
+  };
+  // Leg 1 did not route, so the model's beat for it is dropped.
+  const script = normaliseScript(raw, { ...params(threeStops), legs: [LEG, null] });
+  assert.deepEqual(
+    script.beats.map((b) => b.kind),
+    ["opening", "stop", "travel", "stop", "stop"]
+  );
+  const travel = script.beats.find((b) => b.kind === "travel");
+  assert.equal(travel.legIndex, 0);
+  assert.match(travel.text, /rowing sheds/);
+});
+
+test("a missing travel beat is NOT filled in — the one beat with no fallback", () => {
+  // Both legs routed; the model wrote neither travel beat.
+  const raw = {
+    beats: [
+      { kind: "opening", text: "Morning." },
+      { kind: "stop", stopIndex: 0, text: "One." },
+      { kind: "stop", stopIndex: 1, text: "Two." },
+      { kind: "stop", stopIndex: 2, text: "Three." },
+    ],
+  };
+  const script = normaliseScript(raw, { ...params(threeStops), legs: [LEG, LEG] });
+  assert.deepEqual(
+    script.beats.map((b) => b.kind),
+    ["opening", "stop", "stop", "stop"],
+    "there is nothing honest to say about a journey the model declined to describe; a stop beat gets a fallback because the place is real either way"
+  );
+});
+
+test("a legIndex that is a string is dropped, like a string stopIndex", () => {
+  const raw = {
+    beats: [
+      { kind: "opening", text: "Morning." },
+      { kind: "stop", stopIndex: 0, text: "One." },
+      { kind: "travel", legIndex: "0", text: "Along the water." },
+      { kind: "stop", stopIndex: 1, text: "Two." },
+    ],
+  };
+  const script = normaliseScript(raw, { ...params(day([stop("A"), stop("B")])), legs: [LEG] });
+  assert.deepEqual(script.beats.map((b) => b.kind), ["opening", "stop", "stop"]);
+});
+
+test("stopIndex lives only on stop beats and legIndex only on travel beats", () => {
+  // Guards the trap that made StoryStage and normaliseScript disagree about what a beat is.
+  const raw = {
+    beats: [
+      { kind: "opening", text: "Morning." },
+      { kind: "stop", stopIndex: 0, text: "One." },
+      { kind: "travel", legIndex: 0, text: "Along the water." },
+      { kind: "stop", stopIndex: 1, text: "Two." },
+      { kind: "closing", text: "And so the day closes." },
+    ],
+  };
+  const script = normaliseScript(raw, { ...params(day([stop("A"), stop("B")])), legs: [LEG] });
+  for (const beat of script.beats) {
+    if (beat.kind === "stop") {
+      assert.equal(typeof beat.stopIndex, "number");
+      assert.equal(beat.legIndex, undefined, `${beat.kind} must not carry legIndex`);
+    } else if (beat.kind === "travel") {
+      assert.equal(typeof beat.legIndex, "number");
+      assert.equal(beat.stopIndex, undefined, "a travel beat carrying stopIndex renders as a place");
+    } else {
+      assert.equal(beat.stopIndex, undefined, `${beat.kind} must not carry stopIndex`);
+      assert.equal(beat.legIndex, undefined, `${beat.kind} must not carry legIndex`);
+    }
+  }
+});
+
+test("no legs means no travel beats, whatever the model returned", () => {
+  const raw = {
+    beats: [
+      { kind: "opening", text: "Morning." },
+      { kind: "stop", stopIndex: 0, text: "One." },
+      { kind: "travel", legIndex: 0, text: "Along the water." },
+      { kind: "stop", stopIndex: 1, text: "Two." },
+    ],
+  };
+  const script = normaliseScript(raw, params(day([stop("A"), stop("B")])));
+  assert.deepEqual(
+    script.beats.map((b) => b.kind),
+    ["opening", "stop", "stop"],
+    "routing unavailable must leave the film exactly as it played before travel beats existed"
+  );
+});
+
+test("fallbackScript never emits a travel beat, even with every leg routed", () => {
+  const script = fallbackScript({ ...params(threeStops), legs: [LEG, LEG] });
+  assert.ok(script.beats.every((b) => b.kind !== "travel"));
+  assert.equal(script.source, "fallback");
+});
+
+test("the prompt asks for travel beats only when there are routed legs to describe", () => {
+  const withLegs = buildStoryPrompt({ ...params(threeStops), legs: [LEG, null] });
+  assert.match(withLegs, /Exactly 6 beats/, "3 stops + 1 routed leg + opening + closing");
+  assert.match(withLegs, /"legIndex"/);
+  assert.match(withLegs, /ONE sentence, twenty words at most/);
+  assert.match(withLegs, /Do not restate the minutes or the distance/);
+
+  const without = buildStoryPrompt(params(threeStops));
+  assert.match(without, /Exactly 5 beats/);
+  // Not /travel/i — the base prompt says "carry the traveler from the previous one".
+  assert.doesNotMatch(without, /"travel" beat/, "no travel beat is asked for when nothing routed");
+  assert.doesNotMatch(without, /Travel \d+ -> \d+/, "and no Travel fact lines either");
+  assert.doesNotMatch(without, /legIndex/);
+});
+
+test("the last stop cannot claim a leg off the end of the day", () => {
+  // A legs array longer than the day has legs — a stale array after a stop was deleted.
+  const twoStops = day([stop("A"), stop("B")]);
+  const text = compactDay(twoStops, 0, [LEG, LEG, LEG]);
+  assert.equal((text.match(/Travel /g) ?? []).length, 1, "two stops have exactly one leg");
+  const prompt = buildStoryPrompt({ ...params(twoStops), legs: [LEG, LEG, LEG] });
+  assert.match(prompt, /Exactly 5 beats/, "2 stops + 1 leg + opening + closing");
+});

@@ -1,11 +1,23 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AudioLines, RotateCcw, SkipBack, SkipForward, Volume2, VolumeX, X } from "lucide-react";
+import {
+  AudioLines,
+  Bike,
+  Car,
+  Footprints,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 
 import { beatOpacity, type StoryBeat } from "@/lib/storyScript";
 import { useStoryPlayback } from "@/lib/storyMode";
 import { devLabel } from "@/lib/devInspector";
+import { useRouteProfile } from "@/lib/dayRoutes";
 import type { Stop } from "@/lib/types";
 import { StopAvatar } from "./StopList";
 
@@ -302,6 +314,10 @@ function BeatRow({
   // says nothing about what it is rather than saying something false.
   const mark = beat.kind === "opening" ? dayIndex + 1 : beat.kind === "closing" ? "★" : null;
   const label = beat.kind === "opening" ? `Day ${dayIndex + 1}` : beat.kind === "closing" ? "End of the day" : null;
+  // A travel beat is the going, not a place — so it gets the mode's glyph rather than a photograph
+  // or the day's mark, and no title line at all. The sentence is the whole content, and a label
+  // above it would only repeat what the row already looks like.
+  const travelling = beat.kind === "travel";
   return (
     <div
       data-beat={index}
@@ -315,7 +331,11 @@ function BeatRow({
       aria-current={isActive ? "true" : undefined}
     >
       <span className="w-10 shrink-0">
-        {stop ? (
+        {travelling ? (
+          <span className="flex h-10 w-10 items-center justify-center">
+            <TravelGlyph />
+          </span>
+        ) : stop ? (
           <StopAvatar name={stop.name} category={stop.category} />
         ) : (
           // The opening and the closing are about the day, so they get the day's own mark rather
@@ -349,6 +369,14 @@ function BeatRow({
       </span>
     </div>
   );
+}
+
+/** The mode glyph on a travel beat. Muted, and smaller than a stop's avatar, because the beat is
+ *  the connective tissue between two places rather than a place of its own. */
+function TravelGlyph() {
+  const profile = useRouteProfile();
+  const Icon = profile === "bike" ? Bike : profile === "drive" ? Car : Footprints;
+  return <Icon className="h-4 w-4 text-muted" aria-hidden="true" />;
 }
 
 /** A round icon control in the film's chrome. */

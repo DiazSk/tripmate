@@ -292,8 +292,8 @@ const PLACE_HEIGHT_M = 600;
  * than every other flight here (a stop is -35, a destination -45) because a film wants facades and
  * a horizon, not a plan view.
  */
-const STORY_RANGE_M = 1200;
-const STORY_PITCH_DEG = -30;
+export const STORY_RANGE_M = 1200;
+export const STORY_PITCH_DEG = -30;
 /**
  * The hover peek is a *relative* zoom, not a destination.
  *

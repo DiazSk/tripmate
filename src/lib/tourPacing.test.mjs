@@ -6,7 +6,13 @@
  * one shipped. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bearingRad, legBearingRad, tourFlightSeconds, TOUR_HOLD_MS } from "./tourPacing.ts";
+import {
+  bearingRad,
+  legBearingRad,
+  tourFlightSeconds,
+  travelFollowSeconds,
+  TOUR_HOLD_MS,
+} from "./tourPacing.ts";
 
 const deg = (rad) => (rad * 180) / Math.PI;
 /** Bearings are floats; a hundredth of a degree is far below anything a camera shows. */
@@ -107,4 +113,35 @@ test("a step is shorter than the metronome it replaces", () => {
     const step = tourFlightSeconds(legM, Math.PI) * 1000 + TOUR_HOLD_MS;
     assert.ok(step < 6500, `leg ${legM}m worst-case step ${Math.round(step)}ms should beat 6500ms`);
   }
+});
+
+/* --- travelFollowSeconds ---
+ *
+ * The narration is the clock; the ground speed is what gives. Both clamps matter: a camera under
+ * the floor reads as stopped, and one over the ceiling reads as a whip pan with no legible ground. */
+
+test("a narration inside the speed band sets the duration outright", () => {
+  // 1200m over 8s is 150 m/s — comfortably between the floor and the ceiling.
+  assert.equal(travelFollowSeconds(1200, 8000), 8);
+});
+
+test("a long line over a short walk is capped rather than crawling", () => {
+  // 200m over 30s would be 6.7 m/s, well under the floor: the camera would read as stopped.
+  const seconds = travelFollowSeconds(200, 30_000);
+  assert.ok(seconds < 30, "the flight ends early and holds, rather than crawling for half a minute");
+  assert.ok(Math.abs(seconds - 200 / 25) < 0.001, "clamped to the minimum speed");
+});
+
+test("a long drive under a short line is capped rather than whip-panning", () => {
+  // 20km over 2s would be 10,000 m/s.
+  const seconds = travelFollowSeconds(20_000, 2_000);
+  assert.ok(seconds > 2, "the camera takes longer than the sentence rather than blurring the ground");
+  assert.ok(Math.abs(seconds - 20_000 / 400) < 0.001, "clamped to the maximum speed");
+});
+
+test("a zero-length path falls back to the narration and never divides by it", () => {
+  assert.equal(travelFollowSeconds(0, 5_000), 5);
+  assert.ok(Number.isFinite(travelFollowSeconds(0, 0)));
+  assert.ok(Number.isFinite(travelFollowSeconds(NaN, 4_000)));
+  assert.ok(travelFollowSeconds(500, -100) > 0, "a negative narration still yields a real flight");
 });
