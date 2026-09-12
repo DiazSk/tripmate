@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Sparkles } from "lucide-react";
+import { Bike, Car, Footprints, Sparkles } from "lucide-react";
 import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
@@ -11,6 +11,13 @@ import { useStoryControls } from "@/lib/storyMode";
 import { daySpendByCategory } from "@/lib/itinerary";
 import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
 import { formatMoney } from "@/lib/format";
+import {
+  ROUTE_PROFILES,
+  meaningfulLeg,
+  setRouteProfile,
+  useDayRoute,
+  useRouteProfile,
+} from "@/lib/dayRoutes";
 import BudgetBar from "./BudgetBar";
 import SplitEditor from "./SplitEditor";
 import DayHeader, { DayEditUpdates } from "./DayHeader";
@@ -135,6 +142,49 @@ function dayBreakdown(day: DayPlan) {
     { label: "Stay", amount: spend.stay, Icon: LodgingIcon },
   ].filter((tile) => tile.amount > 0);
   return { tiles, total: spend.total };
+}
+
+/**
+ * How to get between this day's stops: on foot, by bike, or driving.
+ *
+ * Panel vocabulary, not map chrome — `bg-tag-neutral-bg` for the group and the day tabs' jade for
+ * the selected one, so it reads as part of the plan rather than as a control floating over the
+ * world. Deliberately NOT `.glass-control`: that class sets an unlayered `background`, which
+ * outranks every utility, and `MapEngineToggle` already records what that costs.
+ *
+ * `aria-pressed` rather than a radio group, matching `MapEngineToggle` and the wizard's pickers:
+ * these are three buttons that change what is on screen immediately, not a form field awaiting
+ * submission.
+ */
+function RouteProfilePicker() {
+  const profile = useRouteProfile();
+  return (
+    <div className="mb-3 flex items-center gap-1 text-xs" {...devLabel("ItineraryCard.RouteProfile")}>
+      <span className="mr-1 text-muted">Getting around</span>
+      <div className="inline-flex gap-0.5 rounded-full bg-tag-neutral-bg/60 p-0.5">
+        {ROUTE_PROFILES.map((option) => {
+          const active = option === profile;
+          const Icon = option === "bike" ? Bike : option === "drive" ? Car : Footprints;
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setRouteProfile(option)}
+              className={`flex h-7 items-center gap-1 rounded-full px-2.5 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+                active
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function ItineraryCard({
@@ -263,6 +313,20 @@ export default function ItineraryCard({
     () => JSON.stringify(itinerary.days.map((d) => d.stops.map((st) => [st.lat, st.lng]))),
     [itinerary.days]
   );
+  /**
+   * The real street routes between this day's stops, once they land.
+   *
+   * Memoised on the day's coordinates rather than passed `day.stops` directly, because
+   * `useDayRoute` keys on identity and a fresh array every render would restart the fetch on every
+   * render. Null while unknown and null for good if routing is unavailable — every consumer below
+   * renders exactly as it did before this existed.
+   */
+  const dayPoints = useMemo(
+    () => day?.stops.map((st) => ({ lat: st.lat, lng: st.lng })) ?? null,
+    [day?.stops]
+  );
+  const dayLegs = useDayRoute(dayPoints);
+
   /** Where this day's stops start in the flat list the map indexes hover/selection by. The panel
    *  numbers its rows from 0 within the day, so every index crossing this boundary is shifted. */
   const dayOffset = useMemo(
@@ -1050,6 +1114,11 @@ export default function ItineraryCard({
             No stops planned for this day — it&rsquo;s yours to fill.
           </p>
         ) : (
+          <>
+          {/* Only shown once the day actually has legs to describe — a control that changes nothing
+              visible is a control that reads as broken. A single-stop day has no legs, and neither
+              does a day whose routes never landed. */}
+          {dayLegs?.some((l) => meaningfulLeg(l)) && <RouteProfilePicker />}
           <StopList
             stops={day.stops}
             revealedCount={revealedCount}
@@ -1064,7 +1133,9 @@ export default function ItineraryCard({
             activeIndex={activeRow}
             onHoverStop={(index) => setHoveredIndex(index === null ? null : dayOffset + index)}
             revealAnimation={revealingStops}
+            legs={dayLegs}
           />
+          </>
         )}
 
 

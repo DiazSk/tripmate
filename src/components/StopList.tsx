@@ -3,7 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
+import { Bike, Car, Footprints } from "lucide-react";
+
 import { Stop, StopCategory } from "@/lib/types";
+import {
+  PROFILE_VERB,
+  meaningfulLeg,
+  type DayRoute,
+  type RouteLeg,
+  type RouteProfile,
+  useRouteProfile,
+} from "@/lib/dayRoutes";
+import { formatDistance, formatDuration } from "@/lib/format";
 import { groupStopsByTimeOfDay, type TimeOfDay } from "@/lib/timeOfDay";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import Typewriter from "./Typewriter";
@@ -55,11 +66,17 @@ function StopRow({
   revealAnimation,
   isHighlighted,
   onHover,
+  leg,
+  profile,
 }: {
   stop: Stop;
   index: number;
   isLast: boolean;
   onSelect: (stop: Stop) => void;
+  /** The real route from this stop to the next one, or null when it could not be routed.
+   *  Absent entirely until the day's routes have landed. */
+  leg?: RouteLeg | null;
+  profile: RouteProfile;
   /** True only for rows mounted during the post-generation stagger: swaps the normal
    *  scroll-triggered entrance for a plain slide-down-into-place + typewriter on the name,
    *  since this row's mount timing (not scroll position) is already the reveal cue. */
@@ -101,11 +118,12 @@ function StopRow({
       data-stop-index={index}
       onPointerEnter={() => onHover?.(true)}
       onPointerLeave={() => onHover?.(false)}
-      className={`relative flex gap-3 rounded-xl transition-colors ${
+      className={`relative flex flex-col rounded-xl transition-colors ${
         isHighlighted ? "bg-white/10" : "hover:bg-white/5"
       }`}
     >
       {connector}
+      <div className="flex gap-3">
       <button
         type="button"
         onClick={() => onSelect(stop)}
@@ -133,8 +151,32 @@ function StopRow({
           {stop.note && <div className="mt-0.5 text-sm text-muted">{stop.note}</div>}
         </span>
       </button>
+      </div>
+      {leg && (
+        /* Inside the row rather than between two rows, and that is load-bearing geometry rather
+           than a layout preference. `connector` above is sized `100% + 1rem - 2.75rem` off the
+           parent's `space-y-4`; a travel line inserted as a sibling adds a gap that arithmetic
+           does not know about and the rail stops short of the next avatar — the exact bug the
+           comment there records. As a child it grows `100%`, and the rail grows with it. */
+        <div className="flex gap-3 pt-2">
+          <span className="w-10 shrink-0" aria-hidden="true" />
+          <span className="flex items-center gap-1.5 text-xs text-muted">
+            <LegIcon profile={profile} />
+            <span className="tabular-nums">
+              {formatDuration(leg.durationS)} {PROFILE_VERB[profile]} · {formatDistance(leg.distanceM)}
+            </span>
+          </span>
+        </div>
+      )}
     </motion.div>
   );
+}
+
+/** The mode glyph beside a travel line. Muted paper like the text it sits in — this is neither an
+ *  action nor money, and those are the two things colour means in this panel. */
+function LegIcon({ profile }: { profile: RouteProfile }) {
+  const Icon = profile === "bike" ? Bike : profile === "drive" ? Car : Footprints;
+  return <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />;
 }
 
 export default function StopList({
@@ -145,11 +187,15 @@ export default function StopList({
   highlightedIndex,
   activeIndex,
   onHoverStop,
+  legs,
 }: {
   stops: Stop[];
   revealedCount: number;
   onSelect: (stop: Stop) => void;
   revealAnimation?: boolean;
+  /** The day's real routes, index `i` being the leg from stop `i` to stop `i + 1`. Absent until
+   *  they land, and absent for good if routing is unavailable — the list renders as it always did. */
+  legs?: DayRoute | null;
   /** Index of the stop currently hovered or selected on the globe, or null. */
   highlightedIndex?: number | null;
   /** Index of the *selected* stop — clicked on the globe, or stepped onto by a story-mode beat. Scrolled
@@ -158,6 +204,7 @@ export default function StopList({
   onHoverStop?: (index: number | null) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
+  const profile = useRouteProfile();
 
   /**
    * Follow the selected stop, so a camera flight and the list read as one gesture instead of two.
@@ -270,6 +317,13 @@ export default function StopList({
               revealAnimation={revealAnimation}
               isHighlighted={highlightedIndex === index}
               onHover={(hovered) => onHoverStop?.(hovered ? index : null)}
+              // Keyed on the leg existing, NOT on `!isLast`. `isLast` is last-in-group, and the
+              // walk from the last morning stop to the first afternoon one is a real walk — the
+              // one a reader is most likely to be asking about, since it crosses a meal.
+              // `meaningfulLeg`, not the raw leg: a stop and the bike dock outside it round to
+              // "1 min walk · 0 m", which is a confident sentence about nothing.
+              leg={meaningfulLeg(legs?.[index])}
+              profile={profile}
             />
           ))}
         </div>

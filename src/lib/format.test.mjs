@@ -5,7 +5,7 @@
  * read fine and ship wrong. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatClockLabel } from "./format.ts";
+import { formatClockLabel, formatDistance, formatDuration } from "./format.ts";
 
 test("the two hours that a bare modulo gets wrong", () => {
   assert.equal(formatClockLabel("00:15"), "12:15 AM", "midnight is 12 AM, not 0 AM");
@@ -30,4 +30,35 @@ test("anything that isn't a clock time comes back untouched", () => {
     assert.equal(formatClockLabel(bad), bad);
   }
   assert.equal(formatClockLabel(null), "");
+});
+
+/* --- Distance and duration ---
+ *
+ * Both are read straight off an OSRM response, and both have a boundary that is invisible until
+ * someone sees it on screen: the metre/kilometre switch, and the minute floor. The floor is the
+ * one that matters — "0 min" reads as "no distance at all" rather than "next door", and a reader
+ * deciding whether to walk needs those to look different. */
+
+test("distance switches to kilometres at 1000m and stops claiming metres it does not have", () => {
+  assert.equal(formatDistance(940), "940 m");
+  assert.equal(formatDistance(944), "940 m", "rounds to 10m — a route's endpoints are snapped to the pavement, so the last digit was never real");
+  assert.equal(formatDistance(999), "1 km", "rounding happens before the unit is chosen, so there is no 1000m state");
+  assert.equal(formatDistance(1000), "1 km");
+  assert.equal(formatDistance(1249), "1.2 km");
+  assert.equal(formatDistance(12345), "12.3 km");
+});
+
+test("duration floors at a minute and names the hour", () => {
+  assert.equal(formatDuration(24), "1 min", "a forty-second hop is 'next door', not 'no distance'");
+  assert.equal(formatDuration(59), "1 min");
+  assert.equal(formatDuration(512.1), "9 min", "the live Louvre to Palais-Royal walk");
+  assert.equal(formatDuration(3600), "1 hr", "an exact hour is not '1 hr 0 min'");
+  assert.equal(formatDuration(3900), "1 hr 5 min");
+});
+
+test("neither invents a number out of a broken one", () => {
+  assert.equal(formatDistance(NaN), "0 m");
+  assert.equal(formatDistance(-5), "0 m");
+  assert.equal(formatDuration(NaN), "1 min");
+  assert.equal(formatDuration(0), "1 min");
 });
