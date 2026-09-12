@@ -161,7 +161,12 @@ export default function StoryStage() {
                   beat={beat}
                   index={index}
                   activeIndex={beatIndex}
-                  stop={beat.stopIndex !== undefined ? day.stops[beat.stopIndex] : undefined}
+                  // Keyed on `kind`, not on `stopIndex` being present. `stopIndex` is documented
+                  // as living on stop beats and only stop beats, but reading it that way made
+                  // this component the second, quieter definition of what a stop beat is — and
+                  // one that would disagree with `normaliseScript`'s (which filters on `kind`)
+                  // the moment any other beat carried an index.
+                  stop={beat.kind === "stop" && beat.stopIndex !== undefined ? day.stops[beat.stopIndex] : undefined}
                   dayIndex={request.dayIndex}
                 />
               ))}
@@ -290,6 +295,13 @@ function BeatRow({
   dayIndex: number;
 }) {
   const isActive = index === activeIndex;
+  // Both of these used to be `beat.kind === "opening" ? … : <the closing's>`, so every kind that
+  // was not the opening claimed to be the end of the day — a beat this component had never heard
+  // of rendered as "★ End of the day" in the middle of a film. Named per kind instead, with an
+  // unknown one falling through to no mark and no label: it still gets its narration, and the row
+  // says nothing about what it is rather than saying something false.
+  const mark = beat.kind === "opening" ? dayIndex + 1 : beat.kind === "closing" ? "★" : null;
+  const label = beat.kind === "opening" ? `Day ${dayIndex + 1}` : beat.kind === "closing" ? "End of the day" : null;
   return (
     <div
       data-beat={index}
@@ -308,9 +320,11 @@ function BeatRow({
         ) : (
           // The opening and the closing are about the day, so they get the day's own mark rather
           // than a place's photograph.
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">
-            {beat.kind === "opening" ? dayIndex + 1 : "★"}
-          </span>
+          mark !== null && (
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">
+              {mark}
+            </span>
+          )
         )}
       </span>
       <span className="min-w-0 flex-1">
@@ -320,9 +334,9 @@ function BeatRow({
             {stop.time && <span className="text-xs text-muted">{stop.time}</span>}
           </span>
         ) : (
-          <span className="text-xs font-semibold tracking-wide text-muted uppercase">
-            {beat.kind === "opening" ? `Day ${dayIndex + 1}` : "End of the day"}
-          </span>
+          label !== null && (
+            <span className="text-xs font-semibold tracking-wide text-muted uppercase">{label}</span>
+          )
         )}
         {/* The narration itself, italic because it is being spoken rather than listed. */}
         <span

@@ -497,12 +497,19 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       // draw time. See `setRouteConnectorsHidden` for why the film wants the places alone.
       setRouteConnectorsHidden(true);
       showTripRoute(routeDays, request.dayIndex, false, true);
-    } else {
+    } else if (beat.kind === "closing") {
       // Closing: pull back off the last stop to the day's framing, and drop the highlight so the
       // final line is about the day rather than about one place in it.
       setActiveIndex(null);
       reframeRoute();
     }
+    // Any other kind: hold the camera where the previous beat left it and just play the line.
+    //
+    // Tagged rather than left as the closing branch's `else`, which is what it used to be. A
+    // catch-all meant a beat kind this dispatch had never heard of pulled the camera back to the
+    // day's framing and cleared the highlight — the closing's behaviour, performed in the middle
+    // of a film, with nothing to attribute it to. Holding is the honest no-op: an unknown beat
+    // still gets narrated, and the camera says nothing rather than saying the wrong thing.
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const advance = () => {
