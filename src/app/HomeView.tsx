@@ -820,6 +820,44 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    *  or a narrated film a bad idea, not the run. */
   const streamingPlan = draftItinerary !== null;
 
+  const { prefetch: warmStory } = story;
+
+  /**
+   * Warm the narration for the day on screen, so pressing Play starts a film instead of a wait.
+   *
+   * One day, not all of them: `MAX_TRIP_DAYS` is 30 and the CLI transport spawns a subprocess per
+   * call, so warming a whole trip would be half an hour of serialised Sonnet for films nobody has
+   * asked for. The dwell that stops a click along the day tabs from warming every one of them
+   * lives in `story.prefetch`.
+   *
+   * `step === "result"` is the same guard the Play button carries, for the same reason: nothing
+   * clears `itinerary` when a traveller presses Back and plans a second trip (see
+   * `shownItinerary` above), so without it, filling in the wizard for Reykjavik would warm Kyoto's
+   * day one against Reykjavik's `destination` — a script belonging to neither trip.
+   *
+   * `itinerary` rather than `shownItinerary`, and `!streamingPlan` beside it: this file already
+   * draws that line two lines up — it is the *draft* that makes a narrated film a bad idea, not
+   * the run. A half-written day is a call keyed on stops that are about to change.
+   *
+   * The dependency is the **destructured** `prefetch`, not `story`: the controls object changes
+   * identity when a film starts, pauses and ends, and depending on the whole of it would re-arm
+   * the warm mid-playback. `exhaustive-deps` will not accept the member expression, so it is
+   * pulled out into a local — which is stable by construction, being a `useCallback([])`.
+   *
+   * ponytail: the background critique can still revise a day ~150s after the plan lands
+   * (`reviewing`), which changes the key and wastes this call. Gating on `!reviewing` would delay
+   * the warm past the window it exists to serve; one occasionally-wasted cheap call is the price.
+   */
+  useEffect(() => {
+    if (step !== "result" || streamingPlan || !itinerary) return;
+    // Clamped the way `ItineraryCard` clamps it. A chat turn that removes days leaves
+    // `activeDayIndex` past the end for a render, and an unclamped warm there fetches a key no
+    // Play button will ever ask for.
+    const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
+    if (!itinerary.days[dayIndex]?.stops.length) return;
+    warmStory({ itinerary, dayIndex, destination });
+  }, [step, streamingPlan, itinerary, activeDayIndex, destination, warmStory]);
+
   // Null until both dates are set, so the tier cards show per-day rates rather than a total
   // derived from tripDays' floor-at-1.
   const days = startDate && endDate ? tripDays(startDate, endDate) : null;

@@ -8,6 +8,7 @@ import {
   compactDay,
   fallbackScript,
   normaliseScript,
+  storyCacheKey,
 } from "./storyScript.ts";
 
 const stop = (name, extra = {}) => ({
@@ -52,6 +53,44 @@ test("compactDay carries every field the narration can see, and nothing it can't
   assert.match(text, /Why it suits them: you asked for waterfront history/);
   // actualCost moves after the trip is over, so it must not invalidate a cached script.
   assert.doesNotMatch(text, /120/);
+});
+
+/* The session cache in storyMode.tsx dedupes every request for a day's narration against this
+ * string — including a background warm and the Play press that follows it, which must be one call
+ * and not two. It used to be built from a hand-picked list of stop fields, and drifted from what
+ * the prompt actually reads. These are the claims that keep the two together; `compactDay`'s own
+ * field coverage is asserted above, so what is new here is that the key is built from it, plus the
+ * three inputs that live outside it. */
+test("the session cache key changes exactly when the narration would", () => {
+  const base = params(day([stop("Belém Tower", { why: "waterfront history" })]));
+  const same = params(day([stop("Belém Tower", { why: "waterfront history" })]));
+  assert.equal(storyCacheKey(base), storyCacheKey(same));
+
+  // No trip id in it, which is the point: the three Play call sites send a real id, the "preview"
+  // placeholder and nothing at all, and all three must reach one entry.
+  assert.equal(storyCacheKey({ ...base, tripId: "abc" }), storyCacheKey({ ...base, tripId: "xyz" }));
+
+  // Everything the narrator reads is in the key.
+  assert.notEqual(
+    storyCacheKey(base),
+    storyCacheKey(params(day([stop("Belém Tower", { why: "somewhere quiet instead" })])))
+  );
+  assert.notEqual(
+    storyCacheKey(base),
+    storyCacheKey(params(day([stop("Belém Tower", { why: "waterfront history" })], { weather: "Rain, 12°C" })))
+  );
+  assert.notEqual(storyCacheKey(base), storyCacheKey({ ...base, destination: "Porto, Portugal" }));
+  assert.notEqual(storyCacheKey(base), storyCacheKey({ ...base, dayCount: 9 }));
+  assert.notEqual(storyCacheKey(base), storyCacheKey({ ...base, dayIndex: 2 }));
+
+  // And nothing it doesn't: a lodging's actualCost moves after the trip, with nobody watching.
+  const cheap = day([stop("Belém Tower", { why: "waterfront history" })], {
+    lodging: { name: "Casa Amarela", cost: 90, actualCost: 120 },
+  });
+  const dear = day([stop("Belém Tower", { why: "waterfront history" })], {
+    lodging: { name: "Casa Amarela", cost: 90, actualCost: 400 },
+  });
+  assert.equal(storyCacheKey(params(cheap)), storyCacheKey(params(dear)));
 });
 
 test("the prompt asks for one beat per stop plus an opening and a closing", () => {

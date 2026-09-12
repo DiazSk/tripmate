@@ -12,7 +12,7 @@ import {
 } from "react";
 
 import { useMapCamera } from "@/lib/mapCamera";
-import { fallbackScript, type StoryScript } from "@/lib/storyScript";
+import { fallbackScript, storyCacheKey, type StoryScript } from "@/lib/storyScript";
 import { legBearingRad, tourFlightSeconds } from "@/lib/tourPacing";
 import { metresBetween } from "@/lib/peekRange";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
@@ -29,7 +29,7 @@ import {
   type SpeakHandle,
   type VoiceEngine,
 } from "@/lib/storyVoice";
-import type { Itinerary } from "@/lib/types";
+import type { DayPlan, Itinerary } from "@/lib/types";
 
 /**
  * Story mode — the itinerary played as a film.
@@ -87,6 +87,14 @@ interface StoryControls {
    */
   phase: StoryPhase;
   start: (request: StoryRequest) => void;
+  /**
+   * Warm the script for the day **in focus** — not the day playing — so Play is instant.
+   *
+   * Called by whichever surface is showing a plan, on the day whose tab is selected. Safe to call
+   * on every render: it debounces, and it is a cache hit once warm. See the note on the timer in
+   * the provider for why the dwell lives there rather than in each host.
+   */
+  prefetch: (request: StoryRequest) => void;
   exit: () => void;
   togglePlay: () => void;
 }
@@ -127,6 +135,60 @@ interface StoryPlayback {
   exit: () => void;
 }
 
+type ScriptParams = { day: DayPlan; dayIndex: number; dayCount: number; destination: string };
+
+/**
+ * The script for one day, from the session cache or from the route.
+ *
+ * **The promise is cached, not the script, and it is cached before it settles.** That is the whole
+ * of the in-flight dedupe, and it is what makes warming safe: a Play that lands while a warm is
+ * still running joins the call already in flight rather than spawning a second one beside it. On
+ * the CLI transport that window is a minute wide — see `STORY_TIMEOUT_MS` in the route. It also
+ * fixes something that was always broken and invisible: React's StrictMode mounts an effect twice
+ * in dev, and with nothing cached until a response landed, the first Play of every dev session
+ * fired two subprocesses.
+ *
+ * A **rejection evicts its own entry**, so one dropped connection does not pin the read-aloud
+ * fallback to that day for the rest of the session. A 200 carrying the route's *own* fallback is
+ * kept, and the asymmetry is deliberate: that call has already been paid for, and re-spending a
+ * minute to arrive at the same words is worse than the words.
+ */
+function loadScript(
+  cache: Map<string, Promise<StoryScript>>,
+  params: ScriptParams,
+  tripId?: string
+): Promise<StoryScript> {
+  const key = storyCacheKey(params);
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const pending = (async () => {
+    const res = await fetch("/api/trip-story", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...params, tripId }),
+    });
+    const data = (await res.json()) as { script?: StoryScript };
+    if (!data.script?.beats?.length) throw new Error("no script");
+    return data.script;
+  })();
+  // Attached here rather than left to the caller, for two reasons: the entry is gone before anyone
+  // builds a fallback from it, and a warm nobody awaits never becomes an unhandled rejection.
+  pending.catch(() => {
+    if (cache.get(key) === pending) cache.delete(key);
+  });
+  cache.set(key, pending);
+  return pending;
+}
+
+/**
+ * How long a day has to stay on screen before warming it is worth a model call.
+ *
+ * Clicking along a week of day tabs is one gesture, not seven decisions, and on the CLI transport
+ * each of those decisions would be a Sonnet subprocess. Long enough to sit out a scan, short
+ * enough that reading a day's first stop has already bought the Play button.
+ */
+const WARM_DWELL_MS = 1200;
+
 const ControlsContext = createContext<StoryControls | null>(null);
 const PlaybackContext = createContext<StoryPlayback | null>(null);
 
@@ -135,6 +197,7 @@ const IDLE_CONTROLS: StoryControls = {
   dayIndex: null,
   phase: "loading",
   start: () => {},
+  prefetch: () => {},
   exit: () => {},
   togglePlay: () => {},
 };
@@ -183,9 +246,19 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    */
   const engine: VoiceEngine =
     voiceEngine === "natural" && naturalStatus === "ready" ? "natural" : "browser";
-  /** Scripts already fetched this session, so replaying a day — or a plan with no trip row to
-   *  cache against — costs nothing the second time. */
-  const cacheRef = useRef(new Map<string, StoryScript>());
+  /**
+   * Every script asked for this session, keyed by `storyCacheKey` — the **promise**, not the
+   * script, so a request that arrives while an identical one is in flight joins it instead of
+   * starting a second call. See `loadScript`.
+   *
+   * The key carries no trip id, which is what lets a warm started on the pre-save result view be
+   * read by the Play button on `/trip/[id]` after Keep: this provider is mounted in `AppShell`
+   * from the root layout, so it survives that navigation with the Map intact.
+   */
+  const cacheRef = useRef(new Map<string, Promise<StoryScript>>());
+  /** The single pending warm. One focused day at a time, the same way there is one film at a
+   *  time — see `prefetch`. */
+  const warmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const speakRef = useRef<SpeakHandle | null>(null);
 
   useEffect(() => {
@@ -193,7 +266,10 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
     // Nothing may still be speaking after this provider goes away — `speechSynthesis` is a
     // property of the window, not of the React tree, so an unmount mid-sentence would otherwise
     // narrate over whatever the traveller navigated to.
-    return () => silence();
+    return () => {
+      silence();
+      if (warmTimerRef.current) clearTimeout(warmTimerRef.current);
+    };
   }, []);
 
   const day = request ? request.itinerary.days[request.dayIndex] : undefined;
@@ -259,9 +335,6 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     if (!request || !day) return;
-    const key = `${request.tripId ?? "draft"}:${request.dayIndex}:${JSON.stringify(
-      day.stops.map((s) => [s.name, s.time, s.why, s.note])
-    )}`;
     let alive = true;
     const params = {
       day,
@@ -269,26 +342,17 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       dayCount: request.itinerary.days.length,
       destination: request.destination,
     };
-    // The session cache is consulted *inside* the promise, not before it, so that every path out
-    // of this effect resolves asynchronously and none of them renders from the effect body. A
-    // cache hit therefore arrives a microtask later than it strictly could, which is a frame
-    // nobody can see.
-    (async () => {
-      const cached = cacheRef.current.get(key);
-      if (cached) return cached;
-      const res = await fetch("/api/trip-story", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...params, tripId: request.tripId }),
-      });
-      const data = (await res.json()) as { script?: StoryScript };
-      if (!data.script?.beats?.length) throw new Error("no script");
-      return data.script;
-    })()
+    // A cache hit still resolves a microtask later than it strictly could, which is a frame nobody
+    // can see and which keeps every path out of this effect asynchronous — so none of them renders
+    // from the effect body.
+    loadScript(cacheRef.current, params, request.tripId)
+      // The route degrades to `fallbackScript` on its own; this is the case where the route was
+      // never reached at all (offline, a dev server restart mid-press). Applied *outside* the
+      // cached promise on purpose — inside it, one dropped connection would make the read-aloud
+      // fallback this day's script for the rest of the session.
       .catch(() => fallbackScript(params))
       .then((resolved) => {
         if (!alive) return;
-        cacheRef.current.set(key, resolved);
         setScript(resolved);
         setPhase("playing");
       });
@@ -296,6 +360,40 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       alive = false;
     };
   }, [request, day]);
+
+  /**
+   * Warm the script for the day in focus, so pressing Play is instant rather than a wait.
+   *
+   * The same key, the same cache and the same promise the play effect uses — and that sameness is
+   * the feature rather than a tidiness: a Play landing mid-warm joins the call already running.
+   *
+   * **The dwell lives here, not in the hosts.** There is one focused day at a time, the way there
+   * is one film at a time, so one timer covers every caller — and a debounce written once is a
+   * cleanup that can only be got wrong once. Each call re-arms it, so clicking along a week of day
+   * tabs warms the day landed on and none of the ones passed through.
+   *
+   * The empty dependency list is load-bearing: this goes into `controls`, which three trees read,
+   * so a `prefetch` that changed identity would re-render all of them. It must therefore close
+   * over refs only — closing over `request` or `script` would put those trees back on the beat
+   * clock, which is exactly what splitting controls from playback exists to prevent.
+   */
+  const prefetch = useCallback((next: StoryRequest) => {
+    if (warmTimerRef.current) clearTimeout(warmTimerRef.current);
+    warmTimerRef.current = setTimeout(() => {
+      const warmDay = next.itinerary.days[next.dayIndex];
+      if (!warmDay?.stops.length) return;
+      void loadScript(
+        cacheRef.current,
+        {
+          day: warmDay,
+          dayIndex: next.dayIndex,
+          dayCount: next.itinerary.days.length,
+          destination: next.destination,
+        },
+        next.tripId
+      );
+    }, WARM_DWELL_MS);
+  }, []);
 
   /**
    * Play one beat: aim the camera, say the words, and advance when the words are done.
@@ -516,10 +614,11 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       dayIndex: request?.dayIndex ?? null,
       phase,
       start,
+      prefetch,
       exit,
       togglePlay,
     }),
-    [request, phase, start, exit, togglePlay]
+    [request, phase, start, prefetch, exit, togglePlay]
   );
 
   const playback = useMemo<StoryPlayback>(

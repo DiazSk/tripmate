@@ -59,6 +59,7 @@ export default function TripView({
   // is one film at a time and it belongs to the app (`storyMode.tsx`), so this and the card's own
   // Play button are the same control reached from two places.
   const story = useStoryControls();
+  const { prefetch: warmStory } = story;
   /** 0-based days a chat turn changed while the traveler was reading a different one. Owned here
    *  rather than in the card because the chat that produces them lives beside it, not inside it. */
   const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
@@ -108,6 +109,22 @@ export default function TripView({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  /**
+   * Warm the narration for the day on screen — same effect and same reasoning as `HomeView`'s,
+   * with less to guard: there is no half-written plan here, only a trip that may still be loading
+   * (the `/preview` fixture arrives from the dynamic import above).
+   *
+   * `trip.id` is passed as-is, `"preview"` included — `/api/trip-story` already filters that, so
+   * one place decides what a cacheable trip is. The dwell is in `story.prefetch`.
+   */
+  useEffect(() => {
+    if (!trip || !itinerary) return;
+    // Clamped the way `ItineraryCard` clamps it — see the note on the same line in HomeView.
+    const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
+    if (!itinerary.days[dayIndex]?.stops.length) return;
+    warmStory({ itinerary, dayIndex, destination: trip.destination, tripId: trip.id });
+  }, [trip, itinerary, activeDayIndex, warmStory]);
 
   async function persist(updated: Itinerary) {
     if (id === "preview") return;

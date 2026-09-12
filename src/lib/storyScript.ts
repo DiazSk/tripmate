@@ -107,6 +107,40 @@ export function compactDay(day: DayPlan, dayIndex: number): string {
   return lines.join("\n");
 }
 
+/**
+ * The key a fetched script is remembered under in the browser, for the session.
+ *
+ * **It is every input the prompt sees, and nothing else** — which is the only property that makes
+ * it correct in both directions: the key changes when the narration would change, and does not
+ * change when it would not. `compactDay` is that input, so this is built from it rather than from
+ * a hand-picked list of stop fields. The list was the bug: the session cache keyed on
+ * `[name, time, why, note]` alone, so renaming a day, re-reading its weather or changing its
+ * lodging invalidated the *server's* cache and not this one, and the old script kept playing.
+ *
+ * Deliberately **no trip id.** Three call sites ask for the same day under three different ones —
+ * a real id, the `"preview"` placeholder, and nothing at all — so a key that carried it made them
+ * miss each other and pay twice for one script. The trip id in `trip_stories`' primary key is a
+ * row scope, not a content scope; the server's own discriminator is the fingerprint, same as here.
+ * Two trips that collide have byte-identical prompt input and therefore one correct script.
+ *
+ * This mirrors the fingerprint `/api/trip-story` hashes — same `STORY_PROMPT_VERSION`, same
+ * `compactDay` — so the two caches now invalidate on exactly the same events. The module note
+ * above says the cache key is deliberately not here; that is still true of the *hash*, which needs
+ * node crypto and stays in the route. This is the plain string it hashes, and it has to live
+ * beside `compactDay` for the two to be kept in step.
+ */
+export function storyCacheKey(params: {
+  destination: string;
+  dayIndex: number;
+  dayCount: number;
+  day: DayPlan;
+}): string {
+  return `${params.destination}|${params.dayCount}|v${STORY_PROMPT_VERSION}\n${compactDay(
+    params.day,
+    params.dayIndex
+  )}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // The ask
 // ─────────────────────────────────────────────────────────────────────────────
