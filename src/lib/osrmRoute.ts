@@ -1,6 +1,6 @@
 import { DEFAULT_MODES, haversineKm, travelLegBetween } from "./travelTime";
 import { TTL, cached } from "./fetchCache";
-import type { TransportMode } from "./types";
+import type { TransportMode, TravelLeg } from "./types";
 
 /**
  * Real road-network routes from the FOSSGIS OSRM deployment — distance, duration and the
@@ -337,4 +337,57 @@ export function routeMinutes(route: OsrmRoute): number {
 /** Kilometres to 1dp, matching `TravelLeg.distanceKm` and `travelLegBetween`. See `routeMinutes`. */
 export function routeDistanceKm(route: OsrmRoute): number {
   return Math.round(route.distanceM / 100) / 10;
+}
+
+/**
+ * Upgrade estimated legs to measured ones wherever OSRM could answer.
+ *
+ * Index-aligned in, index-aligned out. A leg that could not be routed comes back **unchanged**,
+ * `estimated: true` still on it — so the result is always a complete set of legs and a caller never
+ * has to reason about holes.
+ *
+ * Deliberately a separate pass rather than an option on `buildTravelLegs`. That function is
+ * synchronous, pure and reachable from four `"use client"` components through `schedule.ts`;
+ * threading a network call into it would drag `fetchCache.ts` and `better-sqlite3` into the client
+ * bundle, which is the trap `serverFetchCached.ts` exists to document. It also has to keep working
+ * on its own — it is the fallback.
+ *
+ * `pointByName` is how a leg's two endpoints are found, because `TravelLeg` identifies them by
+ * name. A leg naming a place absent from the map is left estimated rather than guessed at.
+ *
+ * **Mixed output is the normal case, not a degraded one.** With the default modes, `pickMode` picks
+ * `transit` for anything past 1.5km and nothing routes transit, so a typical trip comes back with
+ * its short hops measured and its long ones estimated. `routed`/`routable` are returned so the
+ * caller can say which happened without recounting.
+ */
+export async function applyRealRoutes(
+  legs: TravelLeg[],
+  pointByName: Map<string, Pt>,
+  opts: { budgetMs?: number } = {}
+): Promise<{ legs: TravelLeg[]; routed: number; routable: number }> {
+  // Only legs whose mode OSRM serves and whose endpoints we can place are worth asking about;
+  // `routable` counts those, so "3 of 4" never counts a transit leg as a failure.
+  const candidates = legs.map((leg, index) => {
+    const from = pointByName.get(leg.from);
+    const to = pointByName.get(leg.to);
+    return routableMode(leg.mode) && from && to ? { index, from, to, mode: leg.mode } : null;
+  });
+  const asked = candidates.filter((c): c is NonNullable<typeof c> => c !== null);
+  if (asked.length === 0) return { legs, routed: 0, routable: 0 };
+
+  const routes = await routeLegs(asked, opts);
+  const next = [...legs];
+  let routed = 0;
+  routes.forEach((route, i) => {
+    if (!route) return;
+    routed += 1;
+    const { index } = asked[i];
+    next[index] = {
+      ...legs[index],
+      distanceKm: routeDistanceKm(route),
+      minutes: routeMinutes(route),
+      estimated: false,
+    };
+  });
+  return { legs: next, routed, routable: asked.length };
 }

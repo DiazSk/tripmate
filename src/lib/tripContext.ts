@@ -238,16 +238,39 @@ function poiLine(p: EnrichedPoi): string {
 }
 
 function legLine(l: TravelLeg): string {
-  return `- ${l.from} -> ${l.to}: ${l.minutes} min ${l.mode} (${l.distanceKm} km)`;
+  // `(est)` per leg, the same marker `poiLine` puts on an estimated visit duration four lines up —
+  // one piece of vocabulary for "this number is a guess" rather than two for the model to learn.
+  return `- ${l.from} -> ${l.to}: ${l.minutes} min ${l.mode}${l.estimated ? " (est)" : ""} (${l.distanceKm} km)`;
+}
+
+/**
+ * What to say about where these numbers came from.
+ *
+ * Conditional because it stopped being true that they all come from the same place. Telling the
+ * model every leg is a straight-line estimate when some are measured road routes throws away the
+ * accuracy this pipeline just paid for; telling it they are all measured when most are not is the
+ * dishonesty `osrmRoute.ts`'s doc is about. The mixed case is the common one.
+ */
+function travelHeader(legs: TravelLeg[]): string {
+  const estimated = legs.filter((l) => l.estimated).length;
+  if (estimated === 0) return "(real road-network routes)";
+  if (estimated === legs.length) {
+    return "(estimated — straight-line distance with a road-circuity correction)";
+  }
+  return "(real road-network routes, except those marked (est) — straight-line with a road-circuity correction)";
 }
 
 /** Full pair list while it stays short; otherwise each POI's nearest few, which preserves the
- *  cluster structure at a fraction of the lines. */
-function travelSection(details: PoiDetails): string {
+ *  cluster structure at a fraction of the lines.
+ *
+ *  Exported solely so `tripContext.test.mjs` can reach it — the same reason `bikeshare.ts` exports
+ *  its parsers. What it decides is which legs the model is told are measured and which are guesses,
+ *  and getting that backwards is invisible until a plan is built on a number that was never real. */
+export function travelSection(details: PoiDetails): string {
   const legs = details.travelLegs;
   if (legs.length === 0) return "No travel times — fewer than two places have coordinates.";
 
-  const header = "(estimated — straight-line distance with a road-circuity correction)";
+  const header = travelHeader(legs);
 
   if (legs.length <= MAX_LEGS_LISTED) {
     const sorted = [...legs].sort((a, b) => a.minutes - b.minutes);

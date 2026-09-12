@@ -379,7 +379,18 @@ export interface TravelLeg {
   mode: TransportMode;
   distanceKm: number;
   minutes: number;
-  /** Always true today: legs are haversine + a speed constant, not road-network routing. */
+  /**
+   * False when `minutes` and `distanceKm` came from a real OSRM route for this leg's own `mode`;
+   * true when they came from haversine × a circuity factor.
+   *
+   * **Mixed within one trip is the normal case, not a degraded one.** `osrmRoute.ts` serves foot,
+   * bike and car and there is no free transit router, so a `transit` leg is always estimated — and
+   * `pickMode` sends everything past 1.5km to transit under the default modes. A typical city day
+   * therefore arrives with its short hops measured and its long ones estimated.
+   *
+   * `buildTravelLegs` still hardcodes `true`, because what it produces *is* an estimate;
+   * `applyRealRoutes` is the only thing that flips it.
+   */
   estimated: boolean;
 }
 
