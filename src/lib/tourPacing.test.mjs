@@ -118,29 +118,26 @@ test("a step is shorter than the metronome it replaces", () => {
 
 /* --- travelFollowSeconds ---
  *
- * The camera is the clock on a travel beat — the one place in this controller where the words are
- * not. The first version fitted the flight to the narration and clamped the speed at 400 m/s,
- * which on a 900m leg over a one-sentence line worked out at 650 km/h and read as a lurch rather
- * than as going somewhere. */
+ * The narration is the target; the speed ceiling is the only thing allowed to override it. Both
+ * ways of getting this wrong have been shipped: a 400 m/s ceiling let a 900m leg run at 650 km/h
+ * and read as a lurch, and a 45 m/s cruise held the same leg open for twenty seconds under a
+ * five-second line, which is fifteen seconds of dead air over a camera still going. */
 
-test("a typical city leg is paced at cruise speed, not at the length of the sentence", () => {
-  // 900m at 45 m/s = 20s, capped to TRAVEL_MAX_S.
-  assert.equal(travelFollowSeconds(900, 4_000), 20);
-  // 450m at 45 m/s = 10s, and the 4s sentence does not shorten it.
-  assert.equal(travelFollowSeconds(450, 4_000), 10);
+test("the sentence sets the length whenever the camera can keep up", () => {
+  // 400m in 5s is 80 m/s — inside the ceiling, so the words win outright and there is no silence.
+  assert.equal(travelFollowSeconds(400, 5_000), 5);
+  assert.equal(travelFollowSeconds(750, 6_000), 6);
 });
 
-test("the narration is a floor, never a ceiling", () => {
-  // A short hop under a long line: the words win, because cutting narration is worse than a slow
-  // camera.
-  assert.equal(travelFollowSeconds(90, 12_000), 12);
-  // And the same hop under a short line gets the minimum, not two seconds of twitch.
-  assert.equal(travelFollowSeconds(90, 1_000), 6);
+test("a long leg is stretched only as far as the speed ceiling demands", () => {
+  // 1500m in 6s would be 250 m/s. At the 150 m/s ceiling it takes 10s — four seconds of silence,
+  // not fourteen.
+  assert.equal(travelFollowSeconds(1500, 6_000), 10);
+  assert.equal(travelFollowSeconds(900, 5_000), 6, "900m at the ceiling is 6s, barely over the line");
 });
 
-test("nothing runs past TRAVEL_MAX_S, however long the leg or the line", () => {
-  assert.equal(travelFollowSeconds(40_000, 4_000), 20);
-  assert.equal(travelFollowSeconds(40_000, 60_000), 20, "even a runaway narration estimate");
+test("a very short hop still registers as a movement", () => {
+  assert.equal(travelFollowSeconds(60, 1_000), 4);
 });
 
 test("a zero-length path falls back to the narration and never divides by it", () => {

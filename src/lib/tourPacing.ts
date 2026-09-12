@@ -112,35 +112,37 @@ export function tourFlightSeconds(legM: number, turnRad = 0): number {
 export const TOUR_HOLD_MS = 3600;
 
 /**
- * Cruise speed for a travel beat, in metres per second.
+ * The fastest the ground may pass under a travel beat, in metres per second.
  *
- * 45 m/s is ~160 km/h over ground seen from 1200m — a drone keeping pace with traffic. The first
- * version derived the duration from the narration and clamped the speed at 400 m/s, which on a
- * 900m leg over a one-sentence line worked out at 650 km/h: the ground blurred, and what should
- * have read as walking somewhere read as a lurch.
+ * A ceiling, not a target — it only bites on a leg long enough that covering it in the time the
+ * sentence takes would blur the ground. 150 m/s is ~540 km/h seen from 1200m. The first version
+ * allowed 400, which on a 900m leg under a one-sentence line worked out at 650 km/h and read as a
+ * lurch rather than as going somewhere.
  */
-const TRAVEL_CRUISE_MPS = 45;
-/** A leg shorter than this many seconds does not read as travel at all, however short the ground. */
-const TRAVEL_MIN_S = 6;
-/** And past this it stops being a transition and becomes its own scene. */
-const TRAVEL_MAX_S = 20;
+const TRAVEL_SPEED_MAX_MPS = 150;
+/** Under this the movement is over before it registers as one, however short the ground. */
+const TRAVEL_MIN_S = 4;
 
 /**
  * How long the camera takes to walk a leg.
  *
- * **The camera is the clock on a travel beat, and the narration is a floor** — the one place in
- * this controller where that is true, and the exception is the point of the beat. Every other beat
- * is a thing being described, so the words set its length; a travel beat is a *movement*, and a
- * movement cut off halfway is just a jump with extra steps. The caller holds the beat open until
- * this elapses, so a short line is followed by silence over a camera that is still going, which is
- * what a documentary does over an establishing shot.
+ * **The narration is the target and the speed ceiling is the only thing that overrides it.** The
+ * beat should end about when the sentence does; silence over a camera still travelling is dead
+ * air, and it is what a cruise-speed version of this produced — a 900m leg held open for twenty
+ * seconds under a five-second line.
  *
- * Returns at least the narration, at least `TRAVEL_MIN_S`, and never more than `TRAVEL_MAX_S`.
+ * So: the sentence's length, unless that would mean moving faster than `TRAVEL_SPEED_MAX_MPS`, in
+ * which case the leg takes as long as that speed needs and the difference is a second or two of
+ * silence at the end. A genuinely long leg cannot be both slow and over when the voice stops, and
+ * this resolves that in favour of legible ground.
+ *
+ * The caller holds the beat open for whatever this returns, so the camera is never cut off
+ * mid-street.
  */
 export function travelFollowSeconds(pathM: number, narrationMs: number): number {
   const narrationS = Math.max(narrationMs, 0) / 1000;
   if (!(pathM > 0)) return narrationS;
-  return Math.min(Math.max(pathM / TRAVEL_CRUISE_MPS, narrationS, TRAVEL_MIN_S), TRAVEL_MAX_S);
+  return Math.max(narrationS, pathM / TRAVEL_SPEED_MAX_MPS, TRAVEL_MIN_S);
 }
 
 /**
