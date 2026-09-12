@@ -432,13 +432,18 @@ export async function runGeneration(
   };
 
   // Reuses the §12a/§12b arithmetic and phrasing in guardrails.ts rather than restating it.
-  // No real door-to-door durations are available (the OSRM route-matrix path was removed — it
-  // was unreachable dead code, since this app never requests drive mode and OSRM's demo instance
-  // cannot serve real walking data), so this always runs on the haversine estimate.
-  const travelFindings = evaluateItinerary(itinerary)
-    .filter((g) => g.rule === "travel")
-    .map((g) => g.message)
-    .concat(dietaryFindings);
+  // No real door-to-door durations are available, so this runs on the haversine estimate.
+  //
+  // Declared here but assigned by `computeTravelFindings()` below, and that ordering is
+  // load-bearing rather than tidiness. `evaluateItinerary` measures the distance between
+  // consecutive stops, and until `placeStops()` has run those are the model's own coordinates —
+  // written from memory and wrong by kilometres often enough that placeStops exists to correct
+  // them (measured: Fushimi Inari 11km off). Computing travel findings against them produced
+  // warnings about journeys nobody was taking, and fed them to the critique model as fact.
+  //
+  // Both branches below now call it after `await placeStops()` and before `runCritique()`, which
+  // is the only reader.
+  let travelFindings: string[] = dietaryFindings;
 
   // Correct the model's coordinates against OSM. It writes lat/lng from memory and is often
   // badly wrong (measured: Fushimi Inari 11km off, Nishiki Market 3km), which lands map pins in
@@ -492,6 +497,36 @@ export async function runGeneration(
     }
   };
 
+  /**
+   * Re-apply placeStops()'s OSM lookups to a day set critique handed back.
+   *
+   * Critique's JSON carries the model's own lat/lng guesses for every stop it touched, and
+   * placeStops() does not run again afterwards on either branch. Re-applying by the same
+   * trimmed-name key gives a stop critique kept — renamed or not — its corrected position. A
+   * name critique invented has no entry and keeps the model's guess, which is exactly the
+   * existing fail-soft behaviour for anything placeStops itself could not match. Costs no extra
+   * network: these are names already looked up.
+   */
+  const applyResolvedCoords = (days: Itinerary["days"]): void => {
+    for (const day of days) {
+      for (const stop of day.stops ?? []) {
+        const fixed = resolvedCoords[stop.name.trim()];
+        if (fixed) {
+          stop.lat = fixed.lat;
+          stop.lng = fixed.lon;
+        }
+      }
+    }
+  };
+
+  /** See `travelFindings` above for why this is a call and not an initialiser. */
+  const computeTravelFindings = (): void => {
+    travelFindings = evaluateItinerary(itinerary)
+      .filter((g) => g.rule === "travel")
+      .map((g) => g.message)
+      .concat(dietaryFindings);
+  };
+
   // Best-effort QA pass: checks budget/timing/context usage and swaps in a corrected day set if
   // it finds issues. Never fails the request — a broken critique call just leaves whichever day
   // set it was handed in place.
@@ -537,11 +572,21 @@ export async function runGeneration(
   };
 
   if (!live) {
-    // Plain-JSON caller: one response, so critique has to land before it. Unchanged order.
-    const revision = await runCritique();
-    if (revision) itinerary.days = revision.days;
-    finalizeDays(itinerary.days);
+    // Plain-JSON caller: one response, so critique has to land before it.
+    //
+    // placeStops() moved ahead of critique here to match the streaming branch, because
+    // `computeTravelFindings()` has to see corrected coordinates and critique is its only
+    // reader. The coordinates critique's own day set comes back with are then restored by
+    // `applyResolvedCoords`, the same way the streaming branch restores them — so nothing that
+    // used to get an OSM position loses one.
     await placeStops();
+    computeTravelFindings();
+    const revision = await runCritique();
+    if (revision) {
+      applyResolvedCoords(revision.days);
+      itinerary.days = revision.days;
+    }
+    finalizeDays(itinerary.days);
     return { itinerary, traceId, runId, sessionId };
   }
 
@@ -549,25 +594,12 @@ export async function runGeneration(
   // spend the ~150s critique costs. This is the halving — interactive at ~160s rather than ~310s.
   finalizeDays(itinerary.days);
   await placeStops();
+  computeTravelFindings();
   live.onPlan({ itinerary, traceId, runId, sessionId });
 
   const revision = await runCritique();
   if (revision) {
-    // Critique's JSON carries the model's own lat/lng guesses for every stop it touched, and
-    // placeStops() already ran once above, against the pre-critique day set — it does not run
-    // again down here. Re-apply the coordinates it resolved, by the same trimmed-name key, so a
-    // stop critique kept (renamed or not) gets its OSM-corrected position rather than the
-    // model's memory. A name critique invented has no entry and keeps the model's guess, which
-    // is exactly the existing fail-soft behaviour for anything placeStops itself couldn't match.
-    for (const day of revision.days) {
-      for (const stop of day.stops ?? []) {
-        const fixed = resolvedCoords[stop.name.trim()];
-        if (fixed) {
-          stop.lat = fixed.lat;
-          stop.lng = fixed.lon;
-        }
-      }
-    }
+    applyResolvedCoords(revision.days);
     finalizeDays(revision.days);
     live.onRevised({ days: revision.days, issues: revision.issues });
     itinerary.days = revision.days;
