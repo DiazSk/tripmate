@@ -32,7 +32,7 @@ import {
   peekDayRoute,
 } from "@/lib/dayRoutes";
 import { formatDistance } from "@/lib/format";
-import { measurePath, sampleAt } from "@/lib/pathFollow";
+import { measurePath, sampleAt, travelEase } from "@/lib/pathFollow";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import type { NaturalVoiceStatus } from "@/lib/kokoroVoice";
 import { loadNaturalVoice, naturalVoiceReady, naturalVoiceSupported } from "@/lib/kokoroVoice";
@@ -270,6 +270,17 @@ const HEADING_SETTLE_FRACTION = 0.25;
  *  `flyToPoint`. */
 const ARRIVAL_SETTLE_S = 0.9;
 
+/**
+ * Time constant of the heading filter, in milliseconds.
+ *
+ * Expressed as a time constant and applied as `1 - exp(-dt / TAU)` so the smoothing is the same on
+ * a 144Hz laptop as on a 30fps one — a fixed per-frame fraction is silently twice as aggressive at
+ * half the frame rate, which is the classic way a filter tuned on one machine feels wrong on
+ * another. 900ms is slow enough to ignore individual street kinks and quick enough to have come
+ * round by the end of a real corner.
+ */
+const HEADING_TAU_MS = 900;
+
 function followPath(
   rendererRef: { current: MapRenderer | null },
   points: { lat: number; lng: number }[],
@@ -285,8 +296,10 @@ function followPath(
   const cursor = { i: 0 };
   let frame = 0;
   let done = false;
+  /** The filtered heading actually sent to the camera. See `HEADING_TAU_MS`. */
+  let heldHeading: number | null = null;
 
-  const place = (fraction: number) => {
+  const place = (fraction: number, dtMs: number) => {
     const renderer = rendererRef.current;
     if (!renderer?.isAlive()) return false;
     const sample = sampleAt(path, fraction * path.totalM, cursor);
@@ -294,16 +307,27 @@ function followPath(
     // has no swing left to make. Without this the camera arrived facing along the street and the
     // stop beat immediately spun it to face the *next* stop — one of the two jerks that made the
     // handoff read as the film reloading.
-    let headingRad = sample.headingRad;
+    let target = sample.headingRad;
     if (opts.arrivalHeadingRad !== undefined && fraction > 1 - HEADING_SETTLE_FRACTION) {
       const k = (fraction - (1 - HEADING_SETTLE_FRACTION)) / HEADING_SETTLE_FRACTION;
-      headingRad = blendHeadingRad(headingRad, opts.arrivalHeadingRad, k);
+      target = blendHeadingRad(target, opts.arrivalHeadingRad, k);
     }
+
+    // Low-pass the heading rather than send the raw tangent. A real street is a polyline with a
+    // kink every few metres, and at this range a degree of yaw swings the camera a long way, so
+    // following the tangent exactly makes the whole frame twitch even though the *position* is
+    // perfectly smooth. The filter is what turns that into the gliding course a map walkthrough
+    // holds. Seeded on the first frame rather than from zero, or every walk would begin by
+    // swinging round from due north.
+    const alpha = 1 - Math.exp(-Math.max(dtMs, 0) / HEADING_TAU_MS);
+    heldHeading =
+      heldHeading === null ? target : blendHeadingRad(heldHeading, target, alpha);
+
     renderer.restoreCamera({
       lat: sample.lat,
       lng: sample.lng,
       rangeM: STORY_RANGE_M,
-      headingRad,
+      headingRad: heldHeading,
       pitchDeg: STORY_PITCH_DEG,
     });
     renderer.requestRender();
@@ -325,13 +349,13 @@ function followPath(
   }
 
   const startedAt = performance.now();
+  let lastTickAt = startedAt;
   const tick = () => {
-    const t = Math.min((performance.now() - startedAt) / (durationS * 1000), 1);
-    // Eased at the ends only — `cubicInOut` over a fifteen-second walk spends most of it either
-    // accelerating or braking, which is the opposite of the steady glide this wants. A short
-    // ease-in and ease-out around a long constant middle is how a dolly actually moves.
-    const eased = t < 0.15 ? (t * t) / 0.3 : t > 0.85 ? 1 - (1 - t) * (1 - t) / 0.3 : t;
-    if (!place(eased)) return;
+    const now = performance.now();
+    const dtMs = now - lastTickAt;
+    lastTickAt = now;
+    const t = Math.min((now - startedAt) / (durationS * 1000), 1);
+    if (!place(travelEase(t), dtMs)) return;
     if (t < 1) {
       frame = requestAnimationFrame(tick);
       return;

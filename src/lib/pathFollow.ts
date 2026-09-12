@@ -113,3 +113,31 @@ function positionAt(
     lng: points[i].lng + (points[i + 1].lng - points[i].lng) * t,
   };
 }
+
+/** Fraction of a travel beat spent accelerating, and the same again braking. */
+const TRAVEL_RAMP = 0.18;
+
+/**
+ * Distance covered by fraction `t` of a travel beat, as a fraction of the path.
+ *
+ * A **trapezoidal velocity profile**: accelerate for the first `TRAVEL_RAMP`, hold a constant
+ * speed through the middle, brake over the last `TRAVEL_RAMP`. That is how a dolly moves and how
+ * a map walkthrough should read — `cubicInOut` over a ten-second walk is nearly all acceleration
+ * and braking with no steady middle at all.
+ *
+ * **Continuous in value and in speed, and that is the whole point of doing the arithmetic rather
+ * than eyeballing a piecewise curve.** The first attempt at "ease the ends, keep the middle
+ * linear" was three branches that did not meet: it stepped 0.075 → 0.15 at the first join and
+ * 0.85 → 0.925 at the second, which on a 900m leg is a 68m teleport, twice, mid-walk. It read as
+ * the camera stuttering. The peak speed here is `1 / (1 - TRAVEL_RAMP)` precisely so the area
+ * under the profile is 1, which is what makes the branches meet.
+ */
+export function travelEase(t: number): number {
+  if (!(t > 0)) return 0;
+  if (t >= 1) return 1;
+  const p = TRAVEL_RAMP;
+  const peak = 1 / (1 - p);
+  if (t < p) return (peak * t * t) / (2 * p);
+  if (t > 1 - p) return 1 - (peak * (1 - t) * (1 - t)) / (2 * p);
+  return (peak * p) / 2 + peak * (t - p);
+}
