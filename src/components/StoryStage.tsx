@@ -232,7 +232,9 @@ export default function StoryStage() {
         {/* Things the traveller is owed rather than left to wonder about. */}
         {voiceEngine === "natural" && naturalStatus === "loading" && (
           <p className="mt-1.5 text-[11px] text-muted/80">
-            Downloading a better narrator, about 88 MB, once. The story keeps playing meanwhile.
+            Downloading a better narrator — 88 MB, kept for next time; 326 MB on a GPU, which is
+            too big for the browser to keep, so it comes down each session. The story keeps playing
+            meanwhile.
           </p>
         )}
         {voiceEngine === "natural" && naturalStatus === "unavailable" && (
