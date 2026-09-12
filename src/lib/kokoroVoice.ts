@@ -7,7 +7,7 @@ import { pauseAfter, rateFor, splitForSpeech, type SpeakHandle } from "./storyVo
  * nothing and starts instantly but sounds like an OS voice because it is one. This is the opt-in
  * upgrade: an 82M-parameter open-weight TTS model (Apache-2.0) that reads like a person. It is
  * free in the sense that matters here — no key, no quota, no per-use cost — and not free in the
- * sense that matters to a phone: **an 88MB model download the first time it is switched on**,
+ * sense that matters to a phone: **an 88-326MB model download the first time it is switched on**,
  * cached by the browser afterwards. That is why it is a toggle and not the default.
  *
  * Three decisions in here are load-bearing, and all three were measured rather than assumed.
@@ -49,31 +49,66 @@ const MODULE_URL = "https://esm.sh/kokoro-js@1.2.1";
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
 /**
- * `q8` — 88MB, against 326MB for `fp32` and an audible quality drop at `q4`.
+ * **The quantisation follows the backend, because on WebGPU the low-precision ones do not speak.**
  *
- * The whole point of the toggle is that the voice is better; a quantisation that gave that back to
- * save bandwidth would leave the feature with no reason to exist.
+ * `q8` on WebGPU came out as fluent nonsense in no language. `fp16` on WebGPU came out distorted
+ * and worse. Same model, same voice, same text, both times; the only difference from the CPU run
+ * that reads correctly is the device. onnxruntime-web's WebGPU path does not implement every
+ * operator these need at these precisions, and what it cannot run there it runs elsewhere, quietly
+ * and with different numbers — for `q8` the tell was in the clock, since it came out **no faster
+ * than the CPU** (3.5-10.8s a sentence against WASM's 3.7-9.9s), which is not what an accelerator
+ * that is accelerating looks like. `fp16` was genuinely fast (0.8-2.3s) and still wrong, so speed
+ * alone never settled it.
+ *
+ * `fp32` is what kokoro-js's own WebGPU example ships, and it is 326MB against `q8`'s 88MB. It was
+ * the choice here for a while, because the note on `SYNTHESIS_DEADLINE_MS` rules the CPU out —
+ * WASM runs at a real-time factor of about 1.5 on an M-series Mac, correct and permanently behind.
+ *
+ * **Known and unresolved: the browser will not keep `fp32`.** Measured with a synthetic 320MB
+ * entry and no network at all — `caches.put` rejects it outright with `UnknownError: Unexpected
+ * internal error`, against 2.7GB of quota with 755MB in use. A per-entry cap, not a quota. The
+ * real cache agrees: after two full `fp32` loads `model.onnx` is absent from `transformers-cache`,
+ * while `model_fp16.onnx` (155.7MB) and `model_quantized.onnx` (88.1MB) from earlier runs are both
+ * sitting in it. So this is not 326MB once — it is 326MB **every session**, about 10 seconds on a
+ * fast connection, and the UI copy says so rather than promising "once".
+ *
+ * That is survivable for a demo and is not something to ship widely. The way out is a smaller
+ * dtype that fits the cap, and both candidates have been rejected by ear (`fp16` distorted, `q8`
+ * nonsense) — so the open question is a quality one, not an engineering one. Chunking the weights
+ * into cacheable pieces ourselves would work and means owning a store transformers.js knows
+ * nothing about; it has not been done.
+ *
+ * Waveform distance is **not** evidence here and was twice mistaken for it: two correct renderings
+ * of one sentence sit around 0.7-0.8 relative difference purely from a few milliseconds of phase.
+ * Only a listener can settle which of these is speech.
  */
-const DTYPE = "q8";
+function dtypeFor(device: "webgpu" | "wasm"): "fp32" | "q8" {
+  return device === "webgpu" ? "fp32" : "q8";
+}
 
-/**
- * The narrator. `af_heart` is the model's highest-graded voice (an "A" overall, against "C"s and
- * "D"s for most of the roster) and is warm rather than newsreaderly, which is what a trip story
- * wants. Kokoro ships ~50 voices; that is not a user-facing choice today and does not need to be.
- */
 const VOICE = "af_heart";
 
 /**
  * How long one sentence may take to synthesise before the beat gives up and lets the platform
  * voice read it instead.
  *
- * The WASM backend is an order of magnitude slower than WebGPU and varies hugely by device, so
- * this is the difference between "a slower narrator" and "a film that stops". 12s is past any
- * plausible WebGPU time and past a reasonable WASM time on current hardware; a device slower than
- * that gets the platform voice, mid-beat, and nobody has to watch a caption sit still. See
- * `speakOn` in storyVoice.ts for where that handover happens.
+ * This is sized for the **WASM** path, which is the slow one. Measured in the worker on an
+ * M-series Mac with nothing else running: a real-time factor of **1.49-1.52**, dead flat across
+ * sentences of 29 to 102 characters — about 1.5 seconds of compute per second of speech, so a
+ * sentence's cost scales with the *audio* it produces rather than its length in characters, and
+ * the longest sentence the prompt permits lands near 10s. 12s was inside that margin and tripped
+ * the moment the map got busy, handing real beats back to the platform voice mid-film. 20s clears
+ * it. A device slower still gets the platform voice, mid-beat, and nobody has to watch a caption
+ * sit still — see `speakOn` in storyVoice.ts for where that handover happens.
+ *
+ * **A factor above 1.0 is a narrator that can never catch up**, which is why `fp32` on WebGPU is
+ * worth 326MB: the one-sentence prefetch buys the pause between sentences and nothing more, so on
+ * WASM every beat starts late by its first sentence and falls further behind across the rest. The
+ * same five sentences on WebGPU measure **0.18-0.25**, 550-1583ms each, which stays ahead of
+ * playback with room to spare. Fired back to back with no gaps that rises to ~1.6 under GPU
+ * pressure; real use always has the gap, because the previous sentence is playing.
  */
-const SYNTHESIS_DEADLINE_MS = 12_000;
+const SYNTHESIS_DEADLINE_MS = 20_000;
 
 export type NaturalVoiceStatus = "idle" | "loading" | "ready" | "unavailable";
 
@@ -175,6 +210,9 @@ export function naturalVoiceReady(): boolean {
  * the module loaded off the CDN, the weights downloaded, and the session then refused to
  * initialise, so the toggle went straight from "100%" to "couldn't load". Only `requestAdapter()`
  * returning something is evidence.
+ *
+ * It also picks the quantisation now — see `dtypeFor` — so a wrong answer here is the difference
+ * between an 88MB download and a 326MB one.
  */
 async function webgpuUsable(): Promise<boolean> {
   const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
@@ -188,7 +226,7 @@ async function webgpuUsable(): Promise<boolean> {
 
 /**
  * Download and initialise the model. Idempotent, and safe to call while a load is already running
- * — the second caller waits on the first rather than starting a second 88MB download.
+ * — the second caller waits on the first rather than starting a second model download.
  *
  * `onProgress` is a 0-1 fraction across the whole download, so the UI can say "41%" rather than
  * spinning for a minute with nothing to show. Resolves false on any failure (offline, CDN blocked,
@@ -239,7 +277,7 @@ export function loadNaturalVoice(onProgress?: (fraction: number) => void): Promi
           type: "load",
           moduleUrl: MODULE_URL,
           modelId: MODEL_ID,
-          dtype: DTYPE,
+          dtype: dtypeFor(device),
           device,
         });
       });

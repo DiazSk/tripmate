@@ -259,8 +259,14 @@ nothing. And the model runs in a worker built from a Blob, not a worker *file* �
 sentence on the WASM backend blocked the main thread for **16.9s** (the map froze; a Next press took
 18.4s), against **840ms** worst-case in the worker; and a `new URL("./x.worker.ts",
 import.meta.url)` worker is the thing MapLibre's note above records Turbopack silently failing to
-serve. `webgpuUsable()` probes `requestAdapter()` rather than `"gpu" in navigator`, which is true in
-contexts where no adapter can be had and was how this first failed.
+serve. **The quantisation follows the backend and the pairing is load-bearing**: on a Metal-3 Mac
+`q8` on WebGPU read as fluent nonsense in no language and `fp16` came out distorted, so WebGPU gets
+`fp32` (326MB, what kokoro-js's own WebGPU example ships) and WASM keeps `q8` (88MB). Only a
+listener can settle which of those is speech — waveform distance cannot, since two correct
+renderings differ by 0.7-0.8 relative purely from phase. Speed is the reason to spend the bytes:
+measured per sentence in the worker, WASM runs at a real-time factor of ~1.5 (correct and
+permanently behind, since the one-sentence prefetch cannot make that up), `fp32` on WebGPU at
+0.18-0.25.
 
 **Which one wins, and why the other still exists.** `/api/itinerary` is the incumbent and owns the traveller-facing path: `generate()` in `HomeView.tsx` posts to it with `?stream=1`, and a plan a visitor actually sees always came from there. The staged pipeline is the **intended direction** — it is where the skill/facts/ask separation lives, and it is the one to extend when generation logic changes. Treat `/api/itinerary` as legacy that has not been retired yet, not as the design.
 
