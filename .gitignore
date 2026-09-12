@@ -89,3 +89,6 @@ Trace-*.json
 # git: `next build` copies all of public/ into the deployment, so a zip left in there is a live
 # multi-hundred-megabyte download from any production start.
 /assets/scene-source/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
