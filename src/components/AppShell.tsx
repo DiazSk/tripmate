@@ -157,18 +157,19 @@ function ShellBody({
           {/* Sibling of the content overlay, not a child of it: the nav is app chrome like
               the map controls, so it stays put no matter what shape a page's own content column
               takes. Above z-10 so the right-docked panels can't cover it. */}
-          {/* Everything the film takes off screen: the navbar, the map's search box, the zoom /
-              2D / tilt / compass stack, and the install prompt. All of it is page and map
-              *chrome* — a film has none, and the traveller asked for these specifically.
+          {/* The navbar stays up during a film. It used to go with the rest of the chrome, and the
+              way out of a playing film was Esc or the film's own ✕ — which is fine once you know
+              it and a dead end before you do, since the whole page had no visible exit. */}
+          <Navbar />
+          {/* What the film still takes off screen: the map's search box, the zoom / 2D / tilt /
+              compass stack, and the install prompt. All of it acts *on the map* the film is
+              driving, which is the line — `MapEngineToggle` stays for the same reason, it chooses
+              the world being filmed rather than reaching into the shot.
 
               `display: none` on a wrapper rather than unmounting, so leaving the film restores
-              each one's own state (an open mobile menu, a typed search, a tilt position) instead
-              of rebuilding it. Fixed descendants are hidden along with it.
-
-              `MapEngineToggle` is the one control that stays, and deliberately: it chooses the
-              world being filmed rather than acting on the page. */}
+              each one's own state (a typed search, a tilt position) instead of rebuilding it.
+              Fixed descendants are hidden along with it. */}
           <div className={story.active ? "hidden" : "contents"}>
-            <Navbar />
             {/* Lifted here rather than held in either component, because it is a fact about the
                 map's chrome as a whole: the expanded search panel occupies the same gutter the
                 zoom / 2D / tilt stack sits in, and two controls fighting over one patch of screen
