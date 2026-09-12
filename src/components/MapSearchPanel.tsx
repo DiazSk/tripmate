@@ -22,7 +22,8 @@ import {
   rememberSearch,
 } from "@/lib/searchHistory";
 import { useToast } from "@/lib/toast";
-import { encodePolygon, searchAreaFor } from "@/lib/searchArea";
+import { encodePolygon, searchAreaFor, type LatLng } from "@/lib/searchArea";
+import { isTilePlace, placesFromTiles } from "@/lib/tilePlaces";
 import { SEARCH_COLOURS, searchColourFor } from "@/lib/searchPalette";
 
 /**
@@ -78,6 +79,14 @@ const CARD_GRACE_MS = 600;
 /** How far the view must travel before it is worth asking again, as a fraction of the camera's
  *  distance to the ground — so it means the same thing over a city and over a street. */
 const MOVE_TO_RESEARCH = 0.25;
+
+/** How long a card must stay open before its place is worth a detail lookup — see `tileFacts`. */
+const FACTS_DWELL_MS = 600;
+/** The route clamps `radius` to a 200m floor, so this is already the smallest query it will run. */
+const FACTS_RADIUS_M = 200;
+/** A tile POI and its OSM node are the same object, so they agree to within metres. Anything this
+ *  far off is a different venue that happens to share part of a name. */
+const FACTS_MAX_DRIFT_M = 120;
 const SEARCH_SPRING = { type: "spring", stiffness: 320, damping: 32 } as const;
 
 /**
@@ -169,6 +178,17 @@ export default function MapSearchPanel({
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The camera position the current results describe. See the idle effect. */
   const lastSearchedRef = useRef<CameraState | null>(null);
+  /**
+   * Which search is the live one.
+   *
+   * The same `drawGeneration` guard the renderer uses, and needed here for the same reason: two
+   * searches can be in flight and they do not land in order. It became visible the moment the tiles
+   * became the first index asked — a tile answer is instant, so an Overpass call from the *previous*
+   * view is still open when it arrives, and 25 seconds later its "search is busy" landed on top of
+   * a list that was already on screen and correct. Panning away from a throttled area and back into
+   * a dense one showed it every time.
+   */
+  const searchGenerationRef = useRef(0);
   /**
    * Whether the entry morph is behind us, so a later layout change can take the slower spring.
    *
@@ -285,9 +305,89 @@ export default function MapSearchPanel({
   }, [rendererRef, ready, isOpen]);
 
   /** The place the card is about, derived rather than stored — see the effect above. */
-  const selectedPlace = useMemo(
+  const openPlace = useMemo(
     () => visiblePlaces.find((p) => p.id === selectedId) ?? null,
     [visiblePlaces, selectedId]
+  );
+
+  /**
+   * The facts a vector tile cannot carry, filled in for the one place whose card is open.
+   *
+   * A tile POI is four fields — name, class, subclass, rank — and no id, so there is no handle to
+   * look anything else up by. What there *is* is a name and a coordinate, which is exactly the
+   * question `/api/place-search` already answers: `q=<name>` inside `around:200`. No new route, no
+   * new server code, and the same fail-soft contract as every other search.
+   *
+   * **This is what inverts the load.** Overpass used to answer every chip press over a
+   * neighbourhood; now it answers one tiny query for the one place somebody actually looked at.
+   *
+   * Keyed by place id and kept for the life of the panel, so pointing back at a pin is free.
+   * An empty object is the recorded answer for "asked, found nothing" — the card is built to look
+   * finished without any of this, so a miss is a shape rather than a failure.
+   */
+  const [tileFacts, setTileFacts] = useState<Record<string, Partial<FoundPlace>>>({});
+
+  useEffect(() => {
+    const place = openPlace;
+    if (!place || !isTilePlace(place) || tileFacts[place.id]) return;
+    let alive = true;
+    // The card opens on *hover*, so without a dwell a pointer sweeping across fifteen pins would
+    // spend fifteen Overpass requests on places nobody stopped to read. Matched to the grace period
+    // the card already uses for the reverse gesture.
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({
+        lat: String(place.lat),
+        lng: String(place.lng),
+        q: place.name,
+        radius: String(FACTS_RADIUS_M),
+      });
+      // Narrowed to the tile's own category where it has one, which both shrinks the query and
+      // stops a café's card being filled in by a restaurant two doors down with a similar name.
+      if (place.category !== "place") params.set("category", place.category);
+      fetch(`/api/place-search?${params}`)
+        .then((r) => r.json())
+        .then((data: { places?: FoundPlace[] }) => {
+          if (!alive) return;
+          // Overpass already matched the name; this is the second half of the trust boundary.
+          // These are somebody's opening hours and phone number, and attaching them to the wrong
+          // venue is worse than showing none — so a hit further away than a building is discarded.
+          const match = data.places?.find(
+            (candidate) => metresBetween(place, candidate) <= FACTS_MAX_DRIFT_M
+          );
+          setTileFacts((prev) => ({
+            ...prev,
+            // Field by field, never a spread of `match`: its `id` is Overpass's, and adopting it
+            // would detach the card from the pin it is anchored to and from `addedDays`, which is
+            // keyed by the tile's id and is what keeps "Added · Day 3" on the row.
+            [place.id]: match
+              ? {
+                  address: match.address,
+                  website: match.website,
+                  phone: match.phone,
+                  openingHours: match.openingHours,
+                  cuisine: match.cuisine,
+                  wheelchair: match.wheelchair,
+                  outdoorSeating: match.outdoorSeating,
+                  wikidataId: match.wikidataId,
+                }
+              : {},
+          }));
+        })
+        .catch(() => {
+          if (alive) setTileFacts((prev) => ({ ...prev, [place.id]: {} }));
+        });
+    }, FACTS_DWELL_MS);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [openPlace, tileFacts]);
+
+  /** The open place with whatever the lookup above found folded in. Identical to `openPlace` for
+   *  anything that came from a provider, which already arrives complete. */
+  const selectedPlace = useMemo(
+    () => (openPlace ? { ...openPlace, ...tileFacts[openPlace.id] } : null),
+    [openPlace, tileFacts]
   );
 
   /**
@@ -311,27 +411,74 @@ export default function MapSearchPanel({
     const renderer = rendererRef.current;
     const centre = renderer?.cameraState();
     if (!centre || !renderer) return;
+    // Claimed before anything else, so every earlier search — including one already awaiting a
+    // response — is superseded from this line on.
+    const generation = ++searchGenerationRef.current;
     // Where this answer is *about*, so the idle handler above can tell a real move from a nudge.
     // Written before the request rather than after it: two searches must not race into one another
     // because the first had not recorded itself yet.
     lastSearchedRef.current = centre;
+
+    const trimmed = query.trim();
+
+    // The area, computed rather than assumed. The footprint is the ground the camera can
+    // actually see; the stops inside it are joined into a hull and pushed out by a kilometre-
+    // scale buffer, and *that* is what gets searched. `searchAreaFor` falls back to the bare
+    // footprint when no stop is on screen, and the route falls back to a circle if the shape
+    // fails to parse — so every layer below has a sensible answer for "no shape".
+    //
+    // Hoisted out of the request builder because both indexes want it now: the tile search below
+    // filters against the same polygon, so the two paths answer about the same piece of ground.
+    let area: LatLng[] | undefined;
+    const footprint = renderer.visibleFootprint();
+    if (footprint.length >= 3) {
+      const stops = (active?.itinerary.days ?? []).flatMap((d) =>
+        d.stops.map((stop) => ({ lat: stop.lat, lng: stop.lng }))
+      );
+      const hull = searchAreaFor(footprint, stops);
+      if (hull.length >= 3) area = hull;
+    }
+
+    /**
+     * **Ask the map before asking the internet.**
+     *
+     * The vector tiles under the camera already carry every POI the basemap draws a label for —
+     * they arrived with the streets — so this is a walk over objects already in memory: no request,
+     * no latency, and nothing a shared community Overpass server can rate-limit. Measured on the
+     * nine z14 tiles around Siena: 4,727 named POIs, 161 of them cafés.
+     *
+     * Falling through on an empty answer is the whole of the hybrid. The tiles' `poi` layer is
+     * unpopulated below z14, so a trip-overview framing genuinely has nothing to offer and Overpass
+     * still answers it — and a neighbourhood with no cafés looks identical either way, which is
+     * fine: an Overpass search that also finds none reports the same honest empty state.
+     *
+     * ponytail: any tile hit wins, however thin. A z14 search that turns up two obscure matches
+     * beats Overpass to the answer and stops there, where Overpass might have found eight. Raise
+     * the bar to a count if that shows up in use; a threshold guessed now is a threshold nobody
+     * measured.
+     */
+    const fromTiles = placesFromTiles(renderer.queryVisiblePois(), {
+      centre: { lat: centre.lat, lng: centre.lng },
+      query: trimmed,
+      categories,
+      area,
+    });
+    if (fromTiles.length) {
+      setPlaces(fromTiles);
+      // Honest: OpenMapTiles builds these tiles from OpenStreetMap, so the attribution the panel
+      // already prints is the right one and does not need a third case.
+      setProvider("osm");
+      setSelectedId(null);
+      setState("idle");
+      if (trimmed) setHistory(rememberSearch(query));
+      return;
+    }
+
     setState("searching");
     try {
       const params = new URLSearchParams({ lat: String(centre.lat), lng: String(centre.lng) });
-      // The area, computed rather than assumed. The footprint is the ground the camera can
-      // actually see; the stops inside it are joined into a hull and pushed out by a kilometre-
-      // scale buffer, and *that* is what gets searched. `searchAreaFor` falls back to the bare
-      // footprint when no stop is on screen, and the route falls back to a circle if the shape
-      // fails to parse — so every layer below has a sensible answer for "no shape".
-      const footprint = renderer.visibleFootprint();
-      if (footprint.length >= 3) {
-        const stops = (active?.itinerary.days ?? []).flatMap((d) =>
-          d.stops.map((stop) => ({ lat: stop.lat, lng: stop.lng }))
-        );
-        const area = searchAreaFor(footprint, stops);
-        if (area.length >= 3) params.set("area", encodePolygon(area));
-      }
-      if (query.trim()) params.set("q", query.trim());
+      if (area) params.set("area", encodePolygon(area));
+      if (trimmed) params.set("q", trimmed);
       if (categories.length) params.set("category", categories.join(","));
       const res = await fetch(`/api/place-search?${params}`);
       const data = (await res.json()) as {
@@ -339,6 +486,7 @@ export default function MapSearchPanel({
         provider?: "google" | "osm";
         available?: boolean;
       };
+      if (generation !== searchGenerationRef.current) return;
       const found = data.places ?? [];
       setPlaces(found);
       setProvider(data.provider ?? "osm");
@@ -346,10 +494,12 @@ export default function MapSearchPanel({
       setState(data.available === false ? "throttled" : found.length ? "idle" : "empty");
       // Recorded on the answer rather than the keystroke, so the history is searches that actually
       // ran — not every prefix the debounce happened to catch on the way to one.
-      if (query.trim() && data.available !== false) setHistory(rememberSearch(query));
+      if (trimmed && data.available !== false) setHistory(rememberSearch(query));
     } catch {
       // Same fail-soft contract the route has: the traveler gets a state they can act on
-      // (try again) rather than an error dialog.
+      // (try again) rather than an error dialog — but only if this is still the search anybody is
+      // waiting on. A failure belonging to a view that has been panned away from is not news.
+      if (generation !== searchGenerationRef.current) return;
       setPlaces([]);
       setState("throttled");
     }
@@ -383,12 +533,14 @@ export default function MapSearchPanel({
    * Two guards, and both exist because the index behind this is a shared community Overpass server
    * that rate-limits exactly this traffic:
    *
-   * - **`onCameraIdle`, not `onFrame`.** One request per gesture, after inertia settles, rather
-   *   than one per frame of a drag.
+   * - **`onCameraIdle`, not `onFrame`.** One look per gesture, once the camera has stopped *and*
+   *   the tiles for the new view have parsed — see the note on the MapLibre implementation for why
+   *   the second half of that is load-bearing now that the tiles are the first index asked.
    * - **A movement floor scaled to the camera's own range.** Nudging the map by a few pixels, or
    *   the framing correction that runs when a stop is added, must not spend a request. A quarter of
    *   the camera's distance to the ground is roughly "the view is meaningfully somewhere else" at
-   *   any zoom, which a fixed metre threshold cannot be.
+   *   any zoom, which a fixed metre threshold cannot be. It is also what keeps the idle event's
+   *   non-camera firings — a source write, a style repaint — free.
    */
   useEffect(() => {
     const renderer = rendererRef.current;
