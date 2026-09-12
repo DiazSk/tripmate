@@ -271,7 +271,8 @@ export default function ItineraryCard({
   const headerPhoto = usePlacePhoto(destination, "full");
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
-  const { showTripRoute, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
+  const { showTripRoute, showLegPaths, hoveredIndex, setHoveredIndex, activeIndex } =
+    useMapCamera();
 
   /** Every day's stops in the shape the globe wants, carrying the day index the colour ramp and
    *  the cluster labels are keyed on. Memoised because it is a dependency of the route effect —
@@ -326,6 +327,7 @@ export default function ItineraryCard({
     [day?.stops]
   );
   const dayLegs = useDayRoute(dayPoints);
+
 
   /** Where this day's stops start in the flat list the map indexes hover/selection by. The panel
    *  numbers its rows from 0 within the day, so every index crossing this boundary is shifted. */
@@ -559,6 +561,31 @@ export default function ItineraryCard({
     // the "no refs during render" rule, which is what made the simpler reading obvious.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeShape, dayIndex, panelCollapsed, story.active, showTripRoute]);
+
+  /**
+   * Put the focused day's real street paths on the map, or take them off.
+   *
+   * One caller, so focus, collapse and story mode can never disagree about what is drawn. The
+   * overview (panel collapsed, `focusDay` null) deliberately shows none: every day's pavements at
+   * once is the clutter `soloFocus` exists to prevent, and at that zoom they would be a smudge.
+   * A film keeps them, because the camera is down at street level where they are the *only* thing
+   * describing the ground — the arcs are put away there (`setRouteConnectorsHidden`).
+   *
+   * Legs that did not route are dropped rather than passed as empty arrays, and a day with nothing
+   * routable clears — which is also what happens when routing is unavailable entirely, leaving the
+   * map exactly as it was before this existed.
+   */
+  const legPathDay = story.active ? story.dayIndex : panelCollapsed ? null : dayIndex;
+  useEffect(() => {
+    if (legPathDay === null || !dayLegs) {
+      showLegPaths(null);
+      return;
+    }
+    const paths = dayLegs
+      .map((leg) => meaningfulLeg(leg)?.points ?? [])
+      .filter((points) => points.length >= 2);
+    showLegPaths(paths.length > 0 ? { dayIndex: legPathDay, paths } : null);
+  }, [legPathDay, dayLegs, showLegPaths]);
 
   // Staggered reveal, played once on mount when animateReveal is true: every REVEAL_STEP_MS,
   // one more stop card mounts (with its own slide-down + typewriter, see StopRow) and its map

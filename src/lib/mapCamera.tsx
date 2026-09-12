@@ -27,6 +27,7 @@ import {
   STOP_MIN_RANGE_M,
   type CameraPose,
   type CameraState,
+  type LegPathDrawRequest,
   type MapRenderer,
 } from "@/lib/mapRenderer";
 import type { MapEngine } from "@/lib/mapEngine";
@@ -195,6 +196,14 @@ interface MapCameraContextValue {
    *  forget: failures (rate limit, network) just leave the map without highways rather than
    *  surfacing an error, since this is ambient context, not something the trip depends on. */
   showHighways: (lat: number, lng: number) => void;
+  /**
+   * Draw (or clear) the focused day's real street paths.
+   *
+   * No fetching here, unlike `showHighways` — the data is already deduped and cached in
+   * `dayRoutes.ts`, which the panel and the map both read. This just stores it for the engine
+   * toggle's replay and forwards it to the live renderer.
+   */
+  showLegPaths: (request: LegPathDrawRequest | null) => void;
   /** Draws the destination's administrative outline and collects the names of nearby towns.
    *  Fire-and-forget; failures leave the map without them. */
   showCityContext: (lat: number, lng: number, name?: string) => void;
@@ -385,6 +394,9 @@ export function MapCameraProvider({
    *  Overpass answers take seconds and are throttled by IP; paying for them again on every toggle
    *  would make the toggle the most expensive control in the app. */
   const lastHighwaysRef = useRef<{ points: { lat: number; lng: number }[] }[] | null>(null);
+  /** The focused day's street paths, held for the same reason the highways are: the Map/Satellite
+   *  toggle replays every overlay onto the incoming engine from cache rather than refetching. */
+  const lastLegPathsRef = useRef<LegPathDrawRequest | null>(null);
   const lastCityRef = useRef<{ lat: number; lng: number }[][] | null>(null);
   const lastPinRef = useRef<{ lat: number; lng: number; label?: string } | null>(null);
   const pendingRef = useRef<Flight | null>(null);
@@ -915,6 +927,14 @@ export function MapCameraProvider({
     })();
   }, []);
 
+  const showLegPaths = useCallback((request: LegPathDrawRequest | null) => {
+    lastLegPathsRef.current = request;
+    // No pending-queue dance: unlike the route and the destination flight, nothing here is racing
+    // a cold tileset. If the renderer is not up yet the paths simply arrive with `replayOverlays`
+    // when it is, which is the same path the engine toggle uses.
+    rendererRef.current?.drawLegPaths(request);
+  }, []);
+
   const showHighways = useCallback((lat: number, lng: number) => {
     const renderer = rendererRef.current;
     if (!renderer?.isAlive()) {
@@ -953,6 +973,7 @@ export function MapCameraProvider({
   const replayOverlays = useCallback((renderer: MapRenderer) => {
     if (lastPinRef.current) renderer.setPin(lastPinRef.current);
     if (lastHighwaysRef.current) renderer.drawHighways(lastHighwaysRef.current);
+    if (lastLegPathsRef.current) renderer.drawLegPaths(lastLegPathsRef.current);
     if (lastCityRef.current) renderer.drawCityBoundary(lastCityRef.current);
     const route = lastRouteRef.current;
     if (!route) return;
@@ -1249,6 +1270,7 @@ export function MapCameraProvider({
     routeStopsRef.current = [];
     lastRouteRef.current = null;
     lastHighwaysRef.current = null;
+    lastLegPathsRef.current = null;
     lastCityRef.current = null;
     lastPinRef.current = null;
     emphasisRef.current = null;
@@ -1293,6 +1315,7 @@ export function MapCameraProvider({
       resetToHome,
       showTripRoute,
       showHighways,
+      showLegPaths,
       showCityContext,
       nearbyPlaces,
       routeStops,
@@ -1322,6 +1345,7 @@ export function MapCameraProvider({
       resetToHome,
       showTripRoute,
       showHighways,
+      showLegPaths,
       showCityContext,
       nearbyPlaces,
       routeStops,
