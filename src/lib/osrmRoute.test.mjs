@@ -21,8 +21,17 @@ import { join } from "node:path";
 
 process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "osrm-test-")), "test.db");
 
-const { MAX_LEG_KM, osrmUrl, parseOsrmRoute, probeTransitAvailable, routableMode, routeCacheKey } =
-  await import("./osrmRoute.ts");
+const {
+  MAX_LEG_KM,
+  osrmUrl,
+  parseOsrmRoute,
+  probeTransitAvailable,
+  routableMode,
+  routeCacheKey,
+  routeDistanceKm,
+  routeMinutes,
+} = await import("./osrmRoute.ts");
+const { travelLegBetween } = await import("./travelTime.ts");
 
 /** Louvre → Palais-Royal, the pair the module's doc records a live measurement for. */
 const LOUVRE = { lat: 48.8606, lon: 2.3364 };
@@ -169,5 +178,22 @@ test("transit remains unproven rather than absent", async () => {
     await probeTransitAvailable(),
     false,
     "false means 'not proven' — reconcile.ts degrades to an assumed walk plus transit rather than planning a car-only city"
+  );
+});
+
+test("a real leg and an estimated one round the same way", () => {
+  // Two roundings of the same quantity is how a measured leg and an estimated one start
+  // disagreeing by a minute for no reason a reader could ever explain.
+  assert.equal(routeMinutes({ distanceM: 640.6, durationS: 512.1, geometry: [] }), 9);
+  assert.equal(routeDistanceKm({ distanceM: 640.6, durationS: 512.1, geometry: [] }), 0.6);
+  assert.equal(routeDistanceKm({ distanceM: 1629.9, durationS: 292.2, geometry: [] }), 1.6);
+
+  // The floor at 1 is travelLegBetween's, not a separate decision: a 40-second hop must not read
+  // as "0 min" on one path and "1 min" on the other.
+  assert.equal(routeMinutes({ distanceM: 30, durationS: 24, geometry: [] }), 1);
+  assert.equal(
+    travelLegBetween({ lat: 48.8606, lon: 2.3364 }, { lat: 48.86062, lon: 2.3364 }).minutes,
+    1,
+    "the estimate floors at 1 too — routeMinutes copies it rather than inventing its own floor"
   );
 });

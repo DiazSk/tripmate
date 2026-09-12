@@ -1,4 +1,4 @@
-import { haversineKm } from "./travelTime";
+import { DEFAULT_MODES, haversineKm, travelLegBetween } from "./travelTime";
 import { TTL, cached } from "./fetchCache";
 import type { TransportMode } from "./types";
 
@@ -296,4 +296,45 @@ export async function routeLegs(
     out.push(...(await Promise.all(group.map((l) => fetchRoute(l.from, l.to, l.mode, { signal })))));
   }
   return out;
+}
+
+/**
+ * Route a list of point pairs, choosing each one's mode the way the estimate already does.
+ *
+ * **The mode is picked before routing and is not revised afterwards**, which is the rule worth
+ * stating once rather than rediscovering. `travelLegBetween`'s choice is about traveller comfort
+ * thresholds — 1.5km on foot, 8km on a bike where one exists — so a road turning out longer than
+ * the crow's flight is not a reason to put somebody on a train. Routing answers *how long this
+ * mode takes*, not *which mode*.
+ *
+ * **A transit leg is `null` and always will be.** There is no free transit router, and the
+ * tempting hybrid — OSRM's foot distance divided by the transit speed constant — is rejected on
+ * purpose. A measured distance under an assumed speed produces a number that *looks* verified and
+ * is not, which is precisely the dishonesty `routeMatrix.ts` was written about. It would be worse
+ * than the estimate it replaced, because the estimate at least admits what it is.
+ *
+ * No separate cap on how many pairs may be passed: `routeLegs`'s shared batch deadline already
+ * bounds the caller's worst case however many there are, and `BATCH_CONCURRENCY` bounds the burst.
+ */
+export async function routePairs(
+  pairs: { from: Pt; to: Pt }[],
+  modes: TransportMode[] = DEFAULT_MODES,
+  opts: { budgetMs?: number } = {}
+): Promise<(OsrmRoute | null)[]> {
+  return routeLegs(
+    pairs.map(({ from, to }) => ({ from, to, mode: travelLegBetween(from, to, modes).mode })),
+    opts
+  );
+}
+
+/** Minutes for a route, rounded exactly as `travelLegBetween` rounds its estimate — including the
+ *  floor at 1, so a 40-second walk reads the same whichever produced it. Two roundings of the same
+ *  quantity is how a real leg and an estimated one start disagreeing by a minute for no reason. */
+export function routeMinutes(route: OsrmRoute): number {
+  return Math.max(Math.round(route.durationS / 60), 1);
+}
+
+/** Kilometres to 1dp, matching `TravelLeg.distanceKm` and `travelLegBetween`. See `routeMinutes`. */
+export function routeDistanceKm(route: OsrmRoute): number {
+  return Math.round(route.distanceM / 100) / 10;
 }
