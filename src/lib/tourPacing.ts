@@ -111,35 +111,46 @@ export function tourFlightSeconds(legM: number, turnRad = 0): number {
  */
 export const TOUR_HOLD_MS = 3600;
 
-/** Below this the camera reads as stopped rather than travelling, however long the line is. */
-const TRAVEL_SPEED_MIN_MPS = 25;
-/** Above this it reads as a whip pan and the ground stops being legible. */
-const TRAVEL_SPEED_MAX_MPS = 400;
+/**
+ * Cruise speed for a travel beat, in metres per second.
+ *
+ * 45 m/s is ~160 km/h over ground seen from 1200m — a drone keeping pace with traffic. The first
+ * version derived the duration from the narration and clamped the speed at 400 m/s, which on a
+ * 900m leg over a one-sentence line worked out at 650 km/h: the ground blurred, and what should
+ * have read as walking somewhere read as a lurch.
+ */
+const TRAVEL_CRUISE_MPS = 45;
+/** A leg shorter than this many seconds does not read as travel at all, however short the ground. */
+const TRAVEL_MIN_S = 6;
+/** And past this it stops being a transition and becomes its own scene. */
+const TRAVEL_MAX_S = 20;
 
 /**
- * How long the camera should take to walk a leg, fitted to the narration that plays over it.
+ * How long the camera takes to walk a leg.
  *
- * **The narration wins, and that is this controller's founding rule** — the beat lasts exactly as
- * long as the sentence takes to say. A camera allowed to set its own duration would either finish
- * travelling while the voice was still describing the journey, or still be in transit when the next
- * place was being introduced.
+ * **The camera is the clock on a travel beat, and the narration is a floor** — the one place in
+ * this controller where that is true, and the exception is the point of the beat. Every other beat
+ * is a thing being described, so the words set its length; a travel beat is a *movement*, and a
+ * movement cut off halfway is just a jump with extra steps. The caller holds the beat open until
+ * this elapses, so a short line is followed by silence over a camera that is still going, which is
+ * what a documentary does over an establishing shot.
  *
- * So the narration's length is the target and the ground speed is what gives, clamped at both ends
- * because a value outside this band stops reading as travel at all. Both clamps resolve themselves
- * without further code:
- *
- * - **Floor hit** (a short walk, a long line): the camera arrives early and the driver stops
- *   scheduling frames. That is not dead air — it is a pre-arrival at the place the next beat is
- *   about, which is a better shot than a crawl.
- * - **Ceiling hit** (a long drive, a short line): the leg is travelled fast, and if the narration
- *   still ends first the beat advances and cancels the driver mid-path. The next stop beat flies
- *   from wherever the camera reached, and `tourFlightSeconds` caps that at 2.8s, so it reads as an
- *   ordinary transition rather than a jump.
+ * Returns at least the narration, at least `TRAVEL_MIN_S`, and never more than `TRAVEL_MAX_S`.
  */
 export function travelFollowSeconds(pathM: number, narrationMs: number): number {
   const narrationS = Math.max(narrationMs, 0) / 1000;
   if (!(pathM > 0)) return narrationS;
-  const minS = pathM / TRAVEL_SPEED_MAX_MPS;
-  const maxS = pathM / TRAVEL_SPEED_MIN_MPS;
-  return Math.min(Math.max(narrationS, minS), maxS);
+  return Math.min(Math.max(pathM / TRAVEL_CRUISE_MPS, narrationS, TRAVEL_MIN_S), TRAVEL_MAX_S);
+}
+
+/**
+ * Turn `from` toward `to` by fraction `k`, the short way round.
+ *
+ * Used to settle the fly-along's tangent heading into the heading the arriving stop beat will use,
+ * so the handoff has no swing left to perform. Without the shortest-arc reduction a turn from 350°
+ * to 10° goes the long way — 340° of spin at the exact moment the camera should be coming to rest.
+ */
+export function blendHeadingRad(from: number, to: number, k: number): number {
+  const delta = (((to - from + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+  return from + delta * k;
 }

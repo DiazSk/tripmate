@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   bearingRad,
+  blendHeadingRad,
   legBearingRad,
   tourFlightSeconds,
   travelFollowSeconds,
@@ -117,26 +118,29 @@ test("a step is shorter than the metronome it replaces", () => {
 
 /* --- travelFollowSeconds ---
  *
- * The narration is the clock; the ground speed is what gives. Both clamps matter: a camera under
- * the floor reads as stopped, and one over the ceiling reads as a whip pan with no legible ground. */
+ * The camera is the clock on a travel beat — the one place in this controller where the words are
+ * not. The first version fitted the flight to the narration and clamped the speed at 400 m/s,
+ * which on a 900m leg over a one-sentence line worked out at 650 km/h and read as a lurch rather
+ * than as going somewhere. */
 
-test("a narration inside the speed band sets the duration outright", () => {
-  // 1200m over 8s is 150 m/s — comfortably between the floor and the ceiling.
-  assert.equal(travelFollowSeconds(1200, 8000), 8);
+test("a typical city leg is paced at cruise speed, not at the length of the sentence", () => {
+  // 900m at 45 m/s = 20s, capped to TRAVEL_MAX_S.
+  assert.equal(travelFollowSeconds(900, 4_000), 20);
+  // 450m at 45 m/s = 10s, and the 4s sentence does not shorten it.
+  assert.equal(travelFollowSeconds(450, 4_000), 10);
 });
 
-test("a long line over a short walk is capped rather than crawling", () => {
-  // 200m over 30s would be 6.7 m/s, well under the floor: the camera would read as stopped.
-  const seconds = travelFollowSeconds(200, 30_000);
-  assert.ok(seconds < 30, "the flight ends early and holds, rather than crawling for half a minute");
-  assert.ok(Math.abs(seconds - 200 / 25) < 0.001, "clamped to the minimum speed");
+test("the narration is a floor, never a ceiling", () => {
+  // A short hop under a long line: the words win, because cutting narration is worse than a slow
+  // camera.
+  assert.equal(travelFollowSeconds(90, 12_000), 12);
+  // And the same hop under a short line gets the minimum, not two seconds of twitch.
+  assert.equal(travelFollowSeconds(90, 1_000), 6);
 });
 
-test("a long drive under a short line is capped rather than whip-panning", () => {
-  // 20km over 2s would be 10,000 m/s.
-  const seconds = travelFollowSeconds(20_000, 2_000);
-  assert.ok(seconds > 2, "the camera takes longer than the sentence rather than blurring the ground");
-  assert.ok(Math.abs(seconds - 20_000 / 400) < 0.001, "clamped to the maximum speed");
+test("nothing runs past TRAVEL_MAX_S, however long the leg or the line", () => {
+  assert.equal(travelFollowSeconds(40_000, 4_000), 20);
+  assert.equal(travelFollowSeconds(40_000, 60_000), 20, "even a runaway narration estimate");
 });
 
 test("a zero-length path falls back to the narration and never divides by it", () => {
@@ -144,4 +148,39 @@ test("a zero-length path falls back to the narration and never divides by it", (
   assert.ok(Number.isFinite(travelFollowSeconds(0, 0)));
   assert.ok(Number.isFinite(travelFollowSeconds(NaN, 4_000)));
   assert.ok(travelFollowSeconds(500, -100) > 0, "a negative narration still yields a real flight");
+});
+
+/* --- blendHeadingRad ---
+ *
+ * The arrival settle. Without the shortest-arc reduction the camera spins the long way round at
+ * the exact moment it should be coming to rest — 340 degrees instead of 20. */
+
+const TAU = 2 * Math.PI;
+const headingDeg = (r) => ((((r * 180) / Math.PI) % 360) + 360) % 360;
+
+test("a heading blend takes the short way round the wrap", () => {
+  // 350 degrees -> 10 degrees is a 20-degree turn, not a 340-degree one.
+  const half = blendHeadingRad((350 / 180) * Math.PI, (10 / 180) * Math.PI, 0.5);
+  assert.ok(Math.abs(headingDeg(half) - 0) < 0.001, `expected to pass through 0/360, got ${headingDeg(half)}`);
+});
+
+test("a blend of 0 holds and a blend of 1 lands", () => {
+  const from = 1.2;
+  const to = 2.9;
+  assert.equal(blendHeadingRad(from, to, 0), from);
+  assert.ok(Math.abs(headingDeg(blendHeadingRad(from, to, 1)) - headingDeg(to)) < 1e-9);
+});
+
+test("the blend is monotonic across the wrap rather than jumping", () => {
+  const from = (350 / 180) * Math.PI;
+  const to = (10 / 180) * Math.PI;
+  let previous = null;
+  for (let k = 0; k <= 1.0001; k += 0.1) {
+    const now = blendHeadingRad(from, to, k);
+    if (previous !== null) {
+      assert.ok(now >= previous - 1e-9, "a settle must never reverse direction mid-turn");
+      assert.ok(now - previous < TAU / 8, "nor cover a large arc in one step");
+    }
+    previous = now;
+  }
 });
