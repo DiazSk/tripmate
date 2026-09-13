@@ -75,8 +75,7 @@ const CLASS_TO_CATEGORY: Record<string, PlaceCategory> = {
   bar: "bar",
   beer: "bar",
   // Everything a traveler means by "worth looking at". Measured across twelve city z14 tiles:
-  // 1,723 named features, 84% of them named — against `parking`, which looks tempting at 2,245
-  // features until you notice only 330 carry a name and the loop below drops the rest.
+  // 1,723 named features, 84% of them named.
   museum: "sights",
   art_gallery: "sights",
   place_of_worship: "sights",
@@ -100,6 +99,29 @@ const CLASS_TO_CATEGORY: Record<string, PlaceCategory> = {
   laundry: "shop",
   music: "shop",
 };
+
+/**
+ * **Why there is no Parking chip, which is not the reason it looks like.**
+ *
+ * Only 330 of 2,245 `parking` features carry a name, and the loop below drops the rest — 15%, and a
+ * ten-city US downtown sample lands on the same 15% (7% in Houston and Nashville, 35% in Atlanta),
+ * so the ratio is not a European artefact. It is also not, on its own, a reason to refuse the chip.
+ *
+ * A low named ratio only disqualifies a category if the traveler can *see* what the chip misses,
+ * and **Liberty draws no parking POI at all**: its four `poi` layers are `poi_r20`, `poi_r7`,
+ * `poi_r1` and `poi_transit`, and not one filters on the parking class. Nothing reads as broken,
+ * because nothing is drawn. At viewport scale the named ones would fill a list that caps at
+ * `MAX_RESULTS` anyway — measured over ~1.1km, 14 in downtown Houston and 12 in Atlanta against 4
+ * and 7 cafés — and they are real garages ("Icon", "SP+", "Centerpark West 58th Street").
+ *
+ * What actually defers it is the palette. An eighth chip needs an eighth pin colour, and under
+ * `MIN_COLOUR_DISTANCE` plus the legibility floors in `searchPalette.ts` the best candidate left is
+ * an olive that reads as a darker `shop` yellow. Worth revisiting when the chips are grouped and
+ * colour stops carrying the distinction by itself.
+ *
+ * `bicycle_parking` is a different answer: 23 named of 4,093, and 51 of 3,809 across the US
+ * sample. That one is refused on its merits and should stay refused.
+ */
 
 /**
  * Classes dropped outright, rather than left to fall through to `place`.
