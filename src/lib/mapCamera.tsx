@@ -35,6 +35,39 @@ import type { MapEngine } from "@/lib/mapEngine";
 // Re-exported so the marker layer can reach the rule without importing two modules for it.
 export { dayVisualState } from "@/lib/mapRoute";
 
+/**
+ * How long the sheet may stay down waiting for the incoming engine, whatever it reports.
+ *
+ * **Two tiers, because the two waits are not the same wait.** An engine being asked to draw for the
+ * first time has to import a multi-megabyte module, build a viewer or a style, and stream a city
+ * before it has anything to show — measured here at ~2s for a first toggle to Satellite and well
+ * past ten for a page that opens straight onto it. That wait is the entire reason this feature
+ * exists and cutting it short would show exactly the half-built planet it is meant to hide. Every
+ * later swap is a warm engine restoring a pose, measured at 450-650ms, where a long budget would
+ * only mean a long dead screen on the day something goes wrong.
+ *
+ * Neither is `PHOTOREALISTIC_WATCHDOG_MS`'s 8s, which is precedent for *having* a ceiling rather
+ * than for its value: that one decides Google's tiles are never coming and swaps in flat imagery,
+ * where being wrong costs a permanently blank Earth. Lifting this one early costs a map that is
+ * still filling in, which is an ordinary map and far better than a screen that will not move.
+ */
+const ENGINE_FIRST_DRAW_CEILING_MS = 20_000;
+const ENGINE_SWAP_CEILING_MS = 3000;
+
+/**
+ * A Map/Satellite swap, as the curtain over it needs to see it.
+ *
+ * `direction` is the incoming engine rather than a left/right, so the sweep can follow the control:
+ * Map sits left of Satellite in the toggle, so arriving at Satellite sweeps one way and coming back
+ * sweeps the other, and the motion agrees with the button that caused it.
+ *
+ * `idle` carries a direction too — the last one — so the sheet does not flip sides on its way out.
+ */
+export interface EngineSwap {
+  phase: "idle" | "covering" | "held" | "revealing";
+  direction: MapEngine;
+}
+
 interface MapCameraContextValue {
   /**
    * Register the engine that is drawing the world, or `null` on teardown.
@@ -65,10 +98,46 @@ interface MapCameraContextValue {
    * switching back to one that has is immediate, because neither map is ever destroyed.
    */
   setEngine: (engine: MapEngine) => void;
-  /** False until the map exists — Cesium's 3D tileset takes seconds, and MapLibre's style is a
-   *  network round-trip — so map chrome must not render (and reach for `rendererRef.current`)
-   *  before then. */
-  ready: boolean;
+  /**
+   * The curtain's whole input: which beat of an engine swap is running, and which way it sweeps.
+   *
+   * `covering` while the sheet is closing over the world that is still on screen — the swap has
+   * deliberately **not** happened yet. `held` once it is fully covered: that is when the engines
+   * actually trade places, and it lasts exactly as long as the incoming one needs to draw, which
+   * is a few frames warm and several seconds on Cesium's first build. `revealing` while the sheet
+   * leaves. See `EngineSwap` for why the curtain drives two of those edges itself.
+   */
+  engineSwap: EngineSwap;
+  /**
+   * The curtain reporting that a sweep finished, which is the one thing only it can know.
+   *
+   * Two edges, one function, because the phase says which one this is: the end of `covering`
+   * commits the engine change, and the end of `revealing` puts the machine away. Sequenced on the
+   * real `transitionend` rather than a matching timer so that reduced motion — where the blanket
+   * rule in `globals.css` drives every duration to `0.01ms` precisely so these still fire — runs
+   * the identical sequence, instantly.
+   */
+  advanceEngineSwap: () => void;
+  /**
+   * Falsy until the map exists — Cesium's 3D tileset takes seconds, and MapLibre's style is a
+   * network round-trip — so map chrome must not render (and reach for `rendererRef.current`)
+   * before then.
+   *
+   * **A count of activations, not a boolean, and the difference is a bug this used to have.**
+   * Seven effects across four files capture `rendererRef.current` once and subscribe to *that*
+   * instance — `StopMarkerLayer`'s per-frame projection, `MapControls`, four in `MapSearchPanel`,
+   * `useAnchoredToMap`. Every one of them lists this value in its dependencies to know when to
+   * re-capture. As a boolean it could not tell them: toggling to an engine built earlier in the
+   * session calls `setReady(true)` when it is already `true`, React bails on the identical value,
+   * nothing re-runs, and all seven keep talking to the engine that is now hidden. What that looks
+   * like is the day badges frozen where the *previous* camera last projected them, floating over
+   * the new world instead of sitting on their stops.
+   *
+   * So it changes for every renderer that becomes live. `!ready` still reads exactly as it did —
+   * zero is falsy — which is why no guard anywhere had to change. Do not render it: `{ready && …}`
+   * would print a literal `0`.
+   */
+  ready: number;
   /** Whether the currently-mounted surface puts the map on screen. Exactly two do: `/trip/[id]`
    *  for its whole life, and `/` from the moment generation starts through the result view.
    *  Everywhere else this stays false and the engine is never imported at all — a cold `/profile`
@@ -423,11 +492,33 @@ export function MapCameraProvider({
   /** Bumped per showCityContext call, so a slow answer for a city the traveler has already
    *  moved on from cannot draw over the one they are looking at now. */
   const cityGenerationRef = useRef(0);
+
+  /** The curtain's state. See `EngineSwap` and `setEngine`. */
+  const [engineSwap, setEngineSwap] = useState<EngineSwap>(() => ({
+    // A page that resolves straight to Satellite builds Cesium on mount and never calls
+    // `setEngine`, so the machine below would never start — and that cold build is the longest
+    // wait this whole feature exists for. Starting `held` puts the sheet up with no sweep to
+    // arrive on, which is right: there is no outgoing world to cover, only a canvas-coloured page
+    // that lifts once the Earth is actually there.
+    phase: engine === "cesium" ? "held" : "idle",
+    direction: engine,
+  }));
+  /** The engine the current swap is heading for, uncommitted until the sheet is fully closed. */
+  const pendingEngineRef = useRef<MapEngine | null>(null);
+  /**
+   * Bumped per swap, so a `whenDrawn` for an engine the traveler has already toggled away from
+   * cannot lift the sheet a newer toggle put up. Same shape as `routeGenerationRef` above.
+   */
+  const swapGenerationRef = useRef(0);
+  /** Engines that have reported a drawn frame at least once, which is what separates a cold build
+   *  from a warm restore for the ceiling above. */
+  const hasDrawnRef = useRef(new Set<MapEngine>());
   /** The destination already asked for, so two callers (and React's development double-invoke)
    *  cannot fire the same Overpass query twice and have the throttled one win. */
   const cityKeyRef = useRef<string | null>(null);
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlaceMarker[]>([]);
-  const [ready, setReady] = useState(false);
+  /** See `ready` on the context: an activation counter, not a flag. */
+  const [ready, setReady] = useState(0);
   const [globeWanted, setGlobeWanted] = useState(false);
   const [peekSuspended, setPeekSuspended] = useState(false);
   /**
@@ -1047,8 +1138,11 @@ export function MapCameraProvider({
    */
   const activate = useCallback(
     (renderer: MapRenderer | null) => {
+      const previous = rendererRef.current;
       rendererRef.current = renderer;
-      setReady(!!renderer);
+      // Only when the live instance actually changed, so a redundant activation does not make
+      // seven effects tear down and re-subscribe for nothing.
+      if (renderer !== previous) setReady((n) => (renderer ? n + 1 : 0));
       if (!renderer) return;
 
       // The view the outgoing engine was showing. Restored before the geometry is replayed so the
@@ -1110,13 +1204,84 @@ export function MapCameraProvider({
    */
   const setEngine = useCallback(
     (next: MapEngine) => {
-      if (next === engineRef.current) return;
+      if (next === engineRef.current) {
+        // Pressing the engine that is already live is ordinarily nothing — unless a swap away from
+        // it is mid-sweep and has not committed, in which case this is "never mind" and the sheet
+        // should simply leave again rather than complete a journey nobody still wants.
+        if (pendingEngineRef.current && pendingEngineRef.current !== next) {
+          pendingEngineRef.current = null;
+          handoffRef.current = null;
+          setEngineSwap((prev) => ({ ...prev, phase: "revealing" }));
+        }
+        return;
+      }
       handoffRef.current = rendererRef.current?.cameraState() ?? null;
       cancelPeek();
-      onEngineChange(next);
+
+      // **The engine does not change here.** It changes when the sheet is fully closed, in
+      // `advanceEngineSwap` — otherwise the incoming world appears in the part of the screen the
+      // sweep has not covered yet, which is the defect this whole thing exists to remove. The cost
+      // is that Cesium starts building one sweep later on its first press; against a multi-second
+      // tileset that is a rounding error, and it buys a swap nobody ever sees happen.
+      pendingEngineRef.current = next;
+      swapGenerationRef.current++;
+      setEngineSwap({ phase: "covering", direction: next });
     },
-    [cancelPeek, onEngineChange]
+    [cancelPeek]
   );
+
+  /**
+   * The end of a sweep. See `advanceEngineSwap` on the context for why both edges share one call.
+   *
+   * **Phase only — the engine commit is the effect below, not this.** React runs a state updater
+   * during render, so calling `onEngineChange` in here set state on `AppShell` while
+   * `MapCameraProvider` was rendering, which React reports outright. The updater is now pure and the
+   * side effect happens where side effects go.
+   */
+  const advanceEngineSwap = useCallback(() => {
+    setEngineSwap((prev) => {
+      if (prev.phase === "covering") return { ...prev, phase: "held" };
+      if (prev.phase === "revealing") return { ...prev, phase: "idle" };
+      return prev;
+    });
+  }, []);
+
+  /**
+   * Trade the engines, now that the sheet is fully closed over them.
+   *
+   * One commit later than the phase change that triggers it, which costs nothing anybody can see:
+   * the thing in front of it is opaque, and has been since the sweep finished.
+   */
+  useEffect(() => {
+    if (engineSwap.phase !== "held") return;
+    const next = pendingEngineRef.current;
+    if (!next) return;
+    pendingEngineRef.current = null;
+    onEngineChange(next);
+  }, [engineSwap.phase, onEngineChange]);
+
+  /**
+   * The ceiling, and it bounds the **hold** rather than the whole swap.
+   *
+   * Armed on entering `held` rather than on the press, which is the only version that covers both
+   * ways in. A page that resolves straight to Satellite starts life already held and never calls
+   * `setEngine` at all, so a ceiling armed there left the one path with the longest wait — a cold
+   * Cesium boot — as the single path with no backstop at all. Keyed on the phase, so the machine
+   * has one rule instead of two.
+   *
+   * Nothing is lost by lifting early. The sheet comes off a map that is still filling in, which is
+   * an ordinary map; the alternative is a screen that never moves again.
+   */
+  useEffect(() => {
+    if (engineSwap.phase !== "held") return;
+    const ceiling = setTimeout(
+      () => {
+        setEngineSwap((prev) => (prev.phase === "held" ? { ...prev, phase: "revealing" } : prev));
+      },
+      hasDrawnRef.current.has(engine) ? ENGINE_SWAP_CEILING_MS : ENGINE_FIRST_DRAW_CEILING_MS
+    );
+    return () => clearTimeout(ceiling);
+  }, [engineSwap.phase, engine]);
 
   // React to the engine actually changing — including the case where the target was built earlier
   // in the session and is sitting in the registry, which fires no `setRenderer` of its own.
@@ -1127,6 +1292,48 @@ export function MapCameraProvider({
     // callback identity change would re-restore a handoff that has already been consumed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine]);
+
+  /**
+   * Lift the sheet once the incoming engine has actually drawn.
+   *
+   * **Declared after the effect above, and that ordering is the whole thing working.** Effects in
+   * one component run in declaration order, so written the other way round this reads
+   * `rendererRef.current` while it still holds the *outgoing* engine, bails on the
+   * `renderer.engine !== engine` guard, and never runs again — every swap then sits out the full
+   * ceiling instead of lifting on a real signal. That is exactly what it did, and it looks like a
+   * working feature from the outside: the curtain still lifts, just always three seconds later.
+   *
+   * **Deliberately a second effect rather than more dependencies on the one above.** `activate`
+   * consumes `handoffRef`, so adding `ready` to *its* deps would re-run it on registration and
+   * re-restore a camera state already applied. This one only observes.
+   *
+   * `[engine, ready]` covers both shapes of arrival. Toggling to an engine already in the registry
+   * leaves `ready` true throughout and re-runs on `engine` alone; toggling to one never built runs
+   * `activate(null)` first, so `ready` goes false and then true when `setRenderer` lands.
+   *
+   * It is safe to ask now, and that rests on something worth naming: `restoreCamera` is
+   * synchronous — Cesium's `flyTo` short-circuits a non-positive duration to `setView` and returns
+   * — so by the time `activate` has run, the camera is already at the pose being handed over, and
+   * the first painted frame this can possibly see is a frame of the right place.
+   */
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive() || renderer.engine !== engine) return;
+    const generation = swapGenerationRef.current;
+    let cancelled = false;
+    void renderer.whenDrawn().then(() => {
+      if (cancelled) return;
+      // Recorded even for a superseded swap: this engine really did draw, and the next time it is
+      // asked for it will be the warm one.
+      hasDrawnRef.current.add(renderer.engine);
+      if (generation !== swapGenerationRef.current) return;
+      setEngineSwap((prev) => (prev.phase === "held" ? { ...prev, phase: "revealing" } : prev));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [engine, ready]);
+
 
   const flyToDestination = useCallback(
     (lat: number, lng: number, label?: string) => flyTo(lat, lng, DESTINATION_HEIGHT_M, -45, label),
@@ -1337,6 +1544,8 @@ export function MapCameraProvider({
       rendererRef,
       engine,
       setEngine,
+      engineSwap,
+      advanceEngineSwap,
       ready,
       globeWanted,
       setGlobeWanted,
@@ -1371,6 +1580,8 @@ export function MapCameraProvider({
       setRenderer,
       engine,
       setEngine,
+      engineSwap,
+      advanceEngineSwap,
       ready,
       peekSuspended,
       globeWanted,

@@ -34,14 +34,28 @@ import { setStoredMapEngine, type MapEngine } from "@/lib/mapEngine";
  * had to be argued for in prose rather than being visible on screen.
  */
 export default function MapEngineToggle() {
-  const { engine, setEngine, globeWanted } = useMapCamera();
+  const { engine, setEngine, globeWanted, engineSwap } = useMapCamera();
 
   // Nothing to toggle where there is no map. The same predicate the engines themselves use, so
   // this appears and disappears exactly with the thing it controls rather than on a path list.
   if (!globeWanted) return null;
 
+  /**
+   * The engine this control is *promising*, which during the first half of a swap is not the engine
+   * that is drawing.
+   *
+   * The curtain covers before the engines trade places, so `engine` still reads as the outgoing one
+   * for the whole closing sweep. Lit from that, the control would answer a press by highlighting
+   * the button you did not press — and, worse, `choose` below would compare against it and decide
+   * a press of the other half was a press of the one already selected, and do nothing at all. Both
+   * were real: a Satellite press followed by a Map press inside the sweep ended up on Satellite.
+   *
+   * Only `covering` needs this. By `held` the trade has happened and `engine` is the truth again.
+   */
+  const shownEngine = engineSwap.phase === "covering" ? engineSwap.direction : engine;
+
   const choose = (next: MapEngine) => {
-    if (next === engine) return;
+    if (next === shownEngine) return;
     setStoredMapEngine(next);
     setEngine(next);
   };
@@ -57,8 +71,12 @@ export default function MapEngineToggle() {
         role="group"
         aria-label="Map view"
       >
-        <Choice label="Map" active={engine === "maplibre"} onClick={() => choose("maplibre")} />
-        <Choice label="Satellite" active={engine === "cesium"} onClick={() => choose("cesium")} />
+        <Choice label="Map" active={shownEngine === "maplibre"} onClick={() => choose("maplibre")} />
+        <Choice
+          label="Satellite"
+          active={shownEngine === "cesium"}
+          onClick={() => choose("cesium")}
+        />
       </div>
     </div>
   );

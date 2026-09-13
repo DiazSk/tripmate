@@ -25,9 +25,13 @@
  * 3. `NEXT_PUBLIC_MAP_ENGINE` in `.env.local` — the build's default.
  * 4. `maplibre`.
  *
- * Read once, at provider mount. Changing it mid-session needs a reload, which is deliberate: the
- * viewer is built once and never swapped (see `GlobeBackground`'s construction effect for why),
- * and that reasoning is not engine-specific.
+ * Read once, to seed the state — after that the Map/Satellite toggle changes it live, and this
+ * function is not consulted again. That is a change from how it was: an engine swap used to need a
+ * reload, on the reasoning that a viewer is built once and never rebuilt. The reasoning still holds
+ * and the conclusion no longer follows, because nothing is rebuilt — **both backgrounds stay
+ * mounted for the session** and the toggle only decides which one is visible and building. See
+ * `setEngine` in `mapCamera.tsx` for the camera handoff that makes the swap keep its view, and
+ * `MapEngineCurtain` for what covers it while the incoming engine draws.
  */
 export type MapEngine = "cesium" | "maplibre";
 
