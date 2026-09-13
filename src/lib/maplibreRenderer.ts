@@ -68,7 +68,26 @@ const DEM_MAX_ZOOM = 14;
 
 const ROUTE_SOURCE_ID = "tripmate-route";
 const STEM_SOURCE_ID = "tripmate-stems";
-const HIGHWAY_SOURCE_ID = "tripmate-highways";
+/**
+ * The basemap's own road geometry, read as the highway overlay.
+ *
+ * These are the same OSM ways `/api/roads` asks Overpass for — `highway=motorway|trunk` — except
+ * they already arrived with the streets, so drawing them costs no request and cannot be
+ * rate-limited. Unlike `poi` (z14+, which is why the search still keeps its Overpass fallback) the
+ * `transportation` layer declares **minzoom 4**, so there is no framing where this comes up empty
+ * and no fallback to keep.
+ *
+ * Measured against the live tiles rather than the schema docs, the same way `CLASS_TO_CATEGORY` in
+ * `tilePlaces.ts` was: `subclass` is **not populated** on this planet build — every transportation
+ * feature reads empty — so `class` plus `ramp` is the only way to express what Overpass wrote as
+ * `^(motorway|trunk)$`. The ramp half is not a detail: in the z12 tile over central Tokyo slip
+ * roads outnumber mainline motorway 191 to 131, and without the filter the overlay grows a tangle
+ * at every junction that the Overpass version never had.
+ */
+const TRANSPORTATION_SOURCE_LAYER = "transportation";
+/** Kept as a layer id rather than a source id: the highways are drawn straight off the basemap's
+ *  own vector source now, so this owns no GeoJSON to fill. */
+const HIGHWAY_LAYER_ID = "tripmate-highways";
 const CITY_SOURCE_ID = "tripmate-city";
 const SEARCH_SOURCE_ID = "tripmate-search";
 /** The basemap's POI layer. Not ours to create, only to read — see `queryVisiblePois`. The
@@ -414,7 +433,6 @@ function addTripLayers(map: MapLibreMap) {
   for (const id of [
     ROUTE_SOURCE_ID,
     STEM_SOURCE_ID,
-    HIGHWAY_SOURCE_ID,
     CITY_SOURCE_ID,
     SEARCH_SOURCE_ID,
     LEG_SOURCE_ID,
@@ -423,20 +441,47 @@ function addTripLayers(map: MapLibreMap) {
   }
 
   // Ambient city context first, so the trip's own route always sits over it.
-  map.addLayer({
-    id: `${HIGHWAY_SOURCE_ID}-casing`,
-    type: "line",
-    source: HIGHWAY_SOURCE_ID,
-    paint: { "line-color": HIGHWAY_CASING, "line-width": 5, "line-opacity": 0.75 },
-    layout: { "line-cap": "round", "line-join": "round" },
-  });
-  map.addLayer({
-    id: HIGHWAY_SOURCE_ID,
-    type: "line",
-    source: HIGHWAY_SOURCE_ID,
-    paint: { "line-color": HIGHWAY_COLOR, "line-width": 3 },
-    layout: { "line-cap": "round", "line-join": "round" },
-  });
+  //
+  // Hung off the basemap's own vector source, the way `buildStyle` hangs the extruded buildings off
+  // it — and found by type rather than by name for the reason `queryVisiblePois` records:
+  // `openmaptiles` is the id OpenFreeMap Liberty ships today and a rename upstream lands between
+  // two page loads. No source found, no layers: this is ambient context, and its absence is the
+  // honest degradation.
+  const basemapSource = Object.entries(map.getStyle()?.sources ?? {}).find(
+    ([, source]) => source.type === "vector"
+  )?.[0];
+  if (basemapSource) {
+    // See TRANSPORTATION_SOURCE_LAYER for why this is `class` + `ramp` and not `subclass`. `ramp`
+    // is absent rather than `0` on a mainline way, and `["!=", null, 1]` is true, so this one
+    // clause reads "not a slip road" for both shapes the tile uses.
+    const isMajorHighway: FilterSpecification = [
+      "all",
+      ["match", ["get", "class"], ["motorway", "trunk"], true, false],
+      ["!=", ["get", "ramp"], 1],
+    ];
+    // Hidden until asked for. The geometry is always under the camera now, so visibility is the
+    // only state `drawHighways` has left to set — where the GeoJSON version filled and emptied a
+    // source instead.
+    const hidden = { visibility: "none" } as const;
+    map.addLayer({
+      id: `${HIGHWAY_LAYER_ID}-casing`,
+      type: "line",
+      source: basemapSource,
+      "source-layer": TRANSPORTATION_SOURCE_LAYER,
+      filter: isMajorHighway,
+      paint: { "line-color": HIGHWAY_CASING, "line-width": 5, "line-opacity": 0.75 },
+      layout: { "line-cap": "round", "line-join": "round", ...hidden },
+    });
+    map.addLayer({
+      id: HIGHWAY_LAYER_ID,
+      type: "line",
+      source: basemapSource,
+      "source-layer": TRANSPORTATION_SOURCE_LAYER,
+      filter: isMajorHighway,
+      paint: { "line-color": HIGHWAY_COLOR, "line-width": 3 },
+      layout: { "line-cap": "round", "line-join": "round", ...hidden },
+    });
+  }
   map.addLayer({
     id: CITY_SOURCE_ID,
     type: "line",
@@ -892,18 +937,18 @@ export class MapLibreRenderer implements MapRenderer {
     });
   }
 
-  drawHighways(segments: { points: { lat: number; lng: number }[] }[]) {
-    this.setData(HIGHWAY_SOURCE_ID, {
-      type: "FeatureCollection",
-      features: segments.map((segment) => ({
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "LineString",
-          coordinates: segment.points.map((p) => [p.lng, p.lat]),
-        },
-      })),
-    });
+  readonly drawsHighwaysFromBasemap = true;
+
+  /** See `drawHighways` on `MapRenderer` — `segments` is ignored here, deliberately. The basemap
+   *  already holds this geometry under the camera, so the only thing left to decide is whether it
+   *  is shown. */
+  drawHighways(segments: { points: { lat: number; lng: number }[] }[] | null) {
+    const visibility = segments ? "visible" : "none";
+    for (const id of [`${HIGHWAY_LAYER_ID}-casing`, HIGHWAY_LAYER_ID]) {
+      // Guarded, not assumed: `addTripLayers` skips these entirely when the fetched style declares
+      // no vector source, and `setLayoutProperty` throws on a layer that does not exist.
+      if (this.map.getLayer(id)) this.map.setLayoutProperty(id, "visibility", visibility);
+    }
   }
 
   drawLegPaths(request: LegPathDrawRequest | null) {
@@ -1094,7 +1139,7 @@ export class MapLibreRenderer implements MapRenderer {
   clearOverlays() {
     this.drawGeneration++;
     this.clearRoute();
-    this.setData(HIGHWAY_SOURCE_ID, emptyCollection());
+    this.drawHighways(null);
     this.setData(CITY_SOURCE_ID, emptyCollection());
     this.setData(SEARCH_SOURCE_ID, emptyCollection());
     this.setData(LEG_SOURCE_ID, emptyCollection());
