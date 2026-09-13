@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { categoryForPoiClass, isTilePlace, placesFromTiles } from "./tilePlaces.ts";
+import {
+  categoryForPoiClass,
+  isTilePlace,
+  placeFromTilePoi,
+  placesFromTiles,
+  tilePlaceId,
+} from "./tilePlaces.ts";
 
 /**
  * The tile reader's failure mode is a plausible-looking wrong list, not an exception — the same
@@ -34,7 +40,19 @@ test("a chip covers every OpenMapTiles class OSM_FILTERS would have matched", ()
   assert.equal(categoryForPoiClass("ice_cream"), "cafe");
   assert.equal(categoryForPoiClass("fast_food"), "restaurant");
   assert.equal(categoryForPoiClass("beer"), "bar");
-  assert.equal(categoryForPoiClass("art_gallery"), "museum");
+  assert.equal(categoryForPoiClass("art_gallery"), "sights");
+  // The whole of what a traveler means by one press of Sights. Measured across twelve city z14
+  // tiles: 1,723 named features, every one of which used to fall through to `place` and be
+  // reachable only by typing its name.
+  assert.equal(categoryForPoiClass("museum"), "sights");
+  assert.equal(categoryForPoiClass("place_of_worship"), "sights");
+  assert.equal(categoryForPoiClass("attraction"), "sights");
+  assert.equal(categoryForPoiClass("theatre"), "sights");
+  assert.equal(categoryForPoiClass("castle"), "sights");
+  assert.equal(categoryForPoiClass("monument"), "sights");
+  assert.equal(categoryForPoiClass("cinema"), "sights");
+  // OpenMapTiles puts every kind of bed under one class, so the chip is a single mapping.
+  assert.equal(categoryForPoiClass("lodging"), "hotel");
   assert.equal(categoryForPoiClass("garden"), "park");
   assert.equal(categoryForPoiClass("grocery"), "shop");
   assert.equal(categoryForPoiClass("clothing_store"), "shop");
@@ -161,4 +179,50 @@ test("an id is stable across searches and says where it came from", () => {
 
 test("an unnamed POI is not a search result", () => {
   assert.deepEqual(placesFromTiles([poi("", "cafe", 0.0001)], { centre: CENTRE }), []);
+});
+
+/**
+ * The id two code paths have to agree on.
+ *
+ * `placesFromTiles` mints ids for a searched place and `onBasemapPoiClick` mints one for a place
+ * nobody searched for, via `placeFromTilePoi`. A divergence throws nothing — it silently stops
+ * "Added · Day 3" appearing on a row the traveler just added, because `addedDays` is keyed by it.
+ * So assert they agree rather than trusting that they read alike.
+ */
+test("a clicked place and a searched place mint the same id", () => {
+  const one = poi("Fraumünster", "place_of_worship", 0.0004);
+  const [searched] = placesFromTiles([one], { centre: CENTRE });
+  const clicked = placeFromTilePoi(one);
+
+  assert.equal(clicked.id, searched.id);
+  assert.equal(clicked.id, tilePlaceId(one.name, one.lat, one.lng));
+  assert.equal(clicked.category, "sights");
+  assert.ok(isTilePlace(clicked));
+  // Idempotent by construction: the panel folds a clicked place into the result list only when no
+  // row already carries the id, so these two being equal is what stops a duplicate row.
+  assert.deepEqual(clicked, searched);
+});
+
+/**
+ * `office` is the second-largest named class in the tiles — 3,513 named across twelve city z14
+ * tiles, all of them lawyers, accountants and letting agents. Left to fall through to `place` they
+ * stayed out of the chips but still answered free text, so a name typed in a business district
+ * buried the café somebody wanted. Dropped rather than mapped, which is also the only way the tile
+ * index agrees with Overpass — `OSM_FILTERS` never asked for offices either.
+ */
+test("office noise is dropped rather than left in the free-text bucket", () => {
+  const pois = [
+    poi("Müller & Partner Rechtsanwälte", "office", 0.0002),
+    poi("Café Schober", "cafe", 0.0004),
+  ];
+
+  const all = placesFromTiles(pois, { centre: CENTRE });
+  assert.deepEqual(
+    all.map((p) => p.name),
+    ["Café Schober"]
+  );
+
+  // And not merely filtered out of the chips: a free-text search for it finds nothing either,
+  // which is the half that actually changes what the traveler sees.
+  assert.deepEqual(placesFromTiles(pois, { centre: CENTRE, query: "Rechtsanwälte" }), []);
 });

@@ -59,7 +59,8 @@ export interface TilePoi {
  *
  * - `cafe` ← `amenity~^(cafe|ice_cream)$`
  * - `bar` ← `amenity~^(bar|pub|biergarten)$`, which OpenMapTiles splits across `bar` and `beer`
- * - `museum` ← `tourism~^(museum|gallery)$`, where a gallery arrives as class `art_gallery`
+ * - `sights` ← four different tag keys, which is why `OSM_FILTERS` holds a list per category
+ * - `hotel` ← `tourism~^(hotel|hostel|guest_house|motel|…)$`, all one `lodging` class here
  *
  * `shop` is the one that cannot be a single class. Overpass asks for `["shop"]` — *any* shop tag —
  * and OpenMapTiles scatters those across a catch-all `shop` class plus a dozen specific ones. The
@@ -73,8 +74,18 @@ const CLASS_TO_CATEGORY: Record<string, PlaceCategory> = {
   fast_food: "restaurant",
   bar: "bar",
   beer: "bar",
-  museum: "museum",
-  art_gallery: "museum",
+  // Everything a traveler means by "worth looking at". Measured across twelve city z14 tiles:
+  // 1,723 named features, 84% of them named — against `parking`, which looks tempting at 2,245
+  // features until you notice only 330 carry a name and the loop below drops the rest.
+  museum: "sights",
+  art_gallery: "sights",
+  place_of_worship: "sights",
+  attraction: "sights",
+  theatre: "sights",
+  castle: "sights",
+  monument: "sights",
+  cinema: "sights",
+  lodging: "hotel",
   park: "park",
   garden: "park",
   shop: "shop",
@@ -89,6 +100,22 @@ const CLASS_TO_CATEGORY: Record<string, PlaceCategory> = {
   laundry: "shop",
   music: "shop",
 };
+
+/**
+ * Classes dropped outright, rather than left to fall through to `place`.
+ *
+ * `office` is the second-largest named class in the tiles — 3,513 named across twelve city z14
+ * tiles, every one of them a lawyer, an accountant, an insurance broker or a letting agent. Falling
+ * through to `place` makes them unreachable by chip but still returned by free text, so typing a
+ * street name in a business district buries the café somebody was looking for. Nothing here is a
+ * thing a traveler goes to, and `OSM_FILTERS` never asked Overpass for them either — so dropping
+ * them is the only way the two indexes agree.
+ *
+ * A deny-list rather than an allow-list, deliberately: the tiles carry 100 classes and the long
+ * tail is mostly harmless (a library, a pharmacy, a viewpoint), so listing what to keep would mean
+ * silently losing anything OpenMapTiles adds in a future planet build.
+ */
+const NOISE_CLASSES = new Set(["office"]);
 
 /** Everything else the tiles name — a bank, a school, a bus stop. Reachable by typing its name,
  *  never by pressing a chip, which is the same stance the Overpass path takes on `place`. */
@@ -166,6 +193,7 @@ export function placesFromTiles(
 
   for (const poi of pois) {
     if (!poi.name) continue;
+    if (NOISE_CLASSES.has(poi.klass)) continue;
 
     const category = categoryForPoiClass(poi.klass);
     if (wanted && !wanted.has(category)) continue;
@@ -178,23 +206,14 @@ export function placesFromTiles(
 
     // The dedupe that makes this usable at all. `querySourceFeatures` reads every renderable tile,
     // and the `poi` layer is buffered past each tile's edge, so a venue near a boundary arrives
-    // once per tile that overlaps it. Keyed on the rounded coordinate *and* the name, because two
-    // POIs can legitimately share a doorway — a café inside a museum — and only one of them should
-    // survive a dedupe by position alone.
-    const lat = poi.lat.toFixed(COORD_PRECISION);
-    const lng = poi.lng.toFixed(COORD_PRECISION);
-    const key = `${TILE_ID_PREFIX}${lat},${lng}:${poi.name}`;
-    if (byKey.has(key)) continue;
+    // once per tile that overlaps it. `tilePlaceId` is what makes the key survive that — see its
+    // note for why the name is in there alongside the rounded coordinate.
+    const place = placeFromTilePoi(poi);
+    if (byKey.has(place.id)) continue;
 
-    byKey.set(key, {
+    byKey.set(place.id, {
       distanceM: metresBetween(centre, { lat: poi.lat, lng: poi.lng }),
-      place: {
-        id: key,
-        name: poi.name,
-        lat: poi.lat,
-        lng: poi.lng,
-        category,
-      },
+      place,
     });
   }
 
@@ -202,6 +221,35 @@ export function placesFromTiles(
     .sort((a, b) => a.distanceM - b.distanceM)
     .slice(0, MAX_RESULTS)
     .map((entry) => entry.place);
+}
+
+/**
+ * The id a tile POI gets, and the one thing two code paths must agree on exactly.
+ *
+ * `placesFromTiles` mints it for a searched place; the basemap-click path mints it for a place
+ * nobody searched for. `addedDays` and `tileFacts` are both keyed by it, so a divergence does not
+ * throw — it silently stops "Added · Day 3" appearing on a row the traveler just added, and makes
+ * the card re-fetch facts it already has. Hence one function rather than two call sites that look
+ * alike.
+ *
+ * Rounded to five decimals — ~1m, far finer than two POIs ever sit apart, and coarse enough that
+ * the same venue arriving in two adjacent tiles lands on one key. The name is in the key too,
+ * because two POIs can legitimately share a doorway (a café inside a museum).
+ */
+export function tilePlaceId(name: string, lat: number, lng: number): string {
+  return `${TILE_ID_PREFIX}${lat.toFixed(COORD_PRECISION)},${lng.toFixed(COORD_PRECISION)}:${name}`;
+}
+
+/** One tile POI as the panel's own shape. Shared by the search and the basemap click for the same
+ *  reason `tilePlaceId` is — see its note. */
+export function placeFromTilePoi(poi: TilePoi): FoundPlace {
+  return {
+    id: tilePlaceId(poi.name, poi.lat, poi.lng),
+    name: poi.name,
+    lat: poi.lat,
+    lng: poi.lng,
+    category: categoryForPoiClass(poi.klass),
+  };
 }
 
 /** True for an id `placesFromTiles` minted — the card's cue that its facts have to be fetched. */

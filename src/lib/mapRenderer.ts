@@ -285,6 +285,22 @@ export interface MapRenderer {
   onSearchPinClick(cb: (id: string) => void): () => void;
 
   /**
+   * A click on a POI the *basemap* drew itself — a name on the map that was never a search result.
+   *
+   * The counterpart to `queryVisiblePois`, and MapLibre-only for the same reason: Cesium's
+   * photogrammetry has no queryable venue data, so it returns a no-op unsubscribe. The panel treats
+   * that exactly as it treats an empty POI list.
+   *
+   * Hands over the whole `TilePoi` rather than an id, because the clicked place need not be in the
+   * current result list — it is usually something nobody searched for. The caller mints its id with
+   * `tilePlaceId`, which is what keeps a clicked place and a searched one the same place.
+   *
+   * A z15+ interaction by construction: Liberty draws POI labels from `minzoom: 15`, and a label
+   * that is not drawn cannot be clicked. That needs no state of its own.
+   */
+  onBasemapPoiClick(cb: (poi: TilePoi) => void): () => void;
+
+  /**
    * The search pin under the pointer, or `null` when it leaves one. Returns the unsubscribe.
    *
    * Pointing at a place is how you ask about it here — the click is the fallback for a keyboard or

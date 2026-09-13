@@ -74,29 +74,49 @@ export const PLACE_CATEGORIES = [
   "cafe",
   "restaurant",
   "bar",
-  "museum",
+  "sights",
   "park",
   "shop",
+  "hotel",
 ] as const;
 export type PlaceCategory = (typeof PLACE_CATEGORIES)[number] | "place";
 
-/** How each category is asked for, per provider. */
-const OSM_FILTERS: Record<Exclude<PlaceCategory, "place">, string> = {
-  cafe: '["amenity"~"^(cafe|ice_cream)$"]',
-  restaurant: '["amenity"~"^(restaurant|fast_food)$"]',
-  bar: '["amenity"~"^(bar|pub|biergarten)$"]',
-  museum: '["tourism"~"^(museum|gallery)$"]',
-  park: '["leisure"~"^(park|garden)$"]',
-  shop: '["shop"]',
+/**
+ * How each category is asked for, per provider.
+ *
+ * **A list per category, not one selector.** Overpass ANDs the bracketed clauses on a single `nwr`,
+ * so `nwr["tourism"~"…"]["historic"~"…"]` asks for things that are *both* — never what a chip
+ * means. `sights` spans four different tag keys and is the reason this is an array; every other
+ * category happens to need one element, and says so.
+ */
+const OSM_FILTERS: Record<Exclude<PlaceCategory, "place">, string[]> = {
+  cafe: ['["amenity"~"^(cafe|ice_cream)$"]'],
+  restaurant: ['["amenity"~"^(restaurant|fast_food)$"]'],
+  bar: ['["amenity"~"^(bar|pub|biergarten)$"]'],
+  // Was `museum`, and the rename is the point: the tiles carry churches, castles, monuments and
+  // theatres in the same "worth looking at" bucket a traveler means when they press one chip, and
+  // a key called `museum` holding a mosque is the thing somebody decodes at 3am.
+  sights: [
+    '["tourism"~"^(museum|gallery|attraction|viewpoint)$"]',
+    '["amenity"="place_of_worship"]',
+    '["historic"~"^(castle|monument|memorial|ruins)$"]',
+    '["amenity"~"^(theatre|cinema)$"]',
+  ],
+  park: ['["leisure"~"^(park|garden)$"]'],
+  shop: ['["shop"]'],
+  hotel: ['["tourism"~"^(hotel|hostel|guest_house|motel|chalet|apartment)$"]'],
 };
 
-const GOOGLE_TYPES: Record<Exclude<PlaceCategory, "place">, string> = {
-  cafe: "cafe",
-  restaurant: "restaurant",
-  bar: "bar",
-  museum: "museum",
-  park: "park",
-  shop: "store",
+/** Same list-per-category shape as `OSM_FILTERS`, and for the same reason — `includedTypes` is a
+ *  list on the wire, so a category spanning several Google types costs nothing extra. */
+const GOOGLE_TYPES: Record<Exclude<PlaceCategory, "place">, string[]> = {
+  cafe: ["cafe"],
+  restaurant: ["restaurant"],
+  bar: ["bar"],
+  sights: ["museum", "art_gallery", "tourist_attraction", "performing_arts_theater"],
+  park: ["park"],
+  shop: ["store"],
+  hotel: ["lodging", "hotel"],
 };
 
 /**
@@ -235,7 +255,7 @@ async function searchGoogle(
     body.includedTypes = (picked.length
       ? picked
       : (Object.keys(GOOGLE_TYPES) as Exclude<PlaceCategory, "place">[])
-    ).map((c) => GOOGLE_TYPES[c]);
+    ).flatMap((c) => GOOGLE_TYPES[c]);
   }
 
   try {
@@ -293,7 +313,7 @@ async function searchGoogle(
 function normaliseGoogleType(type: string | undefined, fallback?: PlaceCategory): PlaceCategory {
   if (!type) return fallback ?? "place";
   const match = (Object.keys(GOOGLE_TYPES) as Exclude<PlaceCategory, "place">[]).find((c) =>
-    type.includes(GOOGLE_TYPES[c])
+    GOOGLE_TYPES[c].some((t) => type.includes(t))
   );
   return match ?? fallback ?? "place";
 }
@@ -342,7 +362,9 @@ async function searchOverpass({
   const chosen = (categories ?? []).filter(
     (c): c is Exclude<PlaceCategory, "place"> => c !== "place" && c in OSM_FILTERS
   );
-  const selectors = chosen.length ? chosen.map((c) => OSM_FILTERS[c]) : Object.values(OSM_FILTERS);
+  const selectors = chosen.length
+    ? chosen.flatMap((c) => OSM_FILTERS[c])
+    : Object.values(OSM_FILTERS).flat();
   const clauses = selectors.map((f) => `nwr${f}${nameFilter}${around};`).join("");
   const body = `[out:json][timeout:20];(${clauses});out center ${MAX_RESULTS * 3};`;
 
@@ -404,12 +426,30 @@ function escapeForOverpassRegex(text: string): string {
  */
 
 
-function categoryFromTags(tags: Record<string, string>, fallback?: PlaceCategory): PlaceCategory {
+/**
+ * OSM tags → the same chip the tiles would have put this place under.
+ *
+ * **Exported for the test, and the test is the point.** This is the Overpass half of every chip;
+ * `CLASS_TO_CATEGORY` in `tilePlaces.ts` is the tile half. They answer the same question about the
+ * same venue at different zooms — tiles from z14 up, Overpass below — so a disagreement means a
+ * chip changes meaning as the traveler zooms, silently and in only one direction. Nothing throws.
+ */
+export function categoryFromTags(
+  tags: Record<string, string>,
+  fallback?: PlaceCategory
+): PlaceCategory {
   const amenity = tags.amenity ?? "";
   if (amenity === "cafe" || amenity === "ice_cream") return "cafe";
   if (amenity === "restaurant" || amenity === "fast_food") return "restaurant";
   if (amenity === "bar" || amenity === "pub" || amenity === "biergarten") return "bar";
-  if (tags.tourism === "museum" || tags.tourism === "gallery") return "museum";
+  const tourism = tags.tourism ?? "";
+  if (/^(hotel|hostel|guest_house|motel|chalet|apartment)$/.test(tourism)) return "hotel";
+  // Checked before `shop`, since a gift shop inside a castle carries both tags and the castle is
+  // what somebody is looking for. Mirrors `CLASS_TO_CATEGORY` in `tilePlaces.ts` tag for tag.
+  if (/^(museum|gallery|attraction|viewpoint)$/.test(tourism)) return "sights";
+  if (tags.amenity === "place_of_worship") return "sights";
+  if (/^(castle|monument|memorial|ruins)$/.test(tags.historic ?? "")) return "sights";
+  if (amenity === "theatre" || amenity === "cinema") return "sights";
   if (tags.leisure === "park" || tags.leisure === "garden") return "park";
   if (tags.shop) return "shop";
   return fallback ?? "place";
