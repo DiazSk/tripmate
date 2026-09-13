@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ExternalLink, Plus } from "lucide-react";
+import { Check, ExternalLink, Plus, X } from "lucide-react";
 
 import { devLabel } from "@/lib/devInspector";
 import { searchColourFor } from "@/lib/searchPalette";
@@ -82,8 +82,6 @@ export default function SearchPinCard({
   addedDay,
   suggestionText,
   onClose,
-  onHoldOpen,
-  onRelease,
   action,
   children,
 }: {
@@ -95,12 +93,8 @@ export default function SearchPinCard({
   addedDay?: number;
   /** "Closest to Day 6 — 6.0km from its other stops", already computed for the row. */
   suggestionText?: string;
-  /** Escape, and the keyboard's way out. There is no ✕ — see the note on the element. */
+  /** The ✕ in the header, and Escape. */
   onClose: () => void;
-  /** The pointer is on the card: cancel the close its pin armed when the pointer left. */
-  onHoldOpen: () => void;
-  /** The pointer left the card: arm it again. */
-  onRelease: () => void;
   /** The "Add to a day" trigger — the card's one accent action, and now the only place in the whole
    *  search surface where a day can be chosen. */
   action?: React.ReactNode;
@@ -155,13 +149,11 @@ export default function SearchPinCard({
     <aside
       ref={cardRef as React.RefObject<HTMLDivElement>}
       aria-label={place.name}
-      // **This is what replaces the close button.** The card opens by pointing at a pin and closes
-      // by pointing somewhere else, so the only thing it needs is to not evaporate while the
-      // pointer is crossing the gap to reach it. Not `role="dialog"` any more either: a surface
-      // that appears on hover and takes no focus is a popover, and calling it a dialog promises a
-      // screen reader a focus trap that is not there. Escape and the row still reach it.
-      onMouseEnter={onHoldOpen}
-      onMouseLeave={onRelease}
+      // Opened by a click and closed by one — hover opens nothing. The hover gesture read well on
+      // a mouse and was unusable in practice: the card carries "Add to a day", so the journey that
+      // matters ends in a *click*, and any pause to decide which place you are looking at raced a
+      // timer. It also had no answer at all for touch. Not `role="dialog"`: this takes no focus
+      // trap, so calling it one would promise a screen reader something that is not here.
       onKeyDown={(e) => {
         // Escape closes the card and stops there. Without this it reaches the panel's own handler,
         // which would clear the search text or shut the panel — throwing away the list behind a
@@ -218,6 +210,18 @@ export default function SearchPinCard({
             {place.name}
           </h2>
         </div>
+        {/* Small on purpose — the card is 272px wide and this is the least interesting thing on it.
+            The 24px box is what shows; the negative margin lets the *tap* target stay a full 44px
+            without the glyph growing to match, which is the usual way to keep a dismiss honest on
+            touch without giving it visual weight it has not earned. */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`Close ${place.name}`}
+          className="-m-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/45 transition-colors hover:text-white focus-visible:text-white"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <div className="px-3 pb-3">

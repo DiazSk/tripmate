@@ -903,12 +903,6 @@ export class CesiumRenderer implements MapRenderer {
     return () => {};
   }
 
-  /** Nothing to point at either — see `onSearchPinClick`. */
-  onSearchPinHover(_cb: (id: string | null) => void) {
-    void _cb;
-    return () => {};
-  }
-
   /** Cesium's own camera event. Implemented even though search never opens on this engine, because
    *  "the camera stopped" is not a search-specific question and the next caller should not have to
    *  add it. `moveEnd` returns a removal function directly. */
