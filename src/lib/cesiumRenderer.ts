@@ -106,6 +106,64 @@ export class CesiumRenderer implements MapRenderer {
     if (this.isAlive()) this.viewer.scene.requestRender();
   }
 
+  /**
+   * Is everything currently drawing the Earth finished fetching?
+   *
+   * **`globe.show` is the discriminator, not "is there a tileset".** `showFlatImagery` in
+   * `GlobeBackground` deliberately leaves a failed photorealistic tileset in the scene so that
+   * Google recovering simply draws over the flat imagery — so its presence proves nothing. What
+   * that fallback *does* do is turn the globe back on (`GlobeBackground.tsx:293` against `:423`),
+   * which makes `globe.show` the one honest answer to "which of the two is the ground right now".
+   */
+  private sceneSettled(): boolean {
+    const { scene } = this.viewer;
+    if (scene.globe.show) return scene.globe.tilesLoaded;
+    const { primitives } = scene;
+    for (let i = 0; i < primitives.length; i++) {
+      const primitive: unknown = primitives.get(i);
+      if (primitive instanceof this.Cesium.Cesium3DTileset) return primitive.tilesLoaded;
+    }
+    // The tileset threw before it could be added and the fallback has not turned the globe back on
+    // yet. Nothing is drawing an Earth, so there is nothing to wait for — answering `false` here
+    // would hold a curtain up over a scene that is never going to fill.
+    return true;
+  }
+
+  /**
+   * See `whenDrawn` on `MapRenderer`.
+   *
+   * **`postRender`, and the boolean rather than `allTilesLoaded`.** Read `Scene.prototype.render`
+   * once and the reason is plain: `postPassesUpdate` and `callAfterRenderFunctions` — which is
+   * where `allTilesLoaded` is raised — both run *outside* the `if (shouldRender)` guard, while
+   * `_postRender` is raised *inside* it. So the event can and does fire on a frame that painted
+   * nothing, and it means "the bytes arrived", never "you can see them". `postRender` fires only
+   * on frames that actually reached the canvas, and `tilesLoaded` is recomputed from live
+   * statistics every tick, so the pair together mean exactly what is wanted: *a frame went up, and
+   * nothing is still in flight.*
+   *
+   * Polling the boolean also makes a whole class of bug unrepresentable. Subscribing to
+   * `allTilesLoaded` would miss the case this feature most needs to be quick — a warm toggle back
+   * to a pose whose tiles are all cached changes no counters, so the event never fires again and
+   * every fast toggle would sit out the caller's full ceiling instead.
+   */
+  whenDrawn(): Promise<void> {
+    if (!this.isAlive()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const off = this.onFrame(() => {
+        // Re-checked per frame rather than once: `viewer.destroy()` can land between two frames,
+        // and a dead renderer resolves rather than hangs — the caller is holding a curtain up.
+        if (this.isAlive() && !this.sceneSettled()) return;
+        off();
+        resolve();
+      });
+      // Load-bearing under `requestRenderMode`. Streaming sustains its own loop — the tileset's
+      // load-progress callback returns `true` from `afterRender`, which makes the scene request
+      // the next frame — but nothing schedules the *first* one when the pose is already cached and
+      // the camera did not move. Without this, an instant answer is instead no answer at all.
+      this.requestRender();
+    });
+  }
+
   // ---------------------------------------------------------------- overlays
 
   async drawRoute(request: RouteDrawRequest): Promise<number> {

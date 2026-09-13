@@ -44,6 +44,25 @@ export interface MapRenderer {
    */
   requestRender(): void;
 
+  /**
+   * Resolves once the view the camera is pointed at **has been drawn** — tiles fetched, parsed and
+   * on the canvas.
+   *
+   * The distinction from `ready` is the whole reason this exists. `ready` means a renderer object
+   * exists, which on Cesium is true the instant the tileset is added to the scene and before a
+   * single tile has arrived; something that swaps engines on `ready` reveals an empty planet with
+   * the route arcs hanging over nothing.
+   *
+   * **One-shot, and an answer about the pose the camera is in *now*** — so it must be called after
+   * the camera has been placed, not before. Each call is a fresh question.
+   *
+   * Resolves, never rejects, and carries **no timeout of its own**: the house fail-soft rule, and a
+   * deliberate division of labour. How long a person will stare at a covered map is a product
+   * decision, and it lives with the one caller that needs a guaranteed answer — see
+   * `engineSwap` in `mapCamera.tsx`, which races this against a ceiling.
+   */
+  whenDrawn(): Promise<void>;
+
   // ---------------------------------------------------------------- overlays
 
   /**
