@@ -301,15 +301,6 @@ export interface MapRenderer {
   onBasemapPoiClick(cb: (poi: TilePoi) => void): () => void;
 
   /**
-   * The search pin under the pointer, or `null` when it leaves one. Returns the unsubscribe.
-   *
-   * Pointing at a place is how you ask about it here — the click is the fallback for a keyboard or
-   * a finger, not the main gesture. Fires only on *change*, so a pointer travelling across one
-   * pin's halo costs one call rather than one per mousemove.
-   */
-  onSearchPinHover(cb: (id: string | null) => void): () => void;
-
-  /**
    * The camera has stopped moving. Returns the unsubscribe.
    *
    * *Stopped*, not *moving* — this fires once per gesture, after inertia settles, so a caller can

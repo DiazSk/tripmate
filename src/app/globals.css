@@ -3476,26 +3476,6 @@ html[data-story-mode="true"] .marker-day-label {
 /* The tail. `--tail-x` is written by the anchoring hook every frame, so it keeps pointing at the
    dot even after the card itself has stopped following it into a screen corner — which is what
    stops a clamped card reading as floating near nothing in particular. */
-/* **The bridge.** The card floats 14px clear of its pin, and that gap was a trap: crossing it put
-   the pointer over open map, which armed the close, and a hand that pauses on the way — to read the
-   card it is reaching for — lost it before arriving. This is an invisible extension of the card
-   across the gap, so the journey never leaves the card's own hover region and the timer is a
-   backstop rather than a race. Wider than the card on purpose: a pointer travelling diagonally
-   leaves through a corner. */
-.search-pin-card::after {
-  content: "";
-  position: absolute;
-  left: -1rem;
-  right: -1rem;
-  height: 1.5rem;
-}
-.search-pin-card[data-side="above"]::after {
-  bottom: -1.5rem;
-}
-.search-pin-card[data-side="below"]::after {
-  top: -1.5rem;
-}
-
 .search-pin-card-tail {
   position: absolute;
   left: var(--tail-x, 50%);

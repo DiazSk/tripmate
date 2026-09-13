@@ -65,23 +65,10 @@ const DEBOUNCE_MS = 450;
  */
 const SEARCH_LAYOUT_ID = "search-container";
 
-/**
- * How long the card survives the pointer leaving its pin.
- *
- * 260ms was measured against a synthetic event and is nowhere near a hand: reaching the card means
- * crossing a gap, and a person who pauses on the way — to read the thing they are reaching for —
- * takes longer than that, so the card closed before it could be used. The gap itself is now bridged
- * in CSS (`.search-pin-card::after`), which is the actual fix; this is the backstop for the paths
- * the bridge does not cover, like the pointer leaving the map entirely.
- */
-const CARD_GRACE_MS = 600;
-
 /** How far the view must travel before it is worth asking again, as a fraction of the camera's
  *  distance to the ground — so it means the same thing over a city and over a street. */
 const MOVE_TO_RESEARCH = 0.25;
 
-/** How long a card must stay open before its place is worth a detail lookup — see `tileFacts`. */
-const FACTS_DWELL_MS = 600;
 /** The route clamps `radius` to a 200m floor, so this is already the smallest query it will run. */
 const FACTS_RADIUS_M = 200;
 /** A tile POI and its OSM node are the same object, so they agree to within metres. Anything this
@@ -175,8 +162,6 @@ export default function MapSearchPanel({
   const inputRef = useRef<HTMLInputElement>(null);
   /** The anchored detail card's own node — the anchoring hook moves it, React only fills it. */
   const cardRef = useRef<HTMLElement | null>(null);
-  /** The armed "pointer has left the pin" close, cancelled when the card itself is pointed at. */
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The camera position the current results describe. See the idle effect. */
   const lastSearchedRef = useRef<CameraState | null>(null);
   /**
@@ -292,33 +277,6 @@ export default function MapSearchPanel({
   }, [rendererRef, ready, isOpen]);
 
   /**
-   * **Pointing at a pin opens its card; leaving closes it.**
-   *
-   * That is the gesture — the click above is what a keyboard and a finger get, not the main way in.
-   * It also means the card needs no dismiss control of its own: moving the pointer away *is* the
-   * dismissal, which is why there is no ✕ on it.
-   *
-   * The grace period is the whole trick. Without it the card would vanish the instant the pointer
-   * left the 13px halo, which is to say before it could ever reach the card to press anything. So
-   * leaving a pin only *arms* a close, and the card cancels it by being pointed at — see
-   * `onMouseEnter` where it is rendered. 260ms is long enough to cross the gap from a dot to the
-   * card above it and short enough that a deliberate move away feels like a dismissal.
-   */
-  useEffect(() => {
-    const renderer = rendererRef.current;
-    if (!renderer?.isAlive() || !isOpen) return;
-    const unsubscribe = renderer.onSearchPinHover((id) => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-      if (id) setSelectedId(id);
-      else closeTimerRef.current = setTimeout(() => setSelectedId(null), CARD_GRACE_MS);
-    });
-    return () => {
-      unsubscribe();
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    };
-  }, [rendererRef, ready, isOpen]);
-
-  /**
    * **Clicking a name the basemap drew opens its card.**
    *
    * The map is already a list of places — Liberty labels thousands of them — and until now pointing
@@ -378,10 +336,11 @@ export default function MapSearchPanel({
     const place = openPlace;
     if (!place || !isTilePlace(place) || tileFacts[place.id]) return;
     let alive = true;
-    // The card opens on *hover*, so without a dwell a pointer sweeping across fifteen pins would
-    // spend fifteen Overpass requests on places nobody stopped to read. Matched to the grace period
-    // the card already uses for the reverse gesture.
-    const timer = setTimeout(() => {
+    // No dwell. It existed because the card opened on *hover*, where a pointer sweeping across
+    // fifteen pins would have spent fifteen Overpass requests on places nobody stopped to read.
+    // A click is already the deliberate act the dwell was trying to infer, so waiting for one is
+    // now just a delay before the facts a traveler explicitly asked for.
+    {
       const params = new URLSearchParams({
         lat: String(place.lat),
         lng: String(place.lng),
@@ -423,10 +382,9 @@ export default function MapSearchPanel({
         .catch(() => {
           if (alive) setTileFacts((prev) => ({ ...prev, [place.id]: {} }));
         });
-    }, FACTS_DWELL_MS);
+    }
     return () => {
       alive = false;
-      clearTimeout(timer);
     };
   }, [openPlace, tileFacts]);
 
@@ -1032,13 +990,6 @@ export default function MapSearchPanel({
                   )} from its other stops`
                 : undefined
             }
-            onHoldOpen={() => {
-              if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-            }}
-            onRelease={() => {
-              if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-              closeTimerRef.current = setTimeout(() => setSelectedId(null), CARD_GRACE_MS);
-            }}
             onClose={() => setSelectedId(null)}
             action={
               active && (

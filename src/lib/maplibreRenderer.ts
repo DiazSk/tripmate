@@ -1695,40 +1695,6 @@ export class MapLibreRenderer implements MapRenderer {
     this.map.jumpTo({ pitch });
   }
 
-  /**
-   * Which search pin the pointer is over, by the same hit test the click uses.
-   *
-   * Edge-triggered: MapLibre fires `mousemove` for every pixel of travel, and the consumer sets
-   * React state, so a naive forward would re-render the whole panel a few hundred times crossing
-   * one café. The last id is kept and only a change is reported.
-   */
-  onSearchPinHover(cb: (id: string | null) => void) {
-    if (!this.isAlive()) return () => {};
-    const layer = `${SEARCH_SOURCE_ID}-halo`;
-    let last: string | null = null;
-    const report = (next: string | null) => {
-      if (next === last) return;
-      last = next;
-      cb(next);
-    };
-    const handler = (e: { point: { x: number; y: number } }) => {
-      if (!this.isAlive() || !this.map.getLayer(layer)) return;
-      const hit = this.map.queryRenderedFeatures([e.point.x, e.point.y], { layers: [layer] })[0];
-      const id = hit?.properties?.id;
-      report(typeof id === "string" && id ? id : null);
-    };
-    // Leaving the canvas entirely never produces a `mousemove` over empty map, so it needs its own
-    // event or the last pin stays "hovered" for as long as the pointer is off the map.
-    const leave = () => report(null);
-    this.map.on("mousemove", handler);
-    this.map.getCanvas().addEventListener("mouseleave", leave);
-    return () => {
-      if (!this.isAlive()) return;
-      this.map.off("mousemove", handler);
-      this.map.getCanvas().removeEventListener("mouseleave", leave);
-    };
-  }
-
   /** MapLibre's own `moveend`, which already means "the gesture and its inertia are over". */
   /**
    * **`idle`, not `moveend`** — and that is the difference between the tile search working and
