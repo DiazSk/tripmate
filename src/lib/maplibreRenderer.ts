@@ -805,6 +805,28 @@ export class MapLibreRenderer implements MapRenderer {
     if (this.isAlive()) this.map.triggerRepaint();
   }
 
+  /**
+   * See `whenDrawn` on `MapRenderer`. The same `idle` event `onCameraIdle` rides, taken once.
+   *
+   * `idle` is MapLibre's own definition of the thing being asked for — no transition in progress
+   * and every requested tile loaded and rendered — and it is measured to fire reliably on this app
+   * despite the terrain and the custom WebGL arc layer, either of which repainting every frame
+   * would suppress it forever.
+   *
+   * **The `triggerRepaint` is what stops it hanging on an already-settled map**, which is the
+   * common case for a toggle back to Map rather than an edge case: `idle` is fired from the tail of
+   * `Map._render`, so a map that has gone quiet is a map that will never fire it again. This
+   * schedules exactly one render pass, and a pass with nothing dirty and nothing moving fires
+   * `idle` before it returns. It no-ops when a frame is already queued, so it is safe unconditional.
+   */
+  whenDrawn(): Promise<void> {
+    if (!this.isAlive()) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.map.once("idle", () => resolve());
+      this.map.triggerRepaint();
+    });
+  }
+
   // ---------------------------------------------------------------- overlays
 
   async drawRoute(request: RouteDrawRequest): Promise<number> {
