@@ -22,6 +22,9 @@ const eslintConfig = defineConfig([
     // not in this branch. Measured: one worktree turned a clean run into 39,438 problems, which
     // makes the gate useless exactly when someone is running it to check their own work.
     ".worktrees/**",
+    // Agent tooling, not app source: graft's generated CommonJS helpers (`graft init`) are `.cjs`
+    // by design, so `no-require-imports` fires on every line of them.
+    ".claude/**",
   ]),
 ]);
 
