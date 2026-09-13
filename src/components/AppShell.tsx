@@ -20,6 +20,9 @@ const MapLibreBackground = dynamic(() => import("@/components/MapLibreBackground
 });
 const MapControls = dynamic(() => import("@/components/MapControls"), { ssr: false });
 const MapEngineToggle = dynamic(() => import("@/components/MapEngineToggle"), { ssr: false });
+/* `ssr: false` like its neighbours: it reads a state machine seeded from the resolved engine, which
+   is a localStorage/query answer the server cannot have. */
+const MapEngineCurtain = dynamic(() => import("@/components/MapEngineCurtain"), { ssr: false });
 const MapSearchPanel = dynamic(() => import("@/components/MapSearchPanel"), { ssr: false });
 const StopMarkerLayer = dynamic(() => import("@/components/StopMarkerLayer"), { ssr: false });
 const StoryStage = dynamic(() => import("@/components/StoryStage"), { ssr: false });
@@ -115,8 +118,9 @@ function ShellBody({
             {/* The background must stay mounted across route changes — Next.js already keeps
                 AppShell itself stable across navigations since it's rendered from the root
                 layout, so this just needs to never be conditionally unmounted here. The engine
-                branch is not a conditional unmount: `mapEngine` is resolved once and never
-                changes for the life of the session. */}
+                branch is not a conditional unmount either: `mapEngine` decides which of the two
+                is *visible and building*, and neither is ever destroyed, which is what makes a
+                second press of the toggle instant. */}
             <GlobeBackground
               active={mapEngine === "cesium"}
               creditClassName="fixed bottom-1 left-3"
@@ -143,6 +147,14 @@ function ShellBody({
               globe, so inside it they would slide off their own stems the moment a page
               overflowed. */}
           <StopMarkerLayer />
+          {/* Above the markers and below the content overlay, which is the whole of what it covers:
+              **the world, and everything pinned into it.** The markers are part of that world — the
+              note above says so — so a sheet that left them floating would reproduce the exact look
+              this exists to remove, a day's stops hanging over nothing. What it must *not* cover is
+              the chrome: the navbar, the plan panel and the toggle you just pressed are identical
+              before and after, and hiding them would claim the page changed when only the map did.
+              That is why it is a sibling here rather than a child of the map box at z-0. */}
+          <MapEngineCurtain />
           <div
             ref={scrollRef}
             className="content-overlay pointer-events-none absolute inset-0 z-10 overflow-y-auto"

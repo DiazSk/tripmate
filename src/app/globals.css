@@ -449,6 +449,260 @@ body {
 
    The reduced-motion blanket rule above already collapses this transition to a snap, which is
    the correct behaviour and needs no rule of its own. */
+/* The sheet over a Map/Satellite swap. See `MapEngineCurtain.tsx` for why it is a curtain and not
+   a crossfade — the short version is that this one has to be able to *wait*, and a crossfade has no
+   moment where being slow is safe.
+
+   The shape is a band with a slanted leading edge, swept by interpolating one polygon into another.
+   That is the mechanism behind the curtain in Motion's page-transition set, read off their running
+   demo rather than guessed at: four corners, and a constant horizontal offset between the top pair
+   and the bottom pair which *is* the slant. Two things follow, and together they are why this needs
+   no library. CSS interpolates `polygon()` between values with matching vertex counts, mixed
+   `calc()` units and all — verified in a browser, sweeping 36.5% -> 9.3% -> 2.4% -> 0.4% -> 0% with
+   the offset held constant throughout. And the easing their curtain settles on is
+   indistinguishable from this app's own curve, so the reference and `DESIGN.md` simply agree.
+
+   **Animations, not transitions, and that is forced rather than chosen.** The sheet has to sweep
+   shut on the frame it mounts, and a transition has nothing to transition *from* on a node that
+   did not exist a frame ago — it would simply appear already closed. Keyframes are the thing that
+   animates on mount, which is also why every other arrival in this file is one.
+
+   Every edge travels between -10% and 110% rather than 0% and 100%. A slanted edge cannot cover a
+   rectangle's corner while any part of it is still inside the box, so "closed" has to mean
+   comfortably past the far side; the overshoot is what makes full cover actually full.
+
+   `--canvas`, never a map-native colour: this is interface over the map, not part of it. It is the
+   same move `.hero-frames` makes one layer up — a canvas-coloured sheet that leaves once the real
+   thing can draw. */
+.map-curtain {
+  position: absolute;
+  inset: 0;
+  /* Between the stop markers (z-5) and the content overlay (z-10). See where it is mounted in
+     `AppShell` for why that gap is exactly the right one. */
+  z-index: 6;
+  /**
+   * **The One Slate, frosted.** `DESIGN.md` hands `--surface-deep` "every frosted panel, control
+   * pill, badge, scrim, nav bar and loader" — this is a scrim standing in for a loader, so it wears
+   * the material the rest of the app already wears. `--canvas` was the wrong borrow: that is the
+   * page *floor*, and a sheet painted in it read as the world having been deleted rather than
+   * covered. One step up, and translucent, is the difference between a hole and a lid.
+   *
+   * **56px is a measurement, not a taste.** `.glass-itinerary` records it: "56px is where large
+   * backdrop structures (city blocks, coastlines) stop reading as recognizable shapes; 32px still
+   * leaves their edges visible." Anything less and a half-streamed globe is still legible through
+   * the sheet, which is the single failure this element exists to prevent — so if it ever needs to
+   * hide more, the alpha goes up and the radius stays.
+   *
+   * 0.82 sits well clear of that rule's other number: 0.62 is where "the muted text starts washing
+   * out over bright terrain", and muted text is exactly what stands on this.
+   *
+   * The cost is known and accepted rather than discovered — `docs/map-engine-gpu.md`: "Every map
+   * frame forces every `backdrop-filter` glass panel above the canvas to re-blur." Two things pay
+   * for it here and would not on a docked panel: this sheet exists for a few hundred milliseconds
+   * warm, and `ArrangeBoard` already ships the same shape full-viewport over the live map.
+   *
+   * No hand-written `-webkit-backdrop-filter` — see The Never-Prefix Rule further down this file.
+   * Lightning CSS emits the prefix itself; writing the pair by hand is what silently killed a blur
+   * outright once already.
+   *
+   * **Nothing is drawn on it, and that was arrived at rather than assumed.** Drifting jade columns
+   * were built here twice — as a repeating gradient, then as soft radial blooms — and both read as
+   * muddy over a sheet that is already blurring a whole moving world behind it. Frosted glass is
+   * busy by nature; anything laid on top competes with the very thing that makes it glass. The
+   * blur is the effect. Leave it alone.
+   */
+  background: rgb(var(--surface-deep-rgb) / 0.82);
+  backdrop-filter: blur(56px) saturate(140%);
+  display: grid;
+  place-items: center;
+  /* Deliberately NOT `none`. While the sheet is down, the map underneath is one nobody can see, and
+     a drag that lands on it moves a world the traveller has no picture of. The node only exists
+     while a swap is running, so this costs nothing at rest. */
+  pointer-events: auto;
+}
+
+/* Closing, and staying closed: `both` fill is what holds the last frame through the whole held
+   beat, which lasts as long as the incoming engine needs and is not a duration anything here
+   knows. Toward Satellite the band travels left, matching the toggle, where Map sits to the left
+   of Satellite. */
+.map-curtain[data-curtain="closed"] {
+  animation: map-curtain-close-left 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.map-curtain[data-curtain="closed"][data-toward="maplibre"] {
+  animation-name: map-curtain-close-right;
+}
+
+/* Leaving. The reveal is the slower half on purpose: covering is a thing being taken away and wants
+   to be brisk, while revealing is the new world arriving and is the shot worth watching. The band
+   *continues* the way it was going rather than retreating the way it came — a curtain that backs
+   out reads as a mistake being undone. */
+.map-curtain[data-curtain="leaving"] {
+  animation: map-curtain-open-left 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.map-curtain[data-curtain="leaving"][data-toward="maplibre"] {
+  animation-name: map-curtain-open-right;
+}
+
+/* Band from XL to XR, both edges slanted by the same 150px so they stay parallel. */
+@keyframes map-curtain-close-left {
+  from {
+    clip-path: polygon(
+      calc(110% + 75px) 0%,
+      calc(110% + 75px) 0%,
+      calc(110% - 75px) 100%,
+      calc(110% - 75px) 100%
+    );
+  }
+  to {
+    clip-path: polygon(
+      calc(-10% + 75px) 0%,
+      calc(110% + 75px) 0%,
+      calc(110% - 75px) 100%,
+      calc(-10% - 75px) 100%
+    );
+  }
+}
+
+@keyframes map-curtain-open-left {
+  from {
+    clip-path: polygon(
+      calc(-10% + 75px) 0%,
+      calc(110% + 75px) 0%,
+      calc(110% - 75px) 100%,
+      calc(-10% - 75px) 100%
+    );
+  }
+  to {
+    clip-path: polygon(
+      calc(-10% + 75px) 0%,
+      calc(-10% + 75px) 0%,
+      calc(-10% - 75px) 100%,
+      calc(-10% - 75px) 100%
+    );
+  }
+}
+
+@keyframes map-curtain-close-right {
+  from {
+    clip-path: polygon(
+      calc(-10% + 75px) 0%,
+      calc(-10% + 75px) 0%,
+      calc(-10% - 75px) 100%,
+      calc(-10% - 75px) 100%
+    );
+  }
+  to {
+    clip-path: polygon(
+      calc(-10% + 75px) 0%,
+      calc(110% + 75px) 0%,
+      calc(110% - 75px) 100%,
+      calc(-10% - 75px) 100%
+    );
+  }
+}
+
+@keyframes map-curtain-open-right {
+  from {
+    clip-path: polygon(
+      calc(-10% + 75px) 0%,
+      calc(110% + 75px) 0%,
+      calc(110% - 75px) 100%,
+      calc(-10% - 75px) 100%
+    );
+  }
+  to {
+    clip-path: polygon(
+      calc(110% + 75px) 0%,
+      calc(110% + 75px) 0%,
+      calc(110% - 75px) 100%,
+      calc(110% - 75px) 100%
+    );
+  }
+}
+
+/* The line that appears only once a hold has outlasted the point where silence starts reading as a
+   dead page. There is no "waiting quietly" state here, because that state is an empty sheet.
+
+   `value-in` is the existing 260ms part-settling keyframe, which is exactly what this is: one part
+   arriving inside a surface that is already there. Borrowed as a keyframe rather than by wearing
+   the `.value-in` class, because that class lives inside the `prefers-reduced-motion:
+   no-preference` block and this element needs its *delay* in both cases — the 700ms is a decision
+   about when a wait is worth mentioning, not a piece of motion. The blanket rule collapses the
+   260ms and leaves the delay alone, which is precisely right.
+
+   `backwards` is what makes the delay a delay rather than a flash: the element sits at the
+   keyframe's `from` — opacity zero — for the whole 700ms instead of being painted and then
+   animated. */
+.map-curtain-note {
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
+  /**
+   * The waiting shimmer — a band of full paper travelling through muted paper, the same read as a
+   * chat client's "Thinking…".
+   *
+   * It is the honest motion for this beat. A spinner asserts progress it cannot measure and a bar
+   * needs a denominator Cesium does not have until the tiles are already there; a sweep through the
+   * words says only *still going*, which is exactly and only what is known. Same mechanism the
+   * console sheen in this file uses — a wide gradient walked by `background-position` — clipped to
+   * the glyphs instead of laid over a surface.
+   *
+   * Both stops are existing text tokens, so this introduces no colour: `--muted` is the resting
+   * weight of secondary prose here and `--foreground` is the paper it is mixed from, which is why
+   * the bright pass reads as the *same* text lifting rather than as a second colour crossing it.
+   *
+   * Two animations, one delay. The arrival keeps its 700ms restraint and the shimmer waits with it,
+   * so nothing moves until the wait has earned a word. Under reduced motion the blanket rule
+   * collapses both durations and pins the iteration count to one — the text lands instantly and
+   * simply stops shimmering, which is the correct reading of that preference rather than a
+   * separate branch.
+   */
+  color: transparent;
+  background: linear-gradient(
+    100deg,
+    var(--muted) 35%,
+    var(--foreground) 50%,
+    var(--muted) 65%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation:
+    value-in 260ms cubic-bezier(0.16, 1, 0.3, 1) 700ms backwards,
+    curtain-note-sheen 2.6s linear 700ms infinite;
+}
+
+/* Travelling one way only, never a ping-pong: a sweep that reverses reads as a thing scrubbing back
+   and forth over itself, where a wait only ever goes forwards. */
+@keyframes curtain-note-sheen {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* `background-clip: text` needs transparent text, and a forced-colours mode throws the author's
+   background away while keeping that transparency — which is an invisible label. Hand the colour
+   back. */
+@media (forced-colors: active) {
+  /* Two separate repairs, both because this mode discards author colour.
+     The sheet: `backdrop-filter` is ignored here and a translucent background may be replaced, which
+     would leave the map readable through a curtain whose whole job is that it is not — so it takes a
+     system colour and becomes genuinely opaque.
+     The note: `background-clip: text` needs transparent text, and this mode throws the author's
+     background away while keeping that transparency, which is an invisible label. */
+  .map-curtain {
+    background: Canvas;
+    backdrop-filter: none;
+  }
+  .map-curtain-note {
+    color: var(--muted);
+    background: none;
+    animation: none;
+  }
+}
+
 .globe-tint {
   mix-blend-mode: multiply;
   background-color: transparent;

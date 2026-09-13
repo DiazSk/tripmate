@@ -27,7 +27,7 @@ export function useAnchoredToMap(
   nodeRef: React.RefObject<HTMLElement | null>,
   rendererRef: React.RefObject<MapRenderer | null>,
   point: { lat: number; lng: number } | null,
-  ready: boolean,
+  ready: number,
   /** The left edge of the clear area — the search panel's right edge when it is open. */
   clearLeftPx: number
 ) {
