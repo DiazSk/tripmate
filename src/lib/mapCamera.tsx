@@ -394,6 +394,14 @@ export function MapCameraProvider({
    *  Overpass answers take seconds and are throttled by IP; paying for them again on every toggle
    *  would make the toggle the most expensive control in the app. */
   const lastHighwaysRef = useRef<{ points: { lat: number; lng: number }[] }[] | null>(null);
+  /**
+   * Where the highways were last asked for, kept beside the geometry rather than derived from it.
+   *
+   * Load-bearing for the engine toggle since MapLibre stopped fetching them: on that path
+   * `lastHighwaysRef` is never filled, so it is no longer the record of "highways were wanted" —
+   * and without this, toggling to Satellite would silently drop them. See `replayOverlays`.
+   */
+  const lastHighwayCentreRef = useRef<[lat: number, lng: number] | null>(null);
   /** The focused day's street paths, held for the same reason the highways are: the Map/Satellite
    *  toggle replays every overlay onto the incoming engine from cache rather than refetching. */
   const lastLegPathsRef = useRef<LegPathDrawRequest | null>(null);
@@ -944,6 +952,21 @@ export function MapCameraProvider({
       return;
     }
 
+    lastHighwayCentreRef.current = [lat, lng];
+
+    // **Ask the map before asking the internet** — the same move `MapSearchPanel` makes for POIs,
+    // except here there is not even a fallback to keep: the basemap's `transportation` layer starts
+    // at minzoom 4, so it answers at every framing. `[]` rather than geometry because there is none
+    // to send; the renderer reads only present-vs-`null`.
+    //
+    // A strict improvement on the Overpass answer, not merely a cheaper one. `/api/roads` returns a
+    // snapshot within 30km of a point, so panning past that radius used to stop the motorways
+    // mid-road; the basemap's copy follows the camera.
+    if (renderer.drawsHighwaysFromBasemap) {
+      renderer.drawHighways([]);
+      return;
+    }
+
     const generation = ++highwayGenerationRef.current;
     (async () => {
       let segments: { points: { lat: number; lng: number }[] }[];
@@ -970,38 +993,50 @@ export function MapCameraProvider({
    * `frameRoute`'s job, and `showTripRoute` calls them as two steps), which is what makes the
    * separation possible.
    */
-  const replayOverlays = useCallback((renderer: MapRenderer) => {
-    if (lastPinRef.current) renderer.setPin(lastPinRef.current);
-    if (lastHighwaysRef.current) renderer.drawHighways(lastHighwaysRef.current);
-    if (lastLegPathsRef.current) renderer.drawLegPaths(lastLegPathsRef.current);
-    if (lastCityRef.current) renderer.drawCityBoundary(lastCityRef.current);
-    const route = lastRouteRef.current;
-    if (!route) return;
-    const generation = ++routeGenerationRef.current;
-    void renderer
-      .drawRoute({
-        days: route.days,
-        focusDay: route.focusedDay,
-        soloFocus: route.soloFocus,
-        altitudeHintM: routeAltitudeRef.current,
-        // Carried across the swap like everything else here: pressing Map/Satellite mid-film must
-        // not hand the incoming engine a set of arcs the film had put away.
-        connectors: !connectorsHiddenRef.current,
-        stateFor: (day) => dayVisualState(day, route.focusedDay, hoveredDayRef.current),
-      })
-      .then((altitude) => {
-        if (generation !== routeGenerationRef.current) return;
-        routeAltitudeRef.current = altitude;
-        // The retint and emphasis effects key on state that did not change across the swap, so
-        // they will not re-run — the new geometry has to be told what is selected and what the
-        // pointer is on, or a toggle silently drops the highlight.
-        renderer.applyDayStates((day) =>
-          dayVisualState(day, route.focusedDay, hoveredDayRef.current)
-        );
-        const emphasised = emphasisRef.current;
-        renderer.applyEmphasis(emphasised?.day ?? null, emphasised?.index ?? null);
-      });
-  }, []);
+  const replayOverlays = useCallback(
+    (renderer: MapRenderer) => {
+      if (lastPinRef.current) renderer.setPin(lastPinRef.current);
+      // Three cases, because the incoming engine may not want what the outgoing one held. MapLibre
+      // needs only the flag flipped; Cesium needs geometry, which on a MapLibre-first session was
+      // never fetched — so the request is made now rather than replayed. Safe to call `showHighways`
+      // from here: `activate` writes `rendererRef.current` before it calls this, so the fetch lands
+      // on the renderer being switched to.
+      if (lastHighwayCentreRef.current) {
+        if (renderer.drawsHighwaysFromBasemap) renderer.drawHighways([]);
+        else if (lastHighwaysRef.current) renderer.drawHighways(lastHighwaysRef.current);
+        else showHighways(...lastHighwayCentreRef.current);
+      }
+      if (lastLegPathsRef.current) renderer.drawLegPaths(lastLegPathsRef.current);
+      if (lastCityRef.current) renderer.drawCityBoundary(lastCityRef.current);
+      const route = lastRouteRef.current;
+      if (!route) return;
+      const generation = ++routeGenerationRef.current;
+      void renderer
+        .drawRoute({
+          days: route.days,
+          focusDay: route.focusedDay,
+          soloFocus: route.soloFocus,
+          altitudeHintM: routeAltitudeRef.current,
+          // Carried across the swap like everything else here: pressing Map/Satellite mid-film must
+          // not hand the incoming engine a set of arcs the film had put away.
+          connectors: !connectorsHiddenRef.current,
+          stateFor: (day) => dayVisualState(day, route.focusedDay, hoveredDayRef.current),
+        })
+        .then((altitude) => {
+          if (generation !== routeGenerationRef.current) return;
+          routeAltitudeRef.current = altitude;
+          // The retint and emphasis effects key on state that did not change across the swap, so
+          // they will not re-run — the new geometry has to be told what is selected and what the
+          // pointer is on, or a toggle silently drops the highlight.
+          renderer.applyDayStates((day) =>
+            dayVisualState(day, route.focusedDay, hoveredDayRef.current)
+          );
+          const emphasised = emphasisRef.current;
+          renderer.applyEmphasis(emphasised?.day ?? null, emphasised?.index ?? null);
+        });
+    },
+    [showHighways]
+  );
 
   /**
    * Make `engine`'s renderer the live one.
@@ -1270,6 +1305,7 @@ export function MapCameraProvider({
     routeStopsRef.current = [];
     lastRouteRef.current = null;
     lastHighwaysRef.current = null;
+    lastHighwayCentreRef.current = null;
     lastLegPathsRef.current = null;
     lastCityRef.current = null;
     lastPinRef.current = null;

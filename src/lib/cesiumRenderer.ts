@@ -229,11 +229,19 @@ export class CesiumRenderer implements MapRenderer {
     });
   }
 
-  drawHighways(segments: { points: { lat: number; lng: number }[] }[]) {
+  readonly drawsHighwaysFromBasemap = false;
+
+  /**
+   * See `drawHighways` on `MapRenderer`. Every point is drawn, because there is nowhere else here
+   * to get one: Google's Photorealistic 3D Tiles are a textured mesh, and the roads visible in them
+   * are pixels in an aerial photograph rather than queryable geometry. Same reason
+   * `queryVisiblePois` returns an empty list.
+   */
+  drawHighways(segments: { points: { lat: number; lng: number }[] }[] | null) {
     const { viewer, Cesium } = this;
     if (!this.isAlive()) return;
     for (const e of this.highwayEntities) viewer.entities.remove(e);
-    this.highwayEntities = segments.map((segment) =>
+    this.highwayEntities = (segments ?? []).map((segment) =>
       viewer.entities.add({
         polyline: {
           positions: segment.points.map((p) =>

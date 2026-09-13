@@ -79,7 +79,31 @@ export interface MapRenderer {
   /** The single search pin. `null` removes it. One at a time, by design. */
   setPin(pin: { lat: number; lng: number; label?: string } | null): void;
 
-  drawHighways(segments: { points: { lat: number; lng: number }[] }[]): void;
+  /**
+   * The ambient motorways and trunk roads around the destination. `null` clears them.
+   *
+   * **Two engines answer this from opposite directions, which is why `segments` is optional data
+   * rather than the request itself.** MapLibre's basemap already carries this geometry —
+   * OpenMapTiles' `transportation` layer is built from the same OSM ways `/api/roads` asks Overpass
+   * for, and it arrived with the streets — so it ignores the array entirely and reads only
+   * present-vs-`null`. Cesium's Photorealistic 3D Tiles are a textured mesh with no road vectors
+   * anywhere in the payload, so it draws exactly what it is handed.
+   *
+   * Callers ask `drawsHighwaysFromBasemap` first and skip the fetch when it is true; passing `[]`
+   * is then the honest thing to say — "show them, I am contributing no geometry".
+   */
+  drawHighways(segments: { points: { lat: number; lng: number }[] }[] | null): void;
+
+  /**
+   * True when this engine finds the highways in its own basemap and needs none handed to it.
+   *
+   * A capability, not an engine name: the rule this contract exists to keep is that nothing above
+   * it learns which renderer is underneath. The one caller that reads it (`showHighways` in
+   * `mapCamera.tsx`) uses it to decide whether `/api/roads` is worth a round trip, never to decide
+   * what to draw.
+   */
+  readonly drawsHighwaysFromBasemap: boolean;
+
   drawCityBoundary(segments: { lat: number; lng: number }[][]): void;
 
   /**
