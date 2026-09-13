@@ -181,6 +181,6 @@ export function addPlaceToDay(
  */
 function stopCategoryFor(category: string | undefined): Stop["category"] {
   if (category === "cafe" || category === "restaurant" || category === "bar") return "food";
-  if (category === "museum") return "entry";
+  if (category === "sights") return "entry";
   return "other";
 }

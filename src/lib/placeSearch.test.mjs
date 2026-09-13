@@ -6,7 +6,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { detailsFromTags } from "./placeSearch.ts";
+import { categoryFromTags, detailsFromTags } from "./placeSearch.ts";
+import { categoryForPoiClass } from "./tilePlaces.ts";
 
 test("a place with no interesting tags yields no keys, not empty ones", () => {
   const d = detailsFromTags({ name: "Bar Centrale", amenity: "cafe" });
@@ -58,4 +59,74 @@ test("a wikidata id is shape-checked before it can reach an API URL", () => {
   assert.equal(detailsFromTags({ wikidata: "Q869130;Q123" }).wikidataId, undefined);
   assert.equal(detailsFromTags({ wikidata: "see the article" }).wikidataId, undefined);
   assert.equal(detailsFromTags({ wikidata: "Q0" }).wikidataId, undefined);
+});
+
+// --- the two indexes have to agree ------------------------------------------------------------
+
+/**
+ * A chip means one thing, whichever index answered it.
+ *
+ * The tiles serve z14 and up; Overpass serves everything below, and the fallback is invisible to
+ * the traveler by design. So if `categoryFromTags` and `CLASS_TO_CATEGORY` disagree, pressing
+ * Sights in a city centre and then zooming out returns a different *kind* of list with no error
+ * anywhere — which is the exact failure this pairs-off table exists to prevent. Each row is
+ * [OSM tags, the OpenMapTiles class the same venue arrives as, the chip both must name].
+ */
+test("Overpass and the tiles put the same venue under the same chip", () => {
+  const pairs = [
+    [{ amenity: "cafe" }, "cafe", "cafe"],
+    [{ amenity: "ice_cream" }, "ice_cream", "cafe"],
+    [{ amenity: "restaurant" }, "restaurant", "restaurant"],
+    [{ amenity: "fast_food" }, "fast_food", "restaurant"],
+    [{ amenity: "bar" }, "bar", "bar"],
+    [{ amenity: "pub" }, "beer", "bar"],
+    [{ tourism: "museum" }, "museum", "sights"],
+    [{ tourism: "gallery" }, "art_gallery", "sights"],
+    [{ tourism: "attraction" }, "attraction", "sights"],
+    [{ tourism: "viewpoint" }, "attraction", "sights"],
+    [{ amenity: "place_of_worship" }, "place_of_worship", "sights"],
+    [{ historic: "castle" }, "castle", "sights"],
+    [{ historic: "monument" }, "monument", "sights"],
+    [{ amenity: "theatre" }, "theatre", "sights"],
+    [{ amenity: "cinema" }, "cinema", "sights"],
+    [{ tourism: "hotel" }, "lodging", "hotel"],
+    [{ tourism: "hostel" }, "lodging", "hotel"],
+    [{ tourism: "guest_house" }, "lodging", "hotel"],
+    [{ leisure: "park" }, "park", "park"],
+    [{ leisure: "garden" }, "garden", "park"],
+    [{ shop: "bakery" }, "bakery", "shop"],
+  ];
+
+  const failures = [];
+  for (const [tags, klass, expected] of pairs) {
+    const fromOverpass = categoryFromTags(tags);
+    const fromTiles = categoryForPoiClass(klass);
+    if (fromOverpass !== expected) failures.push(`${JSON.stringify(tags)} → ${fromOverpass}, want ${expected}`);
+    if (fromTiles !== expected) failures.push(`class ${klass} → ${fromTiles}, want ${expected}`);
+  }
+  assert.deepEqual(failures, [], `a chip means two things across z14:\n  ${failures.join("\n  ")}`);
+});
+
+/**
+ * A castle with a gift shop is a castle.
+ *
+ * `["shop"]` is the broadest selector in `OSM_FILTERS` — any shop tag at all — so it matches a
+ * surprising number of places that are primarily something else. Order in `categoryFromTags` is
+ * what resolves that, and order is the kind of thing a later edit reshuffles without noticing.
+ *
+ * Only the clear-cut pairs are asserted. A venue tagged `tourism=hotel` **and** `amenity=restaurant`
+ * is genuinely both, and both chips' selectors return it — the category decides only its pin colour
+ * and label, so pinning that case down here would be inventing a rule rather than recording one.
+ * It currently reads as `restaurant`, which is the more common reason to be looking for it.
+ */
+test("a sight that also sells things is still a sight", () => {
+  assert.equal(categoryFromTags({ historic: "castle", shop: "gift" }), "sights");
+  assert.equal(categoryFromTags({ tourism: "museum", shop: "books" }), "sights");
+  assert.equal(categoryFromTags({ tourism: "hostel", shop: "convenience" }), "hotel");
+});
+
+test("anything unrecognised still falls back rather than inventing a chip", () => {
+  assert.equal(categoryFromTags({ office: "lawyer" }), "place");
+  assert.equal(categoryFromTags({}), "place");
+  assert.equal(categoryFromTags({ amenity: "bench" }, "cafe"), "cafe");
 });

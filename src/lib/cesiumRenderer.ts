@@ -419,6 +419,12 @@ export class CesiumRenderer implements MapRenderer {
     return [];
   }
 
+  /** See `onBasemapPoiClick` on `MapRenderer`. Nothing to subscribe to, for the same reason
+   *  `queryVisiblePois` above is empty — there are no POIs in a photographed mesh to click. */
+  onBasemapPoiClick(): () => void {
+    return () => {};
+  }
+
   clearOverlays() {
     if (!this.isAlive()) return;
     this.drawGeneration++;

@@ -1,6 +1,7 @@
 import type {
   FilterSpecification,
   GeoJSONFeature,
+  MapGeoJSONFeature,
   LngLatLike,
   Map as MapLibreMap,
   Marker,
@@ -423,6 +424,39 @@ function rangeToZoomStatic(rangeM: number, lat: number, viewHeightPx: number): n
   const cameraToCentrePx = 1.5 * viewHeightPx;
   const mpp = rangeM / cameraToCentrePx;
   return Math.log2((EQUATOR_M * Math.cos((lat * Math.PI) / 180)) / (WORLD_TILE_PX * mpp));
+}
+
+/**
+ * One `poi` feature as a `TilePoi`, or `null` for anything unusable.
+ *
+ * Shared by the two queries that read this layer for opposite reasons — every POI in the loaded
+ * tiles (`queryVisiblePois`) and the one under the pointer (`onBasemapPoiClick`). One reader, so a
+ * POI cannot be understood differently depending on how it was reached; the ids minted downstream
+ * are keyed on these fields and have to agree exactly. See `tilePlaceId` in `tilePlaces.ts`.
+ */
+function tilePoiFromFeature(feature: GeoJSONFeature): TilePoi | null {
+  const props = (feature.properties ?? {}) as Record<string, unknown>;
+  const name = typeof props.name === "string" ? props.name.trim() : "";
+  if (!name) return null;
+  // A `poi` feature is a Point by schema, but this is third-party data reached through a
+  // `properties` bag typed as `unknown` — the narrowing costs a comparison and removes the one
+  // shape that would throw on the destructure below.
+  const geometry = feature.geometry;
+  if (geometry?.type !== "Point") return null;
+  const [lng, lat] = geometry.coordinates as [number, number];
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  // Measured across twelve city z14 tiles, 25,948 named POIs: `name:latin` is on 72% of them and
+  // `name_en` on 100%, so the fallback is what answers most of the time. It never falls through —
+  // `name_int` exists too and would rescue nothing, which is why it is not in this chain.
+  const latin = props["name:latin"] ?? props.name_en;
+  return {
+    name,
+    nameLatin: typeof latin === "string" && latin.trim() ? latin.trim() : undefined,
+    klass: typeof props.class === "string" ? props.class : "",
+    subclass: typeof props.subclass === "string" ? props.subclass : "",
+    lat,
+    lng,
+  };
 }
 
 /** The trip's own sources and layers, added once. Everything the app draws lives in these. */
@@ -1096,11 +1130,7 @@ export class MapLibreRenderer implements MapRenderer {
    */
   queryVisiblePois(): TilePoi[] {
     if (!this.isAlive()) return [];
-    // Found rather than named, the same way `buildStyle` finds it to hang the extruded buildings
-    // off: the id is Liberty's to choose and a rename upstream lands between two page loads.
-    const sourceId = Object.entries(this.map.getStyle()?.sources ?? {}).find(
-      ([, source]) => source.type === "vector"
-    )?.[0];
+    const sourceId = this.basemapVectorSource();
     if (!sourceId) return [];
     let features: GeoJSONFeature[];
     try {
@@ -1111,29 +1141,60 @@ export class MapLibreRenderer implements MapRenderer {
 
     const pois: TilePoi[] = [];
     for (const feature of features) {
-      const props = (feature.properties ?? {}) as Record<string, unknown>;
-      const name = typeof props.name === "string" ? props.name.trim() : "";
-      if (!name) continue;
-      // A `poi` feature is a Point by schema, but this is third-party data reached through a
-      // `properties` bag typed as `unknown` — the narrowing costs a comparison and removes the one
-      // shape that would throw on the destructure below.
-      const geometry = feature.geometry;
-      if (geometry?.type !== "Point") continue;
-      const [lng, lat] = geometry.coordinates as [number, number];
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-      // `name:latin` is the field the tilejson advertises; `name_en` is what this planet build
-      // actually populates more often. Either is a Latin spelling to match a query against.
-      const latin = props["name:latin"] ?? props.name_en;
-      pois.push({
-        name,
-        nameLatin: typeof latin === "string" && latin.trim() ? latin.trim() : undefined,
-        klass: typeof props.class === "string" ? props.class : "",
-        subclass: typeof props.subclass === "string" ? props.subclass : "",
-        lat,
-        lng,
-      });
+      const poi = tilePoiFromFeature(feature);
+      if (poi) pois.push(poi);
     }
     return pois;
+  }
+
+  /**
+   * Liberty's own vector source, found rather than named.
+   *
+   * The same lookup `buildStyle` does to hang the extruded buildings off it, and for the same
+   * reason: `openmaptiles` is the id OpenFreeMap ships today and a rename upstream lands between
+   * two page loads. Every caller treats "not found" as an empty answer rather than an error.
+   */
+  private basemapVectorSource(): string | undefined {
+    return Object.entries(this.map.getStyle()?.sources ?? {}).find(
+      ([, source]) => source.type === "vector"
+    )?.[0];
+  }
+
+  /**
+   * See `onBasemapPoiClick` on `MapRenderer` — a click on a name the basemap drew itself.
+   *
+   * `queryRenderedFeatures`, and here that is right where `queryVisiblePois` needs the opposite.
+   * That method wants every POI in the loaded tiles; this one wants the single label the pointer
+   * was actually on, which is by definition one that survived styling and label collision.
+   *
+   * Matched on the source *and* the source-layer, not the layer id. Liberty draws POIs from more
+   * than one symbol layer and renames them freely, while the app's own pins live in sources this
+   * file created — so this pair is the only test that means "a basemap POI" and cannot accidentally
+   * catch a search pin.
+   */
+  onBasemapPoiClick(cb: (poi: TilePoi) => void) {
+    if (!this.isAlive()) return () => {};
+    const handler = (e: { point: { x: number; y: number } }) => {
+      if (!this.isAlive()) return;
+      const sourceId = this.basemapVectorSource();
+      if (!sourceId) return;
+      // `MapGeoJSONFeature`, not `GeoJSONFeature`: only the rendered query's result carries the
+      // `source`/`sourceLayer` provenance this hit test is built on.
+      let hits: MapGeoJSONFeature[];
+      try {
+        hits = this.map.queryRenderedFeatures([e.point.x, e.point.y]);
+      } catch {
+        return;
+      }
+      const hit = hits.find((f) => f.source === sourceId && f.sourceLayer === POI_SOURCE_LAYER);
+      const poi = hit && tilePoiFromFeature(hit);
+      if (poi) cb(poi);
+    };
+    this.map.on("click", handler);
+    return () => {
+      if (!this.isAlive()) return;
+      this.map.off("click", handler);
+    };
   }
 
   clearOverlays() {

@@ -23,7 +23,7 @@ import {
 } from "@/lib/searchHistory";
 import { useToast } from "@/lib/toast";
 import { encodePolygon, searchAreaFor, type LatLng } from "@/lib/searchArea";
-import { isTilePlace, placesFromTiles } from "@/lib/tilePlaces";
+import { isTilePlace, placeFromTilePoi, placesFromTiles } from "@/lib/tilePlaces";
 import { SEARCH_COLOURS, searchColourFor } from "@/lib/searchPalette";
 
 /**
@@ -109,9 +109,10 @@ const CATEGORY_LABELS: Record<PlaceCategory, string> = {
   cafe: "Cafés",
   restaurant: "Food",
   bar: "Bars",
-  museum: "Museums",
+  sights: "Sights",
   park: "Parks",
   shop: "Shops",
+  hotel: "Hotels",
   place: "Places",
 };
 
@@ -225,9 +226,22 @@ export default function MapSearchPanel({
    * last answer is simply not rendered while there is no question, and typing the query back in
    * shows it again with no refetch.
    */
+  /**
+   * The one place the traveler opened by clicking the basemap, when there is no question on screen.
+   *
+   * A click **is** a question — about that place, specifically — but it sets no query and presses no
+   * chip, so `hasQuery` stays false and the gate below would throw the answer away. Held as an id
+   * rather than a place so it stays a view of `places`: the row, the pin, the day picker and
+   * `addedDays` all key off the same object either way.
+   */
+  const [clickedId, setClickedId] = useState<string | null>(null);
+
   // Memoised so the `[]` branch is a stable reference. Without it the pin effect below re-runs on
   // every render while the query is empty, pushing an identical empty collection at the renderer.
-  const visiblePlaces = useMemo(() => (hasQuery ? places : []), [hasQuery, places]);
+  const visiblePlaces = useMemo(
+    () => (hasQuery ? places : places.filter((p) => p.id === clickedId)),
+    [hasQuery, places, clickedId]
+  );
 
 
   // The shell watches this to stand the zoom / 2D / tilt stack down. Reported from an effect on the
@@ -302,6 +316,39 @@ export default function MapSearchPanel({
       unsubscribe();
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
+  }, [rendererRef, ready, isOpen]);
+
+  /**
+   * **Clicking a name the basemap drew opens its card.**
+   *
+   * The map is already a list of places — Liberty labels thousands of them — and until now pointing
+   * at one did nothing unless a search had happened to return it. This closes that: the thing the
+   * traveller can see is the thing they can act on.
+   *
+   * The clicked place is folded into `places` rather than shown some other way. `openPlace` is
+   * derived from the result list, `addedDays` and `tileFacts` key off the id, and the day picker
+   * reads the same row — so a clicked place that lived anywhere else would need every one of those
+   * paths duplicated. `placeFromTilePoi` mints the same id `placesFromTiles` would, which is what
+   * makes the fold idempotent: click a pin that *is* already in the list and it matches by id
+   * rather than arriving twice.
+   *
+   * Prepended, because a place somebody just pointed at outranks the nearest-first ordering — it is
+   * the one row they are looking for.
+   */
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer?.isAlive() || !isOpen) return;
+    return renderer.onBasemapPoiClick((poi) => {
+      const place = placeFromTilePoi(poi);
+      setPlaces((current) =>
+        current.some((p) => p.id === place.id) ? current : [place, ...current]
+      );
+      setSelectedId(place.id);
+      setClickedId(place.id);
+      // A click is an answer, so the panel must stop saying it found nothing — the click can land
+      // while the list is empty, throttled, or mid-search.
+      setState("idle");
+    });
   }, [rendererRef, ready, isOpen]);
 
   /** The place the card is about, derived rather than stored — see the effect above. */
@@ -465,6 +512,7 @@ export default function MapSearchPanel({
     });
     if (fromTiles.length) {
       setPlaces(fromTiles);
+      setClickedId(null);
       // Honest: OpenMapTiles builds these tiles from OpenStreetMap, so the attribution the panel
       // already prints is the right one and does not need a third case.
       setProvider("osm");
@@ -489,6 +537,7 @@ export default function MapSearchPanel({
       if (generation !== searchGenerationRef.current) return;
       const found = data.places ?? [];
       setPlaces(found);
+      setClickedId(null);
       setProvider(data.provider ?? "osm");
       setSelectedId(null);
       setState(data.available === false ? "throttled" : found.length ? "idle" : "empty");

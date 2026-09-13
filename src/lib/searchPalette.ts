@@ -10,9 +10,11 @@ import type { PlaceCategory } from "./placeSearch";
  * 1. **Against the days.** The trip's own routes and stops cycle five `--route-neon-*` colours. A
  *    search pin that lands near one of those reads as "this is already in the plan", which is the
  *    single most misleading thing this layer could say.
- * 2. **Against each other.** Six categories plus free text is seven simultaneous colours, which is
- *    at the top of what anybody can hold — so the separation between them has to be real rather
- *    than nominal.
+ * 2. **Against each other.** Seven categories plus free text is eight simultaneous colours, which
+ *    is past what anybody can hold as a legend — so the separation has to be real rather than
+ *    nominal, and the chips carry a text label beside the swatch precisely because the colour
+ *    alone can no longer be the whole answer. Treat eight as the ceiling: the search that placed
+ *    `hotel` is recorded on it below, and it did not leave much behind.
  *
  * Both are **asserted in `searchPalette.test.mjs`** against a perceptual distance in OKLab, not
  * eyeballed and not argued from hue numbers. Hue alone is a bad guide here: the day palette is
@@ -64,8 +66,28 @@ export const SEARCH_COLOURS: Record<PlaceCategory, string> = {
   cafe: "#ff9f1a", // amber
   shop: "#ffe14d", // yellow
   park: "#35e06a", // green
-  museum: "#19f0d8", // turquoise
+  sights: "#19f0d8", // turquoise
   bar: "#ff45d0", // magenta
+  /**
+   * Violet, and the last colour this palette has room for.
+   *
+   * Searched rather than picked, and the search had to be run twice — both failures are worth
+   * keeping, because each is a way of satisfying a test while shipping something unreadable.
+   *
+   * 1. **Separation alone is not enough.** Scored on `MIN_COLOUR_DISTANCE` only, 5,213 colours pass
+   *    and the widest-margin winners are dark navies (`#0000b3`, margin 0.289) — which clear every
+   *    assertion in `searchPalette.test.mjs` and vanish as a 6px dot on the slated basemap. That is
+   *    what `MIN_PIN_LIGHTNESS`/`MIN_PIN_CHROMA` now exist to catch.
+   * 2. **Maximum margin is not the goal either.** Under the strict floors, 2,744 survive and the
+   *    widest is `#a6af1d` at 0.141 — an olive, which is to say a darker `shop`. OKLab distance
+   *    cannot see that two colours are the same *hue family*, and two 6px dots a few pixels apart
+   *    can. This gives up 0.004 of margin (0.137) for a hue nothing else here uses, and for L 0.714
+   *    against the floor's 0.654 rather than scraping it.
+   *
+   * The note above about blue survives both searches: exactly one candidate exists in 200–219°
+   * (`#148aff`, margin 0.124, barely clearing). Don't reopen that band.
+   */
+  hotel: "#c67aff",
   place: "#f1f5f9", // free text — the one near-neutral, see above
 };
 
@@ -122,3 +144,13 @@ export function colourDistance(a: string, b: string): number {
  * swatches side by side, so the threshold is far above a just-noticeable difference.
  */
 export const MIN_COLOUR_DISTANCE = 0.12;
+
+/**
+ * The legibility floor, in OKLab lightness and chroma.
+ *
+ * Read off the six colours that were already here and known to work, not chosen: every category pin
+ * but `place` sits at or above these. They exist because distance alone lets a dark navy through —
+ * see the note on `hotel`. `place` is exempt by design; it is the near-neutral.
+ */
+export const MIN_PIN_LIGHTNESS = 0.654;
+export const MIN_PIN_CHROMA = 0.151;

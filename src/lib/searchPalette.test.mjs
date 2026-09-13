@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   DAY_COLOURS_HEX,
   MIN_COLOUR_DISTANCE,
+  MIN_PIN_CHROMA,
+  MIN_PIN_LIGHTNESS,
   SEARCH_COLOURS,
   colourDistance,
   oklab,
@@ -38,6 +40,28 @@ test("no two search colours can be mistaken for each other", () => {
   assert.deepEqual(failures, [], `search colours collide:\n  ${failures.join("\n  ")}`);
 });
 
+/**
+ * The floor that separation alone does not give you.
+ *
+ * `MIN_COLOUR_DISTANCE` is a *distance*, so a dark navy can sit far from every day colour and every
+ * other pin and still be unreadable as a 6px dot on the slated basemap — measured while placing
+ * `hotel`: scored on separation alone the best candidate in the whole gamut was `#0000b3`. These
+ * bounds are read off the colours that were already here and known to work, so the assertion is
+ * "as legible as the set you are joining" rather than a number somebody liked.
+ */
+test("every category colour is as bright and as vivid as the set it joins", () => {
+  const failures = [];
+  for (const c of PLACE_CATEGORIES) {
+    const [L, a, b] = oklab(SEARCH_COLOURS[c]);
+    const chroma = Math.hypot(a, b);
+    if (L < MIN_PIN_LIGHTNESS) failures.push(`${c} too dark: L ${L.toFixed(3)}`);
+    if (chroma < MIN_PIN_CHROMA) failures.push(`${c} too washed out: C ${chroma.toFixed(3)}`);
+  }
+  // `place` is deliberately exempt — it is the near-neutral that says "you typed this", and its
+  // chroma of 0.007 is the whole point. See the note on it in `SEARCH_COLOURS`.
+  assert.deepEqual(failures, [], `unreadable on a dark basemap:\n  ${failures.join("\n  ")}`);
+});
+
 // --- completeness ----------------------------------------------------------------------------------
 
 test("every category the picker offers has a colour", () => {
@@ -66,7 +90,7 @@ test("every colour is a full six-digit hex, which the paint expression requires"
 
 test("a known category resolves to its own colour", () => {
   assert.equal(searchColourFor("cafe"), SEARCH_COLOURS.cafe);
-  assert.equal(searchColourFor("museum"), SEARCH_COLOURS.museum);
+  assert.equal(searchColourFor("sights"), SEARCH_COLOURS.sights);
 });
 
 test("anything a provider invents falls back to free text rather than to undefined", () => {
