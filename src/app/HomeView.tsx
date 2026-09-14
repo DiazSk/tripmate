@@ -34,7 +34,7 @@ import ScrollStory from "@/components/blue-hour/ScrollStory";
 import type { PlanPrefill } from "@/components/blue-hour/planExamples";
 import DockedPanel from "@/components/DockedPanel";
 import { useStoryControls } from "@/lib/storyMode";
-import { PauseIcon, PlayIcon } from "@/components/icons";
+import { PlayIcon } from "@/components/icons";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
@@ -2494,32 +2494,23 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
             // Not offered mid-run: the film narrates a finished day, and a day that is still
             // arriving has neither a script to write from nor a camera to spare — the route
             // replay owns it until the last stop lands.
-            step === "result" && !streamingPlan && itinerary?.days.length
-              ? story.active
-                ? {
-                    label: story.phase === "playing" ? "Pause the story" : "Resume the story",
-                    onClick: story.togglePlay,
-                    icon:
-                      story.phase === "playing" ? (
-                        <PauseIcon className="h-4 w-4" />
-                      ) : (
-                        <PlayIcon className="h-4 w-4" />
-                      ),
-                  }
-                : {
-                    label: `Play day ${activeDayIndex + 1} as a story`,
-                    onClick: () =>
-                      itinerary &&
-                      story.start({
-                        itinerary,
-                        dayIndex: activeDayIndex,
-                        destination,
-                        // No trip id: the pre-save view's `trip` prop is the `"preview"`
-                        // placeholder, so its scripts are cached in the browser for the session
-                        // and not against a row.
-                      }),
-                    icon: <PlayIcon className="h-4 w-4" />,
-                  }
+            // And gone once one starts: the button leaves for `StoryStage`'s transport row rather
+            // than being mirrored in two places — see the note there.
+            step === "result" && !streamingPlan && itinerary?.days.length && !story.active
+              ? {
+                  label: `Play day ${activeDayIndex + 1} as a story`,
+                  onClick: () =>
+                    itinerary &&
+                    story.start({
+                      itinerary,
+                      dayIndex: activeDayIndex,
+                      destination,
+                      // No trip id: the pre-save view's `trip` prop is the `"preview"`
+                      // placeholder, so its scripts are cached in the browser for the session
+                      // and not against a row.
+                    }),
+                  icon: <PlayIcon className="h-4 w-4" />,
+                }
               : undefined
           }
           wide={!!focus.target}

@@ -165,8 +165,14 @@ script and the matching line lights up. `src/lib/storyMode.tsx` is the controlle
 the only thing that draws it, both mounted in `AppShell` beside the map chrome.
 
 **The plan panel stays; it shuts to its capsule.** That single clean line — photo, destination,
-length, day in focus — *is* the film's header, and its one action slot becomes the play/pause. So
-`StoryStage` deliberately repeats none of it and docks directly beneath, its geometry copied from
+length, day in focus — *is* the film's header. Its action slot carries Play only while there is no
+film: the moment one starts, the button **leaves** for `StoryStage`'s transport row, between
+Previous and Next, and the capsule keeps only the trip. It travels rather than teleports —
+`src/lib/controlHandoff.ts` hands the capsule's rect to the stage, which flies from it with
+`Element.animate`. That hand-off is deliberately one-way (the capsule is clipped by two
+`overflow-hidden` ancestors, so a return flight would run behind them), which is why it is not
+Framer's symmetric `layoutId`. `StoryStage` otherwise repeats none of the capsule and docks
+directly beneath, its geometry copied from
 `DockedPanel`'s collapsed branch (same insets, same `sm:w-96`/`max-w-[520px]`, offset by the
 capsule's `h-14` plus a gap) so the two read as one stack in the column the plan already owned. An
 earlier revision hid the whole panel and floated the narration bottom-centre over the map; that put
@@ -196,6 +202,27 @@ read as a slideshow. `tourFlightSeconds` puts the distance in the *flight* rathe
 `prefers-reduced-motion` drops the flight to zero while the beat keeps its length. All of that is
 `tourPacing.ts`, written for the Play tour this replaced; `TOUR_HOLD_MS` is the only part that does
 not transfer, because a film already has a hold — the sentence.
+
+**On Cesium the film's own camera is the cost, and it is not the panel.** Measured: a whole film on
+MapLibre drops **0 frames over 32ms**; the same film on Cesium drops 20-34 per window with 100-280ms
+main-thread stalls, and `display: none` on the entire narration panel while the camera keeps flying
+changes that by nothing. Six beat advances blocked the main thread for **2,157ms in 4 seconds**;
+running on over ground already covered dropped it to **0**. It is tile decode — `LOD_TIERS` in
+`GlobeBackground` sets `maximumScreenSpaceError` to 8 below 2,000m (twice Cesium's default, for
+legibility) and `flyToStoryStop` dives to 1200m at every stop, so each beat is a fresh high-detail
+burst. Don't go looking for it in the DOM.
+
+**So the film's dive runs at Cesium's own default and the hold gets the sharpened ceiling back.**
+`inStoryFlight()` in `mapCamera` is a `performance.now()` deadline set by `flyToStoryStop`, read by
+`installLodController` on the frame loop it already runs. Measured A/B, same trip, same day, reload
+before each, six beat advances: **3 and 11 frames over 32ms with it, against 84 and 30 without.** The
+arrival is untouched — only the ground going past is cheaper. **The deadline expires ~150ms *before*
+the flight does, and that is load-bearing**: under `requestRenderMode` frames stop when the camera
+does, so a deadline set to the full length would come due on a frame that never arrives and the stop
+you came to look at would never sharpen. Second and later passes over the same ground are free on
+both sides — only the first costs anything, which is why any measurement here has to reload first.
+What the chrome can do on top — and now does — is animate on the compositor so it rides through the
+remaining stalls instead of freezing with them.
 
 **The film's camera is `flyToStoryStop`, not `flyToPlace`.** `flyToPlace` pulls back to
 `STOP_CONTEXT_RADIUS_M` and refuses to come nearer than `STOP_MIN_RANGE_M` (3.5km, ~zoom 14.5),
