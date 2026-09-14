@@ -101,6 +101,9 @@ export interface Summary {
   thumbnail?: { source?: string };
   originalimage?: { source?: string };
   extract?: string;
+  /** Present only on articles about somewhere on Earth. `place-photo/route.ts` uses its
+   *  presence as the "is this a place" test — see the note there. */
+  coordinates?: { lat?: number; lon?: number };
 }
 
 /** The one place that calls Wikipedia's summary endpoint. Previously duplicated in
