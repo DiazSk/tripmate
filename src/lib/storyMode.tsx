@@ -118,7 +118,7 @@ interface StoryControls {
   togglePlay: () => void;
 }
 
-interface StoryPlayback {
+export interface StoryPlayback {
   request: StoryRequest | null;
   phase: StoryPhase;
   script: StoryScript | null;

@@ -363,6 +363,26 @@ const PLACE_HEIGHT_M = 600;
  */
 export const STORY_RANGE_M = 1200;
 export const STORY_PITCH_DEG = -30;
+
+/**
+ * When the film's current dive stops being worth full detail, as a `performance.now()` deadline.
+ *
+ * A deadline rather than a boolean with a timer because the only thing that reads it is Cesium's
+ * `preRender` loop (`installLodController` in `GlobeBackground`), which already runs every frame —
+ * so there is nothing to clear and nothing to leak.
+ *
+ * **It expires a beat before the flight does, and that is not a rounding error.** Cesium runs in
+ * `requestRenderMode`: frames happen while the camera is moving and then stop. A deadline set to
+ * the full flight length would come due on the frame *after* the last one, which never arrives, so
+ * the relaxed ceiling would stay in force through the entire hold and the stop you actually came to
+ * look at would never sharpen. Ending inside the flight's own ease-out puts the restore on a frame
+ * that is still being drawn — and the last 150ms is where the camera has all but stopped, which is
+ * exactly when the detail is wanted back.
+ */
+let storyFlightDetailUntil = 0;
+const STORY_FLIGHT_TAIL_S = 0.15;
+/** True while the film is mid-dive and the ground is rushing past rather than being read. */
+export const inStoryFlight = () => performance.now() < storyFlightDetailUntil;
 /**
  * The hover peek is a *relative* zoom, not a destination.
  *
@@ -1402,8 +1422,22 @@ export function MapCameraProvider({
    *  the two things the retired Play tour got right and a narrated walk through a day wants for
    *  exactly the same reason. */
   const flyToStoryStop = useCallback(
-    (lat: number, lng: number, motion: { headingRad?: number; durationS?: number } = {}) =>
-      flyTo(
+    (lat: number, lng: number, motion: { headingRad?: number; durationS?: number } = {}) => {
+      // Measured before this existed: six beat advances on Cesium blocked the main thread for
+      // 2,157ms in 4 seconds, all of it the photorealistic tileset decoding new ground at the
+      // `maximumScreenSpaceError: 8` this app asks for below 2,000m — twice Cesium's own default,
+      // and the film dives to 1200m at every single stop. Letting the *flight* run at the default
+      // instead is the one lever above the canvas: it costs detail on ground that is a blur going
+      // past anyway, and gives the arrival back untouched.
+      //
+      // Only Cesium reads this. The fly-along that MapLibre uses for travel beats never calls this
+      // function, and MapLibre's vector tiles were measured at zero dropped frames for a whole
+      // film, so there is nothing there to relax.
+      //
+      // 2.5 is `CesiumRenderer.flyToPoint`'s own default when a beat passes no duration.
+      storyFlightDetailUntil =
+        performance.now() + ((motion.durationS ?? 2.5) - STORY_FLIGHT_TAIL_S) * 1000;
+      return flyTo(
         lat,
         lng,
         STORY_RANGE_M,
@@ -1414,7 +1448,8 @@ export function MapCameraProvider({
         // and none of `flyToPlace`'s neighbourhood framing — see this function's note on the
         // context.
         motion
-      ),
+      );
+    },
     [flyTo]
   );
 

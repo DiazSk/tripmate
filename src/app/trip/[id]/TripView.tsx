@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
 import { useStoryControls } from "@/lib/storyMode";
-import { PauseIcon, PlayIcon } from "@/components/icons";
+import { PlayIcon } from "@/components/icons";
 import FocusEditMode from "@/components/FocusEditMode";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
@@ -284,35 +284,26 @@ export default function TripView({
       <DockedPanel
         collapsible
         // The panel stays on screen through the film, shut to its capsule — that single clean line
-        // is the film's own header (destination, length, day) and its play/pause button, and
-        // `StoryStage` docks directly beneath it. Its body is already `display: none` while
-        // collapsed, so there is nothing to hide.
+        // is the film's own header (destination, length, day), and `StoryStage` docks directly
+        // beneath it. Its body is already `display: none` while collapsed, so there is nothing to
+        // hide.
         capsuleAction={
-          itinerary?.days.length
-            ? story.active
-              ? {
-                  label: story.phase === "playing" ? "Pause the story" : "Resume the story",
-                  onClick: story.togglePlay,
-                  icon:
-                    story.phase === "playing" ? (
-                      <PauseIcon className="h-4 w-4" />
-                    ) : (
-                      <PlayIcon className="h-4 w-4" />
-                    ),
-                }
-              : {
-                  label: `Play day ${activeDayIndex + 1} as a story`,
-                  onClick: () =>
-                    trip &&
-                    itinerary &&
-                    story.start({
-                      itinerary,
-                      dayIndex: activeDayIndex,
-                      destination: trip.destination,
-                      tripId: trip.id,
-                    }),
-                  icon: <PlayIcon className="h-4 w-4" />,
-                }
+          // Gone while the film runs: the button does not sit here and there, it *leaves* — see
+          // the note on `StoryStage`'s own copy of it, which is the one it flies into.
+          itinerary?.days.length && !story.active
+            ? {
+                label: `Play day ${activeDayIndex + 1} as a story`,
+                onClick: () =>
+                  trip &&
+                  itinerary &&
+                  story.start({
+                    itinerary,
+                    dayIndex: activeDayIndex,
+                    destination: trip.destination,
+                    tripId: trip.id,
+                  }),
+                icon: <PlayIcon className="h-4 w-4" />,
+              }
             : undefined
         }
         wide={!!focus.target}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useMapCamera } from "@/lib/mapCamera";
+import { inStoryFlight, useMapCamera } from "@/lib/mapCamera";
 import { CesiumRenderer } from "@/lib/cesiumRenderer";
 import { dayPhase, DayPhase } from "@/lib/mapRoute";
 import "cesium/Build/Cesium/Widgets/widgets.css";
@@ -30,6 +30,16 @@ const LOD_TIERS = [
   [50_000, 12, true],
   [Infinity, 16, true],
 ] as const;
+
+/**
+ * The ceiling while story mode's camera is mid-dive: Cesium's own default, i.e. the sharpening
+ * above is simply not bought on ground nobody is reading.
+ *
+ * Never a *lowering* — `Math.max` below — so a film that starts from the city overview keeps that
+ * tier's cheaper 16 rather than being handed a number that happens to match. See `inStoryFlight`
+ * in `mapCamera` for why this is worth having and why its deadline expires early.
+ */
+const STORY_FLIGHT_SSE = 16;
 
 /** Ceiling on the device-pixel ratio the scene renders at — see the `resolutionScale` comment
  *  below for the measurement behind 1.5. */
@@ -64,13 +74,17 @@ function installLodController(
   viewer: import("cesium").Viewer,
   tileset: import("cesium").Cesium3DTileset
 ) {
-  let applied = -1;
+  // Keyed on what is actually applied rather than on the tier index, because the tier is no longer
+  // the only input: a film crossing a tier boundary mid-dive has to re-decide, and a film ending
+  // has to re-decide without the tier having moved at all.
+  let applied = "";
   viewer.scene.preRender.addEventListener(() => {
     const height = viewer.camera.positionCartographic.height;
-    const tier = LOD_TIERS.findIndex(([ceiling]) => height < ceiling);
-    if (tier === applied) return;
-    applied = tier;
-    const [, sse, dynamic] = LOD_TIERS[tier];
+    const [, tierSse, dynamic] = LOD_TIERS[LOD_TIERS.findIndex(([ceiling]) => height < ceiling)];
+    const sse = inStoryFlight() ? Math.max(tierSse, STORY_FLIGHT_SSE) : tierSse;
+    const key = `${sse}/${dynamic}`;
+    if (key === applied) return;
+    applied = key;
     tileset.maximumScreenSpaceError = sse;
     tileset.dynamicScreenSpaceError = dynamic;
   });

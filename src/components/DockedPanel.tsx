@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Maximize2 } from "lucide-react";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
+import { markHandoffOrigin } from "@/lib/controlHandoff";
 
 /**
  * What the capsule says about the trip while the panel is shut.
@@ -316,7 +317,15 @@ function Capsule({
         // It clears the 56px capsule with 6px either side, the same gutter the navbar keeps.
         <button
           type="button"
-          onClick={action.onClick}
+          // Record where this control was standing before handing over, so whatever replaces it
+          // elsewhere on screen can fly in from here. Generic on purpose: the capsule knows only
+          // that its one action is about to be somebody else's problem. Story mode's Play uses it
+          // to leave for `StoryStage`'s transport row; an action with no successor writes a rect
+          // nobody ever claims, which expires on its own.
+          onClick={(event) => {
+            markHandoffOrigin(event.currentTarget);
+            action.onClick();
+          }}
           aria-label={action.label}
           className="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-accent transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
         >
