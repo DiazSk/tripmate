@@ -245,8 +245,13 @@ the map would keep the film's centred, panel-less framing.
 **Two narrators behind one seam.** Everything above `src/lib/storyVoice.ts` calls `speakOn(engine,
 …)` and knows nothing else — the same shape `placeSearch.ts` puts in front of Google Places and
 Overpass. `browser` is the platform's `speechSynthesis`: free, instant, offline, and it sounds like
-an OS voice because it is one. `natural` is **Kokoro-82M in the browser** (`kokoroVoice.ts`), an
-opt-in toggle that costs an 88MB model download once. Both are free — no key, no quota, no per-use
+an OS voice because it is one. `natural` is **Kokoro-82M in the browser** (`kokoroVoice.ts`), and it
+is simply the voice — it starts downloading when a film does. It was an opt-in toggle; that went
+because "the one that always works" is what a *fallback* is for, and there is one at every level
+(the platform voice narrates the whole download, a browser that cannot run the model never leaves
+it, and a failed sentence is handed back mid-beat), so the preference only ever offered somebody
+the worse narrator. The 88-326MB is disclosed with a live percentage in the stage; that line is not
+decoration, it is the only thing saying where the bytes went. Both are free — no key, no quota, no per-use
 cost. A per-sentence failure on the natural voice (an error, or a device slower than
 `SYNTHESIS_DEADLINE_MS`) hands *that same beat* to the platform voice mid-beat, so the caller gets
 one `onEnd` either way and never learns it happened.
