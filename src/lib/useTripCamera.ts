@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMapCamera } from "./mapCamera";
 import { prefersReducedMotion } from "./reducedMotion";
 import { geocodeDestination } from "./weather";
@@ -173,6 +173,9 @@ export function useTripCamera(destination: string, tripId?: string) {
     [flyToDestination, showHighways, showCityContext]
   );
 
+  /** Monotonic id of the newest `/api/place-detail` lookup — see the note inside `selectStop`. */
+  const detailRequestRef = useRef(0);
+
   const selectStop = useCallback(
     async (stop: Stop) => {
       setSelectedStop(stop);
@@ -201,6 +204,23 @@ export function useTripCamera(destination: string, tripId?: string) {
       setDetail(null);
       setDetailError(null);
       setDetailLoading(true);
+      /**
+       * Which lookup this is, so a slower earlier one cannot answer for a later place.
+       *
+       * The call takes ~6s and nothing was cancelling it, so opening a stop, going back and
+       * opening another inside that window let the *first* response land last and write itself
+       * into the panel — the Markthalle's guidebook entry under the Kunsthaus's heading, with the
+       * right one arriving seconds later to replace it. Every stale write is guarded, not just the
+       * success one: an abandoned request that fails would otherwise put its error on the place
+       * you are actually reading, and its `finally` would clear a spinner that belongs to a
+       * request still in flight.
+       *
+       * A counter rather than an `AbortController`: aborting does not stop the model call the
+       * server has already started, and it throws into the `catch` below, so the guard would be
+       * needed anyway to keep that from surfacing as an error. One ref does the whole job.
+       */
+      const request = ++detailRequestRef.current;
+      const current = () => detailRequestRef.current === request;
       try {
         const res = await fetch("/api/place-detail", {
           method: "POST",
@@ -215,15 +235,16 @@ export function useTripCamera(destination: string, tripId?: string) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
-        setDetail(data.detail);
+        if (current()) setDetail(data.detail);
       } catch (e) {
-        setDetailError(
-          e instanceof Error && e.message
-            ? e.message
-            : `We couldn't look up ${stop.name}. Reopening it will try again.`
-        );
+        if (current())
+          setDetailError(
+            e instanceof Error && e.message
+              ? e.message
+              : `We couldn't look up ${stop.name}. Reopening it will try again.`
+          );
       } finally {
-        setDetailLoading(false);
+        if (current()) setDetailLoading(false);
       }
     },
     [flyToPlace, setActiveStop, destination, tripId]
