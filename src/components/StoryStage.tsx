@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AudioLines,
@@ -19,6 +19,7 @@ import { PauseIcon, PlayIcon } from "@/components/icons";
 import { beatOpacity, type StoryBeat } from "@/lib/storyScript";
 import { takeHandoffOrigin } from "@/lib/controlHandoff";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
+import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { useStoryPlayback, type StoryPlayback } from "@/lib/storyMode";
 import { devLabel } from "@/lib/devInspector";
 import { useRouteProfile } from "@/lib/dayRoutes";
@@ -366,6 +367,8 @@ function StoryStageBody({
           />
         </div>
 
+        <BeatPlate beats={beats} beatIndex={beatIndex} day={day} />
+
         {/* The end of the day, and the only place the film offers to go anywhere. */}
         {phase === "ended" && (
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -453,6 +456,121 @@ function StoryStageBody({
         {script ? beats[beatIndex]?.text : `Writing the story of day ${request.dayIndex + 1}`}
       </div>
     </motion.div>
+  );
+}
+
+/**
+ * The place the film is looking at, as a photograph.
+ *
+ * **Why one picture and not a carousel.** The ask was 3-4 per stop. There is no free source for
+ * the second one, and the repo had already measured that: `placePhotos.ts` records 2 of 8 Siena
+ * names resolving and 0 of 4 museums, and 0%/0%/1% `wikidata`/`wikimedia_commons`/`image` across
+ * 60 named cafés. `/api/place-photo` returns Wikipedia's single lead image by design — `imageUrl`
+ * and `thumbnailUrl` are two sizes of it, not two pictures. The two obvious ways to get more were
+ * tested and both fail on the material rather than on the plumbing: an article's own image list is
+ * alphabetical and uncurated (Jardin du Luxembourg's first four are a photo, an Edelfelt painting,
+ * a boat basin and a postcard; Capitol Hill's include a *map*, inside a film whose whole premise is
+ * a map), and Commons geosearch at a stop's coordinates returns whatever was photographed nearby —
+ * for "Lunch around Saint-Germain-des-Prés", four portraits of strangers.
+ *
+ * **And why the pictures cannot pace the film.** The other half of the ask was to hold a stop until
+ * its pictures had played. That is the fixed interval `useStopTour` was deleted for: the beat is the
+ * clock, and a second one means the sentence and the slideshow disagree about when to leave. So this
+ * has no duration of its own — it shows whatever the beat being spoken is about, and changes when
+ * the beat does.
+ *
+ * **Outside the lyric column, deliberately.** The obvious home is `BeatRow`'s existing `StopAvatar`,
+ * grown. It cannot go there: the column is positioned by a *measured*
+ * `translateY(-row.offsetTop)` computed once per beat, and an image inside a row changes every
+ * following row's `offsetTop` asynchronously as it decodes — after that measurement has run. The
+ * ramp would drift with no error anywhere.
+ *
+ * **It grows; it is not reserved. That is the correction the built version forced.** The first cut
+ * held a fixed 112px band open at the top of the card, on the lyric window's own reasoning that the
+ * panel must not jump between beats. Then coverage was measured across a 20-stop Paris trip and it
+ * is **3 in 20**, not the half that was assumed — Musée d'Orsay, Sacré-Cœur and Luxembourg Gardens
+ * all miss, the last because `resolveTitle`'s containment check will not accept "Jardin du
+ * Luxembourg" for it. A band reserved for a picture that arrives one beat in seven is a hole, which
+ * is the exact thing `placePhotos.ts` says not to build, and on screen it read as an image that had
+ * failed to load.
+ *
+ * So the band opens only when there is something in it, and it sits **below the lyric window** so
+ * that opening moves nothing anyone is using: the transport row, the play button's measured slot
+ * and the narration all hold their positions, and only the voice toggle and the keyboard hint below
+ * are pushed down. A beat with no picture is then exactly the panel that shipped before this
+ * existed — the feature costs nothing when it has nothing to say.
+ *
+ * `sm:` and up. On a 667px phone the panel already leaves ~118px of map and the `ended` state
+ * spends 52 of it, and there the map is the scarcer thing. Same line the full map-control set
+ * already draws.
+ */
+/** `mt-3` (12px) plus the plate's own `h-28` (112px). Written out because `height: auto` cannot
+ *  be interpolated, so the open state has to state a number. */
+const PLATE_BOX_PX = 124;
+
+function BeatPlate({
+  beats,
+  beatIndex,
+  day,
+}: {
+  beats: StoryBeat[];
+  beatIndex: number;
+  day: DayPlan;
+}) {
+  // Keyed on `kind`, the same rule `BeatRow` follows and for the same reason — `stopIndex` being
+  // present is a second, quieter definition of a stop beat that would eventually disagree.
+  const stopOf = (beat?: StoryBeat) =>
+    beat?.kind === "stop" && beat.stopIndex !== undefined ? day.stops[beat.stopIndex] : undefined;
+
+  /**
+   * `"thumb"`, not `"full"`, and that is the whole prefetch strategy.
+   *
+   * This started as `"full"` with an `Image()` warm one stop ahead, on the reasoning that a decode
+   * should not land on the frame the camera is diving on. Measured, the originals are 989x1961 for
+   * Sainte-Chapelle and **3840x1613** for the Louvre — six megapixels, decoded to be drawn 350px
+   * wide. The thumbnail is 330px, which is the size of this box, and every `BeatRow` below has
+   * *already* fetched and decoded exactly that image for its own `StopAvatar` the moment the stage
+   * mounted. So there is nothing left to warm: the picture is in the browser before the film starts.
+   *
+   * (Neither the warm nor the full original was measurable against Cesium's noise on this screen —
+   * six beat advances came out at 44 dropped frames with the plate and 44 with it deleted. It is
+   * removed for being obviously wasteful, not because it showed up.)
+   */
+  const photo = usePlacePhoto(stopOf(beats[beatIndex])?.name ?? "");
+  const [failed, setFailed] = useState<string | null>(null);
+  const shown = photo && photo !== failed ? photo : null;
+
+  return (
+    // Decorative: the narration names the place, and the beat row above it names it again in text.
+    // A screen reader gets nothing new from this and an `alt` would be a third repetition.
+    //
+    // `height` is a layout property and this is the one place in the film's chrome that animates
+    // one — deliberately, and it is affordable where the progress bar's `width` was not. That ran
+    // for 500ms on *every* beat; this runs on the handful that have a picture, and it is a real
+    // reflow either way because the panel genuinely changes size. An explicit 124px rather than
+    // `auto` so the value is interpolable at all.
+    <div
+      aria-hidden="true"
+      className="hidden overflow-hidden transition-[height,opacity] duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] sm:block"
+      style={{ height: shown ? PLATE_BOX_PX : 0, opacity: shown ? 1 : 0 }}
+    >
+      <div className="relative mt-3 h-28 overflow-hidden rounded-lg bg-white/5">
+        {shown && (
+          // Keyed on the URL so each stop's picture is its own element and arrives on `value-in` —
+          // the same 260ms settle `StopAvatar` uses when its own lookup lands, so the two
+          // photographs of one place appear the same way.
+          //
+          // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia originals; next/image *throws* on an unconfigured host, which once took the whole of /trip/[id] down
+          <img
+            key={shown}
+            src={shown}
+            alt=""
+            onError={() => setFailed(shown)}
+            className="value-in absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+      </div>
+    </div>
   );
 }
 

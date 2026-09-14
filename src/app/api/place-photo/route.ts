@@ -15,9 +15,29 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await fetchSummary(title);
+    /**
+     * A photograph is only offered for an article about **somewhere on Earth**.
+     *
+     * `resolveTitle`'s containment check stops most nonsense, and it is not enough: it asks
+     * whether the article's title appears in the stop name, so a stop called "Taxi to departure"
+     * legitimately matches the article **Taxi** and came back with a stock photograph of a cab,
+     * and "Galeries Lafayette" matched the retail chain and came back with its **logo**. Both
+     * were being drawn as though they were the place. Measured across a 20-stop Paris trip, they
+     * were 2 of the 5 apparent hits.
+     *
+     * `coordinates` is the cheap discriminator and it is exact on the cases that matter: the
+     * concept articles (Taxi, Galeries Lafayette the chain) carry none, while Sainte-Chapelle,
+     * the Louvre and Jardin du Luxembourg all do. It costs no extra request — the summary this
+     * reads was already being fetched.
+     *
+     * The extract is kept either way. It is prose about whatever the traveller named, which is
+     * useful even when the subject is not a location, and the generation loader reads it for
+     * destination facts rather than for places.
+     */
+    const isPlace = !!data.coordinates;
     return NextResponse.json({
-      thumbnailUrl: data.thumbnail?.source ?? null,
-      imageUrl: data.originalimage?.source ?? data.thumbnail?.source ?? null,
+      thumbnailUrl: isPlace ? (data.thumbnail?.source ?? null) : null,
+      imageUrl: isPlace ? (data.originalimage?.source ?? data.thumbnail?.source ?? null) : null,
       // The same summary response the photo comes from already carries a one-paragraph
       // description, so returning it costs nothing — this request was being made either way.
       // The generation loader uses its first sentence as a destination fact.
