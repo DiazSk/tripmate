@@ -255,7 +255,8 @@ export function maxTokensFor(type: ClaudeCallType): number {
     // A dozen beats of at most 55 words each, plus the JSON around them.
     case "story":
       return 8_000;
-    // Four short fields.
+    // Six short fields since pros/cons joined the four — still nowhere near this ceiling, which
+    // exists to bound a runaway rather than to fit the answer.
     case "place-detail":
     case "context":
       return 4_000;

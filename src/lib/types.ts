@@ -95,6 +95,17 @@ export interface PlaceDetail {
   bestTime: string;
   tips: string[];
   duration: string;
+  /**
+   * What is good and what is not, one short bold-able clause each.
+   *
+   * **These are not review summaries and must never be presented as ones.** The reference this was
+   * modelled on prints them under a star rating aggregated from thousands of reviews; there is no
+   * free source for that, and inventing the number would be the lie. What these are is the same
+   * kind of knowledge `tips` and `bestTime` already carry — the model's, offered at the model's
+   * authority. The tab is called "Pros & cons", not "Reviews", for that reason.
+   */
+  pros: string[];
+  cons: string[];
 }
 
 export interface ItineraryPreferences {
@@ -371,6 +382,21 @@ export interface PoiOsmTags {
   /** OSM `wheelchair=yes|limited|no`. Already present in the tags Overpass returns — it was being
    *  discarded, which left `minimize_stairs` as a rule with no fact to act on. */
   wheelchair: "yes" | "limited" | "no" | null;
+  /**
+   * The rest of what the same Overpass response was already carrying.
+   *
+   * The query is `out center tags` — every tag on every matched element — and the mapper kept
+   * three of them. These cost no extra request, which is the same argument `placeSearch.ts` makes
+   * for its own widening. Measured coverage on 60 named Siena cafés: street 90%, phone 52%,
+   * website 14%; `wikidata` is 0% on cafés and 55% on museums, attractions and parks.
+   */
+  address: string | null;
+  website: string | null;
+  phone: string | null;
+  /** Feeds the place gallery: a Q-id is the reliable route to a photograph, and a Commons category
+   *  is the only free route to *several*. */
+  wikidataId: string | null;
+  commonsCategory: string | null;
 }
 
 export interface TravelLeg {

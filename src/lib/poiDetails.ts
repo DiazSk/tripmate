@@ -1,7 +1,7 @@
 import { TTL, cached } from "./fetchCache";
 import { askOverpass } from "./overpass";
 import type { PoiOsmTags } from "./types";
-import { parseWheelchair } from "./osmTags";
+import { parseWheelchair, parseWikidataId, tagValue } from "./osmTags";
 
 /** Longer than the shared default because this batches every POI in a trip into one query and
  *  Overpass queues under load. NOTE the `[timeout:N]` inside the query is an instruction to
@@ -34,7 +34,17 @@ function escapeForOverpassRegex(name: string): string {
  *  matched" — the two mean different things to the caller, and matching nothing is the common
  *  case (OpenTripMap names come from Wikidata and often differ from OSM's). */
 export async function fetchPoiOsmTags(
-  pois: { name: string; lat: number; lon: number }[]
+  pois: { name: string; lat: number; lon: number }[],
+  /**
+   * How long to wait, overriding the batch default.
+   *
+   * The 45s above is sized for a generation run: one query covering every POI in a trip, against a
+   * community mirror that queues under load, where waiting is strictly better than losing the
+   * facts. An *interactive* caller is the opposite trade — `/api/place-gallery` opens on a tap, and
+   * a stop that matches nothing was measured taking **36 seconds** to say so, which is a skeleton
+   * nobody watches to the end. It passes a few seconds and does without.
+   */
+  timeoutMs: number = OVERPASS_TIMEOUT_MS
 ): Promise<Record<string, PoiOsmTags> | null> {
   if (pois.length === 0) return {};
 
@@ -57,15 +67,18 @@ export async function fetchPoiOsmTags(
       .sort()
       .join("|");
 
-  return cached(key, TTL.CHURNING, () => fetchPoiOsmTagsUncached(query));
+  return cached(key, TTL.CHURNING, () => fetchPoiOsmTagsUncached(query, timeoutMs));
 }
 
-async function fetchPoiOsmTagsUncached(query: string): Promise<Record<string, PoiOsmTags> | null> {
+async function fetchPoiOsmTagsUncached(
+  query: string,
+  timeoutMs: number
+): Promise<Record<string, PoiOsmTags> | null> {
   try {
     // `null` from here means no mirror answered, which is exactly this function's own `null`:
     // "the fetch failed", as distinct from `{}` for "asked, matched nothing". The caller needs
     // that difference — see the fail-soft note in CLAUDE.md.
-    const elements = (await askOverpass(query, { timeoutMs: OVERPASS_TIMEOUT_MS })) as
+    const elements = (await askOverpass(query, { timeoutMs })) as
       | OverpassPoiElement[]
       | null;
     if (elements === null) return null;
@@ -75,11 +88,24 @@ async function fetchPoiOsmTagsUncached(query: string): Promise<Record<string, Po
       const name = el.tags?.name;
       if (!name || byName[name]) continue;
       const point = el.center ?? (el.lat !== undefined && el.lon !== undefined ? { lat: el.lat, lon: el.lon } : null);
+      const tags = el.tags;
+      // `addr:place` as well as `addr:street`: a venue on a named square carries the square, and
+      // Heimplatz 1 is an address in exactly the way Bahnhofstrasse 1 is.
+      const street = tagValue(tags, "addr:street", "addr:place");
+      const houseNumber = tagValue(tags, "addr:housenumber");
       byName[name] = {
         openingHours: el.tags?.opening_hours ?? null,
         lat: point?.lat ?? null,
         lon: point?.lon ?? null,
         wheelchair: parseWheelchair(el.tags?.wheelchair),
+        // All five were already in this response and were being dropped on the floor. `tagValue`
+        // rather than a raw read because OSM carries empty strings and lone semicolons, and the
+        // card's rule is that a heading is not drawn over a value that is not there.
+        address: street ? (houseNumber ? `${houseNumber} ${street}` : street) : null,
+        website: tagValue(tags, "website", "contact:website", "url") ?? null,
+        phone: tagValue(tags, "phone", "contact:phone") ?? null,
+        wikidataId: parseWikidataId(tagValue(tags, "wikidata")) ?? null,
+        commonsCategory: tagValue(tags, "wikimedia_commons") ?? null,
       };
     }
     return byName;
