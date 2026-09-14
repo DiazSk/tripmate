@@ -257,7 +257,9 @@ export function buildPlaceDetailPrompt(params: {
   return `Give a compact travel-guide entry for "${params.name}" in ${params.destination} (approx. coordinates ${params.lat}, ${params.lng}).${context}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
-{"history":"1-2 sentence history or significance","bestTime":"short best time of day or season to visit","tips":["practical tip 1","practical tip 2"],"duration":"suggested visit duration, e.g. '1-2 hours'"}`;
+{"history":"1-2 sentence history or significance","bestTime":"short best time of day or season to visit","tips":["practical tip 1","practical tip 2"],"duration":"suggested visit duration, e.g. '1-2 hours'","pros":["Short label: one sentence on what is genuinely good here","..."],"cons":["Short label: one sentence on what is genuinely worse here","..."]}
+
+Two or three entries each for "pros" and "cons". Open each with a two-to-four word label, then a colon, then one sentence — the card renders the label in bold. Cons must be real drawbacks a visitor would want warned about (crowds, cost, a climb, a closure pattern), never a hedge or a compliment in disguise. If a place has no honest drawback worth a sentence, return fewer rather than padding.`;
 }
 
 export function buildRebalancePrompt(params: {

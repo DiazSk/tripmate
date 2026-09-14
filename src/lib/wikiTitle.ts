@@ -104,6 +104,9 @@ export interface Summary {
   /** Present only on articles about somewhere on Earth. `place-photo/route.ts` uses its
    *  presence as the "is this a place" test — see the note there. */
   coordinates?: { lat?: number; lon?: number };
+  /** The article's Wikidata id, e.g. `Q685038`. It is in this response already, which is what
+   *  saves the gallery a whole extra round trip to find one — see `/api/place-gallery`. */
+  wikibase_item?: string;
 }
 
 /** The one place that calls Wikipedia's summary endpoint. Previously duplicated in

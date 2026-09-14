@@ -143,6 +143,20 @@ function PlaceDetailView({ detail }: { detail: PlaceDetail }) {
           ))}
         </ul>
       </div>
+      {/* Guarded, unlike `tips` above: these arrived after this view did, so a trace recorded
+          before then has neither field and would render two headings over nothing. */}
+      {(["pros", "cons"] as const).map((key) =>
+        detail[key]?.length ? (
+          <div key={key}>
+            <span className="font-medium text-stone-900 capitalize">{key}:</span>
+            <ul className="mt-0.5 list-disc space-y-0.5 pl-5">
+              {detail[key].map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null
+      )}
     </div>
   );
 }
