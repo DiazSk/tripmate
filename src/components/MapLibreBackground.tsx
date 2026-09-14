@@ -135,13 +135,24 @@ export default function MapLibreBackground({
   }, []);
 
   /**
-   * How lit the world should be: the clock time of the stop being pointed at, or failing that the
-   * first stop of the day on screen. Identical rule to the Cesium path, and deliberately a CSS
-   * blend sheet rather than a real sun — the tiles are flat-shaded vector art with no lighting
-   * model to drive, so a light would do nothing and a tint does everything.
+   * How lit the world should be: the clock time of the stop being pointed at, and nothing else.
+   *
+   * Deliberately a CSS blend sheet rather than a real sun — the tiles are flat-shaded vector art
+   * with no lighting model to drive, so a light would do nothing and a tint does everything.
+   *
+   * **This used to fall back to `routeStops[0]`, which is not what that index means.** The comment
+   * here called it "the first stop of the day on screen"; `showTripRoute` publishes
+   * `days.flat()`, so index 0 is the first stop of the **trip**, whichever day is focused. On a
+   * trip whose day 1 is an evening arrival — 20:00, `dayPhase` → `night` — every other day was
+   * tinted for 8pm, because `showTripRoute` clears `hoveredIndex` and `activeIndex` on every
+   * rebuild (stale indices into a list whose length changes) and so a day switch always landed on
+   * the fallback. Day 2 opened at 9:30 in the dark.
+   *
+   * Nothing pointed at is now `undefined` is `"day"` is no tint at all, which is what the Cesium
+   * path has always done and what both of this file's comments already claimed this one did.
    */
-  const phaseStop = routeStops[hoveredIndex ?? activeIndex ?? 0];
-  const phase = dayPhase(phaseStop?.time);
+  const pointedAt = hoveredIndex ?? activeIndex;
+  const phase = dayPhase(pointedAt === null ? undefined : routeStops[pointedAt]?.time);
 
   return (
     <div
