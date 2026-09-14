@@ -442,31 +442,18 @@ export function silence(): void {
  *
  * `browser` is the platform's `speechSynthesis` — free, instant, offline, and it sounds like an OS
  * voice. `natural` is Kokoro-82M in the browser (`kokoroVoice.ts`) — genuinely natural, also free,
- * at the cost of an 88MB first-load. The traveller chooses; `browser` is the default because it is
- * the one that always works.
+ * at the cost of an 88MB first-load.
+ *
+ * **Nobody chooses any more.** This was a stored preference behind a toggle in the stage, with
+ * `browser` as the default because it is the one that always works. That framing had it backwards:
+ * "the one that always works" is what a *fallback* is for, and there already is one at every level
+ * — the film narrates in `browser` for the whole download, a browser that cannot run the model
+ * stays on `browser` forever, and a single sentence that errors or misses
+ * `SYNTHESIS_DEADLINE_MS` is handed to `browser` mid-beat. With all of that in place the
+ * preference only ever offered somebody the worse narrator. `storyMode` now asks for the natural
+ * one on every film and lets this seam sort out which actually speaks.
  */
 export type VoiceEngine = "browser" | "natural";
-
-/** Where the choice is remembered. Same convention as `tripmateMapEngine`. */
-export const VOICE_ENGINE_KEY = "tripmateStoryVoice";
-
-export function storedVoiceEngine(): VoiceEngine {
-  if (typeof window === "undefined") return "browser";
-  try {
-    return window.localStorage.getItem(VOICE_ENGINE_KEY) === "natural" ? "natural" : "browser";
-  } catch {
-    // Private browsing in some engines throws on localStorage access rather than returning null.
-    return "browser";
-  }
-}
-
-export function storeVoiceEngine(engine: VoiceEngine): void {
-  try {
-    window.localStorage.setItem(VOICE_ENGINE_KEY, engine);
-  } catch {
-    // A preference that cannot be saved is not worth failing a narration over.
-  }
-}
 
 /**
  * Speak a beat on whichever engine is asked for — the one function everything above this file

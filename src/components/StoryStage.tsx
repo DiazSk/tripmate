@@ -203,10 +203,8 @@ function StoryStageBody({
     phase,
     muted,
     silentPlatform,
-    voiceEngine,
     naturalStatus,
     naturalProgress,
-    setVoiceEngine,
     next,
     prev,
     toggleMute,
@@ -393,43 +391,25 @@ function StoryStageBody({
           </div>
         )}
 
-        {/* The narrator, and the one thing about it worth a control.
+        {/* Things the traveller is owed rather than left to wonder about.
             *
-            * A toggle rather than a picker: there are two engines and the difference between them
-            * is "the good one, which costs a download" — a dropdown would be a menu with two
-            * items, one of which is the answer. It counts the download up rather than spinning,
-            * because a minute of unexplained waiting on a phone reads as broken; and the film
-            * keeps narrating in the platform voice throughout, so the toggle costs nothing to
-            * press mid-story. */}
-        {!silentPlatform && (
-          <button
-            type="button"
-            onClick={() => setVoiceEngine(voiceEngine === "natural" ? "browser" : "natural")}
-            disabled={naturalStatus === "unavailable" && voiceEngine !== "natural"}
-            aria-pressed={voiceEngine === "natural"}
-            className={`mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors disabled:opacity-40 ${
-              voiceEngine === "natural"
-                ? "border-accent/50 bg-accent/15 text-accent"
-                : "border-card-border bg-white/5 text-muted hover:bg-white/10"
-            }`}
-          >
-            <AudioLines className="h-3.5 w-3.5" strokeWidth={2} />
-            {voiceEngine === "natural" && naturalStatus === "loading"
-              ? `Natural voice · ${Math.round(naturalProgress * 100)}%`
-              : "Natural voice"}
-          </button>
-        )}
-
-        {/* Things the traveller is owed rather than left to wonder about. */}
-        {voiceEngine === "natural" && naturalStatus === "loading" && (
-          <p className="mt-1.5 text-[11px] text-muted/80">
-            Downloading a better narrator — 88 MB, kept for next time; 326 MB on a GPU, which is
-            too big for the browser to keep, so it comes down each session. The story keeps playing
-            meanwhile.
+            * There was a toggle here, and the good voice is the only voice now — so what was the
+            * control's job falls to this line. It keeps the **percentage**, which the toggle
+            * carried for a documented reason: a minute of unexplained waiting on a phone reads as
+            * broken. It matters more here than it did there, because nobody pressed anything to
+            * start this download. */}
+        {naturalStatus === "loading" && (
+          <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted/80">
+            <AudioLines className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" />
+            <span>
+              Fetching a better narrator — {Math.round(naturalProgress * 100)}%. 88 MB, kept for
+              next time; 326 MB on a GPU, which is too big for the browser to keep, so it comes
+              down each session. The story is playing in this device&rsquo;s own voice meanwhile.
+            </span>
           </p>
         )}
-        {voiceEngine === "natural" && naturalStatus === "unavailable" && (
-          <p className="mt-1.5 text-[11px] text-muted/80">
+        {naturalStatus === "unavailable" && !silentPlatform && (
+          <p className="mt-2 text-[11px] text-muted/80">
             The natural voice couldn&rsquo;t load — staying with this device&rsquo;s own voice.
           </p>
         )}

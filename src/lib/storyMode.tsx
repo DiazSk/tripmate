@@ -41,8 +41,6 @@ import {
   silence,
   speakOn,
   speechAvailable,
-  storedVoiceEngine,
-  storeVoiceEngine,
   warmVoices,
   type SpeakHandle,
   type VoiceEngine,
@@ -132,19 +130,17 @@ export interface StoryPlayback {
    * waiting for a voice that is never coming.
    */
   silentPlatform: boolean;
-  /** Which narrator the traveller has asked for — remembered across sessions. */
-  voiceEngine: VoiceEngine;
   /**
-   * Where the natural voice is: `idle` (never asked for), `loading` (downloading the 88MB model,
-   * `naturalProgress` is a 0-1 fraction), `ready`, or `unavailable` (it was asked for and failed,
-   * or this browser cannot run it).
+   * Where the natural voice is: `idle` (no film has started yet), `loading` (downloading the
+   * model, `naturalProgress` is a 0-1 fraction), `ready`, or `unavailable` (it failed, or this
+   * browser cannot run it).
    *
-   * Separate from `voiceEngine` on purpose — a traveller can have *asked* for the natural voice
-   * while it is still downloading, and during that minute the browser voice keeps narrating.
+   * This used to sit beside a `voiceEngine` preference, because the natural voice was opt-in. It
+   * is now simply the voice, so the only question left is whether it has arrived — during the
+   * download, and forever on a browser that cannot run it, the platform voice narrates.
    */
   naturalStatus: NaturalVoiceStatus;
   naturalProgress: number;
-  setVoiceEngine: (engine: VoiceEngine) => void;
   next: () => void;
   prev: () => void;
   togglePlay: () => void;
@@ -437,20 +433,23 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   const [voiceBroken, setVoiceBroken] = useState(false);
   const speaks = voiceCapable && !voiceBroken;
 
-  /** The narrator the traveller has chosen, read from localStorage once. */
-  const [voiceEngine, setVoiceEngineState] = useState<VoiceEngine>(storedVoiceEngine);
   const [naturalStatus, setNaturalStatus] = useState<NaturalVoiceStatus>("idle");
   const [naturalProgress, setNaturalProgress] = useState(0);
   /**
-   * The engine actually speaking right now, which is not the same as the one asked for.
+   * The engine actually speaking right now.
    *
-   * A `natural` preference with the model still downloading resolves to `browser`, so the film
-   * narrates through the whole load rather than sitting silent — and because this is a dependency
-   * of the beat effect, the moment the model lands the current beat is re-spoken in the new voice.
-   * That is the upgrade arriving mid-film, with no sequencing code anywhere.
+   * The natural voice with the model still downloading resolves to `browser`, so the film narrates
+   * through the whole load rather than sitting silent — and because this is a dependency of the
+   * beat effect, the moment the model lands the current beat is re-spoken in the new voice. That
+   * is the upgrade arriving mid-film, with no sequencing code anywhere.
+   *
+   * This is the *only* remaining fork between the two engines. There used to be a stored
+   * `voiceEngine` preference and a toggle in the stage as well, on the argument that a
+   * hundreds-of-megabytes download should be asked for. The toggle went because the good voice is
+   * plainly the one anybody wants and this line already covers every way it can fail to arrive —
+   * so what the preference actually bought was a chance to be offered the worse narrator.
    */
-  const engine: VoiceEngine =
-    voiceEngine === "natural" && naturalStatus === "ready" ? "natural" : "browser";
+  const engine: VoiceEngine = naturalStatus === "ready" ? "natural" : "browser";
   /**
    * Every script asked for this session, keyed by `storyCacheKey` — the **promise**, not the
    * script, so a request that arrives while an identical one is in flight joins it instead of
@@ -558,19 +557,17 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       setBeatIndex(0);
       setPhase("loading");
       setVoiceBroken(false);
-      // **The remembered preference has to be acted on, not just restored.** `voiceEngine` comes
-      // back from localStorage on mount but `naturalStatus` always starts `idle`, and the loader
-      // used to be reachable only from the toggle — so a traveller who chose the natural voice
-      // last week got the platform voice every session until they pressed the toggle twice to
-      // re-arm it. A choice this app bothered to persist should not need making again.
+      // **Here rather than on mount, and that is the whole reason this is not just a module-level
+      // load.** The weights are hundreds of megabytes and an ORT session to hold them, and a page
+      // nobody plays a film on should pay for neither — every other route in this app renders the
+      // same provider. The film is the moment it is needed, and the platform voice covers the
+      // first beat or two while it initialises, the same handover `engine` above describes.
       //
-      // Here rather than on mount: the weights are hundreds of megabytes and an ORT session to
-      // hold them, and a page nobody plays a film on should pay for neither. The film is the
-      // moment it is needed, and the platform voice covers the first beat or two while it
-      // initialises — the same handover `engine` above already describes.
-      if (voiceEngine === "natural") ensureNaturalVoice();
+      // Idempotent: `ensureNaturalVoice` returns early once the model is ready, so pressing Play
+      // on a second day costs nothing.
+      ensureNaturalVoice();
     },
-    [voiceEngine, ensureNaturalVoice]
+    [ensureNaturalVoice]
   );
 
   const start = openDay;
@@ -908,22 +905,6 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   const toggleMute = useCallback(() => setMuted((m) => !m), []);
 
   /**
-   * Choose a narrator, and start the download if that is what was chosen.
-   *
-   * The preference is stored immediately even though the voice is not ready for another minute —
-   * it is a preference, not a state, and a traveller who turns it on and leaves should find it on
-   * next time. Progress is reported into state so the toggle can count up rather than spin.
-   */
-  const setVoiceEngine = useCallback(
-    (next: VoiceEngine) => {
-      setVoiceEngineState(next);
-      storeVoiceEngine(next);
-      if (next === "natural") ensureNaturalVoice();
-    },
-    [ensureNaturalVoice]
-  );
-
-  /**
    * Publish "a film is running" on the document element.
    *
    * For the chrome Story mode cannot reach from inside `AppShell`: `LlmTraceFab` mounts as a
@@ -988,10 +969,8 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       beatIndex,
       muted,
       silentPlatform: !speaks,
-      voiceEngine,
       naturalStatus,
       naturalProgress,
-      setVoiceEngine,
       next,
       prev,
       togglePlay,
@@ -1006,10 +985,8 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       beatIndex,
       muted,
       speaks,
-      voiceEngine,
       naturalStatus,
       naturalProgress,
-      setVoiceEngine,
       next,
       prev,
       togglePlay,
