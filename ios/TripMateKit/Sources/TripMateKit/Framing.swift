@@ -50,7 +50,20 @@ public enum Framing {
 
     /// A 60° horizontal field of view, which is what the web renderer falls back to when the
     /// frustum cannot be read.
+    ///
+    /// **This is Cesium's number and it does not describe MapKit.** Measured at 450m
+    /// `centerCoordinateDistance`, MapKit spans about 370m where this formula predicts 520m — so
+    /// anything deriving metres-per-pixel from it is wrong by roughly 1.4x on this platform. That
+    /// is why route framing no longer uses `routeBesidePanel`: see its note.
     public static let defaultTanHalfFovX = tan(Double.pi / 6)
+
+    /// The smallest span a framed day is allowed to occupy, in metres.
+    ///
+    /// Replaces the range floor for rect-based fitting. A four-stop day inside one hill town spans
+    /// ~50m, and fitting that exactly would zoom to a single doorway; padding the rect to a
+    /// minimum span keeps a day's *shape* legible without the camera-distance arithmetic that
+    /// floor existed to bound.
+    public static let mapKitMinSpanM: Double = 400
 
     /// The ceiling on pulling back to fit a narrow strip.
     ///
@@ -113,6 +126,21 @@ public enum Framing {
     ///
     /// `rangeM` is computed before `biasM` because the conversion depends on it: the further back
     /// the camera, the more metres a pixel is worth.
+    ///
+    /// ### Not used for framing a route on MapKit, and that is the interesting part
+    ///
+    /// This whole function is a workaround for something Cesium cannot do: there is no "fit this
+    /// content into an inset region" call there, so the web renderer has to convert the panel's
+    /// width into metres itself and shove the aim point sideways. MapKit has
+    /// `setVisibleMapRect(_:edgePadding:animated:)`, which performs the fit *and* the offset using
+    /// its own projection — no field-of-view constant to get wrong, and no bias to over-apply.
+    ///
+    /// Porting the workaround rather than using the native call cost a real bug: with Cesium's 60°
+    /// FOV the bias came out ~1.4x too large and pushed the whole day off the free strip to the
+    /// display's edge.
+    ///
+    /// Kept because **point flights still need it.** Flying to a single stop has no rect to fit —
+    /// story mode asks for a target, a range and a heading — and that is the shape this computes.
     public static func routeBesidePanel(
         radiusM: Double,
         viewWidthPx: Double,

@@ -98,30 +98,56 @@ struct WorldMapView: UIViewRepresentable {
 
     // MARK: - Framing
 
+    /// Fit the day into the strip the panel leaves.
+    ///
+    /// **`setVisibleMapRect(_:edgePadding:)` rather than a computed `MKMapCamera`.** The web
+    /// renderer has to convert the panel's width into metres and shove the camera's aim point
+    /// sideways, because Cesium offers nothing that fits content into an inset region. MapKit
+    /// does, and it does the arithmetic in its own projection — so there is no field-of-view
+    /// constant to get wrong.
+    ///
+    /// Porting the workaround instead of using the native call cost a real bug: with Cesium's 60°
+    /// FOV the bias came out about 1.4x too large and pushed the entire day off the free strip to
+    /// the display's edge, taking the route and every stop card with it.
+    ///
+    /// The padding *is* the panel. `viewWidth - freeWidth` is what the panel covers, measured
+    /// rather than assumed, so this stays correct at every width — including a full-bleed panel,
+    /// where it is zero and the day is simply centred.
     private func frame(_ route: RoutePresentation, in map: MKMapView) {
-        guard let centre = Framing.centroid(route.points) else { return }
-        let framing = Framing.routeBesidePanel(
-            radiusM: Framing.boundingRadiusM(route.points),
-            viewWidthPx: panelMetrics.viewWidth,
-            freeWidthPx: panelMetrics.freeWidth,
-            // The web floor is 800m, calibrated so Cesium's oblique camera never flies into the
-            // building mesh. Drawing flat there is no geometry to hit, and 800m renders a 50m
-            // walking day about 40pt across — measured on a real trip, and it disappeared among
-            // the basemap's own pins.
-            minRangeM: Framing.mapKitMinRangeM
-        )
-        let aim = Framing.offsetEast(centre, metres: framing.biasM)
-        map.setCamera(
-            MKMapCamera(
-                lookingAtCenter: CLLocationCoordinate2D(latitude: aim.lat, longitude: aim.lng),
-                fromDistance: framing.rangeM,
-                // Pitch 0 for now. The web camera sits at an oblique because the route is
-                // *elevated* there and a plan view would flatten the arcs; here the route is
-                // draped, so an oblique buys nothing and costs legibility on the far stops.
-                pitch: 0,
-                heading: 0
+        guard let rect = Self.fitRect(for: route) else { return }
+        map.setVisibleMapRect(
+            rect,
+            edgePadding: UIEdgeInsets(
+                top: Token.navHeight + Token.gapRows,
+                left: Token.padCompact,
+                bottom: Token.padCompact,
+                right: max(0, panelMetrics.viewWidth - panelMetrics.freeWidth) + Token.padCompact
             ),
             animated: true
+        )
+    }
+
+    /// The day's bounding rect, padded to a minimum span.
+    ///
+    /// Built from min/max rather than by unioning zero-sized rects: `union` has special-case
+    /// behaviour for empty rectangles that is easy to be wrong about, and min/max cannot be.
+    ///
+    /// The minimum span replaces the web's range floor. Fitting a 50m day exactly would zoom to a
+    /// single doorway; `mapKitMinSpanM` keeps a day's shape legible without needing the
+    /// camera-distance arithmetic that floor existed to bound.
+    static func fitRect(for route: RoutePresentation) -> MKMapRect? {
+        let points = route.coordinates.map { MKMapPoint($0) }
+        guard let firstCoordinate = route.coordinates.first,
+              let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max()
+        else { return nil }
+
+        let rect = MKMapRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        let minSpan = Framing.mapKitMinSpanM
+            * MKMapPointsPerMeterAtLatitude(firstCoordinate.latitude)
+        return rect.insetBy(
+            dx: -max(0, minSpan - rect.width) / 2,
+            dy: -max(0, minSpan - rect.height) / 2
         )
     }
 

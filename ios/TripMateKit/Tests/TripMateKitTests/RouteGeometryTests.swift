@@ -136,9 +136,11 @@ final class FramingTests: XCTestCase {
         XCTAssertEqual(framing.rangeM, Framing.webMinRangeM)
     }
 
-    /// **The floor is a calibration, not a law.** A MapKit camera drawing flat has no geometry to
-    /// fly into, and the web's 800m renders a 50m walking day about 40pt across — which is how
-    /// this was found. A caller that knows it draws flat supplies its own.
+    /// **The floor is a calibration, not a law**, and the caller supplies it.
+    ///
+    /// Route framing no longer goes through this function at all — MapKit fits a rect natively.
+    /// This still covers the *point-flight* shape story mode needs, where there is no rect and the
+    /// answer genuinely is a target plus a range.
     func testRangeFloorIsCallerSupplied() {
         let tight = Framing.routeBesidePanel(
             radiusM: 25, viewWidthPx: 1488, freeWidthPx: 968,
