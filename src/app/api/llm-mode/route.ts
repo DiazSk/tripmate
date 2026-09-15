@@ -84,8 +84,9 @@ export async function POST(req: NextRequest) {
   setLlmMode(mode as LlmMode | null);
 
   // Warned about, not refused. Flipping to api without a key is a legitimate thing to do while
-  // setting one up, and the failure it produces later is already loud and specific (see
-  // createClient in claudeApi.ts) — but saying so here saves a confusing generation attempt.
+  // setting one up, and the failure it produces later is already loud and specific (see the
+  // missing-key branch in `runClaudeViaApi`, src/lib/claude.ts:795) — but saying so here saves a
+  // confusing generation attempt.
   const state = snapshot();
   return NextResponse.json({
     ...state,
