@@ -44,7 +44,7 @@ export type ClaudeCallType =
  *
  * Process-local and deliberately not persisted: flipping transport is a debugging action ("is this
  * a model problem or a transport problem?"), and a flag that survives a restart is one somebody
- * forgets they set. `LLM_MODE` in `.env.local` is the durable setting; this is the toggle.
+ * forgets they set. `LLM_TRANSPORT` in `.env.local` is the durable setting; this is the toggle.
  *
  * Next's dev server runs route handlers in the same process as the rest of the server, so a flip
  * here is visible to `runClaude()` immediately. Under a multi-worker production deploy it would

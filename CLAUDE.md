@@ -102,17 +102,22 @@ MapLibre's day routes are real translucent tubes drawn by a **custom WebGL layer
 
 Every model call goes through `runClaude()` in `src/lib/claude.ts`. That is the single choke point — it writes a row to `llm_traces` on *every* outcome (success, non-zero exit, timeout, malformed envelope), and `meta.runId` groups sibling calls into an `llm_runs` row for the trace viewer. Route new model calls through it rather than adding your own client.
 
-It now **branches on transport**, and the branch is the only place that knows which one serves a call:
+`runClaude()` (`src/lib/claude.ts:816`) is a **dispatcher, not the implementation**. Both transports live beside it in that same file, and the branch is the only place that knows which one serves a call:
 
-- **`api` (the default)** — an HTTPS request through `@anthropic-ai/sdk`, in `src/lib/claudeApi.ts`. Needs `ANTHROPIC_API_KEY`; a missing key fails loudly rather than falling back.
-- **`cli`** — the original `spawn` of the **`claude` CLI** as a one-shot child process, unchanged.
+- **`cli` (the default)** — `runClaudeViaCli()` at `src/lib/claude.ts:288`, a one-shot `spawn` of the **`claude` CLI**. Serves local development for free under the existing CLI subscription; no `ANTHROPIC_API_KEY` needed.
+- **`api`** — `runClaudeViaApi()` at `src/lib/claude.ts:631`, an HTTPS request through `@anthropic-ai/sdk`. Needs `ANTHROPIC_API_KEY`; a missing key fails loudly rather than falling back. Set only where there is no CLI binary and no logged-in session — i.e. the deployed container.
 
-Set `LLM_MODE=api|cli` in `.env.local`, or flip it mid-session with `POST /api/llm-mode {"mode":"cli"}` (`GET` the same route to see the mode, its source, and what each call type resolves to). The two paths are held to being indistinguishable to callers: same signature, same `ClaudeResult` including `sessionId`, same meaning for `timeoutMs`, and the API path **synthesizes the CLI's JSON envelope** so `parseUsage()` in `runs.ts` and the trace viewer read both without branching.
+**The default is `cli`, and it is a cost decision rather than an oversight.** `llmMode()` (`src/lib/llmConfig.ts:74-76`) resolves `runtimeOverride ?? envMode() ?? "cli"`; flipping it would start metering every developer's machine.
 
-Two things genuinely differ, and both are deliberate:
+Set **`LLM_TRANSPORT=api|cli`** in `.env.local`, or flip it mid-session with `POST /api/llm-mode {"mode":"cli"}` (`GET` the same route to see the mode, its source, and what each call type resolves to). **Mind the two names:** `LlmMode` is the type and `llmMode()` the function, but the environment variable is `LLM_TRANSPORT` and **nothing reads `LLM_MODE`** — `envMode()` (`src/lib/llmConfig.ts:61-65`) reads that one variable, and the comment above it records why the spellings differ.
+
+This is a deliberate, permanent dual-path design, not a migration in progress — both stay in service. The two paths are held to being indistinguishable *to callers*: same signature, same `ClaudeResult` including `sessionId`, same meaning for `timeoutMs`.
+
+Three things genuinely differ, and all three are deliberate:
 
 - **Which model answers.** The API path routes per task through `apiModelFor()` in `src/lib/llmConfig.ts` — strong (`claude-opus-5`) for anything that writes or judges a whole plan, cheap (`claude-haiku-4-5`) for bounded work against facts that already exist. The CLI path stays pinned to `MODEL` (`claude-sonnet-4-5`) because the timeout constants in `claude.ts` were calibrated against that model; re-pointing it silently invalidates them. **`src/lib/llmConfig.ts` is the only place model names belong** — don't hardcode one at a call site.
-- **Where conversational memory lives.** A JSONL file on one machine for the CLI, an `llm_sessions` row for the API. See "Chat memory" below.
+- **Where conversational memory lives.** A JSONL file on one machine for the CLI, replayed on `--resume`; an `llm_sessions` row for the API, replayed as a message array. Because `LLM_TRANSPORT` is a whole-process setting, **a session is only ever resumed under the transport that created it** — never across. See "Chat memory" below.
+- **What `llm_traces.raw_response` holds.** Two envelope shapes, side by side, forever. A CLI-transport row carries the CLI's `modelUsage`/`total_cost_usd` shape; an API-transport row carries the Messages API's `usage` shape plus a separately-populated `cost_usd` column, because the Messages API reports no cost at all (see `src/lib/modelPricing.ts`). `parseUsage()` in `src/lib/runs.ts:31` and `src/lib/perfAggregate.ts:34` both branch on `!("modelUsage" in envelope) && "usage" in envelope`. **Neither path synthesizes the other's envelope, and that branch is not simplifiable away.**
 
 `effort` and `thinking` are **capability-gated, and that gate is load-bearing**: both are a 400, not a no-op, on `claude-haiku-4-5` and `claude-sonnet-4-5`. Forwarding the CLI's `--effort low` to the cheap tier unconditionally would fail every chat call.
 
@@ -122,34 +127,11 @@ Four non-obvious CLI-path constraints are already handled there; don't "fix" the
 - `~/.local/bin` is forced onto `PATH`, since non-login process launchers don't source the shell profile.
 - `--setting-sources ""` and `--tools ""` mean the CLI loads **no** settings sources and has **no** Skill tool. Skills in `.claude/skills/` therefore *cannot* auto-load; `src/lib/skill.ts` reads `SKILL.md` off disk and injects the body into the prompt instead.
 
-### Two transports, one interface
-
-`runClaude()` is a dispatcher, not the implementation. It routes to one of two functions based on
-`LLM_TRANSPORT` (default `"cli"`):
-
-- `runClaudeViaCli()` — the subprocess described above, unchanged. Serves local development for
-  free under the existing CLI subscription; no `ANTHROPIC_API_KEY` needed.
-- `runClaudeViaApi()` — calls the Anthropic Messages API directly via `@anthropic-ai/sdk`. Used
-  only where `LLM_TRANSPORT=api` is set (Railway's deployed environment), since there's no `claude`
-  CLI binary or logged-in session on a container.
-
-This is a deliberate, permanent dual-path design, not a migration in progress — both stay in
-service. Consequences worth knowing:
-
-- **Session continuity works differently per transport but never crosses transports.** The CLI
-  replays a local JSONL transcript on `--resume`; the API path replays a message array stored in
-  the `llm_sessions` table (`src/lib/db.ts`). Because `LLM_TRANSPORT` is a whole-process setting,
-  a session is only ever resumed under the transport that created it.
-- **`llm_traces.raw_response` holds two envelope shapes side by side, forever.** A CLI-transport
-  row has the CLI's `modelUsage`/`total_cost_usd` shape; an API-transport row has the Messages
-  API's `usage` shape and a separately-populated `cost_usd` column (the Messages API reports no
-  cost at all — see `src/lib/modelPricing.ts`). `src/lib/runs.ts` and `src/lib/perfAggregate.ts`
-  branch on which shape they're reading; don't "simplify" that branch away.
-- `src/lib/skill.ts` is unaffected either way — it only ever produced a prompt-text string to
-  splice into the messages/prompt, independent of how the call is transported.
+`src/lib/skill.ts` is unaffected by the transport either way — it only ever produced a prompt-text string to splice into the prompt or the message array, independent of how the call is carried.
 
 See `docs/superpowers/specs/2026-08-25-deploy-and-direct-api-design.md` for the full design and
-why (LinkedIn demo needed a public deploy link, which the CLI-only mechanism blocked).
+why (LinkedIn demo needed a public deploy link, which the CLI-only mechanism blocked). The session
+table this describes lives in `src/lib/db.ts` as `llm_sessions`.
 
 ### Two generation paths coexist
 
