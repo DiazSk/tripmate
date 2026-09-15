@@ -107,3 +107,8 @@ DerivedData/
 # tests. `Package.resolved` is deliberately NOT ignored: it pins transitive dependency versions,
 # and for an app (as opposed to a library) it belongs in git so two machines build the same thing.
 .build/
+
+# xcodebuild's output when it is run without `-derivedDataPath`, which it will be. Scoped to
+# ios/ rather than a bare `build/` so it cannot silently swallow a directory somebody means to
+# track elsewhere; the existing `/build` above is root-anchored and does not reach here.
+ios/**/build/
