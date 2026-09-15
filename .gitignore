@@ -101,3 +101,9 @@ Trace-*.json
 xcuserdata/
 DerivedData/
 .swiftpm/
+
+# SwiftPM build output. 117MB after a single `swift test` on TripMateKit, and unlike the Xcode
+# entries above this one is not hypothetical — it exists the moment anyone runs the package's
+# tests. `Package.resolved` is deliberately NOT ignored: it pins transitive dependency versions,
+# and for an app (as opposed to a library) it belongs in git so two machines build the same thing.
+.build/
