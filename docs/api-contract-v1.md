@@ -205,6 +205,34 @@ behind the session's back and re-sends full state. Dropping it silently degrades
 `candidatePois`. There is no shared generic wrapper; each needs its own nested Swift struct.
 `transportModes.modes` is `[String]`, not the `TransportMode` enum — do not decode it as one.
 
+### Auth **[A2]** — proposed, needs backend agreement
+
+This is the one shape in this document that was **not** read off an existing handler, because
+there is no handler yet. The iOS client is built against it and the mock implements it; **A2 must
+either adopt it or amend this section before building something else.**
+
+`POST /api/auth/apple` — unauthenticated by nature, since it is the call that establishes a
+session.
+
+```
+→ { identityToken, authorizationCode?, fullName?, email? }
+← { token, userId, expiresAt? }
+```
+
+Three notes, and the first is the one that bites:
+
+- **`fullName` and `email` arrive from Apple only on the very first authorization** for a given
+  Apple ID. Every later sign-in returns them nil, by design — Apple treats them as one-time
+  information the relying party is expected to have kept. The server must persist them on that
+  first exchange or they are gone permanently, and the only recovery is the traveler revoking the
+  app in Settings. This is the most common Sign in with Apple defect and it is invisible in
+  testing, because the developer's own first sign-in already happened.
+- **`identityToken` is exchanged, not used as a bearer.** It is a short-lived JWT verified against
+  Apple's public keys; it cannot be refreshed without re-authorizing, so a server-issued session
+  token is what the client actually carries.
+- `expiresAt` is optional. When absent the client learns of expiry from a 401 rather than
+  pre-empting it, which is why the 401 row above is a hard sign-out.
+
 ### Lookups
 
 | Route | Request | 200 | Notes |
@@ -236,6 +264,7 @@ Two shared states on every LLM-backed route (`itinerary`, `trip-edit`, `place-de
 
 | Status | Body | Meaning |
 |---|---|---|
+| 401 **[A2]** | — | The bearer token was rejected: expired, revoked, or minted by another deployment. **The client signs out; it does not retry.** Nothing it can do makes a rejected token acceptable, and retrying turns one failure into a loop. |
 | 429 | `Too many requests — slow down and try again shortly.` | IP throttle. **Buckets on `x-forwarded-for` today**, so carrier NAT puts unrelated users together. **[A2]** re-keys it onto the user id. |
 | 503 | `Demo budget for today has been used up — try again tomorrow.` | Rolling-24h spend cap, **global across all users** today. |
 | 402 **[A4]** | — | No active entitlement. Free tier reads and views; paid generates and refines. |

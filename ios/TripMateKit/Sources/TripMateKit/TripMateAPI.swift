@@ -11,6 +11,10 @@ public enum APIError: Error, Sendable, Equatable {
     case throttled(String)
     /// 503. The rolling-24h spend cap, global across all users until per-user metering lands.
     case spendCapReached(String)
+    /// 401. The bearer token was rejected — expired, revoked, or minted by a different
+    /// deployment. **The correct response is to sign out**, not to retry: nothing the client can
+    /// do makes a rejected token acceptable, and retrying turns one failure into a loop.
+    case unauthorized
     /// 402. No active entitlement — generation and refine are the paid tier.
     case notEntitled
     case notFound(String)
@@ -269,6 +273,20 @@ public struct TripMateAPI: Sendable {
         return request
     }
 
+    /// A POST that deliberately carries no bearer, for the call that *establishes* the session.
+    ///
+    /// Internal rather than private so `signInWithApple` can live next to the credential types it
+    /// belongs with, while `url` and `send` stay private to this file.
+    func postUnauthenticated<T: Decodable>(
+        _ path: String, body: some Encodable, as type: T.Type
+    ) async throws -> T {
+        var request = URLRequest(url: try url(path, query: [:]))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        return try await send(request, as: type)
+    }
+
     private func authorize(_ request: inout URLRequest) async {
         guard let token = await tokenProvider?() else { return }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -305,6 +323,7 @@ public struct TripMateAPI: Sendable {
 
         switch http.statusCode {
         case 400: throw APIError.badRequest(message ?? "The request was rejected.")
+        case 401: throw APIError.unauthorized
         case 402: throw APIError.notEntitled
         case 404: throw APIError.notFound(message ?? "Not found.")
         case 429: throw APIError.throttled(message ?? "Too many requests.")
