@@ -92,3 +92,12 @@ Trace-*.json
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Xcode, for the native client under ios/. Listed before that project exists on purpose: these
+# appear the instant someone opens Xcode, and with two people on the repo `xcuserdata/` — window
+# layout, breakpoints, the last-selected scheme — conflicts on every single pull. Added after is
+# added too late. Only what is actually in use: no CocoaPods or Carthage entries until there are
+# CocoaPods or Carthage.
+xcuserdata/
+DerivedData/
+.swiftpm/
