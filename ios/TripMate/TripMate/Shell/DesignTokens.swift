@@ -21,6 +21,20 @@ enum Token {
     static let cardBorder = Color.white.opacity(0.12)
     static let muted = Color.white.opacity(0.6)
 
+    /// `money` — gold, and **deliberately not `accent`**.
+    ///
+    /// The budget bar used to fill in amber, back when that was the one colour painting the
+    /// primary button, the day label, this fill and the selected tab all at once. There was no way
+    /// to tell an action from a readout, so a *healthy* budget at 90% rendered as a nearly-full bar
+    /// in the please-click-me colour and read as an alarm. A figure is information, not an
+    /// invitation, so it never borrows the action colour.
+    static let money = Color(red: 0xe9 / 255, green: 0xb4 / 255, blue: 0x4c / 255)
+    static let moneySoft = Color(red: 0xe9 / 255, green: 0xb4 / 255, blue: 0x4c / 255).opacity(0.18)
+    /// `alert` — what the bar becomes over budget, where it also says so in words underneath.
+    /// Nothing about the gold fill means "warning"; this does.
+    static let alert = Color(red: 0xe4 / 255, green: 0x55 / 255, blue: 0x3f / 255)
+    static let alertSoft = Color(red: 0xe4 / 255, green: 0x55 / 255, blue: 0x3f / 255).opacity(0.16)
+
     // MARK: Material
 
     /// `.glass-itinerary` — *the only card treatment in the app*; there is no solid-surface
@@ -47,6 +61,9 @@ enum Token {
     /// Stacked panels gap at 24; rows within a panel at 12-16; chips at 6.
     static let gapPanels: CGFloat = 24
     static let gapRows: CGFloat = 12
+
+    /// The chrome bar's height, so the panel can clear it the way `--nav-h` does on the web.
+    static let navHeight: CGFloat = 44
 
     // MARK: The docked panel
 
