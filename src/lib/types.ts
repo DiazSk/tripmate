@@ -248,25 +248,6 @@ export interface UserAnswers {
   accessibility?: AccessibilityNeeds | null;
 }
 
-/**
- * Fixed commitments the plan has to bend around: a booked bed, and the two clock times that bound
- * the first and last usable day. Stated by the traveler, never guessed; `null` per field means
- * "not stated".
- *
- * These field names are not new — `src/lib/bench/customTrip.ts` has been assigning exactly this
- * shape to `userAnswers.logistics` since the harness landed, against a field `UserAnswers` never
- * actually declared (a latent type error). Declaring it here with the bench's own names fixes that
- * rather than adding a second, differently-named copy.
- */
-export interface TripLogistics {
-  /** Local "HH:MM" on the first day. */
-  arrivalTime: string | null;
-  /** Local "HH:MM" on the last day. */
-  departureTime: string | null;
-  /** Free text, e.g. "Hotel Granvia Kyoto" or "Airbnb in Gion". */
-  stayBooked: string | null;
-}
-
 /** Asked directly rather than derived: `energy` answers "how much do you want to walk", which is
  *  a different question from "can you manage stairs". `deriveMobilityProfile` used `energy` as a
  *  proxy for both, and a wheelchair user who describes their energy as high got no accommodation
