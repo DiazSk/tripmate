@@ -65,6 +65,14 @@ public enum Framing {
     /// floor existed to bound.
     public static let mapKitMinSpanM: Double = 400
 
+    /// `STOP_CONTEXT_RADIUS_M` — how much ground to frame around a single place.
+    ///
+    /// A reader asking about one place is asking "where is this *in the city*", so the flight
+    /// stops short of the building. The web's matching `STOP_MIN_RANGE_M` floor of 3.5km does
+    /// **not** port: that exists to keep Cesium's oblique camera out of the building mesh, and a
+    /// flat map has no geometry to fly into.
+    public static let placeContextRadiusM: Double = 800
+
     /// The ceiling on pulling back to fit a narrow strip.
     ///
     /// Without it a very narrow free strip sends the camera far enough up that a city block
@@ -175,5 +183,80 @@ public enum Framing {
         let metresPerDegree = (.pi / 180) * earthRadiusM * cos(point.lat * .pi / 180)
         guard metresPerDegree > 0 else { return point }
         return GeoPoint(lat: point.lat, lng: point.lng + metres / metresPerDegree)
+    }
+}
+
+/// Distance from the camera's eye to a point on the ground, and how visible a label is at it.
+///
+/// Ported from `MapRenderer.cameraDistanceM` and `StopMarkerLayer`'s reveal rule.
+extension Framing {
+
+    /// Metres from the camera's eye to a ground point.
+    ///
+    /// **Distance per stop, not one zoom threshold for the view, and that is the whole design.**
+    /// Zoom is a property of the frame; this is a property of each stop, and on a pitched camera
+    /// those are different numbers — the near edge can be 800m away while the far edge is 9km, so
+    /// a single zoom threshold either floods the horizon with names or hides the street under you.
+    /// A true 3D distance also *is* the pitch-corrected number rather than an estimate of it.
+    ///
+    /// `MKMapCamera` gives exactly the three inputs this needs. At pitch 0 — the app's usual
+    /// state — the eye sits straight over `centre` and this reduces to `hypot(ground, distance)`.
+    public static func cameraDistanceM(
+        to point: GeoPoint,
+        centre: GeoPoint,
+        centreDistanceM: Double,
+        pitchDegrees: Double,
+        headingDegrees: Double
+    ) -> Double {
+        let pitch = pitchDegrees * .pi / 180
+        let altitudeM = centreDistanceM * cos(pitch)
+        // The eye stands *behind* the centre it is aimed at, by however much the pitch lays it
+        // down — so the offset runs along heading + 180°.
+        let backM = centreDistanceM * sin(pitch)
+        let eye = offset(centre, metresNorth: -backM * cos(headingDegrees * .pi / 180),
+                         metresEast: -backM * sin(headingDegrees * .pi / 180))
+        let ground = distanceM(eye, point)
+        return (ground * ground + altitudeM * altitudeM).squareRoot()
+    }
+
+    /// Move a point by a north/east offset in metres.
+    static func offset(_ point: GeoPoint, metresNorth: Double, metresEast: Double) -> GeoPoint {
+        let metresPerDegreeLat = (.pi / 180) * earthRadiusM
+        let lat = point.lat + metresNorth / metresPerDegreeLat
+        return offsetEast(GeoPoint(lat: lat, lng: point.lng), metres: metresEast)
+    }
+
+    /// How a stop's name card fades and shrinks with camera distance.
+    ///
+    /// **A name is a claim about a building, and it earns the screen only once the camera is close
+    /// enough that the building is something you can see.** The band is the web's, chosen to match
+    /// what a zoom rule would have done at this app's framing: a day framed for reading shows no
+    /// names, and coming down on a stop brings its neighbourhood up smoothly rather than switching
+    /// it on.
+    ///
+    /// Losing the name costs the stop its *label*, never its presence — the dot is drawn at every
+    /// distance, which is the same guarantee the web layer makes.
+    public enum Reveal {
+        public static let hiddenBeyondM: Double = 7000
+        public static let visibleWithinM: Double = 2800
+        /// Below this a card is not worth compositing.
+        public static let minOpacity: Double = 0.06
+
+        /// `scale = clamp(900000 / (distance + 260000), 0.55, 1)`. The floor keeps a card readable
+        /// with the whole trip in frame; the ceiling stops it dominating at street level.
+        public static let scaleNumerator: Double = 900_000
+        public static let scaleDistanceBias: Double = 260_000
+        public static let scaleMin: Double = 0.55
+        public static let scaleMax: Double = 1
+
+        public static func opacity(atDistanceM distance: Double) -> Double {
+            let t = (hiddenBeyondM - distance) / (hiddenBeyondM - visibleWithinM)
+            let clamped = min(1, max(0, t))
+            return clamped < minOpacity ? 0 : clamped
+        }
+
+        public static func scale(atDistanceM distance: Double) -> Double {
+            min(scaleMax, max(scaleMin, scaleNumerator / (distance + scaleDistanceBias)))
+        }
     }
 }

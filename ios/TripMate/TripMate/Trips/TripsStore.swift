@@ -28,8 +28,25 @@ final class TripsStore {
         return RoutePresentation(trip: open, dayIndex: activeDay)
     }
 
+    /// Which stop is being pointed at, within the active day, or nil.
+    ///
+    /// **The touch answer to the web's hover.** `mapCamera` carries `hoveredIndex` *and*
+    /// `activeIndex` because a pointer can rest on one thing while another is selected; a finger
+    /// cannot, so those two collapse into this one. It lives beside `activeDay` for the same
+    /// reason: the panel row and the map both answer to it, and a second copy would be a second
+    /// source of truth.
+    private(set) var emphasis: Int?
+
     func selectDay(_ index: Int) {
         activeDay = index
+        // A stop index only means anything within its own day.
+        emphasis = nil
+    }
+
+    /// Point at a stop, or at nothing. Tapping the one already pointed at lets go of it, which is
+    /// what makes the map's own deselect and the panel row agree.
+    func emphasise(_ index: Int?) {
+        emphasis = (index == emphasis) ? nil : index
     }
 
     /// A message ready to show, not an `Error` for the view to interpret.
@@ -65,6 +82,7 @@ final class TripsStore {
             // Reset before the trip lands, not after: a stale index from a nine-day trip would
             // otherwise briefly address a day a three-day trip does not have.
             activeDay = 0
+            emphasis = nil
         } catch {
             message = Self.describe(error)
         }

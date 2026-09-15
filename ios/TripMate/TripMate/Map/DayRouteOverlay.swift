@@ -10,6 +10,14 @@ final class DayRouteOverlay: NSObject, MKOverlay {
     let coordinates: [CLLocationCoordinate2D]
     let palette: DayPalette
 
+    /// The stop being pointed at, whose two adjoining legs take the accent.
+    ///
+    /// **Mutable, and the renderer is invalidated rather than the overlay replaced.** Selection
+    /// changes far more often than the route does, and rebuilding the overlay would run through
+    /// `WorldMapView`'s redraw — which re-frames the camera. Yanking the view back to the day's
+    /// bounding rect every time somebody taps a stop is the bug that avoids.
+    var emphasisIndex: Int?
+
     let coordinate: CLLocationCoordinate2D
     let boundingMapRect: MKMapRect
 
@@ -86,5 +94,22 @@ final class DayRouteRenderer: MKOverlayRenderer {
         context.restoreGState()
 
         stroke(core, width: RouteGeometry.Design.coreWidth)
+
+        // The two legs touching the stop being pointed at, redrawn in the accent at full alpha.
+        // Straight from the web renderer's `touchesEmphasis`: amber — jade, now — means "you are
+        // pointing at this", never "this is a Tuesday", so it overrides the day's own hue rather
+        // than blending with it.
+        guard let index = route.emphasisIndex else { return }
+        let accent = UIColor(
+            red: RouteGeometry.accent.red, green: RouteGeometry.accent.green,
+            blue: RouteGeometry.accent.blue, alpha: 1
+        )
+        for leg in [index - 1, index] where leg >= 0 && leg + 1 < points.count {
+            context.setStrokeColor(accent.cgColor)
+            context.setLineWidth(screenUnits(RouteGeometry.Design.coreWidth))
+            context.beginPath()
+            context.addLines(between: [points[leg], points[leg + 1]])
+            context.strokePath()
+        }
     }
 }

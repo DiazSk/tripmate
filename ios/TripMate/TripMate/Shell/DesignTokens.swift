@@ -11,15 +11,35 @@ enum Token {
 
     // MARK: Colors
 
-    /// `canvas` — the ground behind everything, including before the map has drawn a frame.
-    static let canvas = Color(red: 0x09 / 255, green: 0x1b / 255, blue: 0x20 / 255)
-    /// `surface-deep` — the slate every panel is made of.
-    static let surfaceDeep = Color(red: 13 / 255, green: 46 / 255, blue: 55 / 255)
-    /// `accent` — one warm accent, reserved for interaction. Never decorative.
-    static let accent = Color(red: 0xfb / 255, green: 0x98 / 255, blue: 0x26 / 255)
+    /// `--canvas` — the ground behind everything, including before the map has drawn a frame.
+    ///
+    /// **"Kiln": a warm near-neutral near-black.** These four values were the *previous* palette
+    /// until this edit — a teal-black canvas `#091b20` over surface `13 46 55` with an amber
+    /// accent `#fb9826`. `globals.css` names those exact numbers as its predecessor and says why
+    /// they went: they were measured off an external reference and derived from nothing this
+    /// product is. Transcribing them into Swift shipped a retired palette to a second platform.
+    static let canvas = Color(red: 0x12 / 255, green: 0x11 / 255, blue: 0x10 / 255)
+    /// `--surface-deep` — `rgb(28 26 24)`, one step up from canvas. The panels, the map control
+    /// pills and the photo scrims are all this one colour at different alphas, and that shared
+    /// origin is what makes them read as one material rather than four similar greys.
+    static let surfaceDeep = Color(red: 28 / 255, green: 26 / 255, blue: 24 / 255)
+    /// `--accent` — jade, and **action only**: buttons, the selected day, focus rings, the stop
+    /// being pointed at on the map. Never a label, never a figure, never a fill that reports a
+    /// number. `money` and `alert` exist so it never has to.
+    static let accent = Color(red: 0x28 / 255, green: 0xb9 / 255, blue: 0x81 / 255)
+    /// `--accent-foreground` — dark ink *on the accent*, drawn from the accent's own hue so a
+    /// filled control reads as a solid object rather than a hole punched through to the canvas.
+    /// **Not "text over something dark"** — `globals.css` warns about exactly that conflation, and
+    /// the day tabs were making it in reverse by printing `canvas` over the accent fill.
+    static let accentForeground = Color(red: 0x06 / 255, green: 0x24 / 255, blue: 0x1a / 255)
+    /// `--foreground` / `--on-deep` — warm off-white, not pure white. Pure white over a warm
+    /// ground reads as a cold hole in it.
+    static let foreground = Color(red: 0xf7 / 255, green: 0xf5 / 255, blue: 0xf2 / 255)
     /// `card-border` — the 1px white hairline every surface carries.
     static let cardBorder = Color.white.opacity(0.12)
-    static let muted = Color.white.opacity(0.6)
+    /// `--muted` — the foreground at 0.62, not a sampled grey: every secondary tone is the one
+    /// off-white at an alpha over the one ground, which is what stops the greys drifting apart.
+    static let muted = Color(red: 0xf7 / 255, green: 0xf5 / 255, blue: 0xf2 / 255).opacity(0.62)
 
     /// `money` — gold, and **deliberately not `accent`**.
     ///

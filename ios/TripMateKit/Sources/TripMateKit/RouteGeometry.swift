@@ -27,8 +27,18 @@ public struct GeoPoint: Sendable, Equatable {
 /// it becomes part of a stop's data.
 public struct RouteStop: Sendable, Equatable {
     public let dayIndex: Int
-    /// Index within its own day, which is what emphasis is addressed by.
+    /// Position among the *drawn* stops of its day, so leg `i` runs from stop `i` to stop `i + 1`.
+    /// Dense by construction — a dropped stop closes the gap rather than leaving a hole, or the
+    /// legs either side of it would be drawn to the wrong places.
     public let indexWithinDay: Int
+    /// Position in `DayPlan.stops` before anything was dropped.
+    ///
+    /// **Both indices exist because the panel and the map count differently.** A zeroed coordinate
+    /// is dropped from the drawing but still listed and still read, so a day whose second stop has
+    /// no coordinate has its third stop at `indexWithinDay` 1 and `rawIndex` 2. Addressing
+    /// emphasis with the wrong one of those points at the neighbour — silently, and only on the
+    /// days that have a dropped stop.
+    public let rawIndex: Int
     public let point: GeoPoint
     public let name: String
 }
@@ -72,6 +82,11 @@ public enum RouteGeometry {
         DayPalette(core: rgb(0x7b77ae), glow: rgb(0xa6a2d0)),
     ]
 
+    /// `--accent`, and the only thing it ever means is **"you are pointing at this"** — never
+    /// "this is a Tuesday". The day palettes are spaced against each other rather than against
+    /// this, so emphasis stays distinguishable from every day's own hue.
+    public static let accent = rgb(0x28b981)
+
     /// `--route-casing`. **What makes a route legible**, rather than brightness: a stroke of colour
     /// has no guaranteed contrast against uncontrolled cartography, while a stroke with a
     /// near-black border supplies its own wherever it lands.
@@ -98,12 +113,13 @@ public enum RouteGeometry {
         var out: [RouteStop] = []
         for (dayIndex, day) in itinerary.days.enumerated() {
             var withinDay = 0
-            for stop in day.stops {
+            for (rawIndex, stop) in day.stops.enumerated() {
                 guard stop.lat != 0 || stop.lng != 0 else { continue }
                 out.append(
                     RouteStop(
                         dayIndex: dayIndex,
                         indexWithinDay: withinDay,
+                        rawIndex: rawIndex,
                         point: GeoPoint(stop),
                         name: stop.name
                     )

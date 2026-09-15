@@ -116,18 +116,37 @@ struct AppShell<World: View, Panel: View>: View {
 /// children, so a page's own content column cannot move them. Same reasoning here: chrome is a
 /// property of the app, not of whichever pane happens to be wide.
 private struct ChromeLayer: View {
+    @Environment(\.panelMetrics) private var panelMetrics
+
+    /// "Search near this view" needs a view to be near. At full-bleed panel widths there is no
+    /// live map, so the box would be chrome floating over the plan it is covering — which is the
+    /// compromise `DESIGN.md` records the web app making on a phone, and it does not have to be
+    /// made here.
+    private var hasLiveMap: Bool { panelMetrics.freeWidth < panelMetrics.viewWidth }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("TripMate")
                     .font(.system(size: 17, weight: .semibold))
                     .kerning(-0.6)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Token.foreground)
                 Spacer()
             }
             .padding(.horizontal, Token.padCompact)
             .padding(.vertical, Token.gapRows)
             .background(.ultraThinMaterial)
+
+            // Under the wordmark on the leading edge, where the web puts it — the docked panel
+            // owns the trailing side at every width that has one.
+            if hasLiveMap {
+                HStack {
+                    MapSearchView()
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, Token.padCompact)
+                .padding(.top, Token.gapRows)
+            }
 
             Spacer()
         }

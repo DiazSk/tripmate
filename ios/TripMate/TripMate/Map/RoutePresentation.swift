@@ -17,6 +17,12 @@ struct RoutePresentation: Equatable {
         stops.map { CLLocationCoordinate2D(latitude: $0.point.lat, longitude: $0.point.lng) }
     }
 
+    /// Where a stop the panel is pointing at sits among the *drawn* stops, or nil if it was
+    /// dropped for having no coordinate. See `RouteStop.rawIndex` for why the two differ.
+    func drawnIndex(forRawStop raw: Int) -> Int? {
+        stops.first { $0.rawIndex == raw }?.indexWithinDay
+    }
+
     /// An identity that changes exactly when the drawing should — used to avoid re-framing the
     /// camera on every unrelated environment change.
     var identity: String {

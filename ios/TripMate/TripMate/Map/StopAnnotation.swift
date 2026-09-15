@@ -6,7 +6,10 @@ final class StopAnnotation: NSObject, MKAnnotation {
     let coordinate: CLLocationCoordinate2D
     let title: String?
     let dayIndex: Int
+    /// Compared against for emphasis — the drawn index, which is what the route's legs are in.
     let indexWithinDay: Int
+    /// Reported back when this card is tapped, because the panel counts in raw indices.
+    let rawIndex: Int
 
     init(stop: RouteStop) {
         self.coordinate = CLLocationCoordinate2D(
@@ -15,6 +18,7 @@ final class StopAnnotation: NSObject, MKAnnotation {
         self.title = stop.name
         self.dayIndex = stop.dayIndex
         self.indexWithinDay = stop.indexWithinDay
+        self.rawIndex = stop.rawIndex
     }
 }
 
@@ -54,12 +58,23 @@ final class StopAnnotationView: MKAnnotationView {
     /// does not clip its subviews, so this needs no layout gymnastics.
     private let dot = UIView()
 
+    /// The stop being pointed at, in the accent. `--accent` means "you are pointing at this" and
+    /// nothing else, so an emphasised stop also ignores the distance reveal below — a stop
+    /// somebody selected is named whether or not the camera is close enough to have earned it.
+    var isEmphasised = false {
+        didSet {
+            guard isEmphasised != oldValue else { return }
+            applyPalette()
+            apply(distanceM: lastDistanceM)
+        }
+    }
+
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
 
         // MapKit's own collision handling, in place of the web's hand-rolled scan. A suppressed
-        // card loses its *name*, not its presence — the ground rings are separate overlays drawn
-        // for every stop regardless, which is the same guarantee the web layer makes.
+        // card loses its *name*, not its presence — the dot is a subview drawn at full opacity
+        // regardless, which is the same guarantee the web layer makes.
         collisionMode = .circle
         // **`.required`, so MapKit never drops a stop's name.** `.defaultHigh` competes with the
         // basemap's own POI labels and loses in a dense centre — observed on Pienza, where the
@@ -83,23 +98,12 @@ final class StopAnnotationView: MKAnnotationView {
         blur.layer.cornerCurve = .continuous
         blur.clipsToBounds = true
         blur.layer.borderWidth = 0.5
-        blur.layer.borderColor = UIColor(white: 1, alpha: 0.3).cgColor
+        // Scaling has to pivot on the card's bottom edge, not its middle, or the card drifts off
+        // the dot it names as it shrinks. The layout below sets `position` to match.
+        blur.layer.anchorPoint = CGPoint(x: 0.5, y: 1)
 
-        blur.translatesAutoresizingMaskIntoConstraints = false
-        label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(blur)
         blur.contentView.addSubview(label)
-
-        NSLayoutConstraint.activate([
-            blur.leadingAnchor.constraint(equalTo: leadingAnchor),
-            blur.trailingAnchor.constraint(equalTo: trailingAnchor),
-            blur.topAnchor.constraint(equalTo: topAnchor),
-            blur.bottomAnchor.constraint(equalTo: bottomAnchor),
-            label.leadingAnchor.constraint(equalTo: blur.contentView.leadingAnchor, constant: 7),
-            label.trailingAnchor.constraint(equalTo: blur.contentView.trailingAnchor, constant: -7),
-            label.topAnchor.constraint(equalTo: blur.contentView.topAnchor, constant: 3),
-            label.bottomAnchor.constraint(equalTo: blur.contentView.bottomAnchor, constant: -3),
-        ])
 
         let diameter = RouteGeometry.Design.dotRadius * 2
         dot.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
@@ -113,11 +117,52 @@ final class StopAnnotationView: MKAnnotationView {
         addSubview(dot)
     }
 
+    /// Laid out by hand rather than by constraints, and that is a deletion.
+    ///
+    /// Eight constraints used to pin the card to the view's bounds, which made the view's size the
+    /// card's size and left nowhere for a scale pivot to live: `anchorPoint` reinterprets what
+    /// `position` means, and autolayout sets `center` assuming the default. The card's size is one
+    /// label plus padding, so computing it directly is both shorter and what the scale needs.
     override func layoutSubviews() {
         super.layoutSubviews()
+        blur.bounds = CGRect(origin: .zero, size: Self.cardSize(for: label))
+        blur.layer.position = CGPoint(x: bounds.midX, y: bounds.maxY)
+        label.frame = blur.bounds.insetBy(dx: Self.cardPadding.width, dy: Self.cardPadding.height)
         // The card is lifted above the coordinate by `centerOffset`; the dot goes back down to it.
         dot.center = CGPoint(x: bounds.midX, y: bounds.height + Self.cardGap)
     }
+
+    /// Fade and shrink the name with camera distance — `Framing.Reveal`, which is where the rule
+    /// and its band live so the map and a test read the same numbers.
+    ///
+    /// **Only the card moves; the dot never does.** A name is a claim about a building and earns
+    /// the screen when the building is something you can see, while the stop's presence is not
+    /// conditional on anything. That split is the web layer's too.
+    func apply(distanceM: Double) {
+        lastDistanceM = distanceM
+        if isEmphasised {
+            blur.alpha = 1
+            blur.transform = .identity
+            return
+        }
+        blur.alpha = CGFloat(Framing.Reveal.opacity(atDistanceM: distanceM))
+        let scale = CGFloat(Framing.Reveal.scale(atDistanceM: distanceM))
+        blur.transform = CGAffineTransform(scaleX: scale, y: scale)
+    }
+
+    private var lastDistanceM: Double = .greatestFiniteMagnitude
+
+    /// The label's own size plus the chip's padding. `systemLayoutSizeFitting` used to answer this
+    /// through the constraints that are now gone.
+    private static func cardSize(for label: UILabel) -> CGSize {
+        let text = label.intrinsicContentSize
+        return CGSize(
+            width: (text.width + cardPadding.width * 2).rounded(.up),
+            height: (text.height + cardPadding.height * 2).rounded(.up)
+        )
+    }
+
+    private static let cardPadding = CGSize(width: 7, height: 3)
 
     /// Gap between the dot and the card above it.
     private static let cardGap: CGFloat = 8
@@ -128,27 +173,37 @@ final class StopAnnotationView: MKAnnotationView {
     override func prepareForReuse() {
         super.prepareForReuse()
         label.text = nil
+        isEmphasised = false
     }
 
     override var annotation: MKAnnotation? {
         didSet {
             label.text = annotation?.title ?? nil
-            // The dot takes the day's core colour, so the point and the line between points read
-            // as one thing. Derived from the day index rather than passed in — the annotation
-            // already carries it, and a second source would be a second thing to keep in step.
-            if let stop = annotation as? StopAnnotation {
-                let core = RouteGeometry.palette(forDay: stop.dayIndex).core
-                dot.backgroundColor = UIColor(
-                    red: core.red, green: core.green, blue: core.blue,
-                    alpha: RouteGeometry.Design.dotOpacity
-                )
-            }
+            applyPalette()
             // Sized to the text so `collisionMode = .circle` has a real footprint to work with;
             // a zero-sized view would never be decluttered against anything.
-            frame.size = systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            frame.size = Self.cardSize(for: label)
             // The card sits above the point it names rather than on top of it, so the dot below
             // stays visible.
             centerOffset = CGPoint(x: 0, y: -(frame.height / 2) - Self.cardGap)
         }
+    }
+
+    /// The dot takes the day's core colour, so the point and the line between points read as one
+    /// thing — or the accent when this is the stop being pointed at. Derived from the day index
+    /// rather than passed in: the annotation already carries it, and a second source would be a
+    /// second thing to keep in step.
+    private func applyPalette() {
+        guard let stop = annotation as? StopAnnotation else { return }
+        let fill = isEmphasised
+            ? RouteGeometry.accent
+            : RouteGeometry.palette(forDay: stop.dayIndex).core
+        dot.backgroundColor = UIColor(
+            red: fill.red, green: fill.green, blue: fill.blue,
+            alpha: RouteGeometry.Design.dotOpacity
+        )
+        blur.layer.borderColor = isEmphasised
+            ? UIColor(red: fill.red, green: fill.green, blue: fill.blue, alpha: 0.8).cgColor
+            : UIColor(white: 1, alpha: 0.3).cgColor
     }
 }

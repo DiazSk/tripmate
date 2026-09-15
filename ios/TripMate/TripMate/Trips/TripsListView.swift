@@ -17,7 +17,7 @@ struct TripsListView: View {
             Text("Memories")
                 .font(.system(size: 28, weight: .semibold))
                 .kerning(-2.5)
-                .foregroundStyle(.white)
+                .foregroundStyle(Token.foreground)
 
             if let message = store.message {
                 Notice(text: message)
@@ -51,7 +51,7 @@ struct TripsListView: View {
             Text("Plan your first trip")
                 .font(.system(size: 22, weight: .semibold))
                 .kerning(-1.6)
-                .foregroundStyle(.white)
+                .foregroundStyle(Token.foreground)
             Text("Tell us where and when, and the days come back written.")
                 .font(.system(size: 14))
                 .foregroundStyle(Token.muted)
@@ -67,7 +67,7 @@ private struct TripRow: View {
             Text(trip.destination)
                 .font(.system(size: 17, weight: .semibold))
                 .kerning(-0.8)
-                .foregroundStyle(.white)
+                .foregroundStyle(Token.foreground)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 6) {
                 Text("\(trip.startDate) → \(trip.endDate)")

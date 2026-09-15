@@ -10,6 +10,9 @@ struct TripMateApp: App {
     /// the client happened to be built.
     private let session: AuthSession
     @State private var store: TripsStore
+    /// Place search, beside the trips rather than inside them: it answers "what is near here",
+    /// which is a question about the map and not about the trip being read.
+    @State private var search = MapSearchStore()
 
     init() {
         let session = AuthSession(store: KeychainTokenStore())
@@ -27,6 +30,7 @@ struct TripMateApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(store: store)
+                .environment(search)
                 // Dark-only, matching the web app's `color-scheme: dark` on :root. Not a
                 // preference the system gets to override: the whole palette is one slate, and
                 // `DESIGN.md`'s Darken-Never-Lighten rule has no light-mode counterpart.
@@ -37,10 +41,19 @@ struct TripMateApp: App {
 
 private struct RootView: View {
     let store: TripsStore
+    @Environment(MapSearchStore.self) private var search
 
     var body: some View {
         AppShell {
-            WorldMapView(route: store.route)
+            WorldMapView(
+                route: store.route,
+                // The panel counts stops in raw indices and the map's legs count in drawn ones.
+                // Converted here, once, rather than on either side. See `RouteStop.rawIndex`.
+                emphasis: store.emphasis.flatMap { store.route?.drawnIndex(forRawStop: $0) },
+                pin: search.pin,
+                onEmphasise: { store.emphasise($0) },
+                onRegionSettled: { search.region = $0 }
+            )
         } panel: {
             PanelContent(store: store)
         }
@@ -62,7 +75,9 @@ private struct PanelContent: View {
                 TripDetailView(
                     trip: trip,
                     activeDay: store.activeDay,
+                    emphasis: store.emphasis,
                     onSelectDay: { store.selectDay($0) },
+                    onEmphasise: { store.emphasise($0) },
                     onBack: { store.closeTrip() }
                 )
             } else {

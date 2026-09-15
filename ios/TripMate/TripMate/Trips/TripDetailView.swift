@@ -10,7 +10,10 @@ import TripMateKit
 struct TripDetailView: View {
     let trip: Trip
     let activeDay: Int
+    /// Which stop is being pointed at, as a raw index into `DayPlan.stops`.
+    let emphasis: Int?
     let onSelectDay: (Int) -> Void
+    let onEmphasise: (Int) -> Void
     let onBack: () -> Void
 
     private var days: [DayPlan] { trip.itinerary.days }
@@ -40,7 +43,7 @@ struct TripDetailView: View {
             Text(trip.destination)
                 .font(.system(size: 28, weight: .semibold))
                 .kerning(-2.5)
-                .foregroundStyle(.white)
+                .foregroundStyle(Token.foreground)
 
             Text("\(trip.startDate) → \(trip.endDate)")
                 .font(.system(size: 13))
@@ -61,7 +64,7 @@ struct TripDetailView: View {
                         Text("Day \(index + 1)")
                             .font(.system(size: 12, weight: .semibold))
                             .kerning(-0.4)
-                            .foregroundStyle(isActive ? Token.canvas : Token.muted)
+                            .foregroundStyle(isActive ? Token.accentForeground : Token.muted)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(isActive ? Token.accent : Color.white.opacity(0.08))
@@ -84,8 +87,12 @@ struct TripDetailView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(Token.muted)
                     }
-                    ForEach(Array(day.stops.enumerated()), id: \.offset) { _, stop in
-                        StopRow(stop: stop)
+                    ForEach(Array(day.stops.enumerated()), id: \.offset) { index, stop in
+                        StopRow(
+                            stop: stop,
+                            isEmphasised: index == emphasis,
+                            onTap: { onEmphasise(index) }
+                        )
                     }
                     if let lodging = day.lodging {
                         LodgingRow(lodging: lodging)
@@ -101,13 +108,22 @@ struct TripDetailView: View {
 /// saved before the field existed do not carry it.
 private struct StopRow: View {
     let stop: Stop
+    /// The row and its point on the map take the accent together, which is the whole reason the
+    /// index lives in the store rather than in either view.
+    let isEmphasised: Bool
+    let onTap: () -> Void
 
     var body: some View {
+        Button(action: onTap) { content }
+            .buttonStyle(.plain)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(stop.name)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Token.foreground)
                 Spacer(minLength: 8)
                 Text(stop.cost, format: .currency(code: "USD").precision(.fractionLength(0)))
                     .font(.system(size: 13))
@@ -134,8 +150,12 @@ private struct StopRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Token.gapRows)
-        .background(Color.white.opacity(0.06))
+        .background(Color.white.opacity(isEmphasised ? 0.10 : 0.06))
         .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous)
+                .strokeBorder(Token.accent.opacity(isEmphasised ? 0.55 : 0), lineWidth: 1)
+        )
     }
 }
 
@@ -147,7 +167,7 @@ private struct LodgingRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(lodging.name)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Token.foreground)
                 Text(lodging.note)
                     .font(.system(size: 12))
                     .foregroundStyle(Token.muted)

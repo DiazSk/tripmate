@@ -66,7 +66,7 @@ final class RouteGeometryTests: XCTestCase {
 
     // MARK: - Fixture
 
-    private static func itinerary(_ days: [[(Double, Double, String)]]) throws -> Itinerary {
+    static func itinerary(_ days: [[(Double, Double, String)]]) throws -> Itinerary {
         let dayJSON = days.map { stops in
             let stopJSON = stops.map { lat, lng, name in
                 """
@@ -190,5 +190,118 @@ final class FramingTests: XCTestCase {
         let reykjavikShift = Framing.offsetEast(reykjavik, metres: 1000).lng - reykjavik.lng
         XCTAssertGreaterThan(reykjavikShift, lisbonShift)
         XCTAssertEqual(Framing.offsetEast(lisbon, metres: 0), lisbon)
+    }
+}
+
+// MARK: - Camera distance and the label reveal
+
+final class RevealTests: XCTestCase {
+
+    /// The common case: pitch 0, so the eye is straight over the point it is aimed at.
+    func testFlatCameraIsTheHypotenuseOfGroundAndAltitude() {
+        let centre = GeoPoint(lat: 38.7, lng: -9.1)
+        let target = Framing.offset(centre, metresNorth: 1000, metresEast: 0)
+        let d = Framing.cameraDistanceM(
+            to: target, centre: centre, centreDistanceM: 1000,
+            pitchDegrees: 0, headingDegrees: 0
+        )
+        XCTAssertEqual(d, (1000.0 * 1000 + 1000 * 1000).squareRoot(), accuracy: 1)
+    }
+
+    func testDistanceToTheAimPointIsTheCameraDistance() {
+        let centre = GeoPoint(lat: 38.7, lng: -9.1)
+        for pitch in [0.0, 30, 60] {
+            let d = Framing.cameraDistanceM(
+                to: centre, centre: centre, centreDistanceM: 2000,
+                pitchDegrees: pitch, headingDegrees: 45
+            )
+            XCTAssertEqual(d, 2000, accuracy: 1, "pitch \(pitch)")
+        }
+    }
+
+    /// **The whole reason this is per-stop rather than per-view.** Lay the camera down and the two
+    /// ends of the frame are at genuinely different distances — a single zoom threshold cannot
+    /// tell them apart, which is what the web note argues and what this asserts.
+    func testPitchSeparatesTheNearAndFarEndsOfTheFrame() {
+        let centre = GeoPoint(lat: 38.7, lng: -9.1)
+        // Heading 0 is north, so the eye lies to the south: a point north of centre is the far one.
+        let far = Framing.offset(centre, metresNorth: 2000, metresEast: 0)
+        let near = Framing.offset(centre, metresNorth: -2000, metresEast: 0)
+        let args = (centreDistanceM: 3000.0, pitchDegrees: 70.0, headingDegrees: 0.0)
+        let dFar = Framing.cameraDistanceM(
+            to: far, centre: centre, centreDistanceM: args.centreDistanceM,
+            pitchDegrees: args.pitchDegrees, headingDegrees: args.headingDegrees
+        )
+        let dNear = Framing.cameraDistanceM(
+            to: near, centre: centre, centreDistanceM: args.centreDistanceM,
+            pitchDegrees: args.pitchDegrees, headingDegrees: args.headingDegrees
+        )
+        XCTAssertGreaterThan(dFar - dNear, 3000)
+    }
+
+    /// The band, at its three interesting points. A day framed for reading shows no names; a stop
+    /// you have come down onto is fully named.
+    func testRevealIsOffBeyondTheBandAndFullInsideIt() {
+        XCTAssertEqual(Framing.Reveal.opacity(atDistanceM: 9000), 0)
+        XCTAssertEqual(Framing.Reveal.opacity(atDistanceM: Framing.Reveal.hiddenBeyondM), 0)
+        XCTAssertEqual(Framing.Reveal.opacity(atDistanceM: 1200), 1)
+        let mid = Framing.Reveal.opacity(
+            atDistanceM: (Framing.Reveal.hiddenBeyondM + Framing.Reveal.visibleWithinM) / 2
+        )
+        XCTAssertEqual(mid, 0.5, accuracy: 0.001)
+    }
+
+    /// A card too faint to read must round to nothing rather than compositing at 3%.
+    func testOpacityBelowTheFloorIsZero() {
+        // 6% of the band up from the far edge is the floor itself; just short of it is nothing.
+        let span = Framing.Reveal.hiddenBeyondM - Framing.Reveal.visibleWithinM
+        let justInside = Framing.Reveal.hiddenBeyondM - span * (Framing.Reveal.minOpacity * 0.9)
+        XCTAssertEqual(Framing.Reveal.opacity(atDistanceM: justInside), 0)
+    }
+
+    /// `clamp(900000 / (d + 260000), 0.55, 1)` — both clamps, and the curve between them.
+    func testScaleIsClampedAtBothEnds() {
+        XCTAssertEqual(Framing.Reveal.scale(atDistanceM: 0), Framing.Reveal.scaleMax)
+        XCTAssertEqual(Framing.Reveal.scale(atDistanceM: 5_000_000), Framing.Reveal.scaleMin)
+        // 900000 / 460000 = 1.956 → clamped to 1.
+        XCTAssertEqual(Framing.Reveal.scale(atDistanceM: 200_000), 1)
+        // 900000 / 1260000 = 0.714, inside the band.
+        XCTAssertEqual(Framing.Reveal.scale(atDistanceM: 1_000_000), 0.714, accuracy: 0.001)
+    }
+
+    /// Every distance a real camera reaches is above the floor, which is what makes the reveal and
+    /// not the scale the thing that hides a card.
+    func testScaleStaysNearTheCeilingAcrossTheRevealBand() {
+        for distance in stride(from: 0.0, through: Framing.Reveal.hiddenBeyondM, by: 500) {
+            XCTAssertGreaterThan(Framing.Reveal.scale(atDistanceM: distance), 0.98)
+        }
+    }
+
+    // MARK: - Raw vs drawn stop indices
+
+    /// **The bug both indices exist to prevent.** Drop a stop and the two indices diverge, so
+    /// addressing emphasis with the wrong one points at the neighbour — silently, and only on a
+    /// day that has a dropped stop.
+    func testRawIndexSurvivesADroppedStop() throws {
+        let itinerary = try RouteGeometryTests.itinerary([
+            [(38.70, -9.10, "a"), (0, 0, "gone"), (38.71, -9.11, "b"), (38.72, -9.12, "c")],
+        ])
+        let stops = RouteGeometry.routeStops(itinerary)
+        XCTAssertEqual(stops.map(\.indexWithinDay), [0, 1, 2])
+        XCTAssertEqual(stops.map(\.rawIndex), [0, 2, 3])
+        // "b" is the panel's third row and the route's second point.
+        let b = try XCTUnwrap(stops.first { $0.name == "b" })
+        XCTAssertEqual(b.rawIndex, 2)
+        XCTAssertEqual(b.indexWithinDay, 1)
+    }
+
+    func testRawIndexMatchesDrawnIndexWhenNothingIsDropped() throws {
+        let itinerary = try RouteGeometryTests.itinerary([
+            [(38.70, -9.10, "a"), (38.71, -9.11, "b")],
+            [(38.80, -9.20, "c")],
+        ])
+        for stop in RouteGeometry.routeStops(itinerary) {
+            XCTAssertEqual(stop.rawIndex, stop.indexWithinDay)
+        }
     }
 }

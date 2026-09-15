@@ -12,6 +12,15 @@ import TripMateKit
 struct WorldMapView: UIViewRepresentable {
     /// The day to draw, or nil for a bare map.
     let route: RoutePresentation?
+    /// Which stop within that day is being pointed at, as a *drawn* index — see
+    /// `RoutePresentation.drawnIndex(forRawStop:)`, which is where the panel's index is converted.
+    let emphasis: Int?
+    /// The searched place pinned on the map, if any.
+    let pin: SearchResult?
+    /// Map taps that change what is being pointed at.
+    let onEmphasise: (Int?) -> Void
+    /// Where "near this view" is, reported when the camera settles.
+    let onRegionSettled: (MKCoordinateRegion) -> Void
 
     @Environment(\.panelMetrics) private var panelMetrics
     @Environment(\.shellExclusions) private var exclusions
@@ -45,16 +54,28 @@ struct WorldMapView: UIViewRepresentable {
 
     func updateUIView(_ map: MKMapView, context: Context) {
         map.directionalLayoutMargins = Self.margins(clearing: exclusions, in: map.bounds)
+        context.coordinator.onEmphasise = onEmphasise
+        context.coordinator.onRegionSettled = onRegionSettled
 
+        drawRoute(in: map, coordinator: context.coordinator)
+        drawPin(in: map, coordinator: context.coordinator)
+
+        // Emphasis is applied on every update and gated by nothing: it changes far more often than
+        // the drawing does, and it costs two strokes and a dot colour rather than a redraw.
+        context.coordinator.apply(emphasis: emphasis, in: map)
+        context.coordinator.refreshReveal(in: map)
+    }
+
+    private func drawRoute(in map: MKMapView, coordinator: Coordinator) {
         let identity = route?.identity ?? ""
         // `updateUIView` fires on any environment change — a fold, a rotation, a panel resize.
         // Re-framing on all of those would yank the camera away from wherever the traveler had
         // just dragged it, so the redraw is gated on the drawing actually being different.
-        guard context.coordinator.drawnIdentity != identity else { return }
-        context.coordinator.drawnIdentity = identity
+        guard coordinator.drawnIdentity != identity else { return }
+        coordinator.drawnIdentity = identity
 
         map.removeOverlays(map.overlays)
-        map.removeAnnotations(map.annotations)
+        map.removeAnnotations(map.annotations.filter { $0 is StopAnnotation })
 
         guard let route else { return }
 
@@ -72,6 +93,36 @@ struct WorldMapView: UIViewRepresentable {
         map.addAnnotations(route.stops.map(StopAnnotation.init(stop:)))
 
         frame(route, in: map)
+    }
+
+    /// The searched place, and a flight to it.
+    ///
+    /// Gated separately from the route so a search does not re-frame the day and a day change does
+    /// not drop the pin.
+    private func drawPin(in map: MKMapView, coordinator: Coordinator) {
+        guard coordinator.pinnedID != pin?.id else { return }
+        coordinator.pinnedID = pin?.id
+        map.removeAnnotations(map.annotations.filter { $0 is SearchPinAnnotation })
+        guard let pin else { return }
+        map.addAnnotation(SearchPinAnnotation(pin))
+        // `STOP_CONTEXT_RADIUS_M` (800m) around the place, which is the web's `flyToPlace`: a
+        // traveler asking about a place wants to know where it is *in the city*, so the flight
+        // stops short of the building. The web's 3.5km range floor does not come with it — that
+        // exists to keep Cesium's oblique camera out of the building mesh, and there is no mesh to
+        // fly into here.
+        //
+        // **Through `fit(_:in:)` rather than `setRegion`, and that is not cosmetic.** `setRegion`
+        // centres in the *viewport*, so with a docked panel over the trailing 40% the pin lands
+        // against the panel's edge instead of in the middle of the map you can see. That is the
+        // same mistake, one call over, that put the whole route off the free strip.
+        let span = Framing.placeContextRadiusM * MKMapPointsPerMeterAtLatitude(pin.coordinate.latitude)
+        let centre = MKMapPoint(pin.coordinate)
+        fit(
+            MKMapRect(
+                x: centre.x - span, y: centre.y - span, width: span * 2, height: span * 2
+            ),
+            in: map
+        )
     }
 
     // MARK: - Framing
@@ -93,6 +144,12 @@ struct WorldMapView: UIViewRepresentable {
     /// where it is zero and the day is simply centred.
     private func frame(_ route: RoutePresentation, in map: MKMapView) {
         guard let rect = Self.fitRect(for: route) else { return }
+        fit(rect, in: map)
+    }
+
+    /// Fit a rect into the strip the panel leaves. One implementation, because a day and a
+    /// searched place are the same question about the same geometry.
+    private func fit(_ rect: MKMapRect, in map: MKMapView) {
         map.setVisibleMapRect(
             rect,
             edgePadding: UIEdgeInsets(
@@ -163,6 +220,10 @@ struct WorldMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate {
         /// The drawing currently on the map, so an unrelated layout change does not re-frame.
         var drawnIdentity: String?
+        /// The pinned place currently on the map, gated apart from the route for the same reason.
+        var pinnedID: String?
+        var onEmphasise: (Int?) -> Void = { _ in }
+        var onRegionSettled: (MKCoordinateRegion) -> Void = { _ in }
 
         func mapView(_ map: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let route = overlay as? DayRouteOverlay {
@@ -174,10 +235,101 @@ struct WorldMapView: UIViewRepresentable {
         func mapView(
             _ map: MKMapView, viewFor annotation: MKAnnotation
         ) -> MKAnnotationView? {
-            guard annotation is StopAnnotation else { return nil }
-            return map.dequeueReusableAnnotationView(
-                withIdentifier: StopAnnotationView.reuseIdentifier, for: annotation
+            if annotation is StopAnnotation {
+                return map.dequeueReusableAnnotationView(
+                    withIdentifier: StopAnnotationView.reuseIdentifier, for: annotation
+                )
+            }
+            if annotation is SearchPinAnnotation {
+                // A marker in the accent, because a pin is where you are pointing — the one thing
+                // `--accent` is allowed to mean. MapKit's stock balloon, since a searched place
+                // has no design of its own in this app yet.
+                let view = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: "pin")
+                view.markerTintColor = UIColor(Token.accent)
+                view.glyphImage = UIImage(systemName: "mappin")
+                return view
+            }
+            return nil
+        }
+
+        /// Apply the reveal as soon as the views exist, not only on the next camera change — a
+        /// freshly drawn day would otherwise sit at whatever alpha the reused view came with.
+        func mapView(_ map: MKMapView, didAdd views: [MKAnnotationView]) {
+            refreshReveal(in: map)
+        }
+
+        /// **MapKit's per-frame hook, and the reason there is no `CADisplayLink` here.** This fires
+        /// continuously through a gesture or a flight and not at all while the camera is still,
+        /// which is exactly the schedule the reveal wants — a display link would keep waking for
+        /// a map nobody is moving.
+        func mapViewDidChangeVisibleRegion(_ map: MKMapView) {
+            refreshReveal(in: map)
+        }
+
+        func mapView(_ map: MKMapView, regionDidChangeAnimated animated: Bool) {
+            onRegionSettled(map.region)
+        }
+
+        /// Fade and shrink every stop name by its own distance from the camera.
+        ///
+        /// Per stop rather than per view: on a pitched camera the near edge of the frame can be
+        /// 800m away while the far edge is 9km, so one threshold for the whole view either floods
+        /// the horizon with names or hides the street underneath. See `Framing.Reveal`.
+        ///
+        /// ponytail: linear scan over the day's annotations, n ≤ ~15. A day with dozens would want
+        /// `annotations(in: visibleMapRect)` instead.
+        func refreshReveal(in map: MKMapView) {
+            let camera = map.camera
+            let centre = GeoPoint(
+                lat: camera.centerCoordinate.latitude, lng: camera.centerCoordinate.longitude
             )
+            for annotation in map.annotations {
+                guard let stop = annotation as? StopAnnotation,
+                      let view = map.view(for: stop) as? StopAnnotationView
+                else { continue }
+                view.apply(
+                    distanceM: Framing.cameraDistanceM(
+                        to: GeoPoint(lat: stop.coordinate.latitude, lng: stop.coordinate.longitude),
+                        centre: centre,
+                        centreDistanceM: camera.centerCoordinateDistance,
+                        pitchDegrees: camera.pitch,
+                        headingDegrees: camera.heading
+                    )
+                )
+            }
+        }
+
+        /// Push the emphasised stop into the overlay and the annotation views.
+        ///
+        /// `setNeedsDisplay()` on the renderer rather than replacing the overlay: rebuilding it
+        /// would run through the route's redraw path, which re-frames the camera — so selecting a
+        /// stop would snap the view back to the day's bounding rect.
+        func apply(emphasis: Int?, in map: MKMapView) {
+            if let overlay = map.overlays.compactMap({ $0 as? DayRouteOverlay }).first,
+               overlay.emphasisIndex != emphasis {
+                overlay.emphasisIndex = emphasis
+                map.renderer(for: overlay)?.setNeedsDisplay()
+            }
+            for annotation in map.annotations {
+                guard let stop = annotation as? StopAnnotation,
+                      let view = map.view(for: stop) as? StopAnnotationView
+                else { continue }
+                view.isEmphasised = stop.indexWithinDay == emphasis
+            }
+        }
+
+        /// Tapping a stop's card points at it; tapping the map again stops pointing.
+        ///
+        /// The web's equivalent is a pointer hover, which has no touch analogue — a tap is the
+        /// gesture that means "this one" here, and it is the same state either way.
+        func mapView(_ map: MKMapView, didSelect view: MKAnnotationView) {
+            guard let stop = view.annotation as? StopAnnotation else { return }
+            onEmphasise(stop.rawIndex)
+        }
+
+        func mapView(_ map: MKMapView, didDeselect view: MKAnnotationView) {
+            guard view.annotation is StopAnnotation else { return }
+            onEmphasise(nil)
         }
     }
 }
