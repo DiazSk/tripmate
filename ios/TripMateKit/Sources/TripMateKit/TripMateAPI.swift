@@ -45,11 +45,14 @@ public struct CreateTripRequest: Encodable, Sendable {
     public let status: TripStatus
     public let runId: String?
     public let chatSessionId: String?
+    /// Stored with the draft so the edit loop starts from the same profile planning used, rather
+    /// than re-asking what generation already knew.
+    public let userAnswers: UserAnswers?
 
     public init(
         destination: String, startDate: String, endDate: String, budget: Double,
         itinerary: Itinerary, status: TripStatus,
-        runId: String? = nil, chatSessionId: String? = nil
+        runId: String? = nil, chatSessionId: String? = nil, userAnswers: UserAnswers? = nil
     ) {
         self.destination = destination
         self.startDate = startDate
@@ -59,6 +62,7 @@ public struct CreateTripRequest: Encodable, Sendable {
         self.status = status
         self.runId = runId
         self.chatSessionId = chatSessionId
+        self.userAnswers = userAnswers
     }
 }
 
@@ -79,25 +83,71 @@ public struct GeocodedPlace: Decodable, Sendable, Equatable {
     public let name: String
 }
 
-/// `POST /api/itinerary`. Minimal on purpose — the wizard phase adds `preferences` and the full
-/// `userAnswers` tree when there is a wizard to collect them. Sending fewer fields degrades plan
-/// quality; it does not fail the call.
+/// `preferences` on `POST /api/itinerary`.
+///
+/// **`vibe` is always null, and that is faithful rather than lazy.** The prompt builder reads the
+/// field and the web client sends `{tags, vibe: null}` from its one call site — nothing has ever
+/// populated it. Encoded explicitly, because contract rule 5 is that nullable means an explicit
+/// `null` rather than an absent key.
+public struct GeneratePreferences: Encodable, Sendable, Equatable {
+    public let tags: [String]
+    public let vibe: String?
+
+    public init(tags: [String], vibe: String? = nil) {
+        self.tags = tags
+        self.vibe = vibe
+    }
+
+    /// Hand-written because **`JSONEncoder` omits a nil optional rather than writing `null`**, and
+    /// the whole point of this field is that the web sends an explicit one. `encode` on an
+    /// `Optional` is what emits the null; `encodeIfPresent` is the default behaviour being
+    /// overridden here.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(tags, forKey: .tags)
+        try container.encode(vibe, forKey: .vibe)
+    }
+
+    private enum CodingKeys: String, CodingKey { case tags, vibe }
+}
+
+/// `POST /api/itinerary`.
+///
+/// **Sending fewer fields degrades plan quality; it does not fail the call** — which is why every
+/// answer below the first four is optional, and why the wizard's later steps can be skipped.
+///
+/// `tier` is the exception that looks like an option: it is `nil`-able here because a *refine*
+/// carries `previousItinerary` instead, but a first generation without one is a 400 **"No spending
+/// style was selected"** (`route.ts:114`). Nothing picks it — `PlanDraft.tier` derives it from the
+/// budget, so the real precondition is a budget above zero.
 public struct GenerateRequest: Encodable, Sendable {
     public let destination: String
     public let startDate: String
     public let endDate: String
     public let budget: Double
     public let tier: TierId?
+    public let preferences: GeneratePreferences?
+    public let userAnswers: UserAnswers?
+    /// Sent alongside `userAnswers.dietary` rather than only inside it. The legacy prompt has read
+    /// the top-level field since `formatDietary` shipped, and a food stop the traveler cannot eat
+    /// at is the worst defect this app can produce — so it goes in both places the server looks.
+    public let dietary: DietaryNeeds?
 
     public init(
         destination: String, startDate: String, endDate: String,
-        budget: Double, tier: TierId? = nil
+        budget: Double, tier: TierId? = nil,
+        preferences: GeneratePreferences? = nil,
+        userAnswers: UserAnswers? = nil,
+        dietary: DietaryNeeds? = nil
     ) {
         self.destination = destination
         self.startDate = startDate
         self.endDate = endDate
         self.budget = budget
         self.tier = tier
+        self.preferences = preferences
+        self.userAnswers = userAnswers
+        self.dietary = dietary
     }
 }
 

@@ -13,23 +13,24 @@ struct TripMateApp: App {
     /// Place search, beside the trips rather than inside them: it answers "what is near here",
     /// which is a question about the map and not about the trip being read.
     @State private var search = MapSearchStore()
+    @State private var plan: PlanStore
 
     init() {
         let session = AuthSession(store: KeychainTokenStore())
         self.session = session
-        _store = State(
-            initialValue: TripsStore(
-                api: TripMateAPI(
-                    baseURL: AppConfiguration.apiBaseURL,
-                    tokenProvider: session.tokenProvider()
-                )
-            )
+        // One client for the process, shared by both stores. `tokenProvider()` captures the actor
+        // rather than a value, so a sign-out is visible on the next request either store makes.
+        let api = TripMateAPI(
+            baseURL: AppConfiguration.apiBaseURL,
+            tokenProvider: session.tokenProvider()
         )
+        _store = State(initialValue: TripsStore(api: api))
+        _plan = State(initialValue: PlanStore(api: api))
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(store: store)
+            RootView(store: store, plan: plan)
                 .environment(search)
                 // Dark-only, matching the web app's `color-scheme: dark` on :root. Not a
                 // preference the system gets to override: the whole palette is one slate, and
@@ -41,6 +42,7 @@ struct TripMateApp: App {
 
 private struct RootView: View {
     let store: TripsStore
+    let plan: PlanStore
     @Environment(MapSearchStore.self) private var search
 
     var body: some View {
@@ -51,11 +53,12 @@ private struct RootView: View {
                 // Converted here, once, rather than on either side. See `RouteStop.rawIndex`.
                 emphasis: store.emphasis.flatMap { store.route?.drawnIndex(forRawStop: $0) },
                 pin: search.pin,
+                focus: plan.previewRegion,
                 onEmphasise: { store.emphasise($0) },
                 onRegionSettled: { search.region = $0 }
             )
         } panel: {
-            PanelContent(store: store)
+            PanelContent(store: store, plan: plan)
         }
         .task { await store.loadTrips() }
     }
@@ -63,15 +66,28 @@ private struct RootView: View {
 
 /// What the docked panel currently shows.
 ///
-/// A plain conditional rather than a `NavigationStack`: there are two states, the transition is
+/// A plain conditional rather than a `NavigationStack`: there are three states, the transition is
 /// the panel's own content changing, and a navigation bar would be a second piece of chrome
 /// competing with the one the shell already draws.
 private struct PanelContent: View {
     let store: TripsStore
+    let plan: PlanStore
+    @State private var isPlanning = false
 
     var body: some View {
         Group {
-            if let trip = store.open {
+            if isPlanning {
+                PlanWizardView(
+                    plan: plan,
+                    onGenerated: { id in
+                        isPlanning = false
+                        // The wizard's own copy is done with; the trip row is the record now.
+                        plan.reset()
+                        Task { await store.openTrip(id: id) }
+                    },
+                    onCancel: { isPlanning = false }
+                )
+            } else if let trip = store.open {
                 TripDetailView(
                     trip: trip,
                     activeDay: store.activeDay,
@@ -81,9 +97,11 @@ private struct PanelContent: View {
                     onBack: { store.closeTrip() }
                 )
             } else {
-                TripsListView(store: store) { summary in
-                    Task { await store.openTrip(id: summary.id) }
-                }
+                TripsListView(
+                    store: store,
+                    onOpen: { summary in Task { await store.openTrip(id: summary.id) } },
+                    onPlan: { isPlanning = true }
+                )
             }
         }
         .padding(Token.padCompact)

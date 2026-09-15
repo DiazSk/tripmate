@@ -187,33 +187,14 @@ public struct Trip: Codable, Sendable, Equatable {
     public var resolvedStatus: TripStatus { status ?? .saved }
 }
 
-/// Only the fields this client reads back. Deliberately *not* the full server-side shape: the
-/// write path is the wizard's own request body, and modelling 20 fields we never display would be
-/// 20 more chances to decode-fail on a trip that renders fine.
-///
-/// `TripLogistics` is flattened here rather than nested because all five of its fields are
-/// optional anyway — it was declared twice server-side with different field sets until that was
-/// fixed, so treat any subset as possible.
-public struct UserAnswers: Codable, Sendable, Equatable {
-    public let purpose: String?
-    public let logistics: TripLogistics?
-    public let dietary: DietaryNeeds?
-}
-
-public struct TripLogistics: Codable, Sendable, Equatable {
-    public let arrivalTime: String?
-    public let arrivalPoint: String?
-    public let departureTime: String?
-    public let departurePoint: String?
-    public let stayBooked: String?
-}
-
-/// Both fields empty means "no restrictions" — which is explicitly different from the object
-/// being absent. Do not collapse the two.
-public struct DietaryNeeds: Codable, Sendable, Equatable {
-    public let tags: [String]
-    public let note: String
-}
+// `UserAnswers`, `TripLogistics`, `DietaryNeeds` and the rest of the answer tree live in
+// `UserAnswers.swift` — they are the wizard's *write* shape as well as this read field's type, and
+// one JSON object should not be two Swift types.
+//
+// This read used to model only three fields, on the reasoning that modelling twenty we never
+// display would be twenty more chances to decode-fail. The wizard needs all twenty to *send*, and
+// the reasoning survives the merge intact: every added field is optional, so a trip saved before
+// any of them existed decodes exactly as it did.
 
 // MARK: - The decoder
 

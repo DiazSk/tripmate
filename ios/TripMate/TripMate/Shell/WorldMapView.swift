@@ -17,6 +17,12 @@ struct WorldMapView: UIViewRepresentable {
     let emphasis: Int?
     /// The searched place pinned on the map, if any.
     let pin: SearchResult?
+    /// Somewhere to look when there is no day to frame — the wizard's geocoded destination.
+    ///
+    /// **Only honoured while `route` is nil.** A day's framing is a stronger claim about where the
+    /// camera belongs than "the trip is roughly here", so once there is a route this is ignored
+    /// rather than fighting it.
+    let focus: MKCoordinateRegion?
     /// Map taps that change what is being pointed at.
     let onEmphasise: (Int?) -> Void
     /// Where "near this view" is, reported when the camera settles.
@@ -59,6 +65,7 @@ struct WorldMapView: UIViewRepresentable {
 
         drawRoute(in: map, coordinator: context.coordinator)
         drawPin(in: map, coordinator: context.coordinator)
+        lookAtFocus(in: map, coordinator: context.coordinator)
 
         // Emphasis is applied on every update and gated by nothing: it changes far more often than
         // the drawing does, and it costs two strokes and a dot colour rather than a redraw.
@@ -123,6 +130,19 @@ struct WorldMapView: UIViewRepresentable {
             ),
             in: map
         )
+    }
+
+    /// Fly to the wizard's destination, once per distinct place.
+    ///
+    /// Gated on the coordinate rather than on equality of the region, because `MKCoordinateRegion`
+    /// is not `Equatable` and the span never changes — and gated so a panel resize does not
+    /// re-fly, which is the same rule the route's own redraw gate exists for.
+    private func lookAtFocus(in map: MKMapView, coordinator: Coordinator) {
+        guard route == nil, let focus else { return }
+        let key = "\(focus.center.latitude),\(focus.center.longitude)"
+        guard coordinator.focusedKey != key else { return }
+        coordinator.focusedKey = key
+        map.setRegion(focus, animated: true)
     }
 
     // MARK: - Framing
@@ -222,6 +242,8 @@ struct WorldMapView: UIViewRepresentable {
         var drawnIdentity: String?
         /// The pinned place currently on the map, gated apart from the route for the same reason.
         var pinnedID: String?
+        /// The wizard destination already flown to.
+        var focusedKey: String?
         var onEmphasise: (Int?) -> Void = { _ in }
         var onRegionSettled: (MKCoordinateRegion) -> Void = { _ in }
 

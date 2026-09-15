@@ -11,13 +11,24 @@ import TripMateKit
 struct TripsListView: View {
     let store: TripsStore
     let onOpen: (TripSummary) -> Void
+    let onPlan: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Token.gapPanels) {
-            Text("Memories")
-                .font(.system(size: 28, weight: .semibold))
-                .kerning(-2.5)
-                .foregroundStyle(Token.foreground)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Memories")
+                    .font(.system(size: 28, weight: .semibold))
+                    .kerning(-2.5)
+                    .foregroundStyle(Token.foreground)
+                Spacer(minLength: 8)
+                // Only once there is a wall to add to. On the empty state the invitation below
+                // carries the button, because a heading with an action beside it and nothing
+                // underneath reads as a toolbar for an empty room.
+                if !store.trips.isEmpty {
+                    Button("Plan a trip", action: onPlan)
+                        .buttonStyle(PrimaryButtonStyle())
+                }
+            }
 
             if let message = store.message {
                 Notice(text: message)
@@ -55,6 +66,9 @@ struct TripsListView: View {
             Text("Tell us where and when, and the days come back written.")
                 .font(.system(size: 14))
                 .foregroundStyle(Token.muted)
+            Button("Plan a trip", action: onPlan)
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.top, 4)
         }
     }
 }
