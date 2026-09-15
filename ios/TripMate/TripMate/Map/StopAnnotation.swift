@@ -41,6 +41,19 @@ final class StopAnnotationView: MKAnnotationView {
     private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
     private let label = UILabel()
 
+    /// The stop's point on the map — MapLibre's `-dot` layer.
+    ///
+    /// **Here rather than as an `MKCircle` overlay, and that is the fix for a measured bug.** Two
+    /// metre-radius circles per stop used to draw this, and metres are the wrong unit: across one
+    /// real trip day spans run 82m to 67km, so a fixed 42m radius dominated one day and vanished
+    /// on another. MapLibre's `circle-radius` is *pixels*, and an annotation view is already
+    /// screen-space — so the dot is the same size at every zoom and the span stops mattering.
+    /// It also removes two overlays per stop and adds no new type.
+    ///
+    /// Sits outside the card's bounds, at the coordinate the card is offset above. `MKAnnotationView`
+    /// does not clip its subviews, so this needs no layout gymnastics.
+    private let dot = UIView()
+
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
 
@@ -87,7 +100,27 @@ final class StopAnnotationView: MKAnnotationView {
             label.topAnchor.constraint(equalTo: blur.contentView.topAnchor, constant: 3),
             label.bottomAnchor.constraint(equalTo: blur.contentView.bottomAnchor, constant: -3),
         ])
+
+        let diameter = RouteGeometry.Design.dotRadius * 2
+        dot.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
+        dot.layer.cornerRadius = RouteGeometry.Design.dotRadius
+        dot.layer.borderWidth = RouteGeometry.Design.dotStrokeWidth
+        // `circle-stroke-color: "#12110f"` — the redesign's near-black, which is what separates a
+        // dot from cartography of any brightness.
+        dot.layer.borderColor = UIColor(
+            red: 0x12 / 255, green: 0x11 / 255, blue: 0x0f / 255, alpha: 1
+        ).cgColor
+        addSubview(dot)
     }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // The card is lifted above the coordinate by `centerOffset`; the dot goes back down to it.
+        dot.center = CGPoint(x: bounds.midX, y: bounds.height + Self.cardGap)
+    }
+
+    /// Gap between the dot and the card above it.
+    private static let cardGap: CGFloat = 8
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -100,12 +133,22 @@ final class StopAnnotationView: MKAnnotationView {
     override var annotation: MKAnnotation? {
         didSet {
             label.text = annotation?.title ?? nil
+            // The dot takes the day's core colour, so the point and the line between points read
+            // as one thing. Derived from the day index rather than passed in — the annotation
+            // already carries it, and a second source would be a second thing to keep in step.
+            if let stop = annotation as? StopAnnotation {
+                let core = RouteGeometry.palette(forDay: stop.dayIndex).core
+                dot.backgroundColor = UIColor(
+                    red: core.red, green: core.green, blue: core.blue,
+                    alpha: RouteGeometry.Design.dotOpacity
+                )
+            }
             // Sized to the text so `collisionMode = .circle` has a real footprint to work with;
             // a zero-sized view would never be decluttered against anything.
             frame.size = systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-            // The card sits above the point it names rather than centred on it, so the ground
-            // rings under it stay visible.
-            centerOffset = CGPoint(x: 0, y: -(frame.height / 2) - 8)
+            // The card sits above the point it names rather than on top of it, so the dot below
+            // stays visible.
+            centerOffset = CGPoint(x: 0, y: -(frame.height / 2) - Self.cardGap)
         }
     }
 }

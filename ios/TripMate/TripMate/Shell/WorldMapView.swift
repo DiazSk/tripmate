@@ -60,40 +60,18 @@ struct WorldMapView: UIViewRepresentable {
 
         // **`.aboveLabels`, not `.aboveRoads`.** The day is the reason this map is on screen, so
         // it outranks the basemap's own cartography — and in a dense historic centre like Pienza
-        // the POI labels are thick enough to hide a 16pt stroke entirely. The rings stay below the
-        // labels: they are ground, and burying a street name under a translucent disc would cost
-        // more than it buys.
+        // the POI labels are thick enough to hide the stroke entirely.
+        //
+        // One overlay per day now. The stop dots used to be two metre-radius `MKCircle`s each;
+        // they live in the annotation view instead, where screen-space units make a day's span
+        // irrelevant. See `StopAnnotationView.dot`.
         map.addOverlay(
             DayRouteOverlay(coordinates: route.coordinates, palette: route.palette),
             level: .aboveLabels
         )
-        for circle in Self.groundRings(for: route) {
-            map.addOverlay(circle, level: .aboveRoads)
-        }
         map.addAnnotations(route.stops.map(StopAnnotation.init(stop:)))
 
         frame(route, in: map)
-    }
-
-    // MARK: - Ground rings
-
-    /// `POOL_RADIUS_M` and `POOL_OUTER_RATIO`, drawn as two real metre-radius circles per stop.
-    ///
-    /// This is one of the few pieces that ports *exactly*: `MKCircle` takes a radius in metres and
-    /// foreshortens correctly under pitch, which is the same thing the Cesium ellipses did. What
-    /// does not port is the animation — three rings brightening a third of a cycle apart would
-    /// mean redrawing every ring on every frame through CoreGraphics, so the travelling wave is
-    /// the casualty and the static rings are what remain.
-    private static let poolRadiusM: Double = 42
-    private static let poolOuterRatio: Double = 2.1
-
-    private static func groundRings(for route: RoutePresentation) -> [MKCircle] {
-        route.coordinates.flatMap { coordinate in
-            [
-                MKCircle(center: coordinate, radius: poolRadiusM * poolOuterRatio),
-                MKCircle(center: coordinate, radius: poolRadiusM),
-            ]
-        }
     }
 
     // MARK: - Framing
@@ -189,23 +167,6 @@ struct WorldMapView: UIViewRepresentable {
         func mapView(_ map: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let route = overlay as? DayRouteOverlay {
                 return DayRouteRenderer(overlay: route)
-            }
-            if let circle = overlay as? MKCircle {
-                let renderer = MKCircleRenderer(circle: circle)
-                let palette = (map.overlays.compactMap { $0 as? DayRouteOverlay }.first)?.palette
-                    ?? RouteGeometry.palette(forDay: 0)
-                let colour = UIColor(
-                    red: palette.glow.red, green: palette.glow.green,
-                    blue: palette.glow.blue, alpha: 1
-                )
-                // **The rings are the figure**, not the discs: a disc alone reads as a stain on
-                // the cartography, while a circle has an *edge*, which is the thing a basemap
-                // cannot fake underneath it. So the fill stays very low and the stroke carries it.
-                let isOuter = circle.radius > poolRadiusM * 1.5
-                renderer.fillColor = colour.withAlphaComponent(isOuter ? 0.07 : 0.24)
-                renderer.strokeColor = colour.withAlphaComponent(isOuter ? 0.75 : 0.5)
-                renderer.lineWidth = 1
-                return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
         }

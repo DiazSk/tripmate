@@ -64,34 +64,6 @@ final class RouteGeometryTests: XCTestCase {
         XCTAssertEqual(stops.map(\.dayIndex), [0, 1])
     }
 
-    // MARK: - Taper
-
-    /// Narrows from the stop being left toward the stop being arrived at — the shape says which
-    /// way the day runs before any animation does.
-    func testTaperNarrowsMonotonically() {
-        let widths = RouteGeometry.taperWidths()
-        XCTAssertEqual(widths.count, RouteGeometry.taperSegments)
-        for (a, b) in zip(widths, widths.dropFirst()) {
-            XCTAssertGreaterThan(a, b, "each segment must be narrower than the one before")
-        }
-    }
-
-    /// Sampled at midpoints, so the widths are symmetric about the leg rather than biased to one
-    /// end — the first is inside the start width and the last inside the end width.
-    func testTaperIsSampledAtMidpointsNotEndpoints() {
-        let widths = RouteGeometry.taperWidths()
-        XCTAssertLessThan(widths.first!, RouteGeometry.widthStart)
-        XCTAssertGreaterThan(widths.last!, RouteGeometry.widthEnd)
-        // Symmetric: the mean of the extremes is the mean of the range.
-        let mid = (RouteGeometry.widthStart + RouteGeometry.widthEnd) / 2
-        XCTAssertEqual((widths.first! + widths.last!) / 2, mid, accuracy: 0.0001)
-    }
-
-    func testTaperDegradesSensiblyAtTheEdges() {
-        XCTAssertTrue(RouteGeometry.taperWidths(segments: 0).isEmpty)
-        XCTAssertEqual(RouteGeometry.taperWidths(segments: 1), [12.5])
-    }
-
     // MARK: - Fixture
 
     private static func itinerary(_ days: [[(Double, Double, String)]]) throws -> Itinerary {

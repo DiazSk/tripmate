@@ -114,31 +114,39 @@ public enum RouteGeometry {
         return out
     }
 
-    // MARK: - The taper
+    // MARK: - The 2D design
 
-    /// `ARC_WIDTH_START` → `ARC_WIDTH_END` over `ARC_TAPER_SEGMENTS`.
-    public static let widthStart: Double = 16
-    public static let widthEnd: Double = 9
-    public static let taperSegments = 6
-    /// Total across *both* edges — 5 here is a body between two 2.5pt edges.
-    public static let casingWidth: Double = 5
-
-    /// The per-segment widths of a tapering leg.
+    /// Transcribed from MapLibre's own layers in `src/lib/maplibreRenderer.ts` — `-glow`,
+    /// `-core`, `-pool` and `-dot`. **That is the right reference for a flat map**, and the
+    /// casing-plus-taper this replaced was not: those belong to Cesium's elevated glass ribbon,
+    /// which has a third dimension to separate days in.
     ///
-    /// **The taper says which way the day runs before any animation does** — it narrows from the
-    /// stop being left toward the stop being arrived at. Neither Cesium nor CoreGraphics has
-    /// per-vertex width, so a leg is cut into consecutive constant-width pieces; sampled at
-    /// segment midpoints so the widths are symmetric about the leg rather than biased to one end.
-    public static func taperWidths(
-        segments: Int = taperSegments,
-        start: Double = widthStart,
-        end: Double = widthEnd
-    ) -> [Double] {
-        guard segments > 0 else { return [] }
-        guard segments > 1 else { return [(start + end) / 2] }
-        return (0..<segments).map { index in
-            let t = (Double(index) + 0.5) / Double(segments)
-            return start + (end - start) * t
-        }
+    /// **Every value here is in screen points, and that is the load-bearing part.** MapLibre's
+    /// `circle-radius` and `line-width` are pixels, so a stop dot is the same size whether its
+    /// day spans 82m or 67km. Measured on one real trip, day spans cover exactly that range —
+    /// three orders of magnitude — which is why the metre-radius rings this replaced could only
+    /// read correctly over a narrow band of trips. Screen-space units delete that problem rather
+    /// than tuning around it.
+    public enum Design {
+        /// `-glow`: a wide, blurred line under the core.
+        public static let glowWidth: Double = 14
+        /// MapLibre's `line-blur: 8`.
+        public static let glowBlur: Double = 8
+        /// `-core`: `ROUTE_CORE_WIDTH_PX` (4) × the layer's own 0.5 multiplier.
+        public static let coreWidth: Double = 2
+
+        /// `-pool`: the soft halo under a stop. `circle-radius: 22`, `circle-blur: 1`.
+        public static let poolRadius: Double = 22
+        public static let poolBlur: Double = 1
+        /// `-dot`: `circle-radius: 5` with a `circle-stroke-width: 1.5`.
+        public static let dotRadius: Double = 5
+        public static let dotStrokeWidth: Double = 1.5
+
+        /// Opacities at full emphasis, with MapLibre's multipliers already applied: the glow and
+        /// pool layers are `glowOpacity × 0.55` where `glowOpacity` is itself `α × 0.6`, and the
+        /// core is `α × 0.5`. Resting α is 1.
+        public static let glowOpacity: Double = 0.6 * 0.55
+        public static let coreOpacity: Double = 0.5
+        public static let dotOpacity: Double = 1
     }
 }

@@ -1,11 +1,11 @@
 import MapKit
 import TripMateKit
+import UIKit
 
 /// One day's route, as a MapKit overlay.
 ///
-/// A custom `MKOverlay` rather than `MKPolyline`, because the two things that make a route legible
-/// here — the dark casing and the taper — are neither of them expressible on `MKPolylineRenderer`,
-/// which has one width and one colour.
+/// A custom `MKOverlay` rather than `MKPolyline`, because the design is two strokes — a blurred
+/// glow under a thin core — and `MKPolylineRenderer` has one width and one colour.
 final class DayRouteOverlay: NSObject, MKOverlay {
     let coordinates: [CLLocationCoordinate2D]
     let palette: DayPalette
@@ -24,23 +24,20 @@ final class DayRouteOverlay: NSObject, MKOverlay {
             rect = rect.union(MKMapRect(origin: point, size: MKMapSize(width: 0, height: 0)))
         }
         // Padded so a wide stroke near the edge is not clipped by its own bounding rect — the
-        // rect bounds the *centreline*, and the casing is drawn either side of it.
+        // rect bounds the *centreline*, and the glow is drawn either side of it.
         self.boundingMapRect = rect.isNull ? .null : rect.insetBy(dx: -rect.width * 0.2 - 1000, dy: -rect.height * 0.2 - 1000)
         self.coordinate = points.first?.coordinate ?? CLLocationCoordinate2D()
     }
 }
 
-/// Draws a day's route: dark casing underneath, tapering coloured body on top.
+/// Draws a day's route the way MapLibre's 2D layers do: a wide blurred glow, then a thin core.
 ///
-/// **The casing is what makes it legible, not the brightness.** A stroke of colour has no
-/// guaranteed contrast against uncontrolled cartography — Apple's map is green here and grey
-/// there — while a stroke with a near-black border supplies its own wherever it lands. That was
-/// learned on photorealistic satellite tiles and it holds just as well over vector cartography.
-///
-/// **The taper says which way the day runs before any animation does**, narrowing from the stop
-/// being left toward the stop being arrived at. CoreGraphics has no per-vertex width, exactly as
-/// Cesium had none, so each leg is cut into consecutive constant-width pieces — the same
-/// technique, arrived at for the same reason.
+/// **Ported from the flat design rather than the elevated one.** The previous version carried a
+/// dark casing and a six-segment taper, both of which are Cesium's: that ribbon is lifted into the
+/// air, where a casing supplies contrast against arbitrary photogrammetry and the taper says which
+/// way the day runs. Neither applies to a line draped on vector cartography, and MapLibre's own
+/// `-glow`/`-core` pair is what this app actually looks like in 2D. Two strokes instead of a loop
+/// over seven.
 final class DayRouteRenderer: MKOverlayRenderer {
 
     private var route: DayRouteOverlay { overlay as! DayRouteOverlay }
@@ -55,48 +52,39 @@ final class DayRouteRenderer: MKOverlayRenderer {
         context.setLineJoin(.round)
 
         // `zoomScale` is points-per-MKMapPoint, so dividing by it holds a stroke at a constant
-        // width on screen instead of letting it grow with zoom.
-        func screenWidth(_ width: Double) -> CGFloat { CGFloat(width) / CGFloat(zoomScale) }
+        // width on screen instead of letting it grow with zoom. The blur radius takes the same
+        // conversion — it is a length in the same user space as the stroke.
+        func screenUnits(_ value: Double) -> CGFloat { CGFloat(value) / CGFloat(zoomScale) }
 
-        let widths = RouteGeometry.taperWidths()
-
-        // Pass one: the casing, under everything. Drawn as a single stroke at the widest body
-        // width plus the casing allowance — one pass rather than per-segment, because two
-        // adjacent casing strokes would seam visibly at their join.
-        context.setStrokeColor(
-            red: RouteGeometry.casing.red,
-            green: RouteGeometry.casing.green,
-            blue: RouteGeometry.casing.blue,
-            alpha: 0.9
-        )
-        context.setLineWidth(screenWidth(RouteGeometry.widthStart + RouteGeometry.casingWidth))
-        context.beginPath()
-        context.addLines(between: points)
-        context.strokePath()
-
-        // Pass two: the body, tapering per leg.
-        for legIndex in 0..<(points.count - 1) {
-            let from = points[legIndex]
-            let to = points[legIndex + 1]
-            for (segmentIndex, width) in widths.enumerated() {
-                let t0 = Double(segmentIndex) / Double(widths.count)
-                let t1 = Double(segmentIndex + 1) / Double(widths.count)
-                context.setStrokeColor(
-                    red: route.palette.core.red,
-                    green: route.palette.core.green,
-                    blue: route.palette.core.blue,
-                    alpha: 1
-                )
-                context.setLineWidth(screenWidth(width))
-                context.beginPath()
-                context.move(to: Self.lerp(from, to, t0))
-                context.addLine(to: Self.lerp(from, to, t1))
-                context.strokePath()
-            }
+        func stroke(_ colour: UIColor, width: Double) {
+            context.setStrokeColor(colour.cgColor)
+            context.setLineWidth(screenUnits(width))
+            context.beginPath()
+            context.addLines(between: points)
+            context.strokePath()
         }
-    }
 
-    private static func lerp(_ a: CGPoint, _ b: CGPoint, _ t: Double) -> CGPoint {
-        CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+        let glow = UIColor(
+            red: route.palette.glow.red, green: route.palette.glow.green,
+            blue: route.palette.glow.blue, alpha: RouteGeometry.Design.glowOpacity
+        )
+        let core = UIColor(
+            red: route.palette.core.red, green: route.palette.core.green,
+            blue: route.palette.core.blue, alpha: RouteGeometry.Design.coreOpacity
+        )
+
+        // The glow. `setShadow` at zero offset is CoreGraphics' native equivalent of MapLibre's
+        // `line-blur` — a genuinely blurred copy of the stroke sitting under it, rather than a
+        // wider low-alpha stroke faking the falloff.
+        context.saveGState()
+        context.setShadow(
+            offset: .zero,
+            blur: screenUnits(RouteGeometry.Design.glowBlur),
+            color: glow.cgColor
+        )
+        stroke(glow, width: RouteGeometry.Design.glowWidth)
+        context.restoreGState()
+
+        stroke(core, width: RouteGeometry.Design.coreWidth)
     }
 }
