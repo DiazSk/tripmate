@@ -29,9 +29,9 @@ import SwiftUI
 ///
 /// This is not a workaround to unpick later. The layout below is driven entirely by the size it
 /// is given and contains no fold-specific branch, which is what the design called for regardless;
-/// adopting `ArrangementView` when it becomes declared API replaces one `ZStack` and changes
-/// nothing else.
-struct AppShell<Panel: View>: View {
+/// adopting `ArrangementView` when it becomes declared API replaces one `ZStack`.
+struct AppShell<World: View, Panel: View>: View {
+    @ViewBuilder var world: () -> World
     @ViewBuilder var panel: () -> Panel
 
     @State private var exclusions = ShellExclusions()
@@ -55,6 +55,7 @@ struct AppShell<Panel: View>: View {
     var body: some View {
         GeometryReader { proxy in
             let isDocked = proxy.size.width >= Self.dockingThreshold
+            let panelWidth = isDocked ? Self.panelWidth(in: proxy.size.width) : proxy.size.width
 
             ZStack {
                 // Behind everything, including before the map has produced a frame. The web shell
@@ -69,14 +70,13 @@ struct AppShell<Panel: View>: View {
                 Token.canvas
                     .ignoresSafeArea()
 
-                WorldLayer()
+                world()
                     .ignoresSafeArea()
 
                 if isDocked {
                     HStack(spacing: 0) {
                         Spacer(minLength: 0)
-                        panel()
-                            .frame(width: Self.panelWidth(in: proxy.size.width))
+                        panel().frame(width: panelWidth)
                     }
                 } else {
                     panel()
@@ -84,6 +84,17 @@ struct AppShell<Panel: View>: View {
 
                 ChromeLayer()
             }
+            // Measured rather than assumed, and set here because this is where the size is known.
+            // The camera needs the panel's *real* edge: the panel clamps to a 360-520pt range, so
+            // the fraction it occupies changes with the display, and a hardcoded 40% would frame
+            // routes against an edge that is not there.
+            .environment(
+                \.panelMetrics,
+                PanelMetrics(
+                    viewWidth: proxy.size.width,
+                    freeWidth: isDocked ? proxy.size.width - panelWidth : proxy.size.width
+                )
+            )
         }
         .environment(\.shellExclusions, exclusions)
         // One measurement of the hardware for the whole app; a second measurer would eventually
@@ -96,22 +107,6 @@ struct AppShell<Panel: View>: View {
     /// `w-[40%] min-w-[360px] max-w-[520px]`, straight from `DockedPanel`.
     static func panelWidth(in available: CGFloat) -> CGFloat {
         min(max(available * Token.panelFraction, Token.panelMinWidth), Token.panelMaxWidth)
-    }
-}
-
-/// The world: the map, and everything pinned into it.
-///
-/// A container rather than the map directly, because the marker layer belongs *here* — above the
-/// map and inside the world — and that grouping is what the web shell's z-index comments exist to
-/// protect.
-private struct WorldLayer: View {
-    var body: some View {
-        ZStack {
-            WorldMapView()
-            // The stop-marker layer lands here, above the map and inside the world. Empty until
-            // the renderer can project world coordinates to screen points, which is its own
-            // phase — an annotation layer with nothing to anchor to is a stub, not a start.
-        }
     }
 }
 

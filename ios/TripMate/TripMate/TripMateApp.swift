@@ -40,6 +40,8 @@ private struct RootView: View {
 
     var body: some View {
         AppShell {
+            WorldMapView(route: store.route)
+        } panel: {
             PanelContent(store: store)
         }
         .task { await store.loadTrips() }
@@ -57,7 +59,12 @@ private struct PanelContent: View {
     var body: some View {
         Group {
             if let trip = store.open {
-                TripDetailView(trip: trip) { store.closeTrip() }
+                TripDetailView(
+                    trip: trip,
+                    activeDay: store.activeDay,
+                    onSelectDay: { store.selectDay($0) },
+                    onBack: { store.closeTrip() }
+                )
             } else {
                 TripsListView(store: store) { summary in
                     Task { await store.openTrip(id: summary.id) }

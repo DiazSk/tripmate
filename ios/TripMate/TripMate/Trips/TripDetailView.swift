@@ -9,9 +9,9 @@ import TripMateKit
 /// would be chrome that does nothing.
 struct TripDetailView: View {
     let trip: Trip
+    let activeDay: Int
+    let onSelectDay: (Int) -> Void
     let onBack: () -> Void
-
-    @State private var activeDay = 0
 
     private var days: [DayPlan] { trip.itinerary.days }
 
@@ -57,7 +57,7 @@ struct TripDetailView: View {
             HStack(spacing: 6) {
                 ForEach(days.indices, id: \.self) { index in
                     let isActive = index == activeDay
-                    Button { activeDay = index } label: {
+                    Button { onSelectDay(index) } label: {
                         Text("Day \(index + 1)")
                             .font(.system(size: 12, weight: .semibold))
                             .kerning(-0.4)

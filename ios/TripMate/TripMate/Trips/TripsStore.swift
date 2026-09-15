@@ -14,6 +14,24 @@ final class TripsStore {
     private(set) var open: Trip?
     private(set) var isLoading = false
 
+    /// Which day is being read.
+    ///
+    /// **Here rather than in the detail view**, because two surfaces answer to it: the panel shows
+    /// that day's stops and the map draws that day's route. Held in the view, the map would have
+    /// no way to ask, and a second copy would be a second source of truth for one question.
+    private(set) var activeDay = 0
+
+    /// What the map should draw, derived rather than stored — so it cannot fall out of step with
+    /// the day the panel is showing.
+    var route: RoutePresentation? {
+        guard let open else { return nil }
+        return RoutePresentation(trip: open, dayIndex: activeDay)
+    }
+
+    func selectDay(_ index: Int) {
+        activeDay = index
+    }
+
     /// A message ready to show, not an `Error` for the view to interpret.
     ///
     /// The mapping lives here because `APIError`'s two non-failure cases carry the *server's own*
@@ -44,6 +62,9 @@ final class TripsStore {
         message = nil
         do {
             open = try await api.trip(id: id)
+            // Reset before the trip lands, not after: a stale index from a nine-day trip would
+            // otherwise briefly address a day a three-day trip does not have.
+            activeDay = 0
         } catch {
             message = Self.describe(error)
         }
