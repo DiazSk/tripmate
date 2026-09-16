@@ -6,6 +6,7 @@ import {
   setTripChatSession,
   updateTripItinerary,
 } from "@/lib/db";
+import { readableOwners } from "@/lib/owner";
 import { currentOwnerId } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
 // Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
@@ -35,6 +36,15 @@ export async function PATCH(
   const { id } = await params;
   const trip = getTrip(id);
   if (!trip) {
+    return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
+  }
+
+  // Scoped, unlike the GET above, and for the same reason DELETE is: reading a trip by an
+  // unguessable id is how a shared link works, but *writing* one is not something a link should
+  // confer. Without this, anyone holding an id could overwrite another traveller's itinerary and
+  // promote their draft. `readableOwners` rather than a bare equality so the pre-ownership rows
+  // stay editable by the person who made them — see LEGACY_OWNER.
+  if (!readableOwners(await currentOwnerId()).includes(trip.owner_id)) {
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
