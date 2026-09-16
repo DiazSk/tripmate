@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import { randomUUID } from "crypto";
-import { LOCAL_OWNER, parseProfile, type TravelerProfile } from "./travelerProfile";
+import { parseProfile, type TravelerProfile } from "./travelerProfile";
 import { staleDraftCutoff } from "./drafts";
 import { LEGACY_OWNER, readableOwners } from "./owner";
 import type { TripStatus } from "./types";
@@ -1132,7 +1132,13 @@ export function upsertTravelerProfile(ownerId: string, profileJson: string): voi
  * defaults — so the distinction would carry no consequence. Deliberate departure
  * from the convention, not an oversight.
  */
-export function readProfile(ownerId: string = LOCAL_OWNER): TravelerProfile | null {
+/**
+ * `ownerId` is required, and that is the fix rather than a style preference. It defaulted to
+ * `LOCAL_OWNER`, every one of the four call sites omitted it, and `traveler_profile` was therefore
+ * a one-row table: every browser on a deployment read and wrote one profile, which then fed
+ * generation. A default here cannot be spelled safely — the right owner is always the caller's.
+ */
+export function readProfile(ownerId: string): TravelerProfile | null {
   const row = getTravelerProfile(ownerId);
   if (!row) return null;
   try {
@@ -1142,7 +1148,7 @@ export function readProfile(ownerId: string = LOCAL_OWNER): TravelerProfile | nu
   }
 }
 
-export function writeProfile(profile: TravelerProfile, ownerId: string = LOCAL_OWNER): void {
+export function writeProfile(profile: TravelerProfile, ownerId: string): void {
   upsertTravelerProfile(ownerId, JSON.stringify(profile));
 }
 

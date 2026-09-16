@@ -1,4 +1,5 @@
 import { readProfile } from "@/lib/db";
+import { currentOwnerId } from "@/lib/ownerRequest";
 import HomeView from "./HomeView";
 
 /**
@@ -15,6 +16,6 @@ import HomeView from "./HomeView";
  */
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  return <HomeView initialProfile={readProfile()} />;
+export default async function HomePage() {
+  return <HomeView initialProfile={readProfile(await currentOwnerId())} />;
 }
