@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { insertTrip, linkGenerationToTrip, listTrips, purgeStaleDrafts } from "@/lib/db";
 import { toTripSummary } from "@/lib/tripPayload";
+import { itineraryRejection } from "@/lib/itinerary";
 import { currentOwnerId } from "@/lib/ownerRequest";
 import type { TripStatus } from "@/lib/types";
 
@@ -33,6 +34,14 @@ export async function POST(req: NextRequest) {
   if (!destination || !startDate || !endDate || typeof budget !== "number" || !itinerary) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+
+  // The trust boundary. This route stores `itinerary` verbatim, so whatever arrives here is what
+  // every later reader gets — and a stop with no coordinates 500s the trip page from server
+  // render (see `itineraryRejection`). `normalizeDays` drops those on read, which keeps the page
+  // up, but a plan that quietly loses a stop between saving and opening is worse than one that
+  // was refused. Refused here; dropped there as the backstop.
+  const rejection = itineraryRejection(itinerary);
+  if (rejection) return NextResponse.json({ error: rejection }, { status: 400 });
 
   const trip = insertTrip({
     id: randomUUID(),
