@@ -58,18 +58,61 @@ function wrap(raw: Database.Database) {
   return {
     exec: (sql: string) => raw.exec(sql),
     prepare: (sql: string) => {
-      const stmt = raw.prepare(sql);
+      const [positionalSql, names] = toPositional(sql);
+      const stmt = raw.prepare(positionalSql);
+      const bind = (args: unknown[]) => (names ? orderArgs(names, args, sql) : args);
       return {
         get: (...args: unknown[]) => {
-          const row = stmt.get(...args) as Record<string, unknown> | undefined;
+          const row = stmt.get(...bind(args)) as Record<string, unknown> | undefined;
           if (row) delete row._metadata;
           return row;
         },
-        all: (...args: unknown[]) => stmt.all(...args),
-        run: (...args: unknown[]) => stmt.run(...args),
+        all: (...args: unknown[]) => stmt.all(...bind(args)),
+        run: (...args: unknown[]) => stmt.run(...bind(args)),
       };
     },
   };
+}
+
+/**
+ * **Named parameters silently bind NULL on the remote protocol, so they are rewritten here.**
+ *
+ * `@name` (and `:name`, `$name`) work against a local file and bind NULL over Hrana — no
+ * error at bind time, just a NULL in the column. 14 statements in this file use `@name`, and the
+ * only reason the first remote write failed loudly is that `traveler_profile.profile_json` happens
+ * to be NOT NULL; a nullable column would have taken the NULL and reported success. Positional `?`
+ * binds correctly on both.
+ *
+ * Rewritten at the driver rather than at the 14 call sites because the order is then derived from
+ * the SQL itself instead of retyped beside it — a hand-converted 12-column INSERT that swaps two
+ * arguments of the same type is a data bug no test here would catch. `@name` also stays readable at
+ * the call sites, which for `insertTrip` is the difference between naming twelve columns and
+ * counting twelve question marks.
+ *
+ * No statement in this file repeats a name (checked), so one `?` per occurrence is exact.
+ *
+ * **Only `@name` is recognised, deliberately.** Matching `:name` too would misread the colon in a
+ * string literal — an ISO timestamp, a URL — as a parameter and corrupt the statement. Every named
+ * statement here uses `@`, so the other two styles are not supported rather than half-supported.
+ */
+function toPositional(sql: string): [string, string[] | null] {
+  const names = [...sql.matchAll(/@([a-zA-Z_]\w*)/g)].map((m) => m[1]);
+  if (names.length === 0) return [sql, null];
+  return [sql.replace(/@[a-zA-Z_]\w*/g, "?"), names];
+}
+
+/** The named-arg object in the order the SQL asks for. Throws on a missing key: that is the case
+ *  that used to become a silent NULL, and a loud failure here is the whole point. */
+function orderArgs(names: string[], args: unknown[], sql: string): unknown[] {
+  const supplied = args[0];
+  if (args.length !== 1 || typeof supplied !== "object" || supplied === null || Array.isArray(supplied)) {
+    throw new Error(`named-parameter statement needs one object argument: ${sql.trim().slice(0, 60)}`);
+  }
+  const bag = supplied as Record<string, unknown>;
+  return names.map((n) => {
+    if (!(n in bag)) throw new Error(`missing bind value for ${n} in: ${sql.trim().slice(0, 60)}`);
+    return bag[n];
+  });
 }
 
 db.exec(`
