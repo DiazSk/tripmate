@@ -269,9 +269,9 @@ export async function POST(req: NextRequest) {
       rejected: rejected.map((r) => r.reason),
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Edit failed" },
-      { status: 500 }
-    );
+    // Logged, not returned — see the same guard in `/api/trip-generate`. A raw `err.message` from
+    // here carries model, prompt and session internals to the browser.
+    console.error("[trip-edit]", err);
+    return NextResponse.json({ error: "Edit failed" }, { status: 500 });
   }
 }

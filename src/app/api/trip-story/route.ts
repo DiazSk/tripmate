@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { parseJsonResponse, runClaude } from "@/lib/claude";
+import { isThrottled } from "@/lib/ipThrottle";
+import { isOverDailyCap } from "@/lib/spendCap";
 import { getStoryScript, getTrip, insertRun, saveStoryScript } from "@/lib/db";
 import {
   buildStoryPrompt,
@@ -44,6 +46,18 @@ const STORY_TIMEOUT_MS = 180_000;
  * `"preview"` placeholder), and those scripts live in the browser's session cache alone.
  */
 export async function POST(req: NextRequest) {
+  if (isThrottled(req)) {
+    return NextResponse.json(
+      { error: "Too many requests — slow down and try again shortly." },
+      { status: 429 }
+    );
+  }
+  if (isOverDailyCap()) {
+    return NextResponse.json(
+      { error: "Demo budget for today has been used up — try again tomorrow." },
+      { status: 503 }
+    );
+  }
   let body: {
     destination?: string;
     dayIndex?: number;
