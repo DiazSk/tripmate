@@ -67,15 +67,32 @@ describe("transport mode", () => {
 });
 
 describe("model routing", () => {
-  it("puts every whole-plan call on the strong tier", () => {
-    for (const type of ["generate", "refine", "rebalance", "critique"]) {
+  it("puts every call that WRITES a plan on the strong tier", () => {
+    for (const type of ["generate", "refine", "rebalance"]) {
       assert.equal(apiModelFor(type), "claude-opus-5", type);
     }
   });
 
-  it("puts every bounded call on the cheap tier", () => {
-    for (const type of ["chat", "element-edit", "place-detail", "context"]) {
+  it("puts every bounded call on the cheap tier, critique included", () => {
+    // `critique` moved here from the strong tier: it was 51% of a generation's cost, on the
+    // priciest model, for a pass with a recorded 35% failure rate and no measured contribution
+    // to quality. It reads a plan rather than writing one, so it sits with the other calls that
+    // work against facts already on the page.
+    for (const type of ["chat", "element-edit", "place-detail", "context", "critique"]) {
       assert.equal(apiModelFor(type), "claude-haiku-4-5", type);
+    }
+  });
+
+  it("lets critique be put back on the strong tier without a code change", () => {
+    // The knob exists because this is the one downgrade here that nothing in the repo can score
+    // — the benchmark runs `generateItinerary()`, which makes no critique call at all. If a
+    // reviewer says plans got worse, this is the revert.
+    process.env.LLM_MODEL_CRITIQUE = "claude-opus-5";
+    try {
+      assert.equal(apiModelFor("critique"), "claude-opus-5");
+      assert.equal(apiModelFor("chat"), "claude-haiku-4-5", "must not drag chat with it");
+    } finally {
+      delete process.env.LLM_MODEL_CRITIQUE;
     }
   });
 

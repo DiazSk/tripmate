@@ -52,6 +52,10 @@ function snapshot() {
       LLM_MODEL_CHEAP: process.env.LLM_MODEL_CHEAP?.trim() || null,
       LLM_MODEL_CHAT: process.env.LLM_MODEL_CHAT?.trim() || null,
       LLM_MODEL_STORY: process.env.LLM_MODEL_STORY?.trim() || null,
+      // Reported beside the others because this is the knob someone reaches for when a reviewer
+      // says the plans got worse — see `critiqueModel()`. A knob missing from the diagnostic
+      // route is a knob nobody finds.
+      LLM_MODEL_CRITIQUE: process.env.LLM_MODEL_CRITIQUE?.trim() || null,
     },
     chatFallbackModel: CHAT_FALLBACK_MODEL,
   };
