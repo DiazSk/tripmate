@@ -165,6 +165,48 @@ export function budgetSegments(days: DayPlan[], budget: number): BudgetSegment[]
    Parse boundary
    --------------------------------------------------------------------------- */
 
+/**
+ * Why a stored itinerary should be refused, or null if it is fine.
+ *
+ * **The dividing line is repairable vs not, and it is the same line `normalizeDays` draws.** That
+ * function coerces a junk `cost` to 0 and an unknown `category` to "other", because a plan is
+ * still a plan without them. A missing coordinate cannot be coerced into anything — there is no
+ * default location — and a stop carrying one takes the trip page down: `useDayRoute` builds an
+ * OSRM key with `lat.toFixed(5)` during server render and 500s the route. `normalizeDays` drops
+ * those on read, which keeps the page up but silently discards a stop somebody sent. Refusing at
+ * the write is what makes the drop a backstop rather than the policy.
+ *
+ * Deliberately narrow. It checks the shape the storage layer and the map actually depend on —
+ * days is a list, each day's stops is a list, every stop has a real location — and nothing else.
+ * Everything a reader can repair is left to `normalizeDays`, so this never rejects a plan that
+ * would have rendered.
+ *
+ * Returns the reason rather than a boolean so the 400 can name the offending stop; a client that
+ * posts a malformed plan is a bug being debugged, not a traveller being told off.
+ */
+export function itineraryRejection(itinerary: unknown): string | null {
+  if (!itinerary || typeof itinerary !== "object") return "The itinerary is missing.";
+  const days = (itinerary as { days?: unknown }).days;
+  if (!Array.isArray(days)) return "The itinerary has no days.";
+
+  for (let d = 0; d < days.length; d++) {
+    const day = days[d] as { stops?: unknown } | null;
+    if (!day || typeof day !== "object") return `Day ${d + 1} is not a day.`;
+    // An empty day is legitimate — a travel day, or one the traveller cleared.
+    const stops = day.stops === undefined ? [] : day.stops;
+    if (!Array.isArray(stops)) return `Day ${d + 1} has no list of stops.`;
+    for (let i = 0; i < stops.length; i++) {
+      const stop = stops[i] as { lat?: unknown; lng?: unknown; name?: unknown } | null;
+      if (!stop || typeof stop !== "object") return `Day ${d + 1}, stop ${i + 1} is not a stop.`;
+      if (!Number.isFinite(stop.lat) || !Number.isFinite(stop.lng)) {
+        const name = typeof stop.name === "string" && stop.name ? ` (${stop.name})` : "";
+        return `Day ${d + 1}, stop ${i + 1}${name} has no coordinates.`;
+      }
+    }
+  }
+  return null;
+}
+
 /** Runs on every itinerary entering the app from the model or from the database.
  *  `Stop.category: StopCategory` and `cost: number` are contracts the type system
  *  asserts and nothing enforced: an unrecognised category used to land in no

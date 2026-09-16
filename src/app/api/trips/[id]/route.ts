@@ -6,6 +6,7 @@ import {
   setTripChatSession,
   updateTripItinerary,
 } from "@/lib/db";
+import { itineraryRejection } from "@/lib/itinerary";
 import { readableOwners } from "@/lib/owner";
 import { currentOwnerId } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
@@ -52,6 +53,11 @@ export async function PATCH(
   if (!itinerary) {
     return NextResponse.json({ error: "Missing itinerary" }, { status: 400 });
   }
+
+  // Same guard as POST, because this writes to the same column by the same means — an edit can
+  // put a placeless stop into a trip that saved clean.
+  const rejection = itineraryRejection(itinerary);
+  if (rejection) return NextResponse.json({ error: rejection }, { status: 400 });
 
   // `status` is write-once and one-way: a draft can be kept, a kept trip cannot be un-kept here.
   // Demotion has no caller and would silently drop a saved trip out of the memories wall, so the
