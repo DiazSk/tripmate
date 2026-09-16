@@ -37,7 +37,7 @@ It needs a browser and a running server, and Playwright is deliberately not a de
 `scripts/browser-matrix.mjs` for why). So it is not wired into `npm run build`. Run it by hand after
 touching `Hero`, `HeroFrames`, the `.hero-*` rules, or `scripts/build-frame-sequence.mjs`.
 
-**Node ≥ 22 is mandatory.** `better-sqlite3`'s native binding silently kills the dev server on Node 20 the moment any DB-touching route is hit. `.nvmrc` pins 22 — run `nvm use` if the shell drifts.
+**Node ≥ 22.** `.nvmrc` pins it — run `nvm use` if the shell drifts. This was once a hard requirement for a specific reason: `better-sqlite3`'s native binding silently killed the dev server on Node 20 the moment any DB-touching route was hit. That package is gone (see Storage below); `libsql` declares no `engines` floor and has not been tried lower, so treat 22 as the tested floor rather than a proven cliff.
 
 **The test suite is deliberately narrow, not small.** `npm test` runs
 `node --import ./scripts/ts-resolve.mjs --test "src/**/*.test.mjs"` — 17 files, ~220 tests, no
@@ -51,7 +51,7 @@ registers an ESM resolve hook that retries an extensionless relative specifier a
 `/index.ts`, then `.tsx` — so `import { TIERS } from "./tiers"` inside a module under test resolves
 fine. `src/lib/tripDays.test.mjs` imports `applyPatch` from `itineraryPatch.ts`, which value-imports
 `./tripDays`; `src/lib/bench/bench.test.mjs` reaches `runBenchmark.ts`, which pulls in `../db` and
-`better-sqlite3`. Write the test where the logic lives.
+`libsql`. Write the test where the logic lives.
 
 The hook is registered by `--import` in the `test` script only, so the dev server and the build never
 load it. Import specifiers **inside a `.test.mjs` itself** still need the explicit `.ts` extension —
@@ -322,7 +322,10 @@ Three things carry chat state, and only the first is the model's:
 
 ### Storage
 
-SQLite via `better-sqlite3`, single file `tripmate.db` at repo root. `generations` holds one row per itinerary generation — the context payload, the full prompt and the full response, keyed by run id — written the moment the model answers and *before* the parse, so a response that fails `parseJsonResponse` is still on disk. It is deliberately **not** a `trips` row: it is keyed by run and holds unparsed text, so it can record a generation that never produced a renderable plan.
+**SQLite via `libsql`, and the driver is a deliberate swap.** Locally it is still a single file `tripmate.db` at the repo root and the API is still **synchronous** — `libsql` is better-sqlite3-compatible, so `db.prepare(...).get/all/run`, `rowid` ordering, `INSERT OR REPLACE`, `PRAGMA table_info`, `AUTOINCREMENT` and ISO-string timestamps compared lexically all work unchanged. That compatibility is why this was a two-line constructor change rather than the async Postgres port, and why the ~70 exported functions here and their callers stayed sync.
+
+Set `TURSO_DATABASE_URL` (+ `TURSO_AUTH_TOKEN`) to point the same code at a hosted database; unset, it uses `DB_PATH ?? cwd/tripmate.db`, so tests, the bench harness and `next dev` need no credentials. **One behavioural difference, handled once in `db.ts`'s `wrap()`:** libsql's native `.get()` appends a `_metadata` field that better-sqlite3 never had, and rows from this file reach `NextResponse.json` nearly unchanged — it is stripped at the driver, not at the 13 `.get()` call sites.
+ `generations` holds one row per itinerary generation — the context payload, the full prompt and the full response, keyed by run id — written the moment the model answers and *before* the parse, so a response that fails `parseJsonResponse` is still on disk. It is deliberately **not** a `trips` row: it is keyed by run and holds unparsed text, so it can record a generation that never produced a renderable plan.
 
 A `trips` row, by contrast, now exists from the moment a plan does. `trips.status` is `'draft'` until the traveller presses Keep and `'saved'` after — an itinerary used to live in React state until Save ran, so a Back press threw the whole generation away. Save **promotes the same row** (`promoteTripToSaved`) rather than inserting, which is what keeps the plan's `chat_session_id`, its `generations.trip_id` link and its pre-save edits attached to the trip they belong to. `POST /api/trips` back-fills `generations.trip_id` when the draft is created. **`listTrips()` defaults to `status = 'saved'`** — the memories wall, `/profile` and `/trip/latest` all mean "trips somebody kept" — and unkept drafts are swept after `DRAFT_TTL_DAYS` (`src/lib/drafts.ts`) on read from `/trips` and `GET /api/trips`, this app having no scheduler. `src/lib/db.ts` creates every table at import time with `CREATE TABLE IF NOT EXISTS`, and adds later columns through the `addColumnIfMissing()` PRAGMA guard — follow that pattern instead of writing migration files. Note the deliberate split: DB rows are `snake_case` (`TripRow.start_date`), API/type surfaces are `camelCase` (`TripSummary.startDate`), mapped by hand in each route.
 

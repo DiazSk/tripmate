@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import Database from "libsql";
 import path from "path";
 import { randomUUID } from "crypto";
 import { parseProfile, type TravelerProfile } from "./travelerProfile";
@@ -6,7 +6,71 @@ import { staleDraftCutoff } from "./drafts";
 import { LEGACY_OWNER, readableOwners } from "./owner";
 import type { TripStatus } from "./types";
 
-const db = new Database(process.env.DB_PATH ?? path.join(process.cwd(), "tripmate.db"));
+/**
+ * **`libsql`, not `better-sqlite3`, and the API below is deliberately identical.**
+ *
+ * The driver changed because no free host offers a persistent volume any more, so the database has
+ * to live somewhere else — and `libsql` is SQLite. `rowid`, `INSERT OR REPLACE`, `PRAGMA
+ * table_info`, `AUTOINCREMENT` and ISO-string timestamps compared lexically all keep working, which
+ * is the whole reason this file is a driver swap instead of the async Postgres port. It also keeps
+ * a **synchronous** API, so the ~70 exported functions here, their ~40 callers, and the two server
+ * components whose no-Suspense rationale rests on a synchronous driver (`trips/page.tsx`,
+ * `profile/page.tsx`) are all untouched.
+ *
+ * ponytail: a sync call to a *remote* database blocks the event loop for the round trip, so
+ * concurrent requests serialise. Fine for a demo on one instance; if latency bites, the upgrade is
+ * an embedded replica — `new Database(localPath, { syncUrl, authToken })` — which serves reads from
+ * a local file and pushes writes on. Same synchronous API, so it stays a constructor change.
+ */
+const url = process.env.TURSO_DATABASE_URL?.trim();
+const db = wrap(
+  url
+    ? // `authToken` is a real option — `libsql/index.js:81,91` reads it — but the shipped
+      // `types/index.d.ts` predates it and declares only `syncUrl`. Asserted rather than left
+      // untyped so the day the types catch up this line just stops needing the cast.
+      new Database(url, { authToken: process.env.TURSO_AUTH_TOKEN } as Database.Options)
+    : // No URL is the local path, and it stays the default so `npm test`, the bench harness and a
+      // plain `next dev` need no credentials and no network.
+      //
+      // **`timeout` is not a tuning knob, it is the one default `libsql` does not share with
+      // `better-sqlite3`.** better-sqlite3 waited 5s on a locked database; `libsql/index.js:93`
+      // reads `opts?.timeout ?? 0.0`, so it fails instantly with SQLITE_BUSY instead. That is
+      // invisible in dev and in `npm test` — one process, no contention — and it broke
+      // `npm run build`, which collects page data in **9 parallel workers** that each import this
+      // module and each run the DDL below against the same file. Restored to the old default
+      // rather than picked: the number's job is to make the swap behaviour-preserving.
+      new Database(process.env.DB_PATH ?? path.join(process.cwd(), "tripmate.db"), {
+        timeout: 5000,
+      })
+);
+
+/**
+ * The one behavioural difference between the two drivers, fixed once here.
+ *
+ * `libsql`'s native `.get()` appends a `_metadata` field (`{ duration }`) to the row it returns;
+ * `better-sqlite3` never did, and `.all()` here does not either. Rows from this file reach
+ * `NextResponse.json` almost unchanged — `toTripDetail` hands most of the row straight out — so an
+ * unstripped `_metadata` would appear in the API contract two clients are now written against.
+ * Stripped at the driver rather than at the 13 `.get()` call sites, because the next `.get()` added
+ * would not know to do it.
+ */
+function wrap(raw: Database.Database) {
+  return {
+    exec: (sql: string) => raw.exec(sql),
+    prepare: (sql: string) => {
+      const stmt = raw.prepare(sql);
+      return {
+        get: (...args: unknown[]) => {
+          const row = stmt.get(...args) as Record<string, unknown> | undefined;
+          if (row) delete row._metadata;
+          return row;
+        },
+        all: (...args: unknown[]) => stmt.all(...args),
+        run: (...args: unknown[]) => stmt.run(...args),
+      };
+    },
+  };
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS trips (
@@ -917,8 +981,12 @@ export function getRun(id: string): RunRow | undefined {
 
 /** All steps across all runs, ordered oldest-first within each run — grouped
  *  by `run_id` by the caller. `rowid` (not `created_at`) is the ordering key
- *  since better-sqlite3 is synchronous/single-connection, so insertion order
- *  is exact even when two steps land in the same millisecond. */
+ *  because two steps can land in the same millisecond and `created_at` then ties.
+ *
+ *  ponytail: this leans on insertion order being exact, which was guaranteed while the driver was
+ *  a synchronous single connection to a local file. Against a remote database it holds only
+ *  because writes here still go through one process; a second instance makes `rowid` ordering
+ *  approximate. The fix if that day comes is a real monotonic column, not a different ORDER BY. */
 export function listGroupedTraces(): TraceRow[] {
   return db
     .prepare(`SELECT * FROM llm_traces WHERE run_id IS NOT NULL ORDER BY rowid ASC`)

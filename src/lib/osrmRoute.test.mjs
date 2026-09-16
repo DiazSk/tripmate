@@ -1,6 +1,6 @@
 /* Run: node --import ./scripts/ts-resolve.mjs --test src/lib/osrmRoute.test.mjs
  *
- * `osrmRoute.ts` reaches `fetchCache.ts` and therefore `better-sqlite3`, so this file sets
+ * `osrmRoute.ts` reaches `fetchCache.ts` and therefore `libsql`, so this file sets
  * `DB_PATH` to a scratch file and imports dynamically — the `fetchCache.test.mjs` pattern.
  *
  * Only the pure core is covered, and the split in the module exists to make that possible:

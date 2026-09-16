@@ -9,7 +9,7 @@ import type { Trip, TripSummary } from "./types";
  * handler was the only reader. It stopped being fine once the server pages started reading the
  * same rows directly: two hand-written copies of the same mapping drift, and the one that drifts
  * silently is the one nobody is looking at. `import type` on the row shapes keeps this module
- * free of any runtime dependency on `db.ts`, so importing it never drags better-sqlite3 along.
+ * free of any runtime dependency on `db.ts`, so importing it never drags libsql along.
  */
 export function toTripSummary(row: TripListRow): TripSummary {
   return {

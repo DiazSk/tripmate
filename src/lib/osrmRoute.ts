@@ -32,7 +32,7 @@ import type { TransportMode, TravelLeg } from "./types";
  * If a future check shows three identical distances, this file's premise has failed and the
  * minutes it produces must stop being presented as measured. That is the check worth keeping.
  *
- * **Server-only.** It reaches `fetchCache.ts` and therefore `better-sqlite3` — see the note at the
+ * **Server-only.** It reaches `fetchCache.ts` and therefore `libsql` — see the note at the
  * top of `serverFetchCached.ts` for what importing this from the client graph would do. The client
  * reaches it through `GET /api/route`.
  *
@@ -348,7 +348,7 @@ export function routeDistanceKm(route: OsrmRoute): number {
  *
  * Deliberately a separate pass rather than an option on `buildTravelLegs`. That function is
  * synchronous, pure and reachable from four `"use client"` components through `schedule.ts`;
- * threading a network call into it would drag `fetchCache.ts` and `better-sqlite3` into the client
+ * threading a network call into it would drag `fetchCache.ts` and `libsql` into the client
  * bundle, which is the trap `serverFetchCached.ts` exists to document. It also has to keep working
  * on its own — it is the fallback.
  *

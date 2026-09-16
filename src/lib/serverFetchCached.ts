@@ -15,7 +15,7 @@ import { TTL, cached } from "./fetchCache";
  * - `HomeView.tsx` and `PoiCandidatePicker.tsx` import `CandidatePoi` from `pois.ts` with a plain
  *   `import` rather than `import type`, so it is one refactor away from not being elided.
  *
- * `fetchCache.ts` imports `db.ts`, which opens **native `better-sqlite3` at module load**, and
+ * `fetchCache.ts` imports `db.ts`, which opens **native `libsql` at module load**, and
  * `next.config.ts` sets no `serverExternalPackages`. Putting the cache import at the top of either
  * module would therefore pull a native addon into the browser graph. Best case that is a build
  * error; worse, it builds and dies at runtime — and this repo has already shipped a `next build`
