@@ -8,7 +8,7 @@ import ProfileForm from "./ProfileForm";
 /**
  * Server half of `/profile`: reads the saved traveler profile and hands it to the form.
  *
- * Worth being precise about what this buys, because it is not streaming. `better-sqlite3` is a
+ * Worth being precise about what this buys, because it is not streaming. `libsql` is a
  * synchronous driver, so `readProfile()` returns before this function does — there is nothing to
  * suspend on and a `<Suspense>` boundary or `loading.tsx` here would wrap something that never
  * pends. What it removes is the round trip: the form used to render defaults, mount, fetch

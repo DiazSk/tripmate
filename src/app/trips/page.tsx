@@ -8,7 +8,7 @@ import TripsView from "./TripsView";
 /**
  * Server half of `/trips`: reads the saved trips and hands the list straight to the view.
  *
- * No `<Suspense>` and no `loading.tsx`, on purpose. `better-sqlite3` is synchronous, so
+ * No `<Suspense>` and no `loading.tsx`, on purpose. `libsql` is synchronous, so
  * `listTrips()` has already returned by the time this function does — a boundary here would wrap
  * something that never pends and buy a fallback nobody would ever see. The round trip is what
  * this deletes: the view used to mount, fetch `/api/trips`, and only then know how many trips

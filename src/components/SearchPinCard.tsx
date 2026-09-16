@@ -13,7 +13,7 @@ import type { FoundPlace } from "@/lib/placeSearch";
  *
  * Kept here rather than beside `wikidataPhoto` because that module reaches `fetchCache` and
  * therefore the database — it is a server module, and importing it from a component would put
- * `better-sqlite3` in the client bundle.
+ * `libsql` in the client bundle.
  *
  * A miss is the ordinary answer and is cached as such by the module-level map, so clicking back and
  * forth between two pins does not re-ask. `null` means asked-and-none; `undefined` means not yet.
