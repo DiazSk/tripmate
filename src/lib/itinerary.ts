@@ -176,12 +176,27 @@ export function normalizeDays(days: unknown): DayPlan[] {
   return days.map((day: DayPlan) => ({
     ...day,
     lodging: day.lodging && { ...day.lodging, cost: money(day.lodging.cost) },
-    stops: (Array.isArray(day.stops) ? day.stops : []).map((stop: Stop) => ({
-      ...stop,
-      cost: money(stop.cost),
-      category: normalizeCategory(stop.category),
-      tags: Array.isArray(stop.tags) ? stop.tags : [],
-    })),
+    stops: (Array.isArray(day.stops) ? day.stops : [])
+      // **A stop with no coordinates is dropped, not repaired.** `Stop.lat`/`lng` are typed
+      // `number` and the type says this cannot happen; `POST /api/trips` stores whatever
+      // `itinerary` it is handed with no validation, so it does. What it costs is not a missing
+      // marker: `useDayRoute` builds an OSRM cache key with `lat.toFixed(5)` and throws during
+      // **server render**, so the whole trip page 500s — and on the client `undefined` becomes
+      // `NaN`, MapLibre throws `Invalid LngLat object: (NaN, NaN)` out of the draw, and the
+      // camera is stranded wherever it was. Both observed on one real trip page.
+      //
+      // Dropped here, at the one boundary every reader shares, because the consumers derive
+      // their own coordinate arrays independently — `ItineraryCard` builds `routeDays` for the
+      // map and `dayPoints` for the routing, from the same `day.stops`, in two separate memos —
+      // so guarding per consumer means finding all of them, now and later. It also keeps the
+      // list and the map agreeing about what the day contains, which a map-only filter would not.
+      .filter((stop: Stop) => Number.isFinite(stop?.lat) && Number.isFinite(stop?.lng))
+      .map((stop: Stop) => ({
+        ...stop,
+        cost: money(stop.cost),
+        category: normalizeCategory(stop.category),
+        tags: Array.isArray(stop.tags) ? stop.tags : [],
+      })),
   }));
 }
 
