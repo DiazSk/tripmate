@@ -25,6 +25,30 @@ export interface RouteStop {
   time?: string;
 }
 
+/**
+ * The stops a map can actually place, day by day.
+ *
+ * `RouteStop.lat`/`lng` are typed `number` and a stop without them cannot exist — except it can:
+ * `POST /api/trips` stores whatever `itinerary` it is handed, with no validation, so any client
+ * or script can persist a stop with no coordinates. What that produced was not a missing marker
+ * but a dead map: `undefined` becomes `NaN`, MapLibre throws `Invalid LngLat object: (NaN, NaN)`
+ * out of the draw, and the camera flight aborts mid-air leaving the view wherever it happened to
+ * be. Observed on a real trip page, over Algeria.
+ *
+ * Filtering matches what the export already does — `collectExportMap` returns null for an
+ * itinerary whose stops carry no coordinates rather than drawing nothing-shaped geometry.
+ *
+ * ponytail: dropping stops shifts the flat index that `hoveredIndex`/`activeIndex` share with
+ * `ItineraryCard`'s rows, so on a trip with a placeless stop the wrong row can light up. That is
+ * a cosmetic drift in a case that currently takes the whole map out, and the real fix is upstream
+ * — reject coordinate-less stops at `POST /api/trips` — not a second index space down here.
+ */
+export function placeableStops(days: RouteStop[][]): RouteStop[][] {
+  return days.map((day) =>
+    day.filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+  );
+}
+
 /** How lit the world should be for a given stop. `day` is the tiles' own daylight photography,
  *  untouched — the other three are tints laid over it. */
 export type DayPhase = "dawn" | "day" | "dusk" | "night";
