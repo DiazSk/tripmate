@@ -97,9 +97,7 @@ export async function POST(req: NextRequest) {
     // only read `data.detail` and ignore the rest.
     return NextResponse.json({ detail, runId });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to load place detail" },
-      { status: 500 }
-    );
+    console.error("[place-detail]", err);
+    return NextResponse.json({ error: "Failed to load place detail" }, { status: 500 });
   }
 }
