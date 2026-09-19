@@ -31,6 +31,9 @@ import SwiftUI
 /// is given and contains no fold-specific branch, which is what the design called for regardless;
 /// adopting `ArrangementView` when it becomes declared API replaces one `ZStack`.
 struct AppShell<World: View, Panel: View>: View {
+    /// Which surface is showing. A binding rather than internal state: `RootView` owns it,
+    /// because the panel's own content depends on it too.
+    @Binding var tab: AppTab
     @ViewBuilder var world: () -> World
     @ViewBuilder var panel: () -> Panel
 
@@ -54,7 +57,10 @@ struct AppShell<World: View, Panel: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let isDocked = proxy.size.width >= Self.dockingThreshold
+            // **The Map tab draws no panel, so at every width it covers nothing.** Without the
+            // first clause a docked layout would keep reporting a panel edge the camera then
+            // frames clear of, leaving a band of dead map on a screen that is all map.
+            let isDocked = tab != .map && proxy.size.width >= Self.dockingThreshold
             let panelWidth = isDocked ? Self.panelWidth(in: proxy.size.width) : proxy.size.width
 
             ZStack {
@@ -66,14 +72,18 @@ struct AppShell<World: View, Panel: View>: View {
                 // is scenery, and letterboxing it would waste the display the whole composition
                 // is built around. The panel and the chrome are *read*, so they stay inside it:
                 // an earlier revision ignored the safe area on the whole shell and drew the
-                // wordmark straight over the clock.
+                // wordmark straight over the clock. The same rule now keeps the tab bar off the
+                // home indicator — same mistake, opposite edge.
                 Token.canvas
                     .ignoresSafeArea()
 
                 world()
                     .ignoresSafeArea()
 
-                if isDocked {
+                if tab == .map {
+                    // Nothing. The Map tab *is* the absence of a panel — the map was always
+                    // there, behind the glass; this is what it looks like with the glass gone.
+                } else if isDocked {
                     HStack(spacing: 0) {
                         Spacer(minLength: 0)
                         panel().frame(width: panelWidth)
@@ -82,7 +92,7 @@ struct AppShell<World: View, Panel: View>: View {
                     panel()
                 }
 
-                ChromeLayer()
+                ChromeLayer(tab: $tab)
             }
             // Measured rather than assumed, and set here because this is where the size is known.
             // The camera needs the panel's *real* edge: the panel clamps to a 360-520pt range, so
@@ -115,30 +125,24 @@ struct AppShell<World: View, Panel: View>: View {
 /// The web shell makes the navbar and map controls siblings of the content overlay rather than
 /// children, so a page's own content column cannot move them. Same reasoning here: chrome is a
 /// property of the app, not of whichever pane happens to be wide.
+///
+/// **The wordmark that used to head this is gone.** It held nothing — no buttons, no back, no
+/// tabs, just `Text("TripMate")` — while every screen already draws its own large title
+/// underneath it. A persistent bar naming the app is a web habit; the icon on the home screen
+/// does that job here, and the ~56pt it cost at the top of every phone screen now goes to the
+/// bar at the bottom, which at least navigates.
 private struct ChromeLayer: View {
-    @Environment(\.panelMetrics) private var panelMetrics
-
-    /// "Search near this view" needs a view to be near. At full-bleed panel widths there is no
-    /// live map, so the box would be chrome floating over the plan it is covering — which is the
-    /// compromise `DESIGN.md` records the web app making on a phone, and it does not have to be
-    /// made here.
-    private var hasLiveMap: Bool { panelMetrics.freeWidth < panelMetrics.viewWidth }
+    @Binding var tab: AppTab
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("TripMate")
-                    .textStyle(.heading)
-                    .foregroundStyle(Token.foreground)
-                Spacer()
-            }
-            .padding(.horizontal, Token.padCompact)
-            .padding(.vertical, Token.gapRows)
-            .background(.ultraThinMaterial)
-
-            // Under the wordmark on the leading edge, where the web puts it — the docked panel
-            // owns the trailing side at every width that has one.
-            if hasLiveMap {
+            // **The search belongs to the Map tab, not to a width.** It used to be gated on
+            // `hasLiveMap` — `freeWidth < viewWidth` — which is only ever true in the docked
+            // ≥600pt layout, so on every iPhone the panel was full-bleed and this never
+            // rendered at all. The feature most cited as the reason to build native was
+            // unreachable on the device the app is for. The condition now names a screen
+            // instead of a layout accident.
+            if tab == .map {
                 HStack {
                     MapSearchView()
                     Spacer(minLength: 0)
@@ -148,6 +152,10 @@ private struct ChromeLayer: View {
             }
 
             Spacer()
+
+            TabBar(selection: $tab)
+                .padding(.horizontal, Token.padCompact)
+                .padding(.bottom, Token.gapRows)
         }
     }
 }

@@ -82,8 +82,18 @@ enum Token {
     static let gapPanels: CGFloat = 24
     static let gapRows: CGFloat = 12
 
-    /// The chrome bar's height, so the panel can clear it the way `--nav-h` does on the web.
-    static let navHeight: CGFloat = 44
+    /// `--nav-h` — 3.5rem. The bar's height, so the panel and the camera can clear it.
+    ///
+    /// **56 is the token; 44 is the floor inside it, and this held the floor.** The value here
+    /// was `44` with a docstring claiming to be `--nav-h`, which is `3.5rem` = 56px
+    /// (`globals.css:321`). 44 is the *touch-target* floor discussed in the comment sitting
+    /// directly above that token — "below it the `min-h-11` children stop fitting" — so the
+    /// number was read out of the prose instead of the declaration. `DESIGN.md` warns about
+    /// exactly this: *"Grep for the value, not for the comment."* Fourth instance of that
+    /// mistake in this app, after the retired palette, the tracking and the display weight.
+    ///
+    /// 44 gets no token of its own. It is a floor that 56 satisfies, not a number anything reads.
+    static let barHeight: CGFloat = 56
 
     // MARK: The docked panel
 

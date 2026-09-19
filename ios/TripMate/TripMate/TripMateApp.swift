@@ -17,6 +17,8 @@ struct TripMateApp: App {
     /// One photograph cache for the process — the whole point is that every view asking for the
     /// same destination shares one request.
     @State private var photos: PlacePhotoStore
+    /// The durable answers, beside the trips rather than inside them — they outlive every one.
+    @State private var profile: ProfileStore
 
     init() {
         // Before anything draws. The three faces are bundled TTFs registered into the process
@@ -34,6 +36,7 @@ struct TripMateApp: App {
         _store = State(initialValue: TripsStore(api: api))
         _plan = State(initialValue: PlanStore(api: api))
         _photos = State(initialValue: PlacePhotoStore(api: api))
+        _profile = State(initialValue: ProfileStore(api: api))
     }
 
     var body: some Scene {
@@ -41,6 +44,7 @@ struct TripMateApp: App {
             RootView(store: store, plan: plan)
                 .environment(search)
                 .environment(photos)
+                .environment(profile)
                 // Dark-only, matching the web app's `color-scheme: dark` on :root. Not a
                 // preference the system gets to override: the whole palette is one slate, and
                 // `DESIGN.md`'s Darken-Never-Lighten rule has no light-mode counterpart.
@@ -54,8 +58,17 @@ private struct RootView: View {
     let plan: PlanStore
     @Environment(MapSearchStore.self) private var search
 
+    @State private var tab: AppTab = .trips
+    /// **Hoisted out of `PanelContent`, and it has to be.** On the Map tab `PanelContent` leaves
+    /// the tree entirely, so SwiftUI destroys its `@State` — coming back to Trips would drop you
+    /// on the list with a half-filled draft still sitting in `PlanStore` that nothing renders.
+    /// The wizard's actual content already survives, because it lives in `PlanStore`; only this
+    /// boolean needed to move. Deliberately not a flag on `PlanStore`: that would be a second
+    /// source of truth for one question.
+    @State private var isPlanning = false
+
     var body: some View {
-        AppShell {
+        AppShell(tab: $tab) {
             WorldMapView(
                 route: store.route,
                 // The panel counts stops in raw indices and the map's legs count in drawn ones.
@@ -67,7 +80,7 @@ private struct RootView: View {
                 onRegionSettled: { search.region = $0 }
             )
         } panel: {
-            PanelContent(store: store, plan: plan)
+            PanelContent(store: store, plan: plan, tab: tab, isPlanning: $isPlanning)
         }
         .task { await store.loadTrips() }
     }
@@ -75,17 +88,28 @@ private struct RootView: View {
 
 /// What the docked panel currently shows.
 ///
-/// A plain conditional rather than a `NavigationStack`: there are three states, the transition is
-/// the panel's own content changing, and a navigation bar would be a second piece of chrome
-/// competing with the one the shell already draws.
+/// A plain conditional rather than a `NavigationStack`: the states are few, the transition is the
+/// panel's own content changing, and a navigation bar would be a second piece of chrome competing
+/// with the bar the shell already draws.
+///
+/// **Two routing axes now, and they do not interact.** `tab` picks the surface; `isPlanning` and
+/// `store.open` pick what the Trips surface is showing. The governing rule is that **a tab switch
+/// selects a surface and never mutates content state** — so the open trip, its active day and
+/// emphasis, the wizard's step and every typed field, an in-flight generation, the search query
+/// and pin all survive any number of tab switches. Nothing is reset by one.
+///
+/// `.map` never reaches here: the shell draws no panel for it at all.
 private struct PanelContent: View {
     let store: TripsStore
     let plan: PlanStore
-    @State private var isPlanning = false
+    let tab: AppTab
+    @Binding var isPlanning: Bool
 
     var body: some View {
         Group {
-            if isPlanning {
+            if tab == .profile {
+                ProfileView()
+            } else if isPlanning {
                 PlanWizardView(
                     plan: plan,
                     onGenerated: { id in
@@ -116,8 +140,10 @@ private struct PanelContent: View {
         .padding(Token.padCompact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .glassPanel()
-        .padding(.top, Token.navHeight + Token.gapRows)
-        .padding([.horizontal, .bottom], Token.padCompact)
+        // The 68pt reservation moved from the top to the bottom with the bar. The top is now an
+        // ordinary gutter, because there is nothing up there any more.
+        .padding(.bottom, Token.barHeight + Token.gapRows)
+        .padding([.horizontal, .top], Token.padCompact)
     }
 }
 

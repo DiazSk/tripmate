@@ -233,6 +233,8 @@ public struct TripMateAPI: Sendable {
     }
 
     private struct ArrivalPointsEnvelope: Decodable { let points: [ArrivalPoint] }
+    /// Both directions: the route answers `{"profile": …}` and reads `body?.profile`.
+    private struct ProfileEnvelope: Codable { let profile: TravelerProfile? }
 
     /// `GET /api/arrival-points?lat=&lon=` — the airports and stations near a destination.
     ///
@@ -271,6 +273,25 @@ public struct TripMateAPI: Sendable {
     /// So this returns `PlacePhoto?`: a value to cache, or `nil` meaning "ask again". It
     /// deliberately does not surface `APIError` — 503 classifies as `spendCapReached`, which is
     /// wrong for this route (see `check`), and nothing here is worth showing a traveler anyway.
+    /// The traveller's durable preferences, or `nil` when none have been saved.
+    ///
+    /// **`nil` is a real state, not a failure.** The route answers `{"profile": null}` for a
+    /// traveller who has never filled the form in, and the caller must show an empty form rather
+    /// than an error. A genuine failure throws.
+    public func profile() async throws -> TravelerProfile? {
+        try await send(try await get("/api/profile"), as: ProfileEnvelope.self).profile
+    }
+
+    /// `PUT`, not `POST` — verified against `src/app/api/profile/route.ts`, which exports only
+    /// `GET` and `PUT` and answers `{ok: true}`. The body is enveloped the same way the response
+    /// is; the route reads `body?.profile` and 400s on any other shape.
+    public func saveProfile(_ profile: TravelerProfile) async throws {
+        var request = try await post("/api/profile", body: ProfileEnvelope(profile: profile))
+        request.httpMethod = "PUT"
+        struct Ok: Decodable { let ok: Bool }
+        _ = try await send(request, as: Ok.self)
+    }
+
     public func placePhoto(name: String) async -> PlacePhoto? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         // A caller passing a field the traveler has not filled in yet would otherwise fire a

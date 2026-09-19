@@ -98,6 +98,27 @@ public struct PlanDraft: Sendable, Equatable {
         self.dietary = profile.dietary
     }
 
+    /// The durable half of this draft, back out as a profile.
+    ///
+    /// **Exactly the reverse of `init(profile:)` above, and the two must stay that way.** The
+    /// profile editor holds a `PlanDraft` rather than a `TravelerProfile` so it can reuse
+    /// `toggleInterest`/`toggleStar` — the unstar-follows-deselect rule has a documented failure
+    /// mode and is the last thing that should exist in two copies.
+    ///
+    /// Trip-shaped fields are deliberately absent, as they are in the initialiser: a business
+    /// trip and an anniversary are the same person.
+    public var travelerProfile: TravelerProfile {
+        TravelerProfile(
+            group: group,
+            explorerStyle: explorerStyle,
+            energy: energy,
+            crowds: crowds,
+            priorities: interests,
+            topPriorities: starredInterests,
+            dietary: dietary
+        )
+    }
+
     // MARK: - Derived
 
     public var days: Int { Tiers.tripDays(from: startDate, to: endDate) }
@@ -257,8 +278,12 @@ public struct PlanDraft: Sendable, Equatable {
 
 /// What stays true between trips, from `travelerProfile.ts`.
 ///
-/// Here so `PlanDraft` can be seeded from it. `GET /api/profile` is a B2 remainder, so nothing
-/// fetches one yet — the wizard starts from `PlanDraft()`'s defaults until it does.
+/// Here so `PlanDraft` can be seeded from it, and now also read back out of one — see
+/// `PlanDraft.travelerProfile`. `TripMateAPI.profile()` fetches it and the Profile tab edits it.
+///
+/// **Server-side this is still one global row.** `readProfile()`/`writeProfile()` take no owner
+/// argument, so every device on a deployment shares a profile. Track A2 closes that; until it
+/// does, nothing here should imply per-account storage.
 public struct TravelerProfile: Codable, Sendable, Equatable {
     public var group: GroupType
     public var explorerStyle: ExplorerStyle

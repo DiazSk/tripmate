@@ -397,4 +397,33 @@ final class TimeOfDayTests: XCTestCase {
             XCTAssertNil(Tiers.time(fromHHMM: bad, calendar: calendar()), bad)
         }
     }
+
+    /// **Seven fields mapped by hand in two directions; dropping one is silent.** A traveller
+    /// would simply find a saved preference gone, with nothing logged and no test failing.
+    func testAProfileSurvivesTheRoundTripThroughADraft() {
+        let profile = TravelerProfile(
+            group: .familyWithKids,
+            explorerStyle: .offbeat,
+            energy: .high,
+            crowds: .avoid,
+            priorities: ["Food", "Museums", "Nature"],
+            topPriorities: ["Food", "Nature"],
+            dietary: DietaryNeeds(tags: ["Vegetarian"], note: "no shellfish")
+        )
+        XCTAssertEqual(PlanDraft(profile: profile).travelerProfile, profile)
+    }
+
+    /// The trip's own fields are deliberately *not* carried — a business trip and an anniversary
+    /// are the same person. This guards the omission, which otherwise looks like a bug.
+    func testTheRoundTripCarriesNothingTripShaped() {
+        var draft = PlanDraft(profile: TravelerProfile(group: .solo))
+        draft.destination = "Kyoto"
+        draft.budget = 4000
+        draft.purpose = "anniversary"
+        let reseeded = PlanDraft(profile: draft.travelerProfile)
+        XCTAssertEqual(reseeded.destination, "")
+        XCTAssertEqual(reseeded.budget, 0)
+        XCTAssertEqual(reseeded.purpose, "")
+    }
+
 }

@@ -635,7 +635,7 @@ private struct Hairline: View {
     }
 }
 
-private struct Question<Content: View>: View {
+struct Question<Content: View>: View {
     let title: String
     @ViewBuilder var content: () -> Content
 
@@ -656,7 +656,7 @@ private struct Question<Content: View>: View {
 
 /// A fixed choice, as chips. Every one of these has a default, which is what makes the step
 /// skippable — see `PlanDraft.canAdvance`.
-private struct ChoiceRow<Option: Hashable & CaseIterable>: View {
+struct ChoiceRow<Option: Hashable & CaseIterable>: View {
     let title: String
     let options: [Option]
     @Binding var selection: Option
@@ -685,7 +685,7 @@ extension GroupType: Labelled {}
 extension EnergyLevel: Labelled {}
 extension CrowdPreference: Labelled {}
 
-private struct TagGrid: View {
+struct TagGrid: View {
     let tags: [String]
     let isSelected: (String) -> Bool
     var isStarred: ((String) -> Bool)?
@@ -797,7 +797,7 @@ private struct FlowRow: Layout {
     }
 }
 
-private struct PlainField: View {
+struct PlainField: View {
     let placeholder: String
     @Binding var text: String
 

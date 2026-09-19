@@ -167,15 +167,28 @@ struct WorldMapView: UIViewRepresentable {
         fit(rect, in: map)
     }
 
-    /// Fit a rect into the strip the panel leaves. One implementation, because a day and a
+    /// Fit a rect into the strip the chrome leaves. One implementation, because a day and a
     /// searched place are the same question about the same geometry.
+    ///
+    /// **The safe area is read here, in UIKit, and that is deliberate.** This is the one view in
+    /// the app that ignores the safe area, so it is the one that has to add it back — everything
+    /// else stays inside it and needs no arithmetic. Reading it off the shell's `GeometryProxy`
+    /// instead would report zero, the root being laid out inside the safe area already.
+    ///
+    /// **One band at each edge, both `Token.barHeight`.** Below is the tab bar; above is the
+    /// map search field, which is 36pt in a 56pt band with room to spare. There is no measured
+    /// environment value for either, unlike the panel's width: the panel clamps to 360-520 so
+    /// its edge genuinely moves, while the bar is the same height on every screen at every
+    /// width — that is the whole content of the one-bar rule. An environment value measuring a
+    /// constant is machinery with nothing to measure.
     private func fit(_ rect: MKMapRect, in map: MKMapView) {
+        let safe = map.safeAreaInsets
         map.setVisibleMapRect(
             rect,
             edgePadding: UIEdgeInsets(
-                top: Token.navHeight + Token.gapRows,
+                top: safe.top + Token.barHeight + Token.gapRows,
                 left: Token.padCompact,
-                bottom: Token.padCompact,
+                bottom: safe.bottom + Token.barHeight + Token.gapRows,
                 right: max(0, panelMetrics.viewWidth - panelMetrics.freeWidth) + Token.padCompact
             ),
             animated: true

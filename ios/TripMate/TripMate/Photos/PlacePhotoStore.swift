@@ -77,28 +77,39 @@ struct PlacePhotoView: View {
     }
 
     var body: some View {
-        ZStack {
-            // The permanent base. Never removed, never conditional.
-            Color.white.opacity(0.06)
-
-            if let url {
-                AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.35))) {
-                    phase in
-                    if case .success(let image) = phase {
-                        image.resizable().scaledToFill()
+        // **The base is the only thing that sizes this, and that is load-bearing.**
+        // These were ZStack siblings, and a resolved photograph then blew the tile out to the
+        // image's own pixel width — `.scaledToFill()` reports the natural size as its ideal and
+        // `.clipped()` clips *drawing*, not layout, so a 2000pt-wide JPEG made a 2000pt-wide
+        // card and pushed the whole panel off the right of the screen. It looked fine until the
+        // download finished, which is why it survived a screenshot.
+        //
+        // An overlay cannot influence its parent's size, so the ground defines the tile and the
+        // photograph is painted onto it. That is the Constant-Ground Rule expressed as layout
+        // rather than as a comment.
+        Color.white.opacity(0.06)
+            .overlay {
+                if let url {
+                    AsyncImage(
+                        url: url, transaction: Transaction(animation: .easeOut(duration: 0.35))
+                    ) { phase in
+                        if case .success(let image) = phase {
+                            image.resizable().scaledToFill()
+                        }
+                        // Deliberately nothing for `.empty` and `.failure`: a spinner would be
+                        // the card blanking, which is the exact thing the rule forbids, and a
+                        // failure should look like a place with no photograph rather than an
+                        // error.
                     }
-                    // Deliberately nothing for `.empty` and `.failure`: a spinner would be the
-                    // card blanking, which is the exact thing the rule forbids, and a failure
-                    // should look like a place with no photograph rather than an error.
+                    .transition(.opacity)
                 }
-                .transition(.opacity)
             }
-
-            if scrim > 0, url != nil {
-                Color.black.opacity(scrim)
+            .overlay {
+                if scrim > 0, url != nil {
+                    Color.black.opacity(scrim)
+                }
             }
-        }
-        .clipped()
-        .task(id: name) { await store.load(name) }
+            .clipped()
+            .task(id: name) { await store.load(name) }
     }
 }

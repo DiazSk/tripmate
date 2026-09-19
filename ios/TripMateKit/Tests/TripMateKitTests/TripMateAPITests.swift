@@ -59,6 +59,61 @@ final class TripMateAPITests: XCTestCase {
         StubURLProtocol.stub = .init(status: status, chunks: [Data(body.utf8)])
     }
 
+    // MARK: - Profile
+
+    /// The only new contract with the server in this phase, and wrong until proven. Verified
+    /// against `src/app/api/profile/route.ts`, which exports `GET` and `PUT` only.
+    func testProfileDecodesTheEnvelope() async throws {
+        stub(200, #"""
+        {"profile":{"group":"family_with_kids","explorerStyle":"offbeat","energy":"high",
+          "crowds":"avoid","priorities":["Food","Museums"],"topPriorities":["Food"],
+          "dietary":{"tags":["Vegetarian"],"note":"no shellfish"}}}
+        """#)
+        let profile = try await api.profile()
+        XCTAssertEqual(profile?.group, .familyWithKids)
+        XCTAssertEqual(profile?.priorities, ["Food", "Museums"])
+        XCTAssertEqual(profile?.topPriorities, ["Food"])
+        XCTAssertEqual(profile?.dietary.tags, ["Vegetarian"])
+    }
+
+    /// **A null profile is a real state, not a failure.** Somebody who has never filled the form
+    /// in gets this, and the screen must open on defaults rather than an error.
+    func testAnUnsetProfileDecodesAsNilRatherThanThrowing() async throws {
+        stub(200, #"{"profile":null}"#)
+        let profile = try await api.profile()
+        XCTAssertNil(profile)
+    }
+
+    /// `PUT`, the enveloped body, and the path. A `POST` here is a 405 and the save silently
+    /// never happens.
+    func testSaveProfilePutsAnEnvelopedBody() async throws {
+        stub(200, #"{"ok":true}"#)
+        try await api.saveProfile(TravelerProfile(group: .couple, priorities: ["Food"]))
+
+        let request = try XCTUnwrap(StubURLProtocol.lastRequest)
+        XCTAssertEqual(request.httpMethod, "PUT")
+        XCTAssertEqual(request.url?.path, "/api/profile")
+
+        let body = try XCTUnwrap(request.httpBodyStream.map { stream -> Data in
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            while stream.hasBytesAvailable {
+                let read = stream.read(&buffer, maxLength: buffer.count)
+                if read <= 0 { break }
+                data.append(buffer, count: read)
+            }
+            return data
+        } ?? request.httpBody)
+        let json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+        let sent = try XCTUnwrap(json["profile"] as? [String: Any])
+        XCTAssertEqual(sent["group"] as? String, "couple")
+        XCTAssertEqual(sent["priorities"] as? [String], ["Food"])
+    }
+
     // MARK: - Status mapping
     //
     // 429 and 503 are the two that matter most: the contract calls them first-class states, so a
