@@ -511,35 +511,70 @@ private struct FieldCell<Content: View>: View {
     }
 }
 
-/// A date, as the platform's own picker. The ISO string stays the source of truth; the draft never
-/// holds a `Date`.
+/// A date: our own text, and the system picker only for input.
 ///
-/// **The conversion runs through `Calendar.current`, and an `ISO8601DateFormatter` pinned to UTC
-/// here is a bug — measured, not theorised.** The first version of this used one, and the picker
-/// rendered `2026-09-15` as **9/14/26**: parsing the string gives UTC midnight, `DatePicker`
-/// displays that instant in local time, and local time is behind UTC for most of the Americas. So
-/// the day shown was not the day stored. That is the same off-by-one CLAUDE.md records reaching
-/// generated output once already.
+/// **The `.compact` `DatePicker` draws its own label, and that is why it is not used here.** It
+/// renders in the system font and chooses its own format, so on this screen it was the one piece
+/// of text the design system did not own — and it picked differently for the two fields, showing
+/// "Sep 19, 2026" beside "9/25/26".
 ///
-/// A date-only string is a *calendar day*, not an instant, so it has to become the local midnight
-/// of that day and be read back as the local calendar day. `Tiers.tripDays` parsing the strings in
-/// UTC stays correct because both ends are calendar days and only their difference is used.
+/// That was diagnosed rather than guessed, and the first three answers were wrong: it is not the
+/// ambient font (an explicit `.font` changed nothing), not positional (given identical values
+/// both fields render long), and not a width negotiation (`.fixedSize()` changed nothing). What
+/// is left is the control's own formatter, which takes no instruction. So the label is ours now,
+/// the format is stated, and the control is reduced to the job it is good at.
+///
+/// **The ISO string stays the source of truth; the draft never holds a `Date`.**
+///
+/// The conversion runs through `Calendar.current`, and an `ISO8601DateFormatter` pinned to UTC
+/// here is a bug — measured, not theorised. The first version used one and rendered `2026-09-15`
+/// as **9/14/26**: parsing gives UTC midnight, the picker displays that instant locally, and
+/// local time is behind UTC for most of the Americas, so the day shown was not the day stored.
+/// That is the same off-by-one CLAUDE.md records reaching generated output once already.
+///
+/// A date-only string is a *calendar day*, not an instant, so it becomes the local midnight of
+/// that day and is read back as the local calendar day. `Tiers.tripDays` parsing in UTC stays
+/// correct because both ends are calendar days and only their difference is used.
 private struct DateField: View {
     @Binding var value: String
     /// The earliest selectable day, as ISO. Local today for arrival; the arrival date for
     /// departure, so the reversed-range rule is unreachable by picker.
     let earliest: String
 
+    @State private var isPicking = false
+
+    private var selection: Binding<Date> {
+        Binding(get: parsed, set: { value = Self.iso($0) })
+    }
+
     var body: some View {
-        DatePicker(
-            "",
-            selection: Binding(get: parsed, set: { value = Self.iso($0) }),
-            in: (Self.date(from: earliest) ?? .distantPast)...,
-            displayedComponents: .date
-        )
-        .labelsHidden()
-        .datePickerStyle(.compact)
-        .tint(Token.accent)
+        Button { isPicking = true } label: {
+            Text(parsed(), format: .dateTime.month(.abbreviated).day().year())
+                .textStyle(.bodyLarge)
+                .foregroundStyle(Token.foreground)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // A popover on a regular-width layout, which iOS renders as a sheet on a compact one —
+        // so this is one declaration for both, rather than a size-class branch.
+        .popover(isPresented: $isPicking) {
+            DatePicker(
+                "",
+                selection: selection,
+                in: (Self.date(from: earliest) ?? .distantPast)...,
+                displayedComponents: .date
+            )
+            .labelsHidden()
+            .datePickerStyle(.graphical)
+            .tint(Token.accent)
+            // **An explicit width, because a popover sizes to its content and a graphical
+            // `DatePicker` will compress to whatever it is given.** Anchored on a ~110pt label
+            // it rendered as a 115pt strip showing one column of the month grid. 320 is the
+            // width the month view actually wants.
+            .frame(width: 320)
+            .padding(Token.gapRows)
+            .presentationCompactAdaptation(.popover)
+        }
     }
 
     private func parsed() -> Date {
