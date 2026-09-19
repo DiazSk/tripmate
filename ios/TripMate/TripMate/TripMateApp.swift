@@ -14,6 +14,9 @@ struct TripMateApp: App {
     /// which is a question about the map and not about the trip being read.
     @State private var search = MapSearchStore()
     @State private var plan: PlanStore
+    /// One photograph cache for the process — the whole point is that every view asking for the
+    /// same destination shares one request.
+    @State private var photos: PlacePhotoStore
 
     init() {
         // Before anything draws. The three faces are bundled TTFs registered into the process
@@ -30,12 +33,14 @@ struct TripMateApp: App {
         )
         _store = State(initialValue: TripsStore(api: api))
         _plan = State(initialValue: PlanStore(api: api))
+        _photos = State(initialValue: PlacePhotoStore(api: api))
     }
 
     var body: some Scene {
         WindowGroup {
             RootView(store: store, plan: plan)
                 .environment(search)
+                .environment(photos)
                 // Dark-only, matching the web app's `color-scheme: dark` on :root. Not a
                 // preference the system gets to override: the whole palette is one slate, and
                 // `DESIGN.md`'s Darken-Never-Lighten rule has no light-mode counterpart.

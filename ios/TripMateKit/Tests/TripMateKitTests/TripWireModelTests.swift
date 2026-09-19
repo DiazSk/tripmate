@@ -126,3 +126,42 @@ final class TripWireModelTests: XCTestCase {
         """#
     }
 }
+
+/// `PlacePhoto`'s all-null case is the one that matters: the route answers a *miss* with three
+/// nulls and a **200 so the client caches it**, while a failed lookup is a 503 that never
+/// reaches this type. Decoding the miss as an error would turn "no photograph" into "ask
+/// Wikipedia again on every render".
+final class PlacePhotoTests: XCTestCase {
+
+    func testAMissDecodesRatherThanThrowing() throws {
+        let json = #"{"thumbnailUrl":null,"imageUrl":null,"extract":null}"#
+        let photo = try JSONDecoder.tripMate.decode(PlacePhoto.self, from: Data(json.utf8))
+        XCTAssertTrue(photo.isEmpty)
+        XCTAssertNil(photo.extract)
+    }
+
+    /// Absent keys, not just null ones — the contract writes them `{thumbnailUrl?, ...}`.
+    func testAbsentKeysDecodeAsAMissToo() throws {
+        let photo = try JSONDecoder.tripMate.decode(PlacePhoto.self, from: Data("{}".utf8))
+        XCTAssertTrue(photo.isEmpty)
+    }
+
+    func testARealPhotoIsNotEmpty() throws {
+        let json = """
+        {"thumbnailUrl":"https://example.org/330px.jpg",
+         "imageUrl":"https://example.org/3840px.jpg",
+         "extract":"Kyoto is the capital city of Kyoto Prefecture."}
+        """
+        let photo = try JSONDecoder.tripMate.decode(PlacePhoto.self, from: Data(json.utf8))
+        XCTAssertFalse(photo.isEmpty)
+        XCTAssertEqual(photo.imageUrl, "https://example.org/3840px.jpg")
+    }
+
+    /// A photograph with no extract is ordinary, and must not read as a miss — the header still
+    /// wants the picture.
+    func testAPhotoWithoutAnExtractStillCounts() throws {
+        let json = #"{"thumbnailUrl":"https://example.org/t.jpg","imageUrl":null,"extract":null}"#
+        let photo = try JSONDecoder.tripMate.decode(PlacePhoto.self, from: Data(json.utf8))
+        XCTAssertFalse(photo.isEmpty)
+    }
+}

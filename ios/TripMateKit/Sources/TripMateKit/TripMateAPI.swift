@@ -256,6 +256,35 @@ public struct TripMateAPI: Sendable {
         }
     }
 
+    /// `GET /api/place-photo?name=` — the Wikipedia photograph and extract for a place.
+    ///
+    /// Feeds the memories wall, the itinerary card's collapsing header and stop avatars. Look
+    /// Around does not replace this: that is street-level imagery of somewhere you are standing
+    /// near, this is the editorial photograph *of a destination*.
+    ///
+    /// **The 200/503 split is the caching contract, and it is the whole subtlety.** A miss
+    /// returns all three fields `null` with a **200, deliberately, so the client caches it** —
+    /// a place with no photograph should not be looked up again. A **503 "Lookup failed"** is
+    /// the retryable case: the lookup itself failed, upstream or rate-limited, and caching that
+    /// would leave a trip photo-less for the rest of the session.
+    ///
+    /// So this returns `PlacePhoto?`: a value to cache, or `nil` meaning "ask again". It
+    /// deliberately does not surface `APIError` — 503 classifies as `spendCapReached`, which is
+    /// wrong for this route (see `check`), and nothing here is worth showing a traveler anyway.
+    public func placePhoto(name: String) async -> PlacePhoto? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A caller passing a field the traveler has not filled in yet would otherwise fire a
+        // lookup for "" on every render, which can only 400.
+        guard !trimmed.isEmpty else { return nil }
+        do {
+            return try await send(
+                await get("/api/place-photo", query: ["name": trimmed]), as: PlacePhoto.self
+            )
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: Generation
 
     /// Stream a generation, stop by stop.
@@ -402,6 +431,16 @@ public struct TripMateAPI: Sendable {
         case 404: throw APIError.notFound(message ?? "Not found.")
         case 429: throw APIError.throttled(message ?? "Too many requests.")
         case 500: throw APIError.server(message ?? "Something went wrong.")
+        // **503 does not always mean the spend cap, and this case overstates what the status
+        // code knows.** Three routes send it for the cap — `/api/itinerary`, `/api/trip-edit`
+        // and `/api/place-detail`, all with "Demo budget for today has been used up" — while
+        // `/api/place-photo` sends it for "Lookup failed", a transient upstream miss with no
+        // billing meaning. The bodies differ but branching on copy is worse than this note.
+        //
+        // Harmless today because the one non-cap sender is fail-soft and its caller
+        // (`placePhoto`) ignores the classification entirely. **A new user-facing route that
+        // 503s for any other reason would show the wrong message** — give it the same treatment
+        // rather than relying on this.
         case 503: throw APIError.spendCapReached(message ?? "Temporarily unavailable.")
         default:  throw APIError.unexpectedStatus(http.statusCode, message)
         }

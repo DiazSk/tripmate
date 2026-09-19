@@ -236,3 +236,19 @@ public struct ArrivalPoint: Codable, Sendable, Equatable, Identifiable {
 
     public var id: String { name }
 }
+
+/// `GET /api/place-photo`. **All three fields null is a real answer**, not a failure: the route
+/// returns it with a 200 so the client caches "this place has no photograph" rather than asking
+/// again. A failed *lookup* is a 503 and never reaches this type.
+public struct PlacePhoto: Codable, Sendable, Equatable {
+    /// The small one, for avatars and list rows.
+    public let thumbnailUrl: String?
+    /// The large one, for header backgrounds.
+    public let imageUrl: String?
+    /// Wikipedia's one-paragraph description, which arrives in the same response — so asking
+    /// for it beside a photo costs nothing extra.
+    public let extract: String?
+
+    /// True when the lookup succeeded and the place simply has no picture.
+    public var isEmpty: Bool { thumbnailUrl == nil && imageUrl == nil }
+}

@@ -75,24 +75,43 @@ private struct TripRow: View {
     let trip: TripSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(trip.destination)
-                .textStyle(.heading)
-                .foregroundStyle(Token.foreground)
+        VStack(alignment: .leading, spacing: 10) {
+            // **A bounded tile, and no type on it** — the Photograph-Is-Not-A-Surface Rule.
+            // `DESIGN.md:388` measures why: across eight cities mean luminance runs 0.040-0.348
+            // and Kyoto peaks at 0.947, where white body text is 2.41:1 under a 60% scrim and
+            // 3.56:1 under 75%. A scrim makes *large* type safe and small type only apparently
+            // safe, so the card puts every word on its own material instead.
+            //
+            // **16:10, not a fixed height.** The web arrived here from `h-[200px]`: uncapped, a
+            // card passes 600px wide and 600x200 is a 3:1 letterbox that centre-crops straight
+            // through the one tall landmark that made a destination recognisable.
+            PlacePhotoView(name: trip.destination, large: true)
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(trip.destination)
+                    .textStyle(.heading)
+                    .foregroundStyle(Token.foreground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 6) {
+                    Text("\(trip.startDate) → \(trip.endDate)")
+                    Text("·")
+                    Text(trip.budget, format: .currency(code: "USD").precision(.fractionLength(0)))
+                }
+                .textStyle(.money)
+                .foregroundStyle(Token.muted)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 6) {
-                Text("\(trip.startDate) → \(trip.endDate)")
-                Text("·")
-                Text(trip.budget, format: .currency(code: "USD").precision(.fractionLength(0)))
             }
-            .textStyle(.money)
-            .foregroundStyle(Token.muted)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 2)
         }
-        .padding(Token.gapRows)
-        // The permanent slate base a photograph will later fade in over.
-        .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+        .padding(10)
+        .background(Token.surfaceDeep.opacity(Token.panelOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Token.radiusLarge, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Token.radiusLarge, style: .continuous)
+                .strokeBorder(Token.cardBorder, lineWidth: 1)
+        )
     }
 }
 
