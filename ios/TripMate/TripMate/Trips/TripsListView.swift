@@ -17,8 +17,7 @@ struct TripsListView: View {
         VStack(alignment: .leading, spacing: Token.gapPanels) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Memories")
-                    .font(.system(size: 28, weight: .semibold))
-                    .kerning(-2.5)
+                    .textStyle(.display)
                     .foregroundStyle(Token.foreground)
                 Spacer(minLength: 8)
                 // Only once there is a wall to add to. On the empty state the invitation below
@@ -60,11 +59,10 @@ struct TripsListView: View {
     private var invitation: some View {
         VStack(alignment: .leading, spacing: Token.gapRows) {
             Text("Plan your first trip")
-                .font(.system(size: 22, weight: .semibold))
-                .kerning(-1.6)
+                .textStyle(.title)
                 .foregroundStyle(Token.foreground)
             Text("Tell us where and when, and the days come back written.")
-                .font(.system(size: 14))
+                .textStyle(.body)
                 .foregroundStyle(Token.muted)
             Button("Plan a trip", action: onPlan)
                 .buttonStyle(PrimaryButtonStyle())
@@ -79,8 +77,7 @@ private struct TripRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(trip.destination)
-                .font(.system(size: 17, weight: .semibold))
-                .kerning(-0.8)
+                .textStyle(.heading)
                 .foregroundStyle(Token.foreground)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 6) {
@@ -88,8 +85,7 @@ private struct TripRow: View {
                 Text("·")
                 Text(trip.budget, format: .currency(code: "USD").precision(.fractionLength(0)))
             }
-            .font(.system(size: 13))
-            .monospacedDigit()
+            .textStyle(.money)
             .foregroundStyle(Token.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -107,7 +103,7 @@ struct Notice: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 13))
+            .textStyle(.detail)
             .foregroundStyle(Token.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Token.gapRows)

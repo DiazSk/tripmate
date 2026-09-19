@@ -51,21 +51,19 @@ struct PlanWizardView: View {
                     Image(systemName: "chevron.left")
                     Text("Memories")
                 }
-                .font(.system(size: 13, weight: .medium))
+                .textStyle(.detail.weight(TextStyle.medium))
                 .foregroundStyle(Token.muted)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             Text(plan.step.title)
-                .font(.system(size: 28, weight: .semibold))
-                .kerning(-2.5)
+                .textStyle(.display)
                 .foregroundStyle(Token.foreground)
 
             // Position, not a percentage. Four steps is few enough to count.
             Text("Step \(index + 1) of \(PlanStep.allCases.count)")
-                .font(.system(size: 12))
-                .monospacedDigit()
+                .textStyle(.money.size(12))
                 .foregroundStyle(Token.muted)
         }
     }
@@ -121,11 +119,11 @@ struct PlanWizardView: View {
             HStack(spacing: 10) {
                 ProgressView().tint(Token.accent)
                 Text(plan.stage?.waitingLabel ?? "Starting…")
-                    .font(.system(size: 14))
+                    .textStyle(.body)
                     .foregroundStyle(Token.foreground)
             }
             Text("This takes a minute or two. \(plan.draft.days) days of \(plan.draft.destination).")
-                .font(.system(size: 13))
+                .textStyle(.detail)
                 .foregroundStyle(Token.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -152,7 +150,7 @@ private struct BasicsStep: View {
                         .focused($focus, equals: .destination)
                         .textFieldStyle(.plain)
                         .autocorrectionDisabled()
-                        .font(.system(size: 16))
+                        .textStyle(.bodyLarge)
                         .foregroundStyle(Token.foreground)
                 }
                 Hairline()
@@ -180,8 +178,7 @@ private struct BasicsStep: View {
                             .focused($focus, equals: .budget)
                             .textFieldStyle(.plain)
                             .keyboardType(.numberPad)
-                            .font(.system(size: 16))
-                            .monospacedDigit()
+                            .textStyle(.money.size(16))
                             .foregroundStyle(Token.foreground)
                     }
                 }
@@ -217,10 +214,10 @@ private struct BasicsStep: View {
         let tier = Tiers.tier(plan.draft.tier)
         return VStack(alignment: .leading, spacing: 2) {
             Text("\(plan.draft.days) days · \(tier.name)")
-                .font(.system(size: 13, weight: .medium))
+                .textStyle(.detail.weight(TextStyle.medium))
                 .foregroundStyle(Token.foreground)
             Text(tier.description)
-                .font(.system(size: 12))
+                .textStyle(.caption)
                 .foregroundStyle(Token.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -368,7 +365,7 @@ private struct PreferencesStep: View {
                 PlainField(placeholder: "Anything else we should know", text: bind(\.accessibility.note))
             }
             .tint(Token.accent)
-            .font(.system(size: 14))
+            .textStyle(.body)
             .foregroundStyle(Token.foreground)
         }
     }
@@ -393,7 +390,7 @@ private struct PreferencesStep: View {
                     ? "Star up to \(plan.draft.starsRemaining) more — those count most."
                     : "Those three count most."
             )
-            .font(.system(size: 12))
+            .textStyle(.caption)
             .foregroundStyle(Token.muted)
         }
     }
@@ -434,7 +431,7 @@ private struct ReviewStep: View {
                     )
                 }
                 Text("Optional anchors only — the rest is chosen from your answers above.")
-                    .font(.system(size: 12))
+                    .textStyle(.caption)
                     .foregroundStyle(Token.muted)
             }
         }
@@ -504,8 +501,7 @@ private struct FieldCell<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .kerning(0.6)
+                .textStyle(.label)
                 .foregroundStyle(isFocused ? Token.accent : Token.muted)
             content()
         }
@@ -577,12 +573,11 @@ private struct CountRow: View {
         Stepper(value: $value, in: range) {
             HStack {
                 Text(label)
-                    .font(.system(size: 14))
+                    .textStyle(.body)
                     .foregroundStyle(Token.foreground)
                 Spacer(minLength: 8)
                 Text("\(value)")
-                    .font(.system(size: 14, weight: .medium))
-                    .monospacedDigit()
+                    .textStyle(.money.size(14))
                     .foregroundStyle(value == range.lowerBound ? Token.muted : Token.foreground)
             }
         }
@@ -609,7 +604,7 @@ private struct Question<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .textStyle(.body.weight(TextStyle.medium))
                 .foregroundStyle(Token.foreground)
             content()
         }
@@ -680,8 +675,7 @@ private struct Chip: View {
         HStack(spacing: 5) {
             Button(action: action) {
                 Text(text)
-                    .font(.system(size: 12, weight: .medium))
-                    .kerning(-0.2)
+                    .textStyle(.caption.weight(TextStyle.medium))
                     .foregroundStyle(isSelected ? Token.accentForeground : Token.muted)
                     .contentShape(Rectangle())
             }
@@ -690,7 +684,7 @@ private struct Chip: View {
             if let starAction {
                 Button(action: starAction) {
                     Image(systemName: isStarred ? "star.fill" : "star")
-                        .font(.system(size: 10))
+                        .textStyle(.label.weight(TextStyle.regular))
                         .foregroundStyle(
                             isStarred
                                 ? Token.money
@@ -767,7 +761,7 @@ private struct PlainField: View {
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.plain)
-            .font(.system(size: 14))
+            .textStyle(.body)
             .foregroundStyle(Token.foreground)
             .padding(.horizontal, Token.gapRows)
             .padding(.vertical, 9)
@@ -787,7 +781,7 @@ private struct OptionalField: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 13))
+                .textStyle(.detail)
                 .foregroundStyle(Token.muted)
             Spacer(minLength: 8)
             TextField(
@@ -799,7 +793,7 @@ private struct OptionalField: View {
             )
             .textFieldStyle(.plain)
             .multilineTextAlignment(.trailing)
-            .font(.system(size: 13))
+            .textStyle(.detail)
             .foregroundStyle(Token.foreground)
         }
         .padding(.horizontal, Token.gapRows)
@@ -816,15 +810,15 @@ private struct SummaryRow: View {
         Button(action: onEdit) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(label)
-                    .font(.system(size: 12))
+                    .textStyle(.caption)
                     .foregroundStyle(Token.muted)
                     .frame(width: 56, alignment: .leading)
                 Text(value.isEmpty ? "—" : value)
-                    .font(.system(size: 13))
+                    .textStyle(.detail)
                     .foregroundStyle(Token.foreground)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "pencil")
-                    .font(.system(size: 11))
+                    .textStyle(.micro)
                     .foregroundStyle(Token.muted)
             }
             .padding(.horizontal, Token.gapRows)
@@ -842,7 +836,7 @@ struct Alert: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 13))
+            .textStyle(.detail)
             .foregroundStyle(Token.alert)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Token.gapRows)
@@ -856,7 +850,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 14, weight: .semibold))
+            .textStyle(.body.weight(TextStyle.semibold))
             .foregroundStyle(Token.accentForeground)
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
@@ -871,7 +865,7 @@ struct GhostButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 14, weight: .medium))
+            .textStyle(.body.weight(TextStyle.medium))
             .foregroundStyle(Token.muted.opacity(isEnabled ? 1 : 0.4))
             .padding(.horizontal, 16)
             .padding(.vertical, 10)

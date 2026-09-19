@@ -128,8 +128,7 @@ private struct ChromeLayer: View {
         VStack(spacing: 0) {
             HStack {
                 Text("TripMate")
-                    .font(.system(size: 17, weight: .semibold))
-                    .kerning(-0.6)
+                    .textStyle(.heading)
                     .foregroundStyle(Token.foreground)
                 Spacer()
             }

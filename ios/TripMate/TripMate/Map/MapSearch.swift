@@ -158,20 +158,20 @@ struct MapSearchView: View {
     private var field: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .medium))
+                .textStyle(.detail.weight(TextStyle.medium))
                 .foregroundStyle(Token.muted)
             TextField("Search near this view…", text: Binding(
                 get: { store.query }, set: { store.query = $0 }
             ))
             .textFieldStyle(.plain)
-            .font(.system(size: 13))
+            .textStyle(.detail)
             .foregroundStyle(Token.foreground)
             .submitLabel(.search)
             .autocorrectionDisabled()
             if !store.query.isEmpty {
                 Button { store.clear() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
+                        .textStyle(.body)
                         .foregroundStyle(Token.muted)
                 }
                 .buttonStyle(.plain)
@@ -186,7 +186,7 @@ struct MapSearchView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let message = store.message {
                 Text(message)
-                    .font(.system(size: 12))
+                    .textStyle(.caption)
                     .foregroundStyle(Token.muted)
                     .padding(10)
             }
@@ -194,11 +194,11 @@ struct MapSearchView: View {
                 Button { store.select(result) } label: {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(result.name)
-                            .font(.system(size: 13, weight: .medium))
+                            .textStyle(.detail.weight(TextStyle.medium))
                             .foregroundStyle(Token.foreground)
                         if !result.subtitle.isEmpty {
                             Text(result.subtitle)
-                                .font(.system(size: 11))
+                                .textStyle(.micro)
                                 .foregroundStyle(Token.muted)
                         }
                     }

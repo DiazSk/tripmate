@@ -35,19 +35,17 @@ struct TripDetailView: View {
                     Image(systemName: "chevron.left")
                     Text("Memories")
                 }
-                .font(.system(size: 13, weight: .medium))
+                .textStyle(.detail.weight(TextStyle.medium))
                 .foregroundStyle(Token.muted)
             }
             .buttonStyle(.plain)
 
             Text(trip.destination)
-                .font(.system(size: 28, weight: .semibold))
-                .kerning(-2.5)
+                .textStyle(.display)
                 .foregroundStyle(Token.foreground)
 
             Text("\(trip.startDate) → \(trip.endDate)")
-                .font(.system(size: 13))
-                .monospacedDigit()
+                .textStyle(.money)
                 .foregroundStyle(Token.muted)
         }
     }
@@ -62,8 +60,7 @@ struct TripDetailView: View {
                     let isActive = index == activeDay
                     Button { onSelectDay(index) } label: {
                         Text("Day \(index + 1)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .kerning(-0.4)
+                            .textStyle(.caption.weight(TextStyle.semibold))
                             .foregroundStyle(isActive ? Token.accentForeground : Token.muted)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -84,7 +81,7 @@ struct TripDetailView: View {
                 VStack(alignment: .leading, spacing: Token.gapRows) {
                     if let summary = day.summary {
                         Text(summary)
-                            .font(.system(size: 13))
+                            .textStyle(.detail)
                             .foregroundStyle(Token.muted)
                     }
                     ForEach(Array(day.stops.enumerated()), id: \.offset) { index, stop in
@@ -122,12 +119,11 @@ private struct StopRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(stop.name)
-                    .font(.system(size: 15, weight: .medium))
+                    .textStyle(.headingSmall.weight(TextStyle.medium))
                     .foregroundStyle(Token.foreground)
                 Spacer(minLength: 8)
                 Text(stop.cost, format: .currency(code: "USD").precision(.fractionLength(0)))
-                    .font(.system(size: 13))
-                    .monospacedDigit()
+                    .textStyle(.money)
                     .foregroundStyle(Token.money)
             }
             HStack(spacing: 6) {
@@ -135,17 +131,16 @@ private struct StopRow: View {
                 Text("·")
                 Text(stop.durationLabel)
             }
-            .font(.system(size: 12))
-            .monospacedDigit()
+            .textStyle(.money.size(12))
             .foregroundStyle(Token.muted)
 
             if let why = stop.why {
                 Text(why)
-                    .font(.system(size: 13))
+                    .textStyle(.detail)
                     .foregroundStyle(.white.opacity(0.85))
             }
             Text(stop.note)
-                .font(.system(size: 13))
+                .textStyle(.detail)
                 .foregroundStyle(Token.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -166,16 +161,15 @@ private struct LodgingRow: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(lodging.name)
-                    .font(.system(size: 14, weight: .medium))
+                    .textStyle(.body.weight(TextStyle.medium))
                     .foregroundStyle(Token.foreground)
                 Text(lodging.note)
-                    .font(.system(size: 12))
+                    .textStyle(.caption)
                     .foregroundStyle(Token.muted)
             }
             Spacer(minLength: 8)
             Text(lodging.cost, format: .currency(code: "USD").precision(.fractionLength(0)))
-                .font(.system(size: 13))
-                .monospacedDigit()
+                .textStyle(.money)
                 .foregroundStyle(Token.money)
         }
         .padding(Token.gapRows)
@@ -203,15 +197,13 @@ struct BudgetBarView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(spent, format: .currency(code: "USD").precision(.fractionLength(0)))
-                    .font(.system(size: 15, weight: .semibold))
-                    .monospacedDigit()
+                    .textStyle(.moneyLarge)
                     .foregroundStyle(isOver ? Token.alert : Token.money)
                 Text("of")
-                    .font(.system(size: 12))
+                    .textStyle(.caption)
                     .foregroundStyle(Token.muted)
                 Text(budget, format: .currency(code: "USD").precision(.fractionLength(0)))
-                    .font(.system(size: 13))
-                    .monospacedDigit()
+                    .textStyle(.money)
                     .foregroundStyle(Token.muted)
             }
 
@@ -239,8 +231,7 @@ struct BudgetBarView: View {
 
             if isOver {
                 Text("Over budget by \((spent - budget), format: .currency(code: "USD").precision(.fractionLength(0)))")
-                    .font(.system(size: 12))
-                    .monospacedDigit()
+                    .textStyle(.money.size(12))
                     .foregroundStyle(Token.alert)
             }
         }

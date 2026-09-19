@@ -16,6 +16,10 @@ struct TripMateApp: App {
     @State private var plan: PlanStore
 
     init() {
+        // Before anything draws. The three faces are bundled TTFs registered into the process
+        // rather than declared in an Info.plist, because this project generates its plist.
+        FontLoader.registerBundledFonts()
+
         let session = AuthSession(store: KeychainTokenStore())
         self.session = session
         // One client for the process, shared by both stores. `tokenProvider()` captures the actor
