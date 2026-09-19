@@ -105,6 +105,27 @@ public enum Tiers {
         )
     }
 
+    // MARK: - Time of day
+
+    /// `TripLogistics`' `"HH:MM"`, which is **24-hour and locale-independent** — it is what
+    /// `<input type="time">` hands the web, and the prompt reads it literally.
+    ///
+    /// Kept beside `todayISO` because it is the same class of hazard: a value the traveler sees
+    /// in their own locale and the server must receive in one fixed format. A 12-hour slip here
+    /// sends `11:00` for an 11 PM arrival and nothing downstream can tell.
+    public static func hhmm(_ date: Date, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0)
+    }
+
+    /// The inverse, on an arbitrary day — only the time of day is meaningful.
+    public static func time(fromHHMM value: String, calendar: Calendar = .current) -> Date? {
+        let parts = value.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2, (0...23).contains(parts[0]), (0...59).contains(parts[1])
+        else { return nil }
+        return calendar.date(from: DateComponents(hour: parts[0], minute: parts[1]))
+    }
+
     private static func isoDate(_ value: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate, .withDashSeparatorInDate]

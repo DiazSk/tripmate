@@ -279,25 +279,33 @@ private struct GroupStep: View {
             // row existed — and every rule that reads a field degrades rather than assuming.
             Question("Already booked (optional)") {
                 VStack(spacing: 0) {
-                    OptionalField(
-                        label: "Arrival time", placeholder: "14:30",
-                        value: bind(\.logistics.arrivalTime)
-                    )
+                    OptionalRow(label: "Arrival time") {
+                        TimeField(placeholder: "Set a time", value: bind(\.logistics.arrivalTime))
+                    }
                     Hairline()
-                    OptionalField(
-                        label: "Arriving at", placeholder: "Kansai Intl (KIX)",
-                        value: bind(\.logistics.arrivalPoint)
-                    )
+                    OptionalRow(label: "Arriving at") {
+                        SuggestField(
+                            placeholder: plan.arrivalPoints.isEmpty
+                                ? "Anywhere you like" : "Pick or type a place",
+                            value: bind(\.logistics.arrivalPoint),
+                            options: plan.arrivalPoints
+                        )
+                    }
                     Hairline()
-                    OptionalField(
-                        label: "Departure time", placeholder: "09:15",
-                        value: bind(\.logistics.departureTime)
-                    )
+                    OptionalRow(label: "Departure time") {
+                        TimeField(placeholder: "Set a time", value: bind(\.logistics.departureTime))
+                    }
                     Hairline()
-                    OptionalField(
-                        label: "Leaving from", placeholder: "Kyoto Station",
-                        value: bind(\.logistics.departurePoint)
-                    )
+                    OptionalRow(label: "Leaving from") {
+                        // The same set: the place you fly out of is the place you flew into,
+                        // far more often than not.
+                        SuggestField(
+                            placeholder: plan.arrivalPoints.isEmpty
+                                ? "Anywhere you like" : "Pick or type a place",
+                            value: bind(\.logistics.departurePoint),
+                            options: plan.arrivalPoints
+                        )
+                    }
                 }
                 .background(Color.black.opacity(0.22))
                 .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
@@ -808,10 +816,9 @@ private struct PlainField: View {
 /// A row whose empty state is `nil` rather than `""`, because the wire distinguishes them: an
 /// all-empty `logistics` is collapsed to null server-side and a field left blank must not arrive
 /// as a stated empty string.
-private struct OptionalField: View {
+private struct OptionalRow<Control: View>: View {
     let label: String
-    let placeholder: String
-    @Binding var value: String?
+    @ViewBuilder var control: () -> Control
 
     var body: some View {
         HStack {
@@ -819,20 +826,130 @@ private struct OptionalField: View {
                 .textStyle(.detail)
                 .foregroundStyle(Token.muted)
             Spacer(minLength: 8)
+            control()
+        }
+        .padding(.horizontal, Token.gapRows)
+        .padding(.vertical, 10)
+    }
+}
+
+/// An optional "HH:MM" time, as the platform's own wheel.
+///
+/// **The same popover shape as `DateField`, and for the same reason** — a `.compact` picker
+/// draws its own label in the system font and picks its own format. This one is optional, so
+/// there is a third state neither picker has: nothing chosen. It shows the placeholder until
+/// the traveler picks, and offers Clear once they have.
+///
+/// The wire format is `"HH:MM"` (`TripLogistics.arrivalTime`), 24-hour and locale-independent,
+/// which is what `<input type="time">` gives the web. The *display* is the traveler's own
+/// locale, so a US tester sees 2:30 PM while the payload stays `14:30`.
+private struct TimeField: View {
+    let placeholder: String
+    @Binding var value: String?
+
+    @State private var isPicking = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button { isPicking = true } label: {
+                Text(value.flatMap(Self.display) ?? placeholder)
+                    .textStyle(.detail)
+                    .foregroundStyle(value == nil ? Token.muted : Token.foreground)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if value != nil {
+                Button { value = nil } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Token.muted)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .popover(isPresented: $isPicking) {
+            DatePicker(
+                "",
+                selection: Binding(
+                    get: { value.flatMap(Self.date) ?? Self.defaultTime },
+                    set: { value = Self.hhmm($0) }
+                ),
+                displayedComponents: .hourAndMinute
+            )
+            .labelsHidden()
+            .datePickerStyle(.wheel)
+            .tint(Token.accent)
+            // A wheel needs a stated width for the same reason the month grid did: a popover
+            // sizes to its content and the wheel will compress to whatever it is handed.
+            .frame(width: 260)
+            .padding(Token.gapRows)
+            .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    /// 09:00 rather than "now" — an arrival time nobody has set should not default to the
+    /// minute they opened the form, which reads as a value they chose.
+    private static var defaultTime: Date {
+        Calendar.current.date(from: DateComponents(hour: 9, minute: 0)) ?? Date()
+    }
+
+    // The conversion itself lives in `Tiers`, beside `todayISO`, so `swift test` can reach it —
+    // a 12/24-hour slip is silent on the wire and only a test catches it.
+    private static func date(_ hhmm: String) -> Date? { Tiers.time(fromHHMM: hhmm) }
+    private static func hhmm(_ date: Date) -> String { Tiers.hhmm(date) }
+
+    private static func display(_ hhmm: String) -> String? {
+        date(hhmm).map { $0.formatted(date: .omitted, time: .shortened) }
+    }
+}
+
+/// Free text with suggestions — never a closed list.
+///
+/// **The options are a convenience and the field is the answer.** `TripLogistics` keeps these
+/// points free text on purpose: they are a fact for the prompt, not a place to look up, and
+/// `/api/arrival-points` degrades to an empty list on an Overpass outage. So with suggestions
+/// this is a menu *and* a text field; without them it is just a text field, and nothing about
+/// the layout announces that something failed.
+private struct SuggestField: View {
+    let placeholder: String
+    @Binding var value: String?
+    let options: [ArrivalPoint]
+
+    var body: some View {
+        HStack(spacing: 8) {
             TextField(
                 placeholder,
-                text: Binding(
-                    get: { value ?? "" },
-                    set: { value = $0.isEmpty ? nil : $0 }
-                )
+                text: Binding(get: { value ?? "" }, set: { value = $0.isEmpty ? nil : $0 })
             )
             .textFieldStyle(.plain)
             .multilineTextAlignment(.trailing)
             .textStyle(.detail)
             .foregroundStyle(Token.foreground)
+
+            if !options.isEmpty {
+                Menu {
+                    // Wire order, which is airports by distance and then rail by distance.
+                    // **Not** sorted on `tier` — see its note; the field does not mean what the
+                    // server's own docstring says it does.
+                    ForEach(options) { point in
+                        Button {
+                            value = point.name
+                        } label: {
+                            Label(
+                                "\(point.name) · \(Int(point.distanceKm.rounded())) km",
+                                systemImage: point.kind == .airport ? "airplane" : "tram.fill"
+                            )
+                        }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Token.accent)
+                        .contentShape(Rectangle())
+                }
+            }
         }
-        .padding(.horizontal, Token.gapRows)
-        .padding(.vertical, 10)
     }
 }
 

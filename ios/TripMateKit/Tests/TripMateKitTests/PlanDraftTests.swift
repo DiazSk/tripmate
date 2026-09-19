@@ -349,3 +349,52 @@ final class PlanDraftTests: XCTestCase {
         )
     }
 }
+
+/// `TripLogistics`' `"HH:MM"` is 24-hour and locale-independent, while the field displays in the
+/// traveler's own locale. That split is the bug surface: an 11 PM arrival that goes out as
+/// `11:00` is wrong in a way nothing downstream can detect.
+final class TimeOfDayTests: XCTestCase {
+
+    private func calendar() -> Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        return c
+    }
+
+    /// **Afternoon stays afternoon.** A 12-hour formatter would render 23:00 as `11:00`.
+    func testAfternoonAndEveningStayIn24Hour() throws {
+        let c = calendar()
+        for (hour, minute, expected) in [(23, 0, "23:00"), (14, 30, "14:30"), (17, 5, "17:05")] {
+            let date = try XCTUnwrap(
+                DateComponents(calendar: c, timeZone: c.timeZone, hour: hour, minute: minute).date
+            )
+            XCTAssertEqual(Tiers.hhmm(date, calendar: c), expected)
+        }
+    }
+
+    /// Both halves zero-pad, because `"9:5"` is not a time the server parses.
+    func testSingleDigitsArePadded() throws {
+        let c = calendar()
+        let date = try XCTUnwrap(
+            DateComponents(calendar: c, timeZone: c.timeZone, hour: 9, minute: 5).date
+        )
+        XCTAssertEqual(Tiers.hhmm(date, calendar: c), "09:05")
+    }
+
+    func testRoundTripsThroughBothDirections() {
+        let c = calendar()
+        for value in ["00:00", "09:05", "12:00", "14:30", "23:59"] {
+            let date = Tiers.time(fromHHMM: value, calendar: c)
+            XCTAssertNotNil(date, value)
+            XCTAssertEqual(date.map { Tiers.hhmm($0, calendar: c) }, value)
+        }
+    }
+
+    /// Nonsense is nil rather than a silently clamped time — the field is optional, so "not a
+    /// time" has somewhere to go.
+    func testUnparseableAndOutOfRangeValuesAreRejected() {
+        for bad in ["", "9", "09:", ":30", "24:00", "12:60", "-1:00", "abc", "09:05:00"] {
+            XCTAssertNil(Tiers.time(fromHHMM: bad, calendar: calendar()), bad)
+        }
+    }
+}

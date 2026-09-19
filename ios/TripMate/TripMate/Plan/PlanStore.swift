@@ -28,6 +28,14 @@ final class PlanStore {
     /// Where the map should look while the wizard is open, from the destination geocode.
     private(set) var previewPlace: GeocodedPlace?
 
+    /// Airports and stations near the destination, for the optional "arriving at" field.
+    ///
+    /// **Suggestions, not a closed set** — `TripLogistics` keeps that field free text because
+    /// the point is a fact for the prompt and geocoding it would add a fetch that can fail for
+    /// no planning gain. Empty is the normal outcome of an Overpass outage and costs the
+    /// traveler a convenience, not the form.
+    private(set) var arrivalPoints: [ArrivalPoint] = []
+
     private let api: TripMateAPI
 
     init(api: TripMateAPI) {
@@ -77,6 +85,7 @@ final class PlanStore {
         stage = nil
         message = nil
         previewPlace = nil
+        arrivalPoints = []
     }
 
     // MARK: - Geocode
@@ -100,6 +109,11 @@ final class PlanStore {
             let place = try await api.geocode(destination: name)
             previewPlace = place
             draft.destinationMissed = false
+            // Fires the moment the destination resolves, which is the whole reason this is its
+            // own route rather than a field on `trip-fetch`: that one runs as the traveler
+            // *leaves* the basics step, by which time the arrive/depart fields are already
+            // filled in. Unawaited — nothing is blocked on it.
+            Task { arrivalPoints = await api.arrivalPoints(lat: place.lat, lng: place.lng) }
         } catch APIError.notFound {
             // 404 from the route is a real miss: `geocodeDestinationCached` returned nothing.
             draft.destinationMissed = true

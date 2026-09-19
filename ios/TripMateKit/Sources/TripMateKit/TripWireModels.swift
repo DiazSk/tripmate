@@ -207,3 +207,32 @@ public extension JSONDecoder {
     /// reason noted on `DayPlan.date`.
     static var tripMate: JSONDecoder { JSONDecoder() }
 }
+
+/// An airport or station a traveler could arrive at, from `GET /api/arrival-points`.
+///
+/// Feeds the optional "arriving at" field, which stays **free text** — `TripLogistics` records
+/// why: the point is a fact for the prompt, and geocoding it would add a fetch that can fail for
+/// no planning gain. So these are suggestions, never a closed set.
+public struct ArrivalPoint: Codable, Sendable, Equatable, Identifiable {
+    public enum Kind: String, Codable, Sendable {
+        case airport, rail
+    }
+
+    /// Display name, with the IATA code already appended for airports: "Kansai Intl (KIX)".
+    public let name: String
+    public let kind: Kind
+    public let distanceKm: Double
+    /// **Do not sort on this.** `arrivalPoints.ts` documents it as "0 for an international
+    /// airport, 1 for anything else", and the wire disagrees: Kyoto returns `tier: 2` for all
+    /// three airports and `tier: 0` for every rail station. Observed 2026-09-19 against the
+    /// live route, not inferred.
+    ///
+    /// What the response *is* ordered by is kind then distance — airports ascending, then rail
+    /// ascending — so the wire order is the one to render in.
+    public let tier: Int
+    /// The bare code, separate from `name`, because a flight search needs "KIX" rather than the
+    /// display string it is embedded in. `null` for rail.
+    public let iata: String?
+
+    public var id: String { name }
+}

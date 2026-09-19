@@ -232,6 +232,30 @@ public struct TripMateAPI: Sendable {
         )
     }
 
+    private struct ArrivalPointsEnvelope: Decodable { let points: [ArrivalPoint] }
+
+    /// `GET /api/arrival-points?lat=&lon=` — the airports and stations near a destination.
+    ///
+    /// **Note `lon`, not `lng`.** Contract rule 3: this is the one geo route taking `lon` as a
+    /// query param, while `/api/geocode` renames the geocoder's `lon` to `lng` on the way out.
+    /// So the value handed in here comes from `GeocodedPlace.lng` and goes out as `lon`.
+    ///
+    /// **Never throws.** The route is always 200 and degrades to `{points: []}` on an Overpass
+    /// outage, because the field it feeds is optional and free-text — an error here would
+    /// surface on a question nobody was required to answer. This mirrors that: a failure is an
+    /// empty list, not a thrown error.
+    public func arrivalPoints(lat: Double, lng: Double) async -> [ArrivalPoint] {
+        do {
+            let request = try await get(
+                "/api/arrival-points",
+                query: ["lat": String(lat), "lon": String(lng)]
+            )
+            return try await send(request, as: ArrivalPointsEnvelope.self).points
+        } catch {
+            return []
+        }
+    }
+
     // MARK: Generation
 
     /// Stream a generation, stop by stop.
