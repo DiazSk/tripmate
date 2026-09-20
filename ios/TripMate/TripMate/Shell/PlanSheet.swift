@@ -37,7 +37,7 @@ enum SheetDetent: CaseIterable {
     /// pad. It shows the trip, the day, and — when a stop is emphasised — that stop's name and
     /// time, so tapping a pin names it without opening anything.
     func height(in available: CGSize, safeTop: CGFloat, fitted: CGFloat? = nil) -> CGFloat {
-        let large = available.height - safeTop - Token.barHeight - Token.gapRows * 2
+        let large = available.height - safeTop - sheetDock
         switch self {
         case .small: return 152
         // **The middle stop is the content's own height when it states one.** A flat 46%
@@ -58,6 +58,16 @@ enum SheetDetent: CaseIterable {
 /// generic type. Three literals drifting apart is how a release ends up animating differently
 /// depending on whether it happened to land on a new stop.
 private let sheetSettle = Animation.spring(response: 0.34, dampingFraction: 0.86)
+
+/// How much the sheet leaves clear at the bottom: the bar, plus one row gap.
+///
+/// **One gap, not two, and one constant, not three.** Three expressions spelled
+/// `barHeight + gapRows * 2` had to agree — the large detent's height, the sheet's own bottom
+/// padding, and the map's obstruction — so the gap could not be tuned without finding all
+/// three. It was also too large: 24pt of live map between a 16pt-radius slab and a 28pt-radius
+/// capsule reads as two unrelated floating objects rather than one stack. `StoryStage` on the
+/// web makes the same point about the capsule it docks beneath.
+let sheetDock = Token.barHeight + Token.gapRows
 
 /// The plan over the map, at one of three heights.
 ///
@@ -136,7 +146,7 @@ struct PlanSheet<Content: View>: View {
         .glassPanel()
         .padding(.horizontal, Token.padCompact)
         // Sits on the tab bar's shoulder rather than under it.
-        .padding(.bottom, Token.barHeight + Token.gapRows * 2)
+        .padding(.bottom, sheetDock)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .animation(sheetSettle, value: detent)
         // A step with more questions than the last is a taller sheet, and it should grow
@@ -192,7 +202,6 @@ struct PlanSheet<Content: View>: View {
     static func obstruction(
         _ detent: SheetDetent, in available: CGSize, safeTop: CGFloat, fitted: CGFloat? = nil
     ) -> CGFloat {
-        detent.height(in: available, safeTop: safeTop, fitted: fitted)
-            + Token.barHeight + Token.gapRows * 2
+        detent.height(in: available, safeTop: safeTop, fitted: fitted) + sheetDock
     }
 }

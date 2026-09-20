@@ -40,7 +40,10 @@ struct TripDetailView: View {
                 activeDay: activeDay,
                 dayCount: days.count,
                 onBack: onBack,
-                onSelectDay: onSelectDay
+                onSelectDay: onSelectDay,
+                // From the header the day is whichever one you are on, same as the row at its
+                // foot — the sheet is one surface reached two ways, not two behaviours.
+                onSearch: { search.open(fromDay: activeDay) }
             )
             if isCapsule {
                 capsuleFacts
@@ -257,6 +260,7 @@ private struct TripHeaderRow: View {
     let dayCount: Int
     let onBack: () -> Void
     let onSelectDay: (Int) -> Void
+    let onSearch: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -270,15 +274,25 @@ private struct TripHeaderRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Memories")
 
-            PlacePhotoView(name: trip.destination)
-                .frame(width: 32, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: Token.radiusSmall, style: .continuous))
-
             Text(trip.destination)
                 .textStyle(.heading)
                 .foregroundStyle(Token.foreground)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            // **Here because this row is the only chrome drawn at every detent.** The row at
+            // the foot of a day was the sole way in, which means it could not be reached at the
+            // capsule at all and needed a scroll to the bottom of the day everywhere else —
+            // search was, in practice, invisible. This is the same sheet and the same day.
+            Button(action: onSearch) {
+                Image(systemName: "magnifyingglass")
+                    .textStyle(.heading)
+                    .foregroundStyle(Token.muted)
+                    .frame(width: 32, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add a stop")
 
             if dayCount > 1 { dayControl }
         }
