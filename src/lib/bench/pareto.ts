@@ -4,7 +4,7 @@
  * is the "is Opus worth it" answer.
  *
  * Lives in its own file, with zero imports, specifically so the client chart component can call it.
- * `runBenchmark.ts` reaches `better-sqlite3` through `../db`, and importing it from a `"use client"`
+ * `runBenchmark.ts` reaches `libsql` through `../db`, and importing it from a `"use client"`
  * component would drag a native node module into the browser bundle.
  */
 export function paretoFrontier(

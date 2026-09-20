@@ -6,6 +6,8 @@ import {
   setTripChatSession,
   updateTripItinerary,
 } from "@/lib/db";
+import { itineraryRejection } from "@/lib/itinerary";
+import { readableOwners } from "@/lib/owner";
 import { currentOwnerId } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
 // Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
@@ -38,10 +40,24 @@ export async function PATCH(
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
+  // Scoped, unlike the GET above, and for the same reason DELETE is: reading a trip by an
+  // unguessable id is how a shared link works, but *writing* one is not something a link should
+  // confer. Without this, anyone holding an id could overwrite another traveller's itinerary and
+  // promote their draft. `readableOwners` rather than a bare equality so the pre-ownership rows
+  // stay editable by the person who made them — see LEGACY_OWNER.
+  if (!readableOwners(await currentOwnerId()).includes(trip.owner_id)) {
+    return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
+  }
+
   const { itinerary, status, chatSessionId } = await req.json();
   if (!itinerary) {
     return NextResponse.json({ error: "Missing itinerary" }, { status: 400 });
   }
+
+  // Same guard as POST, because this writes to the same column by the same means — an edit can
+  // put a placeless stop into a trip that saved clean.
+  const rejection = itineraryRejection(itinerary);
+  if (rejection) return NextResponse.json({ error: rejection }, { status: 400 });
 
   // `status` is write-once and one-way: a draft can be kept, a kept trip cannot be un-kept here.
   // Demotion has no caller and would silently drop a saved trip out of the memories wall, so the

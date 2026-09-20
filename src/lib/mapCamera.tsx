@@ -15,6 +15,7 @@ import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { metresBetween, peekFlightSeconds, peekRangeM } from "@/lib/peekRange";
 import {
   buildDayClusters,
+  placeableStops,
   dayVisualState,
   RouteCluster,
   RouteStop,
@@ -668,7 +669,11 @@ export function MapCameraProvider({
   );
 
   const showTripRoute = useCallback(
-    (days: RouteStop[][], focusDay: number | null, panelVisible = true, soloFocus = false) => {
+    (rawDays: RouteStop[][], focusDay: number | null, panelVisible = true, soloFocus = false) => {
+      // Here rather than in the four callers (ItineraryCard, SplitEditor, StoryMode, HomeView's
+      // streaming draft) because they all arrive through this one function, and a stop with no
+      // coordinates kills the map rather than merely going undrawn — see `placeableStops`.
+      const days = placeableStops(rawDays);
       // A new route reframes the camera, so any peek's saved pose belongs to a view that is about
       // to stop existing.
       cancelPeek();

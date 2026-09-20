@@ -16,7 +16,33 @@ import { OWNER_COOKIE, OWNER_COOKIE_MAX_AGE_S, isValidOwnerId, newOwnerId } from
  * The `/trips` page is a server component that needs the owner id at render time, so the cookie
  * must already exist by the time it runs. That is precisely what a proxy is for.
  */
+/**
+ * The developer surface, closed outside development.
+ *
+ * Three of these had no gate of any kind and were reachable in every mode. `/api/llm-traces`
+ * returns `prompt` and `raw_response` for every call the app has ever made — a traveller's whole
+ * trip, verbatim — and `/api/llm-mode` accepts a **POST** that flips the transport for the whole
+ * process, from an anonymous caller. `/backend` renders the console (`/backend/pipeline` beneath
+ * it was gated; its parent was not).
+ *
+ * Blocked by prefix here rather than by adding `notFound()` to seven files, because the list that
+ * matters is "the ops surface" and a new `/api/llm-traces/<something>` should be covered the day
+ * it is written rather than the day someone remembers. The per-file `NODE_ENV` checks in
+ * `/bench`, `/backend/pipeline` and `/api/bench` stay where they are — they are tested, and a
+ * second lock costs nothing if this matcher is ever narrowed.
+ */
+const DEV_ONLY_PREFIXES = ["/api/llm-traces", "/api/llm-mode", "/api/bench", "/backend", "/bench"];
+
 export function proxy(request: NextRequest) {
+  if (
+    process.env.NODE_ENV !== "development" &&
+    DEV_ONLY_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p))
+  ) {
+    // 404 rather than 403: whether this deployment has a trace viewer is not information an
+    // anonymous caller needs, and every other "not here" in this app answers 404.
+    return new NextResponse(null, { status: 404 });
+  }
+
   const existing = request.cookies.get(OWNER_COOKIE)?.value;
   if (isValidOwnerId(existing)) return NextResponse.next();
 

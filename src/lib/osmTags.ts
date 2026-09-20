@@ -2,7 +2,7 @@
  * Readers for OpenStreetMap tags — and a module with **no imports at all**, deliberately.
  *
  * These parsers were born in `poiDetails.ts`, which is a server module: it reaches `fetchCache.ts`,
- * which reaches `db.ts`, which reaches `better-sqlite3`. That is fine where it lives, and fatal
+ * which reaches `db.ts`, which reaches `libsql`. That is fine where it lives, and fatal
  * where these are now also needed. `MapSearchPanel.tsx` imports `PLACE_CATEGORIES` from
  * `placeSearch.ts` as a *value*, so `placeSearch.ts`'s whole module graph is reachable from the
  * client bundle; today that graph is two files deep and clean. One import of `poiDetails` from
