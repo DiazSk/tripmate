@@ -158,4 +158,59 @@ final class SpendTests: XCTestCase {
         XCTAssertEqual(segments[0].left, 0, "the negative day must not shift the next one")
         XCTAssertEqual(segments[0].width, 25)
     }
+
+    // MARK: - The breakdown tiles
+
+    /// **The shipped bug this filter exists to prevent.** A day of sightseeing printed
+    /// `Food $0 · Entry $0 · Transit $0 · Stay $0` beside a Total nothing on screen accounted
+    /// for, because `other` was summed into the total and never given a tile of its own.
+    func testACategoryWithNothingInItGetsNoTile() throws {
+        let day = try makeDay([(40, "entry", nil)])
+        let tiles = Spend.tiles(Spend.byCategory(day))
+        XCTAssertEqual(tiles.map(\.label), ["Entry"], "only the category with money in it")
+    }
+
+    /// The other half of that bug: `other` must be able to produce a tile, or a total can
+    /// exceed the tiles that are supposed to add up to it.
+    func testOtherIsATileLikeAnyOther() throws {
+        let day = try makeDay([(25, "other", nil)])
+        XCTAssertEqual(Spend.tiles(Spend.byCategory(day)).map(\.label), ["Other"])
+    }
+
+    /// The row and the figure beneath it must agree — that is the whole contract of the band.
+    func testTheTilesAlwaysSumToTheTotalBeneathThem() throws {
+        let day = try makeDay(
+            [(30, "food", nil), (12, "entry", nil), (8, "transit", 15), (5, "other", nil)],
+            lodging: (120, nil)
+        )
+        let spend = Spend.byCategory(day)
+        let tiles = Spend.tiles(spend)
+        XCTAssertEqual(tiles.map(\.amount).reduce(0, +), spend.total, accuracy: 0.001)
+        XCTAssertEqual(tiles.count, 5, "every category earned a tile here")
+    }
+
+    /// A day that cost nothing draws no row at all, rather than five zeroes.
+    func testAFreeDayHasNoTiles() throws {
+        let day = try makeDay([(0, "food", nil)])
+        XCTAssertTrue(Spend.tiles(Spend.byCategory(day)).isEmpty)
+    }
+
+    /// An actual cost replaces the estimate in the tile, not just in the total.
+    func testATileShowsWhatWasActuallyPaid() throws {
+        let day = try makeDay([(30, "food", 47)])
+        XCTAssertEqual(Spend.tiles(Spend.byCategory(day)).first?.amount, 47)
+    }
+
+    /// Order is fixed so the row does not reshuffle between days.
+    func testTileOrderIsStable() throws {
+        let day = try makeDay(
+            [(1, "other", nil), (1, "transit", nil), (1, "food", nil), (1, "entry", nil)],
+            lodging: (1, nil)
+        )
+        XCTAssertEqual(
+            Spend.tiles(Spend.byCategory(day)).map(\.label),
+            ["Food", "Entry", "Transit", "Other", "Stay"]
+        )
+    }
+
 }

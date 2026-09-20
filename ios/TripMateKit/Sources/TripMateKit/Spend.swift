@@ -21,6 +21,17 @@ public struct DaySpend: Sendable, Equatable {
     public var total: Double = 0
 }
 
+/// One tile in the day's breakdown.
+///
+/// The SF Symbol travels with it rather than being matched up in the view: the whole point of
+/// this type is that the label, the figure and the mark are one decision.
+public struct SpendTile: Sendable, Equatable, Identifiable {
+    public let label: String
+    public let amount: Double
+    public let symbol: String
+    public var id: String { label }
+}
+
 /// A span of the budget bar: one day's share of the track.
 public struct BudgetSegment: Sendable, Equatable {
     public let dayIndex: Int
@@ -56,6 +67,26 @@ public enum Spend {
         }
         sums.total = sums.food + sums.entry + sums.transit + sums.other + sums.stay
         return sums
+    }
+
+    /// The day's spend as tiles, **with the empty categories dropped.**
+    ///
+    /// That filter is the feature. A day of sightseeing used to print
+    /// `Food $0 · Entry $0 · Transit $0 · Stay $0` beside a Total nothing on screen accounted
+    /// for — because `other` was summed into the total and never given a tile of its own. So a
+    /// category with nothing in it gets no tile, and the tiles that remain always add up to the
+    /// Total printed beneath them.
+    ///
+    /// **Total is deliberately not in this list.** It is the sum of these, not a sixth peer, and
+    /// the view draws it as a rule beneath the row rather than as another tile.
+    public static func tiles(_ spend: DaySpend) -> [SpendTile] {
+        [
+            SpendTile(label: "Food", amount: spend.food, symbol: "fork.knife"),
+            SpendTile(label: "Entry", amount: spend.entry, symbol: "ticket"),
+            SpendTile(label: "Transit", amount: spend.transit, symbol: "tram"),
+            SpendTile(label: "Other", amount: spend.other, symbol: "mappin"),
+            SpendTile(label: "Stay", amount: spend.stay, symbol: "bed.double"),
+        ].filter { $0.amount > 0 }
     }
 
     /// **Delegates rather than reducing again.** The breakdown's Total tile *is* this day's

@@ -127,9 +127,109 @@ struct TripDetailView: View {
                     if let lodging = day.lodging {
                         LodgingRow(lodging: lodging)
                     }
+                    SpendBandView(day: day, dayNumber: activeDay + 1)
                 }
             }
         }
+    }
+}
+
+/// What the day cost, split by what it was spent on.
+///
+/// **The tiles always add up to the Total beneath them**, which is why the empty categories are
+/// dropped in `Spend.tiles` rather than here — a day of sightseeing used to print four zeroes
+/// beside a total nothing on screen accounted for.
+///
+/// **Total is not a sixth tile and not a filled slab in the accent colour.** It was `bg-accent`
+/// with dark ink on the web: a solid button-coloured bar whose entire content is a number you
+/// cannot press. `DESIGN.md` records that going — gold counts, jade acts, and a figure is
+/// information rather than an invitation. So it reads as a rule beneath the row: a hairline in
+/// the money colour, an opaque ground, and the figure in the figure face.
+private struct SpendBandView: View {
+    let day: DayPlan
+    let dayNumber: Int
+
+    var body: some View {
+        let spend = Spend.byCategory(day)
+        let tiles = Spend.tiles(spend)
+        // A day that cost nothing draws nothing. `DESIGN.md`: don't show a tile, heading or chip
+        // for a value that isn't there.
+        if spend.total > 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Day \(dayNumber) spend")
+                    .textStyle(.detail.weight(TextStyle.semibold))
+                    .foregroundStyle(Token.foreground)
+
+                // Wraps rather than taking a fixed column count: there are 0-5 tiles depending
+                // on what the day actually cost money on, and wrapping stretches whatever lands
+                // in the last row instead of orphaning it at half width.
+                FlowRow(spacing: 8) {
+                    ForEach(tiles) { tile in
+                        SpendTileView(tile: tile)
+                    }
+                }
+
+                total(spend.total)
+            }
+            .padding(Token.gapRows)
+            .background(Token.surfaceDeep.opacity(0.7))
+            .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous)
+                    .strokeBorder(Token.cardBorder, lineWidth: 1)
+            )
+        }
+    }
+
+    private func total(_ amount: Double) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Total")
+                .textStyle(.detail.weight(TextStyle.medium))
+                .foregroundStyle(Token.foreground)
+            Spacer(minLength: 8)
+            Text(amount, format: .currency(code: "USD").precision(.fractionLength(0)))
+                .textStyle(.money.weight(TextStyle.semibold))
+                .foregroundStyle(Token.money)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Token.money.opacity(0.25))
+                .frame(height: 1)
+        }
+    }
+}
+
+private struct SpendTileView: View {
+    let tile: SpendTile
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Image(systemName: tile.symbol)
+                .textStyle(.detail)
+                .foregroundStyle(Token.foreground)
+            Text(tile.label)
+                .textStyle(.caption)
+                .foregroundStyle(Token.muted)
+            Text(tile.amount, format: .currency(code: "USD").precision(.fractionLength(0)))
+                .textStyle(.money.weight(TextStyle.semibold))
+                .foregroundStyle(Token.money)
+        }
+        .frame(minWidth: 84)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .background(Color.black.opacity(0.25))
+        .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+        )
+        // One label for the whole tile, so VoiceOver says "Food, 40 dollars" rather than
+        // reading an icon, a word and a number as three separate elements.
+        .accessibilityElement(children: .combine)
     }
 }
 
