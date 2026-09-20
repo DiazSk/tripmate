@@ -153,16 +153,21 @@ struct PlanWizardView: View {
         VStack(alignment: .leading, spacing: Token.gapRows) {
             HStack(spacing: 10) {
                 ProgressView().tint(Token.accent)
-                Text(plan.stage?.waitingLabel ?? "Starting…")
-                    .textStyle(.body)
-                    .foregroundStyle(Token.foreground)
+                // **`TimelineView`, not a `Timer`.** The word is a function of the clock, so
+                // there is no state to own, nothing to cancel when this view goes away, and no
+                // second source of truth for "which word is showing".
+                TimelineView(.periodic(from: .now, by: Thinking.period)) { tick in
+                    Text(Thinking.word(at: tick.date) + "…")
+                        .textStyle(.body)
+                        .foregroundStyle(Token.foreground)
+                }
             }
-            Text(
-                "This takes a minute or two. \(plan.draft.days) days of "
-                    + "\(plan.draft.destination)."
-            )
-            .textStyle(.detail)
-            .foregroundStyle(Token.muted)
+            // **The line under it still reports what is actually happening.** The rotating word
+            // makes no claim; this one does, and a run spends minutes in a single stage, so
+            // dropping it would leave four minutes of verbs and no information.
+            Text("\(stageText) · \(plan.draft.days) days of \(plan.draft.destination)")
+                .textStyle(.detail)
+                .foregroundStyle(Token.muted)
 
             if !plan.streamingDayStops.isEmpty {
                 Hairline()
@@ -173,6 +178,12 @@ struct PlanWizardView: View {
         .padding(Token.gapRows)
         .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+    }
+
+    /// The stage, without the ellipsis it carries when it is the headline.
+    private var stageText: String {
+        let label = plan.stage?.waitingLabel ?? "Starting"
+        return label.hasSuffix("…") ? String(label.dropLast()) : label
     }
 
     /// The day currently being written, stop by stop.
@@ -332,7 +343,11 @@ private struct BasicsStep: View {
                 .buttonStyle(.plain)
             }
         }
-        .background(Color.white.opacity(0.04))
+        // **Darker, not lighter.** `white.opacity(0.04)` was invisible once the wizard gained
+        // the blurred poster behind it — and lightening a surface over photography is what
+        // Darken-Never-Lighten forbids in the first place. This is the same black the field
+        // trough uses, one step deeper so the list reads as a drawer inside it.
+        .background(Color.black.opacity(0.34))
     }
 
     /// The spending style, stated and never offered.
