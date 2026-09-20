@@ -80,6 +80,18 @@ const OUT_ROOT = path.join(ROOT, "public/scenes/petra");
 const TIERS = [
   { name: "land", width: 1600, height: 900, quality: 44 },
   { name: "port", width: 540, height: 960, quality: 50 },
+  // The native iOS hero, which `port` cannot serve. A phone has no `DPR_CAP` to hide behind:
+  // 540 into a 440pt-wide screen at 3x is a 2.44x upscale, worse than the 1.88x this file
+  // already records as mush.
+  //
+  // **760x1080 is the source's ceiling, not the display's requirement.** The app's tallest hero
+  // is 440x626pt, so its backing store is 1320x1878 — but this clip is 1920x1080, and a portrait
+  // crop cannot be taller than the frame it comes from. At 0.70 aspect that caps the crop at
+  // 760x1080, which leaves a 1.74x upscale: better than `port`'s 2.44x, and still short of the
+  // 1.0x the landscape tier gets. **The fix is a taller render, not a bigger number here** —
+  // re-encoding past 1080 would be the pre-blur mistake in reverse, inventing pixels instead of
+  // softening them.
+  { name: "ios", width: 760, height: 1080, quality: 50 },
 ];
 
 /** File extension and encoder, kept together so the manifest and the encoder cannot disagree. */
