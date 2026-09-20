@@ -119,11 +119,11 @@ struct TripDetailView: View {
                 // question asked on arrival rather than after reading the day.
                 BudgetBarView(days: days, budget: trip.budget, activeDayIndex: index)
                 if trip.resolvedStatus == .draft { draftNotice }
-                if let over = TripCopy.overspend(day) {
-                    Text(over)
-                        .textStyle(.detail.weight(TextStyle.medium))
-                        .foregroundStyle(Token.alert)
-                }
+                // **The day's overspend used to sit here, and two coral lines stacked.** The
+                // bar above already says the trip is over; a second warning immediately under
+                // it read as the same fact stuttering rather than as a different scope. It
+                // moved to the spend band, beneath that day's own Total — which is where a
+                // day-money fact belongs, and it is one sentence either way.
                 dayHeader(day)
                 if let summary = day.summary {
                     Text(summary)
@@ -489,16 +489,26 @@ private struct SpendBandView: View {
                     .textStyle(.detail.weight(TextStyle.semibold))
                     .foregroundStyle(Token.foreground)
 
-                // Wraps rather than taking a fixed column count: there are 0-5 tiles depending
-                // on what the day actually cost money on, and wrapping stretches whatever lands
-                // in the last row instead of orphaning it at half width.
-                FlowRow(spacing: 8) {
+                // **Two equal columns, because the wrap did the opposite of what it claimed.**
+                // The note here said flowing "stretches whatever lands in the last row instead
+                // of orphaning it at half width"; it does not — `FlowRow` packs by intrinsic
+                // width, so four tiles came out three-and-one with the fourth at a third of the
+                // row and a hole beside it. A grid cannot do that: the common four (food,
+                // entry, transit, stay) are a clean 2x2, and an odd count orphans at *half*
+                // width, which reads as deliberate.
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
                     ForEach(tiles) { tile in
                         SpendTileView(tile: tile)
                     }
                 }
 
                 total(spend.total)
+                if let over = TripCopy.overspend(day) {
+                    Text(over)
+                        .textStyle(.caption.weight(TextStyle.medium))
+                        .foregroundStyle(Token.alert)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(Token.gapRows)
             .background(Token.surfaceDeep.opacity(0.7))
@@ -547,7 +557,7 @@ private struct SpendTileView: View {
                 .textStyle(.money.weight(TextStyle.semibold))
                 .foregroundStyle(Token.money)
         }
-        .frame(minWidth: 84)
+        .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .padding(.horizontal, 8)
         .background(Color.black.opacity(0.25))

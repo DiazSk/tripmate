@@ -976,7 +976,7 @@ private struct Chip: View {
 
 /// Chips that wrap. `LazyVGrid` cannot do it — its columns are fixed, and a chip's width is its
 /// text — so this is the one layout worth hand-writing.
-struct FlowRow: Layout {
+private struct FlowRow: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

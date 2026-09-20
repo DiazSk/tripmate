@@ -46,15 +46,16 @@ enum SheetDetent: CaseIterable {
         // not fill. Clamped both ways: shorter than `small` is not a sheet, and taller than
         // `large` would cover the tab bar.
         //
-        // **56%, up from 46%, because the budget bar moved to the top of the day.** The
-        // fraction is not a taste: medium's whole contract is *this morning is visible*, and
-        // it has to be re-derived whenever what sits above the first stop changes. At 402x874
-        // that is header 56 + budget 62 + overspend 20 + date 28 + summary 54 + heading 22 =
-        // 242, plus one collapsed stop at 68 and a 12 gap = 322 of content; add the 44 grabber
-        // and the 68 the bar stands on and the sheet is 434 against 781 available. Measured at
-        // 46% it was 359, which showed the heading and cut the stop off under it — which is
-        // the exact failure the whole recomposition existed to fix.
-        case .medium: return min(max(fitted ?? available.height * 0.56, 152), large)
+        // **53%, up from 46%, because the budget bar moved to the top of the day.** The
+        // fraction is not a taste: medium's whole contract is *this morning is visible*, so it
+        // is re-derived whenever what sits above the first stop changes. At 402x874 that is
+        // header 56 + budget 62 + date 28 + summary 54 + heading 22 = 222, plus one collapsed
+        // stop at 68 and a 12 gap = 302 of content; add the 44 grabber and the 68 the bar
+        // stands on and the sheet is 414 against 781 available. At 46% it was 359, which drew
+        // the heading and cut the stop off beneath it — the exact failure the recomposition
+        // existed to fix. It was briefly 56%, before the day's overspend line left this stack
+        // for the spend band.
+        case .medium: return min(max(fitted ?? available.height * 0.53, 152), large)
         // Stops clear of the status bar *and* the tab bar. A real sheet would cover both.
         case .large: return large
         }
