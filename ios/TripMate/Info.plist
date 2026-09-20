@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- **Beside the project, not inside the source folder, and that is forced.** The target
+	     uses a `PBXFileSystemSynchronizedRootGroup`, so anything dropped in `TripMate/` joins
+	     the target automatically — an Info.plist there is both the INFOPLIST_FILE and a copied
+	     resource, and the build fails with "Multiple commands produce .../Info.plist".
+
+	     Everything else is still generated: GENERATE_INFOPLIST_FILE stays on and merges the
+	     INFOPLIST_KEY_* build settings into this file. Only the two things that mechanism
+	     cannot express live here.
+
+	     1. A custom key. INFOPLIST_KEY_<name> only works for keys Xcode already knows —
+	        verified: NSLocalNetworkUsageDescription landed in the built plist and
+	        TripMateAPIBaseURL did not.
+	     2. A nested dictionary, which no INFOPLIST_KEY_ setting can produce. -->
+
+	<!-- Substituted per configuration. Debug sets it to the dev server; Release leaves it
+	     unset, the substitution yields an empty string, `URL(string:)` returns nil, and
+	     `AppConfiguration` falls back — so a release build cannot ship pointing at a laptop. -->
+	<key>TripMateAPIBaseURL</key>
+	<string>$(TRIPMATE_API_BASE_URL)</string>
+
+	<!-- The dev server is plain HTTP on a private address, and ATS blocks cleartext. This is
+	     the narrow exemption rather than NSAllowsArbitraryLoads: it covers local addresses
+	     only and changes nothing about how the app treats the public internet. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
