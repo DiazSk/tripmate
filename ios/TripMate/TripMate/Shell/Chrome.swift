@@ -25,7 +25,7 @@ final class Chrome {
         // bar purely because you arrived there by scrolling up.
         guard offset > 24 else {
             anchor = offset
-            if barCompact { withAnimation(.easeOut(duration: 0.22)) { barCompact = false } }
+            if barCompact { withAnimation(.snappy(duration: 0.3, extraBounce: 0.1)) { barCompact = false } }
             return
         }
         let delta = offset - anchor
@@ -33,7 +33,7 @@ final class Chrome {
         anchor = offset
         let next = delta > 0
         guard next != barCompact else { return }
-        withAnimation(.easeOut(duration: 0.22)) { barCompact = next }
+        withAnimation(.snappy(duration: 0.3, extraBounce: 0.1)) { barCompact = next }
     }
 }
 
