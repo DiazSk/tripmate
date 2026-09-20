@@ -71,7 +71,7 @@ private struct RootView: View {
     @Environment(ProfileStore.self) private var profile
 
     var body: some View {
-        AppShell(tab: $tab) {
+        AppShell(tab: $tab, panelFloats: store.open != nil) {
             WorldMapView(
                 // **The run outranks the open trip.** A generation started from a trip that is
                 // still open would otherwise draw that trip's day while the new plan writes

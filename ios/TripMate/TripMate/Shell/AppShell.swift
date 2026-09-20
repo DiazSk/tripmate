@@ -34,6 +34,14 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
     /// Which surface is showing. A binding rather than internal state: `RootView` owns it,
     /// because the panel's own content depends on it too.
     @Binding var tab: AppTab
+    /// Whether the panel floats over the map, or covers it.
+    ///
+    /// **Only an open trip floats.** Every other surface is a page and takes the whole screen,
+    /// the way the landing already does: a memories wall, a profile or a form has no relationship
+    /// to the ground behind it, so a sheet there is a smaller page over scenery nobody is reading.
+    /// A trip is the one thing that *is* about the map — the day is drawn on it — so that is the
+    /// one thing the glass floats over.
+    var panelFloats: Bool
     @ViewBuilder var world: () -> World
     @ViewBuilder var panel: () -> Panel
     @ViewBuilder var home: () -> Home
@@ -66,7 +74,10 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
             // **The Map tab draws no panel, so at every width it covers nothing.** Without the
             // first clause a docked layout would keep reporting a panel edge the camera then
             // frames clear of, leaving a band of dead map on a screen that is all map.
-            let isDocked = tab != .map && tab != .home && proxy.size.width >= Self.dockingThreshold
+            let floats = panelFloats && tab != .map && tab != .home
+            // Docking is the wide-screen answer to "the panel is covering the map", so it only
+            // applies to the panel that is over the map at all.
+            let isDocked = floats && proxy.size.width >= Self.dockingThreshold
             let panelWidth = isDocked ? Self.panelWidth(in: proxy.size.width) : proxy.size.width
 
             ZStack {
@@ -108,7 +119,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                             .padding([.horizontal, .top], Token.padCompact)
                             .frame(width: panelWidth)
                     }
-                } else {
+                } else if floats {
                     PlanSheet(
                         detent: $detent,
                         fitted: fitted,
@@ -116,6 +127,16 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                         safeTop: proxy.safeAreaInsets.top,
                         content: panel
                     )
+                } else {
+                    // A page, on its own ground. `safeAreaInset` rather than bottom padding: it
+                    // reaches the scroll views *inside* the page, so content passes under the
+                    // glass bar and still stops above it — padding out here would leave a dead
+                    // band the bar floats in.
+                    panel()
+                        .safeAreaInset(edge: .bottom) {
+                            Color.clear.frame(height: Token.barHeight + Token.gapRows)
+                        }
+                        .background(Token.canvas.ignoresSafeArea())
                 }
 
                 ChromeLayer(tab: $tab, compact: chrome.barCompact)
@@ -131,7 +152,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                     freeWidth: isDocked ? proxy.size.width - panelWidth : proxy.size.width,
                     // The tab bar alone where there is no sheet — the Map tab, and every docked
                     // width. The sheet's own height where there is one.
-                    bottomInset: (tab == .map || tab == .home || isDocked)
+                    bottomInset: !floats || isDocked
                         ? Token.barHeight + Token.gapRows
                         : PlanSheet<Panel>.obstruction(
                             detent, in: proxy.size, safeTop: proxy.safeAreaInsets.top,
