@@ -1,12 +1,15 @@
 import SwiftUI
 
-/// The app's three destinations.
+/// The app's four destinations.
 ///
-/// **Trips is the home, Map is the ground, Profile is the person.** "Plan a trip" is deliberately
-/// not here: it is an action taken once per trip, from the Trips screen, and promoting it to a
-/// permanent destination would spend a fifth of the bar on the thing done least.
+/// **Home is the entry, Trips is what you kept, Map is the ground, Profile is the person.**
+///
+/// It was three. Home arrived with the landing, which is a real always-reachable screen carrying
+/// the entry capsule rather than a first-run that vanishes — so it needed a home in the bar, and
+/// the web's `/` is the entry point too. "Plan a trip" still is not a tab: it is an action, and
+/// it now lives in the capsule on Home as well as the button on Trips.
 enum AppTab: String, CaseIterable, Identifiable {
-    case trips, map, profile
+    case home, trips, map, profile
 
     var id: String { rawValue }
 
@@ -14,6 +17,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     /// outright, and there are three of them — there is no width argument for hiding these.
     var label: String {
         switch self {
+        case .home: "Home"
         case .trips: "Trips"
         case .map: "Map"
         case .profile: "Profile"
@@ -22,6 +26,7 @@ enum AppTab: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .home: "house"
         case .trips: "bookmark"
         case .map: "map"
         case .profile: "person"
@@ -41,7 +46,7 @@ enum AppTab: String, CaseIterable, Identifiable {
 /// this `.frame` and by `WorldMapView.fit` and by nothing else.
 ///
 /// **What that costs, stated rather than glossed:** there is no public `.isTab` trait, so
-/// VoiceOver announces "Trips, selected, button" instead of "Trips, tab, one of three". That is a
+/// VoiceOver announces "Trips, selected, button" instead of "Trips, tab, one of four". That is a
 /// real loss. Double-tap-to-scroll-to-top and iOS 26's scroll-to-minimise go too, and neither is
 /// missed.
 struct TabBar: View {

@@ -30,12 +30,13 @@ import SwiftUI
 /// This is not a workaround to unpick later. The layout below is driven entirely by the size it
 /// is given and contains no fold-specific branch, which is what the design called for regardless;
 /// adopting `ArrangementView` when it becomes declared API replaces one `ZStack`.
-struct AppShell<World: View, Panel: View>: View {
+struct AppShell<World: View, Panel: View, Home: View>: View {
     /// Which surface is showing. A binding rather than internal state: `RootView` owns it,
     /// because the panel's own content depends on it too.
     @Binding var tab: AppTab
     @ViewBuilder var world: () -> World
     @ViewBuilder var panel: () -> Panel
+    @ViewBuilder var home: () -> Home
 
     @State private var exclusions = ShellExclusions()
     @State private var detent: PlanSheet<Panel>.Detent = .medium
@@ -61,7 +62,7 @@ struct AppShell<World: View, Panel: View>: View {
             // **The Map tab draws no panel, so at every width it covers nothing.** Without the
             // first clause a docked layout would keep reporting a panel edge the camera then
             // frames clear of, leaving a band of dead map on a screen that is all map.
-            let isDocked = tab != .map && proxy.size.width >= Self.dockingThreshold
+            let isDocked = tab != .map && tab != .home && proxy.size.width >= Self.dockingThreshold
             let panelWidth = isDocked ? Self.panelWidth(in: proxy.size.width) : proxy.size.width
 
             ZStack {
@@ -81,7 +82,13 @@ struct AppShell<World: View, Panel: View>: View {
                 world()
                     .ignoresSafeArea()
 
-                if tab == .map {
+                if tab == .home {
+                    // **Home covers the map rather than floating over it.** The landing brings
+                    // its own photography and the map behind it would be a second world showing
+                    // through the first. The map stays mounted — it is one view for the app and
+                    // rebuilding it per tab is the expensive mistake — it is simply not visible.
+                    home()
+                } else if tab == .map {
                     // Nothing. The Map tab *is* the absence of a panel — the map was always
                     // there, behind the glass; this is what it looks like with the glass gone.
                 } else if isDocked {
@@ -119,7 +126,7 @@ struct AppShell<World: View, Panel: View>: View {
                     freeWidth: isDocked ? proxy.size.width - panelWidth : proxy.size.width,
                     // The tab bar alone where there is no sheet — the Map tab, and every docked
                     // width. The sheet's own height where there is one.
-                    bottomInset: (tab == .map || isDocked)
+                    bottomInset: (tab == .map || tab == .home || isDocked)
                         ? Token.barHeight + Token.gapRows
                         : PlanSheet<Panel>.obstruction(
                             detent, in: proxy.size, safeTop: proxy.safeAreaInsets.top

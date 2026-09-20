@@ -58,7 +58,7 @@ private struct RootView: View {
     let plan: PlanStore
     @Environment(MapSearchStore.self) private var search
 
-    @State private var tab: AppTab = .trips
+    @State private var tab: AppTab = .home
     /// **Hoisted out of `PanelContent`, and it has to be.** On the Map tab `PanelContent` leaves
     /// the tree entirely, so SwiftUI destroys its `@State` — coming back to Trips would drop you
     /// on the list with a half-filled draft still sitting in `PlanStore` that nothing renders.
@@ -81,6 +81,13 @@ private struct RootView: View {
             )
         } panel: {
             PanelContent(store: store, plan: plan, tab: tab, isPlanning: $isPlanning)
+        } home: {
+            HomeView(plan: plan, onPlan: {
+                // The capsule already holds whatever was typed; the wizard picks it up rather
+                // than asking again. One `PlanDraft`, two ways in.
+                isPlanning = true
+                tab = .trips
+            })
         }
         .task { await store.loadTrips() }
     }
