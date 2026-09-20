@@ -52,6 +52,13 @@ enum SheetDetent: CaseIterable {
     }
 }
 
+/// One spring for the whole sheet: the detent change, the fit change, and the release.
+///
+/// **File scope because `PlanSheet` is generic**, and Swift has no static stored property in a
+/// generic type. Three literals drifting apart is how a release ends up animating differently
+/// depending on whether it happened to land on a new stop.
+private let sheetSettle = Animation.spring(response: 0.34, dampingFraction: 0.86)
+
 /// The plan over the map, at one of three heights.
 ///
 /// **Hand-rolled, and the native sheet was tried first and photographed failing.** A SwiftUI
@@ -77,7 +84,13 @@ struct PlanSheet<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
 
-    @GestureState private var drag: CGFloat = 0
+    /// **Reset on the spring, not in one frame.** A release that lands back on the detent it
+    /// started from changes `detent` by nothing, so the `value: detent` animation below has no
+    /// change to fire on — and `@GestureState` zeroes itself instantly, so the sheet teleported
+    /// from wherever the finger left it. The reset transaction is the only place that release
+    /// can be animated at all.
+    @GestureState(resetTransaction: Transaction(animation: sheetSettle))
+    private var drag: CGFloat = 0
 
     private var height: CGFloat {
         let target = detent.height(in: available, safeTop: safeTop, fitted: fitted)
@@ -89,10 +102,27 @@ struct PlanSheet<Content: View>: View {
         return min(max(target - drag, bounds.min()! - 40), bounds.max()! + 40)
     }
 
+    /// Which stop the sheet is *drawn* at, which is not `detent` while a finger is down.
+    ///
+    /// **`detent` only moves on release**, so content keyed off it never learned the sheet was
+    /// being opened: `TripDetailView` stayed a one-line capsule inside a box the drag had
+    /// already taken to half the display, then popped into a full day the instant you let go.
+    /// The content answers to the height it actually has.
+    private var liveDetent: SheetDetent {
+        let drawn = height
+        return SheetDetent.allCases.min {
+            let a = $0.height(in: available, safeTop: safeTop, fitted: fitted)
+            let b = $1.height(in: available, safeTop: safeTop, fitted: fitted)
+            return abs(a - drawn) < abs(b - drawn)
+        } ?? detent
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             grabber
             content()
+                // The live stop, not the settled one — see `liveDetent`.
+                .transformEnvironment(\.panelMetrics) { $0.detent = liveDetent }
                 // The grabber is already 44pt of clearance, so the content's own top inset is
                 // paid twice here. At the small detent that is a third of the sheet.
                 .padding(.top, -Token.padCompact)
@@ -108,10 +138,10 @@ struct PlanSheet<Content: View>: View {
         // Sits on the tab bar's shoulder rather than under it.
         .padding(.bottom, Token.barHeight + Token.gapRows * 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: detent)
+        .animation(sheetSettle, value: detent)
         // A step with more questions than the last is a taller sheet, and it should grow
         // rather than cut to the new height.
-        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: fitted)
+        .animation(sheetSettle, value: fitted)
     }
 
     private var grabber: some View {
@@ -123,8 +153,17 @@ struct PlanSheet<Content: View>: View {
             // deliberate, slow drag aimed straight at it.
             .frame(maxWidth: .infinity, minHeight: 44)
             .contentShape(Rectangle())
+            // **`.global`, and it is the jitter.** A `DragGesture`'s default `.local` space is
+            // the dragged view's own — and this view *is* what the drag moves: growing the
+            // sheet lifts the grabber, which shifts the space the next event is measured in,
+            // which changes the height again. The handle chased the finger a frame behind and
+            // wobbled. Screen coordinates cannot move under the gesture, so they do not.
+            //
+            // `minimumDistance: 0` for the second half of the same symptom: at the default 10
+            // the first delivered translation is already 10pt, so the sheet jumped 10pt the
+            // instant it started following at all.
             .gesture(
-                DragGesture()
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .updating($drag) { value, state, _ in state = value.translation.height }
                     .onEnded { value in
                         // Snap to whichever detent the release lands nearest, with the velocity
