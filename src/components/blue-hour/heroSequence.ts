@@ -8,10 +8,11 @@ export const HERO_SEQUENCE = {
   frames: 100,
   /** Frame 1, full quality, for `next/image`. The canvas's first draw is this same frame, so the
    *  hand-off from poster to canvas is a visual no-op. */
-  poster: "/scenes/petra/0329455b/poster.webp",
+  poster: "/scenes/petra/77650cdf/poster.webp",
   tiers: [
     { id: "land", w: 1600, h: 900 },
     { id: "port", w: 540, h: 960 },
+    { id: "ios", w: 760, h: 1080 },
   ],
 } as const;
 
@@ -19,5 +20,5 @@ export type HeroTierId = (typeof HERO_SEQUENCE.tiers)[number]["id"];
 
 /** 1-based on disk, so callers pass 0-based and this shifts. */
 export function heroFrameUrl(tier: HeroTierId, index: number): string {
-  return `/scenes/petra/0329455b/${tier}-${String(index + 1).padStart(3, "0")}.avif`;
+  return `/scenes/petra/77650cdf/${tier}-${String(index + 1).padStart(3, "0")}.avif`;
 }
