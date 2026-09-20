@@ -110,9 +110,18 @@ enum Token {
 
 extension View {
     /// The one panel treatment: glass, hairline, 16px radius.
-    func glassPanel(radius: CGFloat = Token.radiusLarge) -> some View {
+    /// `frosted: false` is the slate without the blur — the app's `.glass-itinerary.is-opaque`.
+    ///
+    /// **Not an omission, and the memory cards are why it exists.** `globals.css:3462` strips
+    /// `backdrop-filter` from exactly those cards: nothing shows through an opaque fill, so the
+    /// blur is a compositing layer rendering a blur of nothing. A tile inside `PlanSheet` is in
+    /// the same position — the sheet has already frosted the map — so a second material there
+    /// buys a second blur per tile and a slightly paler rectangle.
+    func glassPanel(radius: CGFloat = Token.radiusLarge, frosted: Bool = true) -> some View {
         background(Token.surfaceDeep.opacity(Token.panelOpacity))
-            .background(.ultraThinMaterial)
+            // `AnyShapeStyle` because the two branches are different types, and a bare `if` in
+            // a modifier chain needs a `@ViewBuilder` wrapper this does not otherwise want.
+            .background(frosted ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(.clear))
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)

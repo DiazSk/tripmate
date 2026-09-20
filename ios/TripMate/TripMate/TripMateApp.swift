@@ -158,7 +158,14 @@ private struct PanelContent: View {
                         onOfferProfile(plan.draft.travelerProfile)
                         // The wizard's own copy is done with; the trip row is the record now.
                         plan.reset()
-                        Task { await store.openTrip(id: id) }
+                        // **And reload the wall.** `loadTrips()` only runs from the root
+                        // `.task`, so without this a plan you generate and don't keep is
+                        // invisible under Drafts until the next cold launch. Sequenced rather
+                        // than two tasks: both write `isLoading` and `message`.
+                        Task {
+                            await store.openTrip(id: id)
+                            await store.loadTrips()
+                        }
                     },
                     onCancel: { isPlanning = false }
                 )

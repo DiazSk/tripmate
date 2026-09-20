@@ -1,124 +1,253 @@
 import SwiftUI
 import TripMateKit
 
-/// The memories wall, as the docked panel sees it.
+/// The memories wall.
 ///
-/// The web version is a photo collage: each card resolves a real destination photograph over a
-/// permanent slate base. That base is not a placeholder — `DESIGN.md`'s Constant-Ground Rule says
-/// a slow photo lookup must never blank a card and a resolved one must never repaint the tile. So
-/// a card with no photograph yet is the correct *base state*, not a stub, and the photo layer
-/// arrives with the image pipeline rather than being faked here.
+/// **Two columns, and the web's hero mosaic is deliberately not ported.** `/trips` opens with a
+/// full-viewport photo mosaic above single-column cards (`HERO_LAYOUTS`, `TripsView.tsx:82-111`).
+/// That works because the hero is a whole viewport you scroll *past*. Here the wall lives in a
+/// sheet, so the mosaic and the cards would be on screen together — and at five trips or fewer
+/// they are the same photographs, drawn twice. The cards become the wall instead.
+///
+/// **That costs a stated value, and it is a deviation rather than a slip.** `DESIGN.md:1347`
+/// specifies a 16:10 memory-card photo. At half width that is a 154x96pt strip, so the tile is
+/// 4:5 here. Everything else about the card is the web's: a photograph over a permanent slate
+/// base (the Constant-Ground Rule — a slow lookup must never blank a card and a resolved one
+/// must never repaint the tile), the inset hairline, the destination, the dates, the budget.
 struct TripsListView: View {
     @Environment(Chrome.self) private var chrome
     let store: TripsStore
     let onOpen: (TripSummary) -> Void
     let onPlan: () -> Void
 
+    /// Which list is showing. **View state, not store state**: the store holds `activeDay` and
+    /// `emphasis` because the *map* reads them, and nothing outside this file reads this.
+    @State private var tab: Tab = .memories
+    /// The row a confirm dialog is currently about.
+    @State private var pending: TripSummary?
+
+    enum Tab { case memories, drafts }
+
+    /// **Derived, never trusted.** Discarding the last draft makes the strip disappear; stored
+    /// state would strand you looking at a list that no longer exists.
+    private var activeTab: Tab { store.drafts.isEmpty ? .memories : tab }
+    private var showing: [TripSummary] { activeTab == .drafts ? store.drafts : store.trips }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Token.gapPanels) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Memories")
-                    .textStyle(.display)
-                    .foregroundStyle(Token.foreground)
-                Spacer(minLength: 8)
-                // Only once there is a wall to add to. On the empty state the invitation below
-                // carries the button, because a heading with an action beside it and nothing
-                // underneath reads as a toolbar for an empty room.
-                if !store.trips.isEmpty {
-                    Button("Plan a trip", action: onPlan)
-                        .buttonStyle(PrimaryButtonStyle())
-                }
-            }
+            heading
+
+            // **One sentence slot, where the web shows two.** It can afford the count line under
+            // a full-viewport masthead *and* an explainer above the grid; this is a 360pt panel,
+            // and both sentences describe the collection you are already looking at.
+            Text(activeTab == .drafts ? Self.draftsExplainer : TripsCopy.countLine(store.trips))
+                .textStyle(.detail)
+                .foregroundStyle(Token.muted)
+                .padding(.top, -Token.gapPanels + 6)
+
+            if !store.drafts.isEmpty { tabs }
 
             if let message = store.message {
                 Notice(text: message)
             }
 
-            if store.trips.isEmpty {
+            if showing.isEmpty {
                 if store.isLoading {
                     ProgressView().tint(Token.accent)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 } else {
                     invitation
                 }
+                Spacer(minLength: 0)
             } else {
-                ScrollView {
-                    VStack(spacing: Token.gapRows) {
-                        ForEach(store.trips, id: \.id) { trip in
-                            Button { onOpen(trip) } label: { TripRow(trip: trip) }
-                                .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .shrinksTabBar(chrome)
+                wall
             }
-
-            Spacer(minLength: 0)
+        }
+        // One alert, bound through the row it is about, so the copy can name the destination.
+        // `.alert` rather than `.confirmationDialog`: `DESIGN.md:1359` calls this the app's one
+        // modal, and an action sheet rising out of a sheet already anchored to the bottom reads
+        // as two sheets arguing.
+        .alert(
+            pending?.resolvedStatus == .draft ? "Discard this draft?" : "Delete this trip?",
+            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+            presenting: pending
+        ) { trip in
+            Button(
+                trip.resolvedStatus == .draft ? "Discard draft" : "Delete trip",
+                role: .destructive
+            ) {
+                Task { await store.delete(trip) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { trip in
+            Text("Your \(trip.destination) itinerary will be permanently deleted. This can't be undone.")
         }
     }
 
-    /// An invitation, not an apology — `DESIGN.md`'s empty-state rule. The headline names the
-    /// space, one line explains it, and no "nothing here yet".
+    private static let draftsExplainer =
+        "Plans you generated but haven't kept. Open one to carry on where you left off — "
+        + "unkept drafts are cleared after 30 days."
+
+    // MARK: - Chrome
+
+    private var heading: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Memories")
+                .textStyle(.display)
+                .foregroundStyle(Token.foreground)
+            Spacer(minLength: 8)
+            // On an empty wall the invitation carries the button instead — a heading and an
+            // action over nothing reads as a toolbar for an empty room.
+            if !store.trips.isEmpty {
+                Button("Plan a trip", action: onPlan)
+                    .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+    }
+
+    /// Only drawn when there is a second list to reach. Most travellers never have a draft, and
+    /// a one-tab tab strip is chrome describing itself.
+    private var tabs: some View {
+        HStack(spacing: 6) {
+            capsule("Memories", count: store.trips.count, tab: .memories)
+            capsule("Drafts", count: store.drafts.count, tab: .drafts)
+        }
+        .padding(.top, -Token.gapPanels + 6)
+    }
+
+    private func capsule(_ title: String, count: Int, tab target: Tab) -> some View {
+        let isActive = activeTab == target
+        return Button { tab = target } label: {
+            HStack(spacing: 6) {
+                Text(title)
+                Text("\(count)").textStyle(.money.size(12))
+            }
+            .textStyle(.caption.weight(TextStyle.semibold))
+            // **Not the accent.** `DesignTokens` reserves jade for action and current position
+            // on the map; the day tabs earn it because they move the camera. This moves nothing
+            // but which list is under it, so it is the web's own `bg-white/10`.
+            .foregroundStyle(isActive ? Token.foreground : Token.muted)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .background(isActive ? Color.white.opacity(0.10) : Color.clear)
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// An invitation, not an apology. No "nothing here yet".
     private var invitation: some View {
-        VStack(alignment: .leading, spacing: Token.gapRows) {
-            Text("Plan your first trip")
+        VStack(alignment: .leading, spacing: 8) {
+            Text(activeTab == .drafts ? "No drafts waiting" : "Plan your first trip")
                 .textStyle(.title)
                 .foregroundStyle(Token.foreground)
-            Text("Tell us where and when, and the days come back written.")
-                .textStyle(.body)
-                .foregroundStyle(Token.muted)
-            Button("Plan a trip", action: onPlan)
-                .buttonStyle(PrimaryButtonStyle())
-                .padding(.top, 4)
+            Text(
+                activeTab == .drafts
+                    ? "A plan you generate but don't keep waits here."
+                    : "Tell us where and when, and the days come back written."
+            )
+            .textStyle(.body)
+            .foregroundStyle(Token.muted)
+            if activeTab != .drafts {
+                Button("Plan a trip", action: onPlan)
+                    .buttonStyle(PrimaryButtonStyle())
+                    .padding(.top, 4)
+            }
         }
+    }
+
+    // MARK: - The wall
+
+    private var wall: some View {
+        ScrollView {
+            // Two flexible columns hand each tile a definite width, which is what lets
+            // `.aspectRatio` resolve — `PlacePhotoView` has no intrinsic size by design.
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: Token.gapRows),
+                    GridItem(.flexible(), spacing: Token.gapRows),
+                ],
+                spacing: Token.gapRows
+            ) {
+                ForEach(showing, id: \.id) { trip in
+                    Button { onOpen(trip) } label: {
+                        MemoryTile(trip: trip)
+                    }
+                    .buttonStyle(.plain)
+                    // **Long press, because swipe is not available here.** `.swipeActions` is
+                    // only honoured inside a `List`, and a `List` row holding two tiles would
+                    // swipe both away together. This keeps what swipe was for: no destructive
+                    // chrome parked on every photograph, one deliberate gesture, then the
+                    // dialog. VoiceOver is given the same action explicitly, because a context
+                    // menu it can reach is not the same as one it is told about.
+                    .contextMenu {
+                        Button(
+                            trip.resolvedStatus == .draft ? "Discard draft" : "Delete trip",
+                            systemImage: "trash",
+                            role: .destructive
+                        ) { pending = trip }
+                    }
+                    .accessibilityAction(
+                        named: trip.resolvedStatus == .draft ? "Discard draft" : "Delete trip"
+                    ) { pending = trip }
+                }
+            }
+            .padding(.bottom, Token.gapRows)
+        }
+        .shrinksTabBar(chrome)
     }
 }
 
-private struct TripRow: View {
+/// One memory: a photograph, where it was, when, and what it cost.
+private struct MemoryTile: View {
     let trip: TripSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // **A bounded tile, and no type on it** — the Photograph-Is-Not-A-Surface Rule.
-            // `DESIGN.md:388` measures why: across eight cities mean luminance runs 0.040-0.348
-            // and Kyoto peaks at 0.947, where white body text is 2.41:1 under a 60% scrim and
-            // 3.56:1 under 75%. A scrim makes *large* type safe and small type only apparently
-            // safe, so the card puts every word on its own material instead.
-            //
-            // **16:10, not a fixed height.** The web arrived here from `h-[200px]`: uncapped, a
-            // card passes 600px wide and 600x200 is a 3:1 letterbox that centre-crops straight
-            // through the one tall landmark that made a destination recognisable.
+        VStack(alignment: .leading, spacing: 0) {
             PlacePhotoView(name: trip.destination, large: true)
-                .aspectRatio(16.0 / 10.0, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+                // 4:5 rather than the web's 16:10 — see the note on `TripsListView`.
+                .aspectRatio(4.0 / 5.0, contentMode: .fit)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous)
+                )
+                // Keeps a bright photograph's edge from bleeding into the tile's own
+                // translucent border — the web's `.memory-card-photo` inset, same alpha.
+                .overlay(
+                    RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                )
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(trip.destination)
-                    .textStyle(.heading)
-                    .foregroundStyle(Token.foreground)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: 6) {
-                    Text("\(trip.startDate) → \(trip.endDate)")
-                    Text("·")
-                    Text(trip.budget, format: .currency(code: "USD").precision(.fractionLength(0)))
-                }
-                .textStyle(.money)
+            Text(trip.destination)
+                .textStyle(.heading)
+                .foregroundStyle(Token.foreground)
+                .lineLimit(1)
+                .padding(.top, 8)
+
+            // **Two lines, not one.** At the panel's 360pt floor a tile is ~154pt wide and 134pt
+            // of that is text. `Sep 19 – 23 · $2,400` already fills it, and a longer month pair
+            // or a five-figure budget does not fit at all.
+            Text(DayDisplay.formatRange(trip.startDate, trip.endDate))
+                .textStyle(.money.size(12))
                 .foregroundStyle(Token.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 2)
+                .padding(.top, 2)
+            Text(
+                trip.budget.formatted(.currency(code: "USD").precision(.fractionLength(0)))
+                    + " budget"
+            )
+            .textStyle(.money.size(12))
+            .foregroundStyle(Token.muted)
         }
-        .padding(10)
-        .background(Token.surfaceDeep.opacity(Token.panelOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Token.radiusLarge, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Token.radiusLarge, style: .continuous)
-                .strokeBorder(Token.cardBorder, lineWidth: 1)
-        )
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // The one panel treatment, without the frost — see `glassPanel`.
+        .glassPanel(frosted: false)
     }
 }
 
-/// A soft failure, in the form the web app uses for one: muted text inside the panel rather than
-/// the red block, which is reserved for a hard validation error.
+/// A soft failure, in the form the web app uses for one: muted text inside the panel rather
+/// than the red block, which is reserved for a hard validation error.
 struct Notice: View {
     let text: String
 

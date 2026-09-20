@@ -19,15 +19,50 @@ public enum DayDisplay {
     /// than configuring a `DateFormatter` correctly.
     /// `year` is injectable only so the year-suffix rule is testable without a clock.
     public static func formatDate(_ iso: String, currentYear year: Int? = nil) -> String {
+        guard let date = split(iso) else { return iso }
+        let base = "\(months[date.month - 1]) \(date.day)"
+        // The year is only worth the space when it is not the obvious one.
+        let current = year ?? Calendar.current.component(.year, from: Date())
+        return date.year == current ? base : "\(base), '\(suffix(date.year))"
+    }
+
+    /// `2026-09-12`, `2026-09-20` → `Sep 12 – 20`. One month named once.
+    ///
+    /// **The collapse tests the month *and* the year, and the second half is the whole reason
+    /// this is not two `formatDate` calls with a dash between them.** `2026-09-19` to
+    /// `2027-09-19` is the same month number a year apart, and collapsing it prints `Sep 19 –
+    /// 19`, which says a trip lasted a day when it lasted a year.
+    ///
+    /// When the year does need saying it goes on the **end**, not the start: `Sep 19 – 23, '27`
+    /// reads as one range in 2027, where `Sep 19, '27 – 23` reads as a typo. The web never hits
+    /// this — it prints no year at all — so there is no shape to copy here.
+    ///
+    /// No `Date`, for the reason `formatDate` gives above. An unparseable side falls through to
+    /// the raw strings rather than inventing a date, which is what the list renders today.
+    public static func formatRange(
+        _ start: String, _ end: String, currentYear year: Int? = nil
+    ) -> String {
+        guard let from = split(start), let to = split(end) else { return "\(start) – \(end)" }
+        let current = year ?? Calendar.current.component(.year, from: Date())
+        guard from.year == to.year, from.month == to.month else {
+            return formatDate(start, currentYear: current)
+                + " – " + formatDate(end, currentYear: current)
+        }
+        let head = "\(months[from.month - 1]) \(from.day)"
+        let tail = from.year == current ? "\(to.day)" : "\(to.day), '\(suffix(from.year))"
+        return "\(head) – \(tail)"
+    }
+
+    /// The one parser both spellings share, so they cannot disagree about what a date is.
+    private static func split(_ iso: String) -> (year: Int, month: Int, day: Int)? {
         let parts = iso.split(separator: "-", omittingEmptySubsequences: false).map { Int($0) }
         guard parts.count == 3, let y = parts[0], let m = parts[1], let d = parts[2],
               months.indices.contains(m - 1)
-        else { return iso }
-        let base = "\(months[m - 1]) \(d)"
-        // The year is only worth the space when it is not the obvious one.
-        let current = year ?? Calendar.current.component(.year, from: Date())
-        return y == current ? base : "\(base), '\(String(y).suffix(2))"
+        else { return nil }
+        return (y, m, d)
     }
+
+    private static func suffix(_ year: Int) -> String { String(String(year).suffix(2)) }
 
     public enum WeatherIcon: String, Sendable, Equatable {
         case sun, cloud, rain

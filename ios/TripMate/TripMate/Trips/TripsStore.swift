@@ -11,6 +11,10 @@ import TripMateKit
 @Observable
 final class TripsStore {
     private(set) var trips: [TripSummary] = []
+    /// Plans generated but never kept. **Fetched from the same route with a different status**,
+    /// which the client has always supported and nothing has ever called — so a plan a traveller
+    /// generated and did not keep has been invisible on this platform until now.
+    private(set) var drafts: [TripSummary] = []
     private(set) var open: Trip?
     private(set) var isLoading = false
 
@@ -66,8 +70,11 @@ final class TripsStore {
         isLoading = true
         message = nil
         do {
-            trips = try await api.listTrips(status: .saved)
-            if trips.isEmpty { message = nil }
+            // Both in one flight. Two awaits would double the wall-clock wait on a screen that
+            // renders nothing until the first one lands, and split one failure into two.
+            async let saved = api.listTrips(status: .saved)
+            async let unkept = api.listTrips(status: .draft)
+            (trips, drafts) = try await (saved, unkept)
         } catch {
             message = Self.describe(error)
         }
@@ -116,6 +123,41 @@ final class TripsStore {
         } catch {
             open?.itinerary = previous
             message = "That amount didn't save. Check your connection and re-enter it."
+        }
+    }
+
+    /// Delete a trip or discard a draft.
+    ///
+    /// **Routed off the row, not off the visible tab.** The web makes the same point at
+    /// `TripsView.tsx:421-424`: the tab is where you happen to be standing, and the row already
+    /// knows what it is. Deleting the last draft while the drafts tab is open sends you back to
+    /// memories, and a splice keyed on the tab would then remove the wrong thing.
+    ///
+    /// Optimistic with a rollback, the shape `setActualCost` above sets: the tile is already
+    /// gone from the screen, so there is nothing to spin over, and a failure has to put it back
+    /// rather than leave a trip the traveller believes is deleted.
+    func delete(_ summary: TripSummary) async {
+        let isDraft = summary.resolvedStatus == .draft
+        // The whole array, not an index: the list can be re-sorted or reloaded between these
+        // two lines, and an index would then restore into the wrong slot.
+        let previousTrips = trips
+        let previousDrafts = drafts
+        if isDraft {
+            drafts.removeAll { $0.id == summary.id }
+        } else {
+            trips.removeAll { $0.id == summary.id }
+        }
+        // A deleted trip cannot stay open behind the wall.
+        if open?.id == summary.id { open = nil }
+        message = nil
+        do {
+            try await api.deleteTrip(id: summary.id)
+        } catch {
+            trips = previousTrips
+            drafts = previousDrafts
+            message = isDraft
+                ? "That draft didn't discard. Check your connection and try again."
+                : "That trip didn't delete. Check your connection and try again."
         }
     }
 
