@@ -44,7 +44,11 @@ struct TripDetailView: View {
                 .textStyle(.display)
                 .foregroundStyle(Token.foreground)
 
-            Text("\(trip.startDate) → \(trip.endDate)")
+            // `City: N days` is the web's title; the dates come with it because this panel is
+            // the only place they appear. Both dates go through `DayDisplay.formatDate` — the
+            // raw `2026-09-12` was being printed straight to the screen.
+            Text("\(days.count) day\(days.count == 1 ? "" : "s") · "
+                 + "\(DayDisplay.formatDate(trip.startDate))–\(DayDisplay.formatDate(trip.endDate))")
                 .textStyle(.money)
                 .foregroundStyle(Token.muted)
         }
@@ -54,8 +58,12 @@ struct TripDetailView: View {
     /// *readout* — making thirty spans tappable would duplicate this navigation and add thirty
     /// tab stops to a panel whose job is reading.
     private var dayTabs: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+        // **Centring the selected tab is behaviour, not chrome.** On a thirty-day trip the active
+        // day is otherwise off-screen the moment you arrive, and the strip looks like it starts
+        // at day 1 whatever you are reading.
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
                 ForEach(days.indices, id: \.self) { index in
                     let isActive = index == activeDay
                     Button { onSelectDay(index) } label: {
@@ -68,8 +76,32 @@ struct TripDetailView: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                    .id(index)
+                    }
                 }
             }
+            .onAppear { proxy.scrollTo(activeDay, anchor: .center) }
+            .onChange(of: activeDay) { _, day in
+                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(day, anchor: .center) }
+            }
+        }
+    }
+
+    /// `Day N — title · date`, with whatever the sky is doing.
+    ///
+    /// Every value here was already decoded and thrown away: `DayPlan` carries `title`, `date`,
+    /// `weather` and `weatherDetail`, and the panel rendered none of them.
+    @ViewBuilder
+    private func dayHeader(_ day: DayPlan) -> some View {
+        let read = DayDisplay.read(day)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Day \(activeDay + 1)"
+                 + (day.title.map { " — \($0)" } ?? "")
+                 + " · \(DayDisplay.formatDate(day.date))")
+                .textStyle(.headingSmall.weight(TextStyle.semibold))
+                .foregroundStyle(Token.foreground)
+            Spacer(minLength: 0)
+            if !read.isEmpty { WeatherBadge(read: read) }
         }
     }
 
@@ -79,6 +111,7 @@ struct TripDetailView: View {
             let day = days[activeDay]
             ScrollView {
                 VStack(alignment: .leading, spacing: Token.gapRows) {
+                    dayHeader(day)
                     if let summary = day.summary {
                         Text(summary)
                             .textStyle(.detail)
@@ -97,6 +130,51 @@ struct TripDetailView: View {
                 }
             }
         }
+    }
+}
+
+/// What the sky is doing, in one chip.
+///
+/// **Everything it knows is printed in it.** On the web the rain chance and the typical-weather
+/// caveat lived only in a `title` attribute on a non-focusable span — which is to say nowhere at
+/// all for anyone on a phone. There is no hover here to hide them behind.
+private struct WeatherBadge: View {
+    let read: DayDisplay.WeatherRead
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: read.icon.symbol)
+                .textStyle(.caption)
+                .foregroundStyle(Token.accent)
+            if let temp = read.temp {
+                Text(temp)
+                    .textStyle(.money.size(11))
+                    .foregroundStyle(Token.foreground)
+            }
+            if let label = read.label {
+                Text(label)
+                    .textStyle(.caption)
+                    .foregroundStyle(Token.muted)
+            }
+            // Only when a real forecast supplied one — prose never carries a probability.
+            if let rain = read.rain, rain > 0 {
+                Text("· \(Int(rain))% rain")
+                    .textStyle(.caption)
+                    .foregroundStyle(Token.muted)
+            }
+            // Beyond the ~16-day forecast horizon these figures are last year's same dates, and
+            // the badge must not imply a forecast it does not have.
+            if read.typical {
+                Text("· typical")
+                    .textStyle(.caption)
+                    .foregroundStyle(Token.muted)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.white.opacity(0.08))
+        .clipShape(Capsule())
+        .fixedSize()
     }
 }
 
