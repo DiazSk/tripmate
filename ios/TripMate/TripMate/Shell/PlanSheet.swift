@@ -136,22 +136,55 @@ struct PlanSheet<Content: View>: View {
                 // The grabber is already 44pt of clearance, so the content's own top inset is
                 // paid twice here. At the small detent that is a third of the sheet.
                 .padding(.top, -Token.padCompact)
+                // **The bar's room, as a safe area rather than padding.** It reaches the
+                // `ScrollView`s *inside* the content, so a day scrolls *under* the bar and
+                // still comes to rest above it. Padding out here would leave a dead band the
+                // bar floats in — which is the gap this whole change exists to remove, moved
+                // inward. Same reason `AppShell` insets its full-screen pages this way.
+                .safeAreaInset(edge: .bottom) { Color.clear.frame(height: sheetDock) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .clipped()
         }
         // **Material before the frame that fills, and the order is the whole bug.** With
-        // `.glassPanel()` after the expanding frame it paints the expanded rectangle — the glass
+        // the background after the expanding frame it paints the expanded rectangle — the glass
         // covered the entire display and the sheet's own height did nothing.
-        .frame(height: height, alignment: .top)
-        .glassPanel()
-        .padding(.horizontal, Token.padCompact)
-        // Sits on the tab bar's shoulder rather than under it.
-        .padding(.bottom, sheetDock)
+        //
+        // `+ sheetDock` because the sheet now runs *past* the bar to the screen's edge. The
+        // detent heights are unchanged and still mean the same thing — how much of the plan you
+        // can read — because the inset above gives that much back to the content.
+        .frame(height: height + sheetDock, alignment: .top)
+        .background(glass)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .animation(sheetSettle, value: detent)
         // A step with more questions than the last is a taller sheet, and it should grow
         // rather than cut to the new height.
         .animation(sheetSettle, value: fitted)
+    }
+
+    /// The sheet's own surface: full width, **top corners only**, running past the home
+    /// indicator to the physical edge.
+    ///
+    /// **Not `glassPanel`, and this is the change.** As an inset rounded slab the sheet was a
+    /// floating object with a second floating object — the tab bar — below it and a band of live
+    /// map between them; two shapes at two radii reading as two unrelated things. Anchored to
+    /// the bottom it is a sheet, the bar sits *on* it, and there is no gap left to tune.
+    ///
+    /// The stroke goes all the way round rather than along the top alone: the side edges are the
+    /// screen's own and the bottom one is past it, so only the top arc is ever really seen, and
+    /// a top-only hairline would need a shape of its own to follow that arc.
+    private var glass: some View {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: Token.radiusLarge,
+            topTrailingRadius: Token.radiusLarge,
+            style: .continuous
+        )
+        return shape
+            .fill(Token.surfaceDeep.opacity(Token.panelOpacity))
+            .background(.ultraThinMaterial, in: shape)
+            .overlay(shape.strokeBorder(Token.cardBorder, lineWidth: 1))
+            // The material reaches the bottom of the display, not the bottom of the safe area —
+            // otherwise the home indicator sits on a strip of bare map under the sheet.
+            .ignoresSafeArea(edges: .bottom)
     }
 
     private var grabber: some View {

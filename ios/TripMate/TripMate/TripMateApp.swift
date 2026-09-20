@@ -74,7 +74,15 @@ private struct RootView: View {
         // **A run floats too, because the run is drawn on the map.** Stops appear on the
         // ground as they are written; a full-screen wizard would hide the one thing worth
         // watching for the two to four minutes it takes.
-        AppShell(tab: $tab, panelFloats: store.open != nil || plan.isGenerating) {
+        // **A trip floats only while the trip is what you are looking at.** `store.open != nil`
+        // stays true behind the wizard, so starting a new plan with a trip open put the four
+        // steps in a 152pt capsule over that trip's map — and the wizard's Petra backdrop, which
+        // belongs to the content, stopped 118pt short of the sheet's own bottom edge.
+        //
+        // **Third instance of one bug**, after the floating panel and the backdrop itself: a
+        // question asked as "is a trip open" when it means "is the trip showing". The docstring
+        // below already warns about exactly this.
+        AppShell(tab: $tab, panelFloats: (store.open != nil && !isPlanning) || plan.isGenerating) {
             WorldMapView(
                 // **The run outranks the open trip.** A generation started from a trip that is
                 // still open would otherwise draw that trip's day while the new plan writes
