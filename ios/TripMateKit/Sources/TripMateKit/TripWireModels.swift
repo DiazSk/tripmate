@@ -106,6 +106,42 @@ public struct Stop: Codable, Sendable, Equatable {
         case name, lat, lng, cost, note, why, time, durationLabel, tags, category, actualCost
     }
 
+    /// **The one hand-written initialiser on this tree, and it is here because a searched place
+    /// has to become a stop.** `DayPlan`'s note explains why the others were left out: a custom
+    /// `init(from:)` suppresses the memberwise one, and a hand-written replacement can drift from
+    /// the decoder. That risk is real and is covered — a test round-trips a stop built here
+    /// through `encode`/`decode` and compares, so a field added to one side and not the other
+    /// fails rather than silently dropping off the wire.
+    ///
+    /// The defaults are `newStop`'s (`itineraryEdits.ts:35`): no cost, no note and no duration,
+    /// because a search result knows none of the three and inventing them puts claims in the plan
+    /// that nobody made.
+    public init(
+        name: String,
+        lat: Double,
+        lng: Double,
+        cost: Double = 0,
+        note: String = "",
+        why: String? = nil,
+        time: String = "",
+        durationLabel: String = "",
+        tags: [String]? = nil,
+        category: StopCategory = .other,
+        actualCost: Double? = nil
+    ) {
+        self.name = name
+        self.lat = lat
+        self.lng = lng
+        self.cost = cost
+        self.note = note
+        self.why = why
+        self.time = time
+        self.durationLabel = durationLabel
+        self.tags = tags
+        self.category = category
+        self.actualCost = actualCost
+    }
+
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
