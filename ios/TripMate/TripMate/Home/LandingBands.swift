@@ -205,58 +205,71 @@ private struct ExampleCard: View {
     let example: Landing.Example
     let onPick: () -> Void
 
+    /// **Fixed, so four cards in a rail are one shape rather than four.** Their titles wrap to
+    /// one line or two and their party lines differ, so intrinsic height made every card a
+    /// different size and the rail read as ragged.
+    ///
+    /// ponytail: a hardcoded height. It holds because this is four fixed strings of marketing
+    /// copy — if the list ever becomes data, measure the tallest and drive it off that instead.
+    private static let height: CGFloat = 438
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ScenePhoto(name: example.photo, ratio: 16.0 / 10.0)
+            // **No corner radius of its own.** The card already clips to its own 16pt, which
+            // rounds the photo's top corners for free and leaves the bottom two square where
+            // they meet the body. Rounding it here gave the photo a 12pt curve inside the
+            // card's 16pt one, which is what was spilling past the corner.
+            ScenePhoto(name: example.photo, ratio: 16.0 / 10.0, radius: 0)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(example.title)
-                    .textStyle(.bodyLarge.weight(TextStyle.medium))
+                    .textStyle(.bodyLarge.weight(TextStyle.semibold))
                     .foregroundStyle(Token.foreground)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text("FROM")
                         .textStyle(.label)
                         .foregroundStyle(Token.muted)
-                    // Melodrama for a price to be *felt*, in the money colour — `DESIGN.md`'s
-                    // `.price-display`. A figure is information, never the action colour.
-                    Text(example.price, format: .currency(code: "USD").precision(.fractionLength(0)))
+                    // The currency mark is subordinated to the figure — `.price-display`, where
+                    // the mark rides at 0.42em so the number is what you read.
+                    Text("$")
+                        .textStyle(.moneyLarge.size(15))
+                        .foregroundStyle(Token.money)
+                    Text(example.price.formatted(.number))
                         .textStyle(.moneyLarge)
                         .foregroundStyle(Token.money)
                 }
-                .padding(.top, 9)
+                .padding(.top, 8)
 
-                VStack(alignment: .leading, spacing: 3) {
+                // Label left, value right, a hairline under each — a ruled table, which is what
+                // the web draws. The old version put both on the left against a fixed 52pt
+                // gutter, so nothing lined up down the right.
+                VStack(spacing: 0) {
                     meta("Where", example.whereText)
                     meta("When", example.whenText)
                     meta("Length", example.lengthText)
-                    meta("Party", example.partyText)
+                    meta("Party", example.partyText, last: true)
                 }
-                .padding(.top, 9)
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Token.cardBorder).frame(height: 1)
-                }
-                .padding(.top, 11)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 13)
+                .padding(.top, 12)
 
-            Button(action: onPick) {
-                Text("Plan a trip like this")
-                    .textStyle(.detail.weight(TextStyle.semibold))
-                    .foregroundStyle(Token.foreground)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Token.radiusSmall + 4, style: .continuous)
-                            .strokeBorder(Token.cardBorder, lineWidth: 1)
-                    )
+                Spacer(minLength: 8)
+
+                Button(action: onPick) {
+                    Text("Plan a trip like this")
+                        .textStyle(.detail.weight(TextStyle.semibold))
+                        .foregroundStyle(Token.foreground)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous)
+                                .strokeBorder(Token.cardBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             .padding(14)
         }
-        .frame(width: 268)
+        .frame(width: 268, height: Self.height, alignment: .top)
         .background(Token.surfaceDeep.opacity(Token.panelOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Token.radiusLarge, style: .continuous))
         .overlay(
@@ -265,16 +278,24 @@ private struct ExampleCard: View {
         )
     }
 
-    private func meta(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(label.uppercased())
-                .textStyle(.label)
-                .foregroundStyle(Token.muted)
-                .frame(width: 52, alignment: .leading)
-            Text(value)
-                .textStyle(.money.size(12))
-                .foregroundStyle(Token.foreground)
+    private func meta(_ label: String, _ value: String, last: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(label)
+                    .textStyle(.caption)
+                    .foregroundStyle(Token.muted)
+                Spacer(minLength: 8)
+                Text(value)
+                    .textStyle(.money.size(11))
+                    .foregroundStyle(Token.foreground)
+                    .multilineTextAlignment(.trailing)
+            }
+            .padding(.vertical, 6)
+            if !last {
+                Rectangle().fill(Token.cardBorder).frame(height: 1)
+            }
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
