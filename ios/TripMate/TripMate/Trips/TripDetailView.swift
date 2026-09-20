@@ -20,6 +20,10 @@ struct TripDetailView: View {
     let onActualCost: (Int, Int?, Double?) async -> Void
     /// Promote this draft to a kept trip.
     let onKeep: () -> Void
+    /// `(place, day, slot)` — put a found place into the plan.
+    let onAddPlace: @MainActor (SearchResult, Int, TimeOfDay) async -> Void
+
+    @Environment(MapSearchStore.self) private var search
 
     @Environment(\.panelMetrics) private var metrics
     /// The page the horizontal scroller is on. Mirrors `activeDay` in both directions: the
@@ -51,6 +55,16 @@ struct TripDetailView: View {
             if paged != day { withAnimation(.easeOut(duration: 0.28)) { paged = day } }
         }
         .onAppear { paged = activeDay }
+        // **One sheet, two ways in.** The day's own "Add a stop" opens it on the list; tapping a
+        // café Apple drew on the basemap opens it already pushed to that café's card, by way of
+        // `MapSearchStore.adding`. A second presentation for the second entry would be a second
+        // thing to keep in step.
+        .sheet(isPresented: Binding(
+            get: { search.isAdding }, set: { search.isAdding = $0 }
+        )) {
+            AddStopSheet(trip: trip, fromDay: search.fromDay, onAdd: onAddPlace)
+                .presentationDetents([.large])
+        }
     }
 
     /// The one line the capsule shows over a live map.
@@ -114,6 +128,7 @@ struct TripDetailView: View {
                         onActualCost: { await onActualCost(index, nil, $0) }
                     )
                 }
+                addStop(to: index)
                 moneyBlock(day, index: index)
             }
             .padding(.bottom, Token.gapRows)
@@ -151,6 +166,33 @@ struct TripDetailView: View {
                 }
             }
         }
+    }
+
+    /// **The only entry point, and the header deliberately has none.**
+    ///
+    /// The plan wanted a search field in the trip header too. That header is 322pt wide and the
+    /// previous phase spent its whole argument getting the day above the fold; a general search
+    /// box there costs permanent room to ask a question this row asks in context. Here the day
+    /// is already chosen, which is one decision fewer — the plan's own reason for wanting this
+    /// entry in the first place. The card still carries the day picker, so nothing is lost.
+    private func addStop(to index: Int) -> some View {
+        Button { search.open(fromDay: index) } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle")
+                    .textStyle(.body)
+                Text("Add a stop")
+                    .textStyle(.detail.weight(TextStyle.medium))
+            }
+            .foregroundStyle(Token.accent)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .background(Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: Token.radiusSmall, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a stop to day \(index + 1)")
     }
 
     /// Every figure in one place.

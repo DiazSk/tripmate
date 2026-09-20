@@ -126,6 +126,36 @@ final class TripsStore {
         }
     }
 
+    /// Put a found place into a day, at the part of the day the traveller chose.
+    ///
+    /// **No new server API.** The insert is local arithmetic (`Itinerary.addingPlace`, which is
+    /// `DaySlotting` underneath) and persistence is the `updateTrip` that `setActualCost` has
+    /// been using since B2 — the whole feature is a PATCH of the itinerary it already sends.
+    ///
+    /// Optimistic with a rollback, the shape the three above set. Here the rollback matters more
+    /// than usual: the sheet has already dismissed by the time the request lands, so a silent
+    /// failure would leave a stop on screen that the server has never heard of and that vanishes
+    /// on the next open.
+    func addPlace(_ name: String, at point: GeoPoint, category: String?, day: Int, slot: TimeOfDay) async {
+        guard let trip = open else { return }
+        let previous = trip.itinerary
+        let updated = previous.addingPlace(name, at: point, category: category, toDay: day, slot: slot)
+        guard updated != previous else { return }
+
+        open?.itinerary = updated
+        // Show the day the stop landed in, or the traveller is told it worked and shown a
+        // different day. `selectDay` clears the emphasis, which a new stop would invalidate
+        // anyway — the indices below it have all moved.
+        selectDay(day)
+        message = nil
+        do {
+            _ = try await api.updateTrip(id: trip.id, itinerary: updated)
+        } catch {
+            open?.itinerary = previous
+            message = "\(name) didn't save to your plan. Check your connection and try again."
+        }
+    }
+
     /// Delete a trip or discard a draft.
     ///
     /// **Routed off the row, not off the visible tab.** The web makes the same point at

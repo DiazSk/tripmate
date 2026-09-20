@@ -27,6 +27,12 @@ struct WorldMapView: UIViewRepresentable {
     let onEmphasise: (Int?) -> Void
     /// Where "near this view" is, reported when the camera settles.
     let onRegionSettled: (MKCoordinateRegion) -> Void
+    /// A café, museum or shop **Apple already drew** and the traveller tapped.
+    ///
+    /// **This is the thing the web wants and only approximates.** `tilePlaces.ts` queries the
+    /// basemap's vector tiles to find out what is under a tap; MapKit answers directly, because
+    /// the features are Apple's own. There is nothing to index and nothing to guess.
+    let onSelectPlace: (SearchResult) -> Void
 
     @Environment(\.panelMetrics) private var panelMetrics
     @Environment(\.shellExclusions) private var exclusions
@@ -36,6 +42,11 @@ struct WorldMapView: UIViewRepresentable {
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
         map.delegate = context.coordinator
+        // **The cafés Apple already draws become tappable.** One line, iOS 16+, and it is the
+        // half of place search the web can only reach by querying vector tiles. Points of
+        // interest only: territories and physical features are labels rather than places you
+        // would put in a plan.
+        map.selectableMapFeatures = [.pointsOfInterest]
 
         // Apple's own cartography is all there is — no tint knob, no LOD control, no style JSON,
         // which is the trade `DESIGN.md`'s globe section documents losing. `.realistic` elevation
@@ -66,6 +77,7 @@ struct WorldMapView: UIViewRepresentable {
         map.directionalLayoutMargins = Self.margins(clearing: exclusions, in: map.bounds)
         context.coordinator.onEmphasise = onEmphasise
         context.coordinator.onRegionSettled = onRegionSettled
+        context.coordinator.onSelectPlace = onSelectPlace
 
         drawRoute(in: map, coordinator: context.coordinator)
         drawPin(in: map, coordinator: context.coordinator)
@@ -273,6 +285,7 @@ struct WorldMapView: UIViewRepresentable {
         var refitKey: String?
         /// The pinned place currently on the map, gated apart from the route for the same reason.
         var pinnedID: String?
+        var onSelectPlace: (SearchResult) -> Void = { _ in }
         /// The wizard destination already flown to.
         var focusedKey: String?
         var onEmphasise: (Int?) -> Void = { _ in }
@@ -378,6 +391,28 @@ struct WorldMapView: UIViewRepresentable {
         func mapView(_ map: MKMapView, didSelect view: MKAnnotationView) {
             guard let stop = view.annotation as? StopAnnotation else { return }
             onEmphasise(stop.rawIndex)
+        }
+
+        /// **A tapped basemap POI arrives here, not in `didSelect view:`** — and that is the
+        /// whole difference between this working and silently doing nothing.
+        ///
+        /// A map feature has no annotation *view* of ours: `viewFor` returns nil for it and
+        /// MapKit draws its own balloon, so the view-based callback never fires. This overload
+        /// landed in iOS 16 alongside `selectableMapFeatures`, for exactly this.
+        func mapView(_ map: MKMapView, didSelect annotation: MKAnnotation) {
+            // `MKMapFeatureAnnotation` carries a name and a category but no address and no
+            // contact details, so it is resolved to a real `MKMapItem` before it becomes a
+            // result — the same type a typed search produces, so both reach the day one way.
+            guard let feature = annotation as? MKMapFeatureAnnotation else { return }
+            // Deselected at once: the sheet is the selection now, and leaving Apple's callout
+            // up behind it means two things on screen claiming to be chosen.
+            map.deselectAnnotation(feature, animated: false)
+            Task { [onSelectPlace] in
+                guard let item = try? await MKMapItemRequest(mapFeatureAnnotation: feature).mapItem,
+                      let result = SearchResult(item)
+                else { return }
+                onSelectPlace(result)
+            }
         }
 
         func mapView(_ map: MKMapView, didDeselect view: MKAnnotationView) {

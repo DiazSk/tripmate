@@ -87,6 +87,10 @@ private struct RootView: View {
                 focus: plan.previewRegion,
                 onEmphasise: { store.emphasise($0) },
                 onRegionSettled: { search.region = $0 },
+                // A basemap POI tap opens the add-a-stop sheet straight on that place's card.
+                // Only while a trip is open — with nothing to add it to, the card's day picker
+                // would have no days.
+                onSelectPlace: { if store.open != nil { search.open($0) } },
                 refitKey: plan.streamingRefitKey
             )
         } panel: {
@@ -195,7 +199,18 @@ private struct PanelContent: View {
                     onActualCost: { day, stop, amount in
                         await store.setActualCost(day: day, stop: stop, to: amount)
                     },
-                    onKeep: { Task { await store.keep() } }
+                    onKeep: { Task { await store.keep() } },
+                    onAddPlace: { place, day, slot in
+                        await store.addPlace(
+                            place.name,
+                            at: GeoPoint(
+                                lat: place.coordinate.latitude, lng: place.coordinate.longitude
+                            ),
+                            category: place.kind?.searchCategory,
+                            day: day,
+                            slot: slot
+                        )
+                    }
                 )
             } else {
                 TripsListView(
