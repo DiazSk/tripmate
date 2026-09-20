@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TripMate iOS — Home tab mockup</title>
+<style>
+@font-face{font-family:Melodrama;src:url(http://localhost:3000/fonts/melodrama-variable.woff2)format("woff2");font-weight:200 700;font-display:swap}
+@font-face{font-family:Switzer;src:url(http://localhost:3000/fonts/switzer-variable.woff2)format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:Tabular;src:url(http://localhost:3000/fonts/tabular-variable.woff2)format("woff2");font-weight:100 900;font-display:swap}
+
+:root{
+  --canvas:#121110; --surface-deep:rgb(28 26 24); --surface-deep-rgb:28 26 24;
+  --foreground:#f7f5f2; --muted:rgba(247,245,242,.62); --accent:#28b981;
+  --accent-fg:#06241a; --money:#e9b44c; --card-border:rgba(247,245,242,.12);
+  --pad:20px; --bar:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+body{background:#0a0a0a;font-family:Switzer,system-ui;display:flex;gap:28px;
+  padding:28px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+
+.phone{width:393px;height:852px;border-radius:44px;overflow:hidden;position:relative;
+  background:var(--canvas);box-shadow:0 0 0 9px #1c1a18,0 24px 70px rgba(0,0,0,.7);flex:none}
+.scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.statusbar{position:absolute;top:0;left:0;right:0;height:54px;z-index:40;
+  display:flex;align-items:center;justify-content:space-between;padding:14px 30px 0;
+  font:600 15px Switzer;color:#fff;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+
+/* ---------- HERO ---------- */
+.hero{position:relative;height:498px;display:flex;flex-direction:column;justify-content:flex-end}
+.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero .scrim{position:absolute;inset:0;
+  background:linear-gradient(to top,var(--canvas) 0%,rgba(18,17,16,.75) 26%,rgba(18,17,16,.15) 58%,transparent 78%)}
+.hero .inner{position:relative;padding:0 var(--pad) 22px}
+h1.somewhere{font-family:Melodrama;font-weight:400;font-size:46px;line-height:1.04;
+  letter-spacing:-.018em;color:var(--foreground);
+  text-shadow:0 1px 2px rgba(0,0,0,.55),0 2px 12px rgba(0,0,0,.4),0 0 40px rgba(0,0,0,.25)}
+
+/* entry capsule — the one light surface */
+.capsule{margin:18px var(--pad) 0;background:rgba(247,245,242,.94);border-radius:18px;
+  overflow:hidden;position:relative;box-shadow:0 12px 32px rgba(0,0,0,.45)}
+.cap-row{padding:11px 16px;border-bottom:1px solid rgba(18,17,16,.10)}
+.cap-row:last-of-type{border-bottom:0}
+.cap-label{font:600 10px Switzer;letter-spacing:.18em;text-transform:uppercase;color:rgba(18,17,16,.55)}
+.cap-val{font:500 16px Switzer;color:rgba(18,17,16,.40);margin-top:3px;display:flex;
+  align-items:center;justify-content:space-between}
+.cap-val.set{color:#121110}
+.cap-go{margin:10px;padding:14px;border-radius:12px;background:var(--accent);color:var(--accent-fg);
+  font:700 16px Switzer;text-align:center}
+
+/* ---------- band scaffolding ---------- */
+.band{padding:52px var(--pad) 0}
+.band.quiet{padding-top:44px}
+.opener{display:flex;justify-content:flex-end;align-items:center;gap:6px;
+  padding-bottom:9px;border-bottom:1px solid var(--card-border)}
+.opener .mark{color:var(--accent);font-size:11px;line-height:1}
+.opener .lbl{font:600 11px Switzer;letter-spacing:.18em;text-transform:uppercase;color:var(--foreground)}
+h2{font-family:Melodrama;font-weight:400;font-size:32px;line-height:1.06;letter-spacing:-.018em;
+  color:var(--foreground);margin-top:26px}
+h2.quiet{font-size:27px}
+.standfirst{font:400 15px/1.55 Switzer;color:var(--muted);margin-top:12px;max-width:34ch}
+
+/* ---------- JOURNEY ---------- */
+.jitem{padding-top:22px;margin-top:22px;border-top:1px solid var(--card-border)}
+.jitem:first-of-type{border-top:0;margin-top:26px}
+.jhead{font:500 16px Switzer;color:var(--accent)}
+.jlabel{font:600 10px Switzer;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+.jphoto{margin-top:12px;aspect-ratio:11/12;border-radius:12px;overflow:hidden;position:relative}
+.jphoto img{width:100%;height:100%;object-fit:cover;display:block}
+.jprose{font:400 14px/1.55 Switzer;color:var(--muted);margin-top:12px}
+
+/* ---------- METHOD ---------- */
+.step{display:grid;grid-template-columns:34px 1fr;gap:10px;padding-top:16px;margin-top:16px;
+  border-top:1px solid var(--card-border)}
+.step .n{font-family:Tabular;font-size:12px;color:var(--muted);padding-top:2px}
+.step h3{font:600 15px Switzer;color:var(--foreground)}
+.step p{font:400 14px/1.55 Switzer;color:var(--muted);margin-top:5px}
+
+/* ---------- PLANS: native carousel ---------- */
+.rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;
+  margin:24px calc(var(--pad)*-1) 0;padding:0 var(--pad) 4px;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.pcard{flex:0 0 268px;scroll-snap-align:start;border-radius:16px;overflow:hidden;
+  background:rgba(28,26,24,.62);border:1px solid var(--card-border)}
+.pcard .ph{aspect-ratio:16/10;overflow:hidden}
+.pcard .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.pbody{padding:13px 14px 15px}
+.ptitle{font:500 16px/1.25 Switzer;color:var(--foreground)}
+.pprice{display:flex;align-items:baseline;gap:6px;margin-top:9px}
+.pprice .from{font:600 9px Switzer;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.pprice .amt{font-family:Melodrama;font-weight:400;font-size:27px;color:var(--money);
+  letter-spacing:-.005em;line-height:1}
+.pmeta{margin-top:11px;border-top:1px solid var(--card-border);padding-top:9px;
+  display:grid;grid-template-columns:auto 1fr;gap:3px 12px}
+.pmeta dt{font:600 9px Switzer;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.pmeta dd{font-family:Tabular;font-size:12px;color:var(--foreground)}
+.pcta{margin:12px 14px 14px;padding:10px;border-radius:10px;border:1px solid var(--card-border);
+  text-align:center;font:600 13px Switzer;color:var(--foreground)}
+.railhint{font:400 12px Switzer;color:var(--muted);margin-top:11px;display:flex;
+  align-items:center;gap:7px}
+.dots{display:flex;gap:5px}
+.dots i{width:5px;height:5px;border-radius:50%;background:rgba(247,245,242,.25)}
+.dots i.on{background:var(--accent)}
+
+/* ---------- REACH ---------- */
+.worldwrap{margin-top:22px;border-radius:14px;overflow:hidden;background:rgba(28,26,24,.5);
+  border:1px solid var(--card-border);padding:18px 12px}
+.worldwrap img{width:100%;display:block;opacity:.85}
+
+/* ---------- FOOTER ---------- */
+.foot{margin-top:46px;border-top:1px solid var(--card-border);padding:0 var(--pad) 26px}
+.footstrip{margin:0 calc(var(--pad)*-1);height:118px;overflow:hidden}
+.footstrip img{width:100%;height:100%;object-fit:cover;display:block}
+.footmark{font-family:Melodrama;font-weight:400;font-size:26px;color:var(--foreground);margin-top:22px}
+.footlink{display:flex;align-items:center;gap:9px;margin-top:15px;font:500 21px Switzer;color:var(--foreground)}
+.footlink .plus{color:var(--accent);font-size:15px}
+.foottag{font:400 13px/1.6 Switzer;color:var(--muted);margin-top:22px}
+
+.spacer{height:calc(var(--bar) + 34px)}
+
+/* ---------- TAB BAR ---------- */
+.tabbar{position:absolute;left:var(--pad);right:var(--pad);bottom:14px;height:var(--bar);
+  border-radius:28px;background:rgba(28,26,24,.62);backdrop-filter:blur(18px) saturate(1.1);
+  border:1px solid var(--card-border);display:flex;z-index:30}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  color:var(--muted);font:500 10px Switzer}
+.tab.on{color:var(--accent)}
+.tab svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7}
+
+.caption{width:393px;color:#8a8580;font:400 12.5px/1.6 Switzer;flex:none}
+.caption b{color:#d8d3cd;font-weight:600;display:block;margin-bottom:5px;font-size:13.5px}
+.caption ul{margin:9px 0 0 15px}
+.caption li{margin-bottom:7px}
+.caption em{color:var(--accent);font-style:normal}
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="statusbar"><span>9:41</span><span>􀙇 􀛨</span></div>
+  <div class="scroll">
+
+    <!-- HERO -->
+    <section class="hero">
+      <img src="http://localhost:3000/scenes/petra/0329455b/port-001.avif" alt="">
+      <div class="scrim"></div>
+      <div class="inner"><h1 class="somewhere">Somewhere.</h1></div>
+    </section>
+
+    <div class="capsule">
+      <div class="cap-row">
+        <div class="cap-label">Where</div>
+        <div class="cap-val">Where to?<span style="opacity:.45">􀊫</span></div>
+      </div>
+      <div class="cap-row">
+        <div class="cap-label">Arriving</div>
+        <div class="cap-val">Add dates<span style="opacity:.45">􀉉</span></div>
+      </div>
+      <div class="cap-row">
+        <div class="cap-label">Leaving</div>
+        <div class="cap-val">Add dates<span style="opacity:.45">􀉉</span></div>
+      </div>
+      <div class="cap-go">Plan it</div>
+    </div>
+
+    <!-- JOURNEY -->
+    <section class="band">
+      <div class="opener"><span class="mark">✳</span><span class="lbl">Journey</span></div>
+      <h2>What a plan actually knows</h2>
+
+      <div class="jitem">
+        <div class="jhead">One 20-minute window, every evening</div>
+        <div class="jlabel">The Blue Hour</div>
+        <div class="jphoto"><img src="http://localhost:3000/scenes/vernazza-blue-hour.webp" alt=""></div>
+        <p class="jprose">Dusk decides whether a city reads as ordinary or unforgettable — every stop we place is timed around catching it.</p>
+      </div>
+
+      <div class="jitem">
+        <div class="jhead">Lodging, food, and transit — itemized</div>
+        <div class="jlabel">Real Prices</div>
+        <div class="jphoto"><img src="http://localhost:3000/scenes/spice-market-barrels.webp" alt=""></div>
+        <p class="jprose">Say what you want to spend and get a plan that actually spends it, priced in before you land — not a lowball guess.</p>
+      </div>
+
+      <div class="jitem">
+        <div class="jhead">Real forecast, up to 16 days out</div>
+        <div class="jlabel">Live Weather</div>
+        <div class="jphoto"><img src="http://localhost:3000/scenes/storm-over-forest-ridge.webp" alt=""></div>
+        <p class="jprose">Indoor days when it rains, golden hour when it doesn't — the plan already knows before you pack.</p>
+      </div>
+
+      <div class="jitem">
+        <div class="jhead">Budget · Mid-range · Luxury</div>
+        <div class="jlabel">Three Ways To Travel</div>
+        <div class="jphoto"><img src="http://localhost:3000/scenes/balcony-morning-view.webp" alt=""></div>
+        <p class="jprose">Every tier is priced against your actual dates before you commit to any of them.</p>
+      </div>
+    </section>
+
+    <!-- METHOD -->
+    <section class="band quiet">
+      <div class="opener"><span class="mark">✳</span><span class="lbl">Method</span></div>
+      <h2 class="quiet">How it actually works</h2>
+      <p class="standfirst">Four steps, about five minutes. Most of it is the plan being checked rather than written.</p>
+      <div class="step"><div class="n">01</div><div><h3>You set the constraints</h3><p>Where, when, how much, and who is going. The budget is a target to hit, not a ceiling to stay under.</p></div></div>
+      <div class="step"><div class="n">02</div><div><h3>Real data goes in first</h3><p>Forecast for your actual dates, public holidays, opening hours and travel times — fetched before a single word is written.</p></div></div>
+      <div class="step"><div class="n">03</div><div><h3>Written, then critiqued</h3><p>A second pass reviews the finished plan against your budget and pace, and rewrites the days it finds fault with.</p></div></div>
+      <div class="step"><div class="n">04</div><div><h3>Every place is checked</h3><p>Coordinates are corrected against OpenStreetMap, so the pins land where the place actually is rather than where the model guessed.</p></div></div>
+    </section>
+
+    <!-- PLANS -->
+    <section class="band">
+      <div class="opener"><span class="mark">✳</span><span class="lbl">Plans</span></div>
+      <h2>Four trips, already priced</h2>
+      <p class="standfirst">Every figure below is what the planner returns for those dates and that budget — not a starting price with the real one further in.</p>
+
+      <div class="rail">
+        <article class="pcard">
+          <div class="ph"><img src="http://localhost:3000/scenes/tuscany-cypress-road.webp" alt=""></div>
+          <div class="pbody">
+            <div class="ptitle">Nine slow days in Tuscany</div>
+            <div class="pprice"><span class="from">From</span><span class="amt">$2,600</span></div>
+            <dl class="pmeta">
+              <dt>Where</dt><dd>Val d'Orcia, Italy</dd>
+              <dt>When</dt><dd>Sep 12–20, 2027</dd>
+              <dt>Length</dt><dd>9 days, 8 nights</dd>
+              <dt>Party</dt><dd>2 adults</dd>
+            </dl>
+          </div>
+          <div class="pcta">Plan a trip like this</div>
+        </article>
+
+        <article class="pcard">
+          <div class="ph"><img src="http://localhost:3000/scenes/jaipur-amber-fort-elephant.webp" alt=""></div>
+          <div class="pbody">
+            <div class="ptitle">Jaipur on a real budget</div>
+            <div class="pprice"><span class="from">From</span><span class="amt">$900</span></div>
+            <dl class="pmeta">
+              <dt>Where</dt><dd>Jaipur, India</dd>
+              <dt>When</dt><dd>Nov 7–13, 2026</dd>
+              <dt>Length</dt><dd>7 days, 6 nights</dd>
+              <dt>Party</dt><dd>1 adult</dd>
+            </dl>
+          </div>
+          <div class="pcta">Plan a trip like this</div>
+        </article>
+
+        <article class="pcard">
+          <div class="ph"><img src="http://localhost:3000/scenes/peles-castle-romania-snow.webp" alt=""></div>
+          <div class="pbody">
+            <div class="ptitle">Sinaia when the weather decides</div>
+            <div class="pprice"><span class="from">From</span><span class="amt">$1,700</span></div>
+            <dl class="pmeta">
+              <dt>Where</dt><dd>Sinaia, Romania</dd>
+              <dt>When</dt><dd>Feb 6–11, 2027</dd>
+              <dt>Length</dt><dd>6 days, 5 nights</dd>
+              <dt>Party</dt><dd>2 adults, 1 child</dd>
+            </dl>
+          </div>
+          <div class="pcta">Plan a trip like this</div>
+        </article>
+
+        <article class="pcard">
+          <div class="ph"><img src="http://localhost:3000/scenes/wadi-rum-desert.webp" alt=""></div>
+          <div class="pbody">
+            <div class="ptitle">Wadi Rum, three ways to travel</div>
+            <div class="pprice"><span class="from">From</span><span class="amt">$1,200</span></div>
+            <dl class="pmeta">
+              <dt>Where</dt><dd>Wadi Rum, Jordan</dd>
+              <dt>When</dt><dd>Mar 20–26, 2027</dd>
+              <dt>Length</dt><dd>7 days, 6 nights</dd>
+              <dt>Party</dt><dd>2 adults</dd>
+            </dl>
+          </div>
+          <div class="pcta">Plan a trip like this</div>
+        </article>
+      </div>
+
+      <div class="railhint"><span class="dots"><i class="on"></i><i></i><i></i><i></i></span> Swipe for four</div>
+    </section>
+
+    <!-- REACH -->
+    <section class="band quiet">
+      <div class="opener"><span class="mark">✳</span><span class="lbl">Reach</span></div>
+      <h2 class="quiet">Anywhere you can name</h2>
+      <p class="standfirst" style="max-width:none">The planner geocodes the destination you type, then pulls that place's real forecast, public holidays and opening hours. There is no list of supported cities to be missing from.</p>
+      <div class="worldwrap">
+        <img src="http://localhost:3000/scenes/image-logo.svg" alt="" style="opacity:.0;height:1px">
+        <svg viewBox="0 0 320 150" style="width:100%;display:block">
+          <g fill="rgba(247,245,242,0.22)">
+            <!-- indicative stipple; the real layer is worldLand.ts at ~90 marks -->
+            <script type="application/x-placeholder"></script>
+          </g>
+          <g id="stipple" fill="rgba(247,245,242,0.20)"></g>
+          <g id="marks" fill="#28b981"></g>
+        </svg>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="foot">
+      <div class="footstrip"><img src="http://localhost:3000/scenes/graubunden-autumn-valley.webp" alt=""></div>
+      <div class="footmark">TripMate</div>
+      <div class="footlink"><span class="plus">✚</span>Memories</div>
+      <div class="footlink"><span class="plus">✚</span>Profile</div>
+      <p class="foottag">Plans priced against real dates.<br>Weather, holidays and opening hours included.</p>
+    </footer>
+
+    <div class="spacer"></div>
+  </div>
+
+  <!-- TAB BAR -->
+  <nav class="tabbar">
+    <div class="tab on">
+      <svg viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home
+    </div>
+    <div class="tab">
+      <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Trips
+    </div>
+    <div class="tab">
+      <svg viewBox="0 0 24 24"><path d="m9 4-6 3v13l6-3 6 3 6-3V4l-6 3z"/><path d="M9 4v13M15 7v13"/></svg>Map
+    </div>
+    <div class="tab">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6"/></svg>Profile
+    </div>
+  </nav>
+</div>
+
+<div class="caption">
+  <b>TripMate iOS — Home tab, 393×852</b>
+  Real fonts (Melodrama / Switzer / Tabular), real Kiln tokens, real photography, served from the dev server. Scroll the phone.
+  <ul>
+    <li><em>Hero</em> — <b>498pt</b>, not 400dvh, and the number is derived: 852 − 34 home indicator − 56 bar − 14 gap = 748 usable, minus a 248pt capsule. At 640 the capsule sat under the tab bar, which is the primary action half-hidden at rest. The film plays across it on scroll; the frame shown is <code>port-001</code>. No top navbar — P0 deleted it.</li>
+    <li><em>Capsule</em> — the one light surface, <code>#f7f5f2</code> at .94, 18px radius (a full pill on a stacked box reads as a lozenge). Bound to the same <code>PlanDraft</code> as the wizard.</li>
+    <li><em>Band openers</em> — right-aligned <code>✳ LABEL</code> over a hairline, then Melodrama. The page's spine, unchanged.</li>
+    <li><em>JOURNEY</em> — 4 items, 11:12 photos. The web's hover tint is gone; it was never shown on touch anyway.</li>
+    <li><em>PLANS</em> — <b>changed</b>: a snap carousel, not a 3,475pt stack. Four cards become one screen.</li>
+    <li><em>REACH</em> — stipple placeholder here; the real layer is <code>worldLand.ts</code>. Plan markers stay off: three targets 13px apart fail WCAG 2.2 spacing.</li>
+    <li><em>Tab bar</em> — four cells now, Home first.</li>
+  </ul>
+</div>
+
+<script>
+// Indicative stipple so the REACH band reads as a map rather than an empty box.
+// The shipped version uses worldLand.ts (~38 KB Natural Earth path) + ~90 destination marks.
+const s = document.getElementById('stipple'), m = document.getElementById('marks');
+const blobs = [[38,42,46,26],[52,74,30,34],[150,40,58,30],[168,74,26,26],[196,44,72,34],
+               [232,86,30,22],[262,104,30,20],[120,96,10,10]];
+let dots = '';
+for (const [x,y,w,h] of blobs)
+  for (let i=0;i<w;i+=4) for (let j=0;j<h;j+=4)
+    if (Math.random()>.42) dots += `<circle cx="${x+i}" cy="${y+j}" r="1"/>`;
+s.innerHTML = dots;
+m.innerHTML = [[60,58],[158,48],[176,52],[186,64],[205,58],[240,92],[168,88],[78,96],[262,110],[150,66]]
+  .map(([x,y])=>`<circle cx="${x}" cy="${y}" r="2.1"/>`).join('');
+</script>
+</body>
+</html>
