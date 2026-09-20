@@ -111,10 +111,13 @@ public enum Spend {
     /// the view draws it as a rule beneath the row rather than as another tile.
     public static func tiles(_ spend: DaySpend) -> [SpendTile] {
         [
-            SpendTile(label: "Food", amount: spend.food, symbol: "fork.knife"),
-            SpendTile(label: "Entry", amount: spend.entry, symbol: "ticket"),
-            SpendTile(label: "Transit", amount: spend.transit, symbol: "tram"),
-            SpendTile(label: "Other", amount: spend.other, symbol: "mappin"),
+            SpendTile(label: "Food", amount: spend.food, symbol: StopCategory.food.symbol),
+            SpendTile(label: "Entry", amount: spend.entry, symbol: StopCategory.entry.symbol),
+            SpendTile(
+                label: "Transit", amount: spend.transit, symbol: StopCategory.transit.symbol
+            ),
+            SpendTile(label: "Other", amount: spend.other, symbol: StopCategory.other.symbol),
+            // Stay keeps a literal: lodging is not a `StopCategory` and never will be.
             SpendTile(label: "Stay", amount: spend.stay, symbol: "bed.double"),
         ].filter { $0.amount > 0 }
     }
@@ -127,6 +130,19 @@ public enum Spend {
 
     public static func trip(_ days: [DayPlan]) -> Double {
         days.reduce(0) { $0 + day($1) }
+    }
+
+    /// How far past its own plan a day went, or nil.
+    ///
+    /// **Both halves already existed and the banner needed them to agree.** Asking
+    /// `day(d) > planned(d)` in the view and then recomputing the difference is two chances to
+    /// disagree about one fact; this makes the condition and the figure one decision.
+    ///
+    /// `nil` at exactly equal — a day that landed on its plan did not overspend, and a coral
+    /// banner reading "ran $0 over" is a false alarm.
+    public static func overspend(_ day: DayPlan) -> Double? {
+        let over = self.day(day) - planned(day)
+        return over > 0 ? over : nil
     }
 
     /// What the plan *said* a day would cost — the one summation that deliberately ignores

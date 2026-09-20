@@ -8,6 +8,13 @@ import SwiftUI
 /// panel clamps to a 360-520pt range, so the fraction it actually occupies changes with the
 /// display.
 struct PanelMetrics: Equatable, Sendable {
+    /// Which stop the sheet is at, for the content that has to answer to it.
+    ///
+    /// **On this value rather than in a second environment key**, because this is already the
+    /// one thing that says what the chrome is doing, and `AppShell` already computes it. A page
+    /// that is not in a sheet reads `.large` — it is not collapsed, which is the only question
+    /// anyone asks of this.
+    var detent: SheetDetent = .large
     var viewWidth: CGFloat = 0
     /// The strip left over for the map. Equal to `viewWidth` when the panel is full-bleed, which
     /// is the phone layout — there is no strip to aim at and centred framing is correct.

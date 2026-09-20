@@ -22,6 +22,36 @@ extension View {
     }
 }
 
+/// How tall the plan sheet stands.
+///
+/// **Top-level rather than nested in `PlanSheet<Content>`.** Nested, every reference outside
+/// the file had to name a generic parameter it did not otherwise care about — `AppShell` wrote
+/// `PlanSheet<Panel>.Detent` twice — and `PanelMetrics` could not carry it at all.
+enum SheetDetent: CaseIterable {
+    case small, medium, large
+
+    /// **`small` shows one line over a live map**, which is the composition the web cannot
+    /// offer at any width on a phone — its `DockedPanel` capsule is the same idea.
+    ///
+    /// 152 is derived, not picked: 44 grabber + 56 header row + 8 + 24 facts line + 20 bottom
+    /// pad. It shows the trip, the day, and — when a stop is emphasised — that stop's name and
+    /// time, so tapping a pin names it without opening anything.
+    func height(in available: CGSize, safeTop: CGFloat, fitted: CGFloat? = nil) -> CGFloat {
+        let large = available.height - safeTop - Token.barHeight - Token.gapRows * 2
+        switch self {
+        case .small: return 152
+        // **The middle stop is the content's own height when it states one.** A flat 46%
+        // is right for a day of an itinerary, which is a list that always overflows; it is
+        // wrong for a four-field form, which then sits in the top third of a box it does
+        // not fill. Clamped both ways: shorter than `small` is not a sheet, and taller than
+        // `large` would cover the tab bar.
+        case .medium: return min(max(fitted ?? available.height * 0.46, 152), large)
+        // Stops clear of the status bar *and* the tab bar. A real sheet would cover both.
+        case .large: return large
+        }
+    }
+}
+
 /// The plan over the map, at one of three heights.
 ///
 /// **Hand-rolled, and the native sheet was tried first and photographed failing.** A SwiftUI
@@ -38,7 +68,7 @@ extension View {
 /// **It never covers the tab bar.** `large` stops short of it, so navigation is reachable at
 /// every height — unlike a real sheet, deliberately.
 struct PlanSheet<Content: View>: View {
-    @Binding var detent: Detent
+    @Binding var detent: SheetDetent
     /// What the content asked for, if it asked. `nil` keeps the flat 46%.
     var fitted: CGFloat?
     /// The space the sheet is allowed to live in — the shell's size, minus nothing.
@@ -46,33 +76,12 @@ struct PlanSheet<Content: View>: View {
     let safeTop: CGFloat
     @ViewBuilder var content: () -> Content
 
-    enum Detent: CaseIterable {
-        case small, medium, large
-
-        /// **`small` shows one line over a live map**, which is the composition the web cannot
-        /// offer at any width on a phone. P7 replaces its content with the next stop and its walk;
-        /// until then it is whatever the panel's own first row is.
-        func height(in available: CGSize, safeTop: CGFloat, fitted: CGFloat? = nil) -> CGFloat {
-            let large = available.height - safeTop - Token.barHeight - Token.gapRows * 2
-            switch self {
-            case .small: return 132
-            // **The middle stop is the content's own height when it states one.** A flat 46%
-            // is right for a day of an itinerary, which is a list that always overflows; it is
-            // wrong for a four-field form, which then sits in the top third of a box it does
-            // not fill. Clamped both ways: shorter than `small` is not a sheet, and taller than
-            // `large` would cover the tab bar.
-            case .medium: return min(max(fitted ?? available.height * 0.46, 132), large)
-            // Stops clear of the status bar *and* the tab bar. A real sheet would cover both.
-            case .large: return large
-            }
-        }
-    }
 
     @GestureState private var drag: CGFloat = 0
 
     private var height: CGFloat {
         let target = detent.height(in: available, safeTop: safeTop, fitted: fitted)
-        let bounds = Detent.allCases.map {
+        let bounds = SheetDetent.allCases.map {
             $0.height(in: available, safeTop: safeTop, fitted: fitted)
         }
         // Rubber-band rather than hard-stop: a drag past the end that simply refuses to move
@@ -123,7 +132,7 @@ struct PlanSheet<Content: View>: View {
                         let released = detent
                             .height(in: available, safeTop: safeTop, fitted: fitted)
                             - value.translation.height - value.velocity.height * 0.12
-                        detent = Detent.allCases.min {
+                        detent = SheetDetent.allCases.min {
                             let a = $0.height(in: available, safeTop: safeTop, fitted: fitted)
                             let b = $1.height(in: available, safeTop: safeTop, fitted: fitted)
                             return abs(a - released) < abs(b - released)
@@ -133,7 +142,7 @@ struct PlanSheet<Content: View>: View {
             .accessibilityLabel("Plan panel")
             .accessibilityValue(detent == .small ? "collapsed" : detent == .medium ? "half" : "full")
             .accessibilityAdjustableAction { direction in
-                let order = Detent.allCases
+                let order = SheetDetent.allCases
                 guard let i = order.firstIndex(of: detent) else { return }
                 let next = direction == .increment ? i + 1 : i - 1
                 if order.indices.contains(next) { detent = order[next] }
@@ -142,7 +151,7 @@ struct PlanSheet<Content: View>: View {
 
     /// What the map must keep clear at the bottom, measured from the screen's edge.
     static func obstruction(
-        _ detent: Detent, in available: CGSize, safeTop: CGFloat, fitted: CGFloat? = nil
+        _ detent: SheetDetent, in available: CGSize, safeTop: CGFloat, fitted: CGFloat? = nil
     ) -> CGFloat {
         detent.height(in: available, safeTop: safeTop, fitted: fitted)
             + Token.barHeight + Token.gapRows * 2

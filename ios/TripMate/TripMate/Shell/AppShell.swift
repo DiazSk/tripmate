@@ -47,7 +47,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
     @ViewBuilder var home: () -> Home
 
     @State private var exclusions = ShellExclusions()
-    @State private var detent: PlanSheet<Panel>.Detent = .medium
+    @State private var detent: SheetDetent = .medium
     /// Read here rather than inside the sheet, because the map's bottom inset is
     /// computed at this level too and both have to agree on one number.
     @State private var fitted: CGFloat?
@@ -146,6 +146,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
             .environment(
                 \.panelMetrics,
                 PanelMetrics(
+                    detent: floats && !isDocked ? detent : .large,
                     viewWidth: proxy.size.width,
                     freeWidth: isDocked ? proxy.size.width - panelWidth : proxy.size.width,
                     // The tab bar alone where there is no sheet — the Map tab, and every docked

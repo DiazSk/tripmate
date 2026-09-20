@@ -43,6 +43,20 @@ extension KeyedDecodingContainer {
 public enum StopCategory: String, Codable, Sendable, CaseIterable {
     case food, entry, transit, other
 
+    /// The mark this kind of stop carries, wherever it is drawn.
+    ///
+    /// **On the category rather than at the two call sites**, because there are two — the stop
+    /// row's glyph and the day's spend tile — and they must never show different marks for
+    /// `food`. `Spend.tiles` reads this; a test asserts the two agree.
+    public var symbol: String {
+        switch self {
+        case .food: "fork.knife"
+        case .entry: "ticket"
+        case .transit: "tram"
+        case .other: "mappin"
+        }
+    }
+
     public init(from decoder: any Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = StopCategory(rawValue: raw) ?? .other
@@ -184,7 +198,10 @@ public struct Trip: Codable, Sendable, Equatable {
     public let startDate: String
     public let endDate: String
     public let budget: Double
-    public let status: TripStatus?
+    /// **`var`, for the same reason `itinerary` is.** Keeping a trip is written locally
+    /// and then sent, so the banner goes the moment you press it rather than after a
+    /// round trip; a failure puts it back.
+    public var status: TripStatus?
     /// `var` so an actual cost can be written without rebuilding the trip. The synthesized
     /// memberwise initialiser is internal, so the alternative is a public one that could drift
     /// from the decoder.

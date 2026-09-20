@@ -18,166 +18,275 @@ struct TripDetailView: View {
     let onBack: () -> Void
     /// `(dayIndex, stopIndex or nil for lodging, amount or nil to clear)`
     let onActualCost: (Int, Int?, Double?) async -> Void
+    /// Promote this draft to a kept trip.
+    let onKeep: () -> Void
+
+    @Environment(\.panelMetrics) private var metrics
+    /// The page the horizontal scroller is on. Mirrors `activeDay` in both directions: the
+    /// scroller writes it as you swipe, the stepper and the menu write it to move the scroller.
+    @State private var paged: Int?
 
     private var days: [DayPlan] { trip.itinerary.days }
+    private var isCapsule: Bool { metrics.detent == .small }
 
     var body: some View {
-        // **One scroll view, not a fixed header above a scrolling list.**
-        //
-        // The header used to sit outside the stop list's own `ScrollView`, in a height-bounded
-        // `VStack`. That is why the photograph came out at 60% width: `.aspectRatio(.fit)` in a
-        // container that constrains height shrinks the *width* to fit, so a 16:10 tile in a
-        // short box is a small 16:10 tile. Nesting a scroll view inside a fixed stack was the
-        // cause; one scroller is both the fix and less code.
-        //
-        // The day tabs scroll away with everything else. The web does the same — only its hero
-        // is sticky — and here the sheet's own detents are the mechanism for keeping the top of
-        // the plan in view.
-        ScrollView {
-            VStack(alignment: .leading, spacing: Token.gapPanels) {
-                header
-                BudgetBarView(days: days, budget: trip.budget, activeDayIndex: activeDay)
-                if days.count > 1 { dayTabs }
-                day
+        VStack(spacing: 0) {
+            TripHeaderRow(
+                trip: trip,
+                activeDay: activeDay,
+                dayCount: days.count,
+                onBack: onBack,
+                onSelectDay: onSelectDay
+            )
+            if isCapsule {
+                capsuleFacts
+            } else {
+                pager
             }
+        }
+        .onChange(of: paged) { _, page in
+            if let page, page != activeDay { onSelectDay(page) }
+        }
+        .onChange(of: activeDay) { _, day in
+            if paged != day { withAnimation(.easeOut(duration: 0.28)) { paged = day } }
+        }
+        .onAppear { paged = activeDay }
+    }
+
+    /// The one line the capsule shows over a live map.
+    ///
+    /// **It names the stop you tapped.** With nothing emphasised it is the day's facts; point
+    /// at a pin and this becomes that stop, so the map can be read without opening the sheet —
+    /// which is the whole reason a 152pt stop exists.
+    @ViewBuilder private var capsuleFacts: some View {
+        if days.indices.contains(activeDay) {
+            let day = days[activeDay]
+            let stop = emphasis.flatMap { day.stops.indices.contains($0) ? day.stops[$0] : nil }
+            Text(stop.map { "\($0.name) · \($0.time)" } ?? TripCopy.dayFacts(day, index: activeDay))
+                .textStyle(.detail)
+                .foregroundStyle(stop == nil ? Token.muted : Token.foreground)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 8)
+        }
+    }
+
+    /// **Swipe between days; the strip is gone.** Nine tabs showed about four and a half at
+    /// 322pt and cost 40pt at every detent to do it. Paging costs no layout, and the two other
+    /// ways to move — the header's chevrons and its menu — work at the capsule too, where a
+    /// strip is not even drawn.
+    private var pager: some View {
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
+                ForEach(days.indices, id: \.self) { index in
+                    dayPage(days[index], index: index)
+                        .containerRelativeFrame(.horizontal)
+                        .id(index)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: $paged)
+        .scrollIndicators(.hidden)
+    }
+
+    private func dayPage(_ day: DayPlan, index: Int) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Token.gapRows) {
+                if trip.resolvedStatus == .draft { draftNotice }
+                if let over = TripCopy.overspend(day) {
+                    Text(over)
+                        .textStyle(.detail.weight(TextStyle.medium))
+                        .foregroundStyle(Token.alert)
+                }
+                dayHeader(day)
+                if let summary = day.summary {
+                    Text(summary)
+                        .textStyle(.detail)
+                        .foregroundStyle(Token.muted)
+                }
+                stops(of: day, index: index)
+                if let lodging = day.lodging {
+                    LodgingRow(
+                        lodging: lodging,
+                        isOpen: emphasis == nil,
+                        onActualCost: { await onActualCost(index, nil, $0) }
+                    )
+                }
+                moneyBlock(day, index: index)
+            }
+            .padding(.bottom, Token.gapRows)
         }
         .scrollIndicators(.hidden)
         .shrinksTabBar(chrome)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button(action: onBack) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                    Text("Memories")
-                }
-                .textStyle(.detail.weight(TextStyle.medium))
-                .foregroundStyle(Token.muted)
-            }
-            .buttonStyle(.plain)
-
-            Text(trip.destination)
-                .textStyle(.display)
-                .foregroundStyle(Token.foreground)
-
-            // `City: N days` is the web's title; the dates come with it because this panel is
-            // the only place they appear. Both dates go through `DayDisplay.formatDate` — the
-            // raw `2026-09-12` was being printed straight to the screen.
-            Text("\(days.count) day\(days.count == 1 ? "" : "s") · "
-                 + "\(DayDisplay.formatDate(trip.startDate))–\(DayDisplay.formatDate(trip.endDate))")
-                .textStyle(.money)
-                .foregroundStyle(Token.muted)
-
-            // **Below the title, not above it, and not collapsing.**
-            //
-            // The web leads with this photograph and shrinks it from 11rem to 4.5rem as the plan
-            // scrolls under it, because its panel is a fixed height and at 18rem the photo was
-            // "288px of an 826px panel — 35% of the plan before a stop was visible". The sheet
-            // has no such problem: dragging it *is* the trade between photograph and plan, and a
-            // collapsing header on top of that would be a second mechanism for one job.
-            //
-            // Order is the other consequence. At the small detent only the first rows are
-            // visible, and a sliver of photograph with no words is not a trip — so the
-            // destination and the dates come first and the picture follows them.
-            PlacePhotoView(name: trip.destination, large: true)
-                .aspectRatio(16.0 / 10.0, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
-                .padding(.top, 4)
-        }
-    }
-
-    /// The day tabs own day selection. The budget bar below highlights the same index as a
-    /// *readout* — making thirty spans tappable would duplicate this navigation and add thirty
-    /// tab stops to a panel whose job is reading.
-    private var dayTabs: some View {
-        // **Centring the selected tab is behaviour, not chrome.** On a thirty-day trip the active
-        // day is otherwise off-screen the moment you arrive, and the strip looks like it starts
-        // at day 1 whatever you are reading.
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                ForEach(days.indices, id: \.self) { index in
-                    let isActive = index == activeDay
-                    Button { onSelectDay(index) } label: {
-                        Text("Day \(index + 1)")
-                            .textStyle(.caption.weight(TextStyle.semibold))
-                            .foregroundStyle(isActive ? Token.accentForeground : Token.muted)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(isActive ? Token.accent : Color.white.opacity(0.08))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .id(index)
-                    }
-                }
-            }
-            .onAppear { proxy.scrollTo(activeDay, anchor: .center) }
-            .onChange(of: activeDay) { _, day in
-                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(day, anchor: .center) }
-            }
-        }
-    }
-
-    /// `Day N — title · date`, with whatever the sky is doing.
-    ///
-    /// Every value here was already decoded and thrown away: `DayPlan` carries `title`, `date`,
-    /// `weather` and `weatherDetail`, and the panel rendered none of them.
     @ViewBuilder
+    private func stops(of day: DayPlan, index dayIndex: Int) -> some View {
+        // Chunked into morning / afternoon / evening. `DaySchedule.group` keeps the authored
+        // order and never sorts — a plan that puts a 9am stop after a 3pm one is labelled
+        // `Afternoon → Morning` rather than quietly rearranged.
+        let groups = DaySchedule.group(day.stops)
+        let overlaps = Overlap.findings(in: day)
+        ForEach(groups) { group in
+            // **One group draws no heading.** A single "Morning" over the whole day is a rule
+            // with nothing to separate, and an unlabelled group means no stop carried a
+            // readable time — where a heading would be inventing a fact.
+            if groups.count > 1, let label = group.label {
+                TimeOfDayHeading(label: label)
+            }
+            // The rail runs behind the group rather than being drawn per row: a gap change
+            // cannot break a background, and the web records its per-row arithmetic drawing
+            // through the next avatar.
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(group.stops, id: \.index) { entry in
+                    StopRow(
+                        stop: entry.stop,
+                        isEmphasised: entry.index == emphasis,
+                        clash: overlaps.first { $0.stopIndex == entry.index },
+                        onTap: { onEmphasise(entry.index) },
+                        onActualCost: { await onActualCost(dayIndex, entry.index, $0) }
+                    )
+                }
+            }
+        }
+    }
+
+    /// Every figure in one place.
+    ///
+    /// **The budget bar moved down here from the top of the card.** It is a readout, not
+    /// navigation, and at the top it pushed the day below the fold while splitting money across
+    /// two ends of a scroll. The day-scoped overspend line at the top of the page covers the
+    /// "know it now" case, which is the honest day-level version of the fact anyway.
+    private func moneyBlock(_ day: DayPlan, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: Token.gapRows) {
+            SpendBandView(day: day, dayNumber: index + 1)
+            BudgetBarView(days: days, budget: trip.budget, activeDayIndex: index)
+            if let tier = trip.itinerary.tier.map(Tiers.tier) {
+                // A tier is a spending style, so it explains the budget rather than the title.
+                Text("\(tier.name) · \(tier.description)")
+                    .textStyle(.caption)
+                    .foregroundStyle(Token.muted)
+            }
+        }
+        .padding(.top, Token.gapRows)
+    }
+
+    /// **A button, not a notice.** `updateTrip(status:)` has existed since B2 and nothing has
+    /// ever called it, so a plan generated on this phone could not be kept — and unkept drafts
+    /// are swept. Saying so without offering the fix would be describing the bug.
+    private var draftNotice: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(TripCopy.draftNotice)
+                .textStyle(.detail)
+                .foregroundStyle(Token.muted)
+            Button("Keep this trip", action: onKeep)
+                .buttonStyle(PrimaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Token.gapRows)
+        .background(Token.moneySoft)
+        .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+    }
+
     private func dayHeader(_ day: DayPlan) -> some View {
         let read = DayDisplay.read(day)
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("Day \(activeDay + 1)"
-                 + (day.title.map { " — \($0)" } ?? "")
-                 + " · \(DayDisplay.formatDate(day.date))")
+        // **No `Day N —` prefix.** The header row 44pt above already says `Day 3 of 9`;
+        // printing it twice in a 322pt column is the duplication this redesign is about.
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text((day.title.map { "\($0) · " } ?? "") + DayDisplay.formatDate(day.date))
                 .textStyle(.headingSmall.weight(TextStyle.semibold))
                 .foregroundStyle(Token.foreground)
             Spacer(minLength: 0)
             if !read.isEmpty { WeatherBadge(read: read) }
         }
     }
+}
 
-    @ViewBuilder
-    private var day: some View {
-        if days.indices.contains(activeDay) {
-            let day = days[activeDay]
-            VStack(alignment: .leading, spacing: Token.gapRows) {
-                    dayHeader(day)
-                    if let summary = day.summary {
-                        Text(summary)
-                            .textStyle(.detail)
-                            .foregroundStyle(Token.muted)
-                    }
-                    // Chunked into morning / afternoon / evening. `DaySchedule.group` keeps the
-                    // authored order and never sorts — a plan that puts a 9am stop after a 3pm
-                    // one is labelled `Afternoon → Morning` rather than quietly rearranged.
-                    let groups = DaySchedule.group(day.stops)
-                    // **One group draws no heading.** A single "Morning" over the whole day is a
-                    // rule with nothing to separate, and an unlabelled group means no stop
-                    // carried a readable time — where a heading would be inventing a fact.
-                    ForEach(groups) { group in
-                        if groups.count > 1, let label = group.label {
-                            TimeOfDayHeading(label: label)
-                        }
-                        ForEach(group.stops, id: \.index) { entry in
-                            StopRow(
-                                stop: entry.stop,
-                                isEmphasised: entry.index == emphasis,
-                                onTap: { onEmphasise(entry.index) },
-                                onActualCost: { await onActualCost(activeDay, entry.index, $0) }
-                            )
-                        }
-                    }
-                    if let lodging = day.lodging {
-                        LodgingRow(
-                            lodging: lodging,
-                            onActualCost: { await onActualCost(activeDay, nil, $0) }
-                        )
-                    }
-                    SpendBandView(day: day, dayNumber: activeDay + 1)
+/// The trip, the day, and the two ways to change it — one row, used at every detent.
+///
+/// **One view rather than a capsule and a header**, because the day control is the same control
+/// in both and two copies would drift. At the capsule it sits over a live map with the day's
+/// facts beneath it; expanded it pins above the pager.
+private struct TripHeaderRow: View {
+    let trip: Trip
+    let activeDay: Int
+    let dayCount: Int
+    let onBack: () -> Void
+    let onSelectDay: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .textStyle(.heading)
+                    .foregroundStyle(Token.muted)
+                    .frame(width: 32, height: 44)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Memories")
+
+            PlacePhotoView(name: trip.destination)
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: Token.radiusSmall, style: .continuous))
+
+            Text(trip.destination)
+                .textStyle(.heading)
+                .foregroundStyle(Token.foreground)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if dayCount > 1 { dayControl }
         }
+        .frame(height: 56)
+    }
+
+    /// Chevrons for the next day, a menu for any day. The strip could do neither at nine days.
+    private var dayControl: some View {
+        HStack(spacing: 2) {
+            step(-1, symbol: "chevron.left", label: "Previous day")
+            Menu {
+                ForEach(0..<dayCount, id: \.self) { index in
+                    Button {
+                        onSelectDay(index)
+                    } label: {
+                        if index == activeDay {
+                            Label(TripCopy.dayPosition(index, of: dayCount), systemImage: "checkmark")
+                        } else {
+                            Text("Day \(index + 1)")
+                        }
+                    }
+                }
+            } label: {
+                Text("Day \(activeDay + 1)/\(dayCount)")
+                    .textStyle(.label)
+                    .foregroundStyle(Token.foreground)
+                    .padding(.horizontal, 9)
+                    .frame(height: 30)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+            .accessibilityLabel("Choose a day")
+            .accessibilityValue(TripCopy.dayPosition(activeDay, of: dayCount))
+            step(1, symbol: "chevron.right", label: "Next day")
+        }
+    }
+
+    private func step(_ delta: Int, symbol: String, label: String) -> some View {
+        let target = activeDay + delta
+        let enabled = (0..<dayCount).contains(target)
+        return Button { onSelectDay(target) } label: {
+            Image(systemName: symbol)
+                .textStyle(.caption.weight(TextStyle.semibold))
+                .foregroundStyle(enabled ? Token.muted : Token.muted.opacity(0.3))
+                .frame(width: 30, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel(label)
     }
 }
 
@@ -433,72 +542,111 @@ private struct WeatherBadge: View {
 /// A stop's two lines, in the order `DESIGN.md` specifies: `why` first — why this stop suits
 /// *this* traveler — then `note`, the practical detail. `why` is optional because itineraries
 /// saved before the field existed do not carry it.
+/// One stop: two lines until you point at it.
+///
+/// **Collapsed by default, and that is the redesign.** Expanded, a row measured ~186pt — name,
+/// cost, time, `why`, `note` and a text field — so five stops were 978pt and a day did not fit
+/// the sheet at any height. Two lines is ~68pt and the whole day is scannable.
+///
+/// **One gesture, two effects.** Tapping expands the row *and* emphasises the stop on the map,
+/// because both mean "this one". No disclosure flag: `TripsStore.emphasise` already toggles and
+/// the map already answers to it, so the selection that existed is the disclosure.
+///
+/// What is hidden is what you read once when deciding (`why`), what you want while standing
+/// there (`note`), and a keyboard (`ActualCostField`). What is never hidden: the name, the
+/// time, the cost, and a clash with the stop before it.
 private struct StopRow: View {
     let stop: Stop
     /// The row and its point on the map take the accent together, which is the whole reason the
     /// index lives in the store rather than in either view.
     let isEmphasised: Bool
+    /// Set when this stop starts before the previous one ends.
+    let clash: Overlap.Finding?
     let onTap: () -> Void
     let onActualCost: (Double?) async -> Void
 
     var body: some View {
-        // **Not a Button wrapping everything any more.** A `TextField` inside a button is a
-        // control inside a control: the button swallows the tap and the field never gains focus.
-        // The emphasis tap moves to the content, and the cost field sits beside it.
+        // **Not a Button wrapping everything.** A `TextField` inside a button is a control
+        // inside a control: the button swallows the tap and the field never gains focus.
         content.onTapGesture(perform: onTap)
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(stop.name)
-                    .textStyle(.headingSmall.weight(TextStyle.medium))
-                    .foregroundStyle(Token.foreground)
-                Spacer(minLength: 8)
-                Text(Spend.of(cost: stop.cost, actual: stop.actualCost),
-                     format: .currency(code: "USD").precision(.fractionLength(0)))
-                    .textStyle(.money)
-                    .foregroundStyle(Token.money)
-            }
-            HStack(spacing: 6) {
-                Text(stop.time)
-                Text("·")
-                Text(stop.durationLabel)
-            }
-            .textStyle(.money.size(12))
-            .foregroundStyle(Token.muted)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: stop.category.symbol)
+                .textStyle(.caption)
+                .foregroundStyle(Token.accent)
+                .frame(width: 26, height: 26)
+                .background(Token.accent.opacity(isEmphasised ? 0.16 : 0.08))
+                .clipShape(Circle())
 
-            if let why = stop.why {
-                Text(why)
-                    .textStyle(.detail)
-                    .foregroundStyle(.white.opacity(0.85))
-            }
-            Text(stop.note)
-                .textStyle(.detail)
-                .foregroundStyle(Token.muted)
-            HStack {
-                Spacer(minLength: 0)
-                ActualCostField(
-                    estimate: stop.cost,
-                    actual: stop.actualCost,
-                    accessibilityName: stop.name,
-                    commit: onActualCost
-                )
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(stop.name)
+                        .textStyle(.headingSmall.weight(TextStyle.medium))
+                        .foregroundStyle(Token.foreground)
+                    Spacer(minLength: 8)
+                    Text(Spend.of(cost: stop.cost, actual: stop.actualCost),
+                         format: .currency(code: "USD").precision(.fractionLength(0)))
+                        .textStyle(.money)
+                        .foregroundStyle(Token.money)
+                }
+                Text([stop.time, stop.durationLabel].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .textStyle(.money.size(12))
+                    .foregroundStyle(Token.muted)
+
+                // Shown collapsed as well: a contradiction in the plan is not a detail you
+                // should have to open a row to find.
+                if let clash {
+                    Text("Starts \(clash.minutes) min before \(clash.previous) ends.")
+                        .textStyle(.caption)
+                        .foregroundStyle(Token.alert)
+                        .padding(.top, 2)
+                }
+
+                if isEmphasised {
+                    if let why = stop.why {
+                        Text(why)
+                            .textStyle(.detail)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .padding(.top, 4)
+                    }
+                    if !stop.note.isEmpty {
+                        Text(stop.note)
+                            .textStyle(.detail)
+                            .foregroundStyle(Token.muted)
+                    }
+                    HStack {
+                        Spacer(minLength: 0)
+                        ActualCostField(
+                            estimate: stop.cost,
+                            actual: stop.actualCost,
+                            accessibilityName: stop.name,
+                            commit: onActualCost
+                        )
+                    }
+                    .padding(.top, 2)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Token.gapRows)
-        .background(Color.white.opacity(isEmphasised ? 0.10 : 0.06))
+        .background(Color.white.opacity(isEmphasised ? 0.10 : 0.05))
         .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous)
                 .strokeBorder(Token.accent.opacity(isEmphasised ? 0.55 : 0), lineWidth: 1)
         )
+        .animation(.easeOut(duration: 0.2), value: isEmphasised)
     }
 }
 
 private struct LodgingRow: View {
     let lodging: Lodging
+    /// Whether the cost field is showing. Follows the same rule as a stop: a keyboard is a
+    /// deliberate thing to open, so it appears when nothing else is being pointed at rather
+    /// than sitting under every day.
+    let isOpen: Bool
     let onActualCost: (Double?) async -> Void
 
     var body: some View {
@@ -520,14 +668,16 @@ private struct LodgingRow: View {
                     .textStyle(.money)
                     .foregroundStyle(Token.money)
             }
-            HStack {
-                Spacer(minLength: 0)
-                ActualCostField(
-                    estimate: lodging.cost,
-                    actual: lodging.actualCost,
-                    accessibilityName: lodging.name,
-                    commit: onActualCost
-                )
+            if isOpen {
+                HStack {
+                    Spacer(minLength: 0)
+                    ActualCostField(
+                        estimate: lodging.cost,
+                        actual: lodging.actualCost,
+                        accessibilityName: lodging.name,
+                        commit: onActualCost
+                    )
+                }
             }
         }
         .padding(Token.gapRows)

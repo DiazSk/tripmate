@@ -194,7 +194,8 @@ private struct PanelContent: View {
                     onBack: { store.closeTrip() },
                     onActualCost: { day, stop, amount in
                         await store.setActualCost(day: day, stop: stop, to: amount)
-                    }
+                    },
+                    onKeep: { Task { await store.keep() } }
                 )
             } else {
                 TripsListView(

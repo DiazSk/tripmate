@@ -161,6 +161,36 @@ final class TripsStore {
         }
     }
 
+    /// Promote the open draft to a kept trip.
+    ///
+    /// **This closes a data-loss hole rather than adding a feature.** `updateTrip(status:)` has
+    /// existed since B2 and nothing on iOS has ever called it, so a plan generated on the phone
+    /// could not be kept at all — and `purgeStaleDrafts` sweeps unkept drafts after 30 days.
+    /// The web's `/trip/[id]` has carried a "Keep this trip" button the whole time.
+    ///
+    /// Optimistic with a rollback, the shape `setActualCost` and `delete` set: the banner is
+    /// the only thing on screen that answers to this, so waiting on a round trip to dismiss it
+    /// reads as a dead button.
+    func keep() async {
+        guard let trip = open, trip.resolvedStatus == .draft else { return }
+        let previousTrips = trips
+        let previousDrafts = drafts
+        open?.status = .saved
+        // The wall keys off these two lists, so the row has to move as well as the flag.
+        if let index = drafts.firstIndex(where: { $0.id == trip.id }) {
+            trips.insert(drafts.remove(at: index), at: 0)
+        }
+        message = nil
+        do {
+            _ = try await api.updateTrip(id: trip.id, itinerary: trip.itinerary, status: .saved)
+        } catch {
+            open?.status = .draft
+            trips = previousTrips
+            drafts = previousDrafts
+            message = "That didn't save. Check your connection and try again."
+        }
+    }
+
     /// Turns an error into something worth reading.
     ///
     /// The `throttled` and `spendCapReached` cases pass the server's string through untouched —
