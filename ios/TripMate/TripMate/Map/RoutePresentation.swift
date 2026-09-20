@@ -30,8 +30,12 @@ struct RoutePresentation: Equatable {
     }
 
     init?(trip: Trip, dayIndex: Int) {
-        let all = RouteGeometry.routeStops(trip.itinerary)
-        let dayStops = all.filter { $0.dayIndex == dayIndex }
+        self.init(allStops: RouteGeometry.routeStops(trip.itinerary), dayIndex: dayIndex)
+    }
+
+    /// The same presentation from a run still in progress.
+    init?(allStops: [RouteStop], dayIndex: Int) {
+        let dayStops = allStops.filter { $0.dayIndex == dayIndex }
         guard !dayStops.isEmpty else { return nil }
         self.dayIndex = dayIndex
         self.stops = dayStops

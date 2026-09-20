@@ -49,6 +49,60 @@ final class PlanStore {
     private(set) var poisAvailable = true
     private(set) var poisLoading = false
 
+    // MARK: The run, as it arrives
+
+    /// Every `stop` frame so far, in arrival order.
+    ///
+    /// **Kept rather than folded into an `Itinerary`.** `DayPlan` has no memberwise initialiser
+    /// by design, so a partial itinerary would need exactly the hand-written one its docstring
+    /// argues against. `RouteGeometry.routeStops(streamed:corrections:)` reads these directly.
+    private(set) var streamedStops: [StreamedStop] = []
+
+    /// `day-coords` fix-ups, `dayIndex → name → point`. The model's own coordinates are guesses
+    /// and the server re-geocodes each day once it closes.
+    private(set) var coordFixes: [Int: [String: GeoPoint]] = [:]
+
+    /// The highest day whose coordinates have been corrected, or nil before the first one.
+    ///
+    /// **This, and not the newest stop, is what moves the camera.** `useStreamingCamera` frames
+    /// only `days.slice(0, coordsDay + 1)` and says why: "a day still holding the model's own
+    /// guesses would widen the bounds by however far it guessed wrong, and then snap back." A
+    /// re-frame per arriving stop would also be a camera flight every few seconds for four
+    /// minutes.
+    private(set) var correctedDay: Int?
+
+    /// The day being written, which is the one worth drawing.
+    private var streamingDay: Int? { streamedStops.map(\.dayIndex).max() }
+
+    /// What the map should draw mid-run.
+    ///
+    /// **One day, where the web draws every day so far, and the divergence is the platform's.**
+    /// `RoutePresentation` is single-day everywhere in this app because `WorldMapView` draws one
+    /// day — that is how trip detail works too. The newest day is the one being written, so it
+    /// is the live thing; the finished plan is seconds away and shows the rest.
+    var streamingRoute: RoutePresentation? {
+        guard isGenerating, let day = streamingDay else { return nil }
+        return RoutePresentation(
+            allStops: RouteGeometry.routeStops(
+                streamed: streamedStops, corrections: coordFixes
+            ),
+            dayIndex: day
+        )
+    }
+
+    /// Changes only when a day's coordinates land, so the map redraws on every stop and
+    /// re-frames on neither more nor less than the web does.
+    var streamingRefitKey: String? {
+        guard isGenerating else { return nil }
+        return "run-\(correctedDay.map(String.init) ?? "none")"
+    }
+
+    /// The stops of the day being written, in order, for the sheet to list.
+    var streamingDayStops: [StreamedStop] {
+        guard let day = streamingDay else { return [] }
+        return streamedStops.filter { $0.dayIndex == day }.sorted { $0.stopIndex < $1.stopIndex }
+    }
+
     private let api: TripMateAPI
 
     init(api: TripMateAPI) {
@@ -103,6 +157,9 @@ final class PlanStore {
         message = nil
         previewPlace = nil
         arrivalPoints = []
+        streamedStops = []
+        coordFixes = [:]
+        correctedDay = nil
         candidatePois = []
         poisAvailable = true
         poisLoading = false
@@ -206,6 +263,9 @@ final class PlanStore {
         isGenerating = true
         stage = nil
         message = nil
+        streamedStops = []
+        coordFixes = [:]
+        correctedDay = nil
         defer { isGenerating = false }
 
         var result: GenerationResult?
@@ -228,8 +288,26 @@ final class PlanStore {
                         message = copy
                         return nil
                     }
-                case .stop, .dayCoords, .revised, .unknown:
-                    // B5's content: the live route draw and the revision diff.
+                case .stop(let streamed):
+                    // Written into its own slot rather than appended: a frame names its day and
+                    // index, and a re-sent one must replace rather than duplicate.
+                    if let existing = streamedStops.firstIndex(where: {
+                        $0.dayIndex == streamed.dayIndex && $0.stopIndex == streamed.stopIndex
+                    }) {
+                        streamedStops[existing] = streamed
+                    } else {
+                        streamedStops.append(streamed)
+                    }
+                case .dayCoords(let event):
+                    coordFixes[event.dayIndex] = event.coords.mapValues {
+                        GeoPoint(lat: $0.lat, lng: $0.lon)
+                    }
+                    // Monotonic: frames can arrive out of order and the camera should not walk
+                    // backwards through days it has already settled on.
+                    correctedDay = max(correctedDay ?? 0, event.dayIndex)
+                case .revised, .unknown:
+                    // The revision diff is still B5's: `revised` lands after `plan`, and this
+                    // loop has already stopped consuming by then.
                     continue
                 }
             }

@@ -58,6 +58,10 @@ struct WorldMapView: UIViewRepresentable {
         return map
     }
 
+    /// When to re-frame, as distinct from when to redraw. `nil` means "whenever the drawing
+    /// changes", which is right for any plan that arrives all at once.
+    var refitKey: String?
+
     func updateUIView(_ map: MKMapView, context: Context) {
         map.directionalLayoutMargins = Self.margins(clearing: exclusions, in: map.bounds)
         context.coordinator.onEmphasise = onEmphasise
@@ -75,11 +79,23 @@ struct WorldMapView: UIViewRepresentable {
 
     private func drawRoute(in map: MKMapView, coordinator: Coordinator) {
         let identity = route?.identity ?? ""
-        // `updateUIView` fires on any environment change — a fold, a rotation, a panel resize.
-        // Re-framing on all of those would yank the camera away from wherever the traveler had
-        // just dragged it, so the redraw is gated on the drawing actually being different.
-        guard coordinator.drawnIdentity != identity else { return }
+        // **Two gates, because redrawing and re-framing are different questions.** They are the
+        // same question for a finished plan, which arrives whole — so `refitKey` defaults to the
+        // drawing's own identity and nothing changes for it.
+        //
+        // A *streaming* plan asks them separately. Every arriving stop changes the drawing, and
+        // a camera flight per stop would be a flight every few seconds for four minutes — worse,
+        // it would fly to the model's own guessed coordinates and then snap back when the server
+        // re-geocodes the day. `useStreamingCamera` frames only the days whose coordinates have
+        // landed, and says exactly that. So the caller supplies a key that moves on `day-coords`
+        // and nothing else.
+        let refit = refitKey ?? identity
+        guard coordinator.drawnIdentity != identity || coordinator.refitKey != refit else {
+            return
+        }
+        let shouldFrame = coordinator.refitKey != refit
         coordinator.drawnIdentity = identity
+        coordinator.refitKey = refit
 
         map.removeOverlays(map.overlays)
         map.removeAnnotations(map.annotations.filter { $0 is StopAnnotation })
@@ -99,7 +115,7 @@ struct WorldMapView: UIViewRepresentable {
         )
         map.addAnnotations(route.stops.map(StopAnnotation.init(stop:)))
 
-        frame(route, in: map)
+        if shouldFrame { frame(route, in: map) }
     }
 
     /// The searched place, and a flight to it.
@@ -252,6 +268,9 @@ struct WorldMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate {
         /// The drawing currently on the map, so an unrelated layout change does not re-frame.
         var drawnIdentity: String?
+        /// The framing already applied, which for a streaming run moves far less often than
+        /// `drawnIdentity` does.
+        var refitKey: String?
         /// The pinned place currently on the map, gated apart from the route for the same reason.
         var pinnedID: String?
         /// The wizard destination already flown to.

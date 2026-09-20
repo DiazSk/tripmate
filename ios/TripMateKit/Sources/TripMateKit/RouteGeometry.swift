@@ -130,6 +130,54 @@ public enum RouteGeometry {
         return out
     }
 
+    /// The same flattening, from a stream that has not become an `Itinerary` yet.
+    ///
+    /// **A second entry point rather than a partial `Itinerary`, and that is deliberate.**
+    /// `DayPlan` has no memberwise initialiser on purpose — its docstring argues that a
+    /// hand-written one would drift from the custom decoder — so assembling a fake itinerary out
+    /// of `stop` frames would mean adding exactly the initialiser that comment rejects. The
+    /// drawing only ever needed day, order, coordinate and name, and those are all a
+    /// `StreamedStop` carries.
+    ///
+    /// **Sorted, because arrival order is not document order.** A `stop` frame names its own
+    /// `dayIndex` and `stopIndex`, so a late frame for an earlier slot must land in that slot —
+    /// appending in arrival order would draw the legs in the order the model happened to finish
+    /// writing them.
+    ///
+    /// `corrections` is the `day-coords` fix-up table, `dayIndex → name → point`. The model's own
+    /// coordinates are guesses and are sometimes badly wrong; the server re-geocodes each day and
+    /// sends the answers keyed by stop name, which is the same key the web applies them under.
+    public static func routeStops(
+        streamed: [StreamedStop],
+        corrections: [Int: [String: GeoPoint]] = [:]
+    ) -> [RouteStop] {
+        var out: [RouteStop] = []
+        let ordered = streamed.sorted {
+            ($0.dayIndex, $0.stopIndex) < ($1.dayIndex, $1.stopIndex)
+        }
+        var withinDay: [Int: Int] = [:]
+        for streamedStop in ordered {
+            let corrected = corrections[streamedStop.dayIndex]?[streamedStop.stop.name]
+            let point = corrected ?? GeoPoint(streamedStop.stop)
+            // Same rule as the finished plan: (0, 0) is a missing coordinate, not the Gulf of
+            // Guinea. A streaming plan hits this more often, because these are the model's own
+            // guesses until `day-coords` lands.
+            guard point.lat != 0 || point.lng != 0 else { continue }
+            let index = withinDay[streamedStop.dayIndex, default: 0]
+            out.append(
+                RouteStop(
+                    dayIndex: streamedStop.dayIndex,
+                    indexWithinDay: index,
+                    rawIndex: streamedStop.stopIndex,
+                    point: point,
+                    name: streamedStop.stop.name
+                )
+            )
+            withinDay[streamedStop.dayIndex] = index + 1
+        }
+        return out
+    }
+
     // MARK: - The 2D design
 
     /// Transcribed from MapLibre's own layers in `src/lib/maplibreRenderer.ts` — `-glow`,

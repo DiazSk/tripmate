@@ -144,6 +144,11 @@ struct PlanWizardView: View {
     /// **A generation is 60-150 s**, so silence is not an option, and the stage frames are already
     /// parsed by the client. B5 turns this into the real progress surface — the stage list, the
     /// stops appearing on the map as they stream, the staggered reveal.
+    /// The run, and the plan appearing inside it.
+    ///
+    /// **Measured on the web: a 7-day plan took eight minutes here and showed one line for all
+    /// of it**, while the browser had day 1 drawn on the map and named in a capsule inside the
+    /// first minute. The `stop` frames were arriving the whole time and were being discarded.
     private var waiting: some View {
         VStack(alignment: .leading, spacing: Token.gapRows) {
             HStack(spacing: 10) {
@@ -152,14 +157,59 @@ struct PlanWizardView: View {
                     .textStyle(.body)
                     .foregroundStyle(Token.foreground)
             }
-            Text("This takes a minute or two. \(plan.draft.days) days of \(plan.draft.destination).")
-                .textStyle(.detail)
-                .foregroundStyle(Token.muted)
+            Text(
+                "This takes a minute or two. \(plan.draft.days) days of "
+                    + "\(plan.draft.destination)."
+            )
+            .textStyle(.detail)
+            .foregroundStyle(Token.muted)
+
+            if !plan.streamingDayStops.isEmpty {
+                Hairline()
+                arriving
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Token.gapRows)
         .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+    }
+
+    /// The day currently being written, stop by stop.
+    ///
+    /// The *newest* day rather than all of them, matching what the map draws — a list that grows
+    /// past the sheet would either scroll on its own inside a scroller or push the stage line
+    /// off the top, and the finished plan is the place to read the whole trip.
+    private var arriving: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(dayHeading)
+                .textStyle(.label)
+                .foregroundStyle(Token.muted)
+
+            ForEach(plan.streamingDayStops, id: \.stopIndex) { streamed in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(streamed.stop.time)
+                        .textStyle(.money.size(12))
+                        .foregroundStyle(Token.muted)
+                        // The times are a column, so they are given one — ragged figures down
+                        // the left of a list read as a mistake.
+                        .frame(width: 62, alignment: .leading)
+                    Text(streamed.stop.name)
+                        .textStyle(.detail)
+                        .foregroundStyle(Token.foreground)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                // Each stop arrives on its own, so each one enters on its own.
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.24), value: plan.streamedStops.count)
+    }
+
+    private var dayHeading: String {
+        guard let first = plan.streamingDayStops.first else { return "" }
+        let date = first.date.isEmpty ? "" : " · " + DayDisplay.formatDate(first.date)
+        return "DAY \(first.dayIndex + 1)" + date
     }
 }
 

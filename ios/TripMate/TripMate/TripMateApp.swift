@@ -73,14 +73,18 @@ private struct RootView: View {
     var body: some View {
         AppShell(tab: $tab) {
             WorldMapView(
-                route: store.route,
+                // **The run outranks the open trip.** A generation started from a trip that is
+                // still open would otherwise draw that trip's day while the new plan writes
+                // itself; the thing being made is the thing to watch.
+                route: plan.streamingRoute ?? store.route,
                 // The panel counts stops in raw indices and the map's legs count in drawn ones.
                 // Converted here, once, rather than on either side. See `RouteStop.rawIndex`.
                 emphasis: store.emphasis.flatMap { store.route?.drawnIndex(forRawStop: $0) },
                 pin: search.pin,
                 focus: plan.previewRegion,
                 onEmphasise: { store.emphasise($0) },
-                onRegionSettled: { search.region = $0 }
+                onRegionSettled: { search.region = $0 },
+                refitKey: plan.streamingRefitKey
             )
         } panel: {
             PanelContent(
