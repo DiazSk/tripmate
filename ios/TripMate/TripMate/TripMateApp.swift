@@ -71,7 +71,10 @@ private struct RootView: View {
     @Environment(ProfileStore.self) private var profile
 
     var body: some View {
-        AppShell(tab: $tab, panelFloats: store.open != nil) {
+        // **A run floats too, because the run is drawn on the map.** Stops appear on the
+        // ground as they are written; a full-screen wizard would hide the one thing worth
+        // watching for the two to four minutes it takes.
+        AppShell(tab: $tab, panelFloats: store.open != nil || plan.isGenerating) {
             WorldMapView(
                 // **The run outranks the open trip.** A generation started from a trip that is
                 // still open would otherwise draw that trip's day while the new plan writes
@@ -193,6 +196,41 @@ private struct PanelContent: View {
         // the sheet on a phone, the docked column on an iPad — so that it is not drawn twice.
         .padding(Token.padCompact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // **Petra behind the questions, and only there.** The other pages have their own
+        // subject — photographs of your trips, your own answers — and a form has none, so it
+        // borrows the landing's. Applied *after* the padding so it reaches the screen's edges
+        // rather than stopping at the content's inset.
+        //
+        // Not while generating: the panel is over the live map then, and a second world behind
+        // the glass is exactly what the shell's `home()` note warns about.
+        .background {
+            if isPlanning, !plan.isGenerating { PlanBackdrop() }
+        }
+    }
+}
+
+/// The landing's poster, out of focus.
+///
+/// **A background, not a `ZStack` sibling.** `scaledToFill` reports the photograph's natural
+/// size as its ideal, so as a sibling it would size the panel to the image — the defect
+/// `PlacePhotoView` shipped and `e52ded8` fixed. A background is handed its parent's size and
+/// cannot push back.
+private struct PlanBackdrop: View {
+    var body: some View {
+        if let poster = HeroView.poster {
+            Image(uiImage: poster)
+                .resizable()
+                .scaledToFill()
+                // `opaque: true` samples the edge rather than transparency, or a 48pt blur
+                // fades the picture out into nothing at all four sides.
+                .blur(radius: 48, opaque: true)
+                // Darken-Never-Lighten, and it is load-bearing here rather than decorative:
+                // the form's labels are `Token.muted` on a dark ground, and Petra's sandstone
+                // is bright enough to take them under the contrast floor.
+                .overlay(Token.canvas.opacity(0.70))
+                .clipped()
+                .ignoresSafeArea()
+        }
     }
 }
 

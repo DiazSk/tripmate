@@ -118,7 +118,7 @@ private struct HeroFilm: UIViewRepresentable {
 }
 
 /// The photograph, the word, and nothing else.
-private struct HeroView: View {
+struct HeroView: View {
     let height: CGFloat
 
     /// Decoded once. A hero that re-decodes on every scroll frame is the cheapest possible

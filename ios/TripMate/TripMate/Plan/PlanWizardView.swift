@@ -644,7 +644,11 @@ private struct ReviewStep: View {
             SummaryRow(label: "Where", value: draft.destination) { plan.go(to: .basics) }
             Hairline()
             SummaryRow(
-                label: "When", value: "\(draft.startDate) → \(draft.endDate) · \(draft.days) days"
+                label: "When",
+                // Raw ISO here was the same defect the memories wall had: `2026-09-20 →
+                // 2026-09-26` is a database row, not a date somebody reads.
+                value: DayDisplay.formatRange(draft.startDate, draft.endDate)
+                    + " · \(draft.days) days"
             ) { plan.go(to: .basics) }
             Hairline()
             SummaryRow(
