@@ -175,12 +175,11 @@ struct WorldMapView: UIViewRepresentable {
     /// else stays inside it and needs no arithmetic. Reading it off the shell's `GeometryProxy`
     /// instead would report zero, the root being laid out inside the safe area already.
     ///
-    /// **One band at each edge, both `Token.barHeight`.** Below is the tab bar; above is the
-    /// map search field, which is 36pt in a 56pt band with room to spare. There is no measured
-    /// environment value for either, unlike the panel's width: the panel clamps to 360-520 so
-    /// its edge genuinely moves, while the bar is the same height on every screen at every
-    /// width — that is the whole content of the one-bar rule. An environment value measuring a
-    /// constant is machinery with nothing to measure.
+    /// **The top band is a constant; the bottom one is measured.** Above is the map search
+    /// field, 36pt inside a 56pt band, the same on every screen — a constant, so it is a token.
+    /// Below is the tab bar *and*, when there is one, the plan sheet, which is 132pt or 46% or
+    /// nearly the display and moves under a drag. That is why `bottomInset` is carried on
+    /// `PanelMetrics` beside the panel's width and the top is not: this type measures what moves.
     private func fit(_ rect: MKMapRect, in map: MKMapView) {
         let safe = map.safeAreaInsets
         map.setVisibleMapRect(
@@ -188,7 +187,7 @@ struct WorldMapView: UIViewRepresentable {
             edgePadding: UIEdgeInsets(
                 top: safe.top + Token.barHeight + Token.gapRows,
                 left: Token.padCompact,
-                bottom: safe.bottom + Token.barHeight + Token.gapRows,
+                bottom: panelMetrics.bottomInset + Token.gapRows,
                 right: max(0, panelMetrics.viewWidth - panelMetrics.freeWidth) + Token.padCompact
             ),
             animated: true

@@ -137,13 +137,10 @@ private struct PanelContent: View {
                 )
             }
         }
+        // The content's own inset. The *material* belongs to whichever container holds this —
+        // the sheet on a phone, the docked column on an iPad — so that it is not drawn twice.
         .padding(Token.padCompact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .glassPanel()
-        // The 68pt reservation moved from the top to the bottom with the bar. The top is now an
-        // ordinary gutter, because there is nothing up there any more.
-        .padding(.bottom, Token.barHeight + Token.gapRows)
-        .padding([.horizontal, .top], Token.padCompact)
     }
 }
 

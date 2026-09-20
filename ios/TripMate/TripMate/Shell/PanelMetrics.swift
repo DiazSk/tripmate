@@ -12,6 +12,14 @@ struct PanelMetrics: Equatable, Sendable {
     /// The strip left over for the map. Equal to `viewWidth` when the panel is full-bleed, which
     /// is the phone layout — there is no strip to aim at and centred framing is correct.
     var freeWidth: CGFloat = 0
+
+    /// What the chrome covers at the bottom, from the screen's edge.
+    ///
+    /// **Measured rather than a token, and that is the difference from the tab bar.** The bar is
+    /// the same height on every screen at every width, so it is a constant and `Token.barHeight`
+    /// is the whole story. The sheet is not: it is 132pt or 46% or nearly the display, and it
+    /// changes under a drag. A value that moves is exactly what this type exists to carry.
+    var bottomInset: CGFloat = 0
 }
 
 private struct PanelMetricsKey: EnvironmentKey {

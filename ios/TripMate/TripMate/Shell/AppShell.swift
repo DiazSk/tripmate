@@ -38,6 +38,7 @@ struct AppShell<World: View, Panel: View>: View {
     @ViewBuilder var panel: () -> Panel
 
     @State private var exclusions = ShellExclusions()
+    @State private var detent: PlanSheet<Panel>.Detent = .medium
 
     /// Below this width the panel covers the map; at or above it, the panel docks and leaves live
     /// map beside it.
@@ -84,12 +85,25 @@ struct AppShell<World: View, Panel: View>: View {
                     // Nothing. The Map tab *is* the absence of a panel — the map was always
                     // there, behind the glass; this is what it looks like with the glass gone.
                 } else if isDocked {
+                    // **The docked layout keeps the panel and does not get a sheet.** A sheet
+                    // answers "the panel is covering the map"; at >=600pt it is not, and there is
+                    // already live map beside it. Dragging a full-height column up and down would
+                    // be motion in answer to a problem this width does not have.
                     HStack(spacing: 0) {
                         Spacer(minLength: 0)
-                        panel().frame(width: panelWidth)
+                        panel()
+                            .glassPanel()
+                            .padding(.bottom, Token.barHeight + Token.gapRows)
+                            .padding([.horizontal, .top], Token.padCompact)
+                            .frame(width: panelWidth)
                     }
                 } else {
-                    panel()
+                    PlanSheet(
+                        detent: $detent,
+                        available: proxy.size,
+                        safeTop: proxy.safeAreaInsets.top,
+                        content: panel
+                    )
                 }
 
                 ChromeLayer(tab: $tab)
@@ -102,7 +116,14 @@ struct AppShell<World: View, Panel: View>: View {
                 \.panelMetrics,
                 PanelMetrics(
                     viewWidth: proxy.size.width,
-                    freeWidth: isDocked ? proxy.size.width - panelWidth : proxy.size.width
+                    freeWidth: isDocked ? proxy.size.width - panelWidth : proxy.size.width,
+                    // The tab bar alone where there is no sheet — the Map tab, and every docked
+                    // width. The sheet's own height where there is one.
+                    bottomInset: (tab == .map || isDocked)
+                        ? Token.barHeight + Token.gapRows
+                        : PlanSheet<Panel>.obstruction(
+                            detent, in: proxy.size, safeTop: proxy.safeAreaInsets.top
+                        )
                 )
             )
         }

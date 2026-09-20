@@ -124,15 +124,26 @@ The Map tab **stays**. It is not made redundant: it owns search, and selecting i
 "show me the ground" rather than a drag. But the sheet is what finally puts plan and map on screen
 together, which is the composition `DESIGN.md:538-586` wants and cannot have in a browser.
 
-**Two API details are load-bearing and must be verified before the phase is costed as one week.**
-`.presentationBackgroundInteraction(.enabled(upThrough: .medium))` is what keeps the map behind the
-sheet pannable and tappable — without it the sheet is modal and the composition is no better than
-the panel it replaces, only prettier. And `.presentationBackground` has to carry `Token.glassPanel`
-rather than the system's default sheet material, or the one-slate rule breaks at the largest
-surface in the app. Both are SwiftUI `.sheet` modifiers, iOS 16.4+; neither is verified in this
-codebase yet. If background interaction cannot be made to work alongside the existing
-`UIViewRepresentable` map, the fallback is a hand-rolled draggable container, and the estimate
-grows.
+**Built and verified 2026-09-19. The risk flagged here was not the one that bit.**
+
+The native `.sheet` with `.presentationDetents` was tried first and photographed. It *works*:
+`.presentationBackgroundInteraction(.enabled(upThrough: .medium))` does keep the map live behind
+it, which was the flagged concern. But a sheet presents at **window level and covers the tab
+bar** — the spike screenshot shows the map, the sheet, and no navigation at all. Apps shipping
+both put the tabs inside the sheet, which is a different design and would undo P0.
+
+So it is hand-rolled (`Shell/PlanSheet.swift`, ~100 lines), for the same second reason the tab bar
+is: the map must inset its framing by the sheet's current height, and a system sheet will not tell
+you what that is. Here the height is a value the view computes and publishes through
+`PanelMetrics.bottomInset`.
+
+**One deviation from this document:** it said not to add a vertical companion to `PanelMetrics`,
+on the grounds that the bar's height is a constant. That reasoning holds and now argues the other
+way — the *sheet* is 132pt or 46% or nearly the display and moves under a drag, so it is exactly
+what a measured environment value is for. `bottomInset` was added; the top inset stays a token.
+
+The hand-rolled sheet also differs from a real one deliberately: **it never covers the tab bar.**
+`large` stops short of it, so navigation is reachable at every height.
 
 **This is a frame change, like P0, so it lands before the page that lives in it** — P1 is trip
 detail, and trip detail *is* the sheet's content.
