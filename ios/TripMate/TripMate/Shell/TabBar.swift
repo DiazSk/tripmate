@@ -45,10 +45,18 @@ enum AppTab: String, CaseIterable, Identifiable {
 /// failure this phase exists to stop repeating. Here the height *is* `Token.barHeight`, read by
 /// this `.frame` and by `WorldMapView.fit` and by nothing else.
 ///
-/// **What that costs, stated rather than glossed:** there is no public `.isTab` trait, so
+/// **Liquid Glass is NOT among the costs, and an earlier reading of this said it was.**
+/// `glassEffect`, `GlassEffectContainer`, `glassEffectID`, `glassEffectUnion` and
+/// `glassEffectTransition` are all declared public API on `SwiftUICore` in the 27.0 SDK — a
+/// `View` extension and a container, not a `TabView` affordance. So the material and the
+/// selection morph are both reachable from here, and are used below. What is genuinely
+/// `TabView`-only is *behaviour*: `tabBarMinimizeBehavior` (hand-rolled as `compact`), the
+/// `tabViewBottomAccessory` slot, the `.search` tab role's separate pill, and the iPad sidebar
+/// adaptation. None of those is the effect.
+///
+/// **What it does cost, stated rather than glossed:** there is no public `.isTab` trait, so
 /// VoiceOver announces "Trips, selected, button" instead of "Trips, tab, one of four". That is a
-/// real loss. Double-tap-to-scroll-to-top and iOS 26's scroll-to-minimise go too, and neither is
-/// missed.
+/// real loss. Double-tap-to-scroll-to-top goes too, and it is not missed.
 struct TabBar: View {
     @Binding var selection: AppTab
     /// Scrolling down shrinks the whole bar; scrolling up grows it back. **The hand-rolled
@@ -61,17 +69,42 @@ struct TabBar: View {
     /// nothing in it.
     var compact = false
 
+    /// The one namespace the selection indicator is matched across. A `glassEffectID` only
+    /// morphs to another view carrying the same id in the same namespace, which is precisely
+    /// the tab-to-tab flight.
+    @Namespace private var glass
+
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(AppTab.allCases) { tab in
-                Button { selection = tab } label: {
-                    cell(for: tab)
+        // `spacing: 0`. The container is here for the morph, not to let the indicator merge into
+        // the bar's own glass: a non-zero spacing blends shapes within that distance, and at a
+        // bar's scale every cell is within any useful distance of every other.
+        GlassEffectContainer(spacing: 0) {
+            HStack(spacing: 0) {
+                ForEach(AppTab.allCases) { tab in
+                    Button {
+                        withAnimation(.smooth(duration: 0.32)) { selection = tab }
+                    } label: {
+                        cell(for: tab)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .frame(height: compact ? 46 : Token.barHeight)
+            // **Real Liquid Glass, and `.ultraThinMaterial` was not it.** That is the pre-26
+            // blur: frosted, flat, no refraction of what passes behind it, no specular edge, no
+            // reaction to a press. `glassPanel` still draws every other surface — this is the
+            // one place the system material is worth the divergence, because the bar is the
+            // only chrome that sits over moving content on every screen.
+            //
+            // Tinted with the same slate at the same alpha `glassPanel` uses, so the bar stays
+            // on the Darken-Never-Lighten side of `DESIGN.md` rather than reading as a bright
+            // pane laid over a dark app. Untinted glass over the map lightens it.
+            .glassEffect(
+                .regular.tint(Token.surfaceDeep.opacity(Token.panelOpacity)),
+                in: Capsule()
+            )
+            .overlay(Capsule().strokeBorder(Token.cardBorder, lineWidth: 1))
         }
-        .frame(height: compact ? 46 : Token.barHeight)
-        .glassPanel(radius: (compact ? 46 : Token.barHeight) / 2)
         // Anchored to the bottom so the bar shrinks in place rather than sliding up as it goes.
         .scaleEffect(compact ? 0.90 : 1, anchor: .bottom)
     }
@@ -96,6 +129,21 @@ struct TabBar: View {
         .foregroundStyle(isSelected ? Token.accent : Token.muted)
         .frame(maxWidth: .infinity)
         .frame(height: compact ? 46 : Token.barHeight)
+        // The indicator is one view that moves, not four that fade. `.interactive()` earns its
+        // place here rather than on the bar: the cell is what gets pressed, and putting it on
+        // the bar made the whole row flex under any tap.
+        .background {
+            if isSelected {
+                Capsule()
+                    .foregroundStyle(.clear)
+                    .glassEffect(
+                        .regular.tint(Token.accent.opacity(0.30)).interactive(),
+                        in: Capsule()
+                    )
+                    .glassEffectID("selection", in: glass)
+                    .padding(6)
+            }
+        }
         // Without this a `.plain` button hit-tests only its drawn glyph and text, leaving most
         // of a third of the bar dead. `MapSearchView`'s result rows record the same finding.
         .contentShape(Rectangle())
