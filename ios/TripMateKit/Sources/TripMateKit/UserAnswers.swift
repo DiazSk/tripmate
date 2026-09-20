@@ -162,6 +162,17 @@ public struct CandidatePoi: Codable, Sendable, Equatable {
     public let lon: Double
     public let kind: String?
 
+    /// **`kind` is spelled `category` on the wire, and getting that wrong was silent.** The
+    /// server's `CandidatePoi` declares `category`, `/api/trip-fetch` answers with it, and
+    /// `reconcile.ts` reads `p.category` to fill `kinds`. Without this mapping the field
+    /// decoded as `nil` on the way in and encoded as `"kind"` on the way out, so every POI the
+    /// traveller pinned reached the planner with no category at all — the stop still arrived,
+    /// stripped of what it was. Nothing failed; the plan was just quietly worse.
+    private enum CodingKeys: String, CodingKey {
+        case name, lat, lon
+        case kind = "category"
+    }
+
     public init(name: String, lat: Double, lon: Double, kind: String? = nil) {
         self.name = name
         self.lat = lat

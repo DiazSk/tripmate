@@ -498,6 +498,8 @@ private struct ReviewStep: View {
             summary
 
             Question("Anywhere you already know you want to go? (optional)") {
+                nearby
+
                 HStack(spacing: 8) {
                     PlainField(placeholder: "Palazzo Piccolomini", text: $pending)
                         .onSubmit(add)
@@ -512,11 +514,66 @@ private struct ReviewStep: View {
                         onTap: { name in plan.draft.customPois.removeAll { $0 == name } }
                     )
                 }
-                Text("Optional anchors only — the rest is chosen from your answers above.")
+                Text(anchorCaption)
                     .textStyle(.caption)
                     .foregroundStyle(Token.muted)
             }
+
+            Toggle("Tell me when it's ready", isOn: notifying)
+                .tint(Token.accent)
+                .textStyle(.body)
+                .foregroundStyle(Token.foreground)
+                .frame(minHeight: 44)
         }
+        // The warm-up runs when basics is left; this covers the traveller who jumped straight
+        // back to review through an Edit link, and is a no-op when it already ran.
+        .task { await plan.loadCandidatePois() }
+    }
+
+    /// What the destination has to offer, as things to pin.
+    ///
+    /// **Three outcomes and three sentences.** OpenTripMap unreachable is not "this city has
+    /// nothing", and neither is "still asking" — saying the wrong one of those invents a fact
+    /// about the destination.
+    @ViewBuilder private var nearby: some View {
+        if plan.poisLoading {
+            Text("Looking for places nearby…")
+                .textStyle(.caption)
+                .foregroundStyle(Token.muted)
+        } else if !plan.candidatePois.isEmpty {
+            TagGrid(
+                tags: plan.candidatePois.map(\.name),
+                isSelected: { name in plan.draft.selectedPois.contains { $0.name == name } },
+                onTap: { name in
+                    if let index = plan.draft.selectedPois.firstIndex(where: { $0.name == name }) {
+                        plan.draft.selectedPois.remove(at: index)
+                    } else if let poi = plan.candidatePois.first(where: { $0.name == name }) {
+                        plan.draft.selectedPois.append(poi)
+                    }
+                }
+            )
+        } else if !plan.poisAvailable {
+            Text("We couldn't reach the places list — name your own below.")
+                .textStyle(.caption)
+                .foregroundStyle(Token.muted)
+        }
+    }
+
+    private var anchorCaption: String {
+        let picked = plan.draft.selectedPois.count + plan.draft.customPois.count
+        let tail = "Optional anchors only — the rest is chosen from your answers above."
+        return picked == 0 ? tail : "\(picked) picked · \(tail.lowercasedFirst)"
+    }
+
+    /// Permission is asked on the way *on* and never on the way off.
+    private var notifying: Binding<Bool> {
+        Binding(
+            get: { plan.draft.notify },
+            set: { on in
+                plan.draft.notify = on
+                if on { Task { await plan.requestNotifyPermission() } }
+            }
+        )
     }
 
     private func add() {
@@ -791,12 +848,25 @@ private struct Chip: View {
     let action: () -> Void
     var starAction: (() -> Void)?
 
+    /// **Two targets in one pill, and both are 44pt.** The chip was 28pt tall with a star
+    /// roughly 16pt square inside it — two adjacent controls, both under the floor
+    /// `DESIGN.md:549` sets, and the smaller of them changes what the whole plan optimises for.
+    /// The web gets away with it because a mouse is exact.
+    ///
+    /// The cost is real and is width: a starrable chip is now its text plus 44pt, so fewer fit
+    /// per row and the grid is taller. The sheet sizes to its content, so it simply grows.
+    private static let target: CGFloat = 44
+
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 0) {
             Button(action: action) {
                 Text(text)
                     .textStyle(.caption.weight(TextStyle.medium))
                     .foregroundStyle(isSelected ? Token.accentForeground : Token.muted)
+                    .padding(.leading, 14)
+                    // The star's own box supplies the trailing inset when there is one.
+                    .padding(.trailing, starAction == nil ? 14 : 4)
+                    .frame(minHeight: Self.target)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -810,13 +880,12 @@ private struct Chip: View {
                                 ? Token.money
                                 : (isSelected ? Token.accentForeground.opacity(0.6) : Token.muted)
                         )
+                        .frame(width: Self.target, height: Self.target)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 6)
         .background(isSelected ? Token.accent : Color.white.opacity(0.08))
         .clipShape(Capsule())
     }
@@ -825,7 +894,7 @@ private struct Chip: View {
 /// Chips that wrap. `LazyVGrid` cannot do it — its columns are fixed, and a chip's width is its
 /// text — so this is the one layout worth hand-writing.
 struct FlowRow: Layout {
-    var spacing: CGFloat = 6
+    var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
@@ -1100,5 +1169,14 @@ struct GhostButtonStyle: ButtonStyle {
             .padding(.vertical, 10)
             .background(Color.white.opacity(configuration.isPressed ? 0.12 : 0.06))
             .clipShape(Capsule())
+    }
+}
+
+
+extension String {
+    /// "Optional anchors only…" reads as a sentence on its own and as a clause after a count.
+    var lowercasedFirst: String {
+        guard let first else { return self }
+        return first.lowercased() + dropFirst()
     }
 }

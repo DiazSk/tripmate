@@ -233,6 +233,16 @@ public struct TripMateAPI: Sendable {
     }
 
     private struct ArrivalPointsEnvelope: Decodable { let points: [ArrivalPoint] }
+    private struct RawFetchEnvelope: Decodable {
+        struct RawFetch: Decodable {
+            struct Candidates: Decodable {
+                let available: Bool
+                let pois: [CandidatePoi]
+            }
+            let candidatePois: Candidates
+        }
+        let rawFetch: RawFetch
+    }
     /// Both directions: the route answers `{"profile": …}` and reads `body?.profile`.
     private struct ProfileEnvelope: Codable { let profile: TravelerProfile? }
 
@@ -246,6 +256,43 @@ public struct TripMateAPI: Sendable {
     /// outage, because the field it feeds is optional and free-text — an error here would
     /// surface on a question nobody was required to answer. This mirrors that: a failure is an
     /// empty list, not a thrown error.
+    /// `POST /api/trip-fetch` — the places worth pinning before the plan is written.
+    ///
+    /// **The route returns the whole preference-independent bundle and this reads one field of
+    /// it.** `rawFetch` also carries weather, holidays, highways and city geometry, none of
+    /// which the picker needs; decoding only `candidatePois` keeps the four other shapes out of
+    /// this client until something asks for them. The server does the work either way — the web
+    /// fires this same call to warm its cache the moment the traveller leaves the basics step.
+    ///
+    /// **Never throws**, for the same reason `arrivalPoints` does not: these are optional
+    /// anchors on an optional question. `available: false` and an empty list are different
+    /// facts — the first means OpenTripMap could not be reached, the second means it had
+    /// nothing — and the caller is told which.
+    public func candidatePois(
+        destination: String, startDate: String, endDate: String
+    ) async -> (available: Bool, pois: [CandidatePoi]) {
+        struct Body: Encodable {
+            let destination: String
+            let startDate: String
+            let endDate: String
+        }
+        do {
+            let envelope = try await send(
+                await post(
+                    "/api/trip-fetch",
+                    body: Body(
+                        destination: destination, startDate: startDate, endDate: endDate
+                    )
+                ),
+                as: RawFetchEnvelope.self
+            )
+            return (envelope.rawFetch.candidatePois.available,
+                    envelope.rawFetch.candidatePois.pois)
+        } catch {
+            return (false, [])
+        }
+    }
+
     public func arrivalPoints(lat: Double, lng: Double) async -> [ArrivalPoint] {
         do {
             let request = try await get(

@@ -80,6 +80,14 @@ public struct PlanDraft: Sendable, Equatable {
 
     public var customPois: [String] = []
     public var selectedPois: [CandidatePoi] = []
+    /// Tell me when it's done.
+    ///
+    /// **Not sent to the server, and it is not a stub.** A3's push would need a job record and
+    /// APNs, neither of which exists; but generation runs in this process and takes two to four
+    /// minutes, so the case that actually matters — the traveller backgrounds the app while it
+    /// writes — is answered by a *local* notification with no backend at all. When A3 lands,
+    /// this becomes the flag that asks for the push instead.
+    public var notify = false
 
     public init() {}
 

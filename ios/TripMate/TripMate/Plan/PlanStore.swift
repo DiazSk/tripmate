@@ -1,5 +1,7 @@
 import Foundation
 import MapKit
+import UIKit
+import UserNotifications
 import Observation
 import TripMateKit
 
@@ -36,6 +38,17 @@ final class PlanStore {
     /// traveler a convenience, not the form.
     private(set) var arrivalPoints: [ArrivalPoint] = []
 
+    /// Places worth pinning, and whether the question could be asked at all.
+    ///
+    /// **Three states, not two.** `available == false` means OpenTripMap could not be reached
+    /// (or has no key — `OPENTRIP_API_KEY` is misspelled in `.env.local` and has been for a
+    /// while); an empty list with `available == true` means it answered and had nothing. The
+    /// review step says something different for each, because "we couldn't look" and "there is
+    /// nothing here" are not the same sentence.
+    private(set) var candidatePois: [CandidatePoi] = []
+    private(set) var poisAvailable = true
+    private(set) var poisLoading = false
+
     private let api: TripMateAPI
 
     init(api: TripMateAPI) {
@@ -65,6 +78,10 @@ final class PlanStore {
         guard draft.canAdvance(from: step), let next = step.next else { return }
         message = nil
         step = next
+        // Warmed on the way out of basics rather than on arrival at review, which is what the
+        // web does and for the same reason: the fetch is several seconds of OpenTripMap and
+        // two more steps of answering is exactly long enough to hide it.
+        if next == .group { Task { await loadCandidatePois() } }
     }
 
     func back() {
@@ -86,6 +103,34 @@ final class PlanStore {
         message = nil
         previewPlace = nil
         arrivalPoints = []
+        candidatePois = []
+        poisAvailable = true
+        poisLoading = false
+        fetchedFor = ""
+    }
+
+    // MARK: - Candidate places
+
+    /// **Keyed on the trip, so editing the destination re-asks and re-typing the same one does
+    /// not.** Going back to basics and forward again is the ordinary path through this wizard,
+    /// and it would otherwise re-run a multi-second fetch on every pass.
+    private var fetchedFor = ""
+
+    func loadCandidatePois() async {
+        let key = "\(draft.destination)|\(draft.startDate)|\(draft.endDate)"
+        guard !draft.destination.isEmpty, !draft.startDate.isEmpty, !draft.endDate.isEmpty,
+              key != fetchedFor
+        else { return }
+        fetchedFor = key
+        poisLoading = true
+        let found = await api.candidatePois(
+            destination: draft.destination, startDate: draft.startDate, endDate: draft.endDate
+        )
+        poisLoading = false
+        poisAvailable = found.available
+        candidatePois = found.pois
+        // A destination edited after picking leaves anchors belonging to the old city.
+        draft.selectedPois.removeAll { picked in !found.pois.contains { $0.name == picked.name } }
     }
 
     // MARK: - Geocode
@@ -201,6 +246,8 @@ final class PlanStore {
             return nil
         }
 
+        if draft.notify { await Self.announce(destination: draft.destination) }
+
         do {
             return try await api.createTrip(
                 draft.draftRequest(
@@ -211,6 +258,33 @@ final class PlanStore {
             message = Self.describe(error)
             return nil
         }
+    }
+
+    /// **Only when the app is not in front.** A banner over the screen already showing the
+    /// finished plan is noise, and iOS suppresses it by default anyway — asking for it
+    /// explicitly is how you get a notification nobody needed.
+    private static func announce(destination: String) async {
+        let center = UNUserNotificationCenter.current()
+        guard UIApplication.shared.applicationState != .active else { return }
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+        let content = UNMutableNotificationContent()
+        content.title = destination.isEmpty ? "Your plan is ready" : "\(destination) is planned"
+        content.body = "Your itinerary finished writing."
+        content.sound = .default
+        // `nil` trigger delivers immediately.
+        try? await center.add(
+            UNNotificationRequest(
+                identifier: UUID().uuidString, content: content, trigger: nil
+            )
+        )
+    }
+
+    /// Asked at the moment the traveller turns the switch on, which is the only moment the
+    /// request explains itself. Asking at launch is how an app gets denied by default.
+    func requestNotifyPermission() async {
+        _ = try? await UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .sound])
     }
 
     /// Same mapping as `TripsStore.describe`, and deliberately a copy of the *policy* rather than a
