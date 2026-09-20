@@ -8,7 +8,7 @@ import ProfileForm from "./ProfileForm";
 /**
  * Server half of `/profile`: reads the saved traveler profile and hands it to the form.
  *
- * Worth being precise about what this buys, because it is not streaming. `better-sqlite3` is a
+ * Worth being precise about what this buys, because it is not streaming. `libsql` is a
  * synchronous driver, so `readProfile()` returns before this function does — there is nothing to
  * suspend on and a `<Suspense>` boundary or `loading.tsx` here would wrap something that never
  * pends. What it removes is the round trip: the form used to render defaults, mount, fetch
@@ -44,10 +44,13 @@ export const dynamic = "force-dynamic";
 const RECENT_TRIP_COUNT = 3;
 
 export default async function ProfilePage() {
+  // One resolve, two reads: the profile and the trips belong to the same caller, and awaiting
+  // `currentOwnerId()` twice in one render would invite them to drift.
+  const ownerId = await currentOwnerId();
   return (
     <ProfileForm
-      initialProfile={readProfile()}
-      recentTrips={listTrips("saved", await currentOwnerId()).slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
+      initialProfile={readProfile(ownerId)}
+      recentTrips={listTrips("saved", ownerId).slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
     />
   );
 }

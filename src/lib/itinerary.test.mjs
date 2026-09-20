@@ -13,6 +13,7 @@ import {
   dayPlanned,
   daySpend,
   daySpendByCategory,
+  itineraryRejection,
   normalizeCategory,
   normalizeDays,
   tripSpend,
@@ -89,8 +90,14 @@ test("normalizeDays repairs what the model and old database rows send", () => {
   assert.deepEqual(day.stops, []);
   assert.equal(day.lodging.cost, 80);
 
+  // Coordinates on the fixture because this case is about coercing `category` and `cost`, and a
+  // stop with none is now dropped before it reaches either — see the test below for why.
   const [withStop] = normalizeDays([
-    { date: "2026-09-01", weather: "", stops: [{ name: "x", cost: "12", category: "nope" }] },
+    {
+      date: "2026-09-01",
+      weather: "",
+      stops: [{ name: "x", lat: 41.15, lng: -8.61, cost: "12", category: "nope" }],
+    },
   ]);
   assert.equal(withStop.stops[0].category, "other");
   assert.equal(withStop.stops[0].cost, 12);
@@ -282,4 +289,68 @@ test("budgetSegments: a one-day trip is a single span with no separator to draw"
   const segments = budgetSegments([dayCosting(250)], 1000);
   assert.equal(segments.length, 1);
   assert.deepEqual(segments[0], { dayIndex: 0, spend: 250, width: 25, left: 0 });
+});
+
+test("normalizeDays drops a stop with no coordinates, which would 500 the trip page", () => {
+  // Not hypothetical: `POST /api/trips` stores an unvalidated itinerary, and `useDayRoute` then
+  // builds an OSRM key with `lat.toFixed(5)` during server render.
+  const [day] = normalizeDays([
+    {
+      date: "2026-10-10",
+      stops: [
+        { name: "no coords", cost: 0, category: "sight" },
+        { name: "placed", lat: 41.147, lng: -8.6148, cost: 10, category: "sight" },
+      ],
+    },
+  ]);
+  assert.deepEqual(
+    day.stops.map((s) => s.name),
+    ["placed"]
+  );
+});
+
+test("normalizeDays keeps 0/0, which is a real coordinate and not a missing one", () => {
+  const [day] = normalizeDays([
+    { date: "2026-10-10", stops: [{ name: "Null Island", lat: 0, lng: 0, cost: 0, category: "sight" }] },
+  ]);
+  assert.equal(day.stops.length, 1);
+});
+
+test("itineraryRejection refuses a stop with no coordinates, and names it", () => {
+  const reason = itineraryRejection({
+    days: [{ date: "2026-10-10", stops: [{ name: "Mercado do Bolhão", cost: 0 }] }],
+  });
+  assert.match(reason, /Mercado do Bolhão/);
+  assert.match(reason, /coordinates/);
+});
+
+test("itineraryRejection accepts what normalizeDays can repair", () => {
+  // The dividing line: a junk cost and an unknown category are coerced on read, so refusing them
+  // here would reject plans that render perfectly well.
+  assert.equal(
+    itineraryRejection({
+      days: [{ stops: [{ name: "x", lat: 1, lng: 2, cost: "banana", category: "nope" }] }],
+    }),
+    null
+  );
+});
+
+test("itineraryRejection allows an empty day and a day with no stops key", () => {
+  assert.equal(itineraryRejection({ days: [{ date: "d", stops: [] }, { date: "e" }] }), null);
+});
+
+test("itineraryRejection rejects a shape the storage layer cannot read", () => {
+  assert.match(itineraryRejection(null), /missing/i);
+  assert.match(itineraryRejection({}), /no days/i);
+  assert.match(itineraryRejection({ days: "nope" }), /no days/i);
+  assert.match(itineraryRejection({ days: [{ stops: "nope" }] }), /no list of stops/i);
+  assert.match(itineraryRejection({ days: [{ stops: [null] }] }), /not a stop/i);
+});
+
+test("itineraryRejection keeps 0/0, and rejects NaN", () => {
+  assert.equal(itineraryRejection({ days: [{ stops: [{ name: "n", lat: 0, lng: 0 }] }] }), null);
+  assert.match(
+    itineraryRejection({ days: [{ stops: [{ name: "n", lat: NaN, lng: 0 }] }] }),
+    /coordinates/
+  );
 });

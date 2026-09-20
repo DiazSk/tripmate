@@ -9,7 +9,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
  * the street path drawn on the map, and the travel beats in a story film. One cache, one key.
  *
  * **Deliberately not importing `osrmRoute.ts`.** That module reaches `fetchCache.ts` and therefore
- * `better-sqlite3`, which is exactly what `serverFetchCached.ts`'s header warns a client-reachable
+ * `libsql`, which is exactly what `serverFetchCached.ts`'s header warns a client-reachable
  * module must never do. Everything here goes through `GET /api/route`, which does the real caching
  * in SQLite; this module's map is only a per-session dedupe in front of it.
  */

@@ -4,6 +4,7 @@ import {
   DAY_PALETTES,
   arcLift,
   buildDayClusters,
+  placeableStops,
   dayColorToken,
   dayGlowToken,
   dayPalette,
@@ -559,4 +560,29 @@ test("the axis is measured on the ground, not in raw degrees of longitude", () =
     Math.abs(offUnscaled - 90) > 5,
     "heading is perpendicular to the unscaled axis, so the cos(lat) scaling is not being applied"
   );
+});
+
+const PLACED = { lat: 41.15, lng: -8.61, name: "Bolhão", day: 0 };
+
+test("placeableStops drops a stop with no coordinates rather than letting NaN reach the map", () => {
+  // The real shape of the bug: `POST /api/trips` stores an itinerary with no validation, so a
+  // stop can arrive with no lat/lng despite the type saying otherwise. Undefined becomes NaN,
+  // MapLibre throws `Invalid LngLat object: (NaN, NaN)` out of the draw, and the camera flight
+  // dies mid-air — observed on a real trip page, stranded over Algeria.
+  assert.deepEqual(placeableStops([[PLACED, { name: "no coords", day: 0 }]]), [[PLACED]]);
+});
+
+test("placeableStops rejects NaN and Infinity, not only absent values", () => {
+  const days = [[{ ...PLACED, lat: NaN }, { ...PLACED, lng: Infinity }, PLACED]];
+  assert.deepEqual(placeableStops(days), [[PLACED]]);
+});
+
+test("placeableStops keeps the empty day, and keeps 0/0 which is a real coordinate", () => {
+  const zero = { lat: 0, lng: 0, name: "Null Island", day: 1 };
+  assert.deepEqual(placeableStops([[{ name: "bad", day: 0 }], [zero]]), [[], [zero]]);
+});
+
+test("placeableStops leaves a fully-placed trip untouched", () => {
+  const days = [[PLACED], [{ ...PLACED, day: 1 }]];
+  assert.deepEqual(placeableStops(days), days);
 });

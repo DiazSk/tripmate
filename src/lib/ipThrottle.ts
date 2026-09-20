@@ -9,18 +9,24 @@ const MAX_PER_WINDOW = 3;
 
 const recentByIp = new Map<string, number[]>();
 
-function clientIp(req: { headers: { get(name: string): string | null } }): string {
+/** Null when there is no per-IP signal at all, which is the case this guard must sit out. */
+function clientIp(req: { headers: { get(name: string): string | null } }): string | null {
   const forwarded = req.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || "unknown";
+  return forwarded?.split(",")[0]?.trim() || null;
 }
 
 export function isThrottled(req: { headers: { get(name: string): string | null } }): boolean {
-  // Only the deployed/API-transport environment has a real per-IP signal (a proxy sets
-  // x-forwarded-for) and only it needs protecting. Local CLI-transport dev has no such header —
-  // every request lands in one shared "unknown" bucket — so gate on transport the same way
-  // spendCap.ts no-ops when unconfigured, rather than let a normal local session trip this.
-  if (process.env.LLM_TRANSPORT !== "api") return false;
+  // **Gated on having a per-IP signal, not on the transport.** It used to require
+  // `LLM_TRANSPORT === "api"`, on the reasoning that only the deployed environment both has an
+  // `x-forwarded-for` and costs money. The first half of that is the real condition and the
+  // second half is not: a CLI-transport server reached through a tunnel has real, distinct
+  // client IPs and is spending a subscription's rate limit plus minutes of one laptop's CPU per
+  // generation — and under the old gate it had no throttle whatsoever.
+  //
+  // Absent header still means sit out, for the original reason: a direct localhost request has
+  // no signal, every caller would share one bucket, and a normal dev session would trip this.
   const ip = clientIp(req);
+  if (!ip) return false;
   const now = Date.now();
   const recent = (recentByIp.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
   recent.push(now);

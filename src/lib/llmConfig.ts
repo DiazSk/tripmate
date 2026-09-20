@@ -159,6 +159,30 @@ export function storyModel(): string {
 }
 
 /**
+ * The plan's second opinion.
+ *
+ * **Cheap tier, and this is the app's single largest cost lever rather than a tidy-up.** Measured
+ * off the token counts in `docs/product-readiness.md` re-priced at today's rates, `critique` was
+ * $0.125 of a $0.243 generation — 51% of the bill, on the most expensive model, for a pass whose
+ * marginal contribution to quality has never been measured. `generationRunner.ts:210` already
+ * records a 35% failure rate for it, and 5 of the 8 timeouts in that data are critique giving up.
+ * On the cheap tier the same call is ~$0.025, which takes a generation to ~$0.143.
+ *
+ * It keeps its own knob rather than riding `cheapModel()` because this is the one call here whose
+ * downgrade is *unvalidated*: the benchmark runs `generateItinerary()`, which makes a single LLM
+ * call and no critique at all, so nothing in this repo can currently score a critiqued plan
+ * against an uncritiqued one. `LLM_MODEL_CRITIQUE=claude-opus-5` puts it back with no code change,
+ * and is the right move the moment a reviewer says plans got worse.
+ *
+ * Note what does *not* need changing alongside: `apiEffortFor("critique")` still returns
+ * `"medium"`, and `supportsEffort()` drops it for a model that would 400 on it — so the cheap tier
+ * simply receives no `effort`, which is the gate working as designed rather than a special case.
+ */
+export function critiqueModel(): string {
+  return envModel("LLM_MODEL_CRITIQUE", cheapModel());
+}
+
+/**
  * Which model serves a given call on the **API path**.
  *
  * The CLI path does NOT consult this — it stays pinned to `MODEL` (`claude-sonnet-4-5`), whose
@@ -166,10 +190,11 @@ export function storyModel(): string {
  * CLI elsewhere would invalidate that calibration without re-measuring it.
  *
  * The split is by *what the call has to do*, not by how long its prompt is:
- *   - strong — writes or rewrites a whole plan from facts (generate, refine, rebalance), or judges
- *     one end to end (critique). Getting this wrong costs the traveller the entire product.
+ *   - strong — writes or rewrites a whole plan from facts (generate, refine, rebalance). Getting
+ *     this wrong costs the traveller the entire product.
  *   - cheap  — works against a plan that already exists: patch one thing (chat, element-edit),
- *     look one thing up (place-detail, context). Bounded, well-specified, latency-sensitive.
+ *     look one thing up (place-detail, context), review one (critique). Bounded and
+ *     well-specified, with the plan itself supplying every fact the call reasons over.
  *
  * `judge` sits on the strong tier because a benchmark scored by a weaker model than the ones under
  * test measures the judge. It is dev-only and the bench harness usually passes `meta.model`
@@ -180,9 +205,10 @@ export function apiModelFor(type: ClaudeCallType): string {
     case "generate":
     case "refine":
     case "rebalance":
-    case "critique":
     case "judge":
       return strongModel();
+    case "critique":
+      return critiqueModel();
     case "chat":
       return chatModel();
     case "story":
