@@ -51,6 +51,11 @@ enum AppTab: String, CaseIterable, Identifiable {
 /// missed.
 struct TabBar: View {
     @Binding var selection: AppTab
+    /// Scrolling down hides the label and shrinks the bar to its icons; scrolling up brings it
+    /// back. **The hand-rolled stand-in for iOS 26's `tabBarMinimizeBehavior`**, which only
+    /// applies to a system `TabView` — the thing this is not, for the reason in the docstring
+    /// above.
+    var compact = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -61,8 +66,8 @@ struct TabBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .frame(height: Token.barHeight)
-        .glassPanel(radius: Token.barHeight / 2)
+        .frame(height: compact ? 40 : Token.barHeight)
+        .glassPanel(radius: (compact ? 40 : Token.barHeight) / 2)
     }
 
     private func cell(for tab: AppTab) -> some View {
@@ -70,18 +75,21 @@ struct TabBar: View {
         return VStack(spacing: 2) {
             Image(systemName: isSelected ? "\(tab.symbol).fill" : tab.symbol)
                 .textStyle(.detail)
-            Text(tab.label)
-                .textStyle(.micro)
-                // A fixed-height bar cannot grow for Dynamic Type, so the label shrinks rather
-                // than clipping. Checked at AX3.
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            if !compact {
+                Text(tab.label)
+                    .textStyle(.micro)
+                    // A fixed-height bar cannot grow for Dynamic Type, so the label shrinks
+                    // rather than clipping. Checked at AX3.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .transition(.opacity)
+            }
         }
         // `DesignTokens` lists "the selected day" among the accent's sanctioned uses — action and
         // current position, never a readout. A selected tab is that same class of thing.
         .foregroundStyle(isSelected ? Token.accent : Token.muted)
         .frame(maxWidth: .infinity)
-        .frame(height: Token.barHeight)
+        .frame(height: compact ? 40 : Token.barHeight)
         // Without this a `.plain` button hit-tests only its drawn glyph and text, leaving most
         // of a third of the bar dead. `MapSearchView`'s result rows record the same finding.
         .contentShape(Rectangle())

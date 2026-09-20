@@ -22,6 +22,10 @@ enum SceneImage {
 private struct ScenePhoto: View {
     let name: String
     let ratio: Double
+    /// **0 for a full-bleed strip.** A rounded corner on an image that runs to both screen
+    /// edges reads as a mistake: the radius has nothing to sit against, so it just clips the
+    /// picture. Either it is inset and rounded, or it is full width and square.
+    var radius: CGFloat = Token.radiusMedium
 
     var body: some View {
         // The slate under every photograph, as everywhere else: a picture that has not decoded
@@ -34,7 +38,7 @@ private struct ScenePhoto: View {
                 }
             }
             .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
 }
 
@@ -285,13 +289,16 @@ struct ReachBand: View {
                 .textStyle(.body)
                 .foregroundStyle(Token.muted)
                 .padding(.top, 12)
-            // ponytail: the stippled world map is not here yet. It is `worldLand.ts`, a ~38 KB
-            // Natural Earth path, and rendering it natively needs either an SVG path parser or a
-            // pre-rendered asset — a decision, not a detail. The band's argument still lands in
-            // the prose; the drawing makes it denser.
+            // **A pre-rendered image, not a ported `worldLand.ts`.** That is a ~38 KB Natural
+            // Earth path and rendering it natively needs an SVG path parser — for a drawing that
+            // never changes. A bundled asset is the same picture for none of the code.
             //
-            // The plan markers stay off it whatever happens: three targets 13px apart fail
-            // WCAG 2.2 spacing, which is why the web hides them below `lg`.
+            // No plan markers on it. Three targets 13px apart fail WCAG 2.2 spacing, which is
+            // why the web hides them below `lg`, and a native rebuild does not make them fit.
+            // The density of the drawing is the argument here; four pins are not.
+            ScenePhoto(name: "world-map", ratio: 1200.0 / 844.0)
+                .padding(.top, 22)
+                .accessibilityLabel("A world map. The planner works anywhere you can name.")
         }
     }
 }
@@ -306,7 +313,7 @@ struct LandingFooter: View {
                 .fill(Token.cardBorder)
                 .frame(height: 1)
                 .padding(.bottom, 46)
-            ScenePhoto(name: "graubunden-autumn-valley", ratio: 16.0 / 5.0)
+            ScenePhoto(name: "graubunden-autumn-valley", ratio: 16.0 / 5.0, radius: 0)
                 .padding(.horizontal, -Token.padCompact)
 
             Text("TripMate")

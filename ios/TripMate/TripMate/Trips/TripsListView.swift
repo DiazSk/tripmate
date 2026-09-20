@@ -9,6 +9,7 @@ import TripMateKit
 /// a card with no photograph yet is the correct *base state*, not a stub, and the photo layer
 /// arrives with the image pipeline rather than being faked here.
 struct TripsListView: View {
+    @Environment(Chrome.self) private var chrome
     let store: TripsStore
     let onOpen: (TripSummary) -> Void
     let onPlan: () -> Void
@@ -48,6 +49,7 @@ struct TripsListView: View {
                         }
                     }
                 }
+                .shrinksTabBar(chrome)
             }
 
             Spacer(minLength: 0)

@@ -11,6 +11,7 @@ import TripMateKit
 /// **It is a real screen with a working capsule**, not a first-run that vanishes, so the hero has
 /// to leave room for that capsule at rest — see `heroHeight`.
 struct HomeView: View {
+    @Environment(Chrome.self) private var chrome
     let plan: PlanStore
     /// Opens the wizard, seeded from whatever the capsule already holds.
     let onPlan: () -> Void
@@ -47,6 +48,7 @@ struct HomeView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .shrinksTabBar(chrome)
             .ignoresSafeArea(edges: .top)
             // **Home paints its own ground.** The map is still mounted behind every tab, and
             // without this it showed through beneath the capsule — two worlds at once. The web

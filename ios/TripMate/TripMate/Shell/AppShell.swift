@@ -40,6 +40,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
 
     @State private var exclusions = ShellExclusions()
     @State private var detent: PlanSheet<Panel>.Detent = .medium
+    @State private var chrome = Chrome()
 
     /// Below this width the panel covers the map; at or above it, the panel docks and leaves live
     /// map beside it.
@@ -113,7 +114,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                     )
                 }
 
-                ChromeLayer(tab: $tab)
+                ChromeLayer(tab: $tab, compact: chrome.barCompact)
             }
             // Measured rather than assumed, and set here because this is where the size is known.
             // The camera needs the panel's *real* edge: the panel clamps to a 360-520pt range, so
@@ -134,6 +135,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                 )
             )
         }
+        .environment(chrome)
         .environment(\.shellExclusions, exclusions)
         // One measurement of the hardware for the whole app; a second measurer would eventually
         // disagree with the first. Currently always empty — see `ShellExclusions`.
@@ -161,6 +163,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
 /// bar at the bottom, which at least navigates.
 private struct ChromeLayer: View {
     @Binding var tab: AppTab
+    let compact: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -181,7 +184,7 @@ private struct ChromeLayer: View {
 
             Spacer()
 
-            TabBar(selection: $tab)
+            TabBar(selection: $tab, compact: compact)
                 .padding(.horizontal, Token.padCompact)
                 .padding(.bottom, Token.gapRows)
         }

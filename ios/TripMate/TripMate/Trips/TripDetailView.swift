@@ -8,6 +8,7 @@ import TripMateKit
 /// belong to the edit and generation flows. Building their affordances before the flows exist
 /// would be chrome that does nothing.
 struct TripDetailView: View {
+    @Environment(Chrome.self) private var chrome
     let trip: Trip
     let activeDay: Int
     /// Which stop is being pointed at, as a raw index into `DayPlan.stops`.
@@ -41,6 +42,7 @@ struct TripDetailView: View {
             }
         }
         .scrollIndicators(.hidden)
+        .shrinksTabBar(chrome)
     }
 
     private var header: some View {
