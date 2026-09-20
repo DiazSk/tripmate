@@ -93,6 +93,32 @@ final class TripsStore {
         open = nil
     }
 
+    /// Record what a stop or the lodging actually cost. `stop: nil` is the lodging.
+    ///
+    /// **Written locally first, then sent.** The figure is already on screen in three places —
+    /// the row, the day's breakdown and the budget bar — and a traveller who types 47 and waits
+    /// for a round trip before seeing it reads the app as broken. The web does the same:
+    /// `setItinerary` then a fire-and-forget `persist`.
+    ///
+    /// **A failure puts the old value back.** Optimism without a rollback is just being wrong
+    /// quietly, and this is money. The message says the amount did not save, in those words,
+    /// because "try again" is not actionable for a number the traveller can see on screen.
+    func setActualCost(day: Int, stop: Int?, to amount: Double?) async {
+        guard let trip = open else { return }
+        let previous = trip.itinerary
+        let updated = previous.settingActualCost(day: day, stop: stop, to: amount)
+        guard updated != previous else { return }
+
+        open?.itinerary = updated
+        message = nil
+        do {
+            _ = try await api.updateTrip(id: trip.id, itinerary: updated)
+        } catch {
+            open?.itinerary = previous
+            message = "That amount didn't save. Check your connection and re-enter it."
+        }
+    }
+
     /// Turns an error into something worth reading.
     ///
     /// The `throttled` and `spendCapReached` cases pass the server's string through untouched —

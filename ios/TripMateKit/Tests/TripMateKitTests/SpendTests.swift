@@ -213,4 +213,51 @@ final class SpendTests: XCTestCase {
         )
     }
 
+
+    // MARK: - Writing an actual cost
+
+    private func makeItinerary() throws -> Itinerary {
+        let day = try makeDay([(30, "food", nil), (12, "entry", nil)], lodging: (120, nil))
+        let json = """
+        {"tier":"midrange","days":[\(String(data: try JSONEncoder().encode(day), encoding: .utf8)!)]}
+        """
+        return try JSONDecoder().decode(Itinerary.self, from: Data(json.utf8))
+    }
+
+    func testWritingAStopsActualCostChangesWhatItSpends() throws {
+        let after = try makeItinerary().settingActualCost(day: 0, stop: 0, to: 47)
+        XCTAssertEqual(Spend.byCategory(after.days[0]).food, 47)
+        XCTAssertEqual(after.days[0].stops[1].actualCost, nil, "only the addressed stop moves")
+    }
+
+    /// `stop: nil` is the lodging — the same gesture to a traveller, a different field on the day.
+    func testWritingWithNoStopIndexAddressesTheLodging() throws {
+        let after = try makeItinerary().settingActualCost(day: 0, stop: nil, to: 155)
+        XCTAssertEqual(after.days[0].lodging?.actualCost, 155)
+        XCTAssertEqual(Spend.byCategory(after.days[0]).stay, 155)
+    }
+
+    /// **An emptied field clears back to the estimate.** `nil` and `0` are different statements:
+    /// "I never recorded this" against "this turned out to be free".
+    func testClearingRestoresTheEstimateAndZeroDoesNot() throws {
+        let set = try makeItinerary().settingActualCost(day: 0, stop: 0, to: 47)
+        XCTAssertEqual(Spend.byCategory(set.settingActualCost(day: 0, stop: 0, to: nil).days[0]).food, 30)
+        XCTAssertEqual(Spend.byCategory(set.settingActualCost(day: 0, stop: 0, to: 0).days[0]).food, 0)
+    }
+
+    /// A stale index can outlive the day it addressed. Losing the edit beats trapping on a screen
+    /// somebody is typing into.
+    func testAnOutOfRangeIndexIsIgnoredRatherThanTrapping() throws {
+        let before = try makeItinerary()
+        XCTAssertEqual(before.settingActualCost(day: 9, stop: 0, to: 5), before)
+        XCTAssertEqual(before.settingActualCost(day: 0, stop: 9, to: 5), before)
+    }
+
+    /// The trip total is the sum of the days, so an actual cost has to reach it.
+    func testAnActualCostReachesTheTripTotal() throws {
+        let before = try makeItinerary()
+        let after = before.settingActualCost(day: 0, stop: 0, to: 130)
+        XCTAssertEqual(Spend.trip(after.days) - Spend.trip(before.days), 100, accuracy: 0.001)
+    }
+
 }

@@ -21,6 +21,33 @@ public struct DaySpend: Sendable, Equatable {
     public var total: Double = 0
 }
 
+public extension Itinerary {
+    /// A copy with one actual cost written, or cleared.
+    ///
+    /// **`stop: nil` means the day's lodging.** The two live in different places on a `DayPlan`
+    /// but are the same gesture to a traveller, and `Spend.of` reads them identically.
+    ///
+    /// **`amount: nil` clears back to the estimate**, which is what an emptied field means — the
+    /// web's `onBlur` sends `undefined` for an empty string for exactly this reason. Passing 0 is
+    /// a different statement ("this turned out to be free") and is kept.
+    ///
+    /// Out-of-range indices return the itinerary unchanged rather than trapping. A stale index
+    /// can outlive the day it addressed — a shorter plan can arrive while a field is focused —
+    /// and losing an edit is better than a crash on a screen someone is typing into.
+    func settingActualCost(day: Int, stop: Int?, to amount: Double?) -> Itinerary {
+        guard days.indices.contains(day) else { return self }
+        var copy = self
+        if let stop {
+            guard copy.days[day].stops.indices.contains(stop) else { return self }
+            copy.days[day].stops[stop].actualCost = amount
+        } else {
+            guard copy.days[day].lodging != nil else { return self }
+            copy.days[day].lodging?.actualCost = amount
+        }
+        return copy
+    }
+}
+
 /// One tile in the day's breakdown.
 ///
 /// The SF Symbol travels with it rather than being matched up in the view: the whole point of
@@ -47,7 +74,10 @@ public struct BudgetSegment: Sendable, Equatable {
 public enum Spend {
 
     /// A stop or lodging's real cost once one has been entered, its estimate until then.
-    static func of(cost: Double, actual: Double?) -> Double {
+    ///
+    /// Public because the rows print it too: once a traveller has said what they paid, that is
+    /// the figure the line shows, and it must be the same one the totals used.
+    public static func of(cost: Double, actual: Double?) -> Double {
         actual ?? cost
     }
 

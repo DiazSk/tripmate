@@ -127,7 +127,10 @@ private struct PanelContent: View {
                     emphasis: store.emphasis,
                     onSelectDay: { store.selectDay($0) },
                     onEmphasise: { store.emphasise($0) },
-                    onBack: { store.closeTrip() }
+                    onBack: { store.closeTrip() },
+                    onActualCost: { day, stop, amount in
+                        await store.setActualCost(day: day, stop: stop, to: amount)
+                    }
                 )
             } else {
                 TripsListView(

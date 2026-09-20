@@ -15,6 +15,8 @@ struct TripDetailView: View {
     let onSelectDay: (Int) -> Void
     let onEmphasise: (Int) -> Void
     let onBack: () -> Void
+    /// `(dayIndex, stopIndex or nil for lodging, amount or nil to clear)`
+    let onActualCost: (Int, Int?, Double?) async -> Void
 
     private var days: [DayPlan] { trip.itinerary.days }
 
@@ -121,16 +123,100 @@ struct TripDetailView: View {
                         StopRow(
                             stop: stop,
                             isEmphasised: index == emphasis,
-                            onTap: { onEmphasise(index) }
+                            onTap: { onEmphasise(index) },
+                            onActualCost: { await onActualCost(activeDay, index, $0) }
                         )
                     }
                     if let lodging = day.lodging {
-                        LodgingRow(lodging: lodging)
+                        LodgingRow(
+                            lodging: lodging,
+                            onActualCost: { await onActualCost(activeDay, nil, $0) }
+                        )
                     }
                     SpendBandView(day: day, dayNumber: activeDay + 1)
                 }
             }
         }
+    }
+}
+
+/// What a stop or the lodging actually cost, typed in place.
+///
+/// **The itinerary is the source of truth and this holds no draft.** It mirrors the web's
+/// uncontrolled field: seeded from `actualCost`, committed on the way out, and an emptied field
+/// clears back to the estimate rather than writing zero. Keeping a separate `@State` draft would
+/// be a second copy of a number three other views already read.
+///
+/// **Committing happens on blur and on submit, and both matter.** The web's comment says it
+/// plainly — "a value typed and left uncommitted is a value silently lost" — and on a phone
+/// there is no click-elsewhere, so the keyboard's return key has to work.
+private struct ActualCostField: View {
+    /// What the server currently has. Also the placeholder, so the estimate is visible until
+    /// something replaces it.
+    let estimate: Double
+    let actual: Double?
+    let accessibilityName: String
+    let commit: (Double?) async -> Void
+
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Actual")
+                .textStyle(.micro)
+                .foregroundStyle(Token.muted)
+            Text("$")
+                .textStyle(.money.size(12))
+                .foregroundStyle(Token.muted)
+            TextField(estimate.formatted(.number.precision(.fractionLength(0))), text: $text)
+                .textFieldStyle(.plain)
+                .textStyle(.money.size(13))
+                .foregroundStyle(Token.money)
+                .keyboardType(.decimalPad)
+                .submitLabel(.done)
+                .focused($focused)
+                .frame(maxWidth: 74)
+                // Fires only for a hardware keyboard — see the toolbar below.
+                .onSubmit { send() }
+                // **A decimal pad has no return key, so there is nothing to submit with.**
+                // The web commits on blur and relies on clicking elsewhere; on a phone the
+                // keyboard covers half the screen and there is no "elsewhere" to tap. Without
+                // this, a typed amount cannot be committed at all — verified on device before
+                // it was added.
+                .toolbar {
+                    if focused {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") { focused = false }
+                                .textStyle(.detail.weight(TextStyle.semibold))
+                                .foregroundStyle(Token.accent)
+                        }
+                    }
+                }
+                .onChange(of: focused) { wasFocused, isFocused in
+                    if wasFocused && !isFocused { send() }
+                }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .frame(minHeight: 34)
+        .background(Color.black.opacity(0.22))
+        .clipShape(Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Actual cost for \(accessibilityName)")
+        // The web hid this in a `title` tooltip, which is nowhere at all on a phone.
+        .accessibilityHint("Replaces the estimate in this trip's budget total.")
+        .task(id: actual) { text = actual.map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "" }
+    }
+
+    private func send() {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        // An emptied field clears; anything unparseable is left alone rather than read as zero.
+        let amount = trimmed.isEmpty ? nil : Double(trimmed)
+        guard trimmed.isEmpty || amount != nil else { return }
+        if amount == actual { return }
+        Task { await commit(amount) }
     }
 }
 
@@ -287,10 +373,13 @@ private struct StopRow: View {
     /// index lives in the store rather than in either view.
     let isEmphasised: Bool
     let onTap: () -> Void
+    let onActualCost: (Double?) async -> Void
 
     var body: some View {
-        Button(action: onTap) { content }
-            .buttonStyle(.plain)
+        // **Not a Button wrapping everything any more.** A `TextField` inside a button is a
+        // control inside a control: the button swallows the tap and the field never gains focus.
+        // The emphasis tap moves to the content, and the cost field sits beside it.
+        content.onTapGesture(perform: onTap)
     }
 
     private var content: some View {
@@ -300,7 +389,8 @@ private struct StopRow: View {
                     .textStyle(.headingSmall.weight(TextStyle.medium))
                     .foregroundStyle(Token.foreground)
                 Spacer(minLength: 8)
-                Text(stop.cost, format: .currency(code: "USD").precision(.fractionLength(0)))
+                Text(Spend.of(cost: stop.cost, actual: stop.actualCost),
+                     format: .currency(code: "USD").precision(.fractionLength(0)))
                     .textStyle(.money)
                     .foregroundStyle(Token.money)
             }
@@ -320,6 +410,15 @@ private struct StopRow: View {
             Text(stop.note)
                 .textStyle(.detail)
                 .foregroundStyle(Token.muted)
+            HStack {
+                Spacer(minLength: 0)
+                ActualCostField(
+                    estimate: stop.cost,
+                    actual: stop.actualCost,
+                    accessibilityName: stop.name,
+                    commit: onActualCost
+                )
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Token.gapRows)
@@ -334,21 +433,36 @@ private struct StopRow: View {
 
 private struct LodgingRow: View {
     let lodging: Lodging
+    let onActualCost: (Double?) async -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(lodging.name)
-                    .textStyle(.body.weight(TextStyle.medium))
-                    .foregroundStyle(Token.foreground)
-                Text(lodging.note)
-                    .textStyle(.caption)
-                    .foregroundStyle(Token.muted)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(lodging.name)
+                        .textStyle(.body.weight(TextStyle.medium))
+                        .foregroundStyle(Token.foreground)
+                    Text(lodging.note)
+                        .textStyle(.caption)
+                        .foregroundStyle(Token.muted)
+                }
+                Spacer(minLength: 8)
+                // The figure that counts is what you paid once you have said so. The estimate
+                // does not vanish — it stays as the field's placeholder.
+                Text(Spend.of(cost: lodging.cost, actual: lodging.actualCost),
+                     format: .currency(code: "USD").precision(.fractionLength(0)))
+                    .textStyle(.money)
+                    .foregroundStyle(Token.money)
             }
-            Spacer(minLength: 8)
-            Text(lodging.cost, format: .currency(code: "USD").precision(.fractionLength(0)))
-                .textStyle(.money)
-                .foregroundStyle(Token.money)
+            HStack {
+                Spacer(minLength: 0)
+                ActualCostField(
+                    estimate: lodging.cost,
+                    actual: lodging.actualCost,
+                    accessibilityName: lodging.name,
+                    commit: onActualCost
+                )
+            }
         }
         .padding(Token.gapRows)
         .background(Token.moneySoft)

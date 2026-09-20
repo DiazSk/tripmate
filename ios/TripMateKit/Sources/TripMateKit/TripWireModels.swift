@@ -83,7 +83,10 @@ public struct Stop: Codable, Sendable, Equatable {
     /// absent. Optional anyway, since older rows predate it.
     public let tags: [String]?
     public let category: StopCategory
-    public let actualCost: Double?
+    /// **`var`, and it is the only mutable field on a stop.** A traveller records what they
+    /// actually paid, and `Spend.of` prefers it over the estimate from that moment on. Everything
+    /// else here is what the server said and is not ours to change.
+    public var actualCost: Double?
 
     private enum CodingKeys: String, CodingKey {
         case name, lat, lng, cost, note, why, time, durationLabel, tags, category, actualCost
@@ -109,7 +112,8 @@ public struct Lodging: Codable, Sendable, Equatable {
     public let name: String
     public let cost: Double
     public let note: String
-    public let actualCost: Double?
+    /// `var` for the same reason as `Stop.actualCost`.
+    public var actualCost: Double?
 
     private enum CodingKeys: String, CodingKey { case name, cost, note, actualCost }
 
@@ -132,8 +136,11 @@ public struct DayPlan: Codable, Sendable, Equatable {
     public let summary: String?
     /// User-authored, never model-written.
     public let title: String?
-    public let lodging: Lodging?
-    public let stops: [Stop]
+    /// Both `var` so an actual cost can be written in place. A `let` here would mean giving
+    /// these models a memberwise initialiser, which the custom `init(from:)` suppresses — five
+    /// keywords against two hand-written initialisers that could drift from the decoder.
+    public var lodging: Lodging?
+    public var stops: [Stop]
 }
 
 /// Server-attached forecast, not model-authored. Every field below `historical` is *explicitly
@@ -154,7 +161,7 @@ public struct Itinerary: Codable, Sendable, Equatable {
     /// **Optional, and this is contract rule 2.** `toTripDetail` spreads `JSON.parse(itinerary_json)`
     /// with no shape check, so a row written before `tier` existed has none and nothing adds one.
     public let tier: TierId?
-    public let days: [DayPlan]
+    public var days: [DayPlan]
 }
 
 public struct TripSummary: Codable, Sendable, Equatable {
@@ -178,7 +185,10 @@ public struct Trip: Codable, Sendable, Equatable {
     public let endDate: String
     public let budget: Double
     public let status: TripStatus?
-    public let itinerary: Itinerary
+    /// `var` so an actual cost can be written without rebuilding the trip. The synthesized
+    /// memberwise initialiser is internal, so the alternative is a public one that could drift
+    /// from the decoder.
+    public var itinerary: Itinerary
     /// Explicitly `null` for trips saved before answers were stored.
     public let userAnswers: UserAnswers?
     /// Explicitly `null` when the row tracks no session.
