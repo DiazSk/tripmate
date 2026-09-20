@@ -790,7 +790,15 @@ struct DateField: View {
             // width the month view actually wants.
             .frame(width: 320)
             .padding(Token.gapRows)
-            .presentationCompactAdaptation(.popover)
+            // **The phone is left to adapt, and removing the override is the fix.** Forcing a
+            // popover at compact width contradicted the note above it, and the code won: a
+            // stated-width picker anchored partway down a 402pt screen ran off the right edge
+            // on an iPhone 16 Pro. Adapting gives the phone a sheet it cannot overflow, and
+            // the iPad keeps its popover.
+            //
+            // A half sheet, because a month grid asking for one tap should not take the whole
+            // display. Ignored on the popover path, so it costs the iPad nothing.
+            .presentationDetents([.medium])
         }
     }
 
@@ -1105,7 +1113,15 @@ private struct TimeField: View {
             // sizes to its content and the wheel will compress to whatever it is handed.
             .frame(width: 260)
             .padding(Token.gapRows)
-            .presentationCompactAdaptation(.popover)
+            // **The phone is left to adapt, and removing the override is the fix.** Forcing a
+            // popover at compact width contradicted the note above it, and the code won: a
+            // stated-width picker anchored partway down a 402pt screen ran off the right edge
+            // on an iPhone 16 Pro. Adapting gives the phone a sheet it cannot overflow, and
+            // the iPad keeps its popover.
+            //
+            // A half sheet, because a month grid asking for one tap should not take the whole
+            // display. Ignored on the popover path, so it costs the iPad nothing.
+            .presentationDetents([.medium])
         }
     }
 

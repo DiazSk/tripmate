@@ -71,7 +71,11 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let floats = panelFloats && tab != .home
+            // **`tab == .trips`, not `tab != .home`.** `panelFloats` answers "is a trip
+            // open", which stays true while you are standing on Profile — so tapping Profile
+            // with a trip open drew the profile inside the trip's floating panel. Trips is the
+            // only tab that ever shows a trip or the wizard; nothing else can float.
+            let floats = panelFloats && tab == .trips
             // Docking is the wide-screen answer to "the panel is covering the map", so it only
             // applies to the panel that is over the map at all.
             let isDocked = floats && proxy.size.width >= Self.dockingThreshold

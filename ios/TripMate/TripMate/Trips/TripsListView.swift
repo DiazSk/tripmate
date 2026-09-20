@@ -35,17 +35,25 @@ struct TripsListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Token.gapPanels) {
-            heading
+            // **The masthead is one block with its own rhythm.** These three used to sit in the
+            // outer stack's 24pt spacing and then claw it back with `.padding(.top, -24 + 6)`
+            // each — which left 6pt under a 28pt serif title and read as jammed on an iPhone
+            // 16 Pro. Nesting them states the spacing once instead of subtracting it twice.
+            VStack(alignment: .leading, spacing: 10) {
+                heading
 
-            // **One sentence slot, where the web shows two.** It can afford the count line under
-            // a full-viewport masthead *and* an explainer above the grid; this is a 360pt panel,
-            // and both sentences describe the collection you are already looking at.
-            Text(activeTab == .drafts ? Self.draftsExplainer : TripsCopy.countLine(store.trips))
+                // **One sentence slot, where the web shows two.** It can afford the count line
+                // under a full-viewport masthead *and* an explainer above the grid; this has
+                // one screen, and both sentences describe the collection you are looking at.
+                Text(
+                    activeTab == .drafts
+                        ? Self.draftsExplainer : TripsCopy.countLine(store.trips)
+                )
                 .textStyle(.detail)
                 .foregroundStyle(Token.muted)
-                .padding(.top, -Token.gapPanels + 6)
 
-            if !store.drafts.isEmpty { tabs }
+                if !store.drafts.isEmpty { tabs }
+            }
 
             if let message = store.message {
                 Notice(text: message)
@@ -90,18 +98,36 @@ struct TripsListView: View {
 
     // MARK: - Chrome
 
+    /// **Side by side when they fit, stacked when they do not.** A 28pt Melodrama title and a
+    /// jade pill share a line comfortably at 440pt and crowd each other at 402 — measured on
+    /// an iPhone 16 Pro, where about 8pt separated them and the row read as one jammed line.
+    /// `ViewThatFits` decides per device, which beats a width threshold nobody can defend.
     private var heading: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Memories")
-                .textStyle(.display)
-                .foregroundStyle(Token.foreground)
-            Spacer(minLength: 8)
-            // On an empty wall the invitation carries the button instead — a heading and an
-            // action over nothing reads as a toolbar for an empty room.
-            if !store.trips.isEmpty {
-                Button("Plan a trip", action: onPlan)
-                    .buttonStyle(PrimaryButtonStyle())
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline) {
+                title
+                Spacer(minLength: 16)
+                planButton
             }
+            VStack(alignment: .leading, spacing: 12) {
+                title
+                planButton
+            }
+        }
+    }
+
+    private var title: some View {
+        Text("Memories")
+            .textStyle(.display)
+            .foregroundStyle(Token.foreground)
+    }
+
+    /// On an empty wall the invitation carries the button instead — a heading and an action
+    /// over nothing reads as a toolbar for an empty room.
+    @ViewBuilder private var planButton: some View {
+        if !store.trips.isEmpty {
+            Button("Plan a trip", action: onPlan)
+                .buttonStyle(PrimaryButtonStyle())
         }
     }
 
@@ -112,7 +138,6 @@ struct TripsListView: View {
             capsule("Memories", count: store.trips.count, tab: .memories)
             capsule("Drafts", count: store.drafts.count, tab: .drafts)
         }
-        .padding(.top, -Token.gapPanels + 6)
     }
 
     private func capsule(_ title: String, count: Int, tab target: Tab) -> some View {
@@ -223,7 +248,11 @@ private struct MemoryTile: View {
                 .textStyle(.heading)
                 .foregroundStyle(Token.foreground)
                 .lineLimit(1)
-                .padding(.top, 8)
+                // The one line here that genuinely runs long: at a 175pt tile "Zurich,
+                // Switzerland" already fills the width. Shrinking beats an ellipsis on the
+                // word that says where you went.
+                .minimumScaleFactor(0.85)
+                .padding(.top, 10)
 
             // **Two lines, not one.** At the panel's 360pt floor a tile is ~154pt wide and 134pt
             // of that is text. `Sep 19 – 23 · $2,400` already fills it, and a longer month pair
@@ -239,7 +268,7 @@ private struct MemoryTile: View {
             .textStyle(.money.size(12))
             .foregroundStyle(Token.muted)
         }
-        .padding(8)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         // The one panel treatment, without the frost — see `glassPanel`.
         .glassPanel(frosted: false)
