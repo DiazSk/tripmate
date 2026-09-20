@@ -111,6 +111,13 @@ struct TripDetailView: View {
     private func dayPage(_ day: DayPlan, index: Int) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Token.gapRows) {
+                // **The trip's budget leads the day.** It moved to the foot in P1b on the
+                // argument that a readout is not navigation and 46pt at the top pushed the day
+                // below the fold. That argument was measured against a 322pt column with a
+                // 288pt header; the header is gone and the sheet is 40pt wider, so the cost it
+                // was avoiding no longer exists — and "what have I spent" turned out to be a
+                // question asked on arrival rather than after reading the day.
+                BudgetBarView(days: days, budget: trip.budget, activeDayIndex: index)
                 if trip.resolvedStatus == .draft { draftNotice }
                 if let over = TripCopy.overspend(day) {
                     Text(over)
@@ -207,7 +214,6 @@ struct TripDetailView: View {
     private func moneyBlock(_ day: DayPlan, index: Int) -> some View {
         VStack(alignment: .leading, spacing: Token.gapRows) {
             SpendBandView(day: day, dayNumber: index + 1)
-            BudgetBarView(days: days, budget: trip.budget, activeDayIndex: index)
             if let tier = trip.itinerary.tier.map(Tiers.tier) {
                 // A tier is a spending style, so it explains the budget rather than the title.
                 Text("\(tier.name) · \(tier.description)")
@@ -280,10 +286,18 @@ private struct TripHeaderRow: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // **Here because this row is the only chrome drawn at every detent.** The row at
-            // the foot of a day was the sole way in, which means it could not be reached at the
-            // capsule at all and needed a scroll to the bottom of the day everywhere else —
-            // search was, in practice, invisible. This is the same sheet and the same day.
+            if dayCount > 1 { dayControl }
+
+            // **A toolbar button, so it sits at the toolbar's edge.** This row is the sheet's
+            // navigation bar, and Apple's own guidance lists exactly three entry points for
+            // search — a tab, a toolbar at the top or bottom, or inline with content. A
+            // toolbar is one of them; *mid-row, between the title and another control* is not
+            // any of them, and it read as an orphan.
+            //
+            // Not a tab: search here is scoped to one trip and one day, and a tab that only
+            // works inside a trip breaks the rule that the bar is identical on every route.
+            // Not the bottom toolbar Apple prefers — that is the tab bar, same reason. The
+            // trailing edge of this row is what is left, and it is sanctioned.
             Button(action: onSearch) {
                 Image(systemName: "magnifyingglass")
                     .textStyle(.heading)
@@ -293,8 +307,6 @@ private struct TripHeaderRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Add a stop")
-
-            if dayCount > 1 { dayControl }
         }
         .frame(height: 56)
     }
