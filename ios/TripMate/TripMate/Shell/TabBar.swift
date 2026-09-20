@@ -2,14 +2,23 @@ import SwiftUI
 
 /// The app's four destinations.
 ///
-/// **Home is the entry, Trips is what you kept, Map is the ground, Profile is the person.**
+/// **Home is the entry, Memories is what you kept, Profile is the person.**
 ///
-/// It was three. Home arrived with the landing, which is a real always-reachable screen carrying
-/// the entry capsule rather than a first-run that vanishes — so it needed a home in the bar, and
-/// the web's `/` is the entry point too. "Plan a trip" still is not a tab: it is an action, and
-/// it now lives in the capsule on Home as well as the button on Trips.
+/// **Map was the fourth and is cut, for now and on purpose.** It existed to make
+/// `MapSearchView` reachable — P0 added it precisely because the search was gated on a width
+/// no iPhone has, so the feature most cited as the reason to build native could not be reached
+/// on a phone. What it never gained is a *result*: the search drops a pin and nothing consumes
+/// it, so the tab was a bare map and a box that leads nowhere.
+///
+/// So this is a deliberate pause, not the bug coming back. `MapSearchView` and
+/// `MapSearchStore` are left intact — P2 is where the tab returns, with the control stack, the
+/// category grid, the pin card and taps on Apple's own POIs, which are the things that make a
+/// map worth a tab.
+///
+/// "Plan a trip" is still not a tab: it is an action, and it lives in the capsule on Home as
+/// well as the button on the wall.
 enum AppTab: String, CaseIterable, Identifiable {
-    case home, trips, map, profile
+    case home, trips, profile
 
     var id: String { rawValue }
 
@@ -18,8 +27,12 @@ enum AppTab: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .home: "Home"
-        case .trips: "Trips"
-        case .map: "Map"
+        // **"Memories", though the case is `trips`.** The screen's own title has always said
+        // Memories and the bar said Trips, which is one surface with two names. The web has
+        // the same split deliberately — the route is `/trips`, the page is "My memories" — so
+        // the case keeps the noun the data uses and the label keeps the word the traveller
+        // reads.
+        case .trips: "Memories"
         case .profile: "Profile"
         }
     }
@@ -28,7 +41,6 @@ enum AppTab: String, CaseIterable, Identifiable {
         switch self {
         case .home: "house"
         case .trips: "bookmark"
-        case .map: "map"
         case .profile: "person"
         }
     }

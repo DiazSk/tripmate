@@ -138,8 +138,7 @@ private struct ProfileOffer: Identifiable {
 /// selects a surface and never mutates content state** — so the open trip, its active day and
 /// emphasis, the wizard's step and every typed field, an in-flight generation, the search query
 /// and pin all survive any number of tab switches. Nothing is reset by one.
-///
-/// `.map` never reaches here: the shell draws no panel for it at all.
+
 private struct PanelContent: View {
     let store: TripsStore
     let plan: PlanStore

@@ -71,10 +71,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            // **The Map tab draws no panel, so at every width it covers nothing.** Without the
-            // first clause a docked layout would keep reporting a panel edge the camera then
-            // frames clear of, leaving a band of dead map on a screen that is all map.
-            let floats = panelFloats && tab != .map && tab != .home
+            let floats = panelFloats && tab != .home
             // Docking is the wide-screen answer to "the panel is covering the map", so it only
             // applies to the panel that is over the map at all.
             let isDocked = floats && proxy.size.width >= Self.dockingThreshold
@@ -103,9 +100,6 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                     // through the first. The map stays mounted — it is one view for the app and
                     // rebuilding it per tab is the expensive mistake — it is simply not visible.
                     home()
-                } else if tab == .map {
-                    // Nothing. The Map tab *is* the absence of a panel — the map was always
-                    // there, behind the glass; this is what it looks like with the glass gone.
                 } else if isDocked {
                     // **The docked layout keeps the panel and does not get a sheet.** A sheet
                     // answers "the panel is covering the map"; at >=600pt it is not, and there is
@@ -196,21 +190,10 @@ private struct ChromeLayer: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // **The search belongs to the Map tab, not to a width.** It used to be gated on
-            // `hasLiveMap` — `freeWidth < viewWidth` — which is only ever true in the docked
-            // ≥600pt layout, so on every iPhone the panel was full-bleed and this never
-            // rendered at all. The feature most cited as the reason to build native was
-            // unreachable on the device the app is for. The condition now names a screen
-            // instead of a layout accident.
-            if tab == .map {
-                HStack {
-                    MapSearchView()
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, Token.padCompact)
-                .padding(.top, Token.gapRows)
-            }
-
+            // **No search box here any more, and `MapSearchView` has no call site.** It was
+            // drawn under the Map tab, which is cut — see `AppTab`. Left standing rather than
+            // deleted because P2 is where it comes back, and re-finding it in history is worse
+            // than a view that waits.
             Spacer()
 
             TabBar(selection: $tab, compact: compact)
