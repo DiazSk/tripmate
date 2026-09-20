@@ -133,11 +133,20 @@ private struct ProfileOffer: Identifiable {
 /// panel's own content changing, and a navigation bar would be a second piece of chrome competing
 /// with the bar the shell already draws.
 ///
-/// **Two routing axes now, and they do not interact.** `tab` picks the surface; `isPlanning` and
-/// `store.open` pick what the Trips surface is showing. The governing rule is that **a tab switch
-/// selects a surface and never mutates content state** — so the open trip, its active day and
-/// emphasis, the wizard's step and every typed field, an in-flight generation, the search query
-/// and pin all survive any number of tab switches. Nothing is reset by one.
+/// **Two routing axes, and they do interact — the earlier note here said they did not, and
+/// that claim licensed two bugs.** `tab` picks the surface; `isPlanning` and `store.open` pick
+/// what the *Trips* surface is showing. Because a tab switch never resets content state — the
+/// rule below, and a good one — both stay true while you stand on Profile. Anything that reads
+/// them as "the wizard is showing" or "a trip is showing" is therefore wrong on another tab,
+/// which is how Profile ended up inside the trip's floating panel once and behind the wizard's
+/// Petra backdrop a second time.
+///
+/// So the question is asked once, as `showsWizard`, rather than inferred from branch order.
+///
+/// The governing rule is unchanged: **a tab switch selects a surface and never mutates content
+/// state** — the open trip, its active day and emphasis, the wizard's step and every typed
+/// field, an in-flight generation, the search query and pin all survive any number of tab
+/// switches. Nothing is reset by one.
 
 private struct PanelContent: View {
     let store: TripsStore
@@ -146,11 +155,15 @@ private struct PanelContent: View {
     @Binding var isPlanning: Bool
     let onOfferProfile: (TravelerProfile) -> Void
 
+    /// The wizard is *showing*, not merely in progress. `isPlanning` alone is true on every
+    /// tab; only Trips draws it.
+    private var showsWizard: Bool { tab == .trips && isPlanning }
+
     var body: some View {
         Group {
             if tab == .profile {
                 ProfileView()
-            } else if isPlanning {
+            } else if showsWizard {
                 PlanWizardView(
                     plan: plan,
                     onGenerated: { id in
@@ -203,7 +216,7 @@ private struct PanelContent: View {
         // Not while generating: the panel is over the live map then, and a second world behind
         // the glass is exactly what the shell's `home()` note warns about.
         .background {
-            if isPlanning, !plan.isGenerating { PlanBackdrop() }
+            if showsWizard, !plan.isGenerating { PlanBackdrop() }
         }
     }
 }
