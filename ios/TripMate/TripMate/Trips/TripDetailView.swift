@@ -21,13 +21,26 @@ struct TripDetailView: View {
     private var days: [DayPlan] { trip.itinerary.days }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Token.gapPanels) {
-            header
-            BudgetBarView(days: days, budget: trip.budget, activeDayIndex: activeDay)
-            if days.count > 1 { dayTabs }
-            stops
-            Spacer(minLength: 0)
+        // **One scroll view, not a fixed header above a scrolling list.**
+        //
+        // The header used to sit outside the stop list's own `ScrollView`, in a height-bounded
+        // `VStack`. That is why the photograph came out at 60% width: `.aspectRatio(.fit)` in a
+        // container that constrains height shrinks the *width* to fit, so a 16:10 tile in a
+        // short box is a small 16:10 tile. Nesting a scroll view inside a fixed stack was the
+        // cause; one scroller is both the fix and less code.
+        //
+        // The day tabs scroll away with everything else. The web does the same — only its hero
+        // is sticky — and here the sheet's own detents are the mechanism for keeping the top of
+        // the plan in view.
+        ScrollView {
+            VStack(alignment: .leading, spacing: Token.gapPanels) {
+                header
+                BudgetBarView(days: days, budget: trip.budget, activeDayIndex: activeDay)
+                if days.count > 1 { dayTabs }
+                day
+            }
         }
+        .scrollIndicators(.hidden)
     }
 
     private var header: some View {
@@ -53,6 +66,22 @@ struct TripDetailView: View {
                  + "\(DayDisplay.formatDate(trip.startDate))–\(DayDisplay.formatDate(trip.endDate))")
                 .textStyle(.money)
                 .foregroundStyle(Token.muted)
+
+            // **Below the title, not above it, and not collapsing.**
+            //
+            // The web leads with this photograph and shrinks it from 11rem to 4.5rem as the plan
+            // scrolls under it, because its panel is a fixed height and at 18rem the photo was
+            // "288px of an 826px panel — 35% of the plan before a stop was visible". The sheet
+            // has no such problem: dragging it *is* the trade between photograph and plan, and a
+            // collapsing header on top of that would be a second mechanism for one job.
+            //
+            // Order is the other consequence. At the small detent only the first rows are
+            // visible, and a sliver of photograph with no words is not a trip — so the
+            // destination and the dates come first and the picture follows them.
+            PlacePhotoView(name: trip.destination, large: true)
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
+                .padding(.top, 4)
         }
     }
 
@@ -108,11 +137,10 @@ struct TripDetailView: View {
     }
 
     @ViewBuilder
-    private var stops: some View {
+    private var day: some View {
         if days.indices.contains(activeDay) {
             let day = days[activeDay]
-            ScrollView {
-                VStack(alignment: .leading, spacing: Token.gapRows) {
+            VStack(alignment: .leading, spacing: Token.gapRows) {
                     dayHeader(day)
                     if let summary = day.summary {
                         Text(summary)
@@ -134,7 +162,6 @@ struct TripDetailView: View {
                         )
                     }
                     SpendBandView(day: day, dayNumber: activeDay + 1)
-                }
             }
         }
     }
