@@ -289,14 +289,19 @@ struct ReachBand: View {
                 .textStyle(.body)
                 .foregroundStyle(Token.muted)
                 .padding(.top, 12)
-            // **A pre-rendered image, not a ported `worldLand.ts`.** That is a ~38 KB Natural
-            // Earth path and rendering it natively needs an SVG path parser — for a drawing that
-            // never changes. A bundled asset is the same picture for none of the code.
+            // **The web's own map, rasterised from the same two source files it draws from** —
+            // `worldLand.ts`'s Natural Earth path and `mapPlaces.ts`'s 91 places, through the
+            // same `projectToMap`. Not a screenshot and not a lookalike: identical geometry,
+            // rendered at 2400px so a 3x phone gets real pixels rather than an upscale.
             //
-            // No plan markers on it. Three targets 13px apart fail WCAG 2.2 spacing, which is
-            // why the web hides them below `lg`, and a native rebuild does not make them fit.
-            // The density of the drawing is the argument here; four pins are not.
-            ScenePhoto(name: "world-map", ratio: 1200.0 / 844.0)
+            // Porting the path to a native `Path` would mean an SVG parser for a drawing whose
+            // own docstring says it never changes. A bundled raster is the same picture for
+            // none of the code.
+            //
+            // No plan markers. Three targets 13px apart fail WCAG 2.2 spacing, which is why the
+            // web hides them below `lg`, and a native rebuild does not make them fit. The
+            // density of the drawing is the argument here; four pins are not.
+            ScenePhoto(name: "world-map", ratio: 1200.0 / 480.0, radius: 0)
                 .padding(.top, 22)
                 .accessibilityLabel("A world map. The planner works anywhere you can name.")
         }
