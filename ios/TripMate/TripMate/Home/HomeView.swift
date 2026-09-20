@@ -14,6 +14,7 @@ struct HomeView: View {
     let plan: PlanStore
     /// Opens the wizard, seeded from whatever the capsule already holds.
     let onPlan: () -> Void
+    let onTab: (AppTab) -> Void
 
     var body: some View {
         GeometryReader { proxy in
@@ -23,6 +24,26 @@ struct HomeView: View {
                     EntryCapsule(plan: plan, onPlan: onPlan)
                         .padding(.horizontal, Token.padCompact)
                         .padding(.top, 18)
+
+                    Group {
+                        JourneyBand().padding(.top, 52)
+                        MethodBand().padding(.top, 44)
+                        PlansBand(onPick: { example in
+                            // A card seeds the destination and nothing else. `planExamples.ts`
+                            // stores a season rather than a date for exactly this reason: a
+                            // stored date goes stale and prefills a value the wizard's own
+                            // minimum rejects.
+                            plan.draft.destination = example.whereText
+                            onPlan()
+                        })
+                        .padding(.top, 52)
+                        ReachBand().padding(.top, 44)
+                        LandingFooter(onTab: onTab)
+                    }
+                    .padding(.horizontal, Token.padCompact)
+
+                    // Clear the tab bar. Nothing else on this screen knows it is there.
+                    Color.clear.frame(height: Token.barHeight + Token.gapRows * 3)
                 }
             }
             .scrollIndicators(.hidden)

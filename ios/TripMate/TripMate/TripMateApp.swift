@@ -87,7 +87,7 @@ private struct RootView: View {
                 // than asking again. One `PlanDraft`, two ways in.
                 isPlanning = true
                 tab = .trips
-            })
+            }, onTab: { tab = $0 })
         }
         .task { await store.loadTrips() }
     }
