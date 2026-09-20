@@ -147,13 +147,25 @@ struct TripDetailView: View {
                             .textStyle(.detail)
                             .foregroundStyle(Token.muted)
                     }
-                    ForEach(Array(day.stops.enumerated()), id: \.offset) { index, stop in
-                        StopRow(
-                            stop: stop,
-                            isEmphasised: index == emphasis,
-                            onTap: { onEmphasise(index) },
-                            onActualCost: { await onActualCost(activeDay, index, $0) }
-                        )
+                    // Chunked into morning / afternoon / evening. `DaySchedule.group` keeps the
+                    // authored order and never sorts — a plan that puts a 9am stop after a 3pm
+                    // one is labelled `Afternoon → Morning` rather than quietly rearranged.
+                    let groups = DaySchedule.group(day.stops)
+                    // **One group draws no heading.** A single "Morning" over the whole day is a
+                    // rule with nothing to separate, and an unlabelled group means no stop
+                    // carried a readable time — where a heading would be inventing a fact.
+                    ForEach(groups) { group in
+                        if groups.count > 1, let label = group.label {
+                            TimeOfDayHeading(label: label)
+                        }
+                        ForEach(group.stops, id: \.index) { entry in
+                            StopRow(
+                                stop: entry.stop,
+                                isEmphasised: entry.index == emphasis,
+                                onTap: { onEmphasise(entry.index) },
+                                onActualCost: { await onActualCost(activeDay, entry.index, $0) }
+                            )
+                        }
                     }
                     if let lodging = day.lodging {
                         LodgingRow(
@@ -164,6 +176,31 @@ struct TripDetailView: View {
                     SpendBandView(day: day, dayNumber: activeDay + 1)
             }
         }
+    }
+}
+
+/// A rule with the part of the day on it.
+///
+/// **It labels what is beneath it, not beside it** — so it reads as a heading rather than as a
+/// caption on the next row. The label sits on the leading edge over a hairline that runs to the
+/// far side, which is the same opener the landing's bands use, one size down.
+private struct TimeOfDayHeading: View {
+    let label: TimeOfDay
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label.rawValue.uppercased())
+                .textStyle(.label)
+                .foregroundStyle(Token.muted)
+            Rectangle()
+                .fill(Token.cardBorder)
+                .frame(height: 1)
+        }
+        .padding(.top, 6)
+        // One element, and a header to VoiceOver: "the next three stops are the afternoon" is
+        // the structure a screen reader should get, not a stray word between two rows.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
