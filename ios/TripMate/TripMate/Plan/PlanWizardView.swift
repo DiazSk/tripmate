@@ -22,25 +22,49 @@ struct PlanWizardView: View {
     let onGenerated: (String) -> Void
     let onCancel: () -> Void
 
+    /// The natural height of the current step, measured inside the scroller.
+    @State private var stepHeight: CGFloat = 0
+
     var body: some View {
         VStack(alignment: .leading, spacing: Token.gapPanels) {
             header
 
             if plan.isGenerating {
                 waiting
+                Spacer(minLength: 0)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Token.gapPanels) {
                         step
                     }
                     .padding(.bottom, Token.gapRows)
+                    // Inside the scroller, so this is the step's *ideal* height — a `ScrollView`
+                    // proposes unbounded height to its content. Measured outside it, this would
+                    // report the sheet's height back to the sheet and pin it wherever it started.
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                        stepHeight = $0
+                    }
                 }
                 footer
             }
-
-            Spacer(minLength: 0)
         }
+        // **No trailing `Spacer` any more, and its absence is the fix for a real defect.** A
+        // `Spacer` and a `ScrollView` are both flexible, so the `VStack` split the height
+        // between them: at the tall stop the fields sat in the top third with the footer
+        // stranded, and once a keyboard shrank the shell the spacer took what was left and the
+        // scroller collapsed to nothing — the form vanished while you were typing into it.
+        .sheetFits(stepHeight + Self.chromeHeight)
     }
+
+    /// Header, footer and the gaps around them — everything in the sheet that is not the step.
+    /// Measured once from the two blocks' own metrics rather than typed as a number.
+    private static let chromeHeight: CGFloat =
+        // header: back row, title, position line
+        22 + 34 + 16
+        // footer: the button row
+        + 44
+        // grabber strip, the two `gapPanels` in the stack, and the step's bottom inset
+        + 44 + Token.gapPanels * 2 + Token.gapRows
 
     // MARK: - Chrome
 
@@ -138,6 +162,7 @@ struct PlanWizardView: View {
 private struct BasicsStep: View {
     let plan: PlanStore
     @FocusState private var focus: Field?
+    @State private var suggest = DestinationSuggest()
 
     private enum Field { case destination, start, end, budget }
 
@@ -150,8 +175,22 @@ private struct BasicsStep: View {
                         .focused($focus, equals: .destination)
                         .textFieldStyle(.plain)
                         .autocorrectionDisabled()
+                        // A place name is not a sentence, and the keyboard capitalising the
+                        // second word of "Porto, Portugal" is wrong more often than right.
+                        .textInputAutocapitalization(.words)
                         .textStyle(.bodyLarge)
                         .foregroundStyle(Token.foreground)
+                        .onChange(of: plan.draft.destination) { _, text in
+                            guard focus == .destination else { return }
+                            suggest.query(text)
+                        }
+                }
+                // Inside the trough and above the next hairline, so the list reads as belonging
+                // to the field rather than floating over the form. It is not an overlay: an
+                // overlay would cover Arrive, and a suggestion that hides the next question is
+                // how you fill one field and lose another.
+                if focus == .destination, !suggest.results.isEmpty {
+                    suggestions
                 }
                 Hairline()
                 FieldCell(label: "Arrive", isFocused: focus == .start) {
@@ -189,6 +228,7 @@ private struct BasicsStep: View {
             // debounce. See `PlanStore.geocodeDestination`.
             .onChange(of: focus) { previous, _ in
                 guard previous == .destination else { return }
+                suggest.clear()
                 Task { await plan.geocodeDestination() }
             }
 
@@ -203,6 +243,40 @@ private struct BasicsStep: View {
                 tierReadout
             }
         }
+    }
+
+    /// Apple's completions, as rows under the field.
+    ///
+    /// Tapping one only fills the text — the geocode on blur still decides whether the place
+    /// exists, so a suggestion the geocoder cannot place lands on the existing soft notice
+    /// rather than on a new error path.
+    private var suggestions: some View {
+        VStack(spacing: 0) {
+            ForEach(suggest.results) { result in
+                Button {
+                    plan.draft.destination = result.line
+                    suggest.clear()
+                    focus = nil
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .textStyle(.micro)
+                            .foregroundStyle(Token.accent)
+                        Text(result.line)
+                            .textStyle(.detail)
+                            .foregroundStyle(Token.foreground)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, Token.gapRows)
+                    // The row is the target, not the words in it — and 44 is the floor.
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(Color.white.opacity(0.04))
     }
 
     /// The spending style, stated and never offered.

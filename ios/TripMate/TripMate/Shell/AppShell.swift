@@ -40,6 +40,9 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
 
     @State private var exclusions = ShellExclusions()
     @State private var detent: PlanSheet<Panel>.Detent = .medium
+    /// Read here rather than inside the sheet, because the map's bottom inset is
+    /// computed at this level too and both have to agree on one number.
+    @State private var fitted: CGFloat?
     @State private var chrome = Chrome()
 
     /// Below this width the panel covers the map; at or above it, the panel docks and leaves live
@@ -108,6 +111,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                 } else {
                     PlanSheet(
                         detent: $detent,
+                        fitted: fitted,
                         available: proxy.size,
                         safeTop: proxy.safeAreaInsets.top,
                         content: panel
@@ -130,11 +134,15 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                     bottomInset: (tab == .map || tab == .home || isDocked)
                         ? Token.barHeight + Token.gapRows
                         : PlanSheet<Panel>.obstruction(
-                            detent, in: proxy.size, safeTop: proxy.safeAreaInsets.top
+                            detent, in: proxy.size, safeTop: proxy.safeAreaInsets.top,
+                            fitted: fitted
                         )
                 )
             )
         }
+        // The wizard states its height at the bottom of the tree; preferences travel up,
+        // so this is the first place that can see it and also owns the map's inset.
+        .onPreferenceChange(SheetFitKey.self) { fitted = $0 }
         .environment(chrome)
         .environment(\.shellExclusions, exclusions)
         // One measurement of the hardware for the whole app; a second measurer would eventually
