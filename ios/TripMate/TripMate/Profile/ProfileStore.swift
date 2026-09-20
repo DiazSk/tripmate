@@ -17,6 +17,11 @@ final class ProfileStore {
     /// Cleared by the next edit, so the confirmation never outlives what it confirmed.
     private(set) var isSaved = false
     private(set) var message: String?
+    /// **Distinct from `isLoading`, and from "the draft is non-default".** A traveller who has
+    /// never saved a profile gets `nil` back and keeps `PlanDraft()`'s defaults — which is
+    /// indistinguishable from never having asked. The offer after a generation needs to know
+    /// which of those it is, or it compares against defaults and offers to save every time.
+    private(set) var hasLoaded = false
 
     private let api: TripMateAPI
 
@@ -37,7 +42,13 @@ final class ProfileStore {
         } catch {
             message = Self.describe(error)
         }
+        hasLoaded = true
         isLoading = false
+    }
+
+    func loadOnce() async {
+        guard !hasLoaded else { return }
+        await load()
     }
 
     func save() async {

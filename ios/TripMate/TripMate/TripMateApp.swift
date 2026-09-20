@@ -66,6 +66,9 @@ private struct RootView: View {
     /// boolean needed to move. Deliberately not a flag on `PlanStore`: that would be a second
     /// source of truth for one question.
     @State private var isPlanning = false
+    /// The durable answers a finished trip is offering to keep, if they are worth offering.
+    @State private var offer: ProfileOffer?
+    @Environment(ProfileStore.self) private var profile
 
     var body: some View {
         AppShell(tab: $tab) {
@@ -80,7 +83,18 @@ private struct RootView: View {
                 onRegionSettled: { search.region = $0 }
             )
         } panel: {
-            PanelContent(store: store, plan: plan, tab: tab, isPlanning: $isPlanning)
+            PanelContent(
+                store: store, plan: plan, tab: tab, isPlanning: $isPlanning,
+                onOfferProfile: { candidate in
+                    Task {
+                        // Loaded here rather than at launch: this is the first moment the answer
+                        // is needed, and the traveller is between two screens anyway.
+                        await profile.loadOnce()
+                        guard candidate != profile.draft.travelerProfile else { return }
+                        offer = ProfileOffer(profile: candidate)
+                    }
+                }
+            )
         } home: {
             HomeView(plan: plan, onPlan: {
                 // The capsule already holds whatever was typed; the wizard picks it up rather
@@ -90,7 +104,20 @@ private struct RootView: View {
             }, onTab: { tab = $0 })
         }
         .task { await store.loadTrips() }
+        .sheet(item: $offer) { pending in
+            SaveProfileSheet(
+                candidate: pending.profile, store: profile, onFinish: { offer = nil }
+            )
+            .presentationDetents([.medium, .large])
+        }
     }
+}
+
+/// `.sheet(item:)` wants identity, and a profile has none of its own — two travellers can
+/// legitimately answer identically.
+private struct ProfileOffer: Identifiable {
+    let id = UUID()
+    let profile: TravelerProfile
 }
 
 /// What the docked panel currently shows.
@@ -111,6 +138,7 @@ private struct PanelContent: View {
     let plan: PlanStore
     let tab: AppTab
     @Binding var isPlanning: Bool
+    let onOfferProfile: (TravelerProfile) -> Void
 
     var body: some View {
         Group {
@@ -121,6 +149,9 @@ private struct PanelContent: View {
                     plan: plan,
                     onGenerated: { id in
                         isPlanning = false
+                        // **Read before the reset, not after.** These are the wizard's answers
+                        // and `reset()` is two lines away from throwing them out.
+                        onOfferProfile(plan.draft.travelerProfile)
                         // The wizard's own copy is done with; the trip row is the record now.
                         plan.reset()
                         Task { await store.openTrip(id: id) }

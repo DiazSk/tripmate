@@ -30,7 +30,13 @@ struct PlanWizardView: View {
             header
 
             if plan.isGenerating {
+                // Measured for the same reason the step is: without it the sheet keeps the
+                // height of whatever was on screen when Generate was pressed, and holds a
+                // full-height panel around one status line for the whole run.
                 waiting
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                        stepHeight = $0
+                    }
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
