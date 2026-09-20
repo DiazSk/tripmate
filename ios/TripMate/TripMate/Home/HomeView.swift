@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import TripMateKit
 
@@ -71,6 +72,51 @@ struct HomeView: View {
     }
 }
 
+/// The Petra clip, played once.
+///
+/// **A single H.264 file, not the 100 AVIF frames.** The frames exist because the *web* scrubs
+/// them against scroll position, which a video cannot do. Nothing here scrubs: the film plays
+/// once on appear and holds. So it is one hardware-decoded asset at 1.74 MB against 6.7 MB of
+/// stills, with none of the streaming-decode machinery a frame player would need — holding 100
+/// decoded 760x1080 frames is ~330 MB, so they could never all be resident anyway.
+///
+/// **It does not loop and it does not replay.** `DESIGN.md` records that the landing's motion is
+/// the globe's and everything else moves once; a hero that restarts every time you tap Home is
+/// an animation you cannot get away from.
+private struct HeroFilm: UIViewRepresentable {
+    func makeUIView(context: Context) -> PlayerView {
+        let view = PlayerView()
+        guard let url = Bundle.main.url(forResource: "hero-film", withExtension: "mp4")
+        else { return view }
+        let player = AVPlayer(url: url)
+        // Silent by construction — the clip carries no audio track — but muted anyway so it
+        // cannot interrupt anything the traveller is already listening to.
+        player.isMuted = true
+        player.actionAtItemEnd = .pause
+        view.player = player
+        player.play()
+        return view
+    }
+
+    func updateUIView(_ uiView: PlayerView, context: Context) {}
+
+    /// A view whose backing layer *is* the player layer, so the layer resizes with the view
+    /// instead of needing a frame set by hand on every layout pass.
+    final class PlayerView: UIView {
+        override static var layerClass: AnyClass { AVPlayerLayer.self }
+        private var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+        var player: AVPlayer? {
+            get { playerLayer.player }
+            set {
+                playerLayer.player = newValue
+                // The clip is cut to the hero's own aspect, so this crops almost nothing — it
+                // is here for the displays whose hero is a slightly different shape.
+                playerLayer.videoGravity = .resizeAspectFill
+            }
+        }
+    }
+}
+
 /// The photograph, the word, and nothing else.
 private struct HeroView: View {
     let height: CGFloat
@@ -83,11 +129,11 @@ private struct HeroView: View {
         .flatMap(UIImage.init(data:))
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            // ponytail: the poster frame only, and knowingly the wrong resolution. The 100-frame
-            // film plays here once an iOS tier exists in `scripts/build-frame-sequence.mjs` — the
-            // `port` tier this is cut from is 540x960, a 2.17x upscale on a 3x phone, which
-            // `DESIGN.md:1099` rejects as mush. Composition now, pixels with the tier.
+        ZStack(alignment: .bottom) {
+            // **The poster under the film, never removed.** The player takes a moment to
+            // produce its first frame, and frame one of the clip *is* this image — so the
+            // hand-off is a visual no-op rather than a flash of canvas. Same reasoning the web
+            // gives for its own poster.
             //
             // Loaded by path rather than `Image("name")`: the folder is a
             // `PBXFileSystemSynchronizedRootGroup`, so files bundle without an asset catalog,
@@ -102,6 +148,10 @@ private struct HeroView: View {
                 Token.canvas
             }
 
+            HeroFilm()
+                .frame(height: height)
+                .clipped()
+
             // Lands on the canvas at the bottom so the photograph dissolves into the page rather
             // than ending on a line.
             LinearGradient(
@@ -112,6 +162,7 @@ private struct HeroView: View {
             Text("Somewhere.")
                 .textStyle(.display.size(46))
                 .foregroundStyle(Token.foreground)
+                .frame(maxWidth: .infinity)
                 // **Three layers, and this is the mechanism contrast maths does not model.**
                 // `DESIGN.md:1118`: the worst pixel under the hero is 1.92:1 over 36 of 80 frames,
                 // and a scrim deep enough to fix that by itself would flatten the picture.
@@ -166,9 +217,26 @@ struct EntryCapsule: View {
                 }
             }
             hairline
-            row("Arriving", placeholder: "Add dates") { dateText(plan.draft.startDate) }
+            // **The wizard's own `DateField`**, not a second picker: same graphical month view,
+            // same popover, and the same rule that departure cannot precede arrival — which is
+            // enforced by the picker's own range rather than by validation after the fact.
+            row("Arriving", placeholder: "Add dates") {
+                DateField(
+                    value: Binding(get: { plan.draft.startDate },
+                                   set: { plan.draft.startDate = $0 }),
+                    earliest: Tiers.todayISO(),
+                    foreground: .black
+                )
+            }
             hairline
-            row("Leaving", placeholder: "Add dates") { dateText(plan.draft.endDate) }
+            row("Leaving", placeholder: "Add dates") {
+                DateField(
+                    value: Binding(get: { plan.draft.endDate },
+                                   set: { plan.draft.endDate = $0 }),
+                    earliest: plan.draft.startDate,
+                    foreground: .black
+                )
+            }
 
             Button(action: onPlan) {
                 Text("Plan it")
@@ -208,11 +276,4 @@ struct EntryCapsule: View {
         .padding(.vertical, 11)
     }
 
-    /// The dates are read-only here and typed in the wizard, which owns the picker and the
-    /// range rules. Showing them keeps the capsule honest about what it already knows.
-    private func dateText(_ iso: String) -> some View {
-        Text(iso.isEmpty ? "Add dates" : DayDisplay.formatDate(iso))
-            .textStyle(.bodyLarge)
-            .foregroundStyle(.black.opacity(iso.isEmpty ? 0.40 : 1))
-    }
 }

@@ -102,7 +102,11 @@ struct JourneyBand: View {
                     }
                     Text(beat.headline)
                         .textStyle(.bodyLarge.weight(TextStyle.medium))
-                        .foregroundStyle(Token.accent)
+                        // Gold rather than jade. `DESIGN.md` reserves gold for money and jade
+                        // for action, and a headline is neither — so the jade this replaces was
+                        // already off-rule. Asked for explicitly; noted so the next reader knows
+                        // it is a choice rather than a slip.
+                        .foregroundStyle(Token.money)
                     Text(beat.label.uppercased())
                         .textStyle(.label)
                         .foregroundStyle(Token.muted)

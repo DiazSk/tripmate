@@ -543,11 +543,14 @@ private struct FieldCell<Content: View>: View {
 /// A date-only string is a *calendar day*, not an instant, so it becomes the local midnight of
 /// that day and is read back as the local calendar day. `Tiers.tripDays` parsing in UTC stays
 /// correct because both ends are calendar days and only their difference is used.
-private struct DateField: View {
+struct DateField: View {
     @Binding var value: String
     /// The earliest selectable day, as ISO. Local today for arrival; the arrival date for
     /// departure, so the reversed-range rule is unreachable by picker.
     let earliest: String
+    /// The capsule on Home is the one *light* surface in the app, so the label there is near
+    /// black. Everywhere else it is the panel's off-white.
+    var foreground: Color = Token.foreground
 
     @State private var isPicking = false
 
@@ -559,7 +562,7 @@ private struct DateField: View {
         Button { isPicking = true } label: {
             Text(parsed(), format: .dateTime.month(.abbreviated).day().year())
                 .textStyle(.bodyLarge)
-                .foregroundStyle(Token.foreground)
+                .foregroundStyle(foreground)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
