@@ -51,10 +51,13 @@ enum AppTab: String, CaseIterable, Identifiable {
 /// missed.
 struct TabBar: View {
     @Binding var selection: AppTab
-    /// Scrolling down hides the label and shrinks the bar to its icons; scrolling up brings it
-    /// back. **The hand-rolled stand-in for iOS 26's `tabBarMinimizeBehavior`**, which only
-    /// applies to a system `TabView` — the thing this is not, for the reason in the docstring
-    /// above.
+    /// Scrolling down shrinks the whole bar; scrolling up grows it back. **The hand-rolled
+    /// stand-in for iOS 26's `tabBarMinimizeBehavior`**, which only applies to a system
+    /// `TabView` — the thing this is not, for the reason in the docstring above.
+    ///
+    /// A `scaleEffect` rather than a smaller layout: the bar shrinks *as one object*, labels
+    /// and icons and glass together, which is what minimising reads as. Animating height and
+    /// dropping the labels made it two separate things happening at once.
     var compact = false
 
     var body: some View {
@@ -66,8 +69,10 @@ struct TabBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .frame(height: compact ? 40 : Token.barHeight)
-        .glassPanel(radius: (compact ? 40 : Token.barHeight) / 2)
+        .frame(height: Token.barHeight)
+        .glassPanel(radius: Token.barHeight / 2)
+        // Anchored to the bottom so the bar shrinks in place rather than sliding up as it goes.
+        .scaleEffect(compact ? 0.84 : 1, anchor: .bottom)
     }
 
     private func cell(for tab: AppTab) -> some View {
@@ -75,21 +80,18 @@ struct TabBar: View {
         return VStack(spacing: 2) {
             Image(systemName: isSelected ? "\(tab.symbol).fill" : tab.symbol)
                 .textStyle(.detail)
-            if !compact {
-                Text(tab.label)
-                    .textStyle(.micro)
-                    // A fixed-height bar cannot grow for Dynamic Type, so the label shrinks
-                    // rather than clipping. Checked at AX3.
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .transition(.opacity)
-            }
+            Text(tab.label)
+                .textStyle(.micro)
+                // A fixed-height bar cannot grow for Dynamic Type, so the label shrinks rather
+                // than clipping. Checked at AX3.
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         // `DesignTokens` lists "the selected day" among the accent's sanctioned uses — action and
         // current position, never a readout. A selected tab is that same class of thing.
         .foregroundStyle(isSelected ? Token.accent : Token.muted)
         .frame(maxWidth: .infinity)
-        .frame(height: compact ? 40 : Token.barHeight)
+        .frame(height: Token.barHeight)
         // Without this a `.plain` button hit-tests only its drawn glyph and text, leaving most
         // of a third of the bar dead. `MapSearchView`'s result rows record the same finding.
         .contentShape(Rectangle())

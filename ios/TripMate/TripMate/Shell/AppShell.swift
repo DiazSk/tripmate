@@ -186,7 +186,9 @@ private struct ChromeLayer: View {
 
             TabBar(selection: $tab, compact: compact)
                 .padding(.horizontal, Token.padCompact)
-                .padding(.bottom, Token.gapRows)
+                // Close to the home indicator rather than floating well above it. This is
+                // inside the safe area already, so 4 is a gutter and not an overlap.
+                .padding(.bottom, 4)
         }
     }
 }

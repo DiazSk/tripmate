@@ -318,8 +318,10 @@ struct LandingFooter: View {
                 .fill(Token.cardBorder)
                 .frame(height: 1)
                 .padding(.bottom, 46)
-            ScenePhoto(name: "graubunden-autumn-valley", ratio: 16.0 / 5.0, radius: 0)
-                .padding(.horizontal, -Token.padCompact)
+            // Inset rather than full-bleed. Full width put the radius against the screen edge
+            // where it had nothing to round against; with a gutter either side it reads as a
+            // card again, like every other photograph on the page.
+            ScenePhoto(name: "graubunden-autumn-valley", ratio: 16.0 / 5.0)
 
             Text("TripMate")
                 .textStyle(.display.size(26))
