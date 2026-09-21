@@ -109,18 +109,32 @@ public enum RouteGeometry {
     /// A stop at exactly (0, 0) is treated as missing rather than as a point in the Gulf of
     /// Guinea. The model does occasionally emit a zeroed coordinate, and drawing a route leg out
     /// to the Atlantic is worse than drawing one fewer stop.
-    public static func routeStops(_ itinerary: Itinerary) -> [RouteStop] {
+    ///
+    /// **`corrections` is the same shape the streaming overload already takes** — day index, then
+    /// stop name, then the real point — because the two answer the same question about the same
+    /// data. The server sends them as `day-coords` frames while a plan streams; `TripsStore`
+    /// builds them on the device for a finished plan, where nobody sent any. Keying by *name*
+    /// rather than index is what lets a correction survive `addingPlace` inserting a stop above
+    /// it; an index key would silently re-point the correction at its neighbour.
+    ///
+    /// A correction onto a zeroed stop **un-drops it**, which is a real behaviour change and a
+    /// welcome one: a stop the model gave no coordinate is exactly the kind a geocoder can place.
+    public static func routeStops(
+        _ itinerary: Itinerary,
+        corrections: [Int: [String: GeoPoint]] = [:]
+    ) -> [RouteStop] {
         var out: [RouteStop] = []
         for (dayIndex, day) in itinerary.days.enumerated() {
             var withinDay = 0
             for (rawIndex, stop) in day.stops.enumerated() {
-                guard stop.lat != 0 || stop.lng != 0 else { continue }
+                let point = corrections[dayIndex]?[stop.name] ?? GeoPoint(stop)
+                guard point.lat != 0 || point.lng != 0 else { continue }
                 out.append(
                     RouteStop(
                         dayIndex: dayIndex,
                         indexWithinDay: withinDay,
                         rawIndex: rawIndex,
-                        point: GeoPoint(stop),
+                        point: point,
                         name: stop.name
                     )
                 )
