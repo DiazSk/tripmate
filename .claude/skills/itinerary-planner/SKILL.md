@@ -73,6 +73,10 @@ plus one or two example spots (e.g. "Seafood counters everywhere; e.g. Pike Plac
 invent hours, wait times, or menu prices for an area-level stop. The area must sit within or next
 to that part of the day's route — a meal should never pull the day across town.
 
+When you do name a specific venue, the lat/lng must be that venue's own position, not the
+area's. A stop called "Breakfast at Caffè Poliziano" pinned to the town centre is a wrong
+coordinate, not an approximate one.
+
 ### §3c. Sequencing and travel legs
 
 Cluster each day's stops by geographic proximity before ordering them. Never put scattered stops on
