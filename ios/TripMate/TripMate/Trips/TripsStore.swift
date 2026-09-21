@@ -123,6 +123,9 @@ final class TripsStore {
         resolving?.cancel()
         corrections = [:]
         resolved = []
+        // The session is seeded with *this* trip's plan, so carrying one across trips would have
+        // the model editing a plan it is not looking at.
+        forgetChat()
         do {
             open = try await api.trip(id: id)
             // Reset before the trip lands, not after: a stale index from a nine-day trip would
@@ -138,7 +141,16 @@ final class TripsStore {
 
     func closeTrip() {
         resolving?.cancel()
+        forgetChat()
         open = nil
+    }
+
+    private func forgetChat() {
+        chat = []
+        warnings = []
+        chatSessionId = nil
+        syncedHash = nil
+        isReplying = false
     }
 
     /// Put one day's stops where they actually are.
@@ -256,6 +268,102 @@ final class TripsStore {
     /// Optimistic with a rollback, the shape `setActualCost` above sets: the tile is already
     /// gone from the screen, so there is nothing to spin over, and a failure has to put it back
     /// rather than leave a trip the traveller believes is deleted.
+    // MARK: - Chat
+
+    /// The edit conversation for the open trip, in the order the route wants it.
+    ///
+    /// **In memory only.** The server keeps its own transcript in `trip_chat_turns`, so closing
+    /// the trip loses the history on this device but not on the server. Reading it back is
+    /// `GET /api/trip-chat`, and worth doing when somebody misses it — the chat still *works*
+    /// across a reopen, because continuity lives in the session, not in this array.
+    private(set) var chat: [ChatTurn] = []
+    private(set) var isReplying = false
+
+    /// Skill §12 guardrails from the last turn — an over-long day, a clash, a budget overshoot.
+    /// Held rather than folded into the reply because they are the model flagging a cost of the
+    /// edit it just made, and dropping them silently would hide it.
+    private(set) var warnings: [String] = []
+
+    /// The model's conversation, and what it was last told the plan looks like. Both are opaque
+    /// here: they are echoed back untouched, never inspected. A null `syncedHash` is the server
+    /// telling us its picture is stale, and echoing the null is what forces it to resync.
+    @ObservationIgnored private var chatSessionId: String?
+    @ObservationIgnored private var syncedHash: String?
+
+    /// Send a message and take the plan the planner sends back.
+    ///
+    /// **Not optimistic, unlike every other mutation here.** The others know the answer before
+    /// they ask — an actual cost is the number you typed. An edit's result is whatever the model
+    /// decides, so there is nothing to draw until it replies and nothing to roll back.
+    ///
+    /// Returns false when the turn did not happen, so the composer can keep the text rather than
+    /// make somebody retype it. The failed turn is dropped from `chat` for the same reason the
+    /// others roll back: this array is the conversation the *server* has, and after a failure it
+    /// has nothing.
+    @discardableResult
+    func send(_ text: String) async -> Bool {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty, !isReplying, let trip = open else { return false }
+
+        chat.append(ChatTurn(role: .user, content: body))
+        isReplying = true
+        message = nil
+        defer { isReplying = false }
+
+        do {
+            let edit = try await api.editTrip(
+                trip: trip.summary,
+                itinerary: trip.itinerary,
+                messages: chat,
+                dayIndex: activeDay,
+                userAnswers: trip.userAnswers,
+                sessionId: chatSessionId,
+                syncedHash: syncedHash
+            )
+            chatSessionId = edit.sessionId
+            syncedHash = edit.syncedHash
+            warnings = edit.warnings
+            if let reply = edit.reply, !reply.isEmpty {
+                chat.append(ChatTurn(role: .assistant, content: reply))
+            }
+            apply(edit, to: trip)
+            return true
+        } catch {
+            chat.removeLast()
+            message = Self.describe(error)
+            return false
+        }
+    }
+
+    /// Take the edited plan: draw it, forget what the old one resolved to, then persist it.
+    private func apply(_ edit: TripEdit, to trip: Trip) {
+        open?.itinerary = edit.itinerary
+
+        // A day whose stops changed has corrections keyed to names that may no longer be there,
+        // and `resolved` would stop the pass re-running. `daysModified` is 1-based.
+        for day in edit.daysModified.map({ $0 - 1 }) {
+            corrections[day] = nil
+            resolved.remove(day)
+        }
+        // An edit can delete the day you were looking at.
+        activeDay = min(activeDay, max(edit.itinerary.days.count - 1, 0))
+        emphasis = nil
+        resolveStops(day: activeDay)
+
+        // Persist after drawing, and do not roll the plan back if this fails: the edit is real,
+        // the model has acted on it, and a plan that reverts under you is worse than one that
+        // needs saving again. `chatSessionId` rides along the way `patchDraft` sends it.
+        let itinerary = edit.itinerary
+        let sessionId = edit.sessionId
+        Task { [api] in
+            do {
+                _ = try await api.updateTrip(id: trip.id, itinerary: itinerary, chatSessionId: sessionId)
+            } catch {
+                message = "The plan changed, but saving it failed. It may not survive a reopen."
+            }
+        }
+    }
+
     func delete(_ summary: TripSummary) async {
         let isDraft = summary.resolvedStatus == .draft
         // The whole array, not an index: the list can be re-sorted or reloaded between these

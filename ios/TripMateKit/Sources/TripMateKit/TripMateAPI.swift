@@ -76,6 +76,62 @@ public struct TripUpdate: Decodable, Sendable, Equatable {
     public let status: TripStatus
 }
 
+/// One line of the edit conversation, in the shape `/api/trip-edit` reads.
+public struct ChatTurn: Codable, Sendable, Equatable, Identifiable {
+    public enum Role: String, Codable, Sendable { case user, assistant }
+    public let id: UUID
+    public let role: Role
+    public let content: String
+
+    public init(id: UUID = UUID(), role: Role, content: String) {
+        self.id = id
+        self.role = role
+        self.content = content
+    }
+
+    // `id` is ours, for SwiftUI; the route reads only role and content and rejects nothing extra,
+    // but sending a key it never asked for is noise on a prompt we pay for by the token.
+    private enum CodingKeys: String, CodingKey { case role, content }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = UUID()
+        role = try c.decode(Role.self, forKey: .role)
+        content = try c.decode(String.self, forKey: .content)
+    }
+}
+
+/// `POST /api/trip-edit` in `chat` mode.
+///
+/// **`ops` deliberately does not appear.** The route applies the model's patch server-side and
+/// returns the whole itinerary, so there is no `PatchOp` decoder on this platform and no second
+/// implementation of `applyPatch` to keep in step. Persist `itinerary` and `sessionId`; the web
+/// does the same through `patchDraft`.
+public struct TripEdit: Decodable, Sendable, Equatable {
+    public let ok: Bool
+    /// The plan after the edit. Persist this — the server does not write it to the trip row.
+    public let itinerary: Itinerary
+    /// Prose for the traveller. Null on a turn that only changed the plan.
+    public let reply: String?
+    public let options: [String]
+    public let changes: [String]
+    /// Skill §12 guardrails — travel time, hours clashes, an over-long day, a budget overshoot.
+    public let warnings: [String]
+    /// 1-based, and derived from the ops the applier *accepted* rather than from what the model
+    /// claimed it touched.
+    public let daysModified: [Int]
+    public let why: String?
+    public let knockOn: String?
+    /// Non-empty only when the model reached outside its scope, which means the edit did less
+    /// than its reply says. Surface it rather than dropping it.
+    public let rejected: [String]
+    /// Echo both of these back on the next turn. `syncedHash` is **null when an op was rejected**
+    /// — the session's picture of the plan is then wrong, and failing the match next turn is how
+    /// the server is forced to resync rather than edit from a stale copy.
+    public let sessionId: String?
+    public let syncedHash: String?
+}
+
 public struct GeocodedPlace: Decodable, Sendable, Equatable {
     public let lat: Double
     /// The route renames the geocoder's own `lon` to `lng` on the way out. See contract rule 3.
@@ -211,6 +267,42 @@ public struct TripMateAPI: Sendable {
         )
         request.httpMethod = "PATCH"
         return try await send(request, as: TripUpdate.self)
+    }
+
+    /// Ask the planner to change the plan in words.
+    ///
+    /// `trip` and `itinerary` are both required by the route: it rebuilds the edit context from
+    /// the summary and patches the itinerary you send, not one it looks up — which is what lets
+    /// the pre-save page edit a plan that has no row yet.
+    public func editTrip(
+        trip: TripSummary,
+        itinerary: Itinerary,
+        messages: [ChatTurn],
+        dayIndex: Int? = nil,
+        userAnswers: UserAnswers? = nil,
+        sessionId: String? = nil,
+        syncedHash: String? = nil
+    ) async throws -> TripEdit {
+        struct Body: Encodable {
+            let mode = "chat"
+            let trip: TripSummary
+            let itinerary: Itinerary
+            let tripId: String?
+            let messages: [ChatTurn]
+            let dayIndex: Int?
+            let userAnswers: UserAnswers?
+            let sessionId: String?
+            let syncedHash: String?
+        }
+        let request = try await post(
+            "/api/trip-edit",
+            body: Body(
+                trip: trip, itinerary: itinerary, tripId: trip.id, messages: messages,
+                dayIndex: dayIndex, userAnswers: userAnswers,
+                sessionId: sessionId, syncedHash: syncedHash
+            )
+        )
+        return try await send(request, as: TripEdit.self)
     }
 
     public func deleteTrip(id: String) async throws {

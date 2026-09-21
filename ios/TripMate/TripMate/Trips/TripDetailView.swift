@@ -45,6 +45,7 @@ struct TripDetailView: View {
     /// The page the horizontal scroller is on. Mirrors `activeDay` in both directions: the
     /// scroller writes it as you swipe, the stepper and the menu write it to move the scroller.
     @State private var paged: Int?
+    @State private var isChatting = false
 
     private var days: [DayPlan] { trip.itinerary.days }
     private var isCapsule: Bool { metrics.detent == .small }
@@ -59,7 +60,8 @@ struct TripDetailView: View {
                 onSelectDay: onSelectDay,
                 // From the header the day is whichever one you are on, same as the row at its
                 // foot — the sheet is one surface reached two ways, not two behaviours.
-                onSearch: { search.open(fromDay: activeDay) }
+                onSearch: { search.open(fromDay: activeDay) },
+                onChat: { isChatting = true }
             )
             if isCapsule {
                 capsuleFacts
@@ -83,6 +85,9 @@ struct TripDetailView: View {
         )) {
             AddStopSheet(trip: trip, fromDay: search.fromDay, onAdd: onAddPlace)
                 .presentationDetents([.large])
+        }
+        .sheet(isPresented: $isChatting) {
+            ChatSheet().presentationDetents([.large])
         }
     }
 
@@ -347,6 +352,7 @@ private struct TripHeaderRow: View {
     let onBack: () -> Void
     let onSelectDay: (Int) -> Void
     let onSearch: () -> Void
+    let onChat: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -390,6 +396,18 @@ private struct TripHeaderRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Add a stop")
+
+            // Beside search for the reason search is here: the trailing edge of this row is the
+            // toolbar, and both are trip-scoped actions on the plan below them.
+            Button(action: onChat) {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .textStyle(.heading)
+                    .foregroundStyle(Token.muted)
+                    .frame(width: 32, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Ask for a change")
         }
         .frame(height: 56)
         // **A scroll edge.** The pager runs under this row and was clipping a stop's name

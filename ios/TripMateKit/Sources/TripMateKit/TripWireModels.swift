@@ -214,6 +214,19 @@ public struct Itinerary: Codable, Sendable, Equatable {
     public var days: [DayPlan]
 }
 
+public extension Trip {
+    /// The summary shape `/api/trip-edit` wants, from the trip already open.
+    ///
+    /// Here rather than at the call site because `TripSummary`'s memberwise initialiser is
+    /// internal, so the app target cannot build one.
+    var summary: TripSummary {
+        TripSummary(
+            id: id, destination: destination, startDate: startDate,
+            endDate: endDate, budget: budget, status: status
+        )
+    }
+}
+
 public struct TripSummary: Codable, Sendable, Equatable {
     public let id: String
     public let destination: String
