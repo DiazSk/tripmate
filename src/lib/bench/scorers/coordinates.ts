@@ -27,6 +27,18 @@ import type { ParsedEntry, ParsedItinerary } from "../parseItinerary";
  *
  * What it therefore does NOT catch: a lone stop that is simply in the wrong place, and a whole plan
  * shifted off by a constant. Both need a real gazetteer. Add one when somebody needs the metres.
+ *
+ * **`normalized` rewards vagueness, so never read it alone.** The denominator is named venues, and
+ * a model can raise the score by naming fewer of them rather than by placing them better. That is
+ * not hypothetical: an A/B of the `FOOD_STOP_INSTRUCTION` venue-coordinate rule (2 runs per arm,
+ * same 9-day input, prompts verified out of `generations`) moved the score 31/33% → 45/41% while
+ * `named` fell 29/21 → 22/17 and the largest single pile GREW from 26/62 to 34/63 stops — the
+ * treatment plans had swapped "Farewell dinner at La Grotta" for "Dinner at local trattoria". The
+ * plan got vaguer and geometrically worse while the score went up.
+ *
+ * So `named` and `maxCluster` are reported beside it deliberately, and a comparison that quotes
+ * only the percentage is misreading this scorer. A rising score with a falling `named` is the
+ * model dodging the question.
  */
 
 /**
