@@ -80,3 +80,29 @@ test("all three prompts ask for the identical day shape", () => {
   assert.ok(PROMPTS.critique().includes(dayShape), "critique's day shape differs from generate's");
   assert.ok(PROMPTS.rebalance().includes(dayShape), "rebalance's day shape differs from generate's");
 });
+
+test("a preferences object missing `tags` does not take the generation down", () => {
+  // `POST /api/itinerary` spreads an unvalidated body, so `tags` is typed as required and is not
+  // guaranteed to be there. Reaching `.length` on undefined threw an unhandled TypeError 26
+  // seconds into a real generation — after the context call had already been paid for — and the
+  // traveller was told "The planner didn't finish."
+  const build = (preferences) =>
+    buildGeneratePrompt({
+      destination: "Kyoto",
+      startDate: "2026-05-01",
+      endDate: "2026-05-03",
+      budget: 1500,
+      tier: "comfort",
+      weather: [],
+      preferences,
+    });
+
+  assert.doesNotThrow(() => build({ vibe: "relaxed" }));
+  assert.doesNotThrow(() => build({}));
+  // A vibe with no tags still reaches the traveller.
+  assert.match(build({ vibe: "relaxed" }), /relaxed/);
+  // Neither tags nor vibe is the same as no preferences at all: the block is omitted.
+  assert.equal(build({}).includes("Traveler preferences:"), false);
+  // And the normal shape is unchanged.
+  assert.match(build({ tags: ["Food & Drink"], vibe: null }), /Food & Drink/);
+});

@@ -56,12 +56,21 @@ const INTEREST_GUIDANCE: Record<string, string> = {
 };
 
 function formatPreferences(preferences?: ItineraryPreferences | null): string {
-  if (!preferences || (preferences.tags.length === 0 && !preferences.vibe)) return "";
+  // **`tags` is typed as required and is not guaranteed to be there.** `POST /api/itinerary`
+  // spreads an unvalidated JSON body, and its own route calls itself "the trust boundary" — so a
+  // caller that sends `preferences` without `tags` reached `.length` on undefined and took the
+  // whole generation down with an unhandled TypeError, 26 seconds in, *after* the context call
+  // had already been paid for. The traveller saw "The planner didn't finish".
+  //
+  // One coalesce here rather than four guards below, because all four readers are in this
+  // function and nothing else in the codebase touches `preferences.tags`.
+  const tags = preferences?.tags ?? [];
+  if (!preferences || (tags.length === 0 && !preferences.vibe)) return "";
   const parts: string[] = [];
   if (preferences.vibe) parts.push(`leans toward a "${preferences.vibe}" vibe`);
-  if (preferences.tags.length > 0) parts.push(`especially interested in ${preferences.tags.join(", ")}`);
+  if (tags.length > 0) parts.push(`especially interested in ${tags.join(", ")}`);
 
-  const guidance = preferences.tags
+  const guidance = tags
     .map((tag) => INTEREST_GUIDANCE[tag])
     .filter((line): line is string => Boolean(line));
 
