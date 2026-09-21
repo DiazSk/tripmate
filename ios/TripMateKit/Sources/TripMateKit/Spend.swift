@@ -59,6 +59,23 @@ public struct SpendTile: Sendable, Equatable, Identifiable {
     public var id: String { label }
 }
 
+/// One category's place in the day, for the band that draws the day's composition.
+///
+/// **`fraction` and `drawn` are separate fields on purpose.** The band floors a tiny segment so
+/// it is visible at all, which makes what it draws *not* the true share; keeping the distorted
+/// number in its own property is what stops it leaking into a printed figure. Anything with a
+/// `%` or a `$` on screen reads `percent` or the tile; only geometry reads `drawn`.
+public struct SpendShare: Sendable, Equatable, Identifiable {
+    public let tile: SpendTile
+    /// The true share of the day, `0...1`.
+    public let fraction: Double
+    /// What the band draws: floored, then renormalised so the segments still fill the track.
+    public let drawn: Double
+    /// The printed percentage as a whole number. **These sum to exactly 100.**
+    public let percent: Int
+    public var id: String { tile.label }
+}
+
 /// A span of the budget bar: one day's share of the track.
 public struct BudgetSegment: Sendable, Equatable {
     public let dayIndex: Int
@@ -120,6 +137,62 @@ public enum Spend {
             // Stay keeps a literal: lodging is not a `StopCategory` and never will be.
             SpendTile(label: "Stay", amount: spend.stay, symbol: "bed.double"),
         ].filter { $0.amount > 0 }
+    }
+
+    /// The day's categories as shares of it, biggest first — the day's *composition* rather
+    /// than a list of its amounts.
+    ///
+    /// **Sorted descending, and that is what makes the band's alpha ramp mean something.** The
+    /// palette allows this block exactly one colour (gold; jade acts and coral warns, and the
+    /// route hues are map-native), so rank is carried by lightness. Against `tiles`' fixed
+    /// category order the ramp would be arbitrary. Ties keep `tiles`' order, so the result is
+    /// deterministic for a day with two equal categories.
+    ///
+    /// **`minimum` is a drawing floor, not a rounding rule.** A $2 category in a $665 day is
+    /// 0.3% — at 362pt that is a sub-pixel segment, which draws as nothing or as a stray
+    /// hairline against its own separator. Each share is floored to `minimum` and the set is
+    /// then renormalised, so the segments still fill the track exactly and the distortion is
+    /// confined to `drawn`.
+    ///
+    /// **`percent` uses largest remainder, so the parts add up.** Rounding 48.6 / 41.6 / 9.7
+    /// each to nearest gives 49 + 42 + 10 = 101, and this module exists so that the parts and
+    /// the total cannot disagree — `tiles` says as much about its own filter. Floor every
+    /// share, then hand the leftover points to the largest fractional remainders.
+    ///
+    /// An empty or costless day returns `[]`, same as `tiles`.
+    public static func shares(_ spend: DaySpend, minimum: Double = 0.035) -> [SpendShare] {
+        let ordered = tiles(spend)
+        let total = ordered.reduce(0) { $0 + $1.amount }
+        guard total > 0 else { return [] }
+
+        // `enumerated` before the sort, so the original index survives as the tie-break.
+        let ranked = ordered.enumerated()
+            .sorted { ($0.element.amount, -Double($0.offset)) > ($1.element.amount, -Double($1.offset)) }
+            .map(\.element)
+
+        let fractions = ranked.map { $0.amount / total }
+
+        let floored = fractions.map { Swift.max($0, minimum) }
+        let flooredTotal = floored.reduce(0, +)
+        let drawn = floored.map { $0 / flooredTotal }
+
+        var percents = fractions.map { Int(($0 * 100).rounded(.down)) }
+        let leftover = 100 - percents.reduce(0, +)
+        if leftover > 0 {
+            let byRemainder = fractions.indices.sorted {
+                let a = fractions[$0] * 100, b = fractions[$1] * 100
+                let ra = a - a.rounded(.down), rb = b - b.rounded(.down)
+                // Ties go to the larger share, then to the earlier index, so this is stable.
+                return (ra, fractions[$0], -Double($1)) > (rb, fractions[$1], -Double($0))
+            }
+            for index in byRemainder.prefix(leftover) { percents[index] += 1 }
+        }
+
+        return ranked.indices.map {
+            SpendShare(
+                tile: ranked[$0], fraction: fractions[$0], drawn: drawn[$0], percent: percents[$0]
+            )
+        }
     }
 
     /// **Delegates rather than reducing again.** The breakdown's Total tile *is* this day's

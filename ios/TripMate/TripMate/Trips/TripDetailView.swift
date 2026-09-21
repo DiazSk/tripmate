@@ -256,7 +256,7 @@ struct TripDetailView: View {
     /// navigation, so it sits where you arrive after reading the day rather than in front of it.
     private func moneyBlock(_ day: DayPlan, index: Int) -> some View {
         VStack(alignment: .leading, spacing: Token.gapRows) {
-            SpendTable(day: day, dayNumber: index + 1)
+            SpendComposition(day: day, dayNumber: index + 1)
             if let tier = trip.itinerary.tier.map(Tiers.tier) {
                 // A tier is a spending style, so it explains the budget rather than the title.
                 Text("\(tier.name) · \(tier.description)")
@@ -473,8 +473,10 @@ private struct DayMasthead: View {
 private struct SectionRule: View {
     let label: String
     var tint: Color = Token.muted
-    /// A hair of extra fact at the far end — the hours a group spans, and nothing longer.
+    /// A hair of extra fact at the far end — the hours a group spans, the day's total, and
+    /// nothing longer.
     var trailing: String?
+    var trailingTint: Color = Token.muted.opacity(0.7)
 
     var body: some View {
         HStack(spacing: 10) {
@@ -487,7 +489,7 @@ private struct SectionRule: View {
             if let trailing {
                 Text(trailing)
                     .textStyle(.money.size(10))
-                    .foregroundStyle(Token.muted.opacity(0.7))
+                    .foregroundStyle(trailingTint)
             }
         }
         // One element, and a header to VoiceOver: "the next three stops are the afternoon" is
@@ -639,46 +641,65 @@ private struct ActualCostField: View {
     }
 }
 
-/// What the day cost, split by what it was spent on.
+/// What the day cost, as the shape of the day rather than as a list of its amounts.
 ///
-/// **The tiles always add up to the Total beneath them**, which is why the empty categories are
-/// dropped in `Spend.tiles` rather than here — a day of sightseeing used to print four zeroes
-/// beside a total nothing on screen accounted for.
+/// **A list was the wrong form, and it read as exactly what it was.** Label column, figure
+/// column, ruled `Total` — that is a restaurant check, and the resemblance was not a styling
+/// accident: enumerating amounts is all a list can do. It leaves the division to the reader,
+/// when the fact worth having is that half of this day was the bed.
 ///
-/// **Six bordered boxes became a table of particulars.** Four tiles at `white 0.20`, each with
-/// an icon restating a word beside it, over a black slab for the Total, inside a bordered panel,
-/// on a surface whose entire discipline is one material at one alpha. A price list is a column
-/// of labels and a column of figures with rules between them; that is all this is now, and it is
-/// both quieter and easier to read down.
+/// So the headline is a band sized by share, and the rows are demoted to its key. Proportion is
+/// the one thing the list could not show and the one thing this block exists to say.
 ///
-/// **Total is not a filled bar in the accent colour.** It was `bg-accent` on the web: a solid
-/// button-coloured slab whose whole content is a number you cannot press. Gold counts, jade
-/// acts, and a figure is information rather than an invitation.
-private struct SpendTable: View {
+/// **The `Total` row is gone rather than restyled.** It was the most bill-like element on the
+/// page *and* a duplicate — `DayLedger` prints the same figure twenty points above at 30pt in
+/// the serif. It rides in the section rule now, as a caption on the breakdown rather than as a
+/// bottom line, and the band's full width is the total anyway.
+///
+/// **One colour, at five alphas.** `DESIGN.md` leaves this block exactly one: jade acts, coral
+/// warns, and the route hues are map-native and may never fill chrome. That is not a
+/// compromise — everything in here is gold because everything in here is money, and the ramp
+/// carries rank instead. `Spend.shares` sorts descending so the ramp means something.
+private struct SpendComposition: View {
     let day: DayPlan
     let dayNumber: Int
 
+    /// Gold by rank. Five steps because `Spend.tiles` yields at most five categories; the
+    /// dimmest still separates from the `white 0.07` track behind it.
+    private static let ramp: [Double] = [1.0, 0.76, 0.56, 0.40, 0.28]
+
+    private func tint(_ rank: Int) -> Color {
+        Token.money.opacity(Self.ramp[min(rank, Self.ramp.count - 1)])
+    }
+
     var body: some View {
         let spend = Spend.byCategory(day)
-        let tiles = Spend.tiles(spend)
+        let shares = Spend.shares(spend)
         // A day that cost nothing draws nothing. `DESIGN.md`: don't show a tile, heading or chip
         // for a value that isn't there.
-        if spend.total > 0 {
+        if !shares.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                SectionRule(label: "DAY \(dayNumber) SPEND")
-                    .padding(.bottom, 4)
+                SectionRule(
+                    label: "DAY \(dayNumber) SPEND",
+                    trailing: spend.total.formatted(
+                        .currency(code: "USD").precision(.fractionLength(0))
+                    ),
+                    trailingTint: Token.money
+                )
 
-                ForEach(tiles) { tile in
-                    row(tile.label, tile.amount, tint: Token.money, weight: TextStyle.medium)
-                        .overlay(alignment: .top) {
-                            Rectangle().fill(Token.cardBorder).frame(height: 1)
-                        }
+                // **A composition of one has no composition to show.** A single category fills
+                // the band edge to edge, which reads as a progress meter — and there is already
+                // a real one twenty points above it in `DayLedger`. The row says it alone.
+                if shares.count > 1 {
+                    band(shares).padding(.top, 14)
                 }
 
-                row("Total", spend.total, tint: Token.money, weight: TextStyle.semibold, isTotal: true)
-                    .overlay(alignment: .top) {
-                        Rectangle().fill(Token.money.opacity(0.3)).frame(height: 1)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(shares.enumerated()), id: \.element.id) { rank, share in
+                        row(share, rank: rank)
                     }
+                }
+                .padding(.top, 8)
 
                 if let over = TripCopy.overspend(day) {
                     Text(over)
@@ -691,21 +712,69 @@ private struct SpendTable: View {
         }
     }
 
-    private func row(
-        _ label: String, _ amount: Double, tint: Color, weight: Float, isTotal: Bool = false
-    ) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .textStyle(isTotal ? .detail.weight(TextStyle.medium) : .detail)
-                .foregroundStyle(isTotal ? Token.foreground : Token.muted)
-            Spacer(minLength: 8)
-            Text(amount, format: .currency(code: "USD").precision(.fractionLength(0)))
-                .textStyle(.money.size(isTotal ? 15 : 13).weight(weight))
-                .foregroundStyle(tint)
+    /// The day, to scale.
+    ///
+    /// **A `GeometryReader`, because SwiftUI has no flex weights.** `HStack` distributes slack
+    /// equally between flexible children and `layoutPriority` orders who is served first — a
+    /// share is neither of those, so the widths are arithmetic on the measured track. The
+    /// separators are subtracted before the split, or `n` hairlines push the last segment out.
+    ///
+    /// The separators are `Token.canvas` — the device the retired `BudgetBarView` used, for the
+    /// reason its docstring gave: adjacent spans stay legible where they get narrow.
+    private func band(_ shares: [SpendShare]) -> some View {
+        GeometryReader { proxy in
+            let gaps = CGFloat(shares.count - 1)
+            let available = max(0, proxy.size.width - gaps)
+            HStack(spacing: 0) {
+                ForEach(Array(shares.enumerated()), id: \.element.id) { rank, share in
+                    if rank > 0 {
+                        Rectangle().fill(Token.canvas).frame(width: 1)
+                    }
+                    Rectangle()
+                        .fill(tint(rank))
+                        .frame(width: available * share.drawn)
+                }
+            }
         }
-        .padding(.vertical, 9)
-        // One label for the whole row, so VoiceOver says "Food, 40 dollars" rather than reading
-        // a word and a number as two separate elements.
+        .frame(height: 10)
+        .background(Color.white.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        // It restates the rows beneath it, and a screen reader should hear the day once.
+        .accessibilityHidden(true)
+    }
+
+    /// One line of the key: the swatch that ties it to its segment, the name, its share, and
+    /// what it cost.
+    ///
+    /// **Two figures, one alignment edge.** Only the amount is a column; the percentage hangs
+    /// off the name and is deliberately ragged, because it annotates the name rather than
+    /// forming a third column — and three aligned columns is the bill again.
+    private func row(_ share: SpendShare, rank: Int) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 9) {
+            // Square, not round: the house rule is round what you touch, square what you read,
+            // and a legend swatch is read.
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(tint(rank))
+                .frame(width: 8, height: 8)
+                // A shape carries no baseline, so it is aligned to the text by hand.
+                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+            Text(share.tile.label)
+                .textStyle(.detail)
+                .foregroundStyle(Token.foreground)
+            // **`caption`, not `label`.** The label step carries 0.18em, which exists to give
+            // uppercase micro-labels air — on a two-digit figure it spaces the glyphs out to
+            // `6 8 %` and reads as a fault rather than as a style. A percentage is a figure.
+            Text("\(share.percent)%")
+                .textStyle(.caption)
+                .foregroundStyle(Token.muted.opacity(0.55))
+            Spacer(minLength: 8)
+            Text(share.tile.amount, format: .currency(code: "USD").precision(.fractionLength(0)))
+                .textStyle(.money.size(13).weight(TextStyle.medium))
+                .foregroundStyle(Token.money)
+        }
+        .padding(.vertical, 7)
+        // One label for the whole row, so VoiceOver says "Stay, 49 percent, 125 dollars" rather
+        // than reading a swatch, a word and two numbers as separate elements.
         .accessibilityElement(children: .combine)
     }
 }

@@ -261,3 +261,73 @@ final class SpendTests: XCTestCase {
     }
 
 }
+
+/// `Spend.shares` — the day's composition, which the band draws and the legend prints.
+final class SpendShareTests: XCTestCase {
+
+    private func spend(
+        food: Double = 0, entry: Double = 0, transit: Double = 0,
+        other: Double = 0, stay: Double = 0
+    ) -> DaySpend {
+        DaySpend(
+            food: food, entry: entry, transit: transit, other: other, stay: stay,
+            total: food + entry + transit + other + stay
+        )
+    }
+
+    /// Biggest first, because the band's alpha ramp is the only thing encoding rank.
+    func testOrdersByAmountDescending() {
+        let shares = Spend.shares(spend(food: 107, other: 25, stay: 125))
+        XCTAssertEqual(shares.map(\.tile.label), ["Stay", "Food", "Other"])
+        // 48.64 / 41.63 / 9.73. Nearest-rounding would print 49 / 42 / 10 and sum to 101;
+        // largest remainder gives the two spare points to Other and Stay instead.
+        XCTAssertEqual(shares.map(\.percent), [49, 41, 10])
+    }
+
+    /// Equal amounts keep `tiles`' own order, so two runs cannot disagree.
+    func testTiesKeepTheCategoryOrder() {
+        let shares = Spend.shares(spend(food: 50, transit: 50))
+        XCTAssertEqual(shares.map(\.tile.label), ["Food", "Transit"])
+    }
+
+    /// **The whole reason `percent` is not a plain rounding.** 48.6 / 41.6 / 9.7 each rounded to
+    /// nearest is 49 + 42 + 10 = 101, on a screen whose entire argument is that the parts add
+    /// up to the total.
+    func testPrintedPercentagesAlwaysSumToOneHundred() {
+        let cases: [DaySpend] = [
+            spend(food: 107, other: 25, stay: 125),
+            spend(food: 1, entry: 1, transit: 1),
+            spend(food: 10, entry: 20, transit: 30, other: 40, stay: 50),
+            spend(food: 333, entry: 333, transit: 334),
+            spend(food: 0.01, stay: 99.99),
+        ]
+        for day in cases {
+            let total = Spend.shares(day).reduce(0) { $0 + $1.percent }
+            XCTAssertEqual(total, 100, "percentages summed to \(total) for \(day)")
+        }
+    }
+
+    /// The segments must fill the track exactly, or the band reports a day that lost money.
+    func testDrawnWidthsAlwaysFillTheTrack() {
+        for day in [spend(food: 107, other: 25, stay: 125), spend(food: 2, stay: 663)] {
+            let drawn = Spend.shares(day).reduce(0) { $0 + $1.drawn }
+            XCTAssertEqual(drawn, 1, accuracy: 0.0001)
+        }
+    }
+
+    /// A 0.3% category is a sub-pixel segment. It gets floored so it draws — and its *printed*
+    /// share stays honest, which is why the two are separate fields.
+    func testATinyCategoryIsDrawnWiderThanItIsButStillPrintsTheTruth() {
+        let shares = Spend.shares(spend(food: 2, stay: 663), minimum: 0.035)
+        let tiny = try! XCTUnwrap(shares.first { $0.tile.label == "Food" })
+        XCTAssertEqual(tiny.fraction, 2.0 / 665.0, accuracy: 0.0001)
+        XCTAssertGreaterThanOrEqual(tiny.drawn, 0.03)
+        XCTAssertEqual(tiny.percent, 0)
+    }
+
+    /// Empty categories are already dropped by `tiles`; a day that cost nothing has no
+    /// composition at all.
+    func testACostlessDayHasNoShares() {
+        XCTAssertTrue(Spend.shares(spend()).isEmpty)
+    }
+}
