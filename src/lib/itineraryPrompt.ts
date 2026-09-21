@@ -163,7 +163,22 @@ const STOP_LINES_INSTRUCTION = `Each stop also needs exactly two one-line fields
 // like a booking and pins the day's route to one address. An area plus "what to look
 // for" is both more honest and more usable — the specific venue is only worth naming
 // when the venue itself is the reason to go there.
-const FOOD_STOP_INSTRUCTION = `For "food" stops, prefer an AREA over a specific restaurant unless the place itself is the point (it's a landmark eatery, it needs a reservation, or a stated interest is the reason the day routes there). An area-level food stop uses the neighborhood/market as its "name" (e.g. "Dinner around Pike Place Market"), the area's approximate lat/lng, and a "why"/"note" that says what to look for there plus one or two example spots (e.g. "Seafood counters everywhere; e.g. Pike Place Chowder"). Never invent hours, wait times, or menu prices for an area-level stop. The area must sit within or next to that part of the day's route — a meal should never pull the day across town. **When you do name a specific venue, the lat/lng must be that venue's own position, not the area's** — a stop called "Breakfast at Caffè Poliziano" pinned to the town centre is a wrong coordinate, not an approximate one.`;
+//
+// **Tried and removed: "when you name a specific venue, the lat/lng must be that venue's own
+// position, not the area's."** It is true, and it made things worse. A/B on the canonical
+// Val d'Orcia trip, 2 runs per arm, each arm's prompt verified out of `generations` rather than
+// from the file on disk: `scoreCoordinates` rose 31/33% to 45/41%, which reads as a win until
+// you look at what moved. Named venues per plan fell 29/21 to 22/17 and the largest pile of
+// stops on one coordinate GREW, 26 of 62 to 34 of 63 — over half the trip on the Pienza
+// centroid. The model had swapped "Farewell dinner at La Grotta" and "Cantina Contucci" for
+// "Dinner at local trattoria" and "Aperitivo at wine bar". Asked to give a named venue a real
+// coordinate it does not know, the cheapest compliance is to name no venue.
+//
+// That is worse than the bug it targets, because **the repair path resolves stops by name**
+// (`placeQuery` → Overpass here, `StopResolution` → MKLocalSearch on iOS). A wrong coordinate
+// on "La Grotta" is fixable; "local trattoria" is not fixable by anything, ever. The prompt
+// cannot carry this — it is a knowledge problem, and the model has no coordinates to give.
+const FOOD_STOP_INSTRUCTION = `For "food" stops, prefer an AREA over a specific restaurant unless the place itself is the point (it's a landmark eatery, it needs a reservation, or a stated interest is the reason the day routes there). An area-level food stop uses the neighborhood/market as its "name" (e.g. "Dinner around Pike Place Market"), the area's approximate lat/lng, and a "why"/"note" that says what to look for there plus one or two example spots (e.g. "Seafood counters everywhere; e.g. Pike Place Chowder"). Never invent hours, wait times, or menu prices for an area-level stop. The area must sit within or next to that part of the day's route — a meal should never pull the day across town.`;
 
 // Lodging came back as the same mid-range city hotel every night regardless of who
 // was travelling or where the days actually went. The type of stay is a real choice
