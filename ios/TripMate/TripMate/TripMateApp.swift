@@ -42,6 +42,10 @@ struct TripMateApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(store: store, plan: plan)
+                // Also in the environment, not only as a parameter: a sheet presented from deep
+                // inside trip detail (`ChatSheet`) needs the store, and threading it down through
+                // views that do not use it would be plumbing for one consumer.
+                .environment(store)
                 .environment(search)
                 .environment(photos)
                 .environment(profile)

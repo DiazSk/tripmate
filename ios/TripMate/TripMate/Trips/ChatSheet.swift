@@ -23,6 +23,7 @@ struct ChatSheet: View {
             header
             transcript
             if !store.warnings.isEmpty { warningStrip }
+            if let message = store.message { failure(message) }
             composer
         }
         .background(Token.surfaceDeep)
@@ -99,6 +100,20 @@ struct ChatSheet: View {
             .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
     }
 
+    /// A turn that did not happen.
+    ///
+    /// **Without this the failure is silent**, which is how a 60s client timeout looked on the
+    /// simulator: the bubble vanished, the text came back, and nothing said why. The turn is
+    /// dropped from `chat` deliberately, so this line is the only evidence there was one.
+    private func failure(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.circle")
+            .textStyle(.caption)
+            .foregroundStyle(Token.alert)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Token.padCompact)
+            .padding(.bottom, 8)
+    }
+
     /// The model saying the edit it just made has a cost. Never collapsed into the reply.
     private var warningStrip: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -121,11 +136,18 @@ struct ChatSheet: View {
                 .textStyle(.detail)
                 .lineLimit(1...4)
                 .focused($writing)
-                .submitLabel(.send)
+                // No `.submitLabel(.send)`: the field is `axis: .vertical`, so Return inserts a
+                // newline and `onSubmit` never fires. A keyboard showing a send arrow that does
+                // nothing is worse than one that does not offer it.
                 .disabled(store.isReplying)
 
             Button {
-                Task { if await store.send(draft) { draft = "" } }
+                // Cleared here rather than on success: in flight the turn is already drawn as a
+                // bubble, and leaving it in the field too showed the traveller their own sentence
+                // twice for the whole minute. Put back only if the turn did not happen.
+                let sending = draft
+                draft = ""
+                Task { if await store.send(sending) == false { draft = sending } }
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 28))

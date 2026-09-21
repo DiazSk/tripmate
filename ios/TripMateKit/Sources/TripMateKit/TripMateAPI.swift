@@ -294,7 +294,7 @@ public struct TripMateAPI: Sendable {
             let sessionId: String?
             let syncedHash: String?
         }
-        let request = try await post(
+        var request = try await post(
             "/api/trip-edit",
             body: Body(
                 trip: trip, itinerary: itinerary, tripId: trip.id, messages: messages,
@@ -302,6 +302,12 @@ public struct TripMateAPI: Sendable {
                 sessionId: sessionId, syncedHash: syncedHash
             )
         )
+        // **URLSession's default is 60s and this is a model call.** Measured on the simulator: the
+        // route answered in exactly 60s and the client had already given up — a turn the server
+        // completed, was billed for, and wrote to `trip_chat_turns`, which the traveller saw
+        // vanish. The same 300 `generate` uses, and the same reason its docstring gives for the
+        // timeout being the caller's job.
+        request.timeoutInterval = 300
         return try await send(request, as: TripEdit.self)
     }
 
