@@ -21,9 +21,21 @@ struct HomeView: View {
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
+                ScrollViewReader { scroll in
                 VStack(alignment: .leading, spacing: 0) {
                     HeroView(height: Self.heroHeight(in: proxy.size, safeTop: proxy.safeAreaInsets.top))
-                    EntryCapsule(plan: plan, onPlan: onPlan)
+                    // **The capsule scrolls itself clear when the suggestion list opens.**
+                    // Keyboard avoidance lifts the *field* into view and knows nothing about a
+                    // list that appears under it, and the tab bar floats over the bottom of the
+                    // page — between them three of five suggestions were unreachable. The
+                    // bottom spacer below is what gives this somewhere to scroll to.
+                    EntryCapsule(plan: plan, onPlan: onPlan) { expanded in
+                        guard expanded else { return }
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            scroll.scrollTo(Self.capsuleID, anchor: .bottom)
+                        }
+                    }
+                        .id(Self.capsuleID)
                         .padding(.horizontal, Token.padCompact)
                         .padding(.top, 18)
 
@@ -47,6 +59,7 @@ struct HomeView: View {
                     // Clear the tab bar. Nothing else on this screen knows it is there.
                     Color.clear.frame(height: Token.barHeight + Token.gapRows * 3)
                 }
+                }
             }
             .scrollIndicators(.hidden)
             .shrinksTabBar(chrome)
@@ -60,6 +73,8 @@ struct HomeView: View {
 
     /// **Derived from the tab bar, not chosen.**
     ///
+    private static let capsuleID = "entry-capsule"
+
     /// The capsule is the screen's primary action and has to be whole at rest. Usable height is
     /// the display minus the home indicator, the bar and its gap; the hero gets what is left
     /// after the capsule. At a flat 640 the "Plan it" row sat *underneath* the tab bar — found by
@@ -189,10 +204,20 @@ struct HeroView: View {
 struct EntryCapsule: View {
     let plan: PlanStore
     let onPlan: () -> Void
+    /// Fired when the suggestion list opens or closes, so the page can scroll it clear of the
+    /// keyboard and the tab bar. The capsule does not own the scroll view.
+    var onSuggestionsChange: (Bool) -> Void = { _ in }
 
     /// Three rows plus the action, measured rather than guessed — `HomeView.heroHeight` subtracts
     /// this, so a wrong number here puts the action under the tab bar.
+    ///
+    /// **A resting measure.** The suggestion list grows the capsule past it while somebody is
+    /// typing; the page is a `ScrollView`, so that scrolls rather than clipping, and the hero
+    /// is sized for the state the screen sits in.
     static let height: CGFloat = 250
+
+    @State private var suggest = DestinationSuggest()
+    @FocusState private var typingDestination: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -214,6 +239,29 @@ struct EntryCapsule: View {
                     .textStyle(.bodyLarge)
                     .foregroundStyle(.black)
                     .autocorrectionDisabled()
+                    // A place name is not a sentence, same reason the wizard's field gives.
+                    .textInputAutocapitalization(.words)
+                    .focused($typingDestination)
+                    .onChange(of: plan.draft.destination) { _, text in
+                        guard typingDestination else { return }
+                        suggest.query(text)
+                    }
+                }
+            }
+            // Inline under the field, not an overlay — an overlay here would cover Arriving,
+            // and a suggestion that hides the next question is how you fill one field and lose
+            // another. Same call the wizard makes, in this surface's ink.
+            if showingSuggestions {
+                hairline
+                DestinationSuggestionList(
+                    results: suggest.results,
+                    ink: .black,
+                    // Jade on the cream capsule is 2:1; the mark takes the capsule's own ink.
+                    mark: .black.opacity(0.45)
+                ) { line in
+                    plan.draft.destination = line
+                    suggest.clear()
+                    typingDestination = false
                 }
             }
             hairline
@@ -255,7 +303,13 @@ struct EntryCapsule: View {
         // as a lozenge, and on a phone this capsule is always stacked.
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.45), radius: 16, y: 8)
+        .onChange(of: typingDestination) { wasTyping, _ in
+            if wasTyping { suggest.clear() }
+        }
+        .onChange(of: showingSuggestions) { _, open in onSuggestionsChange(open) }
     }
+
+    private var showingSuggestions: Bool { typingDestination && !suggest.results.isEmpty }
 
     private var hairline: some View {
         Rectangle().fill(Color.black.opacity(0.10)).frame(height: 1)

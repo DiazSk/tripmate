@@ -1,5 +1,6 @@
 import MapKit
 import Observation
+import SwiftUI
 
 /// Type-ahead for the destination field, from Apple's index rather than the server's.
 ///
@@ -70,5 +71,42 @@ final class DestinationSuggest: NSObject, MKLocalSearchCompleterDelegate {
         // A failed lookup is not "no such place" — it is no answer. Saying nothing is right:
         // the field still works typed, and the geocode on blur is the real check.
         Task { @MainActor in self.results = [] }
+    }
+}
+
+/// Apple's completions, as rows under whichever destination field asked for them.
+///
+/// Two fields ask — the wizard's dark trough and the home capsule's light one — and the rows
+/// differ only in ink, so the tap contract lives here once. **Tapping fills the text and
+/// nothing else:** the geocode still decides whether the place exists, so a suggestion the
+/// geocoder cannot place lands on the existing soft notice rather than on a new error path.
+struct DestinationSuggestionList: View {
+    let results: [DestinationSuggest.Suggestion]
+    var ink: Color = Token.foreground
+    var mark: Color = Token.accent
+    let onPick: (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(results) { result in
+                Button { onPick(result.line) } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .textStyle(.micro)
+                            .foregroundStyle(mark)
+                        Text(result.line)
+                            .textStyle(.detail)
+                            .foregroundStyle(ink)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, Token.gapRows)
+                    // The row is the target, not the words in it — and 44 is the floor.
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }

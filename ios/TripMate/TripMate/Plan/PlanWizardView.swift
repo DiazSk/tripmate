@@ -312,36 +312,11 @@ private struct BasicsStep: View {
         }
     }
 
-    /// Apple's completions, as rows under the field.
-    ///
-    /// Tapping one only fills the text — the geocode on blur still decides whether the place
-    /// exists, so a suggestion the geocoder cannot place lands on the existing soft notice
-    /// rather than on a new error path.
     private var suggestions: some View {
-        VStack(spacing: 0) {
-            ForEach(suggest.results) { result in
-                Button {
-                    plan.draft.destination = result.line
-                    suggest.clear()
-                    focus = nil
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "mappin.and.ellipse")
-                            .textStyle(.micro)
-                            .foregroundStyle(Token.accent)
-                        Text(result.line)
-                            .textStyle(.detail)
-                            .foregroundStyle(Token.foreground)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, Token.gapRows)
-                    // The row is the target, not the words in it — and 44 is the floor.
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
+        DestinationSuggestionList(results: suggest.results) { line in
+            plan.draft.destination = line
+            suggest.clear()
+            focus = nil
         }
         // **Darker, not lighter.** `white.opacity(0.04)` was invisible once the wizard gained
         // the blurred poster behind it — and lightening a surface over photography is what
