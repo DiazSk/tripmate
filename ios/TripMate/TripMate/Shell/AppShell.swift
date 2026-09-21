@@ -103,7 +103,15 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                     // its own photography and the map behind it would be a second world showing
                     // through the first. The map stays mounted — it is one view for the app and
                     // rebuilding it per tab is the expensive mistake — it is simply not visible.
+                    // **The same inset the page branch takes, and for the same reason.** Home
+                    // hand-rolled a trailing spacer inside its scroll content instead, which
+                    // only clears the bar once you have scrolled to the very end of the page —
+                    // anything that aligns to the *viewport's* bottom, like the entry capsule
+                    // scrolling its suggestion list into view, still landed under the glass.
                     home()
+                        .safeAreaInset(edge: .bottom) {
+                            Color.clear.frame(height: Token.barHeight + Token.gapRows)
+                        }
                 } else if isDocked {
                     // **The docked layout keeps the panel and does not get a sheet.** A sheet
                     // answers "the panel is covering the map"; at >=600pt it is not, and there is

@@ -56,8 +56,6 @@ struct HomeView: View {
                     }
                     .padding(.horizontal, Token.padCompact)
 
-                    // Clear the tab bar. Nothing else on this screen knows it is there.
-                    Color.clear.frame(height: Token.barHeight + Token.gapRows * 3)
                 }
                 }
             }
@@ -71,17 +69,20 @@ struct HomeView: View {
         }
     }
 
-    /// **Derived from the tab bar, not chosen.**
-    ///
     private static let capsuleID = "entry-capsule"
 
-    /// The capsule is the screen's primary action and has to be whole at rest. Usable height is
-    /// the display minus the home indicator, the bar and its gap; the hero gets what is left
-    /// after the capsule. At a flat 640 the "Plan it" row sat *underneath* the tab bar — found by
-    /// building the mockup, and a mistake the web cannot make because it has no permanent bottom
-    /// chrome.
+    /// **The hero is what is left after the capsule, and nothing else is subtracted here.**
+    ///
+    /// The capsule is the screen's primary action and has to be whole at rest. At a flat 640 the
+    /// "Plan it" row sat *underneath* the tab bar — a mistake the web cannot make, because it
+    /// has no permanent bottom chrome.
+    ///
+    /// The bar used to be subtracted here by hand. It is not any more: `AppShell` gives this
+    /// page the same bottom `safeAreaInset` every other page gets, which already takes the bar
+    /// and its gap out of `proxy.size`. Subtracting it a second time reserved the bar twice and
+    /// cost the photograph 68pt.
     static func heroHeight(in size: CGSize, safeTop: CGFloat) -> CGFloat {
-        let usable = size.height - Token.barHeight - Token.gapRows * 2 - EntryCapsule.height
+        let usable = size.height - EntryCapsule.height
         // A floor so a small display still shows a photograph rather than a letterbox.
         return max(usable, 320)
     }
