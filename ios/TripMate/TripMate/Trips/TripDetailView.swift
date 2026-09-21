@@ -111,13 +111,11 @@ struct TripDetailView: View {
     private func dayPage(_ day: DayPlan, index: Int) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Token.gapRows) {
-                // **The trip's budget leads the day.** It moved to the foot in P1b on the
-                // argument that a readout is not navigation and 46pt at the top pushed the day
-                // below the fold. That argument was measured against a 322pt column with a
-                // 288pt header; the header is gone and the sheet is 40pt wider, so the cost it
-                // was avoiding no longer exists — and "what have I spent" turned out to be a
-                // question asked on arrival rather than after reading the day.
-                BudgetBarView(days: days, budget: trip.budget, activeDayIndex: index)
+                // **Four figures in one row, which is the whole idea.** Flighty's lesson: a
+                // screen reads as designed when the numbers that matter are far larger than
+                // everything else, not when the rows are tidy. This replaces a 62pt budget bar
+                // and a 28pt date heading with one 44pt strip that says more than both.
+                DayStats(days: days, index: index, budget: trip.budget)
                 if trip.resolvedStatus == .draft { draftNotice }
                 // **The day's overspend used to sit here, and two coral lines stacked.** The
                 // bar above already says the trip is over; a second warning immediately under
@@ -129,6 +127,9 @@ struct TripDetailView: View {
                     Text(summary)
                         .textStyle(.detail)
                         .foregroundStyle(Token.muted)
+                        // **Three lines, not four.** The one paragraph on the screen is the
+                        // only thing that can push the first stop below the fold on its own.
+                        .lineLimit(3)
                 }
                 stops(of: day, index: index)
                 if let lodging = day.lodging {
@@ -159,17 +160,22 @@ struct TripDetailView: View {
             // with nothing to separate, and an unlabelled group means no stop carried a
             // readable time — where a heading would be inventing a fact.
             if groups.count > 1, let label = group.label {
-                TimeOfDayHeading(label: label)
+                TimeOfDayHeading(label: label, day: dayIndex)
             }
             // The rail runs behind the group rather than being drawn per row: a gap change
             // cannot break a background, and the web records its per-row arithmetic drawing
             // through the next avatar.
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(group.stops, id: \.index) { entry in
+            // **Hairlines, not cards.** Five bordered slabs in a column is what made this
+            // read as a form; a rule between rows is what makes a list read as a list. Spacing
+            // goes to zero because the separator is now the thing doing the separating.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(group.stops.enumerated()), id: \.element.index) { position, entry in
                     StopRow(
                         stop: entry.stop,
+                        day: dayIndex,
                         isEmphasised: entry.index == emphasis,
                         clash: overlaps.first { $0.stopIndex == entry.index },
+                        isFirst: position == 0,
                         onTap: { onEmphasise(entry.index) },
                         onActualCost: { await onActualCost(dayIndex, entry.index, $0) }
                     )
@@ -241,16 +247,25 @@ struct TripDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
     }
 
-    private func dayHeader(_ day: DayPlan) -> some View {
+    /// The traveller's own title for the day, and what the sky is doing.
+    ///
+    /// **The date left this row for the stats strip; these two could not follow it.** A day's
+    /// `title` is user-authored and a strip cell has no room for prose, and the badge prints a
+    /// rain probability and a "typical" caveat that a 9pt label would have to drop — which is
+    /// exactly the tooltip-shaped mistake `WeatherBadge`'s own docstring records the web making.
+    /// So the row survives, 26pt instead of 28, carrying only what the strip cannot.
+    @ViewBuilder private func dayHeader(_ day: DayPlan) -> some View {
         let read = DayDisplay.read(day)
-        // **No `Day N —` prefix.** The header row 44pt above already says `Day 3 of 9`;
-        // printing it twice in a 322pt column is the duplication this redesign is about.
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text((day.title.map { "\($0) · " } ?? "") + DayDisplay.formatDate(day.date))
-                .textStyle(.headingSmall.weight(TextStyle.semibold))
-                .foregroundStyle(Token.foreground)
-            Spacer(minLength: 0)
-            if !read.isEmpty { WeatherBadge(read: read) }
+        if day.title != nil || !read.isEmpty {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if let title = day.title {
+                    Text(title)
+                        .textStyle(.headingSmall.weight(TextStyle.semibold))
+                        .foregroundStyle(Token.foreground)
+                }
+                Spacer(minLength: 0)
+                if !read.isEmpty { WeatherBadge(read: read) }
+            }
         }
     }
 }
@@ -365,12 +380,17 @@ private struct TripHeaderRow: View {
 /// far side, which is the same opener the landing's bands use, one size down.
 private struct TimeOfDayHeading: View {
     let label: TimeOfDay
+    let day: Int
 
     var body: some View {
         HStack(spacing: 10) {
             Text(label.rawValue.uppercased())
                 .textStyle(.label)
-                .foregroundStyle(Token.muted)
+                // **The day's own hue, as text.** `DESIGN.md` forbids map colours *filling*
+                // chrome; this is ink, and it is doing the job a legend does — the rule above
+                // these stops is the same colour as the line drawn through them on the map.
+                // The `P1c` chip swatch is the same argument.
+                .foregroundStyle(Token.dayGlow(day))
             Rectangle()
                 .fill(Token.cardBorder)
                 .frame(height: 1)
@@ -633,15 +653,53 @@ private struct WeatherBadge: View {
 /// What is hidden is what you read once when deciding (`why`), what you want while standing
 /// there (`note`), and a keyboard (`ActualCostField`). What is never hidden: the name, the
 /// time, the cost, and a clash with the stop before it.
+/// One stop, as an instrument reading rather than a card.
+///
+/// **The clock time is the number that matters, so it is 26pt against 9pt.** That ratio is the
+/// whole design. Two earlier passes at this screen set everything between 13 and 15pt and were
+/// correctly called boring: uniform type is what makes a dense list look like a default list,
+/// and no amount of photography or rounded corners fixes it. Flighty — which is the same
+/// map-and-sheet shape as this app and won an Apple Design Award — puts a 28pt duration beside
+/// 9pt captions, and that single ratio is what makes it read as an instrument.
+///
+/// The row also got *shorter* doing it: a hairline replaced the card, so a collapsed stop is
+/// ~52pt against ~68pt before.
 private struct StopRow: View {
     let stop: Stop
+    /// Which day this belongs to, for the hue its pip and rail share with the map.
+    let day: Int
     /// The row and its point on the map take the accent together, which is the whole reason the
     /// index lives in the store rather than in either view.
     let isEmphasised: Bool
     /// Set when this stop starts before the previous one ends.
     let clash: Overlap.Finding?
+    /// The first row in a group draws no rule above it — the heading already separated it.
+    let isFirst: Bool
     let onTap: () -> Void
     let onActualCost: (Double?) async -> Void
+
+    /// `"11:00"` and `"AM"`, split so the hour can be large and the meridiem small. A time that
+    /// will not parse keeps its own text in the small slot and leaves the large one empty
+    /// rather than inventing a clock.
+    private var clock: (big: String, small: String) {
+        let raw = stop.time.trimmingCharacters(in: .whitespaces)
+        guard DaySchedule.minutes(fromClock: raw) != nil else { return ("—", raw.uppercased()) }
+        let parts = raw.split(separator: " ", maxSplits: 1)
+        guard parts.count == 2 else { return (raw, "") }
+        return (String(parts[0]), String(parts[1]).uppercased())
+    }
+
+    /// `1.5 HOURS · FOOD`, or the clash where there is one. Nine point, wide-tracked, and the
+    /// only place the row says anything that is not a name, a time or a price.
+    private var caption: (text: String, alarming: Bool) {
+        if let clash {
+            return ("OVERLAPS \(clash.previous.uppercased()) BY \(clash.minutes) MIN", true)
+        }
+        let bits = [stop.durationLabel, stop.category.rawValue]
+            .filter { !$0.isEmpty }
+            .map { $0.uppercased() }
+        return (bits.joined(separator: " · "), false)
+    }
 
     var body: some View {
         // **Not a Button wrapping everything.** A `TextField` inside a button is a control
@@ -650,36 +708,48 @@ private struct StopRow: View {
     }
 
     private var content: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: stop.category.symbol)
-                .textStyle(.caption)
-                .foregroundStyle(Token.accent)
-                .frame(width: 26, height: 26)
-                .background(Token.accent.opacity(isEmphasised ? 0.16 : 0.08))
-                .clipShape(Circle())
+        HStack(alignment: .top, spacing: 12) {
+            // The gutter. Right-aligned and fixed at 62 so every hour in the day lines up on
+            // its colon, which is what makes a column of times read as a schedule.
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(clock.big)
+                    .textStyle(.money.size(24).weight(TextStyle.semibold))
+                    .foregroundStyle(isEmphasised ? Token.accent : Token.foreground)
+                Text(clock.small)
+                    .textStyle(.label.size(9))
+                    .foregroundStyle(Token.muted.opacity(0.75))
+            }
+            // 76, because "11:00" at 24pt tabular is ~72 and a narrower box makes the
+            // `.trailing` alignment silently do nothing — the meridiem drifted under the middle
+            // of the hour instead of under its last digit.
+            .frame(width: 76, alignment: .trailing)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(stop.name)
-                        .textStyle(.headingSmall.weight(TextStyle.medium))
+                        .textStyle(.heading)
                         .foregroundStyle(Token.foreground)
                     Spacer(minLength: 8)
-                    Text(Spend.of(cost: stop.cost, actual: stop.actualCost),
-                         format: .currency(code: "USD").precision(.fractionLength(0)))
-                        .textStyle(.money)
-                        .foregroundStyle(Token.money)
+                    let spent = Spend.of(cost: stop.cost, actual: stop.actualCost)
+                    Text(spent, format: .currency(code: "USD").precision(.fractionLength(0)))
+                        .textStyle(.money.size(16).weight(TextStyle.semibold))
+                        // A free stop is not a money fact, so it does not get the money colour.
+                        .foregroundStyle(spent > 0 ? Token.money : Token.muted.opacity(0.55))
                 }
-                Text([stop.time, stop.durationLabel].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .textStyle(.money.size(12))
-                    .foregroundStyle(Token.muted)
-
                 // Shown collapsed as well: a contradiction in the plan is not a detail you
                 // should have to open a row to find.
-                if let clash {
-                    Text("Starts \(clash.minutes) min before \(clash.previous) ends.")
-                        .textStyle(.caption)
-                        .foregroundStyle(Token.alert)
-                        .padding(.top, 2)
+                if !caption.text.isEmpty {
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(caption.alarming ? Token.alert : Token.dayGlow(day))
+                            .frame(width: 6, height: 6)
+                        Text(caption.text)
+                            .textStyle(.label.size(9))
+                            .foregroundStyle(caption.alarming ? Token.alert : Token.muted)
+                            .lineLimit(2)
+                    }
                 }
 
                 if isEmphasised {
@@ -708,14 +778,80 @@ private struct StopRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Token.gapRows)
-        .background(Color.white.opacity(isEmphasised ? 0.10 : 0.05))
-        .clipShape(RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Token.radiusMedium, style: .continuous)
-                .strokeBorder(Token.accent.opacity(isEmphasised ? 0.55 : 0), lineWidth: 1)
-        )
+        .padding(.vertical, 11)
+        .padding(.horizontal, 4)
+        .background(Token.accent.opacity(isEmphasised ? 0.09 : 0))
+        .clipShape(RoundedRectangle(cornerRadius: Token.radiusSmall, style: .continuous))
+        // The rule belongs above rather than below, so the last row in a group does not draw a
+        // line into the whitespace under it.
+        .overlay(alignment: .top) {
+            if !isFirst {
+                Rectangle().fill(Token.cardBorder).frame(height: 1)
+            }
+        }
+        .contentShape(Rectangle())
         .animation(.easeOut(duration: 0.2), value: isEmphasised)
+    }
+}
+
+/// The day's four figures, in one row.
+///
+/// **This is the budget bar and the date heading, collapsed.** Both were rows of their own —
+/// 62pt and 28pt — saying four numbers between them at 13pt. Here they are 19pt against 9pt
+/// labels, in 44pt, and the proportion the bar drew survives as a 3pt track beneath.
+private struct DayStats: View {
+    let days: [DayPlan]
+    let index: Int
+    let budget: Double
+
+    private var day: DayPlan? { days.indices.contains(index) ? days[index] : nil }
+
+    var body: some View {
+        let spent = Spend.trip(days)
+        let over = budget > 0 && spent > budget
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 0) {
+                cell((day.map { Spend.byCategory($0).total } ?? 0)
+                        .formatted(.currency(code: "USD").precision(.fractionLength(0))),
+                     "Today", Token.money)
+                cell(spent.formatted(.currency(code: "USD").precision(.fractionLength(0))),
+                     "of \(budget.formatted(.currency(code: "USD").precision(.fractionLength(0))))",
+                     over ? Token.alert : Token.foreground)
+                cell("\(day?.stops.count ?? 0)", "Stops", Token.foreground)
+                // **The weather rides in the label slot**, which is how the date heading's
+                // badge survives the row it used to live in being deleted. A day with no
+                // forecast says "Date" rather than an empty caption.
+                cell(day.map { DayDisplay.formatDate($0.date) } ?? "—", "Date", Token.foreground)
+            }
+            // The bar's own job — how far along, and how far over — in 3pt rather than 62.
+            GeometryReader { proxy in
+                let fraction = budget > 0 ? min(spent / budget, 1) : 0
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.10))
+                    Capsule()
+                        .fill(over ? Token.alert : Token.money)
+                        .frame(width: max(3, proxy.size.width * fraction))
+                }
+            }
+            .frame(height: 3)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func cell(_ value: String, _ label: String, _ tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .textStyle(.money.size(19).weight(TextStyle.semibold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label.uppercased())
+                .textStyle(.label.size(9))
+                .foregroundStyle(Token.muted.opacity(0.75))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

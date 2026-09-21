@@ -1,4 +1,5 @@
 import SwiftUI
+import TripMateKit
 
 /// The design system, ported from `DESIGN.md` rather than invented.
 ///
@@ -94,6 +95,18 @@ enum Token {
     ///
     /// 44 gets no token of its own. It is a floor that 56 satisfies, not a number anything reads.
     static let barHeight: CGFloat = 56
+
+    /// The hue the map draws this day's route in, as ink.
+    ///
+    /// **Ink, never a fill.** `DESIGN.md`'s rule is that map colours do not fill chrome — a
+    /// jade button and a teal panel would both stop meaning anything. A *label* in the day's
+    /// colour is the opposite: it is a legend, tying the rule above a group of stops to the
+    /// line drawn through those same stops on the ground. `RouteGeometry` owns the palette so
+    /// there is exactly one place the hues live, and this is the one conversion to `Color`.
+    static func dayGlow(_ dayIndex: Int) -> Color {
+        let glow = RouteGeometry.palette(forDay: dayIndex).glow
+        return Color(red: glow.red, green: glow.green, blue: glow.blue)
+    }
 
     // MARK: The docked panel
 
