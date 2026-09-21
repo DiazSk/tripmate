@@ -108,6 +108,23 @@ enum Token {
         return Color(red: glow.red, green: glow.green, blue: glow.blue)
     }
 
+    /// The day's **core** hue — what the map fills a numbered bubble with.
+    ///
+    /// **Not `dayGlow`, and the difference is load-bearing.** The pair is a core and a softer
+    /// companion; the companion is a halo colour and is too pale to carry the near-black ink a
+    /// numbered disc needs. `StopAnnotation.applyPalette` fills its bubble from `.core`, so the
+    /// plan sheet's disc reads this and the two cannot drift.
+    static func dayCore(_ dayIndex: Int) -> Color {
+        let core = RouteGeometry.palette(forDay: dayIndex).core
+        return Color(red: core.red, green: core.green, blue: core.blue)
+    }
+
+    /// The ink a numbered disc carries, whatever hue is under it.
+    ///
+    /// Transcribed from `StopAnnotation.swift` rather than re-derived: the map draws this exact
+    /// value, and the whole point of the disc is that the sheet and the ground agree.
+    static let discInk = Color(red: 0x12 / 255, green: 0x11 / 255, blue: 0x0f / 255).opacity(0.92)
+
     // MARK: The docked panel
 
     /// `w-[40%] min-w-[360px] max-w-[520px]`, straight from `DockedPanel`.

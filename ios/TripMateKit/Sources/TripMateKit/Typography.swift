@@ -127,6 +127,18 @@ public extension TextStyle {
         face: .switzer, size: 10, wght: semibold, trackingEm: 0.18, lineHeight: 1.2
     )
 
+    /// `.price-display` (`globals.css`) — **the figure treated as the subject rather than as
+    /// metadata**, and the second of the two places this app lets the serif speak.
+    ///
+    /// Proportional lining figures, not tabular: nothing is being compared in a column here, and
+    /// `money` already exists for the case where something is. The currency mark is subordinated
+    /// at the call site — `0.42em`, 60% opacity, raised — so what gets read is the amount.
+    ///
+    /// 30pt clears Melodrama's 28pt floor with room; do not shrink it to fit a layout.
+    static let price = TextStyle(
+        face: .melodrama, size: 30, wght: regular, trackingEm: -0.005, lineHeight: 1.0
+    )
+
     /// Figures, in the face that exists for them.
     static let money = TextStyle(
         face: .tabular, size: 13, wght: medium, trackingEm: 0, lineHeight: 1.3

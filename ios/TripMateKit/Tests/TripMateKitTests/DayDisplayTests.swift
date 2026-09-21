@@ -97,3 +97,29 @@ final class DayDisplayTests: XCTestCase {
         XCTAssertTrue(DayDisplay.readProse("").isEmpty)
     }
 }
+
+/// The masthead's dateline. Weekday by arithmetic, so there is no timezone to get wrong.
+final class DatelineTests: XCTestCase {
+
+    func testNamesTheWeekdayTheDateActuallyFallsOn() {
+        XCTAssertEqual(DayDisplay.formatDateline("2026-09-12"), "Saturday, 12 September")
+        XCTAssertEqual(DayDisplay.formatDateline("2026-09-20"), "Sunday, 20 September")
+        XCTAssertEqual(DayDisplay.formatDateline("2026-12-25"), "Friday, 25 December")
+    }
+
+    /// January and February are months 13 and 14 of the year before, and getting that wrong is
+    /// the one way Zeller's congruence fails silently — by exactly one year's drift.
+    func testJanuaryAndFebruaryRollIntoThePrecedingYear() {
+        XCTAssertEqual(DayDisplay.formatDateline("2026-01-01"), "Thursday, 1 January")
+        XCTAssertEqual(DayDisplay.formatDateline("2026-02-28"), "Saturday, 28 February")
+        // A leap day, where the century rule and the month shift both apply at once.
+        XCTAssertEqual(DayDisplay.formatDateline("2024-02-29"), "Thursday, 29 February")
+    }
+
+    /// The same contract every other formatter here holds: garbage in, garbage back out, not a
+    /// crash and not an invented date.
+    func testAnUnparseableDateIsReturnedUnchanged() {
+        XCTAssertEqual(DayDisplay.formatDateline("someday"), "someday")
+        XCTAssertEqual(DayDisplay.formatDateline("2026-13-01"), "2026-13-01")
+    }
+}

@@ -99,3 +99,34 @@ final class DayScheduleTests: XCTestCase {
         XCTAssertTrue(DaySchedule.group([]).isEmpty)
     }
 }
+
+/// The hours a section rule prints beside its label.
+final class DaySpanTests: XCTestCase {
+
+    private func stop(_ time: String) -> Stop {
+        Stop(
+            name: "x", lat: 0, lng: 0, cost: 0, note: "", why: nil,
+            time: time, durationLabel: "", tags: nil, category: .other, actualCost: nil
+        )
+    }
+
+    func testPrintsFirstAndLastStartOnATwentyFourHourClock() {
+        XCTAssertEqual(DaySchedule.span([stop("11:00 AM"), stop("12:55 PM")]), "11:00 – 12:55")
+        XCTAssertEqual(DaySchedule.span([stop("9:00 AM"), stop("5:30 PM")]), "09:00 – 17:30")
+    }
+
+    /// A span needs two ends. One stop, or two at the same minute, is not one.
+    func testASingleReadableTimeHasNoSpan() {
+        XCTAssertNil(DaySchedule.span([stop("11:00 AM")]))
+        XCTAssertNil(DaySchedule.span([stop("11:00 AM"), stop("11:00 AM")]))
+        XCTAssertNil(DaySchedule.span([stop("whenever"), stop("later")]))
+    }
+
+    /// Unreadable times drop out rather than collapsing the span to nothing.
+    func testUnparseableTimesAreSkippedNotFatal() {
+        XCTAssertEqual(
+            DaySchedule.span([stop("morning"), stop("11:00 AM"), stop("2:00 PM")]),
+            "11:00 – 14:00"
+        )
+    }
+}

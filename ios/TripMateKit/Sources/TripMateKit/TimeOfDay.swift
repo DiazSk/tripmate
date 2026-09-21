@@ -88,6 +88,27 @@ public enum DaySchedule {
     /// A stop with no readable time joins the group in progress rather than forming an
     /// "Unscheduled" bucket — a lone untimed stop between two afternoon ones is an afternoon
     /// stop. Leading untimed stops borrow the first real label, so nothing is filed under a guess.
+    /// The hours a group of stops runs between, as `11:00 – 14:30`, for the section rule that
+    /// opens it.
+    ///
+    /// **Start times only, never a computed end.** A stop's length is `durationLabel`, free
+    /// prose the model writes ("about 2 hours", "1.5 hours"), so an end time would be parsed out
+    /// of a sentence and printed as though it were a fact. The first and last *starts* are
+    /// exact.
+    ///
+    /// `nil` when fewer than two stops carry a readable clock, because a span needs two ends and
+    /// `11:00 – 11:00` is not one.
+    public static func span(_ stops: [Stop]) -> String? {
+        let times = stops.compactMap { minutes(fromClock: $0.time) }
+        guard let first = times.first, let last = times.last, first != last else { return nil }
+        return "\(clock(first)) – \(clock(last))"
+    }
+
+    /// Minutes past midnight back to a 24-hour clock. Zero-padded so a column of these lines up.
+    private static func clock(_ minutes: Int) -> String {
+        String(format: "%02d:%02d", minutes / 60, minutes % 60)
+    }
+
     public static func group(_ stops: [Stop]) -> [StopGroup] {
         let labels = stops.map { minutes(fromClock: $0.time).map(timeOfDay) }
         var current = labels.first(where: { $0 != nil }) ?? nil

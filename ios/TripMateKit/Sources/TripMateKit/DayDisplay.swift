@@ -26,6 +26,42 @@ public enum DayDisplay {
         return date.year == current ? base : "\(base), '\(suffix(date.year))"
     }
 
+    /// `2026-09-19` → `Saturday, 19 September`. The plan sheet's masthead, set in the serif.
+    ///
+    /// **Still no `Date`, and now not even a `Calendar`.** The same UTC-midnight trap applies
+    /// (`formatDate`'s comment has the detail), and a weekday is the one part that looks like it
+    /// needs a calendar — so the weekday comes out of Zeller's congruence instead, which is
+    /// arithmetic on the three integers `split` already produced. A formatter here would be the
+    /// fourth place in this codebase to reach for a timezone it does not want.
+    ///
+    /// The year is never printed: this sits under a `DAY n OF m` overline inside a trip whose
+    /// dates the traveller chose, where a year is noise.
+    public static func formatDateline(_ iso: String) -> String {
+        guard let date = split(iso) else { return iso }
+        return "\(weekdays[weekdayIndex(date)]), \(date.day) \(fullMonths[date.month - 1])"
+    }
+
+    /// Zeller's congruence, returning 0 = Sunday so it indexes `weekdays` directly.
+    private static func weekdayIndex(_ date: (year: Int, month: Int, day: Int)) -> Int {
+        // January and February count as months 13 and 14 of the preceding year.
+        let m = date.month < 3 ? date.month + 12 : date.month
+        let y = date.month < 3 ? date.year - 1 : date.year
+        let k = y % 100
+        let j = y / 100
+        let h = (date.day + (13 * (m + 1)) / 5 + k + k / 4 + j / 4 + 5 * j) % 7
+        // Zeller yields 0 = Saturday; shift so 0 = Sunday.
+        return (h + 6) % 7
+    }
+
+    private static let weekdays = [
+        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+    ]
+
+    private static let fullMonths = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ]
+
     /// `2026-09-12`, `2026-09-20` → `Sep 12 – 20`. One month named once.
     ///
     /// **The collapse tests the month *and* the year, and the second half is the whole reason

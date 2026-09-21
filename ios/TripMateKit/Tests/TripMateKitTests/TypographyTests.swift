@@ -16,7 +16,7 @@ final class TypographyTests: XCTestCase {
         ("display", .display), ("title", .title), ("heading", .heading),
         ("headingSmall", .headingSmall), ("bodyLarge", .bodyLarge), ("body", .body),
         ("detail", .detail), ("caption", .caption), ("micro", .micro), ("label", .label),
-        ("money", .money), ("moneyLarge", .moneyLarge),
+        ("money", .money), ("moneyLarge", .moneyLarge), ("price", .price),
     ]
 
     // MARK: - The defect that shipped
