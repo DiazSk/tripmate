@@ -1,5 +1,6 @@
 import { TTL, cached } from "./fetchCache";
 import { askOverpass } from "./overpass";
+import { searchTermsFor } from "./placeQuery";
 import type { PoiOsmTags } from "./types";
 import { parseWheelchair, parseWikidataId, tagValue } from "./osmTags";
 
@@ -174,13 +175,28 @@ function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: num
  * useless here, since the position is exactly what's untrustworthy.
  *
  * Fails soft: returns `{}` on any error, and callers keep the model's value for anything unmatched.
+ *
+ * **It also searches for the place *inside* a phrase-shaped name, and that is a bug fix.** This
+ * function matches on an anchored exact-name regex, while `FOOD_STOP_INSTRUCTION` in
+ * `itineraryPrompt.ts` asks the model for names like "Dinner around Pike Place Market". So one
+ * file manufactured names this one structurally could not match, and every food stop — by prompt
+ * design, most of them — fell through to the invented coordinate. Measured on one real nine-day
+ * plan: 49 stops, 39 distinct coordinates, **ten sharing the town centre**, and "Breakfast at
+ * Caffè Poliziano" pinned 8.4km from Caffè Poliziano. `searchTermsFor` adds the stripped place as
+ * a second term; see `placeQuery.ts` for why that is a vocabulary rule and not a parser.
+ *
+ * **Still one union query, and deliberately not `searchPlaces`.** The fuzzy resolver would match
+ * more, but it is one request per name — around thirty per generation on a nine-day plan, against
+ * the shared Overpass instance whose rate-limiting `placeSearch.ts` documents at length. Widening
+ * *what* this asks costs nothing; changing *how many times* it asks costs the generation.
  */
 export async function resolveNamedPlaceCoords(
   names: string[],
   near: { lat: number; lon: number },
   radiusM = 30000
 ): Promise<Record<string, { lat: number; lon: number }>> {
-  const unique = Array.from(new Set(names.map((n) => n.trim()).filter(Boolean)));
+  const terms = searchTermsFor(names);
+  const unique = Array.from(terms.keys());
   if (unique.length === 0) return {};
 
   // One regex union rather than a clause per name. Two clauses per name at this radius made
@@ -204,14 +220,15 @@ export async function resolveNamedPlaceCoords(
   // kept — so the cache miss and the empty answer look the same to every caller. The `null`
   // matters one layer down, where it decides whether an Overpass refusal gets written down as
   // "none of these places exist" and freezes every stop's wrong coordinates for ninety days.
-  return (await cached(key, TTL.STATIC, () => resolveNamedPlaceCoordsUncached(clauses, near, unique))) ?? {};
+  return (await cached(key, TTL.STATIC, () => resolveNamedPlaceCoordsUncached(clauses, near, terms))) ?? {};
 }
 
 async function resolveNamedPlaceCoordsUncached(
   clauses: string,
   near: { lat: number; lon: number },
-  /** The de-duplicated request names, needed to key results back to what the caller asked for. */
-  unique: string[]
+  /** Search term -> the stop names that asked for it, so a hit can be keyed back to the caller's
+   *  own name. One term can serve several stops ("Breakfast at X" and "Coffee at X"). */
+  terms: Map<string, string[]>
 ): Promise<Record<string, { lat: number; lon: number }> | null> {
   try {
     const elements = (await askOverpass(`[out:json][timeout:40];(${clauses});out center tags;`, {
@@ -225,7 +242,16 @@ async function resolveNamedPlaceCoordsUncached(
       if (!point) continue;
       if (haversineKm(near, point) > MAX_CORRECTION_KM) continue;
       for (const key of [el.tags?.name, el.tags?.["name:en"]]) {
-        if (key && unique.includes(key) && !byName[key]) byName[key] = point;
+        if (!key) continue;
+        // **Nearest wins, not first seen.** A generic name — "La Posta" is Italian for "the post
+        // office" and names a dozen places in Tuscany — otherwise takes whichever element
+        // Overpass happened to return first, which on the iOS side moved a stop ten kilometres
+        // to the wrong village. The destination is the only anchor available at this layer, so
+        // it is the one used; the client, which knows each stop's own guess, can do better.
+        for (const name of terms.get(key) ?? []) {
+          const held = byName[name];
+          if (!held || haversineKm(near, point) < haversineKm(near, held)) byName[name] = point;
+        }
       }
     }
     return byName;
