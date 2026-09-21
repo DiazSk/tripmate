@@ -58,6 +58,23 @@ final class StopAnnotationView: MKAnnotationView {
     /// does not clip its subviews, so this needs no layout gymnastics.
     private let dot = UIView()
 
+    /// The stop's position in the day, drawn inside the bubble.
+    ///
+    /// **Polarsteps' move, and it earns its pixels twice.** A numbered bubble says the order of
+    /// the day on the ground, which a coloured dot cannot — and it survives the case this map
+    /// has always been worst at: in a dense centre three name cards overlap into an unreadable
+    /// pile, and `collisionMode` suppresses names but never the bubble. The number is legible
+    /// when the name is gone.
+    ///
+    /// No photograph in it. That needs `MKLookAroundSnapshotter` keyed on the coordinate —
+    /// `PlacePhotoStore` cannot serve this, its own docstring recording 2 of 8 stop names and 0
+    /// of 4 museums resolving. The glyph-and-number bubble is the part that works today.
+    private let ordinal = UILabel()
+
+    /// 26, up from a 10pt dot. Large enough to hold two digits at 11pt and to be a comfortable
+    /// tap target against the 44pt floor once `MKAnnotationView`'s own slop is counted.
+    private static let bubbleDiameter: CGFloat = 26
+
     /// The stop being pointed at, in the accent. `--accent` means "you are pointing at this" and
     /// nothing else, so an emphasised stop also ignores the distance reveal below — a stop
     /// somebody selected is named whether or not the camera is close enough to have earned it.
@@ -105,15 +122,27 @@ final class StopAnnotationView: MKAnnotationView {
         addSubview(blur)
         blur.contentView.addSubview(label)
 
-        let diameter = RouteGeometry.Design.dotRadius * 2
-        dot.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
-        dot.layer.cornerRadius = RouteGeometry.Design.dotRadius
-        dot.layer.borderWidth = RouteGeometry.Design.dotStrokeWidth
+        dot.bounds = CGRect(x: 0, y: 0, width: Self.bubbleDiameter, height: Self.bubbleDiameter)
+        dot.layer.cornerRadius = Self.bubbleDiameter / 2
+        dot.layer.borderWidth = 2
         // `circle-stroke-color: "#12110f"` — the redesign's near-black, which is what separates a
-        // dot from cartography of any brightness.
+        // bubble from cartography of any brightness. Wider than the dot's 1.5 because the bubble
+        // is wider, and the ring has to keep reading at the same weight.
         dot.layer.borderColor = UIColor(
             red: 0x12 / 255, green: 0x11 / 255, blue: 0x0f / 255, alpha: 1
         ).cgColor
+        // A bubble casts a shadow and a dot did not: at 26pt it is an object on the ground
+        // rather than a mark printed on it, and without one it floats against pale cartography.
+        dot.layer.shadowColor = UIColor.black.cgColor
+        dot.layer.shadowOpacity = 0.45
+        dot.layer.shadowRadius = 5
+        dot.layer.shadowOffset = CGSize(width: 0, height: 2)
+
+        ordinal.font = .systemFont(ofSize: 12, weight: .bold)
+        ordinal.textAlignment = .center
+        ordinal.adjustsFontSizeToFitWidth = true
+        ordinal.minimumScaleFactor = 0.7
+        dot.addSubview(ordinal)
         addSubview(dot)
     }
 
@@ -128,8 +157,10 @@ final class StopAnnotationView: MKAnnotationView {
         blur.bounds = CGRect(origin: .zero, size: Self.cardSize(for: label))
         blur.layer.position = CGPoint(x: bounds.midX, y: bounds.maxY)
         label.frame = blur.bounds.insetBy(dx: Self.cardPadding.width, dy: Self.cardPadding.height)
-        // The card is lifted above the coordinate by `centerOffset`; the dot goes back down to it.
+        // The card is lifted above the coordinate by `centerOffset`; the bubble goes back down
+        // to it.
         dot.center = CGPoint(x: bounds.midX, y: bounds.height + Self.cardGap)
+        ordinal.frame = dot.bounds
     }
 
     /// Fade and shrink the name with camera distance — `Framing.Reveal`, which is where the rule
@@ -140,14 +171,22 @@ final class StopAnnotationView: MKAnnotationView {
     /// conditional on anything. That split is the web layer's too.
     func apply(distanceM: Double) {
         lastDistanceM = distanceM
-        if isEmphasised {
-            blur.alpha = 1
-            blur.transform = .identity
-            return
-        }
-        blur.alpha = CGFloat(Framing.Reveal.opacity(atDistanceM: distanceM))
-        let scale = CGFloat(Framing.Reveal.scale(atDistanceM: distanceM))
-        blur.transform = CGAffineTransform(scaleX: scale, y: scale)
+        // **Only the stop being pointed at is named, and that is the fix for the pile.**
+        // Three stops in Pienza's centre sit inside 50m, so three glass cards stacked into an
+        // unreadable heap at every city zoom — the exact case the web's declutter scan existed
+        // for. MapKit's own collision cannot be the answer here: suppressing an annotation
+        // suppresses the *whole view*, and the bubble would go with the name.
+        //
+        // So the numbered bubble carries the order, the sheet carries the names, and a tap
+        // bridges them. It is also a deletion: no scan, no threshold, no per-frame loop.
+        blur.alpha = isEmphasised ? 1 : 0
+        blur.transform = .identity
+        // The reveal moves to the bubble. Its band was written for a name earning the screen as
+        // the camera closes, and it reads just as well as "how far away is this day" — pull
+        // back and the stops recede, come in and they are full size. Floored at the emphasised
+        // stop's full scale so the one you are pointing at never shrinks.
+        let scale = isEmphasised ? 1 : CGFloat(Framing.Reveal.scale(atDistanceM: distanceM))
+        dot.transform = CGAffineTransform(scaleX: scale, y: scale)
     }
 
     private var lastDistanceM: Double = .greatestFiniteMagnitude
@@ -186,6 +225,8 @@ final class StopAnnotationView: MKAnnotationView {
             // The card sits above the point it names rather than on top of it, so the dot below
             // stays visible.
             centerOffset = CGPoint(x: 0, y: -(frame.height / 2) - Self.cardGap)
+            // 1-based, the way the day reads and the way the panel numbers its rows.
+            ordinal.text = (annotation as? StopAnnotation).map { "\($0.indexWithinDay + 1)" }
         }
     }
 
@@ -198,9 +239,13 @@ final class StopAnnotationView: MKAnnotationView {
         let fill = isEmphasised
             ? RouteGeometry.accent
             : RouteGeometry.palette(forDay: stop.dayIndex).core
-        dot.backgroundColor = UIColor(
-            red: fill.red, green: fill.green, blue: fill.blue,
-            alpha: RouteGeometry.Design.dotOpacity
+        // **Opaque, where the dot was translucent.** A number has to be legible against
+        // whatever the basemap puts underneath it, and `dotOpacity` let the cartography through.
+        dot.backgroundColor = UIColor(red: fill.red, green: fill.green, blue: fill.blue, alpha: 1)
+        // Near-black ink on the day's own colour, which is a light-to-mid hue in every palette
+        // entry — `Darken-Never-Lighten`, and the same pairing the accent uses for its own ink.
+        ordinal.textColor = UIColor(
+            red: 0x12 / 255, green: 0x11 / 255, blue: 0x0f / 255, alpha: 0.92
         )
         blur.layer.borderColor = isEmphasised
             ? UIColor(red: fill.red, green: fill.green, blue: fill.blue, alpha: 0.8).cgColor
