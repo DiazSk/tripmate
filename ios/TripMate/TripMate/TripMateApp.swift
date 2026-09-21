@@ -99,7 +99,10 @@ private struct RootView: View {
                 // Only while a trip is open — with nothing to add it to, the card's day picker
                 // would have no days.
                 onSelectPlace: { if store.open != nil { search.open($0) } },
-                refitKey: plan.streamingRefitKey
+                // **Mirrors the `route:` line above.** A finished trip needs a re-frame key too,
+                // or a stop-coordinate correction changes `RoutePresentation.identity` and flies
+                // the camera away from wherever the traveller had panned to.
+                refitKey: plan.streamingRefitKey ?? store.mapRefitKey
             )
         } panel: {
             PanelContent(

@@ -29,7 +29,42 @@ final class TripsStore {
     /// the day the panel is showing.
     var route: RoutePresentation? {
         guard let open else { return nil }
-        return RoutePresentation(trip: open, dayIndex: activeDay)
+        return RoutePresentation(trip: open, dayIndex: activeDay, corrections: corrections)
+    }
+
+    /// Real coordinates for stops the model placed badly, by day and then by stop name.
+    ///
+    /// **A side table, and nothing is written to `Stop`.** Every field on a stop but
+    /// `actualCost` is `let`, and more to the point `setActualCost` and `addPlace` PATCH the
+    /// *whole* itinerary — so folding these in would mean that typing one actual cost silently
+    /// ships forty-nine device-geocoded coordinates to the server, a write nobody asked for,
+    /// which the web would then draw over OpenFreeMap tiles.
+    ///
+    /// The shape is not new: `RouteGeometry.routeStops(streamed:corrections:)` has taken exactly
+    /// this for the server's `day-coords` frames since B5. This is the same repair arriving by a
+    /// different route for a plan that has finished streaming.
+    private(set) var corrections: [Int: [String: GeoPoint]] = [:]
+
+    /// Days whose resolution pass has already run. Re-opening a day is then free.
+    @ObservationIgnored private var resolved: Set<Int> = []
+    @ObservationIgnored private var resolving: Task<Void, Never>?
+
+    /// What the camera is allowed to re-frame on.
+    ///
+    /// **Without this, correcting a coordinate yanks the map.** `RoutePresentation.identity` is a
+    /// lat/lng string and `WorldMapView.drawRoute` gates *both* redraw and re-frame on it unless
+    /// a separate key is supplied — so a correction landing after you had panned would fly the
+    /// camera away. This key moves on the day and on nothing else, which is the same trick
+    /// `PlanStore.streamingRefitKey` plays for a streaming run.
+    ///
+    /// It also fixes an existing wart: adding a stop re-framed the camera for this same reason.
+    /// **Two frames per day and no more: on arrival, and once when the corrections land.**
+    /// Resolving moved two of day 5's five stops eight kilometres, and with a key that ignored
+    /// corrections the camera stayed framed on the pre-correction bounds — so two stops were
+    /// simply off-screen with nothing to say they existed. Including whether this day has been
+    /// corrected adds exactly one re-frame and then goes stable again.
+    var mapRefitKey: String? {
+        open.map { "trip-\($0.id)-\(activeDay)-\(corrections[activeDay] == nil ? 0 : 1)" }
     }
 
     /// Which stop is being pointed at, within the active day, or nil.
@@ -45,6 +80,7 @@ final class TripsStore {
         activeDay = index
         // A stop index only means anything within its own day.
         emphasis = nil
+        resolveStops(day: index)
     }
 
     /// Point at a stop, or at nothing. Tapping the one already pointed at lets go of it, which is
@@ -84,12 +120,16 @@ final class TripsStore {
     func openTrip(id: String) async {
         isLoading = true
         message = nil
+        resolving?.cancel()
+        corrections = [:]
+        resolved = []
         do {
             open = try await api.trip(id: id)
             // Reset before the trip lands, not after: a stale index from a nine-day trip would
             // otherwise briefly address a day a three-day trip does not have.
             activeDay = 0
             emphasis = nil
+            resolveStops(day: 0)
         } catch {
             message = Self.describe(error)
         }
@@ -97,7 +137,57 @@ final class TripsStore {
     }
 
     func closeTrip() {
+        resolving?.cancel()
         open = nil
+    }
+
+    /// Put one day's stops where they actually are.
+    ///
+    /// **Per day, not per trip.** A thirty-day plan is ~150 stops; resolving them all on open
+    /// would be 150 `MKLocalSearch` calls in a burst, which is the fastest way to be throttled
+    /// for work nobody asked for. A day costs about six, and only days someone actually looks
+    /// at ever cost anything.
+    ///
+    /// Serial rather than a `TaskGroup` for the same reason — concurrency here buys a second and
+    /// risks the rate limit — and the whole day's findings are written in **one** mutation at the
+    /// end, so the map redraws once instead of six times.
+    private func resolveStops(day: Int) {
+        guard let trip = open, trip.itinerary.days.indices.contains(day),
+              !resolved.contains(day)
+        else { return }
+        resolved.insert(day)
+
+        let stops = trip.itinerary.days[day].stops
+        // **Snapshotted once, from raw points, never from already-corrected ones.** Otherwise the
+        // verdict depends on which response happens to land first, and the feature stops being
+        // repeatable or testable.
+        let anchorsByIndex = stops.indices.map { StopResolution.anchors(stops, excluding: $0) }
+        guard let centre = Framing.centroid(StopResolution.anchors(stops, excluding: -1))
+        else { return }
+
+        resolving?.cancel()
+        resolving = Task { [weak self] in
+            var found: [String: GeoPoint] = [:]
+            var asked: Set<String> = []
+            for (index, stop) in stops.enumerated() {
+                if Task.isCancelled { return }
+                guard let query = StopResolution.query(for: stop.name),
+                      StopResolution.namesAPlace(query),
+                      !asked.contains(query)
+                else { continue }
+                asked.insert(query)
+
+                let candidates = await StopResolver.candidates(
+                    for: query, near: centre, spanM: 30_000, category: stop.category
+                )
+                guard let match = StopResolution.best(
+                    of: candidates, near: GeoPoint(stop), anchors: anchorsByIndex[index]
+                ) else { continue }
+                found[stop.name] = match
+            }
+            guard !found.isEmpty, !Task.isCancelled else { return }
+            self?.corrections[day] = found
+        }
     }
 
     /// Record what a stop or the lodging actually cost. `stop: nil` is the lodging.

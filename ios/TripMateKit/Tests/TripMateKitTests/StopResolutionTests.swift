@@ -219,3 +219,73 @@ final class StopResolutionTests: XCTestCase {
         XCTAssertTrue(fixed.isEmpty)
     }
 }
+
+/// `namesAPlace` — the guard that stops a vague name being resolved to a confident wrong place.
+extension StopResolutionTests {
+
+    func testAProperNameIsAPlace() {
+        XCTAssertTrue(StopResolution.namesAPlace("Caffè Poliziano"))
+        XCTAssertTrue(StopResolution.namesAPlace("Corso Rossellino"))
+        XCTAssertTrue(StopResolution.namesAPlace("Pike Place Market"))
+        XCTAssertTrue(StopResolution.namesAPlace("Abbey of Sant'Antimo"))
+    }
+
+    /// **The case that made this function exist.** These resolve to *a* cheese dairy and *an*
+    /// agriturismo — some arbitrary one nearby — which is a confident wrong answer where the
+    /// model's vague centroid was at least honestly vague. The 40 km bound cannot catch it,
+    /// because the imposter is a kilometre away.
+    func testAKindOfPlaceIsNotAPlace() {
+        XCTAssertFalse(StopResolution.namesAPlace("caseificio"))
+        XCTAssertFalse(StopResolution.namesAPlace("agriturismo restaurant"))
+        XCTAssertFalse(StopResolution.namesAPlace("local café"))
+    }
+
+    /// A sentence capitalises its first word whether or not it names anything, so the first
+    /// word never counts on its own.
+    func testAnOpeningCapitalIsNotAProperName() {
+        XCTAssertFalse(StopResolution.namesAPlace("Pasta-making class"))
+        XCTAssertFalse(StopResolution.namesAPlace("Car rental pickup"))
+        XCTAssertFalse(StopResolution.namesAPlace("Pienza centro"))
+    }
+}
+
+/// `best(of:near:anchors:)` — which candidate to believe.
+extension StopResolutionTests {
+
+    /// **The regression that made this function exist.** "La Posta" names a dozen places in
+    /// Tuscany. Taking Apple's first hit moved a stop that already had authoritative
+    /// coordinates ten kilometres to Bagno Vignoni; taking the nearest acceptable one leaves it
+    /// where it belongs.
+    func testTheNearestAcceptableCandidateWins() {
+        let farImposter = Framing.offsetEast(pienza, metres: 10_000)
+        let theRealOne = Framing.offsetEast(pienza, metres: 300)
+        let best = StopResolution.best(
+            of: [farImposter, theRealOne], near: pienza, anchors: [pienza]
+        )
+        XCTAssertEqual(best, theRealOne)
+    }
+
+    /// A stop already in the right place resolves to itself, and the no-op is discarded — which
+    /// is what makes search-added stops safe without marking them exempt.
+    func testAStopAlreadyInTheRightPlaceIsLeftAlone() {
+        let itself = Framing.offsetEast(pienza, metres: 5)
+        XCTAssertNil(StopResolution.best(of: [itself], near: pienza, anchors: [pienza]))
+    }
+
+    /// Distance to the model's guess never overrides the sanity radius.
+    func testAnUnacceptableCandidateIsNotChosenEvenIfItIsTheOnlyOne() {
+        let paris = GeoPoint(lat: 48.8566, lng: 2.3522)
+        XCTAssertNil(StopResolution.best(of: [paris], near: pienza, anchors: [pienza]))
+    }
+
+    func testNoCandidatesMeansNoCorrection() {
+        XCTAssertNil(StopResolution.best(of: [], near: pienza, anchors: [pienza]))
+    }
+
+    /// Caffè Poliziano still travels, because no nearer candidate exists to prefer.
+    func testAGenuinelyDistantPlaceStillMoves() {
+        XCTAssertEqual(
+            StopResolution.best(of: [poliziano], near: pienza, anchors: [pienza]), poliziano
+        )
+    }
+}

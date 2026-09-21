@@ -29,8 +29,11 @@ struct RoutePresentation: Equatable {
         "\(dayIndex):" + stops.map { "\($0.point.lat),\($0.point.lng)" }.joined(separator: ";")
     }
 
-    init?(trip: Trip, dayIndex: Int) {
-        self.init(allStops: RouteGeometry.routeStops(trip.itinerary), dayIndex: dayIndex)
+    init?(trip: Trip, dayIndex: Int, corrections: [Int: [String: GeoPoint]] = [:]) {
+        self.init(
+            allStops: RouteGeometry.routeStops(trip.itinerary, corrections: corrections),
+            dayIndex: dayIndex
+        )
     }
 
     /// The same presentation from a run still in progress.

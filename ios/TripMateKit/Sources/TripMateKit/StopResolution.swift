@@ -79,6 +79,24 @@ public enum StopResolution {
         return words[(cut + 1)...].joined(separator: " ")
     }
 
+    /// Does this query name a *particular* place, or just a kind of place?
+    ///
+    /// **Found by running it.** Day 5 of the test trip contains "Pecorino tasting at caseificio"
+    /// and "Dinner at agriturismo restaurant". Those resolve — to *a* cheese dairy and *an*
+    /// agriturismo, some arbitrary one within the search region, which is a confident wrong
+    /// answer where the model's vague centroid was at least honestly vague. The sanity radius
+    /// cannot catch it: the imposter is a kilometre away, not forty.
+    ///
+    /// The signal is a capitalised word that is **not the first**. "Caffè Poliziano" and "Corso
+    /// Rossellino" have one; "agriturismo restaurant" and "Pasta-making class" do not, because a
+    /// sentence capitalises its opening word whether or not it names anything. It costs the
+    /// occasional real lowercase place name, which is the right way to be wrong here — a stop we
+    /// decline to move keeps exactly the behaviour it has today.
+    public static func namesAPlace(_ query: String) -> Bool {
+        let words = query.split(whereSeparator: \.isWhitespace)
+        return words.dropFirst().contains { $0.first?.isUppercase == true }
+    }
+
     /// Lowercased, unaccented, stripped of the punctuation a name can carry.
     ///
     /// `Café` and `cafe` are the same word to this, which matters because the model writes both.
@@ -117,6 +135,31 @@ public enum StopResolution {
     public static func accepts(_ candidate: GeoPoint, anchors: [GeoPoint]) -> Bool {
         guard let centre = Framing.centroid(anchors) else { return true }
         return Framing.distanceM(centre, candidate) <= maxCorrectionM
+    }
+
+    /// The candidate to believe, if any: **the acceptable one nearest to where the model put it.**
+    ///
+    /// **Not Apple's first hit, and that is a bug fix rather than a preference.** Day 1 of the
+    /// test trip contains "La Posta", which is Italian for "the post office" and names a dozen
+    /// places in Tuscany. Taking the top result moved it ten kilometres to Bagno Vignoni — and
+    /// that stop had *authoritative* coordinates, because it was added through the add-a-stop
+    /// flow from `MKLocalSearch` in the first place. The repair made the data worse.
+    ///
+    /// The model's guess is a weak signal but it is not no signal: it says "roughly Pienza". So
+    /// among the candidates the sanity radius admits, take the one that moves the stop *least*.
+    /// The Pienza La Posta then finds itself and stays put, while Caffè Poliziano still travels
+    /// to Montepulciano because no nearer candidate exists. Minimum necessary movement is the
+    /// right default for a repair.
+    ///
+    /// This also removes the need to mark search-added stops as exempt: a stop already in the
+    /// right place resolves to itself, and `isWorthApplying` then discards the no-op.
+    public static func best(
+        of candidates: [GeoPoint], near original: GeoPoint, anchors: [GeoPoint]
+    ) -> GeoPoint? {
+        candidates
+            .filter { accepts($0, anchors: anchors) }
+            .min { Framing.distanceM(original, $0) < Framing.distanceM(original, $1) }
+            .flatMap { isWorthApplying(from: original, to: $0) ? $0 : nil }
     }
 
     /// Is this move worth recording at all? See `minCorrectionM`.
