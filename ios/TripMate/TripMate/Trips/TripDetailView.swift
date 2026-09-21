@@ -86,29 +86,77 @@ struct TripDetailView: View {
         }
     }
 
-    /// The one line the capsule shows over a live map.
+    /// What the sheet says when it is shut.
     ///
-    /// **It names the stop you tapped.** With nothing emphasised it is the day's facts; point
-    /// at a pin and this becomes that stop, so the map can be read without opening the sheet —
-    /// which is the whole reason a 152pt stop exists.
+    /// **This is the state the app is in whenever somebody is looking at the map**, and it used
+    /// to draw one 13pt line — `Day 2 · Sep 13 · 6 stops` — in 108pt of glass, two of whose
+    /// three facts the header row directly above already carried. Now it carries the
+    /// destination as a photograph, the day as a dateline, what the day costs, and **a disc per
+    /// stop**, so the day can be walked over a full map without opening anything.
+    ///
+    /// **The discs are the same `NumberDisc` the rows and the map draw**, which is the whole
+    /// point: tapping one lights the pin on the ground, names it here, and flies the camera to
+    /// it. Three places, one number, one colour.
     @ViewBuilder private var capsuleFacts: some View {
         if days.indices.contains(activeDay) {
             let day = days[activeDay]
             let stop = emphasis.flatMap { day.stops.indices.contains($0) ? day.stops[$0] : nil }
-            HStack(spacing: 10) {
-                // The same disc the row and the map carry, so the capsule names a stop in the
-                // vocabulary the other two already use.
-                if let index = emphasis, day.stops.indices.contains(index) {
-                    NumberDisc(number: index + 1, day: activeDay, isEmphasised: true)
+            HStack(spacing: 12) {
+                // `large: false` (the default) — that flag only picks `thumbnailUrl` over
+                // `imageUrl`, both arrive in the same response, and painting a full-size
+                // Wikipedia image into 52pt would evict useful entries from the shared cache.
+                // A definite frame because `PlacePhotoView` has no intrinsic size by design.
+                PlacePhotoView(name: trip.destination)
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: Token.radiusSmall, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(stop?.name ?? DayDisplay.formatDateline(day.date))
+                            .textStyle(.headingSmall)
+                            .foregroundStyle(Token.foreground)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        // The day's money when nothing is pointed at; that stop's hour when
+                        // something is. Both are the fact the line beside them does not carry.
+                        Text(stop?.time ?? Spend.byCategory(day).total.formatted(
+                            .currency(code: "USD").precision(.fractionLength(0))
+                        ))
+                            .textStyle(.money.size(13).weight(TextStyle.medium))
+                            .foregroundStyle(stop == nil ? Token.money : Token.muted)
+                            .lineLimit(1)
+                    }
+                    discs(of: day)
                 }
-                Text(stop.map { "\($0.name) · \($0.time)" } ?? TripCopy.dayFacts(day, index: activeDay))
-                    .textStyle(.detail)
-                    .foregroundStyle(stop == nil ? Token.muted : Token.foreground)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.top, 8)
+            .padding(.top, 12)
         }
+    }
+
+    /// The day's stops, tappable, at the size a row of them fits.
+    ///
+    /// Scrolls rather than shrinks: a nine-stop day should look like nine stops, not like six
+    /// stops drawn smaller. **The hit area is 34x44** — under the 44pt floor across, which is
+    /// the trade a numeric picker row makes, and every stop stays reachable at full size both
+    /// in the expanded list and on the map.
+    private func discs(of day: DayPlan) -> some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(day.stops.indices, id: \.self) { index in
+                    Button {
+                        onEmphasise(index)
+                    } label: {
+                        NumberDisc(number: index + 1, day: activeDay, isEmphasised: index == emphasis)
+                            .frame(width: 26, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Stop \(index + 1), \(day.stops[index].name)")
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .frame(height: 26)
     }
 
     /// **Swipe between days; the strip is gone.** Nine tabs showed about four and a half at
@@ -162,7 +210,6 @@ struct TripDetailView: View {
                         .padding(.top, 14)
                     LodgingRow(
                         lodging: lodging,
-                        isOpen: emphasis == nil,
                         onActualCost: { await onActualCost(index, nil, $0) }
                     )
                 }
@@ -539,14 +586,16 @@ struct NumberDisc: View {
     let number: Int
     let day: Int
     let isEmphasised: Bool
+    /// The capsule draws the same disc; one view rather than two that can drift apart.
+    var diameter: CGFloat = NumberDisc.diameter
 
     var body: some View {
         Circle()
             .fill(isEmphasised ? Token.accent : Token.dayCore(day))
-            .frame(width: Self.diameter, height: Self.diameter)
+            .frame(width: diameter, height: diameter)
             .overlay {
                 Text("\(number)")
-                    .textStyle(.money.size(11).weight(TextStyle.semibold))
+                    .textStyle(.money.size(11 * diameter / Self.diameter).weight(TextStyle.semibold))
                     .foregroundStyle(isEmphasised ? Token.accentForeground : Token.discInk)
             }
             .overlay {
@@ -583,21 +632,22 @@ private struct ActualCostField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text("Actual")
-                .textStyle(.micro)
-                .foregroundStyle(Token.muted)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("ACTUAL")
+                .textStyle(.label)
+                .foregroundStyle(Token.muted.opacity(0.55))
             Text("$")
                 .textStyle(.money.size(12))
-                .foregroundStyle(Token.muted)
+                .foregroundStyle(Token.muted.opacity(0.7))
             TextField(estimate.formatted(.number.precision(.fractionLength(0))), text: $text)
                 .textFieldStyle(.plain)
-                .textStyle(.money.size(13))
+                .textStyle(.money.size(15).weight(TextStyle.medium))
                 .foregroundStyle(Token.money)
+                .multilineTextAlignment(.trailing)
                 .keyboardType(.decimalPad)
                 .submitLabel(.done)
                 .focused($focused)
-                .frame(maxWidth: 74)
+                .frame(width: 62)
                 // Fires only for a hardware keyboard — see the toolbar below.
                 .onSubmit { send() }
                 // **A decimal pad has no return key, so there is nothing to submit with.**
@@ -619,11 +669,16 @@ private struct ActualCostField: View {
                     if wasFocused && !isFocused { send() }
                 }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
         .frame(minHeight: 34)
-        .background(Color.black.opacity(0.22))
-        .clipShape(Capsule())
+        // **A rule under the figure, and not under the label.** The black capsule this replaces
+        // floated on its own row as a chip with nothing to align to; what says "type here" in a
+        // ledger is an underlined blank, and it lets the amount sit directly beneath the
+        // estimate it replaces so the two read as one money column.
+        .overlay(alignment: .bottomTrailing) {
+            Rectangle()
+                .fill(Token.money.opacity(0.4))
+                .frame(width: 76, height: 1)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Actual cost for \(accessibilityName)")
         // The web hid this in a `title` tooltip, which is nowhere at all on a phone.
@@ -1055,49 +1110,77 @@ private struct DayLedger: View {
     }
 }
 
-/// Where the night goes. A ruled entry like any other, and no longer a gold slab.
+/// Where the night goes — the day's last entry, and now in the day's column.
 ///
-/// The `moneySoft` background it carried was the largest painted rectangle in the sheet, in the
-/// colour reserved for figures. Gold counts; a bed is not a figure.
+/// **The name used to start 39pt left of every stop name above it.** Every entry on the day
+/// opens with a 26pt disc; this one opened with nothing, so it broke the one column the whole
+/// list is built on. That misalignment is what read as unfinished, not the styling.
+///
+/// **The mark is outlined rather than filled with the day's hue.** A filled disc means "this is
+/// stop N on the route", and lodging is not on it — `Lodging` decodes exactly four fields and
+/// carries no coordinate, so it can never become a `StopAnnotation`.
+///
+/// **Its cost field opens on a tap, like a stop's.** It used to appear whenever *nothing else*
+/// was selected, which made it a permanent input with no trigger, floating on its own row with
+/// nothing to align to. The disclosure is local state rather than `TripsStore.emphasise`,
+/// because that index space is `day.stops` and there is no index in it for a bed.
 private struct LodgingRow: View {
     let lodging: Lodging
-    /// Whether the cost field is showing. Follows the same rule as a stop: a keyboard is a
-    /// deliberate thing to open, so it appears when nothing else is being pointed at rather
-    /// than sitting under every day.
-    let isOpen: Bool
     let onActualCost: (Double?) async -> Void
 
+    @State private var isOpen = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(lodging.name)
-                        .textStyle(.headingSmall)
-                        .foregroundStyle(Token.foreground)
-                    Text(lodging.note)
+        HStack(alignment: .top, spacing: 13) {
+            Circle()
+                .strokeBorder(Token.muted.opacity(0.3), lineWidth: 1)
+                .frame(width: NumberDisc.diameter, height: NumberDisc.diameter)
+                .overlay {
+                    Image(systemName: "bed.double")
                         .textStyle(.caption)
                         .foregroundStyle(Token.muted)
                 }
-                Spacer(minLength: 8)
-                // The figure that counts is what you paid once you have said so. The estimate
-                // does not vanish — it stays as the field's placeholder.
-                Text(Spend.of(cost: lodging.cost, actual: lodging.actualCost),
-                     format: .currency(code: "USD").precision(.fractionLength(0)))
-                    .textStyle(.money.size(15).weight(TextStyle.medium))
-                    .foregroundStyle(Token.money)
-            }
-            if isOpen {
-                HStack {
-                    Spacer(minLength: 0)
-                    ActualCostField(
-                        estimate: lodging.cost,
-                        actual: lodging.actualCost,
-                        accessibilityName: lodging.name,
-                        commit: onActualCost
-                    )
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(lodging.name)
+                        .textStyle(.heading)
+                        .foregroundStyle(Token.foreground)
+                    Spacer(minLength: 8)
+                    // The figure that counts is what you paid once you have said so. The
+                    // estimate does not vanish — it stays as the field's placeholder.
+                    Text(Spend.of(cost: lodging.cost, actual: lodging.actualCost),
+                         format: .currency(code: "USD").precision(.fractionLength(0)))
+                        .textStyle(.money.size(15).weight(TextStyle.medium))
+                        .foregroundStyle(Token.money)
+                }
+                if !lodging.note.isEmpty {
+                    Text(lodging.note)
+                        .textStyle(.detail)
+                        .foregroundStyle(Token.muted)
+                        .lineLimit(isOpen ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if isOpen {
+                    HStack {
+                        Spacer(minLength: 0)
+                        ActualCostField(
+                            estimate: lodging.cost,
+                            actual: lodging.actualCost,
+                            accessibilityName: lodging.name,
+                            commit: onActualCost
+                        )
+                    }
+                    .padding(.top, 2)
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.easeOut(duration: 0.2)) { isOpen.toggle() } }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Stay, \(lodging.name)")
     }
 }

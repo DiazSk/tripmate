@@ -30,16 +30,18 @@ extension View {
 enum SheetDetent: CaseIterable {
     case small, medium, large
 
-    /// **`small` shows one line over a live map**, which is the composition the web cannot
-    /// offer at any width on a phone — its `DockedPanel` capsule is the same idea.
+    /// **`small` is the composition the web cannot offer at any width on a phone** — its
+    /// `DockedPanel` capsule is the same idea.
     ///
-    /// 152 is derived, not picked: 44 grabber + 56 header row + 8 + 24 facts line + 20 bottom
-    /// pad. It shows the trip, the day, and — when a stop is emphasised — that stop's name and
-    /// time, so tapping a pin names it without opening anything.
+    /// 184 is derived, not picked: 44 grabber + 56 header row + 12 gap + 52 capsule block + 20
+    /// bottom pad. It was 152 for a single 24pt line of facts, which in 108pt of glass said
+    /// almost nothing the header above it had not already said. The block now carries a
+    /// photograph of the destination, the dateline, the day's total and a disc per stop — so
+    /// the day can be walked over a full map without opening anything.
     func height(in available: CGSize, safeTop: CGFloat, fitted: CGFloat? = nil) -> CGFloat {
         let large = available.height - safeTop - sheetDock
         switch self {
-        case .small: return 152
+        case .small: return 184
         // **The middle stop is the content's own height when it states one.** A flat
         // fraction is right for a day of an itinerary, which is a list that always overflows;
         // it is wrong for a four-field form, which then sits in the top third of a box it does
@@ -55,7 +57,10 @@ enum SheetDetent: CaseIterable {
         // the heading and cut the stop off beneath it — the exact failure the recomposition
         // existed to fix. It was briefly 56%, before the day's overspend line left this stack
         // for the spend band.
-        case .medium: return min(max(fitted ?? available.height * 0.53, 152), large)
+        // The floor is `small`'s own height, and it is a second literal that must move with
+        // it: left at 152 a short wizard step resolves `medium` *below* `small`, inverting the
+        // order that the rubber-band bounds, `liveDetent` and the release snap all read.
+        case .medium: return min(max(fitted ?? available.height * 0.53, 184), large)
         // Stops clear of the status bar *and* the tab bar. A real sheet would cover both.
         case .large: return large
         }

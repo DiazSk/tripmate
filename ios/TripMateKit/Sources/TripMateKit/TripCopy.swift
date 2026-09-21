@@ -14,19 +14,6 @@ public enum TripCopy {
         "Day \(index + 1) of \(count)"
     }
 
-    /// `Day 3 · Sep 14 · 5 stops` — the one line the capsule shows over a live map.
-    ///
-    /// The date goes through `DayDisplay.formatDate`, never the raw ISO string. This screen has
-    /// already shipped `2026-09-12 → 2026-09-20` to a traveller once.
-    public static func dayFacts(_ day: DayPlan, index: Int, currentYear: Int? = nil) -> String {
-        let count = day.stops.count
-        return [
-            "Day \(index + 1)",
-            DayDisplay.formatDate(day.date, currentYear: currentYear),
-            "\(count) \(count == 1 ? "stop" : "stops")",
-        ].joined(separator: " · ")
-    }
-
     /// `Ran $48 over plan.` — nil when the day did not.
     ///
     /// **Carries the word and the amount.** The colour is the third signal, not the first: a

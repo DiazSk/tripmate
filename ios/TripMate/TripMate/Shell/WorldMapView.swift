@@ -85,7 +85,8 @@ struct WorldMapView: UIViewRepresentable {
 
         // Emphasis is applied on every update and gated by nothing: it changes far more often than
         // the drawing does, and it costs two strokes and a dot colour rather than a redraw.
-        context.coordinator.apply(emphasis: emphasis, in: map)
+        // The flight it can trigger *is* gated — see `apply`.
+        context.coordinator.apply(emphasis: emphasis, in: map) { fit($0, in: map) }
         context.coordinator.refreshReveal(in: map)
     }
 
@@ -205,7 +206,7 @@ struct WorldMapView: UIViewRepresentable {
     ///
     /// **The top band is a constant; the bottom one is measured.** Above is the map search
     /// field, 36pt inside a 56pt band, the same on every screen — a constant, so it is a token.
-    /// Below is the tab bar *and*, when there is one, the plan sheet, which is 132pt or 46% or
+    /// Below is the tab bar *and*, when there is one, the plan sheet, which is 184pt or 53% or
     /// nearly the display and moves under a drag. That is why `bottomInset` is carried on
     /// `PanelMetrics` beside the panel's width and the top is not: this type measures what moves.
     private func fit(_ rect: MKMapRect, in map: MKMapView) {
@@ -365,23 +366,51 @@ struct WorldMapView: UIViewRepresentable {
             }
         }
 
-        /// Push the emphasised stop into the overlay and the annotation views.
+        /// The last emphasis this actually flew to.
+        ///
+        /// **Required, not defensive.** `apply` runs from `updateUIView` on every SwiftUI
+        /// update, and only the overlay half is self-gating (`emphasisIndex != emphasis`). A
+        /// camera call in the annotation loop with no memory would re-fly on every unrelated
+        /// state change in the app.
+        private var flownTo: Int?
+
+        /// Push the emphasised stop into the overlay and the annotation views, and bring it
+        /// into view.
         ///
         /// `setNeedsDisplay()` on the renderer rather than replacing the overlay: rebuilding it
         /// would run through the route's redraw path, which re-frames the camera — so selecting a
         /// stop would snap the view back to the day's bounding rect.
-        func apply(emphasis: Int?, in map: MKMapView) {
+        ///
+        /// **The flight goes through `fit`, never `setRegion`.** Same reason `drawPin` gives one
+        /// screen up: `setRegion` centres in the viewport, so the stop you just pointed at lands
+        /// under the plan sheet or behind the docked panel. `fit` already knows what is covering
+        /// the map. The box is `drawPin`'s own 800m context radius — you asked which stop, not to
+        /// stand in its doorway.
+        ///
+        /// Deselecting sends `nil` and moves nothing: leaving a stop is not a request to go
+        /// somewhere.
+        func apply(emphasis: Int?, in map: MKMapView, fit: (MKMapRect) -> Void) {
             if let overlay = map.overlays.compactMap({ $0 as? DayRouteOverlay }).first,
                overlay.emphasisIndex != emphasis {
                 overlay.emphasisIndex = emphasis
                 map.renderer(for: overlay)?.setNeedsDisplay()
             }
+            var target: CLLocationCoordinate2D?
             for annotation in map.annotations {
                 guard let stop = annotation as? StopAnnotation,
                       let view = map.view(for: stop) as? StopAnnotationView
                 else { continue }
-                view.isEmphasised = stop.indexWithinDay == emphasis
+                let isIt = stop.indexWithinDay == emphasis
+                view.isEmphasised = isIt
+                if isIt { target = stop.coordinate }
             }
+            guard emphasis != flownTo else { return }
+            flownTo = emphasis
+            guard let target else { return }
+            let span = Framing.placeContextRadiusM
+                * MKMapPointsPerMeterAtLatitude(target.latitude)
+            let centre = MKMapPoint(target)
+            fit(MKMapRect(x: centre.x - span, y: centre.y - span, width: span * 2, height: span * 2))
         }
 
         /// Tapping a stop's card points at it; tapping the map again stops pointing.

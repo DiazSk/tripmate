@@ -89,27 +89,6 @@ final class TripCopyTests: XCTestCase {
         XCTAssertTrue(TripCopy.draftNotice.lowercased().contains("draft"))
     }
 
-    // MARK: the capsule line
-
-    func testDayFactsFormatsTheDateAndPluralisesStops() throws {
-        let d = try day(stops: [
-            ("A", 1, nil, "9:00 AM", "1 hour"), ("B", 1, nil, "11:00 AM", "1 hour"),
-        ])
-        XCTAssertEqual(TripCopy.dayFacts(d, index: 2, currentYear: 2026), "Day 3 · Sep 14 · 2 stops")
-    }
-
-    func testDayFactsSaysOneStop() throws {
-        let d = try day(stops: [("A", 1, nil, "9:00 AM", "1 hour")])
-        XCTAssertTrue(TripCopy.dayFacts(d, index: 0, currentYear: 2026).hasSuffix("1 stop"))
-    }
-
-    /// The bug this screen has already shipped: a raw ISO date reaching a traveller.
-    func testDayFactsNeverPrintsARawISODate() throws {
-        let line = TripCopy.dayFacts(try day(), index: 0, currentYear: 2026)
-        XCTAssertFalse(line.contains("2026-09-14"), line)
-        XCTAssertTrue(line.contains("Sep 14"), line)
-    }
-
     func testDayPosition() {
         XCTAssertEqual(TripCopy.dayPosition(2, of: 9), "Day 3 of 9")
     }
