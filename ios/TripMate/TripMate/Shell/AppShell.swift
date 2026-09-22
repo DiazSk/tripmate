@@ -43,7 +43,18 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
     /// one thing the glass floats over.
     var panelFloats: Bool
     @ViewBuilder var world: () -> World
-    @ViewBuilder var panel: () -> Panel
+    /// **Takes the tab rather than capturing it, and that is a bug fix.**
+    ///
+    /// As `() -> Panel` this closure came from whichever `RootView` value built *this* `AppShell`,
+    /// so it carried that render's `tab` inside it. `AppShell`'s own body re-runs the moment the
+    /// binding changes — it reads `tab` for the `home` branch — but a re-run alone does not hand
+    /// it a newer closure. So for one cycle the shell correctly left the home branch while the
+    /// panel it drew was still built from the *previous* tab, which fell through `PanelContent`'s
+    /// `if/else` to the memories wall. Pressing Profile showed Memories; pressing it again, or any
+    /// unrelated invalidation, caught it up — which is exactly how it presented.
+    ///
+    /// Passed as an argument, the panel is a function of the shell's live `tab` and cannot lag it.
+    @ViewBuilder var panel: (AppTab) -> Panel
     @ViewBuilder var home: () -> Home
 
     @State private var exclusions = ShellExclusions()
@@ -119,7 +130,7 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                     // be motion in answer to a problem this width does not have.
                     HStack(spacing: 0) {
                         Spacer(minLength: 0)
-                        panel()
+                        panel(tab)
                             .glassPanel()
                             .padding(.bottom, Token.barHeight + Token.gapRows)
                             .padding([.horizontal, .top], Token.padCompact)
@@ -131,14 +142,14 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                         fitted: fitted,
                         available: proxy.size,
                         safeTop: proxy.safeAreaInsets.top,
-                        content: panel
+                        content: { panel(tab) }
                     )
                 } else {
                     // A page, on its own ground. `safeAreaInset` rather than bottom padding: it
                     // reaches the scroll views *inside* the page, so content passes under the
                     // glass bar and still stops above it — padding out here would leave a dead
                     // band the bar floats in.
-                    panel()
+                    panel(tab)
                         .safeAreaInset(edge: .bottom) {
                             Color.clear.frame(height: Token.barHeight + Token.gapRows)
                         }

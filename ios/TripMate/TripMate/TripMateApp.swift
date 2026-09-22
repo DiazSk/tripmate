@@ -108,7 +108,7 @@ private struct RootView: View {
                 // the camera away from wherever the traveller had panned to.
                 refitKey: plan.streamingRefitKey ?? store.mapRefitKey
             )
-        } panel: {
+        } panel: { tab in
             PanelContent(
                 store: store, plan: plan, tab: tab, isPlanning: $isPlanning,
                 onOfferProfile: { candidate in
@@ -181,7 +181,7 @@ private struct PanelContent: View {
     var body: some View {
         Group {
             if tab == .profile {
-                ProfileView()
+                ProfileView(trips: store)
             } else if showsWizard {
                 PlanWizardView(
                     plan: plan,

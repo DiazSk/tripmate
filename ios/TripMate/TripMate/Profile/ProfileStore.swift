@@ -14,9 +14,14 @@ final class ProfileStore {
     var draft = PlanDraft()
     private(set) var isLoading = false
     private(set) var isSaving = false
-    /// Cleared by the next edit, so the confirmation never outlives what it confirmed.
-    private(set) var isSaved = false
     private(set) var message: String?
+    /// Whether the server actually had a profile for this traveller.
+    ///
+    /// **Distinct from `hasLoaded`, and the header card needs the difference.** `PlanDraft`'s
+    /// defaults resolve to solo / a bit of both / comfortable / some of each, so a portrait
+    /// sentence generated from an untouched draft asserts four things nobody said. This is how
+    /// the card knows to invite rather than to describe.
+    private(set) var hasProfile = false
     /// **Distinct from `isLoading`, and from "the draft is non-default".** A traveller who has
     /// never saved a profile gets `nil` back and keeps `PlanDraft()`'s defaults — which is
     /// indistinguishable from never having asked. The offer after a generation needs to know
@@ -38,6 +43,7 @@ final class ProfileStore {
             // an error — the form simply opens on `PlanDraft()`'s defaults.
             if let profile = try await api.profile() {
                 draft = PlanDraft(profile: profile)
+                hasProfile = true
             }
         } catch {
             message = Self.describe(error)
@@ -57,14 +63,33 @@ final class ProfileStore {
         message = nil
         do {
             try await api.saveProfile(draft.travelerProfile)
-            isSaved = true
+            hasProfile = true
         } catch {
             message = Self.describe(error)
         }
         isSaving = false
     }
 
-    func markEdited() { isSaved = false }
+    /// **Every change writes itself; there is no Save button.** That is what a native settings
+    /// screen does, and the button at the foot of a scrolling form was the most web-shaped thing
+    /// on the old screen.
+    ///
+    /// Debounced because the controls are chatty — starring an interest also selects it, so one
+    /// tap is two mutations — and each write is a round trip. The pending task is cancelled
+    /// rather than coalesced, so a burst of edits costs exactly one save.
+    ///
+    /// A failure leaves `message` set, which the screen renders in a section footer. An autosave
+    /// that fails silently loses answers.
+    func edited() {
+        pending?.cancel()
+        pending = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            await self?.save()
+        }
+    }
+
+    @ObservationIgnored private var pending: Task<Void, Never>?
 
     /// The same table as `TripsStore.describe`, and deliberately a copy rather than a shared
     /// helper: the two will diverge the moment one of them has a case the other cannot hit, and

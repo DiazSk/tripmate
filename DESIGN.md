@@ -535,6 +535,39 @@ The **colour** half of the boundary stands unchanged: route colour is map-native
 appear in a panel, chip or button, and interface colour stays off the globe — with `--accent`
 marking a hovered or selected stop as the one documented exception.
 
+### The third boundary: native settings surfaces (iOS, 2026-09-21)
+
+**A settings-shaped screen in the iOS app uses the system's type ramp and geometry, not this
+one.** This file describes a web app, and every rule above assumes the product draws its own
+chrome. On a native preferences list that assumption inverts: `List(.insetGrouped)` owns the row
+height, the separator insets, the header and footer styling, the chevrons and — the part none of
+the rules above can deliver — **Dynamic Type**. Overriding that with `--font-sans` at hand-picked
+points is what made `ProfileView` read as a web form rather than an iOS screen, which is the
+defect this boundary exists to stop recurring.
+
+So on those surfaces:
+
+- **SF at the system text styles carries the list.** Rows, values, section headers and footers
+  set no custom face at all. Apple's own split is the licence for this — body, labels and
+  controls stay on the system face, a brand face appears in display moments — and taking it is
+  what buys Dynamic Type.
+- **Melodrama appears exactly once**, on the screen's header card, and it must ride
+  `@ScaledMetric` or it becomes the smallest text on the card at the accessibility sizes. Its
+  28pt floor still holds and is enforced with a `max`.
+- **Tabular still sets figures**, unchanged: a column of compared values is a column of compared
+  values on any platform.
+- **The palette does not change.** Kiln needs no adaptation here, and that is a genuine
+  coincidence worth recording: `--surface-deep` is `rgb(28,26,24)` and iOS dark's own grouped-row
+  background is `#1C1C1E`. A real `List` wears this palette with
+  `.scrollContentBackground(.hidden)` and `.listRowBackground(…)` and nothing looks borrowed.
+- **The One Meaning Rule reaches row glyphs.** `.tint(--accent)` is required on the stack, or
+  every checkmark renders system blue — but it reaches SF Symbols too, and a column of jade icons
+  reads as a column of actions. Row glyphs take the secondary label colour. iOS tints those tiles
+  for *identity*; this palette has no colour spare for that job.
+
+This is a boundary, not a licence: it applies to preferences and settings lists. The trip, the
+landing and the map keep the system above.
+
 ## Layout
 
 `AppShell` renders exactly four layers on every route and that structure never varies: the globe at
