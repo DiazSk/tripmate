@@ -1,9 +1,9 @@
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getProfile } from '@/api/tripMateApi';
+import { useFocusedFetch } from '@/lib/useFocusedFetch';
 import type { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, TravelerProfile } from '@/api/types';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { Colors, Radius, Spacing } from '@/constants/theme';
@@ -84,13 +84,11 @@ const M = Platform.select({
 
 export default function Profile() {
   // undefined = still loading, null = the fetch failed, "none" = fetched fine, no profile yet.
-  const [profile, setProfile] = useState<TravelerProfile | null | 'none' | undefined>(undefined);
-
-  useEffect(() => {
-    getProfile().then((result) =>
-      setProfile(result === undefined ? null : result === null ? 'none' : result)
-    );
-  }, []);
+  // On focus: generating a plan writes the profile, so this fills without an app restart.
+  const profile = useFocusedFetch<TravelerProfile | null | 'none'>(async () => {
+    const result = await getProfile();
+    return result === undefined ? null : result === null ? 'none' : result;
+  });
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>

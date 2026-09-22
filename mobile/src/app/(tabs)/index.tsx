@@ -1,5 +1,4 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,6 +10,7 @@ import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
+import { useFocusedFetch } from '@/lib/useFocusedFetch';
 
 /**
  * Transcribed from `ios/TripMate/TripMate/Home/LandingContent.swift`. Static, and true today —
@@ -41,11 +41,8 @@ const METHOD = [
 
 export default function Home() {
   const router = useRouter();
-  const [trips, setTrips] = useState<TripSummary[] | null | undefined>(undefined);
-
-  useEffect(() => {
-    listTrips().then((result) => setTrips(result ?? null));
-  }, []);
+  // On focus, not on mount — "Up next" has to notice a trip kept a moment ago in the wizard.
+  const trips = useFocusedFetch<TripSummary[] | null>(async () => (await listTrips()) ?? null);
 
   const featured = trips ? pickFeatured(trips) : undefined;
 

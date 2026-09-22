@@ -1,5 +1,4 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,15 +9,13 @@ import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
+import { useFocusedFetch } from '@/lib/useFocusedFetch';
 
 export default function Memories() {
   const router = useRouter();
   // undefined = still loading, null = the fetch failed, [] = fetched fine, no trips yet.
-  const [trips, setTrips] = useState<TripSummary[] | null | undefined>(undefined);
-
-  useEffect(() => {
-    listTrips().then((result) => setTrips(result ?? null));
-  }, []);
+  // Re-read on focus rather than on mount: a trip kept in the wizard has to show up here.
+  const trips = useFocusedFetch<TripSummary[] | null>(async () => (await listTrips()) ?? null);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -45,7 +42,7 @@ export default function Memories() {
             <Invitation
               title="No trips kept yet"
               body="Plans you keep are collected here, with the places you chose."
-              note="Planning arrives in a later release"
+              note="Start one from Home"
             />
           )
         }
