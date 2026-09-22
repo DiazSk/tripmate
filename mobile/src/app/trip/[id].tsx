@@ -23,7 +23,7 @@ export default function TripDetail() {
   if (trip === undefined) {
     return (
       <View style={styles.screen}>
-        <Stack.Screen options={{ title: '' }} />
+        <Stack.Screen options={{ title: '', headerBackButtonDisplayMode: 'minimal' }} />
         <Loading />
       </View>
     );
@@ -32,7 +32,7 @@ export default function TripDetail() {
   if (trip === null) {
     return (
       <View style={styles.screen}>
-        <Stack.Screen options={{ title: '' }} />
+        <Stack.Screen options={{ title: '', headerBackButtonDisplayMode: 'minimal' }} />
         <View style={styles.stateWrap}>
           <Notice>Couldn&rsquo;t reach TripMate. Check your connection.</Notice>
         </View>
@@ -44,7 +44,12 @@ export default function TripDetail() {
 
   return (
     <View style={styles.screen}>
-      <Stack.Screen options={{ title: trip.destination }} />
+      {/* Chevron only. The back label defaults to the previous screen's title, which for a route
+          group is the literal string "(tabs)" — and naming one tab would be wrong anyway, since
+          a trip opens from both Home and Memories. */}
+      <Stack.Screen
+        options={{ title: trip.destination, headerBackButtonDisplayMode: 'minimal' }}
+      />
       <SectionList
         sections={days.map((day, index) => ({ day, index, data: day.stops ?? [] }))}
         keyExtractor={(stop, index) => `${stop.name}-${index}`}
