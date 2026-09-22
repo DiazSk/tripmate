@@ -1,4 +1,4 @@
-import { listTrips, getTrip, getProfile, placePhoto } from "./tripMateApi";
+import { listTrips, getTrip, getProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip } from "./tripMateApi";
 
 jest.mock("./session", () => ({ fetchWithSession: jest.fn() }));
 import { fetchWithSession } from "./session";
@@ -112,4 +112,132 @@ test("placePhoto encodes a name with spaces and punctuation", async () => {
     "/api/place-photo?name=Val%20d'Orcia%2C%20Italy",
     expect.anything()
   );
+});
+
+// --- Creating a trip -------------------------------------------------------
+
+// 404 and 500 are different on purpose: one says "no such place", the other says "we couldn't
+// ask". Collapsing them would tell a traveller their destination doesn't exist during an outage.
+test("geocode reports a 404 as a miss, distinct from a failure", async () => {
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ error: "nope" }), { status: 404 }));
+  expect(await geocode("Atlantis")).toEqual({ missed: true });
+});
+
+test("geocode reports a 500 as undefined, making no claim about the place", async () => {
+  mockedFetch.mockResolvedValue(new Response("", { status: 500 }));
+  expect(await geocode("Kyoto")).toBeUndefined();
+});
+
+test("geocode returns the place on success", async () => {
+  mockedFetch.mockResolvedValue(
+    new Response(JSON.stringify({ lat: 35.01, lng: 135.76, name: "Kyoto" }), { status: 200 })
+  );
+  expect(await geocode("Kyoto")).toEqual({ place: { lat: 35.01, lng: 135.76, name: "Kyoto" } });
+});
+
+test("geocode never fires a request for an empty destination", async () => {
+  expect(await geocode("  ")).toBeUndefined();
+  expect(mockedFetch).not.toHaveBeenCalled();
+});
+
+test("createTripDraft returns the new id and sends draft status", async () => {
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ id: "t9" }), { status: 200 }));
+  const body = {
+    destination: "Kyoto", startDate: "2027-04-02", endDate: "2027-04-09", budget: 3800,
+    itinerary: { days: [] }, status: "draft" as const,
+  };
+  expect(await createTripDraft(body)).toBe("t9");
+  const [, init] = mockedFetch.mock.calls[0];
+  expect(JSON.parse(init.body).status).toBe("draft");
+});
+
+test("promoteTrip returns the server's recomputed endDate, not the sent one", async () => {
+  mockedFetch.mockResolvedValue(
+    new Response(JSON.stringify({ ok: true, endDate: "2027-04-08", days: 7, status: "saved" }), { status: 200 })
+  );
+  const update = await promoteTrip("t9", { days: [] });
+  expect(update?.endDate).toBe("2027-04-08");
+  const [, init] = mockedFetch.mock.calls[0];
+  expect(init.method).toBe("PATCH");
+  expect(JSON.parse(init.body).status).toBe("saved");
+});
+
+// --- Generation ------------------------------------------------------------
+
+const REQ = {
+  destination: "Kyoto", startDate: "2027-04-02", endDate: "2027-04-09",
+  budget: 3800, tier: "midrange" as const,
+};
+
+function sseResponse(body: string, status = 200) {
+  // No `body` stream here, which exercises the whole-text fallback path deliberately.
+  return new Response(body, { status, headers: { "Content-Type": "text/event-stream" } });
+}
+
+test("generateTrip surfaces a 429 as a throttle, not a generic failure", async () => {
+  mockedFetch.mockResolvedValue(
+    new Response(JSON.stringify({ error: "Too many requests — slow down and try again shortly." }), { status: 429 })
+  );
+  const result = await generateTrip(REQ, { onPlan: () => {} });
+  expect(result).toEqual({ kind: "throttled", message: "Too many requests — slow down and try again shortly." });
+});
+
+test("generateTrip surfaces a 503 as the spend cap", async () => {
+  mockedFetch.mockResolvedValue(
+    new Response(JSON.stringify({ error: "Demo budget for today has been used up — try again tomorrow." }), { status: 503 })
+  );
+  const result = await generateTrip(REQ, { onPlan: () => {} });
+  expect(result?.kind).toBe("spendCap");
+});
+
+test("generateTrip delivers stages, stops and the plan, skipping padding and keepalives", async () => {
+  const stages: string[] = [];
+  const stops: number[] = [];
+  let planned: unknown;
+  mockedFetch.mockResolvedValue(
+    sseResponse(
+      `:${"x".repeat(2048)}\n\n` +
+        'event: stage\ndata: {"stage":"geocode","status":"start"}\n\n' +
+        ':\n\n' +
+        'event: stop\ndata: {"dayIndex":0,"stopIndex":0,"date":"2027-04-02","stop":{"name":"Fushimi Inari"}}\n\n' +
+        'event: plan\ndata: {"itinerary":{"days":[]},"traceId":"tr","runId":"r1"}\n\n'
+    )
+  );
+  const result = await generateTrip(REQ, {
+    onStage: (e) => stages.push(e.stage),
+    onStop: (e) => stops.push(e.stopIndex),
+    onPlan: (r) => { planned = r; },
+  });
+  expect(result).toBeUndefined();
+  expect(stages).toEqual(["geocode"]);
+  expect(stops).toEqual([0]);
+  expect(planned).toEqual({ itinerary: { days: [] }, traceId: "tr", runId: "r1" });
+});
+
+test("generateTrip reports a stream error when no plan landed", async () => {
+  mockedFetch.mockResolvedValue(
+    sseResponse('event: error\ndata: {"error":"The planner didn\'t finish. Try generating again."}\n\n')
+  );
+  const result = await generateTrip(REQ, { onPlan: () => {} });
+  expect(result?.kind).toBe("failed");
+  expect(result?.message).toContain("didn't finish");
+});
+
+// A late failure must never tear down a plan already handed to the caller.
+test("generateTrip ignores an error arriving after the plan", async () => {
+  let planned = false;
+  mockedFetch.mockResolvedValue(
+    sseResponse(
+      'event: plan\ndata: {"itinerary":{"days":[]},"traceId":"t","runId":"r"}\n\n' +
+        'event: error\ndata: {"error":"too late"}\n\n'
+    )
+  );
+  const result = await generateTrip(REQ, { onPlan: () => { planned = true; } });
+  expect(planned).toBe(true);
+  expect(result).toBeUndefined();
+});
+
+test("generateTrip returns a failure when the request itself throws", async () => {
+  mockedFetch.mockRejectedValue(new Error("network down"));
+  expect((await generateTrip(REQ, { onPlan: () => {} }))?.kind).toBe("failed");
 });

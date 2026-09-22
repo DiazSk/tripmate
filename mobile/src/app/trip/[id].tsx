@@ -1,9 +1,10 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 
-import { getTrip } from '@/api/tripMateApi';
+import { discardTrip, getTrip, promoteTrip } from '@/api/tripMateApi';
 import type { DayPlan, Stop, Trip } from '@/api/types';
+import { PrimaryButton } from '@/components/form';
 import { PlacePhoto } from '@/components/place-photo';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
@@ -105,6 +106,69 @@ export default function TripDetail() {
           ) : null
         }
       />
+
+      {trip.status === 'draft' ? (
+        <KeepShelf
+          trip={trip}
+          onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * An unkept plan's shelf.
+ *
+ * A generated trip is a `draft` row from the moment it exists, so nothing is lost on a back
+ * press — but a draft is invisible on the memories wall (`listTrips` defaults to saved), so
+ * without this it could only be reached by going back through generation. Keeping promotes the
+ * same row rather than inserting a second one, which is what keeps its `runId` link intact.
+ */
+function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => void }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<'keep' | 'discard' | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function keep() {
+    setBusy('keep');
+    setFailed(false);
+    const update = await promoteTrip(trip.id, trip.itinerary);
+    setBusy(null);
+    // The returned endDate is recomputed from the itinerary server-side, so it is the one to
+    // keep — not whatever was sent.
+    if (update) onKept(update.endDate);
+    else setFailed(true);
+  }
+
+  async function discard() {
+    setBusy('discard');
+    setFailed(false);
+    const ok = await discardTrip(trip.id);
+    if (ok) router.replace('/(tabs)/memories');
+    else {
+      setBusy(null);
+      setFailed(true);
+    }
+  }
+
+  return (
+    <View style={styles.shelf}>
+      {failed ? (
+        <ThemedText type="detail" themeColor="alert" style={styles.shelfError}>
+          That didn&rsquo;t go through. Try again.
+        </ThemedText>
+      ) : (
+        <ThemedText type="detail" themeColor="muted" style={styles.shelfError}>
+          Not kept yet — it won&rsquo;t appear under Memories until you do.
+        </ThemedText>
+      )}
+      <PrimaryButton title="Keep this trip" onPress={keep} busy={busy === 'keep'} disabled={!!busy} />
+      <Pressable onPress={discard} disabled={!!busy} style={styles.discard}>
+        <ThemedText type="detail" themeColor="muted">
+          {busy === 'discard' ? 'Discarding…' : 'Discard'}
+        </ThemedText>
+      </Pressable>
     </View>
   );
 }
@@ -341,4 +405,16 @@ const styles = StyleSheet.create({
     gap: Spacing.tight,
     paddingVertical: Spacing.rows,
   },
+
+  shelf: {
+    backgroundColor: Colors.bar,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.cardBorder,
+    paddingHorizontal: Spacing.read,
+    paddingTop: Spacing.rows,
+    paddingBottom: Spacing.regular,
+    gap: Spacing.rows,
+  },
+  shelfError: { textAlign: 'center' },
+  discard: { alignItems: 'center', paddingVertical: Spacing.tight },
 });
