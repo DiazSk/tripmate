@@ -202,7 +202,7 @@ function DayMasthead({
         style={styles.mastheadPhoto}>
         {weather ? (
           <View style={styles.weatherBadge}>
-            <ThemedText type="label" themeColor="foreground">
+            <ThemedText type="label" themeColor="foreground" numberOfLines={1}>
               {weather}
             </ThemedText>
           </View>
@@ -329,16 +329,23 @@ function dayTotal(day: DayPlan): string | undefined {
 }
 
 /**
- * The forecast in one line. `historical` says the figures are last year's same-date weather
- * rather than a forecast, and saying so is cheap and honest.
+ * The forecast, short enough to stay a badge.
+ *
+ * **`day.weather` is prose, not a label** — the model writes things like "Pleasant autumn day,
+ * 18.9-23.5°C, mostly sunny", which wrapped to two lines and covered the photograph it sits on.
+ * So the structured figures win whenever they exist, and the prose is used only as a fallback,
+ * cut at its first clause. `historical` says the numbers are last year's same-date weather rather
+ * than a forecast, which is cheap to say and worth saying.
  */
 function weatherLine(day: DayPlan): string | undefined {
   const detail = day.weatherDetail;
-  const parts: string[] = [];
-  if (day.weather?.trim()) parts.push(day.weather.trim());
-  if (detail) parts.push(`${Math.round(detail.tempMaxC)}° / ${Math.round(detail.tempMinC)}°`);
-  if (detail?.historical) parts.push('typical');
-  return parts.length ? parts.join('  ·  ') : undefined;
+  if (detail) {
+    const temps = `${Math.round(detail.tempMaxC)}° / ${Math.round(detail.tempMinC)}°`;
+    return detail.historical ? `${temps}  ·  typical` : temps;
+  }
+  const prose = day.weather?.trim();
+  if (!prose) return undefined;
+  return prose.split(',')[0].trim();
 }
 
 const styles = StyleSheet.create({
@@ -359,6 +366,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
     paddingHorizontal: 10,
     paddingVertical: 5,
+    // The badge stays a badge: a long fallback truncates rather than wrapping across the photo.
+    maxWidth: '60%',
   },
   dateline: { padding: Spacing.rows, gap: Spacing.hair },
   datelineOverline: { opacity: 0.72 },
