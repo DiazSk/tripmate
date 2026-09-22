@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { OWNER_COOKIE, OWNER_COOKIE_MAX_AGE_S, isValidOwnerId, newOwnerId } from "@/lib/owner";
+import {
+  OWNER_COOKIE,
+  OWNER_COOKIE_MAX_AGE_S,
+  OWNER_HEADER,
+  isValidOwnerId,
+  newOwnerId,
+} from "@/lib/owner";
 
 /**
  * Mints the owner cookie on a browser that doesn't have one yet.
@@ -41,6 +47,19 @@ export function proxy(request: NextRequest) {
     // 404 rather than 403: whether this deployment has a trace viewer is not information an
     // anonymous caller needs, and every other "not here" in this app answers 404.
     return new NextResponse(null, { status: 404 });
+  }
+
+  // A client that carries its own identity wins over whatever cookie jar sits in front of it.
+  // Folded into the cookie rather than read separately, so `currentOwnerId()` and every route
+  // under it stay cookie-only and none of them learn that a second channel exists. See
+  // OWNER_HEADER for the React Native cookie-jar behaviour that makes this necessary — and note
+  // it must take precedence rather than act as a fallback, because that jar arrives *full*, of
+  // stale ids the client never chose.
+  const claimed = request.headers.get(OWNER_HEADER);
+  if (isValidOwnerId(claimed)) {
+    request.cookies.set(OWNER_COOKIE, claimed as string);
+    // No Set-Cookie on this path: the client is telling us who it is, not asking.
+    return NextResponse.next({ request: { headers: request.headers } });
   }
 
   const existing = request.cookies.get(OWNER_COOKIE)?.value;

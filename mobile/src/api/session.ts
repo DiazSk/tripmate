@@ -3,7 +3,8 @@ import { Platform } from "react-native";
 import { apiBaseUrl } from "./config";
 
 const OWNER_KEY = "tripmate.session.owner";
-const OWNER_COOKIE = "tripmate_owner";
+/** Mirrors `OWNER_HEADER` in the backend's `src/lib/owner.ts`. */
+const OWNER_HEADER = "X-TripMate-Owner";
 
 // expo-secure-store has no web implementation and throws on every call there. This app never
 // ships to web, but `npx expo start --web` is a dev-only preview that should still work — an
@@ -58,24 +59,28 @@ async function ownerId(): Promise<string> {
 /**
  * Every request, carrying this installation's own anonymous owner.
  *
- * **The client mints the identity rather than capturing the server's, and that is the fix for a
- * bug that made the app unusable.** There is no login on this product: the backend scopes trips
- * to an anonymous `owner` cookie it sets itself (`src/proxy.ts`). The obvious client is to read
- * that `Set-Cookie` and echo it back — but React Native's networking consumes `Set-Cookie` into
- * its own native jar and does not expose it to JS, so the read always came back empty, nothing
- * was ever stored, no `Cookie` header was ever sent, and `proxy.ts` minted a **fresh owner on
- * every single request**.
+ * **A header, not a cookie, and the client mints the value rather than capturing the server's.**
+ * There is no login on this product: the backend scopes trips to an anonymous owner it tracks in
+ * a cookie (`src/proxy.ts`). The obvious client reads that `Set-Cookie` and echoes it back, and
+ * both halves of that fail here.
+ *
+ * React Native's networking owns cookies end to end. `Set-Cookie` never reaches JS, so the read
+ * always came back empty and nothing was ever stored — the server minted a fresh owner on every
+ * request. Minting one here fixed the storage half and not the sending half: the native store
+ * also *overwrites* a hand-set `Cookie` header with its own contents. Proven, not inferred — a
+ * request left the app carrying `tripmate_owner=<A>,tripmate_owner=<B>`, two ids the store had
+ * collected from earlier responses, with the client's own value nowhere in it.
  *
  * It hid for a long time because reads mostly still worked: fetching a trip by id is not
  * owner-scoped, and an empty trip list looks like a new user rather than a bug. What exposed it
  * was writes — a trip and the profile saved milliseconds apart in one flow landed under two
- * different owners, and promoting a draft answered 404 because the caller was no longer the
- * person who created it.
+ * different owners, and promoting a draft answered 404.
  *
- * The server accepts any UUID-shaped value as an owner (`isValidOwnerId`), so generating one
- * here and sending it on every request removes the dependency on reading a response header
- * entirely. `ownerPromise` resolves once per process so two concurrent first requests cannot
- * race into two different identities.
+ * So the identity travels in a header the platform has no opinion about. The proxy folds it into
+ * the cookie before anything else reads it, so this is the same identity the web app uses rather
+ * than a parallel scheme. `ownerPromise` resolves once per process so two concurrent first
+ * requests cannot race into two different owners — which is the exact shape the trip-and-profile
+ * pair had.
  */
 export async function fetchWithSession(
   path: string,
@@ -84,6 +89,6 @@ export async function fetchWithSession(
   const owner = await ownerId();
   return fetch(`${apiBaseUrl}${path}`, {
     ...init,
-    headers: { ...init.headers, Cookie: `${OWNER_COOKIE}=${owner}` },
+    headers: { ...init.headers, [OWNER_HEADER]: owner },
   });
 }

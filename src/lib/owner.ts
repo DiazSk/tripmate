@@ -20,6 +20,24 @@ import { LOCAL_OWNER } from "./travelerProfile";
 export const OWNER_COOKIE = "tripmate_owner";
 
 /**
+ * The same identity, for a client that does not have a cookie jar we can reach.
+ *
+ * A cookie is a browser mechanism, and the React Native app is not a browser. Its networking
+ * layer swallows `Set-Cookie` into a native store that JS cannot read, and — the part that
+ * actually breaks things — it *overwrites* a hand-set `Cookie` header with whatever that store
+ * holds. Observed on the mobile app: a request went out carrying
+ * `tripmate_owner=<A>,tripmate_owner=<B>`, two stale ids the store had accumulated from earlier
+ * responses and neither of them the one the client had chosen. So a trip and the profile written
+ * milliseconds apart in one flow landed under different owners, and promoting the draft answered
+ * 404 because the caller was no longer the person who had created it.
+ *
+ * The header is not a second identity scheme — the proxy folds it straight into the cookie the
+ * rest of the app already reads, so `currentOwnerId()` and every route below it are untouched.
+ * Same validation, same legacy fallback, same lack of any authorization claim (see below).
+ */
+export const OWNER_HEADER = "x-tripmate-owner";
+
+/**
  * 400 days — the ceiling Chrome clamps `Max-Age` to, so asking for more silently gets this anyway.
  *
  * Deliberately far longer than `DRAFT_TTL_DAYS`. The cookie is the identity; the 30-day sweep is a
