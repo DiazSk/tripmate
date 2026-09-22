@@ -1,5 +1,22 @@
 import { fetchWithSession } from "./session";
-import type { PlacePhoto, Trip, TripSummary, TravelerProfile, TripStatus } from "./types";
+import { createSseParser } from "./sse";
+import type {
+  CreateTripRequest,
+  GenerateFailure,
+  GenerateHandlers,
+  GenerateRequest,
+  GenerationResult,
+  GeocodedPlace,
+  Itinerary,
+  PlacePhoto,
+  StageEvent,
+  StreamedStop,
+  Trip,
+  TripSummary,
+  TripUpdate,
+  TravelerProfile,
+  TripStatus,
+} from "./types";
 
 export async function listTrips(status: TripStatus = "saved"): Promise<TripSummary[] | undefined> {
   try {
@@ -53,5 +70,205 @@ export async function placePhoto(name: string): Promise<PlacePhoto | undefined> 
     return (await res.json()) as PlacePhoto;
   } catch {
     return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Creating a trip
+// ---------------------------------------------------------------------------
+
+/**
+ * `GET /api/geocode` — where the destination actually is.
+ *
+ * **A miss and a failure are different status codes on purpose, and the caller must keep them
+ * apart.** 404 means the geocoder ran and found nothing, which is worth telling the traveller.
+ * 500 means the lookup never completed, which is not a claim anybody can make about what they
+ * typed. Neither ever blocks generating.
+ */
+export async function geocode(
+  destination: string
+): Promise<{ place: GeocodedPlace } | { missed: true } | undefined> {
+  const trimmed = destination.trim();
+  if (!trimmed) return undefined;
+  try {
+    const res = await fetchWithSession(
+      `/api/geocode?destination=${encodeURIComponent(trimmed)}`,
+      {}
+    );
+    if (res.status === 404) return { missed: true };
+    if (!res.ok) return undefined;
+    return { place: (await res.json()) as GeocodedPlace };
+  } catch {
+    return undefined;
+  }
+}
+
+export async function createTripDraft(body: CreateTripRequest): Promise<string | undefined> {
+  try {
+    const res = await fetchWithSession('/api/trips', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return undefined;
+    return ((await res.json()) as { id: string }).id;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Promote a draft to kept. Write-once and one-way — the route refuses to demote.
+ *
+ * The returned `endDate` is **recomputed server-side from the itinerary's length**, not an echo
+ * of anything sent, so callers persist what comes back rather than what they had.
+ */
+export async function promoteTrip(
+  id: string,
+  itinerary: Itinerary
+): Promise<TripUpdate | undefined> {
+  try {
+    const res = await fetchWithSession(`/api/trips/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itinerary, status: 'saved' }),
+    });
+    if (!res.ok) return undefined;
+    return (await res.json()) as TripUpdate;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function discardTrip(id: string): Promise<boolean> {
+  try {
+    const res = await fetchWithSession(`/api/trips/${id}`, { method: 'DELETE' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stream a generation, stage by stage and stop by stop.
+ *
+ * Four things here are contract, not preference:
+ *
+ * 1. **The throttle (429) and the spend cap (503) fire before the stream opens**, as ordinary
+ *    JSON with a non-200. They can never arrive as stream events, so they are checked on the
+ *    response itself and reported as their own failure kinds — a traveller told "the planner
+ *    didn't finish" when the real answer is "you have generated three of these in ten minutes"
+ *    has been told nothing.
+ * 2. **Reading stops at `plan`.** Critique runs *after* the plan is handed over and takes around
+ *    150 seconds; draining to `done` leaves a spinner up with the finished plan already in hand.
+ * 3. **`error` is only a failure if no plan landed.** The route cannot currently emit one after
+ *    `plan`, but the Swift client guards it anyway and so does this: a late failure must never
+ *    tear down something already on screen.
+ * 4. **`day-coords` spells it `lon`**, alone on this wire. Not consumed here, noted so the next
+ *    reader does not transcribe `lng` and silently get `undefined`.
+ */
+export async function generateTrip(
+  request: GenerateRequest,
+  handlers: GenerateHandlers
+): Promise<GenerateFailure | undefined> {
+  let response: Response;
+  try {
+    response = await fetchWithSession('/api/itinerary?stream=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    return { kind: 'failed', message: GENERIC_FAILURE };
+  }
+
+  if (!response.ok) {
+    const message = await errorMessage(response);
+    if (response.status === 429) return { kind: 'throttled', message };
+    if (response.status === 503) return { kind: 'spendCap', message };
+    return { kind: 'failed', message };
+  }
+
+  let planned = false;
+  let streamError: string | undefined;
+
+  const parser = createSseParser((frame) => {
+    if (planned) return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(frame.data);
+    } catch {
+      return; // A frame we cannot read is not a reason to fail a running generation.
+    }
+    switch (frame.event) {
+      case 'stage':
+        handlers.onStage?.(payload as StageEvent);
+        break;
+      case 'stop':
+        handlers.onStop?.(payload as StreamedStop);
+        break;
+      case 'plan':
+      case 'done':
+        planned = true;
+        handlers.onPlan(payload as GenerationResult);
+        break;
+      case 'error':
+        streamError = (payload as { error?: string }).error || GENERIC_FAILURE;
+        break;
+    }
+  });
+
+  try {
+    await readBody(response, (chunk) => parser.feed(chunk), () => planned);
+    parser.end();
+  } catch {
+    if (!planned) return { kind: 'failed', message: GENERIC_FAILURE };
+  }
+
+  if (planned) return undefined;
+  return { kind: 'failed', message: streamError ?? GENERIC_FAILURE };
+}
+
+const GENERIC_FAILURE = "The planner didn't finish. Try generating again.";
+
+async function errorMessage(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string };
+    return body.error || GENERIC_FAILURE;
+  } catch {
+    return GENERIC_FAILURE;
+  }
+}
+
+/**
+ * Read the response body incrementally where the platform allows it.
+ *
+ * Expo replaces the global `fetch` on native with its WinterCG implementation, whose response
+ * carries a real `ReadableStream` — so `getReader()` is the live path and the one that makes
+ * stops appear as they are written. The whole-text fallback exists for any runtime where `body`
+ * is absent: generation still completes correctly there, the traveller simply gets every stop at
+ * once at the end instead of watching them arrive.
+ */
+async function readBody(
+  response: Response,
+  onChunk: (chunk: string) => void,
+  done: () => boolean
+): Promise<void> {
+  const body = response.body as ReadableStream<Uint8Array> | null | undefined;
+  if (!body?.getReader) {
+    onChunk(await response.text());
+    return;
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done: finished, value } = await reader.read();
+    if (finished) break;
+    if (value) onChunk(decoder.decode(value, { stream: true }));
+    // Stop pulling the moment the plan is in hand; the rest of the stream is critique.
+    if (done()) {
+      await reader.cancel().catch(() => {});
+      break;
+    }
   }
 }

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { listTrips } from '@/api/tripMateApi';
 import type { TripSummary } from '@/api/types';
+import { PrimaryButton } from '@/components/form';
 import { PlacePhoto } from '@/components/place-photo';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
@@ -56,6 +57,10 @@ export default function Home() {
           Days worth keeping, written for where you are going.
         </ThemedText>
 
+        <View style={styles.cta}>
+          <PrimaryButton title="Plan a trip" onPress={() => router.push('/plan/basics')} />
+        </View>
+
         {/* The only place Home spends a network call, and it reuses the Memories photo cache. */}
         <View style={styles.band}>
           <BandOpener label={featured?.upcoming ? 'Up next' : 'Latest memory'} />
@@ -88,7 +93,6 @@ export default function Home() {
             <Invitation
               title="No trips kept yet"
               body="Once you keep a plan, it opens here."
-              note="Planning arrives in a later release"
             />
           )}
         </View>
@@ -113,10 +117,8 @@ export default function Home() {
           ))}
         </View>
 
-        {/* No button, and no disabled one either — an affordance that does nothing is worse than
-            a sentence that says so. */}
         <ThemedText type="detail" themeColor="muted" style={styles.closing}>
-          Planning a new trip arrives in a later release. Plans you have kept are under Memories.
+          Every plan you keep is collected under Memories.
         </ThemedText>
       </ScrollView>
     </SafeAreaView>
@@ -162,6 +164,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   headline: { marginTop: Spacing.read },
+  cta: { marginTop: Spacing.read },
   band: { marginTop: Spacing.regular * 1.5 },
   bandHeading: { marginTop: Spacing.rows, marginBottom: Spacing.hair },
   featured: { marginTop: Spacing.rows, justifyContent: 'flex-end' },
