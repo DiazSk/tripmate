@@ -1,122 +1,339 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 
 import { getTrip } from '@/api/tripMateApi';
 import type { DayPlan, Stop, Trip } from '@/api/types';
+import { PlacePhoto } from '@/components/place-photo';
+import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Colors, DiscInk, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
+import { formatDateline, formatRange } from '@/lib/dayDisplay';
 
 export default function TripDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  // undefined = still loading, null = the fetch failed.
   const [trip, setTrip] = useState<Trip | null | undefined>(undefined);
+  /** `dayIndex:stopIndex` of the one expanded stop, or null. One at a time, like the Swift app. */
+  const [emphasis, setEmphasis] = useState<string | null>(null);
 
   useEffect(() => {
     getTrip(id).then((result) => setTrip(result ?? null));
   }, [id]);
 
-  const title = trip ? trip.destination : 'Trip';
-
   if (trip === undefined) {
     return (
-      <ThemedView style={styles.container}>
-        <Stack.Screen options={{ title }} />
-        <SafeAreaView style={styles.centered}>
-          <ActivityIndicator />
-        </SafeAreaView>
-      </ThemedView>
+      <View style={styles.screen}>
+        <Stack.Screen options={{ title: '' }} />
+        <Loading />
+      </View>
     );
   }
 
   if (trip === null) {
     return (
-      <ThemedView style={styles.container}>
-        <Stack.Screen options={{ title }} />
-        <SafeAreaView style={styles.centered}>
-          <ThemedText type="default" themeColor="textSecondary" style={styles.centeredText}>
-            Couldn&apos;t load this trip. Check your connection.
-          </ThemedText>
-        </SafeAreaView>
-      </ThemedView>
+      <View style={styles.screen}>
+        <Stack.Screen options={{ title: '' }} />
+        <View style={styles.stateWrap}>
+          <Notice>Couldn&rsquo;t reach TripMate. Check your connection.</Notice>
+        </View>
+      </View>
     );
   }
 
+  const days = trip.itinerary?.days ?? [];
+
   return (
-    <ThemedView style={styles.container}>
-      <Stack.Screen options={{ title }} />
-      <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.list}>
-          <ThemedText type="subtitle">{trip.destination}</ThemedText>
-          <ThemedText type="default" themeColor="textSecondary" style={styles.dates}>
-            {trip.startDate} – {trip.endDate}
+    <View style={styles.screen}>
+      <Stack.Screen options={{ title: trip.destination }} />
+      <SectionList
+        sections={days.map((day, index) => ({ day, index, data: day.stops ?? [] }))}
+        keyExtractor={(stop, index) => `${stop.name}-${index}`}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <View style={styles.tripHeader}>
+            <ThemedText type="label" themeColor="muted">
+              {formatRange(trip.startDate, trip.endDate)}
+            </ThemedText>
+          </View>
+        }
+        ListEmptyComponent={
+          <Invitation title="No days in this plan yet" body="This trip was kept before its days were written." />
+        }
+        renderSectionHeader={({ section }) => (
+          <DayMasthead
+            day={section.day}
+            dayIndex={section.index}
+            dayCount={days.length}
+            destination={trip.destination}
+          />
+        )}
+        renderItem={({ item, index, section }) => {
+          const key = `${section.index}:${index}`;
+          return (
+            <StopRow
+              stop={item}
+              ordinal={index + 1}
+              dayIndex={section.index}
+              first={index === 0}
+              expanded={emphasis === key}
+              onPress={() => setEmphasis(emphasis === key ? null : key)}
+            />
+          );
+        }}
+        renderSectionFooter={({ section }) =>
+          section.day.lodging ? (
+            <View style={styles.lodging}>
+              <SectionRule label="Stay" />
+              <View style={styles.lodgingRow}>
+                <View style={styles.grow}>
+                  <ThemedText type="heading">{section.day.lodging.name}</ThemedText>
+                  {section.day.lodging.note ? (
+                    <ThemedText type="detail" themeColor="muted">
+                      {section.day.lodging.note}
+                    </ThemedText>
+                  ) : null}
+                </View>
+                <Cost amount={section.day.lodging.cost} />
+              </View>
+            </View>
+          ) : null
+        }
+      />
+    </View>
+  );
+}
+
+/**
+ * The day's masthead: a photograph with the measured scrim, the dateline set into it.
+ *
+ * Only large type and tracked caps ride the picture — the Photograph-Is-Not-A-Surface rule. The
+ * weather badge is a slate pill rather than bare text for the same reason: small type over a
+ * photograph is only apparently safe.
+ */
+function DayMasthead({
+  day,
+  dayIndex,
+  dayCount,
+  destination,
+}: {
+  day: DayPlan;
+  dayIndex: number;
+  dayCount: number;
+  destination: string;
+}) {
+  const weather = weatherLine(day);
+  return (
+    <View style={styles.masthead}>
+      <PlacePhoto
+        name={destination}
+        aspectRatio={16 / 9}
+        radius={Radius.read}
+        scrim={PhotoScrim}
+        style={styles.mastheadPhoto}>
+        {weather ? (
+          <View style={styles.weatherBadge}>
+            <ThemedText type="label" themeColor="foreground">
+              {weather}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        <View style={styles.dateline}>
+          <ThemedText type="label" themeColor="foreground" style={styles.datelineOverline}>
+            {`Day ${dayIndex + 1} of ${dayCount}`}
           </ThemedText>
-          {trip.itinerary.days.map((day, i) => (
-            <DayCard key={day.date} day={day} index={i} />
-          ))}
-        </ScrollView>
-      </SafeAreaView>
-    </ThemedView>
-  );
-}
+          <ThemedText type="display" numberOfLines={2}>
+            {formatDateline(day.date)}
+          </ThemedText>
+          {day.title ? (
+            <ThemedText type="detail" style={styles.datelineTitle}>
+              {day.title}
+            </ThemedText>
+          ) : null}
+        </View>
+      </PlacePhoto>
 
-function DayCard({ day, index }: { day: DayPlan; index: number }) {
-  return (
-    <ThemedView style={styles.day}>
-      <ThemedText type="smallBold">
-        Day {index + 1} · {day.date}
-      </ThemedText>
-      {day.title ? <ThemedText type="small">{day.title}</ThemedText> : null}
-      {day.stops.map((stop, j) => (
-        <StopRow key={`${stop.name}-${j}`} stop={stop} />
-      ))}
-    </ThemedView>
-  );
-}
-
-function StopRow({ stop }: { stop: Stop }) {
-  return (
-    <ThemedView style={styles.stop}>
-      <ThemedText type="default">
-        {stop.time ? `${stop.time} — ` : ''}
-        {stop.name}
-      </ThemedText>
-      {stop.note ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          {stop.note}
+      {day.summary ? (
+        <ThemedText type="detail" themeColor="muted" style={styles.summary}>
+          {day.summary}
         </ThemedText>
       ) : null}
-    </ThemedView>
+
+      <SectionRule label="The day" trailing={dayTotal(day)} />
+    </View>
   );
+}
+
+/** A stop is a row, never a card. The system draws rules rather than boxing things. */
+function StopRow({
+  stop,
+  ordinal,
+  dayIndex,
+  first,
+  expanded,
+  onPress,
+}: {
+  stop: Stop;
+  ordinal: number;
+  dayIndex: number;
+  first: boolean;
+  expanded: boolean;
+  onPress: () => void;
+}) {
+  const particulars = [stop.time, stop.durationLabel, stop.category]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join('  ·  ');
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.stop, !first && styles.stopRuled, expanded && styles.stopExpanded]}
+      android_ripple={{ color: Colors.pressed }}>
+      <View style={[styles.disc, { backgroundColor: dayCore(dayIndex) }]}>
+        <ThemedText type="money" style={styles.discOrdinal}>
+          {ordinal}
+        </ThemedText>
+      </View>
+
+      <View style={styles.grow}>
+        <View style={styles.stopHead}>
+          <ThemedText type="heading" style={styles.grow}>
+            {stop.name}
+          </ThemedText>
+          <Cost amount={stop.cost} />
+        </View>
+
+        {particulars ? (
+          <ThemedText type="label" themeColor="muted" style={styles.particulars}>
+            {particulars}
+          </ThemedText>
+        ) : null}
+
+        {expanded ? (
+          <View style={styles.expanded}>
+            {stop.why ? <ThemedText type="detail">{stop.why}</ThemedText> : null}
+            {stop.note ? (
+              <ThemedText type="detail" themeColor="muted">
+                {stop.note}
+              </ThemedText>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+/** A label against a rule, which is how this system opens a section. */
+function SectionRule({ label, trailing }: { label: string; trailing?: string }) {
+  return (
+    <View style={styles.sectionRule}>
+      <ThemedText type="label" themeColor="muted">
+        {label}
+      </ThemedText>
+      <View style={styles.rule} />
+      {trailing ? (
+        <ThemedText type="money" themeColor="money">
+          {trailing}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+/** Gold counts. A zero is not a money fact, so it goes muted rather than borrowing the colour. */
+function Cost({ amount }: { amount: number }) {
+  if (!amount) return null;
+  return (
+    <ThemedText type="moneyLarge" themeColor="money">
+      {`$${Math.round(amount).toLocaleString('en-US')}`}
+    </ThemedText>
+  );
+}
+
+function dayTotal(day: DayPlan): string | undefined {
+  const stops = (day.stops ?? []).reduce((sum, stop) => sum + (stop.cost ?? 0), 0);
+  const total = stops + (day.lodging?.cost ?? 0);
+  return total > 0 ? `$${Math.round(total).toLocaleString('en-US')}` : undefined;
+}
+
+/**
+ * The forecast in one line. `historical` says the figures are last year's same-date weather
+ * rather than a forecast, and saying so is cheap and honest.
+ */
+function weatherLine(day: DayPlan): string | undefined {
+  const detail = day.weatherDetail;
+  const parts: string[] = [];
+  if (day.weather?.trim()) parts.push(day.weather.trim());
+  if (detail) parts.push(`${Math.round(detail.tempMaxC)}° / ${Math.round(detail.tempMinC)}°`);
+  if (detail?.historical) parts.push('typical');
+  return parts.length ? parts.join('  ·  ') : undefined;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  screen: { flex: 1, backgroundColor: Colors.canvas },
+  content: { paddingBottom: Spacing.regular * 2 },
+  stateWrap: { paddingTop: Spacing.regular },
+  tripHeader: { paddingHorizontal: Spacing.read, paddingBottom: Spacing.rows },
+
+  masthead: { paddingHorizontal: Spacing.read, paddingTop: Spacing.tight },
+  mastheadPhoto: { justifyContent: 'flex-end' },
+  weatherBadge: {
+    position: 'absolute',
+    top: Spacing.rows,
+    right: Spacing.rows,
+    backgroundColor: Colors.bar,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  centered: {
-    flex: 1,
+  dateline: { padding: Spacing.rows, gap: Spacing.hair },
+  datelineOverline: { opacity: 0.72 },
+  datelineTitle: { opacity: 0.8 },
+  summary: { marginTop: Spacing.rows },
+
+  sectionRule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.tight,
+    marginTop: Spacing.compact,
+    marginBottom: Spacing.hair,
+  },
+  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder },
+
+  stop: {
+    flexDirection: 'row',
+    gap: 13,
+    paddingVertical: Spacing.rows,
+    paddingHorizontal: Spacing.read,
+    alignItems: 'flex-start',
+  },
+  stopRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
+  stopExpanded: { backgroundColor: Colors.accentWash },
+  disc: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: Spacing.four,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
-  centeredText: {
-    textAlign: 'center',
-  },
-  list: {
-    padding: Spacing.three,
-  },
-  dates: {
-    marginBottom: Spacing.four,
-  },
-  day: {
-    marginBottom: Spacing.four,
-    gap: Spacing.one,
-  },
-  stop: {
-    paddingVertical: Spacing.one,
-    gap: Spacing.half,
+  discOrdinal: { color: DiscInk, lineHeight: 15 },
+  stopHead: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
+  grow: { flex: 1 },
+  particulars: { marginTop: 3 },
+  expanded: { marginTop: Spacing.tight, gap: Spacing.hair },
+
+  lodging: { paddingHorizontal: Spacing.read },
+  lodgingRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: Spacing.tight,
+    paddingVertical: Spacing.rows,
   },
 });
