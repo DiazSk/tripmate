@@ -4,6 +4,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Switch,
   TextInput,
   View,
   type TextInputProps,
@@ -204,9 +205,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.read,
     paddingVertical: Spacing.tight,
   },
-  // Narrow, and the control gets the rest: the native date picker has an intrinsic width of its
-  // own and clips rather than wrapping when the row does not leave it enough.
-  rowLabel: { width: 58 },
+  // Natural width rather than fixed: a fixed one wrapped "Infants (under 2)" mid-word. The date
+  // picker no longer competes for the space — it carries an explicit size of its own.
+  rowLabel: { flexShrink: 1 },
   rowControl: { flex: 1, alignItems: 'flex-end', minWidth: 0 },
   textWrap: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   input: {
@@ -232,4 +233,214 @@ const styles = StyleSheet.create({
   },
   buttonInert: { opacity: 0.4 },
   buttonPressed: { opacity: 0.85 },
+
+  question: { gap: Spacing.hair },
+  caption: { marginTop: -2 },
+  questionBody: { marginTop: Spacing.tight },
+  choice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: Spacing.read,
+    paddingVertical: Spacing.tight,
+  },
+  choiceSelected: { backgroundColor: Colors.accentWash },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.tight },
+  chip: {
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+    backgroundColor: Colors.panel,
+    paddingHorizontal: Spacing.rows,
+    paddingVertical: Spacing.tight,
+    overflow: 'hidden',
+  },
+  chipOn: { backgroundColor: Colors.pressed, borderColor: Colors.foreground },
+  chipStarred: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows },
+  step: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surfaceDeep,
+    overflow: 'hidden',
+  },
+  stepInert: { opacity: 0.35 },
+  stepperValue: { minWidth: 24, textAlign: 'center' },
+  toggleLabel: { flex: 1, paddingRight: Spacing.rows },
 });
+
+/** A question's heading, above a group of controls. */
+export function Question({ title, caption, children }: { title: string; caption?: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.question}>
+      <ThemedText type="label" themeColor="muted">
+        {title}
+      </ThemedText>
+      {caption ? (
+        <ThemedText type="detail" themeColor="muted" style={styles.caption}>
+          {caption}
+        </ThemedText>
+      ) : null}
+      <View style={styles.questionBody}>{children}</View>
+    </View>
+  );
+}
+
+/**
+ * Single-select, stacked rather than segmented.
+ *
+ * These options are sentences ("Happy to walk all day"), not words — a segmented control would
+ * truncate every one of them on a phone.
+ */
+export function ChoiceRow<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <View style={styles.trough}>
+      {options.map((option, i) => {
+        const selected = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            onPress={() => onChange(option.value)}
+            style={[styles.choice, i > 0 && styles.ruled, selected && styles.choiceSelected]}
+            android_ripple={{ color: Colors.pressed }}>
+            <ThemedText type="bodyLarge" themeColor={selected ? 'foreground' : 'muted'}>
+              {option.label}
+            </ThemedText>
+            {selected ? (
+              <ThemedText type="heading" themeColor="accent">
+                ✓
+              </ThemedText>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * Chips. `starred` turns the grid into the two-state one interests need — tap to select, tap a
+ * selected chip again to star it, which is what actually weights the plan.
+ */
+export function TagGrid({
+  tags,
+  selected,
+  starred,
+  onToggle,
+  onStar,
+}: {
+  tags: string[];
+  selected: string[];
+  starred?: string[];
+  onToggle: (tag: string) => void;
+  onStar?: (tag: string) => void;
+}) {
+  return (
+    <View style={styles.grid}>
+      {tags.map((tag) => {
+        const isOn = selected.includes(tag);
+        const isStar = starred?.includes(tag) ?? false;
+        return (
+          <Pressable
+            key={tag}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isOn }}
+            accessibilityLabel={isStar ? `${tag}, starred` : tag}
+            onPress={() => (isOn && onStar ? onStar(tag) : onToggle(tag))}
+            onLongPress={isOn && onStar ? () => onToggle(tag) : undefined}
+            style={[styles.chip, isOn && styles.chipOn, isStar && styles.chipStarred]}
+            android_ripple={{ color: Colors.pressed }}>
+            <ThemedText
+              type="detail"
+              themeColor={isStar ? 'accentForeground' : isOn ? 'foreground' : 'muted'}>
+              {isStar ? `★ ${tag}` : tag}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** A count, with the bounds the planning rules actually care about. */
+export function CountRow({
+  label,
+  value,
+  min = 0,
+  max = 12,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <FieldRow label={label}>
+      <View style={styles.stepper}>
+        <Step sign="−" disabled={value <= min} onPress={() => onChange(value - 1)} label={`Fewer ${label}`} />
+        <ThemedText type="moneyLarge" style={styles.stepperValue}>
+          {value}
+        </ThemedText>
+        <Step sign="+" disabled={value >= max} onPress={() => onChange(value + 1)} label={`More ${label}`} />
+      </View>
+    </FieldRow>
+  );
+}
+
+function Step({ sign, disabled, onPress, label }: { sign: string; disabled: boolean; onPress: () => void; label: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.step, disabled && styles.stepInert]}
+      android_ripple={{ color: Colors.pressed, radius: 18 }}>
+      <ThemedText type="heading" themeColor={disabled ? 'muted' : 'foreground'}>
+        {sign}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+/** A switch, drawn by the platform. */
+export function ToggleRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <View style={styles.row}>
+      <ThemedText type="bodyLarge" style={styles.toggleLabel}>
+        {label}
+      </ThemedText>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        trackColor={{ true: Colors.accent, false: Colors.surfaceDeep }}
+        thumbColor={Colors.foreground}
+      />
+    </View>
+  );
+}

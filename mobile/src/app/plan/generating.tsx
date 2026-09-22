@@ -1,15 +1,15 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { createTripDraft, generateTrip } from '@/api/tripMateApi';
+import { createTripDraft, generateTrip, saveProfile } from '@/api/tripMateApi';
 import type { GenerationStage, StreamedStop } from '@/api/types';
 import { PrimaryButton } from '@/components/form';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, dayCore } from '@/constants/theme';
 import { formatDateline } from '@/lib/dayDisplay';
-import { closestTier, tripDays } from '@/lib/tiers';
+import { toGenerateRequest, toTravelerProfile, toUserAnswers, usePlanDraft } from '@/lib/planDraft';
 
 /** Stage copy ported from the Swift wizard's `waitingLabel`. */
 const STAGE_LABEL: Record<GenerationStage, string> = {
@@ -22,12 +22,7 @@ const STAGE_LABEL: Record<GenerationStage, string> = {
 
 export default function Generating() {
   const router = useRouter();
-  const params = useLocalSearchParams<{
-    destination: string;
-    startDate: string;
-    endDate: string;
-    budget: string;
-  }>();
+  const { draft } = usePlanDraft();
 
   const [stage, setStage] = useState<GenerationStage>('geocode');
   const [stops, setStops] = useState<StreamedStop[]>([]);
@@ -41,14 +36,11 @@ export default function Generating() {
     if (started.current) return;
     started.current = true;
 
-    const { destination, startDate, endDate } = params;
-    const budget = Number(params.budget) || 0;
-    const days = tripDays(startDate, endDate);
-
+    const { destination, startDate, endDate, budget } = draft;
     let cancelled = false;
 
     generateTrip(
-      { destination, startDate, endDate, budget, tier: closestTier(budget, days) },
+      toGenerateRequest(draft),
       {
         onStage: (event) => {
           if (!cancelled && event.status === 'start') setStage(event.stage);
@@ -80,7 +72,12 @@ export default function Generating() {
             status: 'draft',
             runId: result.runId,
             chatSessionId: result.sessionId,
+            // Stored so the edit loop can reuse the answers without asking again.
+            userAnswers: toUserAnswers(draft),
           });
+          // The durable half of the draft becomes the traveller profile. Unawaited: a plan is
+          // not worth blocking on a preference write, and the Profile tab reads it next time.
+          void saveProfile(toTravelerProfile(draft));
           if (cancelled) return;
           if (!id) {
             setFailure('The plan was written, but saving it failed. Try generating again.');
@@ -124,7 +121,7 @@ export default function Generating() {
       />
       <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="label" themeColor="muted">
-          {params.destination}
+          {draft.destination}
         </ThemedText>
         <ThemedText type="display" style={styles.stage}>
           {STAGE_LABEL[stage]}

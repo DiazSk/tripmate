@@ -1,6 +1,7 @@
 import { fetchWithSession } from "./session";
 import { createSseParser } from "./sse";
 import type {
+  CandidatePoi,
   CreateTripRequest,
   GenerateFailure,
   GenerateHandlers,
@@ -270,5 +271,49 @@ async function readBody(
       await reader.cancel().catch(() => {});
       break;
     }
+  }
+}
+
+/**
+ * `POST /api/trip-fetch` — the places worth pinning before the plan is written.
+ *
+ * The route returns a whole preference-independent bundle; only the candidate POIs are read
+ * here. **Never throws, and `available: false` is not the same as an empty list**: the first
+ * means the source could not be reached, the second means it had nothing to say about this
+ * place. The picker says different things for each.
+ */
+export async function candidatePois(
+  destination: string,
+  startDate: string,
+  endDate: string
+): Promise<{ available: boolean; pois: CandidatePoi[] }> {
+  try {
+    const res = await fetchWithSession('/api/trip-fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destination, startDate, endDate }),
+    });
+    if (!res.ok) return { available: false, pois: [] };
+    const body = (await res.json()) as {
+      rawFetch?: { candidatePois?: { available?: boolean; pois?: CandidatePoi[] } };
+    };
+    const found = body.rawFetch?.candidatePois;
+    return { available: found?.available ?? false, pois: found?.pois ?? [] };
+  } catch {
+    return { available: false, pois: [] };
+  }
+}
+
+/** `PUT /api/profile`. The route answers `{ok:true}` and reads `body.profile`. */
+export async function saveProfile(profile: TravelerProfile): Promise<boolean> {
+  try {
+    const res = await fetchWithSession('/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile }),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }

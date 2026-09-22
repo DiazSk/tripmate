@@ -21,11 +21,17 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   // Static cuts instanced from the Swift app's variable TTFs, each keyed by its own family name.
   // The keys here ARE the family names RN resolves, so they must match `Fonts` in constants/theme.
-  useFonts({
+  const [fontsLoaded] = useFonts({
     'Melodrama-Regular': MelodramaRegular,
     'Tabular-Medium': TabularMedium,
     'Tabular-SemiBold': TabularSemiBold,
   });
+
+  // **Nothing draws until the faces are in.** `useFonts` loads asynchronously, and a screen that
+  // renders first gets the system fallback — silently, since a missing family is not an error in
+  // RN. Deep-linking straight into a route on a cold start showed every Melodrama heading as
+  // plain sans. The splash is still up at this point, so holding here costs nothing visible.
+  if (!fontsLoaded) return null;
 
   // Unconditionally dark. Kiln has one ground and no light variant, so reading the system scheme
   // could only ever produce a surface the design system does not define.
@@ -44,6 +50,8 @@ export default function RootLayout() {
           headerShadowVisible: false,
         }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        {/* The plan flow has its own Stack, which draws the per-step headers. */}
+        <Stack.Screen name="plan" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );
