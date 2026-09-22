@@ -204,17 +204,26 @@ struct WorldMapView: UIViewRepresentable {
     /// else stays inside it and needs no arithmetic. Reading it off the shell's `GeometryProxy`
     /// instead would report zero, the root being laid out inside the safe area already.
     ///
-    /// **The top band is a constant; the bottom one is measured.** Above is the map search
-    /// field, 36pt inside a 56pt band, the same on every screen — a constant, so it is a token.
-    /// Below is the tab bar *and*, when there is one, the plan sheet, which is 184pt or 53% or
-    /// nearly the display and moves under a drag. That is why `bottomInset` is carried on
-    /// `PanelMetrics` beside the panel's width and the top is not: this type measures what moves.
+    /// **Nothing is drawn at the top any more, and this was still reserving a band for it.** The
+    /// note here used to read "above is the map search field, 36pt inside a 56pt band" — but
+    /// `MapSearchView` has had no call site since the Map tab was cut, which `AppShell`'s
+    /// `ChromeLayer` says in its own words. Measured on an iPhone 16 Pro, the top padding was
+    /// `62 + 56 + 12 = 130pt` on an edge holding only the status bar, so every day was framed
+    /// ~48pt low. The top now takes the same visual margin as the sides, because that is all
+    /// that is there.
+    ///
+    /// **The bottom is measured from the screen's edge, and that is why it adds `safe.bottom`.**
+    /// This is the one full-bleed view in the app: everything else is laid out *inside* the safe
+    /// area, so an inset of `barHeight + gapRows` from its own bottom correctly clears a bar that
+    /// is also inside it — which is why the three scroll insets in `AppShell` are right as they
+    /// stand and this one was not. From the physical edge the bar's top is at
+    /// `safe.bottom + drawnHeight`, and this was being handed 68 against a real 90.
     private func fit(_ rect: MKMapRect, in map: MKMapView) {
         let safe = map.safeAreaInsets
         map.setVisibleMapRect(
             rect,
             edgePadding: UIEdgeInsets(
-                top: safe.top + Token.barHeight + Token.gapRows,
+                top: safe.top + Token.padCompact,
                 left: Token.padCompact,
                 bottom: panelMetrics.bottomInset + Token.gapRows,
                 right: max(0, panelMetrics.viewWidth - panelMetrics.freeWidth) + Token.padCompact

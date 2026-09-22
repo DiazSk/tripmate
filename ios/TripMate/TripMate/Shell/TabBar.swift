@@ -52,10 +52,20 @@ enum AppTab: String, CaseIterable, Identifiable {
 /// to sit *inside* the shell's `ZStack` holding only panel content, because the map is mounted
 /// once behind everything and a `TabView` whose tabs each contained it would mount three. Sitting
 /// there, its bar is at the bottom of the panel's frame — and the map, which is outside it and
-/// ignores the safe area, learns nothing about how tall that bar is. The camera would be back on
-/// a transcribed constant that drifts from what is drawn, which is exactly the `navHeight = 44`
-/// failure this phase exists to stop repeating. Here the height *is* `Token.barHeight`, read by
-/// this `.frame` and by `WorldMapView.fit` and by nothing else.
+/// ignores the safe area, learns nothing about how tall that bar is.
+///
+/// **The second half of that argument was false, and it was false about this file.** It used to
+/// end "here the height *is* `Token.barHeight`, read by this `.frame` and by `WorldMapView.fit`
+/// and by nothing else" — a claim that the drift a `TabView` would cause cannot happen here.
+/// Thirteen sites read that token, `Token.barHeight` is itself `--nav-h: 3.5rem` transcribed
+/// from a web stylesheet rather than measured, and while the bar was drawn at 41.4 the camera
+/// was handed 56. The `navHeight = 44` failure invoked above as history was live in this file.
+/// `drawnHeight(compact:)` below is the answer: one place that knows what is drawn.
+///
+/// The reasons to stay hand-rolled are the two that survive measurement: `PlanSheet` must sit
+/// *under* this bar with the bar drawn on top, which nothing presented at window level can do;
+/// and the compact behaviour and the pill's flight are built, with two rejected approaches
+/// recorded below.
 ///
 /// **Liquid Glass is NOT among the costs, and an earlier reading of this said it was.**
 /// `glassEffect`, `GlassEffectContainer`, `glassEffectID`, `glassEffectUnion` and
@@ -95,6 +105,27 @@ struct TabBar: View {
     /// works, so the bar keeps one glass layer and the pill flies on geometry.
     @Namespace private var glass
 
+    /// What the bar actually covers, which is not `Token.barHeight` whenever it is out of the way.
+    ///
+    /// **`scaleEffect` does not change layout, so this cannot be measured.** An
+    /// `onGeometryChange` on the bar reports the *frame* — 46 when compact — and knows nothing
+    /// about the 0.90 the same view is then drawn at. The product of the two is the only honest
+    /// answer, so it is computed here, beside both numbers, rather than recombined by a caller
+    /// that would have to import both.
+    ///
+    /// The docstring above this type used to claim the height "is `Token.barHeight`, read by
+    /// this `.frame` and by `WorldMapView.fit` and by nothing else". Measured on an iPhone 16
+    /// Pro: 13 things read that token, and the bar draws at 41.4 while the camera was being
+    /// handed 56 — the `navHeight = 44` drift that claim invokes as history, live in this file.
+    static func drawnHeight(compact: Bool) -> CGFloat {
+        compact ? compactHeight * compactScale : Token.barHeight
+    }
+
+    /// Tall enough for the glyph with the label gone.
+    private static let compactHeight: CGFloat = 46
+    /// Anchored to the bottom, so the bar shrinks in place rather than sliding up as it goes.
+    private static let compactScale: CGFloat = 0.90
+
     var body: some View {
         HStack(spacing: 0) {
             ForEach(AppTab.allCases) { tab in
@@ -104,7 +135,7 @@ struct TabBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .frame(height: compact ? 46 : Token.barHeight)
+        .frame(height: compact ? Self.compactHeight : Token.barHeight)
         // **Real Liquid Glass, and `.ultraThinMaterial` was not it.** That is the pre-26 blur:
         // frosted, flat, no refraction of what passes behind it, no specular edge, no reaction
         // to a press. `glassPanel` still draws every other surface — this is the one place the
@@ -120,7 +151,7 @@ struct TabBar: View {
         )
         .overlay(Capsule().strokeBorder(Token.cardBorder, lineWidth: 1))
         // Anchored to the bottom so the bar shrinks in place rather than sliding up as it goes.
-        .scaleEffect(compact ? 0.90 : 1, anchor: .bottom)
+        .scaleEffect(compact ? Self.compactScale : 1, anchor: .bottom)
         // **On the bar, not in the button, because the button is not the only way here.** The
         // landing footer's `+Memories` and `+Profile` set the tab, and so does pressing `Plan
         // it` on the capsule — three call sites, and a `withAnimation` in the tap handler
@@ -153,7 +184,7 @@ struct TabBar: View {
         // current position, never a readout. A selected tab is that same class of thing.
         .foregroundStyle(isSelected ? Token.accent : Token.muted)
         .frame(maxWidth: .infinity)
-        .frame(height: compact ? 46 : Token.barHeight)
+        .frame(height: compact ? Self.compactHeight : Token.barHeight)
         .background {
             if isSelected {
                 Capsule()

@@ -149,6 +149,13 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                     // reaches the scroll views *inside* the page, so content passes under the
                     // glass bar and still stops above it — padding out here would leave a dead
                     // band the bar floats in.
+                    //
+                    // **The resting height, deliberately, and not `TabBar.drawnHeight`.** This
+                    // reserves room in scrolling content, and the thing that shrinks the bar is
+                    // that same scroll: an inset tracking it would reflow the page under the
+                    // finger doing the scrolling. The bar always comes back to full, so full is
+                    // the right reservation. It needs no `safe.bottom` either — this view is
+                    // laid out inside the safe area, and so is the bar.
                     panel(tab)
                         .safeAreaInset(edge: .bottom) {
                             Color.clear.frame(height: Token.barHeight + Token.gapRows)
@@ -170,8 +177,17 @@ struct AppShell<World: View, Panel: View, Home: View>: View {
                     freeWidth: isDocked ? proxy.size.width - panelWidth : proxy.size.width,
                     // The tab bar alone where there is no sheet — the Map tab, and every docked
                     // width. The sheet's own height where there is one.
+                    //
+                    // **Both are measured from the physical edge, which is what the one reader
+                    // of this — a full-bleed map — needs.** The sheet already is: it ignores the
+                    // bottom safe area, so its own height is the whole story. The bar is not: it
+                    // is laid out inside the safe area, so what it covers from the screen's edge
+                    // is `safe.bottom` more than its height. That term was missing, and the
+                    // height was the token rather than what `TabBar` draws when it is compact.
                     bottomInset: !floats || isDocked
-                        ? Token.barHeight + Token.gapRows
+                        ? proxy.safeAreaInsets.bottom
+                            + TabBar.drawnHeight(compact: chrome.barCompact)
+                            + Token.gapRows
                         : PlanSheet<Panel>.obstruction(
                             detent, in: proxy.size, safeTop: proxy.safeAreaInsets.top,
                             fitted: fitted

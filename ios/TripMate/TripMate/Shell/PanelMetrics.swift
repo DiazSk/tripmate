@@ -22,10 +22,16 @@ struct PanelMetrics: Equatable, Sendable {
 
     /// What the chrome covers at the bottom, from the screen's edge.
     ///
-    /// **Measured rather than a token, and that is the difference from the tab bar.** The bar is
-    /// the same height on every screen at every width, so it is a constant and `Token.barHeight`
-    /// is the whole story. The sheet is not: it is 132pt or 46% or nearly the display, and it
-    /// changes under a drag. A value that moves is exactly what this type exists to carry.
+    /// **This used to say the bar was the exception — "the same height on every screen at every
+    /// width, so it is a constant and `Token.barHeight` is the whole story".** It is not. The
+    /// bar shrinks to 46 and is then drawn at 0.90 of that, so it covers 41.4 while the camera
+    /// was being handed 56; and the bar sits inside the safe area while its one reader is
+    /// full-bleed, so what it covers from the screen's edge is `safe.bottom` more again. Both
+    /// terms are now in the value `AppShell` computes, via `TabBar.drawnHeight(compact:)`.
+    ///
+    /// So the sheet is not the exception either, it is merely the larger mover: 184pt or 53% or
+    /// nearly the display, changing under a drag. A value that moves is what this type carries —
+    /// and the lesson of the bar is that the other one was moving too, quietly.
     var bottomInset: CGFloat = 0
 }
 
