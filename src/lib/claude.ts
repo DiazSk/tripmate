@@ -37,6 +37,30 @@ import {
  *    travelerProfilePrompt.ts), but it is a reminder that a model change is a behaviour change and
  *    wants a real generation looked at, not just a benchmark number.
  *
+ * **Tried and reverted 2026-09-21: serving `chat` from Haiku 4.5 on this path.** The idea is
+ * sound on its face — `apiModelFor` has always given chat the cheap tier on the other transport,
+ * and the pin's stated reason (timeouts calibrated against Sonnet 4.5) only argues against calls
+ * that get *slower*. Measured with `runRefineCell`, 3 fixtures x 3 task shapes x both models,
+ * input tokens matched to within ~2 per pair:
+ *
+ *     latency   mean 103s -> 77s, median 99s -> 57s
+ *     output    5,815 -> 9,568 tokens (Haiku generates more and still costs half, at 1/3 the rate)
+ *     cost      $1.213 -> $0.573 over nine cells
+ *
+ * Then the part that decided it. On `barcelona-access-dietary / add-day2` — "Add a good vegan
+ * dinner to day 2", on the one fixture carrying dietary data (vegan + severe tree-nut allergy),
+ * annotated in `refineTasks.ts` as the case where a dietary miss is detectable — Haiku emitted
+ * **no ops on 4 of 5 runs** while replying as though it had acted. `opsRejected` was 0, so this is
+ * not the applier filtering bad ops; it is an empty patch for a real change request, which is
+ * verbatim the trigger `chatModel`'s own docstring names for reaching for `claude-sonnet-5`.
+ * Sonnet emitted ops on 2 of 2. A silent no-op is the worst shape this failure could take: the
+ * traveller reads a confirmation and the allergy-constrained meal was never added.
+ *
+ * Two things not to re-derive. `--effort low` is *not* the obstacle — the API-path 400 on the 4.5
+ * models is `supportsEffort`, and `claude --model claude-haiku-4-5 --effort low -p …` answers
+ * normally. And `refineComposite` is no use for adjudicating this: it took four distinct values
+ * across all 18 cells and only moved on the no-op, so it detects "did it act", not edit quality.
+ *
  * Bare id, no date suffix — the dated form is a stale convention.
  */
 export const MODEL = "claude-sonnet-4-5";
