@@ -1,4 +1,5 @@
-import DateTimePicker from '@expo/ui/community/datetime-picker';
+// Renamed off the package's own exported name, which ESLint reads as a shadowing mistake.
+import NativeDatePicker from '@expo/ui/community/datetime-picker';
 import {
   ActivityIndicator,
   Platform,
@@ -98,7 +99,7 @@ export function DateField({
         {/* An explicit size, because a native view does not report a usable intrinsic one to
             yoga: left to size itself the chip overflows the row and the trough's `overflow:
             hidden` shears its right edge off mid-year. */}
-        <DateTimePicker
+        <NativeDatePicker
           style={styles.datePicker}
           value={toDate(value)}
           minimumDate={minimumDate ? toDate(minimumDate) : undefined}
