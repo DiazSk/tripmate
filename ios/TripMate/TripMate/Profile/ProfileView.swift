@@ -52,13 +52,14 @@ struct ProfileView: View {
 
     // MARK: - Sections
 
-    /// A place for a face, and nothing else.
+    /// A place for a face, and the one line that says who you are.
     ///
-    /// **The card this replaces named the screen it sat under and then described you in a
+    /// **The card this replaces named the screen it sat under and described you in a display
     /// serif.** Both were wrong for the top of a settings list: the large title already names
     /// the screen, and a paragraph of display type is a landing-page move. Every mobile profile
     /// opens the same way instead — a picture, centred, with the account's own facts under it —
-    /// and here those facts are the record section directly below.
+    /// and here those facts are the record section directly below. What the card was right about
+    /// is kept: the portrait sentence, in the system face, where a display name sits.
     ///
     /// **On a clear row, so it sits on the page rather than in a container.** A card would be a
     /// third grouped box competing with the two real ones.
@@ -68,21 +69,37 @@ struct ProfileView: View {
     /// worse than a placeholder that admits what it is.
     private var avatar: some View {
         Section {
-            Circle()
-                .fill(Color.white.opacity(0.09))
-                .frame(width: 88, height: 88)
-                .overlay {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 38, weight: .regular))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 4)
-                .padding(.bottom, 8)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .accessibilityLabel("Profile picture")
+            VStack(spacing: 14) {
+                Circle()
+                    .fill(Color.white.opacity(0.09))
+                    .frame(width: 88, height: 88)
+                    .overlay {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 38, weight: .regular))
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("Profile picture")
+                Text(portrait)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
+    }
+
+    /// Who you are, where a display name would go — and the one place the four answers below are
+    /// read as a sentence instead of four rows each stating one in isolation. It restates no row
+    /// verbatim, so it is not the stutter the header card it replaced was.
+    private var portrait: String {
+        store.hasProfile
+            ? TravelerPortrait.sentence(store.draft.travelerProfile)
+            : TravelerPortrait.unanswered
     }
 
     private var record: some View {

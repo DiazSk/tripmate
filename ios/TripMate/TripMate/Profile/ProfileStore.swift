@@ -15,6 +15,11 @@ final class ProfileStore {
     private(set) var isLoading = false
     private(set) var isSaving = false
     private(set) var message: String?
+    /// **Distinct from `hasLoaded`, and the line under the picture needs the difference.**
+    /// `PlanDraft`'s defaults resolve to solo / a bit of both / comfortable / some of each, so a
+    /// portrait sentence generated from an untouched draft asserts four things nobody said. This
+    /// is how that line knows to invite rather than to describe.
+    private(set) var hasProfile = false
     /// **Distinct from `isLoading`, and from "the draft is non-default".** A traveller who has
     /// never saved a profile gets `nil` back and keeps `PlanDraft()`'s defaults — which is
     /// indistinguishable from never having asked. The offer after a generation needs to know
@@ -36,6 +41,7 @@ final class ProfileStore {
             // an error — the form simply opens on `PlanDraft()`'s defaults.
             if let profile = try await api.profile() {
                 draft = PlanDraft(profile: profile)
+                hasProfile = true
             }
         } catch {
             message = Self.describe(error)
@@ -55,6 +61,7 @@ final class ProfileStore {
         message = nil
         do {
             try await api.saveProfile(draft.travelerProfile)
+            hasProfile = true
         } catch {
             message = Self.describe(error)
         }
