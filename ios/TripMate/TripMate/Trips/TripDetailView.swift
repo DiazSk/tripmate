@@ -40,6 +40,10 @@ struct TripDetailView: View {
     let onAddPlace: @MainActor (SearchResult, Int, TimeOfDay) async -> Void
 
     @Environment(MapSearchStore.self) private var search
+    /// **Only for `message`.** The plan itself arrives as `trip` above, deliberately — this view
+    /// is handed values rather than the store so it cannot mutate one. What it could not do
+    /// before is *report*, which is the bug below.
+    @Environment(TripsStore.self) private var store
 
     @Environment(\.panelMetrics) private var metrics
     /// The page the horizontal scroller is on. Mirrors `activeDay` in both directions: the
@@ -66,6 +70,7 @@ struct TripDetailView: View {
             if isCapsule {
                 capsuleFacts
             } else {
+                failure
                 pager
             }
         }
@@ -88,6 +93,27 @@ struct TripDetailView: View {
         }
         .sheet(isPresented: $isChatting) {
             ChatSheet().presentationDetents([.large])
+        }
+    }
+
+    /// **This screen had no way to report a failure, and four of them route through here.**
+    /// `setActualCost`, `addPlace`, the day reorder and the delete all set `TripsStore.message`
+    /// on the way out — and nothing on this sheet has ever rendered it. `TripsListView:58` does,
+    /// but it is not on screen while a trip is open, so every one of those failures was silent:
+    /// the optimistic edit appeared, rolled back a moment later, and said nothing.
+    ///
+    /// `Notice`, not `Alert` — the same choice `TripsListView` makes for the same store's
+    /// message. `Alert` is the red one, and its docstring reserves it for something the
+    /// traveller has to *fix*; a connection that dropped is not a validation error.
+    ///
+    /// Not drawn at the capsule, where there is no room for it: 184pt is a photograph, a
+    /// dateline and a row of discs. The message outlives the failure, so it is there when the
+    /// sheet comes back up.
+    @ViewBuilder private var failure: some View {
+        if let message = store.message {
+            Notice(text: message)
+                .padding(.top, Token.gapRows)
+                .transition(.opacity)
         }
     }
 
@@ -144,6 +170,12 @@ struct TripDetailView: View {
     /// stops drawn smaller. **The hit area is 34x44** — under the 44pt floor across, which is
     /// the trade a numeric picker row makes, and every stop stays reachable at full size both
     /// in the expanded list and on the map.
+    ///
+    /// **That sentence was true of the intent and false of the code, in both dimensions.** The
+    /// button asked for `width: 26` and the strip then clamped itself to `.frame(height: 26)`,
+    /// which clips the 44 — so the real target was 26x26, and the comment saying otherwise is
+    /// how it survived. `DesignTokens:88` names this failure by name: grep for the value, not
+    /// for the comment. The strip is now as tall as the target it claims.
     private func discs(of day: DayPlan) -> some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
@@ -152,17 +184,22 @@ struct TripDetailView: View {
                         onEmphasise(index)
                     } label: {
                         NumberDisc(number: index + 1, day: activeDay, isEmphasised: index == emphasis)
-                            .frame(width: 26, height: 44)
+                            .frame(width: Self.discTarget.width, height: Self.discTarget.height)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Stop \(index + 1), \(day.stops[index].name)")
+                    .accessibilityAddTraits(index == emphasis ? .isSelected : [])
                 }
             }
         }
         .scrollIndicators(.hidden)
-        .frame(height: 26)
+        // Read from the same value the button is built at, so the strip cannot clip it again.
+        .frame(height: Self.discTarget.height)
     }
+
+    /// One value, so the strip and the button cannot disagree about it a second time.
+    private static let discTarget = CGSize(width: 34, height: 44)
 
     /// **Swipe between days; the strip is gone.** Nine tabs showed about four and a half at
     /// 322pt and cost 40pt at every detent to do it. Paging costs no layout, and the two other
@@ -1033,8 +1070,22 @@ private struct StopRow: View {
         }
         .contentShape(Rectangle())
         .animation(.easeOut(duration: 0.2), value: isEmphasised)
+        // **`.contain` alone left this row impossible to activate.** It declares a *group* whose
+        // children stay separately reachable — which is exactly what the `TextField` below needs,
+        // so it stays — but a group is not actionable, and the tap above is a bare gesture that
+        // the accessibility tree cannot see. Double-tap did nothing, so everything the row
+        // reveals when it opens was unreachable: the `why`, the note, and the cost field.
+        //
+        // Not a `Button`, for the reason `body` gives. The fix is to state in the accessibility
+        // tree what the gesture already does in the touch one.
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Stop \(number), \(stop.name)")
+        // Emphasis was jade fill, jade ink and a jade wash and nothing else — the map's "this
+        // one" was carried entirely by hue. `TripsListView:162` and `AddStopSheet:116` both
+        // already say it this way.
+        .accessibilityAddTraits(isEmphasised ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default, onTap)
+        .accessibilityHint(isEmphasised ? "Closes this stop" : "Opens this stop")
     }
 }
 
@@ -1198,7 +1249,14 @@ private struct LodgingRow: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
         .onTapGesture { withAnimation(.easeOut(duration: 0.2)) { isOpen.toggle() } }
+        // Same defect as `StopRow`, same fix, and the same cost when it is missing: with the
+        // group unactivatable, the lodging's own actual-cost field could not be reached at all.
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Stay, \(lodging.name)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default) {
+            withAnimation(.easeOut(duration: 0.2)) { isOpen.toggle() }
+        }
+        .accessibilityHint(isOpen ? "Closes the stay" : "Opens the stay")
     }
 }

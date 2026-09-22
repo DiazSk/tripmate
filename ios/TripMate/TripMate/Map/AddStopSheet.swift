@@ -23,6 +23,8 @@ struct AddStopSheet: View {
     let onAdd: @MainActor (SearchResult, Int, TimeOfDay) async -> Void
 
     @Environment(MapSearchStore.self) private var search
+    /// Only to ask whether the add actually landed before dismissing on it.
+    @Environment(TripsStore.self) private var trips
     @Environment(\.dismiss) private var dismiss
 
     /// The web's debounce. Long enough that typing a word is one search rather than five.
@@ -49,7 +51,13 @@ struct AddStopSheet: View {
             .navigationDestination(item: $search.adding) { result in
                 PlaceCard(result: result, trip: trip, fromDay: fromDay) { day, slot in
                     await onAdd(result, day, slot)
-                    dismiss()
+                    // **A failed add keeps the sheet up with its reason showing rather than
+                    // dismissing on a promise it did not keep** — `SaveProfileSheet:68` sets
+                    // this rule and this is the second place it applies. It dismissed
+                    // unconditionally before, so a rolled-back stop closed the sheet and said
+                    // nothing, which is the one outcome `TripsStore.addPlace`'s own docstring
+                    // says must not happen.
+                    if trips.message == nil { dismiss() }
                 }
             }
         }
@@ -181,6 +189,8 @@ private struct PlaceCard: View {
     /// Apple's own place sheet, which has the hours and the rating `MKMapItem` does not expose.
     @State private var detail: MKMapItem?
     @State private var saving = false
+    /// Only to show why an add did not land.
+    @Environment(TripsStore.self) private var trips
 
     init(result: SearchResult, trip: Trip, fromDay: Int?, onAdd: @escaping @MainActor (Int, TimeOfDay) async -> Void) {
         self.result = result
@@ -210,6 +220,11 @@ private struct PlaceCard: View {
                 dayPicker
                 slotPicker
                 addButton
+                // The reason the sheet stayed up, where the action was taken. Without it the
+                // card just sits there having apparently done nothing.
+                if let message = trips.message {
+                    Alert(text: message)
+                }
             }
             .padding(Token.padCompact)
         }
@@ -335,7 +350,14 @@ private struct PlaceCard: View {
     private var addButton: some View {
         Button {
             saving = true
-            Task { await onAdd(day, slot) }
+            // **Reset, because the card can now outlive the attempt.** It never did before:
+            // the sheet dismissed unconditionally, so a stuck flag on a disappearing view was
+            // invisible. Now a failure keeps the card up, and without this the button stays
+            // "Adding…" and disabled — no second try.
+            Task {
+                await onAdd(day, slot)
+                saving = false
+            }
         } label: {
             Text(saving ? "Adding…" : "Add to Day \(day + 1)")
                 .textStyle(.body.weight(TextStyle.semibold))
