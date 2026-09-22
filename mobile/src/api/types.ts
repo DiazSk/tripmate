@@ -111,6 +111,39 @@ export interface PlacePhoto {
  * field defaults and degrades server-side. That is deliberate, and the Swift wizard records why:
  * a required answer on a screen the traveller has nothing to say on is a wall in front of a plan.
  */
+export interface PartyCounts {
+  adults: number;
+  children: number;
+  infants: number;
+}
+
+/** Every field optional, and the whole object is dropped when nothing was said. */
+export interface TripLogistics {
+  arrivalTime?: string;
+  arrivalPoint?: string;
+  departureTime?: string;
+  departurePoint?: string;
+  stayBooked?: string;
+}
+
+/**
+ * Separate from `EnergyLevel` on purpose. "How much do you want to walk" is a different question
+ * from "can you manage stairs" — using the first as a proxy for the second gave a wheelchair user
+ * who describes their energy as high no accommodation at all.
+ */
+export interface AccessibilityNeeds {
+  stepFreeRequired: boolean;
+  limitStairs: boolean;
+  note: string;
+}
+
+export interface CandidatePoi {
+  name: string;
+  lat: number;
+  lon: number;
+  kind?: string;
+}
+
 export interface PlanDraft {
   destination: string;
   startDate: string;
@@ -122,6 +155,43 @@ export interface PlanDraft {
    * typed, and neither case ever blocks generating.
    */
   destinationMissed: boolean;
+
+  group: GroupType;
+  groupOther: string;
+  party: PartyCounts;
+  logistics: TripLogistics;
+
+  purpose: string;
+  explorerStyle: ExplorerStyle;
+  energy: EnergyLevel;
+  crowds: CrowdPreference;
+  interests: string[];
+  /** In the order starred, because the order *is* the weighting. */
+  starredInterests: string[];
+  dietary: DietaryNeeds;
+  accessibility: AccessibilityNeeds;
+
+  selectedPois: CandidatePoi[];
+  customPois: string[];
+}
+
+/** The answer tree the generate route stores and the edit loop later reuses. */
+export interface UserAnswers {
+  purpose?: string;
+  explorerStyle?: ExplorerStyle;
+  group?: GroupType;
+  groupOther?: string;
+  party?: PartyCounts;
+  logistics?: TripLogistics | null;
+  energy?: EnergyLevel;
+  crowds?: CrowdPreference;
+  budget?: number;
+  priorities?: string[];
+  topPriorities?: string[];
+  selectedPois?: CandidatePoi[];
+  customPois?: string[];
+  dietary?: DietaryNeeds | null;
+  accessibility?: AccessibilityNeeds | null;
 }
 
 export interface GenerateRequest {

@@ -1,8 +1,9 @@
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { geocode } from '@/api/tripMateApi';
+import { usePlanDraft } from '@/lib/planDraft';
 import { DateField, FieldTrough, PrimaryButton, TextField } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
@@ -10,18 +11,30 @@ import { closestTier, isEndBeforeStart, isTripTooLong, tierName, tripDays } from
 
 export default function Basics() {
   const router = useRouter();
-  const [destination, setDestination] = useState('');
+  const { draft, patch } = usePlanDraft();
+  const { destination, startDate, endDate, budget } = draft;
+  /** Held as a string, not a number: a numeric binding renders "$ 01800" while you type. */
+  const [budgetText, setBudgetText] = useState(budget ? String(budget) : '');
+
   // Real defaults rather than empty. A native date picker always draws *some* date, so an
   // "unset" field is indistinguishable from one showing today — it reads as answered when it
-  // isn't. A month out, a week long, is a trip somebody might actually take, and adjusting one
-  // is less work than starting from nothing.
-  const [startDate, setStartDate] = useState(() => isoDaysFromNow(30));
-  const [endDate, setEndDate] = useState(() => isoDaysFromNow(36));
-  /** Held as a string, not a number: a numeric binding renders "$ 01800" while you type. */
-  const [budgetText, setBudgetText] = useState('');
-  const [missed, setMissed] = useState(false);
+  // isn't. A month out, a week long, is a trip somebody might actually take.
+  useEffect(() => {
+    if (!startDate || !endDate) {
+      patch({ startDate: isoDaysFromNow(30), endDate: isoDaysFromNow(36) });
+    }
+    // Once, on first mount: re-running would fight the traveller's own edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const budget = Number(budgetText.replace(/[^0-9.]/g, '')) || 0;
+  const setDestination = (value: string) => patch({ destination: value });
+  const setStartDate = (value: string) => patch({ startDate: value });
+  const setEndDate = (value: string) => patch({ endDate: value });
+  const setBudget = (text: string) => {
+    setBudgetText(text);
+    patch({ budget: Number(text.replace(/[^0-9.]/g, '')) || 0 });
+  };
+  const missed = draft.destinationMissed;
   const problem = crossFieldProblem(startDate, endDate);
   const complete =
     destination.trim().length > 0 && !!startDate && !!endDate && budget > 0 && !problem;
@@ -40,19 +53,14 @@ export default function Basics() {
   async function checkDestination() {
     const name = destination.trim();
     if (!name) {
-      setMissed(false);
+      patch({ destinationMissed: false });
       return;
     }
     const result = await geocode(name);
-    setMissed(result !== undefined && 'missed' in result);
+    patch({ destinationMissed: result !== undefined && 'missed' in result });
   }
 
-  function generate() {
-    router.push({
-      pathname: '/plan/generating',
-      params: { destination: destination.trim(), startDate, endDate, budget: String(budget) },
-    });
-  }
+
 
   return (
     <KeyboardAvoidingView
@@ -85,7 +93,7 @@ export default function Basics() {
           <TextField
             label="Budget"
             value={budgetText}
-            onChangeText={setBudgetText}
+            onChangeText={setBudget}
             placeholder="2,600"
             keyboardType="number-pad"
             prefix="$"
@@ -114,8 +122,22 @@ export default function Basics() {
           </ThemedText>
         ) : null}
 
+        {/* Two ways on. The optional steps sharpen the plan; they never gate it, so the fast
+            path stays one tap from here. */}
         <View style={styles.action}>
-          <PrimaryButton title="Generate the plan" onPress={generate} disabled={!complete} />
+          <PrimaryButton
+            title="Next"
+            onPress={() => router.push('/plan/group')}
+            disabled={!complete}
+          />
+          <Pressable
+            onPress={() => router.replace('/plan/generating')}
+            disabled={!complete}
+            style={[styles.skip, !complete && styles.skipInert]}>
+            <ThemedText type="detail" themeColor="muted">
+              Skip the questions and generate
+            </ThemedText>
+          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -147,5 +169,7 @@ const styles = StyleSheet.create({
   headline: { marginBottom: Spacing.tight },
   note: { marginTop: -Spacing.tight },
   readout: { marginTop: -Spacing.tight },
-  action: { marginTop: Spacing.tight },
+  action: { marginTop: Spacing.tight, gap: Spacing.rows },
+  skip: { alignItems: 'center', paddingVertical: Spacing.tight },
+  skipInert: { opacity: 0.4 },
 });
