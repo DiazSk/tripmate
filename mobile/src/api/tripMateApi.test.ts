@@ -23,6 +23,12 @@ test("listTrips returns undefined when the fetch fails", async () => {
   expect(await listTrips()).toBeUndefined();
 });
 
+test("listTrips returns undefined when the fetch rejects", async () => {
+  mockedFetch.mockRejectedValue(new Error("network down"));
+
+  expect(await listTrips()).toBeUndefined();
+});
+
 test("getTrip returns the trip on success", async () => {
   const trip = {
     id: "1", destination: "Kyoto", startDate: "2026-10-01", endDate: "2026-10-05",
@@ -34,6 +40,12 @@ test("getTrip returns the trip on success", async () => {
   expect(mockedFetch).toHaveBeenCalledWith("/api/trips/1", expect.anything());
 });
 
+test("getTrip returns undefined when the fetch rejects", async () => {
+  mockedFetch.mockRejectedValue(new Error("network down"));
+
+  expect(await getTrip("1")).toBeUndefined();
+});
+
 test("getProfile returns null when the traveler has no saved profile", async () => {
   mockedFetch.mockResolvedValue(new Response(JSON.stringify({ profile: null }), { status: 200 }));
 
@@ -42,6 +54,12 @@ test("getProfile returns null when the traveler has no saved profile", async () 
 
 test("getProfile returns undefined when the fetch fails", async () => {
   mockedFetch.mockResolvedValue(new Response("", { status: 500 }));
+
+  expect(await getProfile()).toBeUndefined();
+});
+
+test("getProfile returns undefined when the fetch rejects", async () => {
+  mockedFetch.mockRejectedValue(new Error("network down"));
 
   expect(await getProfile()).toBeUndefined();
 });
