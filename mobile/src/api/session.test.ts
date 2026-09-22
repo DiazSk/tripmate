@@ -29,9 +29,9 @@ beforeEach(() => {
     .mockResolvedValue(new Response("{}", { status: 200 }));
 });
 
-const cookieOf = (call: number) =>
-  ((globalThis.fetch as unknown as jest.Mock).mock.calls[call][1].headers as Record<string, string>)
-    .Cookie;
+const headersOf = (call: number) =>
+  (globalThis.fetch as unknown as jest.Mock).mock.calls[call][1].headers as Record<string, string>;
+const ownerOf = (call: number) => headersOf(call)["X-TripMate-Owner"];
 
 test("mints an owner on first use and stores it", async () => {
   const { fetchWithSession, store } = freshSession();
@@ -42,7 +42,7 @@ test("mints an owner on first use and stores it", async () => {
   expect(key).toBe("tripmate.session.owner");
   // Only a UUID-shaped owner is accepted; anything else lands in the server's legacy bucket.
   expect(value).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-  expect(cookieOf(0)).toBe(`tripmate_owner=${value}`);
+  expect(ownerOf(0)).toBe(value);
 });
 
 test("reuses the stored owner rather than minting another", async () => {
@@ -51,7 +51,7 @@ test("reuses the stored owner rather than minting another", async () => {
   await fetchWithSession("/api/trips");
 
   expect(store.setItemAsync).not.toHaveBeenCalled();
-  expect(cookieOf(0)).toBe("tripmate_owner=11111111-2222-4333-8444-555555555555");
+  expect(ownerOf(0)).toBe("11111111-2222-4333-8444-555555555555");
 });
 
 // The bug this replaced: a trip and the profile written milliseconds apart landed under two
@@ -61,7 +61,7 @@ test("concurrent first requests share one identity", async () => {
 
   await Promise.all([fetchWithSession("/api/trips"), fetchWithSession("/api/profile")]);
 
-  expect(cookieOf(0)).toBe(cookieOf(1));
+  expect(ownerOf(0)).toBe(ownerOf(1));
   expect(store.setItemAsync).toHaveBeenCalledTimes(1);
 });
 
@@ -71,10 +71,10 @@ test("every later request carries the same owner", async () => {
   await fetchWithSession("/api/trips");
   await fetchWithSession("/api/profile");
 
-  expect(cookieOf(0)).toBe(cookieOf(1));
+  expect(ownerOf(0)).toBe(ownerOf(1));
 });
 
-test("caller headers survive alongside the cookie", async () => {
+test("caller headers survive alongside the owner", async () => {
   const { fetchWithSession } = freshSession();
 
   await fetchWithSession("/api/trips", {
@@ -82,10 +82,16 @@ test("caller headers survive alongside the cookie", async () => {
     headers: { "Content-Type": "application/json" },
   });
 
-  const headers = (globalThis.fetch as unknown as jest.Mock).mock.calls[0][1].headers as Record<
-    string,
-    string
-  >;
-  expect(headers["Content-Type"]).toBe("application/json");
-  expect(headers.Cookie).toContain("tripmate_owner=");
+  expect(headersOf(0)["Content-Type"]).toBe("application/json");
+  expect(ownerOf(0)).toBeDefined();
+});
+
+// The platform overwrites a hand-set `Cookie` header from its own store, which is the whole
+// reason the identity moved to a header. Sending one anyway would be silently ignored.
+test("no Cookie header is sent", async () => {
+  const { fetchWithSession } = freshSession();
+
+  await fetchWithSession("/api/trips");
+
+  expect(headersOf(0).Cookie).toBeUndefined();
 });
