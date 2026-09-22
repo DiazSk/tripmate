@@ -1,33 +1,180 @@
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StyleSheet } from 'react-native';
 
+import { listTrips } from '@/api/tripMateApi';
+import type { TripSummary } from '@/api/types';
+import { PlacePhoto } from '@/components/place-photo';
+import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Colors, PhotoScrim, Radius, Spacing } from '@/constants/theme';
+import { formatRange } from '@/lib/dayDisplay';
+
+/**
+ * Transcribed from `ios/TripMate/TripMate/Home/LandingContent.swift`. Static, and true today —
+ * this is what the backend actually does when a plan is generated.
+ */
+const METHOD = [
+  {
+    number: '01',
+    title: 'You set the constraints',
+    prose: 'Where, when, how much, and who is going. The budget is a target to hit, not a ceiling to stay under.',
+  },
+  {
+    number: '02',
+    title: 'Real data goes in first',
+    prose: 'Forecast for your actual dates, public holidays, opening hours and travel times — fetched before a single word is written.',
+  },
+  {
+    number: '03',
+    title: 'Written, then critiqued',
+    prose: 'A second pass reviews the finished plan against your budget and pace, and rewrites the days it finds fault with.',
+  },
+  {
+    number: '04',
+    title: 'Every place is checked',
+    prose: 'Coordinates are corrected against OpenStreetMap, so the pins land where the place actually is rather than where the model guessed.',
+  },
+];
 
 export default function Home() {
+  const router = useRouter();
+  const [trips, setTrips] = useState<TripSummary[] | null | undefined>(undefined);
+
+  useEffect(() => {
+    listTrips().then((result) => setTrips(result ?? null));
+  }, []);
+
+  const featured = trips ? pickFeatured(trips) : undefined;
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedText type="default" style={styles.text}>
-          Plan a trip — coming in the next plan.
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <BandOpener label="TripMate" />
+        <ThemedText type="display" style={styles.headline}>
+          Days worth keeping, written for where you are going.
         </ThemedText>
-      </SafeAreaView>
-    </ThemedView>
+
+        {/* The only place Home spends a network call, and it reuses the Memories photo cache. */}
+        <View style={styles.band}>
+          <BandOpener label={featured?.upcoming ? 'Up next' : 'Latest memory'} />
+          {trips === undefined ? (
+            <Loading />
+          ) : trips === null ? (
+            <Notice>Couldn&rsquo;t reach TripMate. Check your connection.</Notice>
+          ) : featured ? (
+            <Pressable
+              onPress={() => router.push(`/trip/${featured.trip.id}`)}
+              style={({ pressed }) => pressed && styles.pressed}
+              android_ripple={{ color: Colors.pressed }}>
+              <PlacePhoto
+                name={featured.trip.destination}
+                aspectRatio={16 / 10}
+                radius={Radius.read}
+                scrim={PhotoScrim}
+                style={styles.featured}>
+                <View style={styles.featuredCaption}>
+                  <ThemedText type="display" numberOfLines={2}>
+                    {featured.trip.destination}
+                  </ThemedText>
+                  <ThemedText type="money" themeColor="foreground">
+                    {formatRange(featured.trip.startDate, featured.trip.endDate)}
+                  </ThemedText>
+                </View>
+              </PlacePhoto>
+            </Pressable>
+          ) : (
+            <Invitation
+              title="No trips kept yet"
+              body="Once you keep a plan, it opens here."
+              note="Planning arrives in a later release"
+            />
+          )}
+        </View>
+
+        <View style={styles.band}>
+          <BandOpener label="Method" />
+          <ThemedText type="title" style={styles.bandHeading}>
+            How it actually works
+          </ThemedText>
+          {METHOD.map((step, index) => (
+            <View key={step.number} style={[styles.step, index > 0 && styles.stepRuled]}>
+              <ThemedText type="money" themeColor="money" style={styles.stepNumber}>
+                {step.number}
+              </ThemedText>
+              <View style={styles.grow}>
+                <ThemedText type="heading">{step.title}</ThemedText>
+                <ThemedText type="detail" themeColor="muted" style={styles.stepProse}>
+                  {step.prose}
+                </ThemedText>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* No button, and no disabled one either — an affordance that does nothing is worse than
+            a sentence that says so. */}
+        <ThemedText type="detail" themeColor="muted" style={styles.closing}>
+          Planning a new trip arrives in a later release. Plans you have kept are under Memories.
+        </ThemedText>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
+/** A label against a bottom rule — how this system opens a section. */
+function BandOpener({ label }: { label: string }) {
+  return (
+    <View style={styles.opener}>
+      <ThemedText type="label" themeColor="muted">
+        {label}
+      </ThemedText>
+    </View>
+  );
+}
+
+/**
+ * The soonest trip that has not ended, else the most recent one.
+ *
+ * Dates are compared as ISO strings rather than parsed: `2026-09-19` sorts correctly as text, and
+ * building a `Date` from a date-only string is the UTC-midnight trap this codebase has already
+ * shipped once.
+ */
+function pickFeatured(trips: TripSummary[]): { trip: TripSummary; upcoming: boolean } | undefined {
+  if (trips.length === 0) return undefined;
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = trips
+    .filter((trip) => trip.endDate >= today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  if (upcoming.length > 0) return { trip: upcoming[0], upcoming: true };
+  const past = [...trips].sort((a, b) => b.endDate.localeCompare(a.endDate));
+  return { trip: past[0], upcoming: false };
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  screen: { flex: 1, backgroundColor: Colors.canvas },
+  content: { padding: Spacing.read, paddingBottom: Spacing.regular * 2 },
+  opener: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.cardBorder,
+    paddingBottom: Spacing.tight,
+    alignItems: 'flex-end',
   },
-  safeArea: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.four,
+  headline: { marginTop: Spacing.read },
+  band: { marginTop: Spacing.regular * 1.5 },
+  bandHeading: { marginTop: Spacing.rows, marginBottom: Spacing.hair },
+  featured: { marginTop: Spacing.rows, justifyContent: 'flex-end' },
+  featuredCaption: { padding: Spacing.rows, gap: Spacing.hair },
+  pressed: { opacity: 0.7 },
+  step: {
+    flexDirection: 'row',
+    gap: Spacing.rows,
+    paddingVertical: Spacing.rows,
   },
-  text: {
-    textAlign: 'center',
-  },
+  stepRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
+  stepNumber: { width: 22 },
+  stepProse: { marginTop: 2 },
+  grow: { flex: 1 },
+  closing: { marginTop: Spacing.regular * 1.5 },
 });

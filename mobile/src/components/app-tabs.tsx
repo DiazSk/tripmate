@@ -1,17 +1,21 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 
+/**
+ * `NativeTabs` is each platform's real tab bar, which is the point — this is chrome the system
+ * draws better than we would, and DESIGN.md's third boundary says to let it.
+ *
+ * **The selected tab is paper, not jade.** Jade means action, and switching which list you are
+ * looking at does not act on anything; a jade tab would be the One Meaning Rule leaking.
+ */
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-
   return (
     <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+      backgroundColor={Colors.canvas}
+      indicatorColor={Colors.surfaceDeep}
+      labelStyle={{ color: Colors.muted, selected: { color: Colors.foreground } }}
+      tintColor={Colors.foreground}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
@@ -27,10 +31,7 @@ export default function AppTabs() {
 
       <NativeTabs.Trigger name="profile">
         <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'person', selected: 'person.fill' }}
-          md="person"
-        />
+        <NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} md="person" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );
