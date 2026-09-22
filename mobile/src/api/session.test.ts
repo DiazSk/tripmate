@@ -1,59 +1,91 @@
-import * as SecureStore from "expo-secure-store";
-import { fetchWithSession } from "./session";
-
 jest.mock("expo-secure-store");
 
-const mockedGet = SecureStore.getItemAsync as jest.Mock;
-const mockedSet = SecureStore.setItemAsync as jest.Mock;
+type Store = {
+  getItemAsync: jest.Mock;
+  setItemAsync: jest.Mock;
+};
+
+/**
+ * A fresh copy of the module, with its secure-store mock from the same registry.
+ *
+ * `session` memoises the owner for the life of the process — that memo is what stops two
+ * concurrent first requests minting two identities — so each test needs the module reloaded, and
+ * a reload gives it a new `expo-secure-store` instance that the outer mock handles would miss.
+ */
+function freshSession(stored: string | null = null) {
+  jest.resetModules();
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const store = require("expo-secure-store") as Store;
+  store.getItemAsync.mockResolvedValue(stored);
+  store.setItemAsync.mockResolvedValue(undefined);
+  const mod = require("./session") as typeof import("./session");
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  return { ...mod, store };
+}
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  mockedGet.mockResolvedValue(null);
-  global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
+  (globalThis as unknown as { fetch: jest.Mock }).fetch = jest
+    .fn()
+    .mockResolvedValue(new Response("{}", { status: 200 }));
 });
 
-test("sends a stored cookie on the request when one was saved", async () => {
-  mockedGet.mockResolvedValue("owner=abc123");
-  (global.fetch as jest.Mock).mockResolvedValue(new Response("{}", { status: 200 }));
+const cookieOf = (call: number) =>
+  ((globalThis.fetch as unknown as jest.Mock).mock.calls[call][1].headers as Record<string, string>)
+    .Cookie;
+
+test("mints an owner on first use and stores it", async () => {
+  const { fetchWithSession, store } = freshSession();
 
   await fetchWithSession("/api/trips");
 
-  const [, init] = (global.fetch as jest.Mock).mock.calls[0];
-  expect(init.headers["Cookie"]).toBe("owner=abc123");
+  const [key, value] = store.setItemAsync.mock.calls[0];
+  expect(key).toBe("tripmate.session.owner");
+  // Only a UUID-shaped owner is accepted; anything else lands in the server's legacy bucket.
+  expect(value).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  expect(cookieOf(0)).toBe(`tripmate_owner=${value}`);
 });
 
-test("stores only the name=value pair, dropping every attribute", async () => {
-  const headers = new Headers();
-  headers.set("set-cookie", "owner=fresh456; Path=/; HttpOnly");
-  (global.fetch as jest.Mock).mockResolvedValue(new Response("{}", { status: 200, headers }));
+test("reuses the stored owner rather than minting another", async () => {
+  const { fetchWithSession, store } = freshSession("11111111-2222-4333-8444-555555555555");
 
   await fetchWithSession("/api/trips");
 
-  expect(mockedSet).toHaveBeenCalledWith("tripmate.session.cookie", "owner=fresh456");
+  expect(store.setItemAsync).not.toHaveBeenCalled();
+  expect(cookieOf(0)).toBe("tripmate_owner=11111111-2222-4333-8444-555555555555");
 });
 
-// The real header carries `Expires=Wed, 27 Oct 2027 17:47:48 GMT`. Echoed back whole, that comma
-// and those spaces make the Cookie header unparseable, the server mints a fresh owner on every
-// request, and each call arrives as a different person — invisible until the first owner-scoped
-// write 404s.
-test("drops an Expires attribute whose value contains a comma", async () => {
-  const headers = new Headers();
-  headers.set(
-    "set-cookie",
-    "tripmate_owner=abc; Path=/; Expires=Wed, 27 Oct 2027 17:47:48 GMT; Max-Age=34560000; HttpOnly; SameSite=lax"
-  );
-  (global.fetch as jest.Mock).mockResolvedValue(new Response("{}", { status: 200, headers }));
+// The bug this replaced: a trip and the profile written milliseconds apart landed under two
+// different owners, so promoting the draft answered 404. Every request must be the same person.
+test("concurrent first requests share one identity", async () => {
+  const { fetchWithSession, store } = freshSession();
 
-  await fetchWithSession("/api/trips");
+  await Promise.all([fetchWithSession("/api/trips"), fetchWithSession("/api/profile")]);
 
-  expect(mockedSet).toHaveBeenCalledWith("tripmate.session.cookie", "tripmate_owner=abc");
+  expect(cookieOf(0)).toBe(cookieOf(1));
+  expect(store.setItemAsync).toHaveBeenCalledTimes(1);
 });
 
-test("sends no Cookie header when nothing has been stored yet", async () => {
-  (global.fetch as jest.Mock).mockResolvedValue(new Response("{}", { status: 200 }));
+test("every later request carries the same owner", async () => {
+  const { fetchWithSession } = freshSession();
 
   await fetchWithSession("/api/trips");
+  await fetchWithSession("/api/profile");
 
-  const [, init] = (global.fetch as jest.Mock).mock.calls[0];
-  expect(init.headers["Cookie"]).toBeUndefined();
+  expect(cookieOf(0)).toBe(cookieOf(1));
+});
+
+test("caller headers survive alongside the cookie", async () => {
+  const { fetchWithSession } = freshSession();
+
+  await fetchWithSession("/api/trips", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  const headers = (globalThis.fetch as unknown as jest.Mock).mock.calls[0][1].headers as Record<
+    string,
+    string
+  >;
+  expect(headers["Content-Type"]).toBe("application/json");
+  expect(headers.Cookie).toContain("tripmate_owner=");
 });
