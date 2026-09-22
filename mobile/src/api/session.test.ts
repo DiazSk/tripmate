@@ -9,7 +9,7 @@ const mockedSet = SecureStore.setItemAsync as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
   mockedGet.mockResolvedValue(null);
-  (global as any).fetch = jest.fn();
+  global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
 });
 
 test("sends a stored cookie on the request when one was saved", async () => {

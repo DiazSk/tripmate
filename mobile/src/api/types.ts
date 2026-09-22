@@ -73,10 +73,10 @@ export interface Trip {
   chatSessionId: string | null;
 }
 
-export type GroupType = "solo" | "couple" | "family" | "friends" | "other";
-export type ExplorerStyle = "planner" | "spontaneous" | "mixed";
-export type EnergyLevel = "relaxed" | "moderate" | "packed";
-export type CrowdPreference = "quiet" | "mixed" | "lively";
+export type GroupType = "solo" | "couple" | "family_with_kids" | "other";
+export type ExplorerStyle = "packed" | "relaxed" | "offbeat" | "mixed";
+export type EnergyLevel = "high" | "moderate" | "low";
+export type CrowdPreference = "love" | "mixed" | "avoid";
 
 export interface DietaryNeeds {
   tags: string[];

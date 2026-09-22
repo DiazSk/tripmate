@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 
 import { getTrip } from '@/api/tripMateApi';
 import type { DayPlan, Stop, Trip } from '@/api/types';
@@ -18,9 +18,12 @@ export default function TripDetail() {
     getTrip(id).then((result) => setTrip(result ?? null));
   }, [id]);
 
+  const title = trip ? trip.destination : 'Trip';
+
   if (trip === undefined) {
     return (
       <ThemedView style={styles.container}>
+        <Stack.Screen options={{ title }} />
         <SafeAreaView style={styles.centered}>
           <ActivityIndicator />
         </SafeAreaView>
@@ -31,6 +34,7 @@ export default function TripDetail() {
   if (trip === null) {
     return (
       <ThemedView style={styles.container}>
+        <Stack.Screen options={{ title }} />
         <SafeAreaView style={styles.centered}>
           <ThemedText type="default" themeColor="textSecondary" style={styles.centeredText}>
             Couldn&apos;t load this trip. Check your connection.
@@ -42,6 +46,7 @@ export default function TripDetail() {
 
   return (
     <ThemedView style={styles.container}>
+      <Stack.Screen options={{ title }} />
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.list}>
           <ThemedText type="subtitle">{trip.destination}</ThemedText>
