@@ -1,7 +1,10 @@
+import { fetchWithSession } from "./session";
 import { listTrips, getTrip, getProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip } from "./tripMateApi";
 
+// Reads as though it runs too late, and does not: babel-jest hoists every `jest.mock` above the
+// imports, so the mock is registered before `tripMateApi` resolves `./session`.
 jest.mock("./session", () => ({ fetchWithSession: jest.fn() }));
-import { fetchWithSession } from "./session";
+
 const mockedFetch = fetchWithSession as jest.Mock;
 
 beforeEach(() => jest.clearAllMocks());

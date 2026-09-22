@@ -25,6 +25,12 @@ const eslintConfig = defineConfig([
     // Agent tooling, not app source: graft's generated CommonJS helpers (`graft init`) are `.cjs`
     // by design, so `no-require-imports` fires on every line of them.
     ".claude/**",
+    // The React Native app is a separate project with its own ESLint config (`npx expo lint`),
+    // its own rules and its own generated files. Linting it from here applies Next's web rules
+    // to it — `jsx-a11y/alt-text` on an `expo-image`, `no-require-imports` on Metro's own asset
+    // idiom — and sweeps in `mobile/.expo/**`, which is generated. Same reason `mobile` is
+    // excluded from the root tsconfig.
+    "mobile/**",
   ]),
 ]);
 
