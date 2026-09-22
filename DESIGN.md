@@ -551,9 +551,17 @@ So on those surfaces:
   set no custom face at all. Apple's own split is the licence for this — body, labels and
   controls stay on the system face, a brand face appears in display moments — and taking it is
   what buys Dynamic Type.
-- **Melodrama appears exactly once**, on the screen's header card, and it must ride
-  `@ScaledMetric` or it becomes the smallest text on the card at the accessibility sizes. Its
-  28pt floor still holds and is enforced with a `max`.
+- **Melodrama does not appear at all.** The header card that carried it named the screen it sat
+  under ("Your travel profile" beneath a "Profile" large title), and replacing that card with the
+  avatar every mobile profile opens with took the serif with it. Recorded because it was tried
+  twice: a display face at the top of a settings list is a landing-page move, and putting it on
+  `@ScaledMetric` to survive the accessibility sizes was the second sign it did not belong there.
+- **The list reserves the floating tab bar with `contentMargins`, not a `safeAreaInset`.**
+  `AppShell` insets the panel, and that does not reach through a `NavigationStack` — the last row
+  came to rest behind the bar, unreadable and untappable. Scroll content is where the room has to
+  go, so content still passes under the glass and still stops clear of it.
+- **A `List` is laid out full-bleed.** `PanelContent`'s own 20pt inset is skipped for it, or the
+  grouped inset doubles up and the cards sit narrower than both the large title and the tab bar.
 - **Tabular still sets figures**, unchanged: a column of compared values is a column of compared
   values on any platform.
 - **The palette does not change.** Kiln needs no adaptation here, and that is a genuine

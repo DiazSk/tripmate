@@ -237,7 +237,13 @@ private struct PanelContent: View {
         }
         // The content's own inset. The *material* belongs to whichever container holds this —
         // the sheet on a phone, the docked column on an iPad — so that it is not drawn twice.
-        .padding(Token.padCompact)
+        //
+        // **Profile is exempt, because a `List` already has insets of its own.** Padded here
+        // too it sat at 20 + the inset-grouped inset, so its cards were ~38pt in while the
+        // navigation bar's large title stayed at 20 — the title hanging left of everything
+        // under it, and the cards narrower than the tab bar. Full-bleed, the list's own inset
+        // lands on the same 20 the title and the bar already use.
+        .padding(tab == .profile ? 0 : Token.padCompact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // **Petra behind the questions, and only there.** The other pages have their own
         // subject — photographs of your trips, your own answers — and a form has none, so it

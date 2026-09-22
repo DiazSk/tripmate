@@ -31,28 +31,16 @@ struct ProfileView: View {
     /// For the record section. Read-only — Profile never writes trips.
     let trips: TripsStore
 
-    /// **The serif has to scale with the rest, and `TextStyle` resolves literal points.** At
-    /// AX5 the SF paragraph beneath this headline grew past it and the display face ended up
-    /// the smallest text on the card. `@ScaledMetric` is the one-line way to put a fixed point
-    /// size on the Dynamic Type curve; `max` keeps Melodrama's documented 28pt floor, which
-    /// the small end of the curve would otherwise go under.
-    @ScaledMetric(relativeTo: .title) private var displaySize: CGFloat = 28
-
     var body: some View {
         NavigationStack {
             List {
-                headerCard
+                avatar
                 record
                 howYouTravel
                 interests
                 food
             }
-            .listStyle(.insetGrouped)
-            // The Kiln palette inside a real list. `surfaceDeep` is `rgb(28,26,24)` and iOS
-            // dark's own grouped row background is `#1C1C1E` — within a point of each other,
-            // which is why this needs no fighting.
-            .scrollContentBackground(.hidden)
-            .background(Token.canvas)
+            .profileList()
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.large)
         }
@@ -64,39 +52,36 @@ struct ProfileView: View {
 
     // MARK: - Sections
 
-    /// The screen's one display moment, in iOS 26's own header-card shape: a mark, a name, and
-    /// a paragraph of explanation.
-    private var headerCard: some View {
+    /// A place for a face, and nothing else.
+    ///
+    /// **The card this replaces named the screen it sat under and then described you in a
+    /// serif.** Both were wrong for the top of a settings list: the large title already names
+    /// the screen, and a paragraph of display type is a landing-page move. Every mobile profile
+    /// opens the same way instead — a picture, centred, with the account's own facts under it —
+    /// and here those facts are the record section directly below.
+    ///
+    /// **On a clear row, so it sits on the page rather than in a container.** A card would be a
+    /// third grouped box competing with the two real ones.
+    ///
+    /// It is not tappable: there is nowhere to put a photograph. This app has no accounts and
+    /// no image storage, and a control that opens a picker whose result cannot be saved is
+    /// worse than a placeholder that admits what it is.
+    private var avatar: some View {
         Section {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: "asterisk")
-                    .font(.system(size: 30, weight: .regular))
-                    .foregroundStyle(Token.accent)
-                    .frame(width: 64, height: 64)
-                    .background(Color.white.opacity(0.09))
-                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                    .padding(.bottom, 14)
-
-                if store.hasProfile {
-                    Text(TravelerPortrait.headline(store.draft.travelerProfile))
-                        .textStyle(.display.size(max(28, displaySize)))
-                        .foregroundStyle(Token.foreground)
-                    Text(TravelerPortrait.detail(store.draft.travelerProfile))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 9)
-                } else {
-                    Text(TravelerPortrait.unanswered)
-                        .font(.subheadline)
+            Circle()
+                .fill(Color.white.opacity(0.09))
+                .frame(width: 88, height: 88)
+                .overlay {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 38, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
-            }
-            .padding(.vertical, 6)
-            .listRowBackground(Token.surfaceDeep)
-        } footer: {
-            // The old screen said this in a loose caption under the title. A footer is the slot
-            // the platform provides for exactly this sentence.
-            Text("Answered once. Every new trip starts from here.")
+                .frame(maxWidth: .infinity)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .accessibilityLabel("Profile picture")
         }
     }
 
@@ -259,9 +244,7 @@ private struct ChoiceList<Option: Hashable & Labelled>: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Token.canvas)
+        .profileList()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -321,9 +304,7 @@ private struct InterestsList: View {
                 )
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Token.canvas)
+        .profileList()
         .navigationTitle("Interests")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -373,10 +354,28 @@ private struct DietaryList: View {
                 Text("In your own words")
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(Token.canvas)
+        .profileList()
         .navigationTitle("Dietary needs")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private extension View {
+    /// The four Lists on this screen, dressed the same way once.
+    ///
+    /// **`contentMargins` is the part that is not cosmetic.** `AppShell` reserves the floating
+    /// tab bar's height with a `safeAreaInset` on the panel, and that does not reach through the
+    /// `NavigationStack` this screen introduced — so the last row came to rest *behind* the bar,
+    /// unreadable and untappable, with its footer fully hidden. `contentMargins` adds the room
+    /// to the scroll content itself, which is where it has to be: content still passes under the
+    /// glass on the way past, and still stops clear of it.
+    func profileList() -> some View {
+        listStyle(.insetGrouped)
+            // The Kiln palette inside a real list. `surfaceDeep` is `rgb(28,26,24)` and iOS
+            // dark's own grouped row background is `#1C1C1E` — within a point of each other,
+            // which is why this needs no fighting.
+            .scrollContentBackground(.hidden)
+            .background(Token.canvas)
+            .contentMargins(.bottom, Token.barHeight + Token.gapRows, for: .scrollContent)
     }
 }
