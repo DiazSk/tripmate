@@ -221,8 +221,16 @@ const styles = StyleSheet.create({
   },
   // Wide enough for the longest rendering the compact picker produces ("Sep 22, 2026") plus its
   // own chip padding; without a floor it is handed the row's leftovers and truncates.
+  //
+  // The negative margin is what lines the chip up with the values above and below it, and it is
+  // needed because the box is deliberately bigger than its contents. The native picker centres
+  // its chip in whatever frame it is given: measured, the chip is 125pt inside this 150pt box,
+  // so its right edge landed 11pt inside the column every text value is flush to. Pulling the
+  // box right by that slack aligns the chip without shrinking the box — which matters, because
+  // the chip grows with Dynamic Type and a box sized to fit today would truncate at larger text
+  // instead of merely overhanging.
   dateWrap: { alignItems: 'flex-end' },
-  datePicker: { width: 150, height: 36 },
+  datePicker: { width: 150, height: 36, marginRight: -11 },
   button: {
     backgroundColor: Colors.accent,
     borderRadius: Radius.pill,
