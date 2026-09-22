@@ -1,56 +1,31 @@
-# Welcome to your Expo app 👋
+# TripMate mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The TripMate mobile client (Expo / React Native), talking to the existing Next.js backend at the
+repo root over HTTP. There is no local database or business logic here — every screen fetches
+from the backend's API routes.
 
-## Get started
+Routes live in `src/app/` (Expo Router), **not** `app/` — non-route code (components, hooks,
+constants) lives outside `src/app/` under `src/`.
 
-1. Install dependencies
+## Running it
 
-   ```bash
-   npm install
-   ```
+1. Start the backend first, from the repo root: `npm run dev` (needs to be up before this app can
+   show real trips/profile data — see the root `CLAUDE.md`).
+2. From this directory, start the Expo dev server: `npx expo start`.
 
-2. Start the app
+## Talking to the backend
 
-   ```bash
-   npx expo start
-   ```
+`src/api/config.ts` resolves the API base URL from `EXPO_PUBLIC_API_BASE_URL`, falling back in dev
+to `http://localhost:3000` — except on the **Android emulator**, which cannot reach the host
+machine via `localhost`; it defaults to `http://10.0.2.2:3000` there instead (the emulator's
+loopback address for the host). Set `EXPO_PUBLIC_API_BASE_URL` in `mobile/.env` to point at a
+physical device or a deployed backend.
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Commands
 
 ```bash
-npm run reset-project
+npx expo start        # dev server
+npx expo lint         # lint
+npx tsc --noEmit       # typecheck
+npm test              # jest
 ```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
