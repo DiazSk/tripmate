@@ -4,48 +4,45 @@ import XCTest
 /// The one sentence the Profile header card prints.
 final class TravelerPortraitTests: XCTestCase {
 
-    func testReadsAsOneSentence() {
+    func testTheTwoHalvesMakeOneSentence() {
         XCTAssertEqual(
-            TravelerPortrait.sentence(
-                group: .solo, explorerStyle: .relaxed, energy: .moderate, crowds: .avoid
-            ),
-            "A solo traveller who wants a few things done well — at a comfortable pace, away from the crowds."
+            TravelerPortrait.headline(group: .couple, explorerStyle: .mixed),
+            "A couple who likes a bit of both"
         )
         XCTAssertEqual(
-            TravelerPortrait.sentence(
-                group: .familyWithKids, explorerStyle: .packed, energy: .high, crowds: .love
-            ),
-            "A family with kids who wants to see as much as possible — happy to walk all day, in the thick of it."
+            TravelerPortrait.detail(energy: .moderate, crowds: .avoid),
+            "At a comfortable pace, away from the crowds."
         )
     }
 
-    /// **Every one of the 144 combinations, because the point of composing from fragments was
-    /// that none of them can come out malformed.** A missing fragment would show up here as a
-    /// double space or a stray dash rather than on somebody's phone.
+    /// **The headline must never end in a stop and the detail must always start with a capital**,
+    /// because they are one sentence broken across two faces: the serif carries the subject and
+    /// the system face finishes it.
     func testEveryCombinationIsWellFormed() {
-        var seen = Set<String>()
+        var headlines = Set<String>()
         for group in GroupType.allCases {
             for style in ExplorerStyle.allCases {
-                for energy in EnergyLevel.allCases {
-                    for crowds in CrowdPreference.allCases {
-                        let s = TravelerPortrait.sentence(
-                            group: group, explorerStyle: style, energy: energy, crowds: crowds
-                        )
-                        seen.insert(s)
-                        XCTAssertTrue(s.hasPrefix("A "), s)
-                        XCTAssertTrue(s.hasSuffix("."), s)
-                        XCTAssertFalse(s.contains("  "), "double space: \(s)")
-                        XCTAssertFalse(s.contains(" ."), "space before stop: \(s)")
-                        XCTAssertFalse(s.contains(",,"), s)
-                        XCTAssertEqual(
-                            s.filter { $0 == "—" }.count, 1, "exactly one dash: \(s)"
-                        )
-                    }
-                }
+                let h = TravelerPortrait.headline(group: group, explorerStyle: style)
+                headlines.insert(h)
+                XCTAssertTrue(h.hasPrefix("A "), h)
+                XCTAssertFalse(h.hasSuffix("."), "headline is not a sentence: \(h)")
+                XCTAssertFalse(h.contains("  "), "double space: \(h)")
             }
         }
-        // 4 groups x 4 styles x 3 energies x 3 crowds, and `other` collapses none of them.
-        XCTAssertEqual(seen.count, 144)
+        XCTAssertEqual(headlines.count, 16)
+
+        var details = Set<String>()
+        for energy in EnergyLevel.allCases {
+            for crowds in CrowdPreference.allCases {
+                let d = TravelerPortrait.detail(energy: energy, crowds: crowds)
+                details.insert(d)
+                XCTAssertTrue(d.hasSuffix("."), d)
+                XCTAssertEqual(d.first, d.first?.uppercased().first, "not capitalised: \(d)")
+                XCTAssertFalse(d.contains("  "), "double space: \(d)")
+                XCTAssertFalse(d.contains(" ."), "space before stop: \(d)")
+            }
+        }
+        XCTAssertEqual(details.count, 9)
     }
 
     /// The defaults resolve to solo/mixed/moderate/mixed, so a generated sentence would assert

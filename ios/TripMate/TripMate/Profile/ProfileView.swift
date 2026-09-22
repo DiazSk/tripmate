@@ -77,18 +77,19 @@ struct ProfileView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
                     .padding(.bottom, 14)
 
-                Text("Your travel profile")
-                    .textStyle(.display.size(max(28, displaySize)))
-                    .foregroundStyle(Token.foreground)
-
-                Text(
-                    store.hasProfile
-                        ? TravelerPortrait.sentence(store.draft.travelerProfile)
-                        : TravelerPortrait.unanswered
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.top, 9)
+                if store.hasProfile {
+                    Text(TravelerPortrait.headline(store.draft.travelerProfile))
+                        .textStyle(.display.size(max(28, displaySize)))
+                        .foregroundStyle(Token.foreground)
+                    Text(TravelerPortrait.detail(store.draft.travelerProfile))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 9)
+                } else {
+                    Text(TravelerPortrait.unanswered)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.vertical, 6)
             .listRowBackground(Token.surfaceDeep)

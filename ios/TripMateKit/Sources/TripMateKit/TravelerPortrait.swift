@@ -17,23 +17,29 @@ public enum TravelerPortrait {
     public static let unanswered =
         "Tell us how you travel, and every plan after this one starts from it."
 
-    public static func sentence(
-        group: GroupType,
-        explorerStyle: ExplorerStyle,
-        energy: EnergyLevel,
-        crowds: CrowdPreference
-    ) -> String {
-        "\(subject(group)) \(pursuit(explorerStyle)) — \(pace(energy)), \(company(crowds))."
+    /// The card's serif line: who you are, in a phrase short enough for a display face.
+    ///
+    /// **It deliberately does not name the screen.** It read "Your travel profile" under a
+    /// "Profile" large title — the same words twice, thirty points apart, which is the stutter
+    /// this app has already shipped once in the trip header. A card under a large title names
+    /// its subject, not its page: Settings' own root card says "Apple Account", not "Settings".
+    public static func headline(group: GroupType, explorerStyle: ExplorerStyle) -> String {
+        "\(subject(group)) \(pursuit(explorerStyle))"
     }
 
-    /// Convenience for the one caller that holds a whole profile.
-    public static func sentence(_ profile: TravelerProfile) -> String {
-        sentence(
-            group: profile.group,
-            explorerStyle: profile.explorerStyle,
-            energy: profile.energy,
-            crowds: profile.crowds
-        )
+    /// The rest of it, beneath the headline in the system face. Two halves of one sentence, so
+    /// no fragment is written twice.
+    public static func detail(energy: EnergyLevel, crowds: CrowdPreference) -> String {
+        let opener = pace(energy)
+        return "\(opener.prefix(1).uppercased())\(opener.dropFirst()), \(company(crowds))."
+    }
+
+    public static func headline(_ profile: TravelerProfile) -> String {
+        headline(group: profile.group, explorerStyle: profile.explorerStyle)
+    }
+
+    public static func detail(_ profile: TravelerProfile) -> String {
+        detail(energy: profile.energy, crowds: profile.crowds)
     }
 
     private static func subject(_ group: GroupType) -> String {
