@@ -173,7 +173,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.rows,
   },
   stepRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
-  stepNumber: { width: 22 },
+  // A floor, not a fixed width: the figures are tabular so every step is the same width anyway,
+  // and a hard 22 made "01" wrap to two lines once the text scaled.
+  stepNumber: { minWidth: 22 },
   stepProse: { marginTop: 2 },
   grow: { flex: 1 },
   closing: { marginTop: Spacing.regular * 1.5 },

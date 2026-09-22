@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Switch,
   TextInput,
+  useWindowDimensions,
   View,
   type TextInputProps,
 } from 'react-native';
@@ -37,13 +38,36 @@ export function FieldTrough({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Where a label and its value stop sharing a line.
+ *
+ * Not a taste call, and the number is not a guess. The binding constraint is the date chip, the
+ * one control here that keeps growing after everything else has stopped: `maxFontSizeMultiplier`
+ * caps every `ThemedText` at 1.6x but reaches nothing inside a native view. Measured, the chip is
+ * 125pt wide at scale 1 and 357pt at 3.1 — at the top end it is wider than the whole 334pt row
+ * and draws straight over its own label.
+ *
+ * 1.2 is where it outgrows the fixed box that keeps it aligned at ordinary sizes: 148pt of the
+ * 150pt it is given. Above that the row stacks and the chip takes a full line, so there is no
+ * scale at which it is clipped. Deliberately a threshold rather than a formula scaling the box
+ * with the text — a fitted growth curve would be one more thing measured on one device in one
+ * locale, and when it was wrong it would fail the silent way, by shearing the year off again.
+ *
+ * The platform agrees: an iOS Form row stacks at large text rather than letting the two fight.
+ */
+const STACK_ABOVE_SCALE = 1.2;
+
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+  // `fontScale` here rather than `PixelRatio.getFontScale()`: this one re-renders when the
+  // reader changes the setting, instead of holding whatever it was at mount.
+  const { fontScale } = useWindowDimensions();
+  const stacked = fontScale > STACK_ABOVE_SCALE;
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, stacked && styles.rowStacked]}>
       <ThemedText type="label" themeColor="muted" style={styles.rowLabel}>
         {label}
       </ThemedText>
-      <View style={styles.rowControl}>{children}</View>
+      <View style={[styles.rowControl, stacked && styles.rowControlStacked]}>{children}</View>
     </View>
   );
 }
@@ -62,6 +86,10 @@ export function TextField({
           </ThemedText>
         ) : null}
         <TextInput
+          // The cap `ThemedText` gives every other string, which a bare TextInput does not
+          // inherit. Without it the value grew to ~3x while its label stopped at 1.6x, and the
+          // value simply took the label's half of the row.
+          maxFontSizeMultiplier={1.6}
           placeholderTextColor={Colors.muted}
           selectionColor={Colors.accent}
           {...input}
@@ -93,14 +121,22 @@ export function DateField({
   minimumDate?: string;
   onChange: (iso: string) => void;
 }) {
+  // `maxFontSizeMultiplier` is a React Native Text prop and reaches nothing inside a SwiftUI or
+  // Compose view, so this chip keeps growing after every label around it has stopped at 1.6x.
+  // Measured: 125pt wide at scale 1, 357pt at 3.1. Past the stacking threshold it therefore gets
+  // its own line and the trough's full width, where alignment with the text column is moot and
+  // the only thing that matters is that the year still fits.
+  const { fontScale } = useWindowDimensions();
+  const wide = fontScale > STACK_ABOVE_SCALE;
+
   return (
     <FieldRow label={label}>
-      <View style={styles.dateWrap}>
+      <View style={[styles.dateWrap, wide && styles.dateWrapWide]}>
         {/* An explicit size, because a native view does not report a usable intrinsic one to
             yoga: left to size itself the chip overflows the row and the trough's `overflow:
             hidden` shears its right edge off mid-year. */}
         <NativeDatePicker
-          style={styles.datePicker}
+          style={wide ? [styles.datePickerWide, { height: Math.round(36 * fontScale) }] : styles.datePicker}
           value={toDate(value)}
           minimumDate={minimumDate ? toDate(minimumDate) : undefined}
           mode="date"
@@ -210,6 +246,9 @@ const styles = StyleSheet.create({
   // picker no longer competes for the space — it carries an explicit size of its own.
   rowLabel: { flexShrink: 1 },
   rowControl: { flex: 1, alignItems: 'flex-end', minWidth: 0 },
+  rowStacked: { flexDirection: 'column', alignItems: 'stretch', gap: Spacing.tight },
+  // `flex: 1` would stretch the control down the column instead of across it.
+  rowControlStacked: { flex: 0, alignSelf: 'stretch' },
   textWrap: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   input: {
     color: Colors.foreground,
@@ -230,6 +269,10 @@ const styles = StyleSheet.create({
   // the chip grows with Dynamic Type and a box sized to fit today would truncate at larger text
   // instead of merely overhanging.
   dateWrap: { alignItems: 'flex-end' },
+  // Out to the trough's own edge. The row's padding leaves 334pt and the chip wants 357pt at the
+  // largest size, so those 36pt are the difference between a whole date and a missing year.
+  dateWrapWide: { alignSelf: 'stretch', marginHorizontal: -Spacing.read },
+  datePickerWide: { width: '100%' },
   datePicker: { width: 150, height: 36, marginRight: -11 },
   button: {
     backgroundColor: Colors.accent,
