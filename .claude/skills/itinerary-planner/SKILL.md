@@ -1,6 +1,6 @@
 ---
 name: itinerary-planner
-description: Planning rules for generating a trip itinerary from scratch and for editing one that already exists — traveler-profile pacing, preferences, weather, stop and lodging selection, budget targeting, and the output format for a from-scratch generation. Loaded at runtime via loadSkill("itinerary-planner") by the chat/element-edit loop (src/app/api/trip-edit/route.ts) and the staged-pipeline generator (src/app/api/trip-generate/route.ts).
+description: Planning rules for generating a trip itinerary from scratch and for editing one that already exists — traveler-profile pacing, preferences, weather, stop and lodging selection, budget limits, and the output format for a from-scratch generation. Loaded at runtime via loadSkill("itinerary-planner") by the chat/element-edit loop (src/app/api/trip-edit/route.ts) and the staged-pipeline generator (src/app/api/trip-generate/route.ts).
 ---
 
 # Itinerary Planner
@@ -446,7 +446,7 @@ bound whenever it is tighter than this one.
 
 ### §12d. Budget boundaries
 
-§5 sets the target band. On top of it: if a change materially raises the trip's cost — a fine
+§5 sets the ceiling. On top of it: if a change materially raises the trip's cost — a fine
 dining swap, a private guide, a premium experience — and pushes the total past the stated budget
 or above the tier's register (§6), the traveler must be told what it now costs and by how much it
 overshoots. Make the change they asked for; don't silently downgrade it to stay in budget, and
