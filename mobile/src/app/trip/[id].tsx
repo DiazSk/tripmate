@@ -1,21 +1,30 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, SectionList, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 
 import { discardTrip, getTrip, promoteTrip } from '@/api/tripMateApi';
-import type { DayPlan, Stop, Trip } from '@/api/types';
+import type { Trip } from '@/api/types';
+import { DayPage } from '@/components/day-page';
 import { PrimaryButton } from '@/components/form';
-import { PlacePhoto } from '@/components/place-photo';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, DiscInk, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
-import { formatDateline, formatRange } from '@/lib/dayDisplay';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { formatRange } from '@/lib/dayDisplay';
 
 export default function TripDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [trip, setTrip] = useState<Trip | null | undefined>(undefined);
   /** `dayIndex:stopIndex` of the one expanded stop, or null. One at a time, like the Swift app. */
   const [emphasis, setEmphasis] = useState<string | null>(null);
+  const [day, setDay] = useState(0);
 
   useEffect(() => {
     getTrip(id).then((result) => setTrip(result ?? null));
@@ -47,65 +56,38 @@ export default function TripDetail() {
     <View style={styles.screen}>
       {/* Chevron only. The back label defaults to the previous screen's title, which for a route
           group is the literal string "(tabs)" — and naming one tab would be wrong anyway, since
-          a trip opens from both Home and Memories. */}
+          a trip opens from both Home and Memories. The title stays the destination rather than
+          the day: a nav title that changes on every swipe is noise, and it re-renders the native
+          header each time. */}
       <Stack.Screen
         options={{ title: trip.destination, headerBackButtonDisplayMode: 'minimal' }}
       />
-      <SectionList
-        sections={days.map((day, index) => ({ day, index, data: day.stops ?? [] }))}
-        keyExtractor={(stop, index) => `${stop.name}-${index}`}
-        stickySectionHeadersEnabled={false}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <View style={styles.tripHeader}>
+
+      {days.length === 0 ? (
+        <View style={styles.stateWrap}>
+          <Invitation
+            title="No days in this plan yet"
+            body="This trip was kept before its days were written."
+          />
+        </View>
+      ) : (
+        <>
+          <View style={styles.chrome}>
             <ThemedText type="label" themeColor="muted">
               {formatRange(trip.startDate, trip.endDate)}
             </ThemedText>
+            <DayStrip count={days.length} current={day} onSelect={setDay} />
           </View>
-        }
-        ListEmptyComponent={
-          <Invitation title="No days in this plan yet" body="This trip was kept before its days were written." />
-        }
-        renderSectionHeader={({ section }) => (
-          <DayMasthead
-            day={section.day}
-            dayIndex={section.index}
-            dayCount={days.length}
-            destination={trip.destination}
+
+          <DayPager
+            trip={trip}
+            day={day}
+            onDayChange={setDay}
+            emphasis={emphasis}
+            onEmphasise={setEmphasis}
           />
-        )}
-        renderItem={({ item, index, section }) => {
-          const key = `${section.index}:${index}`;
-          return (
-            <StopRow
-              stop={item}
-              ordinal={index + 1}
-              dayIndex={section.index}
-              first={index === 0}
-              expanded={emphasis === key}
-              onPress={() => setEmphasis(emphasis === key ? null : key)}
-            />
-          );
-        }}
-        renderSectionFooter={({ section }) =>
-          section.day.lodging ? (
-            <View style={styles.lodging}>
-              <SectionRule label="Stay" />
-              <View style={styles.lodgingRow}>
-                <View style={styles.grow}>
-                  <ThemedText type="heading">{section.day.lodging.name}</ThemedText>
-                  {section.day.lodging.note ? (
-                    <ThemedText type="detail" themeColor="muted">
-                      {section.day.lodging.note}
-                    </ThemedText>
-                  ) : null}
-                </View>
-                <Cost amount={section.day.lodging.cost} />
-              </View>
-            </View>
-          ) : null
-        }
-      />
+        </>
+      )}
 
       {trip.status === 'draft' ? (
         <KeepShelf
@@ -115,6 +97,140 @@ export default function TripDetail() {
       ) : null}
     </View>
   );
+}
+
+/**
+ * The days, paged one per screen.
+ *
+ * A `ScrollView` rather than a `FlatList`, and the reason is the map that lands next: a list's one
+ * real contribution here is windowing, and windowing is precisely what would unmount a built map
+ * two pages away. A FlatList configured never to window *is* a ScrollView, with three more knobs
+ * and two more ways to fail quietly. A trip is one to fourteen days; mounting them all is cheap.
+ *
+ * The strip and the swipe drive the same `day`, so the sync runs both ways. `settled` is what
+ * stops it looping: a programmatic `scrollTo` fires `onMomentumScrollEnd` too, and without the
+ * guard that would set the state that caused the scroll.
+ */
+function DayPager({
+  trip,
+  day,
+  onDayChange,
+  emphasis,
+  onEmphasise,
+}: {
+  trip: Trip;
+  day: number;
+  onDayChange: (day: number) => void;
+  emphasis: string | null;
+  onEmphasise: (key: string | null) => void;
+}) {
+  // `useWindowDimensions`, not `Dimensions.get()` — this one re-renders on rotation, and a page
+  // whose width disagrees with the pager's by even a point drifts out of alignment by day 8.
+  const { width } = useWindowDimensions();
+  const pager = useRef<ScrollView>(null);
+  const settled = useRef(0);
+  const days = trip.itinerary?.days ?? [];
+
+  useEffect(() => {
+    if (settled.current === day) return;
+    settled.current = day;
+    pager.current?.scrollTo({ x: day * width, animated: true });
+  }, [day, width]);
+
+  function onMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const landed = Math.round(event.nativeEvent.contentOffset.x / width);
+    if (landed === settled.current) return;
+    settled.current = landed;
+    onDayChange(landed);
+  }
+
+  return (
+    <ScrollView
+      ref={pager}
+      horizontal
+      pagingEnabled
+      // iOS-only, harmless elsewhere: stops a diagonal drag jiggling the page sideways while the
+      // day's own list is scrolling vertically.
+      directionalLockEnabled
+      // Explicit, because a clipped subview is how a native map goes black on Android.
+      removeClippedSubviews={false}
+      showsHorizontalScrollIndicator={false}
+      onMomentumScrollEnd={onMomentumScrollEnd}>
+      {days.map((dayPlan, index) => (
+        // A fixed width, never `flex: 1`: a flex child inside a horizontal ScrollView collapses
+        // to zero width and renders blank, with no warning.
+        <View key={dayPlan.date} style={{ width }}>
+          <DayPage
+            day={dayPlan}
+            dayIndex={index}
+            dayCount={days.length}
+            destination={trip.destination}
+            emphasis={stopIndexFor(emphasis, index)}
+            onEmphasise={(stop) => onEmphasise(stop === null ? null : `${index}:${stop}`)}
+          />
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+/**
+ * Which day you are on, and that there are others.
+ *
+ * The masthead already prints "Day 3 of 7", so this is not information — it is the affordance. It
+ * also outlives the swipe: once the map face is pannable it takes the horizontal drag, and tapping
+ * a chip is then the only way to change day. Tapping one is also how you reach day 6 without
+ * swiping six times.
+ *
+ * Not jade. Jade means action, and where-you-are is not an action.
+ */
+function DayStrip({
+  count,
+  current,
+  onSelect,
+}: {
+  count: number;
+  current: number;
+  onSelect: (day: number) => void;
+}) {
+  const strip = useRef<ScrollView>(null);
+
+  // Keep the active chip on screen — a fourteen-day trip runs off the edge.
+  useEffect(() => {
+    strip.current?.scrollTo({ x: Math.max(0, current * CHIP_STRIDE - CHIP_STRIDE), animated: true });
+  }, [current]);
+
+  return (
+    <ScrollView
+      ref={strip}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.strip}>
+      {Array.from({ length: count }, (_, index) => {
+        const active = index === current;
+        return (
+          <Pressable
+            key={index}
+            onPress={() => onSelect(index)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`Day ${index + 1} of ${count}`}
+            style={[styles.chip, active && styles.chipActive]}>
+            <ThemedText type="money" themeColor={active ? 'foreground' : 'muted'}>
+              {index + 1}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/** The stop index within `dayIndex`, or null when the emphasis belongs to another day. */
+function stopIndexFor(emphasis: string | null, dayIndex: number): number | null {
+  if (!emphasis) return null;
+  const [day, stop] = emphasis.split(':');
+  return Number(day) === dayIndex ? Number(stop) : null;
 }
 
 /**
@@ -173,246 +289,32 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
   );
 }
 
-/**
- * The day's masthead: a photograph with the measured scrim, the dateline set into it.
- *
- * Only large type and tracked caps ride the picture — the Photograph-Is-Not-A-Surface rule. The
- * weather badge is a slate pill rather than bare text for the same reason: small type over a
- * photograph is only apparently safe.
- */
-function DayMasthead({
-  day,
-  dayIndex,
-  dayCount,
-  destination,
-}: {
-  day: DayPlan;
-  dayIndex: number;
-  dayCount: number;
-  destination: string;
-}) {
-  const weather = weatherLine(day);
-  return (
-    <View style={styles.masthead}>
-      <PlacePhoto
-        name={destination}
-        aspectRatio={16 / 9}
-        radius={Radius.read}
-        scrim={PhotoScrim}
-        style={styles.mastheadPhoto}>
-        {weather ? (
-          <View style={styles.weatherBadge}>
-            <ThemedText type="label" themeColor="foreground" numberOfLines={1}>
-              {weather}
-            </ThemedText>
-          </View>
-        ) : null}
-
-        <View style={styles.dateline}>
-          <ThemedText type="label" themeColor="foreground" style={styles.datelineOverline}>
-            {`Day ${dayIndex + 1} of ${dayCount}`}
-          </ThemedText>
-          <ThemedText type="display" numberOfLines={2}>
-            {formatDateline(day.date)}
-          </ThemedText>
-          {day.title ? (
-            <ThemedText type="detail" style={styles.datelineTitle}>
-              {day.title}
-            </ThemedText>
-          ) : null}
-        </View>
-      </PlacePhoto>
-
-      {day.summary ? (
-        <ThemedText type="detail" themeColor="muted" style={styles.summary}>
-          {day.summary}
-        </ThemedText>
-      ) : null}
-
-      <SectionRule label="The day" trailing={dayTotal(day)} />
-    </View>
-  );
-}
-
-/** A stop is a row, never a card. The system draws rules rather than boxing things. */
-function StopRow({
-  stop,
-  ordinal,
-  dayIndex,
-  first,
-  expanded,
-  onPress,
-}: {
-  stop: Stop;
-  ordinal: number;
-  dayIndex: number;
-  first: boolean;
-  expanded: boolean;
-  onPress: () => void;
-}) {
-  const particulars = [stop.time, stop.durationLabel, stop.category]
-    .map((part) => part?.trim())
-    .filter(Boolean)
-    .join('  ·  ');
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.stop, !first && styles.stopRuled, expanded && styles.stopExpanded]}
-      android_ripple={{ color: Colors.pressed }}>
-      <View style={[styles.disc, { backgroundColor: dayCore(dayIndex) }]}>
-        <ThemedText type="money" style={styles.discOrdinal}>
-          {ordinal}
-        </ThemedText>
-      </View>
-
-      <View style={styles.grow}>
-        <View style={styles.stopHead}>
-          <ThemedText type="heading" style={styles.grow}>
-            {stop.name}
-          </ThemedText>
-          <Cost amount={stop.cost} />
-        </View>
-
-        {particulars ? (
-          <ThemedText type="label" themeColor="muted" style={styles.particulars}>
-            {particulars}
-          </ThemedText>
-        ) : null}
-
-        {expanded ? (
-          <View style={styles.expanded}>
-            {stop.why ? <ThemedText type="detail">{stop.why}</ThemedText> : null}
-            {stop.note ? (
-              <ThemedText type="detail" themeColor="muted">
-                {stop.note}
-              </ThemedText>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
-
-/** A label against a rule, which is how this system opens a section. */
-function SectionRule({ label, trailing }: { label: string; trailing?: string }) {
-  return (
-    <View style={styles.sectionRule}>
-      <ThemedText type="label" themeColor="muted">
-        {label}
-      </ThemedText>
-      <View style={styles.rule} />
-      {trailing ? (
-        <ThemedText type="money" themeColor="money">
-          {trailing}
-        </ThemedText>
-      ) : null}
-    </View>
-  );
-}
-
-/** Gold counts. A zero is not a money fact, so it goes muted rather than borrowing the colour. */
-function Cost({ amount }: { amount: number }) {
-  if (!amount) return null;
-  return (
-    <ThemedText type="moneyLarge" themeColor="money">
-      {`$${Math.round(amount).toLocaleString('en-US')}`}
-    </ThemedText>
-  );
-}
-
-function dayTotal(day: DayPlan): string | undefined {
-  const stops = (day.stops ?? []).reduce((sum, stop) => sum + (stop.cost ?? 0), 0);
-  const total = stops + (day.lodging?.cost ?? 0);
-  return total > 0 ? `$${Math.round(total).toLocaleString('en-US')}` : undefined;
-}
-
-/**
- * The forecast, short enough to stay a badge.
- *
- * **`day.weather` is prose, not a label** — the model writes things like "Pleasant autumn day,
- * 18.9-23.5°C, mostly sunny", which wrapped to two lines and covered the photograph it sits on.
- * So the structured figures win whenever they exist, and the prose is used only as a fallback,
- * cut at its first clause. `historical` says the numbers are last year's same-date weather rather
- * than a forecast, which is cheap to say and worth saying.
- */
-function weatherLine(day: DayPlan): string | undefined {
-  const detail = day.weatherDetail;
-  if (detail) {
-    const temps = `${Math.round(detail.tempMaxC)}° / ${Math.round(detail.tempMinC)}°`;
-    return detail.historical ? `${temps}  ·  typical` : temps;
-  }
-  const prose = day.weather?.trim();
-  if (!prose) return undefined;
-  return prose.split(',')[0].trim();
-}
+/** Chip width plus its gap — what one step along the strip measures. */
+const CHIP_STRIDE = 44;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.canvas },
-  content: { paddingBottom: Spacing.regular * 2 },
   stateWrap: { paddingTop: Spacing.regular },
-  tripHeader: { paddingHorizontal: Spacing.read, paddingBottom: Spacing.rows },
 
-  masthead: { paddingHorizontal: Spacing.read, paddingTop: Spacing.tight },
-  mastheadPhoto: { justifyContent: 'flex-end' },
-  weatherBadge: {
-    position: 'absolute',
-    top: Spacing.rows,
-    right: Spacing.rows,
-    backgroundColor: Colors.bar,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    // The badge stays a badge: a long fallback truncates rather than wrapping across the photo.
-    maxWidth: '60%',
-  },
-  dateline: { padding: Spacing.rows, gap: Spacing.hair },
-  datelineOverline: { opacity: 0.72 },
-  datelineTitle: { opacity: 0.8 },
-  summary: { marginTop: Spacing.rows },
-
-  sectionRule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.tight,
-    marginTop: Spacing.compact,
-    marginBottom: Spacing.hair,
-  },
-  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder },
-
-  stop: {
-    flexDirection: 'row',
-    gap: 13,
-    paddingVertical: Spacing.rows,
+  chrome: {
     paddingHorizontal: Spacing.read,
-    alignItems: 'flex-start',
+    paddingBottom: Spacing.tight,
+    gap: Spacing.tight,
   },
-  stopRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
-  stopExpanded: { backgroundColor: Colors.accentWash },
-  disc: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  strip: { gap: Spacing.tight, paddingRight: Spacing.read },
+  chip: {
+    minWidth: 36,
+    height: 36,
+    paddingHorizontal: Spacing.tight,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.control,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
   },
-  discOrdinal: { color: DiscInk, lineHeight: 15 },
-  stopHead: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
-  grow: { flex: 1 },
-  particulars: { marginTop: 3 },
-  expanded: { marginTop: Spacing.tight, gap: Spacing.hair },
-
-  lodging: { paddingHorizontal: Spacing.read },
-  lodgingRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: Spacing.tight,
-    paddingVertical: Spacing.rows,
+  chipActive: {
+    backgroundColor: Colors.surfaceDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
   },
 
   shelf: {
