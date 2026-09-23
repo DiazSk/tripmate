@@ -1,5 +1,6 @@
 import { fetchWithSession } from "./session";
-import { listTrips, getTrip, getProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip } from "./tripMateApi";
+import type { TravelerProfile } from "./types";
+import { listTrips, getTrip, getProfile, getProfileStats, saveProfile, placePhoto, geocode, createTripDraft, promoteTrip, generateTrip } from "./tripMateApi";
 
 // Reads as though it runs too late, and does not: babel-jest hoists every `jest.mock` above the
 // imports, so the mock is registered before `tripMateApi` resolves `./session`.
@@ -59,6 +60,55 @@ test("getProfile returns undefined when the fetch fails", async () => {
   mockedFetch.mockResolvedValue(new Response("", { status: 500 }));
 
   expect(await getProfile()).toBeUndefined();
+});
+
+// Zeroes are a real record — somebody who has kept no trips has exactly this — so they must not
+// be confused with not having been able to ask.
+test("getProfileStats returns the record, and undefined only when it could not ask", async () => {
+  mockedFetch.mockResolvedValue(
+    new Response(JSON.stringify({ trips: 2, places: 2, spend: 2452 }), { status: 200 })
+  );
+  expect(await getProfileStats()).toEqual({ trips: 2, places: 2, spend: 2452 });
+  expect(mockedFetch).toHaveBeenCalledWith("/api/profile/stats", expect.anything());
+
+  mockedFetch.mockResolvedValue(new Response("", { status: 500 }));
+  expect(await getProfileStats()).toBeUndefined();
+});
+
+const profile: TravelerProfile = {
+  group: "solo",
+  explorerStyle: "mixed",
+  energy: "moderate",
+  crowds: "mixed",
+  priorities: ["Food", "Nightlife"],
+  topPriorities: ["Food"],
+  dietary: { tags: ["Vegetarian"], note: "no shellfish" },
+};
+
+/**
+ * `PUT /api/profile` **replaces** rather than merging — the route's `parseProfile` demands every
+ * field and rejects anything short. So the body carrying the whole object is the contract, and
+ * this assertion is what fails the day somebody "optimises" it into sending only what changed.
+ */
+test("saveProfile PUTs the whole profile, nested under a profile key", async () => {
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+  expect(await saveProfile(profile)).toBe(true);
+
+  const [url, init] = mockedFetch.mock.calls[0];
+  expect(url).toBe("/api/profile");
+  expect(init.method).toBe("PUT");
+  expect(JSON.parse(init.body).profile).toEqual(profile);
+});
+
+// A 400 is the route refusing the shape. Reporting it as saved would leave the screen showing
+// edits the server never took.
+test("saveProfile reports failure on a refused shape and on a dead connection", async () => {
+  mockedFetch.mockResolvedValue(new Response(JSON.stringify({ error: "bad" }), { status: 400 }));
+  expect(await saveProfile(profile)).toBe(false);
+
+  mockedFetch.mockRejectedValue(new Error("network down"));
+  expect(await saveProfile(profile)).toBe(false);
 });
 
 test("getProfile returns undefined when the fetch rejects", async () => {

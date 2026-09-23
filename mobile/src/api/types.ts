@@ -98,6 +98,20 @@ export interface DietaryNeeds {
   note: string;
 }
 
+/**
+ * What somebody's kept trips add up to, from `GET /api/profile/stats`.
+ *
+ * `places` counts distinct destinations rather than countries: `destination` is free text with no
+ * country on the row, so "countries" could only be guessed at by splitting on a comma — which
+ * makes a trip to "Tokyo" a country called Tokyo.
+ */
+export interface ProfileStats {
+  trips: number;
+  places: number;
+  /** Real spend, honouring any `actualCost`, from the same summation the budget bar uses. */
+  spend: number;
+}
+
 export interface TravelerProfile {
   group: GroupType;
   explorerStyle: ExplorerStyle;

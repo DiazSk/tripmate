@@ -1,6 +1,14 @@
 import type { PlanDraft } from '@/api/types';
 
-import { MAX_STARRED, toGenerateRequest, toTravelerProfile, toUserAnswers, toggleStar, toggleTag } from './planDraft';
+import {
+  MAX_STARRED,
+  toGenerateRequest,
+  toTravelerProfile,
+  toUserAnswers,
+  toggleInterest,
+  toggleStarred,
+  toggleTag,
+} from './planDraft';
 
 function draft(overrides: Partial<PlanDraft> = {}): PlanDraft {
   return {
@@ -32,27 +40,42 @@ test('toggleTag adds then removes', () => {
   expect(toggleTag(['Food', 'Nightlife'], 'Food')).toEqual(['Nightlife']);
 });
 
+const picks = (selected: string[] = [], starred: string[] = []) => ({ selected, starred });
+
+test('tapping a chip selects it, and tapping again deselects it', () => {
+  expect(toggleInterest(picks(), 'Food')).toEqual(picks(['Food']));
+  expect(toggleInterest(picks(['Food', 'Nightlife']), 'Food')).toEqual(picks(['Nightlife']));
+});
+
+// This rule used to live in the wizard's JSX, where no test could reach it. A starred tag that is
+// no longer chosen would weight a plan by something the traveller had just removed.
+test('deselecting an interest takes its star with it', () => {
+  expect(toggleInterest(picks(['Food', 'Nightlife'], ['Food']), 'Food')).toEqual(
+    picks(['Nightlife'], [])
+  );
+});
+
 test('starring selects the tag too, so a star is never orphaned', () => {
-  const d = draft();
-  expect(toggleStar(d, 'Food')).toEqual({ starredInterests: ['Food'], interests: ['Food'] });
+  expect(toggleStarred(picks(), 'Food')).toEqual(picks(['Food'], ['Food']));
 });
 
 // The order is the weighting — the server reads the first three — so it must be preserved.
 test('stars keep the order they were added in', () => {
-  let d = draft({ interests: ['Food', 'Nightlife', 'Shopping'] });
-  for (const tag of ['Shopping', 'Food']) d = { ...d, ...toggleStar(d, tag) };
-  expect(d.starredInterests).toEqual(['Shopping', 'Food']);
+  let p = picks(['Food', 'Nightlife', 'Shopping']);
+  for (const tag of ['Shopping', 'Food']) p = toggleStarred(p, tag);
+  expect(p.starred).toEqual(['Shopping', 'Food']);
 });
 
+// Silently dropping an earlier choice to honour the latest is the worse surprise, so the cap
+// refuses rather than evicting.
 test('the fourth star is refused rather than silently replacing one', () => {
-  const full = draft({ starredInterests: ['A', 'B', 'C'], interests: ['A', 'B', 'C', 'D'] });
-  expect(full.starredInterests).toHaveLength(MAX_STARRED);
-  expect(toggleStar(full, 'D')).toEqual({});
+  const full = picks(['A', 'B', 'C', 'D'], ['A', 'B', 'C']);
+  expect(full.starred).toHaveLength(MAX_STARRED);
+  expect(toggleStarred(full, 'D')).toEqual(full);
 });
 
 test('unstarring leaves the tag selected', () => {
-  const d = draft({ interests: ['Food'], starredInterests: ['Food'] });
-  expect(toggleStar(d, 'Food')).toEqual({ starredInterests: [] });
+  expect(toggleStarred(picks(['Food'], ['Food']), 'Food')).toEqual(picks(['Food'], []));
 });
 
 // A shape full of blanks is not the same as saying nothing, and the prompt reads them differently.
