@@ -10,8 +10,11 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 
+import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+
 import { discardTrip, getTrip, promoteTrip } from '@/api/tripMateApi';
 import type { Trip } from '@/api/types';
+import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
 import { PrimaryButton } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
@@ -25,6 +28,22 @@ export default function TripDetail() {
   /** `dayIndex:stopIndex` of the one expanded stop, or null. One at a time, like the Swift app. */
   const [emphasis, setEmphasis] = useState<string | null>(null);
   const [day, setDay] = useState(0);
+  /**
+   * Which face you are reading, for the whole trip rather than per day.
+   *
+   * Trip-level on purpose: you are *in map mode*, and changing day should not silently drop you
+   * back to a list. It is also what lets one map serve every day instead of one per day.
+   */
+  const [face, setFace] = useState<'list' | 'map'>('list');
+  /**
+   * One-way: false until the map is first asked for, true forever after.
+   *
+   * The map is never unmounted once built — the same latch the web app's map background uses.
+   * Tearing down a warmed native map and its decoded tiles every time someone glances at the
+   * list would make the second look as slow as the first.
+   */
+  const [mapBuilt, setMapBuilt] = useState(false);
+  if (face === 'map' && !mapBuilt) setMapBuilt(true);
 
   useEffect(() => {
     getTrip(id).then((result) => setTrip(result ?? null));
@@ -76,16 +95,32 @@ export default function TripDetail() {
             <ThemedText type="label" themeColor="muted">
               {formatRange(trip.startDate, trip.endDate)}
             </ThemedText>
-            <DayStrip count={days.length} current={day} onSelect={setDay} />
+            <View style={styles.chromeRow}>
+              <DayStrip count={days.length} current={day} onSelect={setDay} />
+              <FaceToggle face={face} onChange={setFace} />
+            </View>
           </View>
 
-          <DayPager
-            trip={trip}
-            day={day}
-            onDayChange={setDay}
-            emphasis={emphasis}
-            onEmphasise={setEmphasis}
-          />
+          <View style={styles.faces}>
+            <DayPager
+              trip={trip}
+              day={day}
+              onDayChange={setDay}
+              emphasis={emphasis}
+              onEmphasise={setEmphasis}
+            />
+
+            {mapBuilt ? (
+              <MapFace visible={face === 'map'}>
+                <DayMap
+                  stops={days[day]?.stops ?? []}
+                  dayIndex={day}
+                  emphasis={stopIndexFor(emphasis, day)}
+                  onEmphasise={(stop) => setEmphasis(stop === null ? null : `${day}:${stop}`)}
+                />
+              </MapFace>
+            ) : null}
+          </View>
         </>
       )}
 
@@ -205,6 +240,11 @@ function DayStrip({
       ref={strip}
       horizontal
       showsHorizontalScrollIndicator={false}
+      // The box explicitly takes the room the toggle leaves, rather than inheriting it. A
+      // seven-day strip at the largest text size already bounded correctly without this, so it
+      // fixes nothing observed — it states the constraint the layout is relying on instead of
+      // depending on how a ScrollView happens to size itself inside a row.
+      style={styles.stripBox}
       contentContainerStyle={styles.strip}>
       {Array.from({ length: count }, (_, index) => {
         const active = index === current;
@@ -223,6 +263,69 @@ function DayStrip({
         );
       })}
     </ScrollView>
+  );
+}
+
+/**
+ * The map face, faded over the list rather than swapped with it.
+ *
+ * **Hidden by opacity, never unmounted and never `display: none`.** Both of those throw the
+ * native map away; `pointerEvents` is what actually takes the hidden face out of hit-testing, so
+ * a drag meant for the list underneath is not swallowed by an invisible map on top.
+ *
+ * Opacity and a slight scale together are Material's shared-axis Z — the canonical "two views of
+ * one thing" transition, and unremarkable on iOS.
+ */
+function MapFace({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  const style = useAnimatedStyle(() => ({
+    opacity: withTiming(visible ? 1 : 0, { duration: visible ? 220 : 160 }),
+    transform: [{ scale: withTiming(visible ? 1 : 0.96, { duration: visible ? 220 : 160 }) }],
+  }));
+
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, style]}
+      pointerEvents={visible ? 'auto' : 'none'}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
+ * List or map, for the trip.
+ *
+ * A two-up control rather than a card flip: neither platform ships a flip — it is iOS 6-era
+ * skeuomorphism Apple removed, and Material has no equivalent — and a flip would also force both
+ * faces to stay mounted for backface-visibility, keeping a live map behind the list forever.
+ *
+ * The selected side is paper on slate, not jade. Jade means action, and which view you are
+ * looking at is not an action.
+ */
+function FaceToggle({
+  face,
+  onChange,
+}: {
+  face: 'list' | 'map';
+  onChange: (face: 'list' | 'map') => void;
+}) {
+  return (
+    <View style={styles.toggle}>
+      {(['list', 'map'] as const).map((option) => {
+        const active = face === option;
+        return (
+          <Pressable
+            key={option}
+            onPress={() => onChange(option)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            style={[styles.toggleHalf, active && styles.toggleHalfActive]}>
+            <ThemedText type="label" themeColor={active ? 'foreground' : 'muted'}>
+              {option === 'list' ? 'List' : 'Map'}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -301,7 +404,23 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.tight,
     gap: Spacing.tight,
   },
-  strip: { gap: Spacing.tight, paddingRight: Spacing.read },
+  chromeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
+  faces: { flex: 1 },
+  stripBox: { flex: 1 },
+  strip: { gap: Spacing.tight, paddingRight: Spacing.tight, alignItems: 'center' },
+  toggle: {
+    flexDirection: 'row',
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.control,
+    padding: 3,
+    gap: 2,
+  },
+  toggleHalf: {
+    paddingHorizontal: Spacing.rows,
+    paddingVertical: 7,
+    borderRadius: Radius.pill,
+  },
+  toggleHalfActive: { backgroundColor: Colors.surfaceDeep },
   chip: {
     minWidth: 36,
     height: 36,

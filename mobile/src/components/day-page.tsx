@@ -2,8 +2,9 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { DayPlan, Stop } from '@/api/types';
 import { PlacePhoto } from '@/components/place-photo';
+import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, DiscInk, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
+import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
 import { formatDateline } from '@/lib/dayDisplay';
 
 /**
@@ -168,11 +169,7 @@ function StopRow({
       onPress={onPress}
       style={[styles.stop, !first && styles.stopRuled, expanded && styles.stopExpanded]}
       android_ripple={{ color: Colors.pressed }}>
-      <View style={[styles.disc, { backgroundColor: dayCore(dayIndex) }]}>
-        <ThemedText type="money" style={styles.discOrdinal}>
-          {ordinal}
-        </ThemedText>
-      </View>
+      <StopDisc ordinal={ordinal} color={dayCore(dayIndex)} />
 
       <View style={styles.grow}>
         <View style={styles.stopHead}>
@@ -297,16 +294,6 @@ const styles = StyleSheet.create({
   },
   stopRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
   stopExpanded: { backgroundColor: Colors.accentWash },
-  disc: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  discOrdinal: { color: DiscInk, lineHeight: 15 },
   stopHead: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
   grow: { flex: 1 },
   particulars: { marginTop: 3 },

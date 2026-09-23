@@ -112,6 +112,21 @@ export const RouteDayCore = ['#4E8C99', '#A46E93', '#C4784B', '#7E9C5E', '#7B77A
 export const dayCore = (dayIndex: number) =>
   RouteDayCore[((dayIndex % RouteDayCore.length) + RouteDayCore.length) % RouteDayCore.length];
 
+/**
+ * The pale half of each day's pair, for the halo under a route line.
+ *
+ * `RouteDayCore` above says "core only — glow is too pale to carry ink", and that is a rule about
+ * *ink*: a numeral on one of these would not meet contrast. A stroke is not ink. The map draws a
+ * day's route as a thin core inside a soft spill, and using the core colour for both would make
+ * the spill darker than the line it spills from, which inverts the whole effect.
+ *
+ * Transcribed from `ios/TripMateKit/Sources/TripMateKit/RouteGeometry.swift:76-82`.
+ */
+export const RouteDayGlow = ['#7FB3BD', '#C596B6', '#DFA079', '#A6BF89', '#A6A2D0'] as const;
+
+export const dayGlow = (dayIndex: number) =>
+  RouteDayGlow[((dayIndex % RouteDayGlow.length) + RouteDayGlow.length) % RouteDayGlow.length];
+
 /** Ink drawn on a day disc. Near-black at 92%, from the Swift app's `discInk`. */
 export const DiscInk = '#12110FEB';
 
