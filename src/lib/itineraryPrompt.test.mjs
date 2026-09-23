@@ -11,6 +11,7 @@ import {
   buildCritiquePrompt,
   buildGeneratePrompt,
   buildRebalancePrompt,
+  buildRefinePrompt,
 } from "./itineraryPrompt.ts";
 
 const DAYS = [
@@ -126,4 +127,52 @@ test("the generate prompt states which constraint wins when two conflict", () =>
     prompt.indexOf("Safety and accessibility") < prompt.indexOf("Traveler profile"),
     "accessibility must be listed above pace"
   );
+});
+
+// --- refine carries the same stated requirements as generate ------------------------------------
+
+const bareAnswers = (over) => ({
+  purpose: "",
+  explorerStyle: "mixed",
+  group: "solo",
+  energy: "moderate",
+  crowds: "mixed",
+  budget: 1500,
+  priorities: [],
+  topPriorities: [],
+  selectedPois: [],
+  customPois: [],
+  ...over,
+});
+
+const refineBase = {
+  destination: "Kyoto",
+  startDate: "2026-05-01",
+  endDate: "2026-05-03",
+  budget: 1500,
+  previousItinerary: { tier: "comfort", days: DAYS },
+  feedback: "Add more food stops.",
+};
+
+test("a refine prompt carries a named must-include and a named exclusion", () => {
+  const prompt = buildRefinePrompt({
+    ...refineBase,
+    answers: bareAnswers({ mustInclude: ["Nishiki Market"], avoid: ["nightclubs"] }),
+  });
+  assert.match(
+    prompt,
+    /Must include, and these are requirements rather than preferences: Nishiki Market/
+  );
+  assert.match(prompt, /Do not include: nightclubs/);
+});
+
+test("a refine call with nothing stated is byte-identical to a call that never passed answers", () => {
+  // Mirrors formatTravelLegs's own "absent logistics leave the prompt byte-identical" contract:
+  // a traveler who named nothing must not change a single byte of what the model sees, and a
+  // caller that predates `answers` entirely (omitting the key) must land on the exact same prompt
+  // as one that passes it with nothing stated.
+  const withoutAnswersKey = buildRefinePrompt(refineBase);
+  const withEmptyAnswers = buildRefinePrompt({ ...refineBase, answers: bareAnswers() });
+  assert.equal(withoutAnswersKey, withEmptyAnswers);
+  assert.doesNotMatch(withoutAnswersKey, /Stated requirements/);
 });
