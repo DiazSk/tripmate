@@ -1,7 +1,6 @@
 import { Stack, useRouter } from 'expo-router';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
-import type { CrowdPreference, EnergyLevel, ExplorerStyle } from '@/api/types';
 import {
   ChoiceRow,
   FieldTrough,
@@ -14,37 +13,28 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
 import {
+  CROWDS,
   DIETARY_TAGS,
+  ENERGY,
   INTERESTS,
   MAX_STARRED,
-  toggleStar,
+  STYLES,
+  toggleInterest,
+  toggleStarred,
   toggleTag,
   usePlanDraft,
 } from '@/lib/planDraft';
-
-const STYLES: { value: ExplorerStyle; label: string }[] = [
-  { value: 'packed', label: 'See as much as possible' },
-  { value: 'relaxed', label: 'A few things, done well' },
-  { value: 'offbeat', label: 'Off the beaten path' },
-  { value: 'mixed', label: 'A bit of both' },
-];
-
-const ENERGY: { value: EnergyLevel; label: string }[] = [
-  { value: 'high', label: 'Happy to walk all day' },
-  { value: 'moderate', label: 'A comfortable amount' },
-  { value: 'low', label: 'Prefer it gentle' },
-];
-
-const CROWDS: { value: CrowdPreference; label: string }[] = [
-  { value: 'love', label: 'Love the buzz' },
-  { value: 'mixed', label: 'Some of each' },
-  { value: 'avoid', label: 'Keep it quiet' },
-];
 
 export default function PreferencesStep() {
   const router = useRouter();
   const { draft, patch } = usePlanDraft();
   const { dietary, accessibility, starredInterests } = draft;
+  /** The wizard's names for the pair the shared rules operate on, and back again. */
+  const picks = { selected: draft.interests, starred: starredInterests };
+  const fromPicks = (next: { selected: string[]; starred: string[] }) => ({
+    interests: next.selected,
+    starredInterests: next.starred,
+  });
 
   const starsLeft = MAX_STARRED - starredInterests.length;
   const interestCaption =
@@ -80,15 +70,11 @@ export default function PreferencesStep() {
             tags={INTERESTS}
             selected={draft.interests}
             starred={starredInterests}
-            onToggle={(tag) =>
-              patch({
-                interests: toggleTag(draft.interests, tag),
-                // Unpicking a starred tag must take the star with it, or the weighting keeps a
-                // priority the traveller just removed.
-                starredInterests: starredInterests.filter((t) => t !== tag),
-              })
-            }
-            onStar={(tag) => patch(toggleStar(draft, tag))}
+            // Both rules live in `planDraft`, because the Profile tab edits the same pair under
+            // the names the server uses. The unstar-on-deselect rule used to be written here, in
+            // this JSX, where nothing could test it.
+            onToggle={(tag) => patch(fromPicks(toggleInterest(picks, tag)))}
+            onStar={(tag) => patch(fromPicks(toggleStarred(picks, tag)))}
           />
         </Question>
 

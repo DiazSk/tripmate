@@ -12,6 +12,7 @@ import type {
   PlaceCategory,
   PlacePhoto,
   PlaceSearchResult,
+  ProfileStats,
   StageEvent,
   StreamedStop,
   Trip,
@@ -48,6 +49,23 @@ export async function getProfile(): Promise<TravelerProfile | null | undefined> 
     if (!res.ok) return undefined;
     const body = await res.json();
     return body.profile as TravelerProfile | null;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `GET /api/profile/stats` — what the trips somebody kept add up to.
+ *
+ * Its own route rather than fields on `/api/trips`, because the figures need every stored
+ * itinerary and the trips list deliberately stopped reading them. `undefined` is "could not ask",
+ * distinct from a real record of zeroes, which somebody with no trips legitimately has.
+ */
+export async function getProfileStats(): Promise<ProfileStats | undefined> {
+  try {
+    const res = await fetchWithSession("/api/profile/stats", {});
+    if (!res.ok) return undefined;
+    return (await res.json()) as ProfileStats;
   } catch {
     return undefined;
   }

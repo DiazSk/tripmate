@@ -1,59 +1,80 @@
+import { useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getProfile } from '@/api/tripMateApi';
-import { useFocusedFetch } from '@/lib/useFocusedFetch';
-import type { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType, TravelerProfile } from '@/api/types';
+import { getProfile, getProfileStats, saveProfile } from '@/api/tripMateApi';
+import type { ProfileStats, TravelerProfile } from '@/api/types';
+import { FieldSheet } from '@/components/field-sheet';
+import { ChoiceRow, FieldTrough, PrimaryButton, TagGrid, TextField } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { ThemedText } from '@/components/themed-text';
+import { BarHeight, Colors, Radius, Spacing } from '@/constants/theme';
+import {
+  CROWDS,
+  DIETARY_TAGS,
+  ENERGY,
+  GROUPS,
+  INTERESTS,
+  MAX_STARRED,
+  STYLES,
+  emptyDraft,
+  labelOf,
+  toTravelerProfile,
+  toggleInterest,
+  toggleStarred,
+  toggleTag,
+} from '@/lib/planDraft';
+import { dietaryValue, interestsValue } from '@/lib/profileRows';
+import { formatMoney } from '@/lib/spend';
 
 /**
- * **This screen is deliberately not drawn in the Kiln type scale, and that is the design.**
+ * Your travel profile — and the only place some of it can be set.
  *
- * `DESIGN.md`'s third boundary (line 538) says a settings-shaped screen uses the system's type
- * ramp and geometry rather than the product's: the list owns row height, separator insets and
- * header styling, and — the part no Kiln rule can deliver — **Dynamic Type**. Overriding that
- * with hand-picked points is what made the Swift `ProfileView` read as a web form, which is the
- * defect the boundary exists to stop recurring. So: system font, system sizes, no
- * `maxFontSizeMultiplier`, and no Melodrama anywhere on this screen.
+ * **A profile reads as a summary, not a questionnaire.** Each row shows the answer it holds and
+ * nothing else; choosing happens on a sheet you open. An earlier pass made every field editable
+ * inline and the screen became fourteen radio rows followed by seventeen chips — the same
+ * information, but something you fill in rather than something you read.
  *
- * What does not change is the palette. Kiln needs no adaptation here, on either platform: the one
- * slate `#1C1A18` sits within 10% of iOS dark's grouped-row `#1C1C1E` and of Material 3's dark
+ * **The rows are deliberately not in the Kiln type scale.** `DESIGN.md`'s third boundary: a
+ * settings-shaped screen borrows the system's ramp and geometry rather than the product's — row
+ * height, separator insets, header styling, and the part no Kiln rule can deliver, **Dynamic
+ * Type**. That is why the editors live in sheets: anything using `ThemedText` caps scaling at 1.6x,
+ * so keeping the controls off this surface is what lets everything you *read* here scale freely.
+ *
+ * What does not change is the palette. Kiln needs no adaptation on either platform: the one slate
+ * `#1C1A18` sits within 10% of iOS dark's grouped-row `#1C1C1E` and Material 3's dark
  * `surfaceContainerLow` `#1D1B20`. The difference is hue, not value, and the hue is ours to keep.
+ *
+ * Every field here changes the plans the app writes — `explorerStyle` and `energy` set the pace
+ * ceiling, `crowds` shifts timing, `family_with_kids` adds a rules block, the starred priorities
+ * are what the prompt calls the thing that "drives which stops are chosen". Dietary has no wizard
+ * screen at all, so this is the only route to it.
  */
 
-// Labels ported from ios/TripMateKit/Sources/TripMateKit/UserAnswers.swift.
-const GROUP_LABELS: Record<GroupType, string> = {
-  solo: 'Solo',
-  couple: 'Couple',
-  family_with_kids: 'Family with kids',
-  other: 'Something else',
-};
+/** Matches `ProfileStore.edited()` in the Swift app: long enough that a burst of chip taps is one
+ *  request, short enough that leaving the tab rarely races it — and blur flushes what is pending. */
+const SAVE_DEBOUNCE_MS = 600;
 
-const EXPLORER_STYLE_LABELS: Record<ExplorerStyle, string> = {
-  packed: 'See as much as possible',
-  relaxed: 'A few things, done well',
-  offbeat: 'Off the beaten path',
-  mixed: 'A bit of both',
-};
+/** `undefined` still loading · `null` the fetch failed · `'none'` asked, and there is no profile. */
+type Loaded = TravelerProfile | null | 'none' | undefined;
 
-const ENERGY_LABELS: Record<EnergyLevel, string> = {
-  high: 'Happy to walk all day',
-  moderate: 'A comfortable amount',
-  low: 'Prefer it gentle',
-};
-
-const CROWD_LABELS: Record<CrowdPreference, string> = {
-  love: 'Love the buzz',
-  mixed: 'Some of each',
-  avoid: 'Keep it quiet',
-};
+/** Which field's sheet is open. */
+type Field = 'group' | 'explorerStyle' | 'energy' | 'crowds' | 'interests' | 'dietary';
 
 /**
- * iOS and Android want the same tree — rows, separators, section headers — with different
- * numbers, so this is a metrics object rather than a `.ios.tsx`/`.android.tsx` split. A file
- * split would duplicate the row markup twice and guarantee the two drift.
+ * iOS and Android want the same tree — rows, separators, section headers — with different numbers,
+ * so this is a metrics object rather than a `.ios.tsx`/`.android.tsx` split. A file split would
+ * duplicate the row markup twice and guarantee the two drift.
  */
 const M = Platform.select({
   ios: {
@@ -82,49 +103,314 @@ const M = Platform.select({
   },
 })!;
 
+const CAPTIONS = {
+  travel: 'Every new trip is planned from these answers.',
+  interests: 'Starred interests weigh most when a plan is written.',
+  dietary: 'Named up front, so a plan never suggests somewhere you can’t eat.',
+};
+
 export default function Profile() {
-  // undefined = still loading, null = the fetch failed, "none" = fetched fine, no profile yet.
-  // On focus: generating a plan writes the profile, so this fills without an app restart.
-  const profile = useFocusedFetch<TravelerProfile | null | 'none'>(async () => {
-    const result = await getProfile();
-    return result === undefined ? null : result === null ? 'none' : result;
-  });
+  const [profile, setProfile] = useState<Loaded>(undefined);
+  const [stats, setStats] = useState<ProfileStats | undefined>(undefined);
+  const [failed, setFailed] = useState(false);
+  const [editing, setEditing] = useState<Field | null>(null);
+
+  /**
+   * True from the first edit until a PUT carrying it succeeds.
+   *
+   * **The screen's one correctness guard.** The profile is re-read whenever the tab is focused —
+   * which is how a plan generated in the wizard appears here without a restart — and that read
+   * would happily overwrite an edit that has not reached the server. One flag covers all three
+   * windows where that matters: debounce armed, PUT in flight, and PUT failed.
+   *
+   * It clears on **success**, not on the first edit, which is what hands authority back to the
+   * server and lets the focus refetch resume doing its job.
+   */
+  const unsaved = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<TravelerProfile | null>(null);
+
+  const flush = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    const next = pending.current;
+    if (!next) return;
+    pending.current = null;
+    void saveProfile(next).then((ok) => {
+      setFailed(!ok);
+      // Only a success releases the guard, and only if nothing was queued behind this write.
+      if (ok && !timer.current) unsaved.current = false;
+    });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      if (!unsaved.current) {
+        void getProfile().then((result) => {
+          if (!active || unsaved.current) return;
+          setProfile(result === undefined ? null : result === null ? 'none' : result);
+        });
+      }
+      void getProfileStats().then((result) => {
+        if (active) setStats(result);
+      });
+      // Leaving the tab mid-debounce must not sit on an unsent edit.
+      return () => {
+        active = false;
+        flush();
+      };
+    }, [flush])
+  );
+
+  /**
+   * Queue an edit. **The whole profile goes every time**, because `PUT /api/profile` replaces
+   * rather than merges — its `parseProfile` refuses anything short of every field.
+   */
+  const edit = useCallback(
+    (changes: Partial<TravelerProfile>) => {
+      setProfile((current) => {
+        if (!current || typeof current !== 'object') return current;
+        const next = { ...current, ...changes };
+        unsaved.current = true;
+        pending.current = next;
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
+        return next;
+      });
+    },
+    [flush]
+  );
+
+  /** A single decision closes its own sheet; the multi-select ones stay open. */
+  const pick = useCallback(
+    (changes: Partial<TravelerProfile>) => {
+      edit(changes);
+      setEditing(null);
+    },
+    [edit]
+  );
+
+  const loadedProfile = profile && typeof profile === 'object' ? profile : null;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Avatar profile={typeof profile === 'object' ? profile : null} />
+        <Avatar profile={loadedProfile} />
+
+        {stats ? <Record stats={stats} /> : null}
 
         {profile === undefined ? (
           <Loading />
         ) : profile === null ? (
           <Notice>Couldn&rsquo;t reach TripMate. Check your connection.</Notice>
         ) : profile === 'none' ? (
-          <Invitation
-            title="No travel profile yet"
-            body="It gets filled in when you plan a trip, and shapes the plans you get afterwards."
-          />
+          <View style={styles.block}>
+            <Invitation
+              title="No travel profile yet"
+              body="It shapes every plan you get afterwards — and dietary needs can only be set here."
+            />
+            {/* Seeded from the wizard's own defaults rather than a second set that would drift.
+                Nothing is written until the first real edit. */}
+            <PrimaryButton
+              title="Set one up"
+              onPress={() => setProfile(toTravelerProfile(emptyDraft()))}
+            />
+          </View>
         ) : (
           <>
-            <Section title="How you travel">
-              <Row label="Group" value={GROUP_LABELS[profile.group]} first />
-              <Row label="Explorer style" value={EXPLORER_STYLE_LABELS[profile.explorerStyle]} />
-              <Row label="Energy" value={ENERGY_LABELS[profile.energy]} />
-              <Row label="Crowds" value={CROWD_LABELS[profile.crowds]} />
+            <Section title="How you travel" footer={CAPTIONS.travel}>
+              <Row
+                label="Travels with"
+                value={labelOf(GROUPS, profile.group)}
+                onPress={() => setEditing('group')}
+                first
+              />
+              <Row
+                label="Explores"
+                value={labelOf(STYLES, profile.explorerStyle)}
+                onPress={() => setEditing('explorerStyle')}
+              />
+              <Row
+                label="Walking"
+                value={labelOf(ENERGY, profile.energy)}
+                onPress={() => setEditing('energy')}
+              />
+              <Row
+                label="Crowds"
+                value={labelOf(CROWDS, profile.crowds)}
+                onPress={() => setEditing('crowds')}
+              />
             </Section>
 
-            <Section title="Interests">
-              <Row label="Top priorities" value={profile.topPriorities.join(', ') || '—'} first />
+            <Section title="What you're into" footer={CAPTIONS.interests}>
+              <Row
+                label="Interests"
+                value={interestsValue(profile)}
+                onPress={() => setEditing('interests')}
+                first
+              />
             </Section>
 
-            <Section title="Food">
-              <Row label="Dietary" value={profile.dietary.tags.join(', ') || '—'} first />
-              {profile.dietary.note ? <Row label="Note" value={profile.dietary.note} /> : null}
+            <Section title="Food" footer={CAPTIONS.dietary}>
+              <Row
+                label="Dietary needs"
+                value={dietaryValue(profile)}
+                onPress={() => setEditing('dietary')}
+                first
+              />
             </Section>
           </>
         )}
+
+        {/* One line, at the foot, rather than Swift's per-section footer: a single PUT writes all
+            seven fields, so blaming the section you last touched would be a guess. */}
+        {failed ? (
+          <View style={styles.block}>
+            <ThemedText type="detail" themeColor="alert">
+              Couldn&rsquo;t save that. It&rsquo;s still here — the next change tries again.
+            </ThemedText>
+          </View>
+        ) : null}
       </ScrollView>
+
+      {loadedProfile ? (
+        <Sheets
+          profile={loadedProfile}
+          editing={editing}
+          onClose={() => setEditing(null)}
+          edit={edit}
+          pick={pick}
+        />
+      ) : null}
     </SafeAreaView>
+  );
+}
+
+/**
+ * The six editors, each behind the one sheet shell.
+ *
+ * Split from the screen so the branches above stay a readable list of rows. `visible` per sheet
+ * rather than one sheet with a switched body: `Modal` keyed on content would animate between
+ * fields, and each of these is a separate opening.
+ */
+function Sheets({
+  profile,
+  editing,
+  onClose,
+  edit,
+  pick,
+}: {
+  profile: TravelerProfile;
+  editing: Field | null;
+  onClose: () => void;
+  edit: (changes: Partial<TravelerProfile>) => void;
+  pick: (changes: Partial<TravelerProfile>) => void;
+}) {
+  const picks = { selected: profile.priorities, starred: profile.topPriorities };
+  const fromPicks = (next: { selected: string[]; starred: string[] }) => ({
+    priorities: next.selected,
+    topPriorities: next.starred,
+  });
+  const starsLeft = MAX_STARRED - profile.topPriorities.length;
+
+  return (
+    <>
+      <FieldSheet visible={editing === 'group'} title="Travels with" onClose={onClose}>
+        <ChoiceRow options={GROUPS} value={profile.group} onChange={(group) => pick({ group })} />
+      </FieldSheet>
+
+      <FieldSheet visible={editing === 'explorerStyle'} title="Explores" onClose={onClose}>
+        <ChoiceRow
+          options={STYLES}
+          value={profile.explorerStyle}
+          onChange={(explorerStyle) => pick({ explorerStyle })}
+        />
+      </FieldSheet>
+
+      <FieldSheet visible={editing === 'energy'} title="Walking" onClose={onClose}>
+        <ChoiceRow options={ENERGY} value={profile.energy} onChange={(energy) => pick({ energy })} />
+      </FieldSheet>
+
+      <FieldSheet visible={editing === 'crowds'} title="Crowds" onClose={onClose}>
+        <ChoiceRow options={CROWDS} value={profile.crowds} onChange={(crowds) => pick({ crowds })} />
+      </FieldSheet>
+
+      {/* Stays open: choosing is one pass over the chips and starring is a second. */}
+      <FieldSheet
+        visible={editing === 'interests'}
+        title="Interests"
+        caption={
+          profile.topPriorities.length === 0
+            ? 'Tap to choose. Tap a chosen one again to star it — up to three.'
+            : starsLeft > 0
+              ? `Star ${starsLeft} more. Long-press to remove one.`
+              : 'Those three drive which stops get picked. Long-press to remove one.'
+        }
+        onClose={onClose}
+      >
+        <TagGrid
+          tags={INTERESTS}
+          selected={profile.priorities}
+          starred={profile.topPriorities}
+          onToggle={(tag) => edit(fromPicks(toggleInterest(picks, tag)))}
+          onStar={(tag) => edit(fromPicks(toggleStarred(picks, tag)))}
+        />
+      </FieldSheet>
+
+      <FieldSheet
+        visible={editing === 'dietary'}
+        title="Dietary needs"
+        caption="Applied to every food stop on every trip. Leave it empty if nothing applies."
+        onClose={onClose}
+      >
+        <TagGrid
+          tags={DIETARY_TAGS}
+          selected={profile.dietary.tags}
+          onToggle={(tag) =>
+            edit({ dietary: { ...profile.dietary, tags: toggleTag(profile.dietary.tags, tag) } })
+          }
+        />
+        <FieldTrough>
+          <TextField
+            label="Anything else"
+            value={profile.dietary.note}
+            onChangeText={(note) => edit({ dietary: { ...profile.dietary, note } })}
+            placeholder="No shellfish, low salt…"
+          />
+        </FieldTrough>
+      </FieldSheet>
+    </>
+  );
+}
+
+/**
+ * What the trips you kept add up to.
+ *
+ * `spend` is real spend through the same summation the trip screen's budget bar uses, so a cost
+ * corrected on a trip shows up here too. Rendered only once the figures arrive — a record of three
+ * dashes says nothing an absent record does not.
+ */
+function Record({ stats }: { stats: ProfileStats }) {
+  return (
+    <View style={styles.record}>
+      <Figure label="Trips" value={String(stats.trips)} />
+      <Figure label="Places" value={String(stats.places)} />
+      <Figure label="Spent" value={formatMoney(stats.spend)} money />
+    </View>
+  );
+}
+
+function Figure({ label, value, money }: { label: string; value: string; money?: boolean }) {
+  return (
+    <View style={styles.figure}>
+      <ThemedText type="moneyLarge" themeColor={money ? 'money' : 'foreground'}>
+        {value}
+      </ThemedText>
+      <ThemedText type="label" themeColor="muted">
+        {label}
+      </ThemedText>
+    </View>
   );
 }
 
@@ -154,34 +440,101 @@ function Avatar({ profile }: { profile: TravelerProfile | null }) {
 
 function portraitSentence(profile: TravelerProfile | null): string {
   if (!profile) return 'Your travel profile shapes every plan you get.';
-  const group = GROUP_LABELS[profile.group]?.toLowerCase() ?? 'travelling';
-  const energy = ENERGY_LABELS[profile.energy]?.toLowerCase() ?? '';
-  return `Travelling ${group === 'solo' ? 'solo' : `as a ${group}`}${energy ? `, ${energy}` : ''}.`;
+  const group = labelOf(GROUPS, profile.group).toLowerCase();
+  const energy = labelOf(ENERGY, profile.energy).toLowerCase();
+  return `Travelling ${group === 'solo' ? 'solo' : `as a ${group}`}, ${energy}.`;
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** A grouped section: a header above, rows in a surface, and the explanation underneath — which is
+ *  where the native idiom puts it, rather than above the control it describes. */
+function Section({
+  title,
+  footer,
+  children,
+}: {
+  title: string;
+  footer?: string;
+  children: React.ReactNode;
+}) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionHeader}>{title}</Text>
       <View style={styles.sectionBody}>{children}</View>
+      {footer ? <Text style={styles.sectionFooter}>{footer}</Text> : null}
     </View>
   );
 }
 
-function Row({ label, value, first }: { label: string; value: string; first?: boolean }) {
+/**
+ * Where the label and its value stop sharing a line.
+ *
+ * The same threshold `FieldRow` in `form.tsx` uses, for the same measured reason: these rows carry
+ * a label *and* a value on one line, and at the accessibility sizes the label takes the row and
+ * the value truncates to nothing — "Travels with C.", "Explores Off…". A value nobody can read is
+ * worse than a taller row, and the platform agrees: an iOS Form row stacks rather than letting the
+ * two fight.
+ */
+const STACK_ABOVE_SCALE = 1.2;
+
+/** Label left, current value right, chevron last — and the whole row is the target. */
+function Row({
+  label,
+  value,
+  onPress,
+  first,
+}: {
+  label: string;
+  value: string;
+  onPress: () => void;
+  first?: boolean;
+}) {
+  // `fontScale` from the hook rather than `PixelRatio.getFontScale()`: this one re-renders when the
+  // reader changes the setting instead of holding whatever it was at mount.
+  const { fontScale } = useWindowDimensions();
+  const stacked = fontScale > STACK_ABOVE_SCALE;
+
   return (
-    <View style={[styles.row, M.separators && !first && styles.rowSeparated]}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue} numberOfLines={2}>
-        {value}
-      </Text>
-    </View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, ${value}`}
+      style={({ pressed }) => [
+        styles.row,
+        M.separators && !first && styles.rowSeparated,
+        // Darken on press, never lighten.
+        pressed && styles.rowPressed,
+      ]}
+      android_ripple={{ color: Colors.pressed }}
+    >
+      <View style={[styles.rowText, stacked && styles.rowTextStacked]}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text
+          style={[styles.rowValue, stacked && styles.rowValueStacked]}
+          // Stacked it has the full width, so let it wrap rather than truncate.
+          numberOfLines={stacked ? 2 : 1}
+        >
+          {value}
+        </Text>
+      </View>
+      <SymbolView
+        name={{ ios: 'chevron.right', android: 'chevron_right' }}
+        tintColor={Colors.muted}
+        size={13}
+        fallback={<Text style={styles.chevron}>›</Text>}
+      />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.canvas },
-  scroll: { paddingBottom: Spacing.regular * 2 },
+  /**
+   * Clears the floating tab bar, and the height is functional rather than generous. The bar floats
+   * over the content and its safe-area inset does not reach this scroll view, so without this the
+   * last section sits behind it. The Swift app carries the same margin for the same reason
+   * (`Token.barHeight + Token.gapRows`).
+   */
+  scroll: { paddingBottom: BarHeight + Spacing.regular },
 
   avatarBlock: {
     alignItems: 'center',
@@ -201,6 +554,19 @@ const styles = StyleSheet.create({
   avatarFallback: { color: Colors.muted, fontSize: 32 },
   portrait: { color: Colors.muted, fontSize: 15, textAlign: 'center' },
 
+  record: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.read,
+    marginBottom: Spacing.tight,
+    backgroundColor: Colors.panel,
+    borderRadius: Radius.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+    paddingVertical: Spacing.rows,
+  },
+  // Thirds rather than a gap, so the three figures read as one row of columns.
+  figure: { flex: 1, alignItems: 'center', gap: Spacing.hair },
+
   section: { marginTop: Spacing.compact },
   sectionHeader: {
     color: M.headerColor,
@@ -217,20 +583,37 @@ const styles = StyleSheet.create({
     marginHorizontal: M.sectionInset,
     overflow: 'hidden',
   },
+  sectionFooter: {
+    color: Colors.muted,
+    fontSize: 13,
+    marginTop: Spacing.tight,
+    marginHorizontal: M.sectionInset + Spacing.read,
+  },
+
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.read,
+    gap: Spacing.tight,
     minHeight: M.rowMinHeight,
     paddingHorizontal: Spacing.read,
     paddingVertical: Spacing.tight,
   },
-  // Inset to the label's leading edge, the way a native grouped list draws them.
-  rowSeparated: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.cardBorder,
+  rowSeparated: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
+  rowPressed: { backgroundColor: Colors.pressed },
+  // Label and value share a line until the type outgrows it, then stack — see STACK_ABOVE_SCALE.
+  rowText: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.read,
   },
+  rowTextStacked: { flexDirection: 'column', alignItems: 'flex-start', gap: 2 },
   rowLabel: { color: Colors.foreground, fontSize: M.rowFontSize },
+  // Takes the room the label leaves, so a long value truncates rather than pushing the chevron.
   rowValue: { color: Colors.muted, fontSize: M.rowFontSize, flexShrink: 1, textAlign: 'right' },
+  rowValueStacked: { textAlign: 'left' },
+  chevron: { color: Colors.muted, fontSize: 17 },
+
+  block: { paddingHorizontal: Spacing.read, gap: Spacing.rows },
 });

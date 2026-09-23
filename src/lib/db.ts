@@ -617,6 +617,27 @@ export function setTripChatSession(id: string, sessionId: string | null): void {
   db.prepare(`UPDATE trips SET chat_session_id = ? WHERE id = ?`).run(sessionId, id);
 }
 
+/**
+ * Destination and stored itinerary for every kept trip, for the profile's lifetime figures.
+ *
+ * **Separate from `listTrips` on purpose, and the purpose is the comment on that query**: it
+ * dropped `itinerary_json` because every caller selected it and threw it away, which meant reading
+ * every stored plan off disk to render a list of destinations and dates. The profile's spend figure
+ * genuinely needs those itineraries, so it gets a query that says so — and the memories wall, which
+ * is the hot path, keeps not paying for it.
+ */
+export function listTripItineraries(
+  ownerId: string = LEGACY_OWNER
+): { destination: string; itinerary_json: string }[] {
+  const owners = readableOwners(ownerId);
+  return db
+    .prepare(
+      `SELECT destination, itinerary_json
+       FROM trips WHERE status = 'saved' AND owner_id IN (${owners.map(() => "?").join(",")})`
+    )
+    .all(...owners) as { destination: string; itinerary_json: string }[];
+}
+
 /** Exactly the columns `listTrips` selects — deliberately narrower than `TripRow`, which
  *  describes the whole table. The old signature claimed `TripRow` while the query returned
  *  neither `run_id` nor `user_answers_json`, so the type was quietly lying about three fields. */

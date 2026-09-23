@@ -1,13 +1,54 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 
 import type {
+  CrowdPreference,
+  EnergyLevel,
+  ExplorerStyle,
   GenerateRequest,
+  GroupType,
   PlanDraft,
   TravelerProfile,
   TripLogistics,
   UserAnswers,
 } from '@/api/types';
 import { closestTier, tripDays } from '@/lib/tiers';
+
+/**
+ * The four option vocabularies, in one place.
+ *
+ * They were written twice — as `{value,label}[]` in the plan wizard and as `Record<T, string>`
+ * label maps on the Profile tab — which is two chances for the same enum to be described two ways
+ * to the same person. Both screens now read these, and the label maps are gone.
+ */
+export const GROUPS: { value: GroupType; label: string }[] = [
+  { value: 'solo', label: 'Solo' },
+  { value: 'couple', label: 'Couple' },
+  { value: 'family_with_kids', label: 'Family with kids' },
+  { value: 'other', label: 'Something else' },
+];
+
+export const STYLES: { value: ExplorerStyle; label: string }[] = [
+  { value: 'packed', label: 'See as much as possible' },
+  { value: 'relaxed', label: 'A few things, done well' },
+  { value: 'offbeat', label: 'Off the beaten path' },
+  { value: 'mixed', label: 'A bit of both' },
+];
+
+export const ENERGY: { value: EnergyLevel; label: string }[] = [
+  { value: 'high', label: 'Happy to walk all day' },
+  { value: 'moderate', label: 'A comfortable amount' },
+  { value: 'low', label: 'Prefer it gentle' },
+];
+
+export const CROWDS: { value: CrowdPreference; label: string }[] = [
+  { value: 'love', label: 'Love the buzz' },
+  { value: 'mixed', label: 'Some of each' },
+  { value: 'avoid', label: 'Keep it quiet' },
+];
+
+/** The label for one value, or the raw value if somebody adds an enum case and forgets the list. */
+export const labelOf = <T extends string>(options: { value: T; label: string }[], value: T) =>
+  options.find((option) => option.value === value)?.label ?? value;
 
 /** Interests, from `UserAnswers.swift`. */
 export const INTERESTS = [
@@ -41,7 +82,9 @@ export const DIETARY_TAGS = [
   'Nut allergy',
 ];
 
-function emptyDraft(): PlanDraft {
+/** The starting draft. Exported so the Profile tab can seed a first profile from it rather than
+ *  writing a second set of defaults that would drift from these. */
+export function emptyDraft(): PlanDraft {
   return {
     destination: '',
     startDate: '',
@@ -94,23 +137,49 @@ export function usePlanDraft(): Ctx {
   return ctx;
 }
 
-/** Toggle a tag in a list. Used by both interest and dietary grids. */
+/** Toggle a tag in a list. Used by the dietary grid, and by `toggleInterest` below. */
 export const toggleTag = (list: string[], tag: string) =>
   list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag];
 
 /**
- * Star an interest, capped, and never starred without also being selected.
+ * The interest grid's two rules, over a plain pair of lists.
  *
- * Order is preserved because the order is the weighting: the server reads the first three.
+ * **Lists rather than a `PlanDraft`, because two screens hold the same pair under different
+ * names** — the wizard calls them `interests`/`starredInterests`, the Profile tab receives them
+ * from the server as `priorities`/`topPriorities`. Keying the rules to one screen's field names is
+ * what made the other screen inline its own copy.
+ *
+ * And they were already drifting: rule one below lived nowhere but a `.filter()` inside the
+ * wizard's JSX, which is why it had never been tested.
  */
-export function toggleStar(draft: PlanDraft, tag: string): Partial<PlanDraft> {
-  if (draft.starredInterests.includes(tag)) {
-    return { starredInterests: draft.starredInterests.filter((t) => t !== tag) };
+export type Picks = { selected: string[]; starred: string[] };
+
+/** Tap a chip: select or deselect. **Deselecting takes the star with it** — a starred tag that is
+ *  no longer chosen would be weighting a plan by something the traveller just removed. */
+export function toggleInterest(picks: Picks, tag: string): Picks {
+  const selected = toggleTag(picks.selected, tag);
+  return selected.includes(tag)
+    ? { selected, starred: picks.starred }
+    : { selected, starred: picks.starred.filter((t) => t !== tag) };
+}
+
+/**
+ * Tap a chosen chip's star: star or unstar.
+ *
+ * Two rules beyond the obvious. **Starring a tag that was not chosen chooses it too**, so a star
+ * is never orphaned. And **the fourth star is a silent no-op, not an eviction** of the oldest —
+ * quietly dropping someone's earlier choice to honour their latest is the worse surprise.
+ *
+ * Order is preserved because the order *is* the weighting: the server reads the first three.
+ */
+export function toggleStarred(picks: Picks, tag: string): Picks {
+  if (picks.starred.includes(tag)) {
+    return { selected: picks.selected, starred: picks.starred.filter((t) => t !== tag) };
   }
-  if (draft.starredInterests.length >= MAX_STARRED) return {};
+  if (picks.starred.length >= MAX_STARRED) return picks;
   return {
-    starredInterests: [...draft.starredInterests, tag],
-    interests: draft.interests.includes(tag) ? draft.interests : [...draft.interests, tag],
+    selected: picks.selected.includes(tag) ? picks.selected : [...picks.selected, tag],
+    starred: [...picks.starred, tag],
   };
 }
 
