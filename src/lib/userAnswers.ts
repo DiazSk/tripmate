@@ -117,14 +117,46 @@ export function sanitizeLogistics(
  * or a `25:99` arrival in front of the model. Applying this at each barrier — `reconcileTrip`,
  * `buildEditContext` — means neither has to remember to.
  */
+/** Deliberately low. These are places and categories a person typed, not a catalogue — a list
+ *  longer than this is a paste accident, and every entry costs prompt tokens on every call. */
+const MAX_NAMED_ITEMS = 12;
+
+/**
+ * Trims, drops blanks, de-duplicates case-insensitively, caps the count, and returns `undefined`
+ * for an empty result.
+ *
+ * `undefined` rather than `[]` on purpose: the guardrail and the prompt both branch on "did the
+ * traveler name anything", and an empty array reads as a demand for nothing rather than as silence.
+ */
+export function sanitizeNamedList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value) {
+    const text = sanitizeFreeText(raw);
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= MAX_NAMED_ITEMS) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 export function sanitizeAnswers(answers: UserAnswers): UserAnswers {
   const party = sanitizeParty(answers.party);
   const logistics = sanitizeLogistics(answers.logistics);
   const groupOther = sanitizeFreeText(answers.groupOther);
+  const mustInclude = sanitizeNamedList(answers.mustInclude);
+  const avoid = sanitizeNamedList(answers.avoid);
   return {
     ...answers,
     ...(party ? { party } : {}),
     ...(groupOther ? { groupOther } : {}),
+    ...(mustInclude ? { mustInclude } : { mustInclude: undefined }),
+    ...(avoid ? { avoid } : { avoid: undefined }),
+    constraintsNote: sanitizeFreeText(answers.constraintsNote),
     logistics,
   };
 }

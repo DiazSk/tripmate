@@ -246,6 +246,23 @@ export interface UserAnswers {
   /** Mobility needs stated directly, rather than inferred from `energy`. Absent means nothing was
    *  stated — NOT that the traveler has no needs. */
   accessibility?: AccessibilityNeeds | null;
+  /**
+   * Places the traveler named outright, as distinct from an interest tag. "I like museums" is
+   * `priorities`; "I have to see the Louvre" is this, and a plan missing it has failed however
+   * good the rest is. Structured rather than folded into `constraintsNote` because
+   * `evaluateItinerary`'s `required` check needs a list it can match against, which prose does not
+   * give it. Absent means none were named.
+   */
+  mustInclude?: string[];
+  /** Hard negative constraints — "no nightclubs", "no seafood". Absent means none were named. */
+  avoid?: string[];
+  /**
+   * Anything already booked, off-limits or constraining that the structured fields don't cover:
+   * transport availability, a reservation, whether the budget is per person. Passed verbatim to
+   * the model and never parsed — the checks that need machine-readable data have their own fields
+   * above. Absent means nothing was said, which is not the same as no constraints existing.
+   */
+  constraintsNote?: string | null;
 }
 
 /** Asked directly rather than derived: `energy` answers "how much do you want to walk", which is
