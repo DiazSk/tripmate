@@ -2,6 +2,7 @@ import { fetchWithSession } from "./session";
 import { createSseParser } from "./sse";
 import type {
   CandidatePoi,
+  ChatTurn,
   CreateTripRequest,
   GenerateFailure,
   GenerateHandlers,
@@ -16,6 +17,7 @@ import type {
   StageEvent,
   StreamedStop,
   Trip,
+  TripEdit,
   TripSummary,
   TripUpdate,
   TravelerProfile,
@@ -171,13 +173,15 @@ export async function promoteTrip(
  */
 export async function updateTripItinerary(
   id: string,
-  itinerary: Itinerary
+  itinerary: Itinerary,
+  /** Set after a chat turn, so the next one resumes the conversation this plan came out of. */
+  chatSessionId?: string | null
 ): Promise<TripUpdate | undefined> {
   try {
     const res = await fetchWithSession(`/api/trips/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itinerary }),
+      body: JSON.stringify({ itinerary, ...(chatSessionId ? { chatSessionId } : {}) }),
     });
     if (!res.ok) return undefined;
     return (await res.json()) as TripUpdate;
@@ -388,5 +392,58 @@ export async function saveProfile(profile: TravelerProfile): Promise<boolean> {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * `POST /api/trip-edit` — ask the planner for a change and take the plan it sends back.
+ *
+ * **No `dayIndex`, deliberately, where the Swift app sends `activeDay`.** That scope-locks the
+ * conversation to the day you happen to be looking at, so "move the market to day 3" is refused by
+ * the applier rather than done. A change is a thing you ask of a trip.
+ *
+ * The route does NOT persist the plan — it returns it, and the caller writes it back with
+ * `updateTripItinerary`. `undefined` is the transport failure, per the house rule; there is no
+ * partial success to represent, since the model either answered or it did not.
+ */
+export async function editTrip(params: {
+  trip: TripSummary;
+  itinerary: Itinerary;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  tripId: string;
+  userAnswers: unknown | null;
+  sessionId: string | null;
+  syncedHash: string | null;
+}): Promise<TripEdit | undefined> {
+  try {
+    const res = await fetchWithSession('/api/trip-edit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'chat', ...params }),
+    });
+    if (!res.ok) return undefined;
+    return (await res.json()) as TripEdit;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `GET /api/trip-chat` — the conversation this trip already had, oldest first.
+ *
+ * Worth the call because the transcript lives on the server, not on the device: without it,
+ * reopening a trip shows an empty sheet for a conversation the planner still remembers, and the
+ * next reply arrives with no visible question. An empty list is the honest answer for a trip that
+ * has never been asked anything, so a failure returns `[]` too — there is nothing a reader could
+ * do differently, and an error strip over a chat nobody has started yet is noise.
+ */
+export async function chatTurns(tripId: string): Promise<ChatTurn[]> {
+  try {
+    const res = await fetchWithSession(`/api/trip-chat?tripId=${encodeURIComponent(tripId)}`, {});
+    if (!res.ok) return [];
+    const body = (await res.json()) as { turns?: ChatTurn[] };
+    return body.turns ?? [];
+  } catch {
+    return [];
   }
 }

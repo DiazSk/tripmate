@@ -12,10 +12,18 @@ import {
 
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
-import { discardTrip, getTrip, promoteTrip, updateTripItinerary } from '@/api/tripMateApi';
-import type { Stop, Trip } from '@/api/types';
+import {
+  chatTurns,
+  discardTrip,
+  editTrip,
+  getTrip,
+  promoteTrip,
+  updateTripItinerary,
+} from '@/api/tripMateApi';
+import type { ChatTurn, Stop, Trip } from '@/api/types';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { BudgetBar } from '@/components/budget-bar';
+import { ChatSheet } from '@/components/chat-sheet';
 import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
 import { PrimaryButton } from '@/components/form';
@@ -57,6 +65,7 @@ export default function TripDetail() {
    * inherit the last stop asked about.
    */
   const [probe, setProbe] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const chat = useChat(id, trip, setTrip);
 
   function closeSheet() {
     setAdding(false);
@@ -121,8 +130,21 @@ export default function TripDetail() {
             <View style={styles.chromeRow}>
               <DayStrip count={days.length} current={day} onSelect={setDay} />
               <FaceToggle face={face} onChange={setFace} />
-              {/* Jade, unlike the strip and the toggle beside it — this one *does* something to
-                  the plan, where those two only change what you are looking at. */}
+              {/* Beside + for the reason + is here: the trailing end of this row is the toolbar,
+                  and both act on the plan below it — the same pairing `TripHeaderRow` makes in the
+                  Swift app. Muted rather than jade, also copied from there: two filled jade
+                  targets side by side read as two primary actions, and adding one stop is the
+                  ordinary one. Not the nav bar's `headerRight`, which is where this started: Expo
+                  Go parks its own floating dev button exactly there and swallows every tap. */}
+              <Pressable
+                onPress={chat.open}
+                accessibilityRole="button"
+                accessibilityLabel="Ask for a change"
+                style={({ pressed }) => [styles.ask, pressed && styles.askPressed]}>
+                <ThemedText type="label" themeColor="foreground">
+                  Ask
+                </ThemedText>
+              </Pressable>
               <Pressable
                 onPress={() => setAdding(true)}
                 accessibilityRole="button"
@@ -187,6 +209,15 @@ export default function TripDetail() {
         }}
       />
 
+      <ChatSheet
+        visible={chat.visible}
+        onClose={chat.close}
+        turns={chat.turns}
+        replying={chat.replying}
+        failure={chat.failure}
+        onSend={chat.send}
+      />
+
       {trip.status === 'draft' ? (
         <KeepShelf
           trip={trip}
@@ -195,6 +226,101 @@ export default function TripDetail() {
       ) : null}
     </View>
   );
+}
+
+/**
+ * The edit conversation for the open trip.
+ *
+ * A hook rather than state in the screen because the screen is already holding six pieces of view
+ * state, and none of the seven here is one: this is a conversation, its two opaque continuation
+ * tokens, and the plan they produce.
+ *
+ * **`sessionId` is what makes a follow-up a follow-up.** It seeds from `trip.chatSessionId` — the
+ * session the itinerary was *generated* in — so the first question inherits the planner's own
+ * reasoning about this trip rather than a fresh reading of its output. `syncedHash` starts null on
+ * purpose: this device has not been told what the model believes, so the first turn must resync.
+ *
+ * Neither token is ever inspected. A null `syncedHash` coming back means the applier rejected
+ * something and the model's picture is now wrong, and echoing that null is precisely what forces
+ * the correction next turn.
+ */
+function useChat(
+  id: string,
+  trip: Trip | null | undefined,
+  setTrip: React.Dispatch<React.SetStateAction<Trip | null | undefined>>
+) {
+  const [visible, setVisible] = useState(false);
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [replying, setReplying] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const session = useRef<{ id: string | null; hash: string | null }>({ id: null, hash: null });
+  const restored = useRef(false);
+
+  function open() {
+    setVisible(true);
+    // The transcript lives on the server, so a reopened trip has a conversation this device has
+    // never seen. Once per mount: after that, `turns` is the live copy and re-reading would
+    // duplicate the turn that is still in flight.
+    if (restored.current || !trip) return;
+    restored.current = true;
+    session.current.id = trip.chatSessionId;
+    chatTurns(id).then((saved) => saved.length && setTurns(saved));
+  }
+
+  async function send(text: string): Promise<boolean> {
+    if (!trip) return false;
+    setTurns((prior) => [...prior, { role: 'user', content: text }]);
+    setReplying(true);
+    setFailure(null);
+    try {
+      const edit = await editTrip({
+        trip: {
+          id: trip.id,
+          destination: trip.destination,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          budget: trip.budget,
+          status: trip.status,
+        },
+        itinerary: trip.itinerary,
+        // The whole conversation, because a turn only makes sense after the one before it — and
+        // the route falls back to rebuilding the full prompt from these when the session is gone.
+        messages: [...turns, { role: 'user' as const, content: text }],
+        tripId: trip.id,
+        userAnswers: trip.userAnswers,
+        sessionId: session.current.id,
+        syncedHash: session.current.hash,
+      });
+      if (!edit) {
+        // Dropped, not left greyed out: this array mirrors the conversation the *server* has, and
+        // after a failure it has nothing. The sheet keeps the text so nothing is retyped.
+        setTurns((prior) => prior.slice(0, -1));
+        setFailure("That didn't reach the planner. Check your connection and try again.");
+        return false;
+      }
+      session.current = { id: edit.sessionId, hash: edit.syncedHash };
+      setTurns((prior) => [
+        ...prior,
+        {
+          role: 'assistant',
+          content: edit.reply ?? '',
+          warnings: edit.warnings,
+          rejected: edit.rejected,
+        },
+      ]);
+      setTrip({ ...trip, itinerary: edit.itinerary });
+      // Persisted after the plan is on screen, and NOT rolled back if this fails. The edit is
+      // real, the model has acted on it, and a plan that reverts under you is worse than one that
+      // needs asking for again — the opposite bargain from `onAdd`, which knew its own answer.
+      const saved = await updateTripItinerary(trip.id, edit.itinerary, edit.sessionId);
+      if (!saved) setFailure("The plan changed, but saving it failed. It may not survive a reopen.");
+      return true;
+    } finally {
+      setReplying(false);
+    }
+  }
+
+  return { visible, open, close: () => setVisible(false), turns, replying, failure, send };
 }
 
 /**
@@ -493,6 +619,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   toggleHalfActive: { backgroundColor: Colors.surfaceDeep },
+  // The face toggle's pill, since this reads as the third control in that group rather than a
+  // second + — its height comes from the same 3pt padding plus a `label` line.
+  ask: {
+    height: 40,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.control,
+    paddingHorizontal: Spacing.rows,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  askPressed: { backgroundColor: Colors.pressed },
   add: {
     width: 40,
     height: 40,

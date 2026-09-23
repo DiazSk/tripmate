@@ -363,3 +363,33 @@ export interface PlaceSearchResult {
   places: FoundPlace[];
   available: boolean;
 }
+
+/**
+ * One turn of the edit conversation.
+ *
+ * `warnings` and `rejected` ride the turn they belong to rather than living beside the transcript,
+ * because a restored conversation has to read the same as a live one — `GET /api/trip-chat` spreads
+ * each turn's stored `meta_json` back into this shape for exactly that reason.
+ */
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  /** Skill §12 alerts: a day now too long, a leg that no longer fits, a budget overshoot. */
+  warnings?: string[];
+  /** Ops the applier refused. Rare, and silence here would read as "done" for a turn that partly wasn't. */
+  rejected?: string[];
+}
+
+/** What `POST /api/trip-edit` answers in chat mode. `itinerary` is the whole updated plan. */
+export interface TripEdit {
+  itinerary: Itinerary;
+  reply: string | null;
+  warnings: string[];
+  rejected: string[];
+  /** 1-based, computed server-side from the ops that actually applied. */
+  daysModified: number[];
+  /** Both opaque — echoed back untouched on the next turn, never inspected. A null `syncedHash`
+   *  is the server saying its picture is stale, and echoing the null is what forces a resync. */
+  sessionId: string | null;
+  syncedHash: string | null;
+}
