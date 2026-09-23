@@ -562,8 +562,22 @@ export async function runGeneration(
     const realMinutes: LegMinutesLookup = (from, to) =>
       byPair.get(`${from.name.trim()}→${to.name.trim()}`) ?? null;
 
-    travelFindings = evaluateItinerary(itinerary, { realMinutes })
-      .filter((g) => g.rule === "travel")
+    // Every deterministic finding, not just the travel ones. The filter used to be here because
+    // `travel` was the only rule this path could evaluate honestly — the others needed data the
+    // runner had but never passed. It has `logistics` and `mustInclude`/`avoid` now, and a
+    // critique told "the Louvre appears twice" fixes it, where a critique told nothing does not.
+    //
+    // `logistics` is the sanitized object already resolved above, not the raw answers. `budget`
+    // is the one rule deliberately still excluded: the critique prompt already receives the
+    // budget number separately and states any overspend in its own words, so passing it here
+    // would put the same finding in twice.
+    travelFindings = evaluateItinerary(itinerary, {
+      realMinutes,
+      logistics,
+      mustInclude: (userAnswers as UserAnswers | undefined)?.mustInclude,
+      avoid: (userAnswers as UserAnswers | undefined)?.avoid,
+    })
+      .filter((g) => g.rule !== "budget")
       .map((g) => g.message)
       .concat(dietaryFindings);
   };
