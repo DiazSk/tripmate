@@ -75,7 +75,12 @@ and a stop is a viewpoint or a sunset-dependent scene, place it in the slot near
 ### §3a. General
 
 Every stop needs:
-- A realistic estimated cost in USD (0 is fine for free attractions).
+- A realistic estimated cost in USD — what the **whole party** pays at that stop, never one
+  person's share (0 is fine for free attractions). Where the price you know is per head, multiply
+  it by the party size (§9) before you write it: a $15 ticket for a family of four is written as
+  60, not 15. Every surface that reads this figure — the budget bar the traveler looks at, the
+  day's spend tiles, the §12d ceiling check — treats it as the party total and does no
+  multiplying of its own, so a per-head number left unmultiplied understates the trip.
 - A start time — times across a day's stops must be sequential and non-overlapping.
 - A short duration label (e.g. "1 hour", "45 minutes").
 - A category: "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit"
@@ -447,6 +452,9 @@ Repeat the day heading and stop list for every day of the trip, in order. Omit t
 the last day only. Every field named above (time, category, duration label, cost, lat/lng, why,
 note) must be present for every stop, in that order, so the structure is identical across stops and
 days.
+
+Both `$cost` fields — the lodging line's and each stop's — are party totals, already multiplied out
+per §3a. Write the number the whole group pays, never a per-person price.
 
 ## §12. Guardrails — validate before committing a change
 

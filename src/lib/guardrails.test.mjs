@@ -191,7 +191,7 @@ test("no logistics means no commitment findings at all", () => {
   );
 });
 
-/* --- §0 rank 4: what the traveler named outright, and §5 party pricing --- */
+/* --- §0 rank 4: what the traveler named outright --- */
 
 const oneStop = (name) => ({
   tier: "mid-range",
@@ -243,27 +243,6 @@ test("an exclusion matches whole words only, so 'bar' does not fire on Barcelona
   assert.deepEqual(
     evaluateItinerary(oneStop("Barcelona Cathedral"), { avoid: ["bar"] })
       .filter((g) => g.rule === "required"),
-    []
-  );
-});
-
-test("party size multiplies per-person costs before the budget is judged", () => {
-  // $20 a head for four is $80, which clears a $100 budget; the same plan against a $50 budget
-  // does not.
-  assert.deepEqual(
-    evaluateItinerary(oneStop("Louvre Museum"), { budget: 100, partySize: 4 })
-      .filter((g) => g.rule === "party-budget"),
-    []
-  );
-  const over = evaluateItinerary(oneStop("Louvre Museum"), { budget: 50, partySize: 4 })
-    .filter((g) => g.rule === "party-budget");
-  assert.equal(over.length, 1);
-  assert.match(over[0].message, /4 people/);
-});
-
-test("no party size means the plain budget check, unchanged", () => {
-  assert.deepEqual(
-    evaluateItinerary(oneStop("Louvre Museum"), { budget: 50 }).filter((g) => g.rule === "party-budget"),
     []
   );
 });
