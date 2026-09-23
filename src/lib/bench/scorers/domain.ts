@@ -1,3 +1,4 @@
+import { ARRIVAL_BUFFER_MIN, DEPARTURE_BUFFER_MIN } from "../../itinerary";
 import { haversineKm } from "../../travelTime";
 import { knownPois } from "../fixtures";
 import type { BenchFixture } from "../fixtures";
@@ -658,8 +659,10 @@ const SLOT_BOUNDS: Record<Slot, { startMin: number; endMin: number }> = {
   Evening: { startMin: 17 * 60, endMin: 23 * 60 },
 };
 
-/** Hours a traveler loses to immigration, bags and the transfer in — skill §4c-bis. */
-export const TRANSFER_BUFFER_MIN = 90;
+/** The arrival and departure buffers. Defined in `../../itinerary` and re-exported here, because
+ *  `guardrails.ts` needs them too and cannot import this file — see the docblock there for the
+ *  import graph that forbids it. */
+export { ARRIVAL_BUFFER_MIN, DEPARTURE_BUFFER_MIN } from "../../itinerary";
 
 /**
  * Is this slot actually available to plan into?
@@ -681,11 +684,11 @@ export function usableSlot(
 
   if (dayIndex === 0 && logistics.arrivalTime) {
     const landed = parseClock(logistics.arrivalTime);
-    if (landed !== null && bounds.endMin <= landed + TRANSFER_BUFFER_MIN) return false;
+    if (landed !== null && bounds.endMin <= landed + ARRIVAL_BUFFER_MIN) return false;
   }
   if (dayIndex === dayCount - 1 && logistics.departureTime) {
     const leaves = parseClock(logistics.departureTime);
-    if (leaves !== null && bounds.startMin >= leaves - TRANSFER_BUFFER_MIN) return false;
+    if (leaves !== null && bounds.startMin >= leaves - DEPARTURE_BUFFER_MIN) return false;
   }
   return true;
 }
