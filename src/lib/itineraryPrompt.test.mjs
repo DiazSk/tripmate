@@ -106,3 +106,24 @@ test("a preferences object missing `tags` does not take the generation down", ()
   // And the normal shape is unchanged.
   assert.match(build({ tags: ["Food & Drink"], vibe: null }), /Food & Drink/);
 });
+
+test("the generate prompt states which constraint wins when two conflict", () => {
+  const prompt = buildGeneratePrompt({
+    destination: "Kyoto",
+    startDate: "2026-09-19",
+    endDate: "2026-09-22",
+    budget: 3000,
+    tier: "mid-range",
+    weather: [],
+  });
+  assert.match(prompt, /when two of these conflict/i);
+  // The ordering itself, not just the fact that an ordering exists.
+  assert.ok(
+    prompt.indexOf("Fixed commitments") < prompt.indexOf("Primary (starred) interests"),
+    "commitments must be listed above interests"
+  );
+  assert.ok(
+    prompt.indexOf("Safety and accessibility") < prompt.indexOf("Traveler profile"),
+    "accessibility must be listed above pace"
+  );
+});
