@@ -278,3 +278,41 @@ export type GenerateFailure =
   | { kind: 'throttled'; message: string }
   | { kind: 'spendCap'; message: string }
   | { kind: 'failed'; message: string };
+
+/**
+ * The categories the place search offers, exactly as `GET /api/place-search` spells them.
+ *
+ * The same seven on every client — the web's control, the Swift app's chips and these. The list
+ * is deliberately short: a picker with forty options is a taxonomy somebody has to learn, and
+ * free text covers the rest.
+ */
+export const PLACE_CATEGORIES = ['cafe', 'restaurant', 'bar', 'sights', 'park', 'shop', 'hotel'] as const;
+
+export type PlaceCategory = (typeof PLACE_CATEGORIES)[number] | 'place';
+
+/** One result from the place search. Everything past `category` is provider-dependent. */
+export interface FoundPlace {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  category: PlaceCategory;
+  address?: string;
+  rating?: number;
+  openingHours?: string;
+  cuisine?: string;
+}
+
+/**
+ * A search's answer, with the house distinction intact.
+ *
+ * `available: false` is **"we could not ask"** — Overpass rate-limited or timed out. An empty
+ * `places` with `available: true` is "there are no cafes here". Saying the second when the first
+ * is true is a lie about the neighbourhood, which is why the flag exists rather than an empty
+ * array standing for both.
+ */
+export interface PlaceSearchResult {
+  provider: 'google' | 'osm';
+  places: FoundPlace[];
+  available: boolean;
+}

@@ -12,8 +12,9 @@ import {
 
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
-import { discardTrip, getTrip, promoteTrip } from '@/api/tripMateApi';
+import { discardTrip, getTrip, promoteTrip, updateTripItinerary } from '@/api/tripMateApi';
 import type { Trip } from '@/api/types';
+import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
 import { PrimaryButton } from '@/components/form';
@@ -21,6 +22,7 @@ import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
+import { regionForStops } from '@/lib/mapRegion';
 
 export default function TripDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,6 +46,7 @@ export default function TripDetail() {
    */
   const [mapBuilt, setMapBuilt] = useState(false);
   if (face === 'map' && !mapBuilt) setMapBuilt(true);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     getTrip(id).then((result) => setTrip(result ?? null));
@@ -98,6 +101,17 @@ export default function TripDetail() {
             <View style={styles.chromeRow}>
               <DayStrip count={days.length} current={day} onSelect={setDay} />
               <FaceToggle face={face} onChange={setFace} />
+              {/* Jade, unlike the strip and the toggle beside it — this one *does* something to
+                  the plan, where those two only change what you are looking at. */}
+              <Pressable
+                onPress={() => setAdding(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Add a stop"
+                style={styles.add}>
+                <ThemedText type="heading" themeColor="accentForeground">
+                  +
+                </ThemedText>
+              </Pressable>
             </View>
           </View>
 
@@ -123,6 +137,28 @@ export default function TripDetail() {
           </View>
         </>
       )}
+
+      <AddPlaceSheet
+        visible={adding}
+        onClose={() => setAdding(false)}
+        itinerary={trip.itinerary}
+        dayIndex={day}
+        // Search around the day you are reading. A day with no stops has no middle to search
+        // from, and the sheet says so rather than defaulting to somewhere arbitrary.
+        centre={centreOf(days[day]?.stops ?? [])}
+        onAdd={async (next, name) => {
+          const previous = trip;
+          // Optimistic, then rolled back on failure. The write is a whole-itinerary overwrite
+          // with no server-side transaction to undo, so the only honest recovery is to put the
+          // object we replaced back exactly as it was.
+          setTrip({ ...trip, itinerary: next });
+          const saved = await updateTripItinerary(trip.id, next);
+          if (saved) return true;
+          setTrip(previous);
+          console.warn(`Adding ${name} did not save`);
+          return false;
+        }}
+      />
 
       {trip.status === 'draft' ? (
         <KeepShelf
@@ -329,6 +365,12 @@ function FaceToggle({
   );
 }
 
+/** The middle of a day's stops, reusing the map's own framing maths. */
+function centreOf(stops: { lat: number; lng: number }[]): { lat: number; lng: number } | null {
+  const region = regionForStops(stops);
+  return region ? { lat: region.latitude, lng: region.longitude } : null;
+}
+
 /** The stop index within `dayIndex`, or null when the emphasis belongs to another day. */
 function stopIndexFor(emphasis: string | null, dayIndex: number): number | null {
   if (!emphasis) return null;
@@ -421,6 +463,14 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   toggleHalfActive: { backgroundColor: Colors.surfaceDeep },
+  add: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chip: {
     minWidth: 36,
     height: 36,

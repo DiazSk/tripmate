@@ -9,7 +9,9 @@ import type {
   GenerationResult,
   GeocodedPlace,
   Itinerary,
+  PlaceCategory,
   PlacePhoto,
+  PlaceSearchResult,
   StageEvent,
   StreamedStop,
   Trip,
@@ -136,6 +138,59 @@ export async function promoteTrip(
     });
     if (!res.ok) return undefined;
     return (await res.json()) as TripUpdate;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Saves an itinerary onto a trip that is already kept.
+ *
+ * The same `PATCH` `promoteTrip` uses, without the status flip — adding a stop is an edit to a
+ * saved trip, not a promotion. **The whole itinerary goes over the wire**, because there is no
+ * single-stop endpoint and the server overwrites the column outright; it recomputes `endDate`
+ * from the day count itself and never trusts a client's.
+ */
+export async function updateTripItinerary(
+  id: string,
+  itinerary: Itinerary
+): Promise<TripUpdate | undefined> {
+  try {
+    const res = await fetchWithSession(`/api/trips/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itinerary }),
+    });
+    if (!res.ok) return undefined;
+    return (await res.json()) as TripUpdate;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Places of a kind, near a point.
+ *
+ * Returns `undefined` only for a transport failure, per the house rule. The route's own
+ * `available: false` — "we could not ask" — is passed through untouched, because the screen has
+ * to be able to say "search is busy" rather than "there is nothing here".
+ */
+export async function searchPlaces(params: {
+  lat: number;
+  lng: number;
+  q?: string;
+  category?: PlaceCategory;
+  radius?: number;
+}): Promise<PlaceSearchResult | undefined> {
+  const query = new URLSearchParams({ lat: String(params.lat), lng: String(params.lng) });
+  if (params.q?.trim()) query.set('q', params.q.trim());
+  if (params.category) query.set('category', params.category);
+  if (params.radius) query.set('radius', String(params.radius));
+
+  try {
+    const res = await fetchWithSession(`/api/place-search?${query.toString()}`, {});
+    if (!res.ok) return undefined;
+    return (await res.json()) as PlaceSearchResult;
   } catch {
     return undefined;
   }
