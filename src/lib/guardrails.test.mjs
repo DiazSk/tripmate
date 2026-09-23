@@ -184,6 +184,44 @@ test("booked lodging charged again is a commitment finding", () => {
   assert.match(found[0].message, /already paid/i);
 });
 
+test("only the booked stay is flagged, not every other city's hotel", () => {
+  // The regression this guards: `stayBooked` names ONE stay, and the check used to fire on any
+  // priced lodging whenever it was non-null. On a multi-city trip that reported every other
+  // city's correctly-priced hotel as already paid for — and Task 10 hands these findings to a
+  // critique model as fact, which would then zero out a real cost.
+  const trip = {
+    tier: "mid-range",
+    days: [
+      {
+        date: "2026-09-19",
+        weather: "Clear",
+        lodging: { name: "Hotel Ronda Sant Pere", cost: 190, note: "" },
+        stops: [{ name: "Sagrada Familia", lat: 41.4036, lng: 2.1744, cost: 26, note: "", time: "10:00", durationLabel: "2 hours", category: "entry" }],
+      },
+      {
+        date: "2026-09-20",
+        weather: "Clear",
+        lodging: { name: "Pension Aran", cost: 120, note: "" },
+        stops: [{ name: "Alhambra", lat: 37.1761, lng: -3.5881, cost: 19, note: "", time: "10:00", durationLabel: "2 hours", category: "entry" }],
+      },
+    ],
+  };
+  // Only the stay is booked here — no flights, so the arrival and departure branches stay quiet
+  // and anything this finds came from the lodging comparison.
+  const found = evaluateItinerary(trip, {
+    logistics: {
+      arrivalTime: null,
+      arrivalPoint: null,
+      departureTime: null,
+      departurePoint: null,
+      stayBooked: "Hotel Ronda Sant Pere (already paid)",
+    },
+  }).filter((g) => g.rule === "commitment");
+  assert.equal(found.length, 1, "the second city's hotel is correctly priced and must stay silent");
+  assert.equal(found[0].dayIndex, 0);
+  assert.match(found[0].message, /Hotel Ronda Sant Pere/);
+});
+
 test("no logistics means no commitment findings at all", () => {
   assert.deepEqual(
     evaluateItinerary(twoDayTrip("06:00", "23:00")).filter((g) => g.rule === "commitment"),
@@ -243,6 +281,15 @@ test("an exclusion matches whole words only, so 'bar' does not fire on Barcelona
   assert.deepEqual(
     evaluateItinerary(oneStop("Barcelona Cathedral"), { avoid: ["bar"] })
       .filter((g) => g.rule === "required"),
+    []
+  );
+});
+
+test("no must-include and no exclusions means no required findings at all", () => {
+  // The gate, matching the one `commitment` has: an absent option means "not asked", never
+  // "nothing was named", so the check must not run at all.
+  assert.deepEqual(
+    evaluateItinerary(oneStop("Musee d'Orsay")).filter((g) => g.rule === "required"),
     []
   );
 });
