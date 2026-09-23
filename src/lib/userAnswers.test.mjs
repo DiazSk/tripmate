@@ -13,6 +13,7 @@ import {
   labelPace,
   PACE_FLOOR,
   PARTY_MAX_PER_BAND,
+  sanitizeAnswers,
   sanitizeLogistics,
   sanitizeParty,
   deriveGroupLabel,
@@ -193,4 +194,26 @@ test("the traveler's own words describe the group when they gave any", () => {
   assert.equal(deriveGroupLabel("other", "   "), "group");
   // A stray enum from a raw POST must not produce "undefined".
   assert.equal(deriveGroupLabel("nonsense", undefined), "group");
+});
+
+test("must-include and avoid lists are trimmed, de-duplicated and capped", () => {
+  const out = sanitizeAnswers(
+    answers({
+      mustInclude: ["  Louvre Museum  ", "Louvre Museum", "", "Versailles"],
+      avoid: ["nightclubs"],
+    })
+  );
+  assert.deepEqual(out.mustInclude, ["Louvre Museum", "Versailles"]);
+  assert.deepEqual(out.avoid, ["nightclubs"]);
+});
+
+test("an empty list becomes undefined rather than an empty array", () => {
+  const out = sanitizeAnswers(answers({ mustInclude: ["", "   "] }));
+  assert.equal(out.mustInclude, undefined, "nothing stated is not the same as an empty demand");
+});
+
+test("the constraints note is trimmed and capped like any other free text", () => {
+  const out = sanitizeAnswers(answers({ constraintsNote: "  No rental car.  " }));
+  assert.equal(out.constraintsNote, "No rental car.");
+  assert.equal(sanitizeAnswers(answers({ constraintsNote: "   " })).constraintsNote, null);
 });
