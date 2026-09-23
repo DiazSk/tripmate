@@ -1,11 +1,15 @@
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { groupStopsByTimeOfDay } from '@shared/timeOfDay';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { DayPlan, Stop } from '@/api/types';
 import { PlacePhoto } from '@/components/place-photo';
+import { SpendBreakdown } from '@/components/spend-breakdown';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
 import { formatDateline } from '@/lib/dayDisplay';
+import { directionsUrl } from '@/lib/directions';
+import { daySpend, formatMoney } from '@/lib/spend';
 
 /**
  * One day of a trip, read as a page.
@@ -22,6 +26,7 @@ export function DayPage({
   destination,
   emphasis,
   onEmphasise,
+  onFindNearby,
 }: {
   day: DayPlan;
   dayIndex: number;
@@ -31,23 +36,54 @@ export function DayPage({
   /** Index of the emphasised stop within this day, or null. */
   emphasis: number | null;
   onEmphasise: (index: number | null) => void;
+  /** "What else is near this stop" — the anchored replacement for pressing open map. */
+  onFindNearby: (stop: Stop) => void;
 }) {
   const stops = day.stops ?? [];
+  /**
+   * The day, cut into Morning / Afternoon / Evening.
+   *
+   * The grouping is imported rather than written here: it never reorders the day, an untimed stop
+   * joins the group in progress, and — the part that matters most — each entry keeps its **index
+   * in the day's own `stops` array**, which is the currency `emphasis`, `onEmphasise` and the map
+   * camera all speak in. Regrouping with fresh indices would light up the wrong row.
+   */
+  const groups = groupStopsByTimeOfDay(stops);
+  /**
+   * A day with one heading is a heading that says nothing — it labels the whole list it sits on.
+   * Both the web and the Swift app suppress it on the same test, and a day whose stops carry no
+   * readable clock time comes back as a single unlabelled group, so it reads exactly as before.
+   */
+  const showHeadings = groups.length > 1;
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <DayMasthead day={day} dayIndex={dayIndex} dayCount={dayCount} destination={destination} />
 
-      {stops.map((stop, index) => (
-        <StopRow
-          key={`${stop.name}-${index}`}
-          stop={stop}
-          ordinal={index + 1}
-          dayIndex={dayIndex}
-          first={index === 0}
-          expanded={emphasis === index}
-          onPress={() => onEmphasise(emphasis === index ? null : index)}
-        />
+      {groups.map((group, groupIndex) => (
+        <View key={group.label ?? `group-${groupIndex}`}>
+          {showHeadings && group.label ? (
+            <View style={styles.slot}>
+              <SectionRule label={group.label} />
+            </View>
+          ) : null}
+          {group.stops.map((entry, indexInGroup) => (
+            <StopRow
+              key={`${entry.stop.name}-${entry.index}`}
+              stop={entry.stop}
+              // The day's own numbering, not the group's — the stops stay 1..n down the page and
+              // keep agreeing with the numbered discs on the map.
+              ordinal={entry.index + 1}
+              dayIndex={dayIndex}
+              // First *in its group*, not in the day: `first` suppresses the row's top hairline,
+              // and without this every heading would be followed immediately by a second rule.
+              first={indexInGroup === 0}
+              expanded={emphasis === entry.index}
+              onPress={() => onEmphasise(emphasis === entry.index ? null : entry.index)}
+              onFindNearby={() => onFindNearby(entry.stop)}
+            />
+          ))}
+        </View>
       ))}
 
       {day.lodging ? (
@@ -66,6 +102,8 @@ export function DayPage({
           </View>
         </View>
       ) : null}
+
+      <SpendBreakdown day={day} dayIndex={dayIndex} />
     </ScrollView>
   );
 }
@@ -151,6 +189,7 @@ function StopRow({
   first,
   expanded,
   onPress,
+  onFindNearby,
 }: {
   stop: Stop;
   ordinal: number;
@@ -158,6 +197,7 @@ function StopRow({
   first: boolean;
   expanded: boolean;
   onPress: () => void;
+  onFindNearby: () => void;
 }) {
   const particulars = [stop.time, stop.durationLabel, stop.category]
     .map((part) => part?.trim())
@@ -193,6 +233,25 @@ function StopRow({
                 {stop.note}
               </ThemedText>
             ) : null}
+
+            {/* The two things you can do about a stop, on the stop. "Near here" lives here rather
+                than on the map because a tap on open map points at nothing — a stop is a referent
+                you chose, and it carries the day and the arrival time with it. */}
+            <View style={styles.actions}>
+              <Pressable
+                onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})}
+                accessibilityRole="link"
+                hitSlop={8}>
+                <ThemedText type="label" themeColor="accent">
+                  Directions
+                </ThemedText>
+              </Pressable>
+              <Pressable onPress={onFindNearby} accessibilityRole="button" hitSlop={8}>
+                <ThemedText type="label" themeColor="accent">
+                  Find nearby
+                </ThemedText>
+              </Pressable>
+            </View>
           </View>
         ) : null}
       </View>
@@ -222,15 +281,27 @@ function Cost({ amount }: { amount: number }) {
   if (!amount) return null;
   return (
     <ThemedText type="moneyLarge" themeColor="money">
-      {`$${Math.round(amount).toLocaleString('en-US')}`}
+      {formatMoney(amount)}
     </ThemedText>
   );
 }
 
+/**
+ * The day's figure for the section rule.
+ *
+ * **The summation is `daySpend`, not a local reduce, and that is a fix rather than tidying.** This
+ * used to add up `stop.cost` and `lodging.cost` itself and never look at `actualCost` — so a real
+ * spend entered on the web moved that app's totals and left this one quietly showing the estimate.
+ * Nothing noticed while this was the only money on the page; the budget bar and the breakdown now
+ * beside it are both drawn from `daySpend`, and three figures disagreeing on one screen is exactly
+ * what the shared money module was written to stop.
+ *
+ * Still a string-or-`undefined`, because `SectionRule` omits its trailing figure on `undefined`
+ * and a day nobody has priced should carry no figure rather than a `$0`.
+ */
 function dayTotal(day: DayPlan): string | undefined {
-  const stops = (day.stops ?? []).reduce((sum, stop) => sum + (stop.cost ?? 0), 0);
-  const total = stops + (day.lodging?.cost ?? 0);
-  return total > 0 ? `$${Math.round(total).toLocaleString('en-US')}` : undefined;
+  const total = daySpend(day);
+  return total > 0 ? formatMoney(total) : undefined;
 }
 
 /**
@@ -285,6 +356,11 @@ const styles = StyleSheet.create({
   },
   rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder },
 
+  /** `SectionRule` carries no inset of its own — it inherits one from whichever block holds it
+   *  (the masthead, the stay). A time-of-day heading sits at the page's top level, so it brings
+   *  its own. */
+  slot: { paddingHorizontal: Spacing.read },
+
   stop: {
     flexDirection: 'row',
     gap: 13,
@@ -298,6 +374,7 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   particulars: { marginTop: 3 },
   expanded: { marginTop: Spacing.tight, gap: Spacing.hair },
+  actions: { flexDirection: 'row', gap: Spacing.read, marginTop: Spacing.tight },
 
   lodging: { paddingHorizontal: Spacing.read },
   lodgingRow: {

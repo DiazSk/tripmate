@@ -23,16 +23,31 @@ export interface Lodging {
   actualCost?: number;
 }
 
+/**
+ * A day's forecast, exactly as the server declares it.
+ *
+ * **The five nullable fields are required-and-nullable, not optional.** They were written here as
+ * `?: number`, which reads the same at a call site and is a different type: the backend's own
+ * `DayWeather` (`src/lib/weather.ts`) fills every key and uses `null` for "the provider had no
+ * figure". Because this app can import that backend's pure logic through `@shared/*`, the two
+ * declarations meet — and the mismatch made a `DayPlan` from this file unassignable to the
+ * server's, over five fields nothing here even reads (only `tempMaxC`, `tempMinC` and
+ * `historical` are used, in `day-page.tsx`).
+ *
+ * Corrected rather than cast around at the boundary: a cast would have to be written once per
+ * shared function and would keep claiming a wire shape the server does not send.
+ */
 export interface DayWeather {
   date: string;
   tempMaxC: number;
   tempMinC: number;
   historical: boolean;
-  precipitationProbability?: number;
-  humidity?: number;
-  weatherCode?: number;
-  sunrise?: string;
-  sunset?: string;
+  precipitationProbability: number | null;
+  humidity: number | null;
+  weatherCode: number | null;
+  /** Local ISO datetime, e.g. "2026-08-14T05:16". */
+  sunrise: string | null;
+  sunset: string | null;
 }
 
 export interface DayPlan {
