@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { searchPlaces } from '@/api/tripMateApi';
 import { PLACE_CATEGORIES, type FoundPlace, type Itinerary, type PlaceCategory } from '@/api/types';
@@ -7,12 +7,28 @@ import { FieldTrough, PrimaryButton, TextField } from '@/components/form';
 import { Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { addPlaceToDay, slotPreview, suggestDay, suggestTimeOfDay, type TimeOfDay } from '@/lib/addPlace';
+import {
+  addPlaceToDay,
+  describePlace,
+  slotPreview,
+  suggestDay,
+  suggestTimeOfDay,
+  type TimeOfDay,
+} from '@/lib/addPlace';
 
 const SLOTS: TimeOfDay[] = ['Morning', 'Afternoon', 'Evening'];
 
 /** Matches the route's own default, and its clamp is 200–8000. */
 const SEARCH_RADIUS_M = 1800;
+
+/**
+ * How far around a pressed point counts as "here".
+ *
+ * 200m is the route's own floor, and it is the right end of the clamp for this: a press is aimed
+ * at something the reader can see, so the answer has to be things within sight of it. A browse
+ * wants a neighbourhood; this wants a block.
+ */
+const PROBE_RADIUS_M = 200;
 
 /**
  * Find a place and put it in a day.
@@ -32,6 +48,7 @@ export function AddPlaceSheet({
   itinerary,
   dayIndex,
   centre,
+  at,
   onAdd,
 }: {
   visible: boolean;
@@ -41,13 +58,26 @@ export function AddPlaceSheet({
   dayIndex: number;
   /** Where to search. The focused day's own middle. */
   centre: { lat: number; lng: number } | null;
+  /**
+   * A stop somebody asked "what else is near this?" about.
+   *
+   * The same sheet, asked a tighter question: it searches around that stop instead of the day's
+   * middle, over every kind of place rather than one. Everything past the result list — the card,
+   * the day, the slot, the add — is the browse's, unchanged.
+   *
+   * The `name` is required because it is the whole difference between this and pressing open map:
+   * the question has a subject, and the sheet says whose neighbourhood it is showing.
+   */
+  at?: { lat: number; lng: number; name: string } | null;
   onAdd: (next: Itinerary, placeName: string) => Promise<boolean>;
 }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.sheet}>
         <View style={styles.bar}>
-          <ThemedText type="title">Add a stop</ThemedText>
+          <ThemedText type="title" numberOfLines={1}>
+            {at ? `Near ${at.name}` : 'Add a stop'}
+          </ThemedText>
           <Pressable onPress={onClose} accessibilityRole="button" hitSlop={12}>
             <ThemedText type="label" themeColor="muted">
               Close
@@ -63,6 +93,7 @@ export function AddPlaceSheet({
             itinerary={itinerary}
             dayIndex={dayIndex}
             centre={centre}
+            at={at ?? null}
             onAdd={onAdd}
             onClose={onClose}
           />
@@ -76,16 +107,21 @@ function SheetBody({
   itinerary,
   dayIndex,
   centre,
+  at,
   onAdd,
   onClose,
 }: {
   itinerary: Itinerary;
   dayIndex: number;
   centre: { lat: number; lng: number } | null;
+  at: { lat: number; lng: number; name: string } | null;
   onAdd: (next: Itinerary, placeName: string) => Promise<boolean>;
   onClose: () => void;
 }) {
-  const [category, setCategory] = useState<PlaceCategory | null>('cafe');
+  // No category when asking about a stop's surroundings: "what else is here" is a question about
+  // every kind of place at once, and the route reads an absent category as the union of all of
+  // them. The chips stay on screen either way — they are how you narrow a busy corner to cafes.
+  const [category, setCategory] = useState<PlaceCategory | null>(at ? null : 'cafe');
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<FoundPlace | null>(null);
 
@@ -106,8 +142,12 @@ function SheetBody({
 
   // Primitives, never the `centre` object: the parent builds it inline, so a new identity every
   // render would restart the debounce on every render and never actually search.
-  const lat = centre?.lat;
-  const lng = centre?.lng;
+  // The asked-about stop wins over the day's middle — it is the more specific thing to search
+  // around, and it is the only one there is when the day has no stops to have a middle.
+  const origin = at ?? centre;
+  const lat = origin?.lat;
+  const lng = origin?.lng;
+  const radius = at ? PROBE_RADIUS_M : SEARCH_RADIUS_M;
 
   useEffect(() => {
     if (lat === undefined || lng === undefined) return;
@@ -119,7 +159,7 @@ function SheetBody({
         lng,
         q: query,
         category: category ?? undefined,
-        radius: SEARCH_RADIUS_M,
+        radius,
       });
       setAnswer({
         asked,
@@ -130,7 +170,7 @@ function SheetBody({
       });
     }, 320);
     return () => clearTimeout(run);
-  }, [lat, lng, asked, query, category]);
+  }, [lat, lng, asked, query, category, radius]);
 
   const searching = answer?.asked !== asked;
   const places = answer?.places ?? [];
@@ -179,7 +219,7 @@ function SheetBody({
         />
       </FieldTrough>
 
-      {!centre ? (
+      {!origin ? (
         <Notice>This day has nowhere to search around yet.</Notice>
       ) : searching ? (
         <Loading />
@@ -187,7 +227,12 @@ function SheetBody({
         <Notice>Search is busy. Try again in a moment.</Notice>
       ) : places.length === 0 ? (
         <ThemedText type="detail" themeColor="muted" style={styles.empty}>
-          Nothing of that kind nearby. Try another kind, or a name.
+          {/* A stop out on a headland or up a mountain legitimately has nothing mapped within a
+              block of it. That is an answer about the place, not a failure, and it must not read
+              like the category one — there is no category. */}
+          {at
+            ? `Nothing else mapped within a short walk of ${at.name}.`
+            : 'Nothing of that kind nearby. Try another kind, or a name.'}
         </ThemedText>
       ) : (
         <View style={styles.results}>
@@ -198,8 +243,10 @@ function SheetBody({
               style={[styles.result, index > 0 && styles.resultRuled]}
               android_ripple={{ color: Colors.pressed }}>
               <ThemedText type="heading">{place.name}</ThemedText>
+              {/* The same line the stop will carry once it is added, rather than a second summary
+                  written to a different rule — so what you read here is what lands in the day. */}
               <ThemedText type="label" themeColor="muted" style={styles.resultMeta}>
-                {[LABELS[place.category] ?? place.category, place.address].filter(Boolean).join('  ·  ')}
+                {describePlace(place)}
               </ThemedText>
             </Pressable>
           ))}
@@ -262,6 +309,8 @@ function PlaceCard({
           {[LABELS[place.category] ?? place.category, place.address].filter(Boolean).join('  ·  ')}
         </ThemedText>
       </View>
+
+      <PlaceFacts place={place} />
 
       <ThemedText type="label" themeColor="muted">
         Which day
@@ -329,6 +378,70 @@ function PlaceCard({
   );
 }
 
+/** How OSM's `wheelchair` tag reads as a sentence. `no` is worth saying — somebody planning
+ *  around a wheelchair needs the negative as much as the positive. */
+const ACCESS: Record<string, string> = {
+  yes: 'Wheelchair access',
+  limited: 'Limited wheelchair access',
+  no: 'No wheelchair access',
+};
+
+/** `https://www.slowjet.coffee/` → `slowjet.coffee`. The scheme and the trailing slash are
+ *  plumbing; what a reader wants to recognise is the domain. */
+function tidyUrl(url: string): string {
+  return url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+}
+
+/**
+ * What is known about this place, beyond its name.
+ *
+ * **The card has to look finished with none of it.** Coverage is partial by nature — see
+ * `FoundPlace` for the measured shape of it — so this renders nothing at all rather than a stack
+ * of empty rows or "unknown" six times, and the card above stands on its own.
+ *
+ * Hours go in exactly as OSM wrote them, unparsed: this is where the long grammar the stop's own
+ * line leaves out finally has room. A phone number and a website are the two rows worth pressing,
+ * so they are the two that are links; a rejected `openURL` is swallowed, because a device with no
+ * dialler is not something to report to somebody reading about a cafe.
+ */
+function PlaceFacts({ place }: { place: FoundPlace }) {
+  const rows: { label: string; value: string; href?: string }[] = [];
+  if (place.openingHours) rows.push({ label: 'Hours', value: place.openingHours });
+  if (place.phone) rows.push({ label: 'Phone', value: place.phone, href: `tel:${place.phone}` });
+  if (place.website) {
+    rows.push({ label: 'Website', value: tidyUrl(place.website), href: place.website });
+  }
+  if (place.outdoorSeating) rows.push({ label: 'Seating', value: 'Tables outside' });
+  if (place.wheelchair) rows.push({ label: 'Access', value: ACCESS[place.wheelchair] });
+  if (place.rating) rows.push({ label: 'Rating', value: `${place.rating.toFixed(1)} out of 5` });
+
+  if (rows.length === 0) return null;
+
+  return (
+    <FieldTrough>
+      {rows.map((row) => (
+        <Pressable
+          key={row.label}
+          disabled={!row.href}
+          onPress={() => row.href && Linking.openURL(row.href).catch(() => {})}
+          accessibilityRole={row.href ? 'link' : 'text'}
+          style={styles.fact}
+          android_ripple={row.href ? { color: Colors.pressed } : undefined}>
+          <ThemedText type="label" themeColor="muted" style={styles.factLabel}>
+            {row.label}
+          </ThemedText>
+          <ThemedText
+            type="detail"
+            themeColor={row.href ? 'accent' : 'foreground'}
+            style={styles.grow}>
+            {row.value}
+          </ThemedText>
+        </Pressable>
+      ))}
+    </FieldTrough>
+  );
+}
+
 /** The category names as a person would say them, not as the API spells them. */
 const LABELS: Record<string, string> = {
   cafe: 'Cafes',
@@ -380,6 +493,17 @@ const styles = StyleSheet.create({
   empty: { paddingVertical: Spacing.rows },
 
   cardHead: { gap: Spacing.hair, marginBottom: Spacing.tight },
+  fact: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.rows,
+    minHeight: 44,
+    paddingHorizontal: Spacing.read,
+    paddingVertical: Spacing.tight,
+  },
+  // A fixed column so the values line up down the card rather than starting wherever their label
+  // happens to end. Wide enough for "Seating" at the largest text size.
+  factLabel: { width: 82, paddingTop: 1 },
   slotsLabel: { marginTop: Spacing.tight },
   slot: {
     flexDirection: 'row',
