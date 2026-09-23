@@ -20,8 +20,12 @@ test("prices lodging to the style/tier rather than a real rate", () => {
   assert.equal(lodgingPricingBasis(), "priced to the style above");
 });
 
-test("keeps the unqualified 85-100% budget target", () => {
-  const out = budgetInstruction();
-  assert.match(out, /MUST come close to the full stated budget/);
-  assert.match(out, /85-100%/);
+test("budgetInstruction states the budget as a ceiling, not a target to consume", () => {
+  const text = budgetInstruction();
+  assert.match(text, /ceiling/i);
+  // The exact mechanism the review identified as manufacturing bad recommendations: a rule to
+  // fill the remaining budget with premium extras.
+  assert.doesNotMatch(text, /85-100/);
+  assert.doesNotMatch(text, /premium extras/i);
+  assert.match(text, /never add an experience primarily because money remains/i);
 });

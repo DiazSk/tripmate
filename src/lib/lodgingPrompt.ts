@@ -28,9 +28,15 @@ export function lodgingPricingBasis(): string {
 }
 
 /**
- * The budget target. Without this the 85-100% target is an unqualified MUST, and the only way to
- * satisfy it on some trips is to invent a cheaper hotel — the defect this feature removes.
+ * The one shared budget string, spliced into both legacy prompts (`itineraryPrompt.ts:217` and
+ * `:250`) and mirrored by SKILL.md §5. The three must not drift.
+ *
+ * This used to ask for 85-100% of the stated budget and, failing that, for premium extras to
+ * consume the rest. A stated budget almost always means "do not exceed this", and the rule turned
+ * a good $2,900 trip into a padded $4,700 one. `evaluateBudget` in guardrails.ts has always
+ * treated the budget as a pure ceiling, so the code and the prompt were already disagreeing; this
+ * sides with the code.
  */
 export function budgetInstruction(): string {
-  return `The itinerary's total cost (lodging + stops combined) MUST come close to the full stated budget (aim for 85-100% of it), not just "under" it. If standard sightseeing and dining wouldn't use up a high budget, add premium extras appropriate to the tier (private guides, exclusive experiences, shopping, spa, upgraded transport) rather than leaving the budget unused.`;
+  return `Treat the stated budget as a ceiling, not a target to reach. A strong itinerary does not need to spend all of it. Stay comfortably within it, prefer value and fit over spending, and where practical leave roughly 10-15% unspent for unplanned transport, price variation, tips and taxes. Let the tier set the style of what you recommend. If the traveler explicitly asked to use the full budget, to make it luxurious, or for the best possible within the amount, premium upgrades are welcome where they genuinely improve the trip. Never add an experience primarily because money remains.`;
 }

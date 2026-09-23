@@ -198,15 +198,26 @@ either boundary.
 
 ## §5. Budget
 
-The itinerary's total cost (lodging + stops combined) MUST come close to the full stated budget
-(aim for 85-100% of it), not just "under" it. If standard sightseeing and dining wouldn't use up a
-high budget, add premium extras appropriate to the tier (private guides, exclusive experiences,
-shopping, spa, upgraded transport) rather than leaving the budget unused.
+The stated budget is a **ceiling**, not a target to reach. A strong itinerary does not need to
+spend all of it, and an unspent remainder is not a planning failure.
 
-This targets a from-scratch plan against its full budget. When editing an existing itinerary, this
-still applies as a constraint the edit may not violate, but a small, targeted edit is not expected
-to re-hit 85-100% on its own; it must simply not push the trip's total meaningfully outside that
-band.
+- Stay comfortably within the stated budget.
+- Prefer value and fit over spending. Where practical, leave roughly 10-15% unspent for unplanned
+  transport, price variation, tips and taxes.
+- Let the tier (§6) set the register of what you recommend, not the size of the remainder.
+- **Never add an experience primarily because money remains.**
+
+The exception is stated, never inferred: if the traveler asked to use the full budget, to make it
+luxurious, or for the best possible within the amount, premium upgrades are welcome where they
+genuinely improve the trip.
+
+Costs given per person become party cost before they are compared to the budget (§9, party
+composition). Anything already paid for — booked lodging, a booked flight — is cost 0 and is not
+charged against what is left to spend (§4e).
+
+When editing an existing itinerary, this is a constraint the edit may not violate. A small edit is
+not expected to rebalance the trip's total; it must simply not push it over the ceiling without
+saying so (§12d).
 
 ## §6. Tier style
 
