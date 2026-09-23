@@ -5,7 +5,7 @@
  * a caller with no answers must leave the prompt byte-identical to before. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatTravelLegs, formatTravelerProfile } from "./travelerProfilePrompt.ts";
+import { formatRequirements, formatTravelLegs, formatTravelerProfile } from "./travelerProfilePrompt.ts";
 
 const flags = (over) => ({
   paceSpotsPerDay: 4,
@@ -217,6 +217,52 @@ test("an arrival still allows 90 minutes, which is a different thing from a depa
 
 test("booked lodging tells the model to stop choosing one", () => {
   assert.match(formatTravelLegs(legs({ stayBooked: "Guesthouse in Gion" })), /already booked/);
+});
+
+// --- stated requirements ------------------------------------------------------------------------
+
+const answers = (over) => ({
+  purpose: "",
+  explorerStyle: "mixed",
+  group: "solo",
+  energy: "moderate",
+  crowds: "mixed",
+  budget: 1000,
+  priorities: [],
+  topPriorities: [],
+  selectedPois: [],
+  customPois: [],
+  ...over,
+});
+
+test("nothing named leaves the prompt byte-identical", () => {
+  // The contract this module is built on: a traveler who named nothing must not change a single
+  // byte of what the model sees, matching formatTravelLegs.
+  assert.equal(formatRequirements(null), "");
+  assert.equal(formatRequirements(answers()), "", "no mustInclude/avoid/constraintsNote is the same as no answers at all");
+});
+
+test("a named must-see is a requirement, not a preference, and appears exactly once", () => {
+  const out = formatRequirements(answers({ mustInclude: ["Louvre Museum"] }));
+  assert.match(out, /Must include, and these are requirements rather than preferences: Louvre Museum/);
+  assert.match(out, /exactly once/);
+});
+
+test("a named exclusion is a hard exclusion, not a de-emphasis", () => {
+  const out = formatRequirements(answers({ avoid: ["nightclubs"] }));
+  assert.match(out, /Do not include: nightclubs/);
+  assert.match(out, /hard exclusion/);
+});
+
+test("the constraints note reaches the prompt verbatim, labelled as the traveler's own words", () => {
+  const out = formatRequirements(answers({ constraintsNote: "No rental car; budget is per person." }));
+  assert.match(out, /In the traveler's own words: "No rental car; budget is per person\."/);
+});
+
+test("the constraints note tells the model not to assume access it wasn't given, and not to assert its absence either", () => {
+  const out = formatRequirements(answers({ constraintsNote: "No rental car." }));
+  assert.match(out, /never assume access/i);
+  assert.match(out, /don't read its silence as a denial/i, "silence is not the same as a stated absence");
 });
 
 test("the group reaches the prompt in words", () => {

@@ -9,7 +9,8 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { travelSection } from "./tripContext.ts";
+import { buildTripContext, travelSection } from "./tripContext.ts";
+import { reconcileTrip } from "./reconcile.ts";
 
 const leg = (from, to, minutes, estimated) => ({
   from,
@@ -21,6 +22,59 @@ const leg = (from, to, minutes, estimated) => ({
 });
 
 const section = (legs) => travelSection({ pois: [], travelLegs: legs, notes: [] });
+
+/** No POIs, no travel legs, no notes — the shape `buildTripContext`'s tests need when they aren't
+ *  exercising the anchor-places or travel-times sections. */
+const EMPTY_POI_DETAILS = { pois: [], travelLegs: [], notes: [] };
+
+/** A minimal but real `ReconciledTrip`, built through the actual `reconcileTrip` barrier (not a
+ *  hand-assembled literal) so it can't drift from what the pipeline actually produces. Every
+ *  fetched source reports "available" with the smallest possible payload; `answerOverrides` layers
+ *  onto a bare-minimum `UserAnswers` the same way `src/lib/bench/fixtures.ts` does for the
+ *  benchmark's fixtures. */
+function tripWith(answerOverrides) {
+  const rawFetch = {
+    dateContext: { tripDays: 1, leadTimeDays: 30, season: "fall", days: [{ date: "2026-10-01", dayOfWeek: "Thu" }] },
+    destination: { resolved: true, lat: 41.4, lon: 2.2, timezone: "Europe/Madrid", region: "Test Region", countryCode: "ES" },
+    weather: {
+      available: true,
+      historical: false,
+      days: [
+        {
+          date: "2026-10-01",
+          tempMinC: 15,
+          tempMaxC: 22,
+          precipitationProbability: 10,
+          humidity: null,
+          weatherCode: null,
+          sunrise: "2026-10-01T07:00",
+          sunset: "2026-10-01T19:00",
+          historical: false,
+        },
+      ],
+    },
+    holidays: { available: true, events: [] },
+    transportModes: { available: true, modes: ["walk", "transit"] },
+    bikeshare: { available: true, system: null },
+    candidatePois: { available: true, pois: [] },
+  };
+
+  const userAnswers = {
+    purpose: "",
+    explorerStyle: "mixed",
+    group: "solo",
+    energy: "moderate",
+    crowds: "mixed",
+    budget: 1000,
+    priorities: [],
+    topPriorities: [],
+    selectedPois: [],
+    customPois: [],
+    ...answerOverrides,
+  };
+
+  return reconcileTrip(rawFetch, userAnswers);
+}
 
 test("an all-estimated set is still described as estimated", () => {
   const out = section([leg("A", "B", 14, true), leg("B", "C", 9, true)]);
@@ -49,4 +103,25 @@ test("(est) reuses the marker poiLine already uses for an estimated duration", (
 
 test("no legs is still a sentence rather than an empty section", () => {
   assert.match(section([]), /No travel times/);
+});
+
+// --- Must include / Avoid -----------------------------------------------------------------------
+
+test("named must-dos and exclusions reach the trip context as their own section", () => {
+  const trip = tripWith({ mustInclude: ["Louvre Museum"], avoid: ["nightclubs"] });
+  const md = buildTripContext(trip, EMPTY_POI_DETAILS);
+  assert.match(md, /## Must include \/ Avoid/);
+  assert.match(md, /must_include: Louvre Museum/);
+  assert.match(md, /avoid: nightclubs/);
+});
+
+test("nothing named says so explicitly rather than leaving a blank heading", () => {
+  const md = buildTripContext(tripWith({}), EMPTY_POI_DETAILS);
+  assert.match(md, /## Must include \/ Avoid\nNone stated/);
+});
+
+test("the traveler's own constraints note appears under fixed commitments, verbatim", () => {
+  const trip = tripWith({ constraintsNote: "No rental car; budget is per person." });
+  const md = buildTripContext(trip, EMPTY_POI_DETAILS);
+  assert.match(md, /No rental car; budget is per person\./);
 });

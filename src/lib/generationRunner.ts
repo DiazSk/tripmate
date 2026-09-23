@@ -124,6 +124,11 @@ export async function runGeneration(
   // otherwise fine, and the prompt is unchanged when this is null.
   let resolvedFlags: ResolvedFlags | null = null;
   let logistics: TripLogistics | null = null;
+  // Set alongside resolvedFlags/logistics, inside the same try — formatRequirements only ever
+  // reads mustInclude/avoid/constraintsNote off this, but a malformed userAnswers must still
+  // degrade to "say nothing" rather than let a bad shape from one traveler fail another's
+  // generation.
+  let answers: UserAnswers | null = null;
   const stepFreeRequired =
     (userAnswers as UserAnswers | undefined)?.accessibility?.stepFreeRequired === true;
   // Raw preference, not the derived CrowdBias flags object — detectConflicts only needs to know
@@ -133,6 +138,7 @@ export async function runGeneration(
     try {
       resolvedFlags = deriveFlags(userAnswers as UserAnswers);
       logistics = sanitizeLogistics((userAnswers as UserAnswers).logistics);
+      answers = userAnswers as UserAnswers;
     } catch (err) {
       console.error("[itinerary] ignoring malformed userAnswers", err);
     }
@@ -231,6 +237,7 @@ export async function runGeneration(
       resolvedFlags,
       dietary,
       logistics,
+      answers,
       // Generate only. A refine deliberately skips the geocode (it reuses the previous plan's
       // coordinates), so it has no point to look a bikeshare up from and would always pass null —
       // which reads to the model as "no bikeshare here" rather than "not asked". The previous
