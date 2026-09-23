@@ -280,15 +280,27 @@ function checkCommitments(itinerary: Itinerary, logistics: TripLogistics): Guard
     }
   }
 
-  if (logistics.stayBooked) {
+  // `stayBooked` names ONE stay, so only the nights actually spent in it may be flagged. Matching
+  // on the name and not merely on "a stay is booked" is what keeps a multi-city trip's other,
+  // correctly-priced hotels silent — flagging those would tell the critique pass to zero out a
+  // real cost.
+  //
+  // Containment in either direction, on the normalized form: the traveler types free text
+  // ("Hotel Ronda Sant Pere (already paid)") and the model writes a tidied name ("Hotel Ronda
+  // Sant Pere"), and neither is reliably the prefix of the other. An empty normalized key is
+  // dropped rather than matched — `"".includes()` is true of everything, which would restore the
+  // bug in its widest form.
+  const booked = normalizeStopName(logistics.stayBooked ?? "");
+  if (booked) {
     itinerary.days.forEach((day, dayIndex) => {
-      if (day.lodging && day.lodging.cost > 0) {
-        found.push({
-          rule: "commitment",
-          dayIndex,
-          message: `${day.lodging.name} is already paid for — it should cost 0, not $${day.lodging.cost}.`,
-        });
-      }
+      if (!day.lodging || day.lodging.cost <= 0) return;
+      const name = normalizeStopName(day.lodging.name);
+      if (!name || (!booked.includes(name) && !name.includes(booked))) return;
+      found.push({
+        rule: "commitment",
+        dayIndex,
+        message: `${day.lodging.name} is already paid for — it should cost 0, not $${day.lodging.cost}.`,
+      });
     });
   }
 
