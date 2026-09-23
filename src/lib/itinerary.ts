@@ -274,6 +274,26 @@ export function carryOverDaySummaries(revised: DayPlan[], previous: DayPlan[]): 
   }
 }
 
+/**
+ * Two buffers, because they are two different things.
+ *
+ * Arrival is immigration, bags and the transfer in after landing. Departure is check-in and
+ * security before a flight, and it sits on top of the travel time to the airport rather than
+ * including it — SKILL.md §4c-bis states 2h domestic and 3h international.
+ *
+ * 120 is the checkable floor rather than a claim the flight is domestic: `departurePoint` is free
+ * text and cannot tell us which it is, a plan that correctly reserved 3 hours also clears a
+ * 2-hour check, and checking against 180 would fail every correct domestic plan.
+ *
+ * They live in this module, not beside the benchmark scorer that also uses them, because
+ * `guardrails.ts` is in four client components' import graph. Importing them from
+ * `bench/scorers/domain.ts` takes that graph from 5 modules to 22 and pulls in `db.ts` —
+ * `domain.ts` → `bench/fixtures.ts` → `poiDetails.ts` → `fetchCache.ts` → `db.ts` — with nothing
+ * in tsc, eslint or `node --test` able to see it happen. `domain.ts` re-exports these instead.
+ */
+export const ARRIVAL_BUFFER_MIN = 90;
+export const DEPARTURE_BUFFER_MIN = 120;
+
 export interface DayActiveSpan {
   /** First stop's start and last stop's end, both as "8:00 AM". */
   start: string;

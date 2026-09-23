@@ -503,10 +503,19 @@ test("a booked arrival consumes the slots it lands in, and only on day 1", () =>
 test("a booked departure consumes the tail of the last day only", () => {
   const f = withLogistics(null, "11:00");
   const last = 3;
+  // The boundary moved with the buffer when the single 90-minute constant split in two: an 11:00
+  // departure now clears at 09:00 rather than 09:30. None of these three answers changed, because
+  // the departure branch compares each slot's *start* and Morning starts at 06:00 either way.
   assert.equal(usableSlot("Morning", last, 4, f), true);
   assert.equal(usableSlot("Afternoon", last, 4, f), false);
   assert.equal(usableSlot("Evening", last, 4, f), false);
   assert.equal(usableSlot("Afternoon", 0, 4, f), true, "the first day keeps its afternoon");
+
+  // Which is why this case is here: it is the one that can tell the two buffers apart. An 08:00
+  // departure clears at 06:00 under DEPARTURE_BUFFER_MIN=120, exactly Morning's start, so the
+  // morning goes — under the old 90 it would have survived. Without this assertion the split is
+  // invisible to the suite.
+  assert.equal(usableSlot("Morning", last, 4, withLogistics(null, "08:00")), false);
 });
 
 test("with no booked logistics every slot is expected", () => {

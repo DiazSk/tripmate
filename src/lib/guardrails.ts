@@ -1,7 +1,15 @@
-import { dayActiveSpan, parseClock, parseDuration, tripSpend } from "./itinerary";
+import {
+  ARRIVAL_BUFFER_MIN,
+  DEPARTURE_BUFFER_MIN,
+  dayActiveSpan,
+  formatClock,
+  parseClock,
+  parseDuration,
+  tripSpend,
+} from "./itinerary";
 import { normalizeStopName } from "./placeConflicts";
 import { legMinutes } from "./schedule";
-import type { DayPlan, Itinerary, Stop, TransportMode } from "./types";
+import type { DayPlan, Itinerary, Stop, TransportMode, TripLogistics } from "./types";
 
 /**
  * The §12 guardrails, evaluated in code.
@@ -218,6 +226,71 @@ function checkDuplicates(itinerary: Itinerary): Guardrail[] {
 }
 
 /**
+ * §0 rank 1: what the traveler already committed to, which no plan may cross.
+ *
+ * Three things, all silent failures otherwise. A stop before the arrival buffer clears is a stop
+ * they are still at baggage reclaim for. A stop still running inside the departure buffer is a
+ * missed flight. A booked stay priced again double-counts money already spent and distorts what
+ * is left.
+ *
+ * Every check is skipped when its field is absent — "not stated" is a real state and must not read
+ * as a boundary of midnight.
+ */
+function checkCommitments(itinerary: Itinerary, logistics: TripLogistics): Guardrail[] {
+  const found: Guardrail[] = [];
+  const lastIndex = itinerary.days.length - 1;
+
+  const landed = parseClock(logistics.arrivalTime ?? "");
+  if (landed !== null && itinerary.days[0]) {
+    const clears = landed + ARRIVAL_BUFFER_MIN;
+    for (const stop of itinerary.days[0].stops ?? []) {
+      const start = parseClock(stop.time ?? "");
+      if (start !== null && start < clears) {
+        found.push({
+          rule: "commitment",
+          dayIndex: 0,
+          message: `${stop.name} starts at ${stop.time}, but the traveler only arrives at ${logistics.arrivalTime} and needs about ${ARRIVAL_BUFFER_MIN} min for bags and the transfer in.`,
+        });
+      }
+    }
+  }
+
+  const leaves = parseClock(logistics.departureTime ?? "");
+  if (leaves !== null && lastIndex >= 0 && itinerary.days[lastIndex]) {
+    // The travel time to the departure point is not known here, so this checks the processing
+    // buffer alone. A plan that clears this can still be too tight once the transfer is counted —
+    // §12a's travel check is what catches that half.
+    const mustEndBy = leaves - DEPARTURE_BUFFER_MIN;
+    for (const stop of itinerary.days[lastIndex].stops ?? []) {
+      const start = parseClock(stop.time ?? "");
+      if (start === null) continue;
+      const end = start + parseDuration(stop.durationLabel ?? "");
+      if (end > mustEndBy) {
+        found.push({
+          rule: "commitment",
+          dayIndex: lastIndex,
+          message: `${stop.name} runs past ${formatClock(mustEndBy)}, which is when the traveler needs to be heading for a ${logistics.departureTime} departure.`,
+        });
+      }
+    }
+  }
+
+  if (logistics.stayBooked) {
+    itinerary.days.forEach((day, dayIndex) => {
+      if (day.lodging && day.lodging.cost > 0) {
+        found.push({
+          rule: "commitment",
+          dayIndex,
+          message: `${day.lodging.name} is already paid for — it should cost 0, not $${day.lodging.cost}.`,
+        });
+      }
+    });
+  }
+
+  return found;
+}
+
+/**
  * Everything wrong with the plan as it currently stands.
  *
  * Returns findings for the whole trip so a stop dragged off day 1 onto day 3 reports what it did
@@ -226,13 +299,21 @@ function checkDuplicates(itinerary: Itinerary): Guardrail[] {
  */
 export function evaluateItinerary(
   itinerary: Itinerary,
-  options: { budget?: number; modes?: TransportMode[]; realMinutes?: LegMinutesLookup } = {}
+  options: {
+    budget?: number;
+    modes?: TransportMode[];
+    realMinutes?: LegMinutesLookup;
+    /** What the traveler already booked. Absent means not asked — every check inside is skipped
+     *  rather than defaulting to a boundary. */
+    logistics?: TripLogistics | null;
+  } = {}
 ): Guardrail[] {
   const perDay = itinerary.days.flatMap((day, i) =>
     evaluateDay(day, i, options.modes, options.realMinutes)
   );
   const budget = options.budget ? evaluateBudget(itinerary, options.budget) : [];
-  // Needs no option, so every existing caller gains it — a duplicate is a defect whether the
-  // model wrote it or an edit introduced it.
-  return [...perDay, ...checkDuplicates(itinerary), ...budget];
+  const commitments = options.logistics ? checkCommitments(itinerary, options.logistics) : [];
+  // `checkDuplicates` needs no option, so every existing caller gains it — a duplicate is a defect
+  // whether the model wrote it or an edit introduced it.
+  return [...perDay, ...checkDuplicates(itinerary), ...commitments, ...budget];
 }

@@ -129,3 +129,64 @@ test("the same stop twice within one day is also a duplicate", () => {
   };
   assert.equal(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate").length, 1);
 });
+
+/* --- §0 rank 1: what the traveler already committed to --- */
+
+const LOGISTICS = {
+  arrivalTime: "13:45",
+  arrivalPoint: "KIX",
+  departureTime: "18:00",
+  departurePoint: "KIX",
+  stayBooked: "Hotel Ronda (already paid)",
+};
+
+const twoDayTrip = (firstStopTime, lastStopTime) => ({
+  tier: "mid-range",
+  days: [
+    {
+      date: "2026-09-19",
+      weather: "Clear",
+      lodging: { name: "Hotel Ronda (already paid)", cost: 0, note: "" },
+      stops: [{ name: "Gion walk", lat: 35.0037, lng: 135.7788, cost: 0, note: "", time: firstStopTime, durationLabel: "1 hour", category: "other" }],
+    },
+    {
+      date: "2026-09-20",
+      weather: "Clear",
+      stops: [{ name: "Nishiki Market", lat: 35.0050, lng: 135.7649, cost: 0, note: "", time: lastStopTime, durationLabel: "1 hour", category: "other" }],
+    },
+  ],
+});
+
+test("a stop before the arrival buffer clears is a commitment finding", () => {
+  // Lands 13:45, so nothing may start before 15:15.
+  const found = evaluateItinerary(twoDayTrip("14:00", "09:00"), { logistics: LOGISTICS })
+    .filter((g) => g.rule === "commitment");
+  assert.equal(found.length, 1);
+  assert.match(found[0].message, /arriv/i);
+  assert.equal(found[0].dayIndex, 0);
+});
+
+test("a stop running into the departure buffer is a commitment finding", () => {
+  // Departs 18:00, so nothing may still be running after 16:00.
+  const found = evaluateItinerary(twoDayTrip("15:30", "15:30"), { logistics: LOGISTICS })
+    .filter((g) => g.rule === "commitment");
+  assert.equal(found.length, 1);
+  assert.match(found[0].message, /depart/i);
+  assert.equal(found[0].dayIndex, 1);
+});
+
+test("booked lodging charged again is a commitment finding", () => {
+  const trip = twoDayTrip("15:30", "09:00");
+  trip.days[0].lodging = { name: "Hotel Ronda (already paid)", cost: 180, note: "" };
+  const found = evaluateItinerary(trip, { logistics: LOGISTICS })
+    .filter((g) => g.rule === "commitment");
+  assert.equal(found.length, 1);
+  assert.match(found[0].message, /already paid/i);
+});
+
+test("no logistics means no commitment findings at all", () => {
+  assert.deepEqual(
+    evaluateItinerary(twoDayTrip("06:00", "23:00")).filter((g) => g.rule === "commitment"),
+    []
+  );
+});
