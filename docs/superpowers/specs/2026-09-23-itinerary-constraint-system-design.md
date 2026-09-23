@@ -207,9 +207,13 @@ New `GuardrailRule` members: `"duplicate" | "commitment" | "required" | "party-b
   whose repeat the traveller asked for. Needs no options, so the four existing UI callers gain it
   without changing a line.
 - **commitment** — booked lodging used every night at cost 0; nothing scheduled before
-  `arrivalTime + 90min`; nothing ending after `departureTime − 120min − transfer`. 120 is the
-  checkable floor, not a claim the flight is domestic: `departurePoint` is free text and cannot tell
-  us, and a plan obeying the 3-hour rule passes a 2-hour check.
+  `arrivalTime + ARRIVAL_BUFFER_MIN`; nothing ending after
+  `departureTime − DEPARTURE_BUFFER_MIN − transfer`. The two buffers are separate constants (90 and
+  120) because they are separate things: immigration and bags after landing, against check-in and
+  security before a flight. 120 is the checkable floor rather than a claim the flight is domestic —
+  `departurePoint` is free text and cannot tell us, and a plan that correctly reserved the 3-hour
+  international buffer also clears a 2-hour check, whereas checking against 180 would fail every
+  correct domestic plan.
 - **required** — every `mustInclude` term present exactly once; no `avoid` term present. Null, not
   zero, when the traveller stated neither.
 - **party-budget** — per-person stop costs multiplied to party cost before the total is compared,
@@ -269,10 +273,22 @@ Phase A adopts. Both arms are re-scored by the same code at compare time, so thi
 comparison, and budget is not in the composite, so historical composites in
 `docs/itinerary-quality.md` stay comparable.
 
-**`usableSlot`'s `TRANSFER_BUFFER_MIN` stays at 90.** It feeds coverage, which *is* in the composite;
-raising it for the departure side would shift both arms and break comparability with every prior run,
-to answer a question the new `commitments` scorer answers better. The constant's docstring gains a
-line saying why it no longer matches the prompt's departure default.
+**`usableSlot` is extended, not duplicated, and `TRANSFER_BUFFER_MIN` splits in two.** An earlier
+draft of this spec froze that constant at 90 on the grounds that it feeds coverage and therefore the
+composite. That is wrong: `usableSlot` is exported and tested but **has no caller** — nothing in
+`scoreParsed` reaches it, and the two comments referring to it (`types.ts:196`,
+`bench/types.ts:8`) describe an integration that was never wired up. So changing it moves no
+existing number.
+
+It already implements exactly the arithmetic the `commitments` scorer needs, from the other
+direction — "is this slot plannable" against "did the plan cross the boundary". Rather than write a
+parallel copy, `TRANSFER_BUFFER_MIN` becomes `ARRIVAL_BUFFER_MIN = 90` and
+`DEPARTURE_BUFFER_MIN = 120`, `usableSlot` reads both, and `commitments` is built on the same
+window. Its existing tests in `bench.test.mjs` carry over apart from the departure expectations,
+which move with the constant.
+
+Because nothing consumes it today, this shifts no arm of the A/B and breaks no historical
+comparability — which is the outcome the earlier draft wanted for the wrong reason.
 
 ## Testing
 
@@ -292,7 +308,7 @@ the direction the rules intend.
   belong in retrieved destination context, which `destinationContext.ts` already supplies. The
   separation the skill maintains — context provides facts, the skill governs reasoning about facts
   — is preserved.
-- **No fact-confidence enum.** The reviewer's `fact_status: verified | model_known | unverified`
+- **No fact-confidence enum.** Confirmed with Zaid, 2026-09-23. The reviewer's `fact_status: verified | model_known | unverified`
   schema is not adopted. `placeFacts.ts` already distinguishes looked-up from absent, `poiLine()`
   already marks estimates inline ("hours unknown — verify before visiting", "~90 min (est)"), and
   `placeStops()` already replaces model coordinates with OSM ones. The uncertainty-propagation rule
