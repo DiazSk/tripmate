@@ -59,6 +59,80 @@ function stopCategoryFor(category: string | undefined): StopCategory {
   return 'other';
 }
 
+/** The kind of place as a noun somebody would say — singular, unlike the sheet's plural chips. */
+const KINDS: Record<string, string> = {
+  cafe: 'Cafe',
+  restaurant: 'Restaurant',
+  bar: 'Bar',
+  sights: 'Sight',
+  park: 'Park',
+  shop: 'Shop',
+  hotel: 'Hotel',
+};
+
+/**
+ * `italian;pizza` → `Italian`, `coffee_shop` → `Coffee shop`.
+ *
+ * OSM writes cuisine as a tag value: lowercase, underscored, and semicolon-separated where a venue
+ * claims several. The first is the one it leads with. Only the first letter is raised — lowercasing
+ * the remainder would turn `BBQ` into `Bbq`.
+ */
+function tidyCuisine(cuisine: string): string {
+  const first = cuisine.split(';')[0].replace(/_/g, ' ').trim();
+  return first ? first[0].toUpperCase() + first.slice(1) : '';
+}
+
+/**
+ * Hours longer than this are a week's schedule rather than a fact.
+ *
+ * `Mo-Sa 07:00-19:00` is 17 characters and belongs on a line; `Mo-Fr 08:00-18:00; Sa 09:00-14:00;
+ * Su off` is 41 and would be the only thing anybody read. The long ones are still shown in full on
+ * the place card, where there is room for them.
+ */
+const MAX_HOURS_CHARS = 24;
+
+/** At most this many facts, so the note stays one line under the stop's name. */
+const MAX_FACTS = 3;
+
+/**
+ * A stop's line, composed from what the search already found.
+ *
+ * **Facts only, and only facts somebody else recorded.** A generated stop's `note` is written by
+ * the model, which has the trip in front of it; a hand-added one has no such context, and inventing
+ * a sentence for it would put a claim in the plan nobody made. What this does instead is say what
+ * OSM says — the kind of place, whether it has tables outside, when it opens, where it is.
+ *
+ * Empty is a real answer. Coverage is partial by nature (see `FoundPlace`), and a place with
+ * nothing tagged gets `''` — exactly what every added stop got before this existed, so the row
+ * simply renders no line rather than an apology for having none.
+ *
+ * Opening hours go in **as written**. OSM's `opening_hours` is a grammar, not a clock; turning it
+ * into "open now" needs the venue's timezone and a real parser, and getting it wrong tells somebody
+ * a closed door is open.
+ */
+export function describePlace(place: FoundPlace): string {
+  // The cuisine *replaces* the kind rather than joining it. Stacking the two was the first shape
+  // and it produced "Coffee shop cafe": the pair are synonyms far more often than they are
+  // complements, and no cheap test tells those apart — `cafe` is not a substring of `coffee shop`.
+  // Replacing loses nothing, because where a cuisine exists at all it is the more specific word of
+  // the two ("Italian" over "Restaurant"). The kind still leads the other 94% of places, cuisine
+  // being the thinnest-covered tag of the set.
+  const lead = (place.cuisine ? tidyCuisine(place.cuisine) : '') || KINDS[place.category] || '';
+
+  // Ordered by how much it tells you about the place, not by how often it is present: the street
+  // is the best-covered tag of the set and still goes last, because "where" is the one thing the
+  // map beside it already answers.
+  return [
+    lead,
+    place.outdoorSeating ? 'outdoor seating' : '',
+    place.openingHours && place.openingHours.length <= MAX_HOURS_CHARS ? place.openingHours : '',
+    place.address ?? '',
+  ]
+    .filter(Boolean)
+    .slice(0, MAX_FACTS)
+    .join(' · ');
+}
+
 /**
  * The itinerary with the place inserted, or the original if the day does not exist.
  *
@@ -84,7 +158,9 @@ export function addPlaceToDay(
     lat: place.lat,
     lng: place.lng,
     cost: 0,
-    note: '',
+    // The facts the search already fetched, rather than the blank line this used to leave. They
+    // were in hand at this exact moment and were being dropped — see `describePlace`.
+    note: describePlace(place),
     time: plan.time,
     durationLabel: '',
     category: stopCategoryFor(place.category),

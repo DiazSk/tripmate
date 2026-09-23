@@ -1,6 +1,6 @@
 import type { FoundPlace, Itinerary, Stop } from '@/api/types';
 
-import { addPlaceToDay, slotPreview, suggestDay, suggestTimeOfDay } from './addPlace';
+import { addPlaceToDay, describePlace, slotPreview, suggestDay, suggestTimeOfDay } from './addPlace';
 
 const stop = (name: string, time: string, lat: number, lng: number): Stop => ({
   name,
@@ -73,6 +73,65 @@ test('the original itinerary is untouched, so a failed save can be rolled back',
 
 test('a day that does not exist changes nothing', () => {
   expect(addPlaceToDay(trip, 9, place('Somewhere', 35.0, 135.77, 'park'), 'Morning')).toBe(trip);
+});
+
+// --- describePlace -------------------------------------------------------------------------
+
+const cafe = (extra: Partial<FoundPlace>): FoundPlace => ({
+  ...place('Somewhere', 35.0, 135.77, 'cafe'),
+  ...extra,
+});
+
+test('the line leads with the kind of place', () => {
+  expect(describePlace(place('Trattoria', 35.0, 135.77, 'restaurant'))).toBe('Restaurant');
+  expect(describePlace(place('Kiyomizu-dera', 35.0, 135.77, 'sights'))).toBe('Sight');
+});
+
+// The more specific word wins, and stacking the two produced "Coffee shop cafe".
+test('a cuisine replaces the kind rather than joining it', () => {
+  expect(describePlace(cafe({ category: 'restaurant', cuisine: 'italian' }))).toBe('Italian');
+  expect(describePlace(cafe({ cuisine: 'coffee_shop' }))).toBe('Coffee shop');
+  // Semicolons separate the kinds a venue claims; underscores are OSM's spaces.
+  expect(describePlace(cafe({ cuisine: 'italian;pizza' }))).toBe('Italian');
+  expect(describePlace(cafe({ cuisine: 'fish_and_chips' }))).toBe('Fish and chips');
+});
+
+test('the facts join in order, and stop at three', () => {
+  expect(
+    describePlace(
+      cafe({ outdoorSeating: true, openingHours: 'Mo-Sa 07:00-19:00', address: 'Via di Citta 43' })
+    )
+  ).toBe('Cafe · outdoor seating · Mo-Sa 07:00-19:00');
+});
+
+test('the street is carried when there is room for it', () => {
+  expect(describePlace(cafe({ address: 'Via di Citta 43' }))).toBe('Cafe · Via di Citta 43');
+});
+
+// A week's schedule is not a fact on one line — the card shows it in full instead.
+test('a long opening-hours grammar is left out rather than swallowing the line', () => {
+  const long = 'Mo-Fr 08:00-18:00; Sa 09:00-14:00; Su off';
+  expect(describePlace(cafe({ openingHours: long, address: 'Via di Citta 43' }))).toBe(
+    'Cafe · Via di Citta 43'
+  );
+});
+
+// `false` is OSM saying no, which is not worth a line; absent is nobody having said.
+test('outdoor seating appears only when it is actually there', () => {
+  expect(describePlace(cafe({ outdoorSeating: false }))).toBe('Cafe');
+  expect(describePlace(cafe({ outdoorSeating: undefined }))).toBe('Cafe');
+});
+
+// Empty is the honest answer, and is exactly what every added stop got before this existed.
+test('a place with nothing tagged gets no line at all', () => {
+  expect(describePlace(place('Nowhere', 35.0, 135.77, 'place'))).toBe('');
+});
+
+test('the added stop carries the description the search already found', () => {
+  const found = cafe({ name: 'Slow Jet Coffee', outdoorSeating: true, address: 'Kiyamachi' });
+  const next = addPlaceToDay(trip, 0, found, 'Morning');
+  const added = next.days[0].stops.find((s) => s.name === 'Slow Jet Coffee')!;
+  expect(added.note).toBe('Cafe · outdoor seating · Kiyamachi');
 });
 
 test('the slot preview reports the time it would actually get', () => {
