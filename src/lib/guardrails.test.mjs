@@ -113,6 +113,60 @@ test("two different places close together are not duplicates", () => {
   assert.deepEqual(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate"), []);
 });
 
+test("two food stops sharing a neighborhood's coordinates are not duplicates", () => {
+  // §3b: an area-level food stop carries the neighborhood's own lat/lng, so two different meals
+  // in the same district are supposed to land on the same point.
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      {
+        date: "2026-09-19",
+        weather: "Clear",
+        stops: [
+          { name: "Lunch around Pike Place Market", lat: 47.6097, lng: -122.3422, cost: 20, note: "", time: "12:00", durationLabel: "1 hour", category: "food" },
+          { name: "Dinner around Pike Place Market", lat: 47.6097, lng: -122.3422, cost: 40, note: "", time: "19:00", durationLabel: "1 hour", category: "food" },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate"), []);
+});
+
+test("two transit legs sharing a station's coordinates are not duplicates", () => {
+  // An arrival transfer to a station and a departure transfer from it are the same coordinate on
+  // purpose — different legs, same point.
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      { date: "2026-09-19", weather: "Clear", stops: [{ name: "Airport to Kyoto Station", lat: 34.9851, lng: 135.7583, cost: 60, note: "", time: "15:30", durationLabel: "1h 45m", category: "transit" }] },
+      { date: "2026-09-21", weather: "Clear", stops: [{ name: "Transfer to Kyoto Station", lat: 34.9851, lng: 135.7583, cost: 15, note: "", time: "08:00", durationLabel: "20m", category: "transit" }] },
+    ],
+  };
+  assert.deepEqual(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate"), []);
+});
+
+test("two food stops with the same name are still a duplicate — name matching survives", () => {
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      { date: "2026-09-19", weather: "Clear", stops: [{ name: "Dinner at Sushi Dai", lat: 35.6654, lng: 139.7707, cost: 50, note: "", time: "19:00", durationLabel: "1 hour", category: "food" }] },
+      { date: "2026-09-20", weather: "Clear", stops: [{ name: "Dinner at Sushi Dai", lat: 35.6700, lng: 139.7800, cost: 50, note: "", time: "19:00", durationLabel: "1 hour", category: "food" }] },
+    ],
+  };
+  assert.equal(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate").length, 1);
+});
+
+test("two non-food, non-transit stops still trip on proximity — the narrowing doesn't swallow this", () => {
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      { date: "2026-09-19", weather: "Clear", stops: [{ name: "Sensō-ji", lat: 35.7148, lng: 139.7967, cost: 0, note: "", time: "10:00", durationLabel: "1 hour", category: "entry" }] },
+      { date: "2026-09-20", weather: "Clear", stops: [{ name: "Asakusa Kannon Temple", lat: 35.7148, lng: 139.7967, cost: 0, note: "", time: "10:00", durationLabel: "1 hour", category: "entry" }] },
+    ],
+  };
+  assert.equal(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate").length, 1);
+});
+
 test("the same stop twice within one day is also a duplicate", () => {
   const itinerary = {
     tier: "mid-range",
