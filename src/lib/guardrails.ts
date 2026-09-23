@@ -9,7 +9,7 @@ import {
 } from "./itinerary";
 import { normalizeStopName } from "./placeConflicts";
 import { legMinutes } from "./schedule";
-import type { DayPlan, Itinerary, Stop, TransportMode, TripLogistics } from "./types";
+import type { DayPlan, Itinerary, Stop, StopCategory, TransportMode, TripLogistics } from "./types";
 
 /**
  * The §12 guardrails, evaluated in code.
@@ -200,19 +200,32 @@ const DUPLICATE_DEGREES = 0.0015;
  * Matches on the normalized name OR on proximity, not both: "Sensō-ji" and "Asakusa Kannon Temple"
  * share coordinates and no letters, while two branches of one chain share a name and no
  * coordinates. Either alone is enough to be worth a look.
+ *
+ * The proximity branch is skipped for `food` and `transit` stops, because for those two
+ * categories sharing coordinates is by design, not by accident. §3b has an area-level food stop
+ * carry the neighborhood's own lat/lng rather than a specific restaurant's — "Dinner around Pike
+ * Place Market" and "Lunch near Pike Place Market" are two different meals that are supposed to
+ * land on the same point, and flagging that as a repeat would report the rule the skill states
+ * working as a fault. A transit leg to a station and the leg back from it are the same coordinate
+ * on purpose for the same reason. Name matching still applies to both categories unchanged — two
+ * dinners at the literally same restaurant, or the same transit leg logged twice, are still caught.
  */
 function checkDuplicates(itinerary: Itinerary): Guardrail[] {
   const found: Guardrail[] = [];
-  const seen: { key: string; lat: number; lng: number; name: string }[] = [];
+  const seen: { key: string; lat: number; lng: number; name: string; category: StopCategory }[] = [];
 
   itinerary.days.forEach((day, dayIndex) => {
     for (const stop of day.stops ?? []) {
       const key = normalizeStopName(stop.name);
       if (!key) continue;
+      const coLocationExpected = stop.category === "food" || stop.category === "transit";
       const prior = seen.find(
         (s) =>
           s.key === key ||
-          (Math.abs(s.lat - stop.lat) < DUPLICATE_DEGREES &&
+          (!coLocationExpected &&
+            s.category !== "food" &&
+            s.category !== "transit" &&
+            Math.abs(s.lat - stop.lat) < DUPLICATE_DEGREES &&
             Math.abs(s.lng - stop.lng) < DUPLICATE_DEGREES)
       );
       if (prior) {
@@ -222,7 +235,7 @@ function checkDuplicates(itinerary: Itinerary): Guardrail[] {
           message: `${stop.name} is already in the trip as ${prior.name} — the same place twice.`,
         });
       } else {
-        seen.push({ key, lat: stop.lat, lng: stop.lng, name: stop.name });
+        seen.push({ key, lat: stop.lat, lng: stop.lng, name: stop.name, category: stop.category });
       }
     }
   });
