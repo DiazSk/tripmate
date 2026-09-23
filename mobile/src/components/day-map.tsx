@@ -85,10 +85,13 @@ export function DayMap({
         pitchEnabled={false}
         // Android otherwise puts Google's own directions buttons over the map on a marker press.
         toolbarEnabled={false}>
-        {/* No `onPress` on the map to clear the emphasis, and that is not an omission. A marker
-            press bubbles to it on iOS, so the tap set the emphasis and the same gesture cleared
-            it — the disc never changed colour and the tap simply looked dead. Clearing is still
-            reachable two ways: press the marker again, or press the caption. */}
+        {/* No `onPress` on the map, and that is deliberate twice over. A marker press bubbles to
+            it on iOS, so a handler here sees the same gesture that set the emphasis and clears it
+            — the disc never changes colour and the tap looks dead. And a plain tap on a map is
+            *pointing*: it means "that one", which presumes a referent. Apple's own POI labels are
+            not ours to make tappable, so a tap here points at nothing and any answer would be a
+            guess. "What is near here" now hangs off a stop, which is a referent. Clearing the
+            emphasis is reachable two ways: press the marker again, or press the caption. */}
         {line.length >= 2 ? (
           <>
             {/* Two strokes, glow first: a thin core inside a soft spill. Order is the z-order —
