@@ -28,8 +28,14 @@ import type { DayPlan, Itinerary, Stop, TransportMode, TripLogistics } from "./t
  * `realMinutes` lets the generation path substitute looked-up door-to-door durations for the
  * straight-line estimate. UI callers omit it and behave exactly as before.
  *
- * Rules mirrored: §12a travel feasibility, §12b time overlaps only, §12c pace, §12d budget.
- * Keep this file and SKILL.md §12 in step — if a threshold moves in one, move it in the other.
+ * Rules mirrored: §12a travel feasibility, §12b time overlaps only, §12c pace, §12d budget,
+ * §14e duplicates, §0 rank 1 commitments, §0 rank 4 must-dos and exclusions, §5 party pricing.
+ *
+ * Keep this file in step with SKILL.md and with the four prompt builders that state the same
+ * rules in prose — `lodgingPrompt.ts` (the budget ceiling), `travelerProfilePrompt.ts` (the
+ * arrival and departure buffers), `itineraryPrompt.ts` (the precedence order and the critique
+ * checklist) and `editPrompt.ts` (minimal change). A threshold now lives in five files, not two;
+ * moving it in one is how the model and the checker start disagreeing.
  */
 
 export type GuardrailRule =
@@ -291,6 +297,86 @@ function checkCommitments(itinerary: Itinerary, logistics: TripLogistics): Guard
 }
 
 /**
+ * §0 rank 4: what the traveler named outright.
+ *
+ * A must-include is not an interest tag. "I like museums" is a preference the plan weighs; "I have
+ * to see the Louvre" is a requirement, and a plan missing it has failed however good the rest is.
+ * Reported trip-wide (`dayIndex: null`) because the fix is "put it somewhere", not "fix day 3".
+ *
+ * **The two directions match differently, and the asymmetry is the point.** Both run on
+ * `normalizeStopName`'s output, so the model's capitalisation and punctuation drift is absorbed
+ * the way `placeConflicts` absorbs it. But a must-do is typically a *prefix* of a longer real name
+ * — "Louvre" has to match "Louvre Museum" — so it matches as a substring. An exclusion is a whole
+ * word, and a bare substring test makes `avoid: ["bar"]` fire on every stop in Barcelona. A check
+ * that cries wolf teaches everyone to ignore the channel it feeds, so exclusions match on word
+ * boundaries: the normalized form is lowercase alphanumerics separated by single spaces, so
+ * padding both sides with a space is the whole of the boundary test, and it still matches a
+ * multi-word exclusion as a contiguous run of whole words.
+ */
+function checkRequired(
+  itinerary: Itinerary,
+  mustInclude: string[],
+  avoid: string[]
+): Guardrail[] {
+  const found: Guardrail[] = [];
+  const names = itinerary.days.flatMap((d) => (d.stops ?? []).map((s) => normalizeStopName(s.name)));
+
+  for (const want of mustInclude) {
+    const key = normalizeStopName(want);
+    if (!key) continue;
+    if (!names.some((n) => n.includes(key))) {
+      found.push({
+        rule: "required",
+        dayIndex: null,
+        message: `${want} was asked for but is not in the plan.`,
+      });
+    }
+  }
+
+  for (const unwanted of avoid) {
+    const key = normalizeStopName(unwanted);
+    if (!key) continue;
+    if (names.some((n) => ` ${n} `.includes(` ${key} `))) {
+      found.push({
+        rule: "required",
+        dayIndex: null,
+        message: `${unwanted} was excluded but something in the plan matches it.`,
+      });
+    }
+  }
+
+  return found;
+}
+
+/**
+ * §5 + §9: a per-person price is not a trip total.
+ *
+ * `tripSpend` sums the numbers as written. Where those are per head — which is what a "$20"
+ * museum entry means for a party of four — the trip costs four times what the plan says, and the
+ * budget check silently passes a trip that is 300% over. Reported separately from `budget` so the
+ * two readings are visible side by side rather than one overwriting the other.
+ *
+ * Lodging is excluded from the multiplication: a room price is already a party price.
+ */
+function checkPartyBudget(itinerary: Itinerary, budget: number, partySize: number): Guardrail[] {
+  if (partySize <= 1) return [];
+  const stopsTotal = itinerary.days.reduce(
+    (n, day) => n + (day.stops ?? []).reduce((m, s) => m + (s.actualCost ?? s.cost ?? 0), 0),
+    0
+  );
+  const lodgingTotal = itinerary.days.reduce((n, day) => n + (day.lodging?.cost ?? 0), 0);
+  const partyTotal = stopsTotal * partySize + lodgingTotal;
+  if (partyTotal <= budget) return [];
+  return [
+    {
+      rule: "party-budget",
+      dayIndex: null,
+      message: `Priced per person, this comes to $${Math.round(partyTotal)} for ${partySize} people — $${Math.round(partyTotal - budget)} over the $${budget} budget.`,
+    },
+  ];
+}
+
+/**
  * Everything wrong with the plan as it currently stands.
  *
  * Returns findings for the whole trip so a stop dragged off day 1 onto day 3 reports what it did
@@ -306,6 +392,11 @@ export function evaluateItinerary(
     /** What the traveler already booked. Absent means not asked — every check inside is skipped
      *  rather than defaulting to a boundary. */
     logistics?: TripLogistics | null;
+    /** Places the traveler named outright. Absent means none were named, not none matter. */
+    mustInclude?: string[];
+    avoid?: string[];
+    /** Heads, for converting per-person stop costs to a party total. 1 or absent is a no-op. */
+    partySize?: number;
   } = {}
 ): Guardrail[] {
   const perDay = itinerary.days.flatMap((day, i) =>
@@ -313,7 +404,22 @@ export function evaluateItinerary(
   );
   const budget = options.budget ? evaluateBudget(itinerary, options.budget) : [];
   const commitments = options.logistics ? checkCommitments(itinerary, options.logistics) : [];
+  const required =
+    options.mustInclude?.length || options.avoid?.length
+      ? checkRequired(itinerary, options.mustInclude ?? [], options.avoid ?? [])
+      : [];
+  const partyBudget =
+    options.budget && options.partySize
+      ? checkPartyBudget(itinerary, options.budget, options.partySize)
+      : [];
   // `checkDuplicates` needs no option, so every existing caller gains it — a duplicate is a defect
   // whether the model wrote it or an edit introduced it.
-  return [...perDay, ...checkDuplicates(itinerary), ...commitments, ...budget];
+  return [
+    ...perDay,
+    ...checkDuplicates(itinerary),
+    ...commitments,
+    ...required,
+    ...budget,
+    ...partyBudget,
+  ];
 }

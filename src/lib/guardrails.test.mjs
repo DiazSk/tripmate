@@ -190,3 +190,80 @@ test("no logistics means no commitment findings at all", () => {
     []
   );
 });
+
+/* --- §0 rank 4: what the traveler named outright, and §5 party pricing --- */
+
+const oneStop = (name) => ({
+  tier: "mid-range",
+  days: [
+    {
+      date: "2026-09-19",
+      weather: "Clear",
+      stops: [{ name, lat: 48.8606, lng: 2.3376, cost: 20, note: "", time: "10:00", durationLabel: "1 hour", category: "entry" }],
+    },
+  ],
+});
+
+test("a must-include that never appears is a finding", () => {
+  const found = evaluateItinerary(oneStop("Musée d'Orsay"), { mustInclude: ["Louvre Museum"] })
+    .filter((g) => g.rule === "required");
+  assert.equal(found.length, 1);
+  assert.match(found[0].message, /Louvre Museum/);
+  assert.equal(found[0].dayIndex, null, "a missing must-do is a trip-wide finding");
+});
+
+test("a must-include that appears is not a finding", () => {
+  assert.deepEqual(
+    evaluateItinerary(oneStop("Louvre Museum"), { mustInclude: ["louvre  museum"] })
+      .filter((g) => g.rule === "required"),
+    []
+  );
+});
+
+test("a must-include matches as a substring, so a prefix of the real name counts", () => {
+  assert.deepEqual(
+    evaluateItinerary(oneStop("Louvre Museum"), { mustInclude: ["Louvre"] })
+      .filter((g) => g.rule === "required"),
+    [],
+    "travelers name the place, not its full signage"
+  );
+});
+
+test("an excluded term that appears is a finding", () => {
+  const found = evaluateItinerary(oneStop("Rooftop cocktail bar"), { avoid: ["bar"] })
+    .filter((g) => g.rule === "required");
+  assert.equal(found.length, 1);
+  assert.match(found[0].message, /bar/i);
+});
+
+test("an exclusion matches whole words only, so 'bar' does not fire on Barcelona", () => {
+  // The asymmetry with must-include is deliberate: a must-do is typically a prefix of a longer
+  // real name, an exclusion is a whole word. A check that cries wolf on every Barcelona stop
+  // trains everyone to ignore the channel this feeds.
+  assert.deepEqual(
+    evaluateItinerary(oneStop("Barcelona Cathedral"), { avoid: ["bar"] })
+      .filter((g) => g.rule === "required"),
+    []
+  );
+});
+
+test("party size multiplies per-person costs before the budget is judged", () => {
+  // $20 a head for four is $80, which clears a $100 budget; the same plan against a $50 budget
+  // does not.
+  assert.deepEqual(
+    evaluateItinerary(oneStop("Louvre Museum"), { budget: 100, partySize: 4 })
+      .filter((g) => g.rule === "party-budget"),
+    []
+  );
+  const over = evaluateItinerary(oneStop("Louvre Museum"), { budget: 50, partySize: 4 })
+    .filter((g) => g.rule === "party-budget");
+  assert.equal(over.length, 1);
+  assert.match(over[0].message, /4 people/);
+});
+
+test("no party size means the plain budget check, unchanged", () => {
+  assert.deepEqual(
+    evaluateItinerary(oneStop("Louvre Museum"), { budget: 50 }).filter((g) => g.rule === "party-budget"),
+    []
+  );
+});
