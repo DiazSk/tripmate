@@ -210,7 +210,9 @@ test("evaluateItinerary reports days the traveler is no longer looking at", () =
   const it = {
     tier: "midrange",
     days: [
-      day([stop({ name: "fine", time: "9:00 AM" })]),
+      // Deliberately off the default coordinate: every other stop here sits on NEAR, and the
+      // duplicate check reads two stops within ~150m of each other as one place written twice.
+      day([stop({ name: "fine", ...ALSO_NEAR, time: "9:00 AM" })]),
       day(
         [
           stop({ name: "Far", ...FAR, time: "9:00 AM", durationLabel: "1 hour" }),

@@ -1,4 +1,5 @@
 import { dayActiveSpan, parseClock, parseDuration, tripSpend } from "./itinerary";
+import { normalizeStopName } from "./placeConflicts";
 import { legMinutes } from "./schedule";
 import type { DayPlan, Itinerary, Stop, TransportMode } from "./types";
 
@@ -23,7 +24,15 @@ import type { DayPlan, Itinerary, Stop, TransportMode } from "./types";
  * Keep this file and SKILL.md §12 in step — if a threshold moves in one, move it in the other.
  */
 
-export type GuardrailRule = "travel" | "overlap" | "pace" | "budget";
+export type GuardrailRule =
+  | "travel"
+  | "overlap"
+  | "pace"
+  | "budget"
+  | "duplicate"
+  | "commitment"
+  | "required"
+  | "party-budget";
 
 /** Looked-up door-to-door minutes for one hop, or `null` when no route was found. */
 export type LegMinutesLookup = (from: Stop, to: Stop) => number | null;
@@ -163,6 +172,51 @@ export function evaluateBudget(itinerary: Itinerary, budget: number): Guardrail[
   ];
 }
 
+/** Two stops this close, under names that normalize the same, are one place written twice rather
+ *  than two neighbours. Degrees, not metres: ~0.0015° is roughly 150m at any latitude this app
+ *  plans trips at, and a haversine here would be precision the comparison does not need. */
+const DUPLICATE_DEGREES = 0.0015;
+
+/**
+ * §14e: the same place scheduled twice across the trip.
+ *
+ * Trip-wide rather than per-day, because reading a plan day by day is exactly how a repeat
+ * survives. Lodging is exempt — §4c *requires* the same stay on every night in one city, so
+ * flagging it would report the rule working as a fault.
+ *
+ * Matches on the normalized name OR on proximity, not both: "Sensō-ji" and "Asakusa Kannon Temple"
+ * share coordinates and no letters, while two branches of one chain share a name and no
+ * coordinates. Either alone is enough to be worth a look.
+ */
+function checkDuplicates(itinerary: Itinerary): Guardrail[] {
+  const found: Guardrail[] = [];
+  const seen: { key: string; lat: number; lng: number; name: string }[] = [];
+
+  itinerary.days.forEach((day, dayIndex) => {
+    for (const stop of day.stops ?? []) {
+      const key = normalizeStopName(stop.name);
+      if (!key) continue;
+      const prior = seen.find(
+        (s) =>
+          s.key === key ||
+          (Math.abs(s.lat - stop.lat) < DUPLICATE_DEGREES &&
+            Math.abs(s.lng - stop.lng) < DUPLICATE_DEGREES)
+      );
+      if (prior) {
+        found.push({
+          rule: "duplicate",
+          dayIndex,
+          message: `${stop.name} is already in the trip as ${prior.name} — the same place twice.`,
+        });
+      } else {
+        seen.push({ key, lat: stop.lat, lng: stop.lng, name: stop.name });
+      }
+    }
+  });
+
+  return found;
+}
+
 /**
  * Everything wrong with the plan as it currently stands.
  *
@@ -178,5 +232,7 @@ export function evaluateItinerary(
     evaluateDay(day, i, options.modes, options.realMinutes)
   );
   const budget = options.budget ? evaluateBudget(itinerary, options.budget) : [];
-  return [...perDay, ...budget];
+  // Needs no option, so every existing caller gains it — a duplicate is a defect whether the
+  // model wrote it or an edit introduced it.
+  return [...perDay, ...checkDuplicates(itinerary), ...budget];
 }
