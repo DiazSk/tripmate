@@ -149,9 +149,16 @@ When an arrival point is given (an airport, a station), keep day 1's first stop 
 lodging near it or on the natural route in from it. A traveler who lands at 20:15 should be eating
 somewhere close, not crossing the city.
 
-The last day mirrors this: leave roughly 90 minutes clear before the departure time for the
-transfer out, plan nothing that would run into it, and keep that day's stops near the departure
-point.
+The last day mirrors this, but with **two** buffers rather than one, because they are different
+things and collapsing them is how a traveler misses a flight:
+
+1. the travel time from the last stop to the departure point; **plus**
+2. an arrival buffer at the departure point itself — roughly 2 hours before a domestic flight,
+   3 hours before an international one, and much less for a train.
+
+Those are conservative defaults, not claims about a specific airport: if the trip context gives
+airline or airport guidance, use that instead. The airport buffer is never part of the transfer
+time. Plan nothing that would run into either, and keep that day's stops near the departure point.
 
 Both are optional. When no arrival or departure is given, plan both days in full — absence means
 the traveler didn't say, not that they arrive at midnight.
