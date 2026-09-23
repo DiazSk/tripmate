@@ -258,6 +258,7 @@ export function buildRefinePrompt(params: {
   resolvedFlags?: ResolvedFlags | null;
   dietary?: DietaryNeeds | null;
   logistics?: TripLogistics | null;
+  answers?: UserAnswers | null;
 }): string {
   return `Here is a trip itinerary for ${params.destination} (${params.startDate} to ${params.endDate}, budget $${params.budget}):
 
@@ -266,7 +267,7 @@ ${JSON.stringify(params.previousItinerary)}
 Style: ${tierStyle(params.previousItinerary.tier)}
 
 The user's feedback on this itinerary: "${params.feedback}"
-${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
+${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
 Revise the itinerary to address this feedback. Keep real, well-known places with real approximate latitude/longitude, keep the lodging entries, and keep per-stop costs realistic.
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}

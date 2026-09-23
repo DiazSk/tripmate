@@ -182,6 +182,11 @@ export async function runGeneration(
       resolvedFlags,
       dietary,
       logistics,
+      // Same guarded value the generate branch passes — computed once, above, alongside
+      // resolvedFlags/logistics, inside the try that already treats a malformed userAnswers as
+      // absent rather than fatal. Not re-cast here: a second, differently-guarded read of
+      // `userAnswers` right beside the first would be the inconsistency this exists to avoid.
+      answers,
     }));
   } else {
     if (!tier) {
