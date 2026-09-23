@@ -101,7 +101,28 @@ function logisticsSection(trip: ReconciledTrip): string {
   if (l?.departureTime?.trim()) {
     lines.push(`departure_time (last day, local): ${l.departureTime.trim()}`);
   }
+  // Verbatim and last, labelled as the traveler's own words so the model reads it as fact rather
+  // than as an instruction competing with the rules. Never parsed: the machine-readable
+  // requirements have their own section.
+  if (trip.userAnswers.constraintsNote?.trim()) {
+    lines.push(`traveler's own words: ${trip.userAnswers.constraintsNote.trim()}`);
+  }
   return lines.length > 0 ? lines.join("\n") : "Nothing booked or stated — lodging is yours to choose.";
+}
+
+/**
+ * What the traveler named outright, kept separate from `## Flags` because it is a different kind
+ * of thing: priorities are weights, these are requirements. §0 rank 4.
+ *
+ * "None stated" rather than an empty section, matching `dietarySection` — a blank heading reads to
+ * the model as an omission it might fill in.
+ */
+function requirementsSection(trip: ReconciledTrip): string {
+  const a = trip.userAnswers;
+  const lines: string[] = [];
+  if (a.mustInclude?.length) lines.push(`must_include: ${a.mustInclude.join(", ")}`);
+  if (a.avoid?.length) lines.push(`avoid: ${a.avoid.join(", ")}`);
+  return lines.length > 0 ? lines.join("\n") : "None stated.";
 }
 
 /** Model-sourced (one cached LLM call), so it is ranked below the fetched facts above and labelled
@@ -310,6 +331,9 @@ ${flagsSection(trip)}
 
 ## Dietary needs
 ${dietarySection(trip)}
+
+## Must include / Avoid
+${requirementsSection(trip)}
 
 ## Accessibility
 ${accessibilitySection(trip)}

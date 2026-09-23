@@ -9,10 +9,11 @@ import type {
   ItineraryPreferences,
   ResolvedFlags,
   TripLogistics,
+  UserAnswers,
 } from "./types";
 import { TIERS } from "./tiers";
 import type { TierId } from "./tiers";
-import { formatTravelLegs, formatTravelerProfile } from "./travelerProfilePrompt";
+import { formatRequirements, formatTravelLegs, formatTravelerProfile } from "./travelerProfilePrompt";
 import { formatDietary } from "./dietaryPrompt";
 import {
   budgetInstruction,
@@ -221,6 +222,7 @@ export function buildGeneratePrompt(params: {
   dietary?: DietaryNeeds | null;
   logistics?: TripLogistics | null;
   bikeshare?: BikeshareSystem | null;
+  answers?: UserAnswers | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -230,7 +232,7 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}
+${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
 Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${lodgingInstruction()}

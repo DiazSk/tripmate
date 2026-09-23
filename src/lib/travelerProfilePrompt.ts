@@ -1,4 +1,4 @@
-import type { ResolvedFlags, TripLogistics } from "./types";
+import type { ResolvedFlags, TripLogistics, UserAnswers } from "./types";
 
 /**
  * The traveler's answers, rendered as prompt lines. Kept in its own module rather
@@ -133,4 +133,32 @@ export function formatTravelLegs(logistics: TripLogistics | null): string {
 
   if (lines.length === 0) return "";
   return `\nBooked travel:\n${lines.map((line) => `- ${line}`).join("\n")}\n`;
+}
+
+/**
+ * The legacy path's copy of `## Must include / Avoid`, on the same empty-string-for-absent
+ * contract as `formatTravelLegs` — a traveler who named nothing gets a byte-identical prompt to
+ * the one they'd have got before these fields existed. Takes the whole answers object, not just
+ * the three fields it reads, on the same `| null` contract as `formatTravelerProfile` — the legacy
+ * route sometimes has no `userAnswers` at all (an older caller, a raw curl).
+ */
+export function formatRequirements(answers: UserAnswers | null): string {
+  if (!answers) return "";
+
+  const lines: string[] = [];
+  if (answers.mustInclude?.length) {
+    lines.push(
+      `Must include, and these are requirements rather than preferences: ${answers.mustInclude.join(", ")}. Each appears exactly once. If one genuinely cannot fit, say which and why rather than dropping it silently.`
+    );
+  }
+  if (answers.avoid?.length) {
+    lines.push(`Do not include: ${answers.avoid.join(", ")}. This is a hard exclusion, not a de-emphasis.`);
+  }
+  if (answers.constraintsNote?.trim()) {
+    lines.push(
+      `In the traveler's own words: "${answers.constraintsNote.trim()}" — treat anything named there as already decided. Never assume access to a transport mode, a booking or a budget basis it does not mention, but don't read its silence as a denial either: if it doesn't say they have a car, don't plan a day that needs one — that is not the same as assuming they don't have one.`
+    );
+  }
+  if (lines.length === 0) return "";
+  return `\nStated requirements:\n${lines.map((l) => `- ${l}`).join("\n")}\n`;
 }
