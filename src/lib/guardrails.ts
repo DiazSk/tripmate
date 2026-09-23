@@ -29,7 +29,7 @@ import type { DayPlan, Itinerary, Stop, TransportMode, TripLogistics } from "./t
  * straight-line estimate. UI callers omit it and behave exactly as before.
  *
  * Rules mirrored: §12a travel feasibility, §12b time overlaps only, §12c pace, §12d budget,
- * §14e duplicates, §0 rank 1 commitments, §0 rank 4 must-dos and exclusions, §5 party pricing.
+ * §14e duplicates, §0 rank 1 commitments, §0 rank 4 must-dos and exclusions.
  *
  * Keep this file in step with SKILL.md and with the four prompt builders that state the same
  * rules in prose — `lodgingPrompt.ts` (the budget ceiling), `travelerProfilePrompt.ts` (the
@@ -45,8 +45,7 @@ export type GuardrailRule =
   | "budget"
   | "duplicate"
   | "commitment"
-  | "required"
-  | "party-budget";
+  | "required";
 
 /** Looked-up door-to-door minutes for one hop, or `null` when no route was found. */
 export type LegMinutesLookup = (from: Stop, to: Stop) => number | null;
@@ -349,34 +348,6 @@ function checkRequired(
 }
 
 /**
- * §5 + §9: a per-person price is not a trip total.
- *
- * `tripSpend` sums the numbers as written. Where those are per head — which is what a "$20"
- * museum entry means for a party of four — the trip costs four times what the plan says, and the
- * budget check silently passes a trip that is 300% over. Reported separately from `budget` so the
- * two readings are visible side by side rather than one overwriting the other.
- *
- * Lodging is excluded from the multiplication: a room price is already a party price.
- */
-function checkPartyBudget(itinerary: Itinerary, budget: number, partySize: number): Guardrail[] {
-  if (partySize <= 1) return [];
-  const stopsTotal = itinerary.days.reduce(
-    (n, day) => n + (day.stops ?? []).reduce((m, s) => m + (s.actualCost ?? s.cost ?? 0), 0),
-    0
-  );
-  const lodgingTotal = itinerary.days.reduce((n, day) => n + (day.lodging?.cost ?? 0), 0);
-  const partyTotal = stopsTotal * partySize + lodgingTotal;
-  if (partyTotal <= budget) return [];
-  return [
-    {
-      rule: "party-budget",
-      dayIndex: null,
-      message: `Priced per person, this comes to $${Math.round(partyTotal)} for ${partySize} people — $${Math.round(partyTotal - budget)} over the $${budget} budget.`,
-    },
-  ];
-}
-
-/**
  * Everything wrong with the plan as it currently stands.
  *
  * Returns findings for the whole trip so a stop dragged off day 1 onto day 3 reports what it did
@@ -395,8 +366,6 @@ export function evaluateItinerary(
     /** Places the traveler named outright. Absent means none were named, not none matter. */
     mustInclude?: string[];
     avoid?: string[];
-    /** Heads, for converting per-person stop costs to a party total. 1 or absent is a no-op. */
-    partySize?: number;
   } = {}
 ): Guardrail[] {
   const perDay = itinerary.days.flatMap((day, i) =>
@@ -408,10 +377,6 @@ export function evaluateItinerary(
     options.mustInclude?.length || options.avoid?.length
       ? checkRequired(itinerary, options.mustInclude ?? [], options.avoid ?? [])
       : [];
-  const partyBudget =
-    options.budget && options.partySize
-      ? checkPartyBudget(itinerary, options.budget, options.partySize)
-      : [];
   // `checkDuplicates` needs no option, so every existing caller gains it — a duplicate is a defect
   // whether the model wrote it or an edit introduced it.
   return [
@@ -420,6 +385,5 @@ export function evaluateItinerary(
     ...commitments,
     ...required,
     ...budget,
-    ...partyBudget,
   ];
 }
