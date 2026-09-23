@@ -1,5 +1,5 @@
 import { insertDay, redateDays, removeDay } from "./tripDays";
-import type { Itinerary, Stop } from "./types";
+import type { DayPlan, Itinerary, Stop } from "./types";
 
 /**
  * Edits arrive as operations, never as a regenerated itinerary.
@@ -30,9 +30,44 @@ function inRange(i: number, len: number): boolean {
 }
 
 /**
+ * Where a stop the model wanted at `stopIndex` goes, given the day may have moved underneath.
+ *
+ * Reads as "before whatever used to be at `stopIndex`", and scans forward when that stop has
+ * itself been removed by an earlier op in this patch — which is what makes a swap expressed as
+ * remove-then-add land in the slot it vacated rather than at the end of the day. Nothing left to
+ * sit in front of means append, which is also the answer for the append the model asks for by
+ * naming an index past the end.
+ */
+function insertionIndex(day: DayPlan, before: Stop[], stopIndex: number): number {
+  for (let i = Math.max(stopIndex, 0); i < before.length; i++) {
+    const at = day.stops.indexOf(before[i]);
+    if (at >= 0) return at;
+  }
+  return day.stops.length;
+}
+
+/**
  * Applies ops to a deep clone. `allowedDayIndex`/`allowedStopIndex`, when given, scope-lock the
  * patch (Mode B): any op touching a different slot is rejected rather than applied, so a
  * single-element edit can never quietly reshuffle the rest of the day.
+ *
+ * **Every `stopIndex` addresses the day as the model was shown it, not as the patch has left it.**
+ * A multi-op turn — "drop the museum and the shrine, and put ramen where the shrine was" — used to
+ * resolve each op against an array its predecessors had already spliced, so two removals listed
+ * low-index-first deleted the second stop and then whatever slid into the gap. Both indices were
+ * in range, so nothing was rejected and nobody was told. The only defence was a paragraph in
+ * `editPrompt.ts` asking the model to sort its removals highest-first, which is a rule it had to
+ * get right every time on a surface where being wrong is invisible.
+ *
+ * So each day's stop list is snapshotted the first time an op touches it and every index resolves
+ * through that snapshot to a stop *object*, which is then located by identity. Order stops
+ * mattering, and a stop an earlier op removed is rejected by name rather than silently standing in
+ * for its neighbour.
+ *
+ * `dayIndex` is deliberately NOT snapshotted and still means "the day at this position right now".
+ * Day ops move later days, and a day that did not exist when the model looked still has to be
+ * fillable in the same patch — a snapshot cannot express both. `editPrompt.ts` scripts the day-op
+ * ordering instead, and day ops are one-per-turn in practice.
  */
 export function applyPatch(
   itinerary: Itinerary,
@@ -41,6 +76,18 @@ export function applyPatch(
 ): PatchResult {
   const next: Itinerary = structuredClone(itinerary);
   const rejected: PatchResult["rejected"] = [];
+
+  // Keyed by the day object rather than its index, so a day `add_day` created mid-patch gets its
+  // own (empty) snapshot instead of inheriting the one belonging to whatever used to sit there.
+  const snapshots = new Map<DayPlan, Stop[]>();
+  const snapshotOf = (day: DayPlan): Stop[] => {
+    let stops = snapshots.get(day);
+    if (!stops) {
+      stops = [...day.stops];
+      snapshots.set(day, stops);
+    }
+    return stops;
+  };
 
   // Captured before any op runs, because `add_day` at index 0 would otherwise make the new (blank)
   // day the reference point and drag the whole trip's dates with it. The start date never moves.
@@ -91,25 +138,33 @@ export function applyPatch(
     }
 
     const day = next.days[op.dayIndex];
+    const before = snapshotOf(day);
     switch (op.op) {
       case "replace_stop":
-        if (!inRange(op.stopIndex, day.stops.length)) {
+      case "remove_stop": {
+        const target = inRange(op.stopIndex, before.length) ? before[op.stopIndex] : undefined;
+        if (!target) {
           rejected.push({ op, reason: `stop ${op.stopIndex} out of range` });
           break;
         }
-        // Merge rather than overwrite: the model only needs to send changed fields, and this
-        // keeps coordinates/category intact when it omits them.
-        day.stops[op.stopIndex] = { ...day.stops[op.stopIndex], ...op.stop };
+        const at = day.stops.indexOf(target);
+        if (at < 0) {
+          // Only reachable when an earlier op in this same patch removed it. Saying so is the
+          // whole point: the alternative is applying the op to whichever stop took its place.
+          rejected.push({ op, reason: `stop ${op.stopIndex} was already removed by an earlier op` });
+          break;
+        }
+        if (op.op === "remove_stop") {
+          day.stops.splice(at, 1);
+          break;
+        }
+        // Merged in place rather than replaced with a new object: the model only needs to send
+        // changed fields, and keeping the identity lets a later op in this patch still find it.
+        Object.assign(target, op.stop);
         break;
+      }
       case "add_stop":
-        day.stops.splice(Math.min(Math.max(op.stopIndex, 0), day.stops.length), 0, op.stop);
-        break;
-      case "remove_stop":
-        if (!inRange(op.stopIndex, day.stops.length)) {
-          rejected.push({ op, reason: `stop ${op.stopIndex} out of range` });
-          break;
-        }
-        day.stops.splice(op.stopIndex, 1);
+        day.stops.splice(insertionIndex(day, before, op.stopIndex), 0, op.stop);
         break;
       case "replace_lodging":
         day.lodging = op.lodging;

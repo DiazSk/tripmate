@@ -21,9 +21,13 @@ const CHAT_OPS_SHAPE = [
   `{"op":"remove_day","dayIndex":2}`,
 ].join(",");
 
-/** What the ops above can and cannot express, and the index arithmetic that makes a multi-op
- *  patch land where it was aimed. Sequential application is the trap: two removes on one day
- *  written low-index-first delete the wrong second stop. */
+/** What the ops above can and cannot express.
+ *
+ *  It used to carry index arithmetic too — "list removals on one day highest-index-first" — because
+ *  the applier resolved each op against a day its predecessors had already spliced. `applyPatch`
+ *  now resolves every stopIndex against the day as shown here, so that rule is gone rather than
+ *  reworded: a multi-op patch lands where it was aimed whatever order it is listed in. Day indices
+ *  are the exception and still shift, which is why the day-op rules below stayed. */
 const CHAT_CAPABILITIES = `You can, within the scope stated below:
 - Add a stop ("add_stop" at the position it should occupy), remove one, or swap one for another
   ("replace_stop").
@@ -38,10 +42,15 @@ const CHAT_CAPABILITIES = `You can, within the scope stated below:
 Whenever you move, add, remove or retime anything, restate the "time" of every stop whose slot
 shifted as a result, so the day stays in sequential order with no overlaps.
 
-Ops apply in the order you list them, against an itinerary that is already changing as they do.
-So: list several removals on the SAME day from the highest stopIndex down to the lowest, and treat
-the indices shown below as valid only until your first op on that day. Ops on different days never
-affect each other's indices.
+Every "stopIndex" you write refers to the plan exactly as shown below, and does NOT shift as your
+other ops apply. So list as many ops on one day as the request needs, in whatever order reads best
+— remove two stops and add a third in the same breath, and each lands on the stop shown at that
+index. An "add_stop" goes in front of whatever is shown at its stopIndex (use the day's stop count
+to append at the end), so removing a stop and adding another at the same stopIndex swaps one for
+the other in place.
+
+If a request asks for several changes at once, do ALL of them in this one turn. Doing the first
+and offering the rest is the one failure here nobody can see until they re-read their plan.
 
 Lengthening or shortening the trip:
 - "add_day" inserts a NEW EMPTY day at that position ("dayIndex":3 on a 3-day trip appends a
