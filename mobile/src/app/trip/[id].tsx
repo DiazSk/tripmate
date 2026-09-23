@@ -13,8 +13,9 @@ import {
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 import { discardTrip, getTrip, promoteTrip, updateTripItinerary } from '@/api/tripMateApi';
-import type { Trip } from '@/api/types';
+import type { Stop, Trip } from '@/api/types';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
+import { BudgetBar } from '@/components/budget-bar';
 import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
 import { PrimaryButton } from '@/components/form';
@@ -47,6 +48,25 @@ export default function TripDetail() {
   const [mapBuilt, setMapBuilt] = useState(false);
   if (face === 'map' && !mapBuilt) setMapBuilt(true);
   const [adding, setAdding] = useState(false);
+  /**
+   * The stop being asked "what else is near this?", or null when the sheet was opened by +.
+   *
+   * One piece of state rather than a second sheet: the two ask the same question of the same
+   * endpoint and end in the same day-and-slot card, and the only difference is where they search
+   * and how tightly. Cleared alongside `adding` on every close, or the next + press would silently
+   * inherit the last stop asked about.
+   */
+  const [probe, setProbe] = useState<{ lat: number; lng: number; name: string } | null>(null);
+
+  function closeSheet() {
+    setAdding(false);
+    setProbe(null);
+  }
+
+  function findNearby(stop: { name: string; lat: number; lng: number }) {
+    setProbe({ lat: stop.lat, lng: stop.lng, name: stop.name });
+    setAdding(true);
+  }
 
   useEffect(() => {
     getTrip(id).then((result) => setTrip(result ?? null));
@@ -115,6 +135,11 @@ export default function TripDetail() {
             </View>
           </View>
 
+          {/* Below the chrome and outside it, so the bar spans the width rather than sitting in
+              the row with the controls. Shown on the map face too: it is a fact about the trip,
+              not about the list, and hiding it there would make the face swap jump. */}
+          <BudgetBar days={days} budget={trip.budget} activeDayIndex={day} />
+
           <View style={styles.faces}>
             <DayPager
               trip={trip}
@@ -122,6 +147,7 @@ export default function TripDetail() {
               onDayChange={setDay}
               emphasis={emphasis}
               onEmphasise={setEmphasis}
+              onFindNearby={findNearby}
             />
 
             {mapBuilt ? (
@@ -140,12 +166,13 @@ export default function TripDetail() {
 
       <AddPlaceSheet
         visible={adding}
-        onClose={() => setAdding(false)}
+        onClose={closeSheet}
         itinerary={trip.itinerary}
         dayIndex={day}
         // Search around the day you are reading. A day with no stops has no middle to search
         // from, and the sheet says so rather than defaulting to somewhere arbitrary.
         centre={centreOf(days[day]?.stops ?? [])}
+        at={probe}
         onAdd={async (next, name) => {
           const previous = trip;
           // Optimistic, then rolled back on failure. The write is a whole-itinerary overwrite
@@ -188,12 +215,14 @@ function DayPager({
   onDayChange,
   emphasis,
   onEmphasise,
+  onFindNearby,
 }: {
   trip: Trip;
   day: number;
   onDayChange: (day: number) => void;
   emphasis: string | null;
   onEmphasise: (key: string | null) => void;
+  onFindNearby: (stop: Stop) => void;
 }) {
   // `useWindowDimensions`, not `Dimensions.get()` — this one re-renders on rotation, and a page
   // whose width disagrees with the pager's by even a point drifts out of alignment by day 8.
@@ -238,6 +267,7 @@ function DayPager({
             destination={trip.destination}
             emphasis={stopIndexFor(emphasis, index)}
             onEmphasise={(stop) => onEmphasise(stop === null ? null : `${index}:${stop}`)}
+            onFindNearby={onFindNearby}
           />
         </View>
       ))}
