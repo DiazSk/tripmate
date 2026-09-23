@@ -145,6 +145,27 @@ function formatBikeshare(system?: BikeshareSystem | null): string {
 
 const CONTEXT_USE_INSTRUCTION = `If a festival's dates overlap the trip, include it as a stop on the relevant day. Weigh the safety notes when choosing areas and timing. Include at least one shopping stop from the list if it fits the budget and tier.`;
 
+/**
+ * The one answer to "what wins when three valid rules disagree".
+ *
+ * The rules below (and in SKILL.md) each say "hard constraint", "authoritative", "priority" —
+ * which is unambiguous one at a time and silent about a packed-pace traveler with low mobility, a
+ * museum closing at 4pm and a 6pm reservation. Stating the order once is what makes the model
+ * consistent across those, rather than picking a different winner each generation.
+ *
+ * Mirrored by SKILL.md §0. Move one, move both.
+ */
+export const PRECEDENCE_INSTRUCTION = `When two of these conflict, this is the order that decides it, highest first:
+1. Fixed commitments and immutable facts — booked flights, trains, accommodation, timed tickets, anything the traveler says cannot move.
+2. Safety and accessibility — stated accessibility needs, dietary and allergy requirements, destination safety notes.
+3. Physical and temporal feasibility — opening hours, travel time, arrival and departure boundaries, daylight, realistic stop duration.
+4. Explicit traveler requirements and exclusions — must-dos, do-not-includes, transport restrictions, the budget ceiling.
+5. Traveler profile — pace, energy, crowd preference, group and family rules.
+6. Primary (starred) interests.
+7. Secondary interests and vibe.
+8. Variety, aesthetics and optimization.
+A lower item never silently overrides a higher one. When two hard constraints genuinely cannot both hold, keep the higher one and say plainly in the affected stop's note that the other could not be met.`;
+
 function formatContextBlock(insight?: string): string {
   if (!insight) return "";
   return `\nDestination context:\n${insight}\n${CONTEXT_USE_INSTRUCTION}\n`;
@@ -202,6 +223,8 @@ export function buildGeneratePrompt(params: {
   bikeshare?: BikeshareSystem | null;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
+
+${PRECEDENCE_INSTRUCTION}
 
 Style: ${tierStyle(params.tier)}
 
