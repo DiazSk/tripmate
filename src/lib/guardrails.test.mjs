@@ -6,7 +6,7 @@
  * written about. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateBudget, evaluateDay } from "./guardrails.ts";
+import { evaluateBudget, evaluateDay, evaluateItinerary } from "./guardrails.ts";
 
 /** One stop, one day, priced to whatever the case needs. */
 const itineraryCosting = (cost) => ({
@@ -74,4 +74,58 @@ test("an unroutable pair falls back to the estimate rather than skipping the che
     evaluateDay(tightDay, 0),
     "null means 'we could not answer', not 'there is nothing to check' — dropping the leg would silently retire the guardrail for every leg OSRM cannot reach"
   );
+});
+
+/* --- §14e: the same place twice --- */
+
+test("the same place on two days is a finding; the lodging is not", () => {
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      {
+        date: "2026-09-19",
+        weather: "Clear",
+        lodging: { name: "Boutique hotel in Gion", cost: 180, note: "" },
+        stops: [{ name: "Nishiki Market", lat: 35.0050, lng: 135.7649, cost: 0, note: "", time: "10:00", durationLabel: "1 hour", category: "other" }],
+      },
+      {
+        date: "2026-09-20",
+        weather: "Clear",
+        lodging: { name: "Boutique hotel in Gion", cost: 180, note: "" },
+        stops: [{ name: "nishiki  market", lat: 35.0050, lng: 135.7649, cost: 0, note: "", time: "10:00", durationLabel: "1 hour", category: "other" }],
+      },
+    ],
+  };
+  const found = evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate");
+  assert.equal(found.length, 1, "one finding for the repeated market");
+  assert.match(found[0].message, /Nishiki Market/);
+  assert.equal(found[0].dayIndex, 1, "reported against the later day, which is the one to change");
+});
+
+test("two different places close together are not duplicates", () => {
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      { date: "2026-09-19", weather: "Clear", stops: [{ name: "Museu Picasso", lat: 41.3851, lng: 2.1810, cost: 12, note: "", time: "10:00", durationLabel: "1 hour", category: "entry" }] },
+      { date: "2026-09-20", weather: "Clear", stops: [{ name: "Gothic Quarter", lat: 41.3833, lng: 2.1766, cost: 0, note: "", time: "10:00", durationLabel: "1 hour", category: "other" }] },
+    ],
+  };
+  assert.deepEqual(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate"), []);
+});
+
+test("the same stop twice within one day is also a duplicate", () => {
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      {
+        date: "2026-09-19",
+        weather: "Clear",
+        stops: [
+          { name: "Pike Place Market", lat: 47.6097, lng: -122.3422, cost: 0, note: "", time: "10:00", durationLabel: "1 hour", category: "other" },
+          { name: "Pike Place Market", lat: 47.6097, lng: -122.3422, cost: 0, note: "", time: "15:00", durationLabel: "1 hour", category: "other" },
+        ],
+      },
+    ],
+  };
+  assert.equal(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate").length, 1);
 });
