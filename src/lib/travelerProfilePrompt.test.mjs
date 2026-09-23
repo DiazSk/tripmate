@@ -184,7 +184,35 @@ test("a place without a time still says where, and claims no time", () => {
 test("a departure reserves the end of the last day", () => {
   const out = formatTravelLegs(legs({ departureTime: "09:40" }));
   assert.match(out, /departs on the last day at 09:40/);
-  assert.match(out, /90 minutes/);
+  assert.match(out, /2 hours/);
+  assert.match(out, /3 hours/);
+});
+
+test("a departure reserves transfer time AND an airport buffer, named separately", () => {
+  const text = formatTravelLegs({
+    arrivalTime: null,
+    arrivalPoint: null,
+    departureTime: "18:00",
+    departurePoint: "Kansai Intl (KIX)",
+    stayBooked: null,
+  });
+  // Both halves must be present and distinguishable — collapsing them into one 90-minute figure
+  // is the defect this replaces.
+  assert.match(text, /travel time/i);
+  assert.match(text, /2 hours/);
+  assert.match(text, /3 hours/);
+  assert.doesNotMatch(text, /90 minutes before/i);
+});
+
+test("an arrival still allows 90 minutes, which is a different thing from a departure buffer", () => {
+  const text = formatTravelLegs({
+    arrivalTime: "13:45",
+    arrivalPoint: null,
+    departureTime: null,
+    departurePoint: null,
+    stayBooked: null,
+  });
+  assert.match(text, /90 minutes/);
 });
 
 test("booked lodging tells the model to stop choosing one", () => {

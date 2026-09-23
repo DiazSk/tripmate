@@ -96,8 +96,13 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
  * traveler who skipped these optional fields gets a byte-identical prompt to the one they'd have
  * got before the fields existed.
  *
- * The 90-minute figure is stated here and in the skill (§4c-bis), and mirrors `TRANSFER_BUFFER_MIN`
- * in the benchmark scorer that checks the model obeyed it.
+ * Two figures, not one, and they are different things. Arrival keeps 90 minutes for immigration,
+ * bags and the transfer in. Departure reserves travel time to the airport PLUS a processing buffer
+ * before the flight — 2 hours domestic, 3 hours international. Collapsing them was the defect: "90
+ * minutes before a 18:00 flight" reads as leaving at 16:30, which is not enough for either half.
+ *
+ * Both are mirrored in SKILL.md §4c-bis and in `ARRIVAL_BUFFER_MIN` / `DEPARTURE_BUFFER_MIN` in
+ * the benchmark scorers. Move one, move all three.
  */
 export function formatTravelLegs(logistics: TripLogistics | null): string {
   if (!logistics) return "";
@@ -115,7 +120,7 @@ export function formatTravelLegs(logistics: TripLogistics | null): string {
   if (logistics.departureTime || logistics.departurePoint) {
     const where = logistics.departurePoint ? ` from ${logistics.departurePoint}` : "";
     const when = logistics.departureTime
-      ? `The traveler departs on the last day at ${logistics.departureTime}${where}. Leave about 90 minutes before that clear for the transfer out, and plan nothing that would run into it.`
+      ? `The traveler departs on the last day at ${logistics.departureTime}${where}. Reserve two separate things before it: the travel time from the last stop to the departure point, PLUS an arrival buffer at the departure point itself — about 2 hours before a domestic flight, 3 hours before an international one, much less for a train. Those defaults apply unless the trip context says otherwise, and the airport buffer is not part of the transfer time. Plan nothing that would run into either.`
       : `The traveler departs on the last day${where}. Keep the last day's stops near the departure point.`;
     lines.push(when);
   }
