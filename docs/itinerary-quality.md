@@ -196,6 +196,70 @@ same place twice"), the §15 whole-trip read, and the new `duplicate` guardrail 
 exactly this, and the measured rate of repeats rose. It is unweighted, so it does not touch the
 composite — that is the axis being honest rather than the axis being excused.
 
+### The duplicates regression, read fixture by fixture
+
+The aggregate above is true and stays as stated. Underneath it, the hand read of the 17 flagged
+pairs changes what the number means.
+
+| Fixture | Repeats, baseline → candidate | |
+|---|---|---|
+| rome-family-slow | 6 → 5 | improved |
+| reykjavik-couple-packed | 5 → 4 | improved |
+| barcelona-access-dietary | 1 → 1 | flat |
+| lisbon-solo-offbeat | 1 → 1 | flat |
+| kyoto-couple-mixed | 0 → 0 | flat |
+| bangkok-solo-degraded | 0 → 2 | worse |
+| queenstown-couple-noweather | 1 → 4 | worse |
+
+**The two worst offenders both improved; the two cleanest both got worse.** The entire +3 net is
+queenstown and bangkok. So "5 of 7 fixtures worse" on the normalized axis and "the rule backfired"
+are not the same claim, and only the first is supported: this is a rule that **helped where
+duplication was already severe and hurt where the plan was already clean.** Directional, not
+uniform.
+
+**Queenstown's four repeats are all `by: "name"`, not proximity:**
+
+```
+{"dayIndex":1,"name":"Dinner in Arrowtown","priorName":"Dinner in Arrowtown","by":"name"}
+{"dayIndex":2,"name":"Dinner in Arrowtown","priorName":"Dinner in Arrowtown","by":"name"}
+{"dayIndex":3,"name":"Lunch in Arrowtown","priorName":"Lunch in Arrowtown","by":"name"}
+{"dayIndex":3,"name":"Dinner in Arrowtown","priorName":"Dinner in Arrowtown","by":"name"}
+```
+
+Reading the plan itself, it is worse than the four flags suggest — eight Arrowtown meal stops, all
+`food` category on one identical coordinate:
+
+```
+11:30 AM — Lunch in Arrowtown     (food, 1 hour,   $50)
+06:30 PM — Dinner in Arrowtown    (food, 1.5 hours, $80)
+06:30 PM — Dinner in Arrowtown    (food, 1.5 hours, $85)
+06:30 PM — Dinner in Arrowtown    (food, 1.5 hours, $75)
+11:30 AM — Lunch in Arrowtown     (food, 1 hour,   $50)
+06:00 PM — Dinner in Arrowtown    (food, 1.5 hours, $75)
+11:00 AM — Brunch in Arrowtown    (food, 1 hour,   $55)
+```
+
+**Four dinners in the same town on four consecutive evenings, three of them at the same 6:30 PM.**
+These are real repeats of exactly the kind §14e forbids. They are not a coordinate artifact, not
+the food/transit proximity exemption failing, and not the scorer being lossy on a bad parse — the
+name match alone caught them, and the names are byte-identical.
+
+**That kills the denominator hypothesis for the fixture driving the regression.** Queenstown went
+1 → 4 in *absolute* count while its stop count rose 22 → 23; a smaller denominator cannot explain
+an increase in the numerator. The hypothesis may still contribute to the aggregate rate — the
+other six fixtures shed stops, lisbon by nine and rome by seven — but it explains nothing about
+queenstown, and queenstown plus bangkok are the entire net regression.
+
+Where it points instead: `queenstown-couple-noweather` is a **one-town trip**, and §4d anchors each
+day to the previous night's base. With a single base and one nearby town carrying the restaurants,
+the lodging-continuity rules and §14e pull against each other, and §14e lost four times. That is a
+specific, testable interaction, not a general "the rule made things worse".
+
+Bangkok's two are the weaker half of the regression and worth flagging as such: both are
+`by: "proximity"` (`Riverside coffee break` against `Wat Arun`, `Riverside promenade and sunset`
+against `ICONSIAM`) — riverside stops sharing a stretch of the Chao Phraya rather than the same
+venue twice. That is the read the scorer's own docblock warns is lossiest.
+
 ### Paired table — seven fixtures, staged path
 
 | Axis | Baseline | Candidate | Δ | Split |
@@ -330,11 +394,14 @@ instead. Anyone re-running `AB_PATH=legacy` will hit this whenever the route exc
   evidence.
 - **`mustInclude` has been exercised on exactly one trip, and `commitments` on two.** Both passed
   perfectly, which is what a rule with one test looks like whether it is robust or lucky.
-- **The duplicates regression is the finding most worth following up**, and this run cannot say
-  why. Both candidates are plausible on this data and neither is tested: the trip got shorter
-  (154 stops against 164), which concentrates any repeat into a smaller denominator; or the
-  rules genuinely made repetition more likely. A sweep with more generations per fixture, and a
-  look at the 17 flagged pairs by hand, would separate them.
+- **The duplicates regression is the finding most worth following up, and the hand read has
+  already closed half of it.** *No longer open:* it is not a scorer artifact — queenstown's four
+  flags are byte-identical names, not a proximity or parse effect — and the shrinking denominator
+  does not explain it, since queenstown rose 1 → 4 in absolute count while gaining a stop. *Still
+  open:* why a one-town trip repeats its evening meal area four nights running, which reads as
+  §4d's lodging continuity pulling against §14e; and whether any of this replicates, since it is
+  one generation per fixture. The aggregate rate may still be partly a denominator effect on the
+  other six fixtures, which shed 10 stops between them.
 
 ## Still open
 
