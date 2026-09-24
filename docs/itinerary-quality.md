@@ -226,8 +226,8 @@ uniform.
 {"dayIndex":3,"name":"Dinner in Arrowtown","priorName":"Dinner in Arrowtown","by":"name"}
 ```
 
-Reading the plan itself, it is worse than the four flags suggest — eight Arrowtown meal stops, all
-`food` category on one identical coordinate:
+Reading the plan itself, it is worse than the four flags suggest — seven Arrowtown meal stops,
+every one of them `food` category on the same coordinate:
 
 ```
 11:30 AM — Lunch in Arrowtown     (food, 1 hour,   $50)
@@ -246,9 +246,10 @@ name match alone caught them, and the names are byte-identical.
 
 **That kills the denominator hypothesis for the fixture driving the regression.** Queenstown went
 1 → 4 in *absolute* count while its stop count rose 22 → 23; a smaller denominator cannot explain
-an increase in the numerator. The hypothesis may still contribute to the aggregate rate — the
-other six fixtures shed stops, lisbon by nine and rome by seven — but it explains nothing about
-queenstown, and queenstown plus bangkok are the entire net regression.
+an increase in the numerator. The hypothesis may still contribute to the aggregate rate — the other
+six fixtures shed 11 stops between them, though not uniformly: lisbon dropped nine and rome seven
+while kyoto gained six. But it explains nothing about queenstown, and queenstown plus bangkok are
+the entire net regression.
 
 Where it points instead: `queenstown-couple-noweather` is a **one-town trip**, and §4d anchors each
 day to the previous night's base. With a single base and one nearby town carrying the restaurants,
@@ -401,7 +402,7 @@ instead. Anyone re-running `AB_PATH=legacy` will hit this whenever the route exc
   open:* why a one-town trip repeats its evening meal area four nights running, which reads as
   §4d's lodging continuity pulling against §14e; and whether any of this replicates, since it is
   one generation per fixture. The aggregate rate may still be partly a denominator effect on the
-  other six fixtures, which shed 10 stops between them.
+  other six fixtures, which shed 11 stops between them.
 
 ## Still open
 
