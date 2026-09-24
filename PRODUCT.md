@@ -4,38 +4,71 @@
 
 ## Platform
 
-web
+web, ios, android
 
 ## Stack
 
-Next.js (App Router, TypeScript) + Tailwind CSS. SQLite (`better-sqlite3`) for persistence, no accounts/auth. Itinerary and place-detail generation both run through the local Claude CLI (Haiku) instead of a metered LLM API. Map is a persistent, full-viewport 3D globe: CesiumJS + Google's Photorealistic 3D Tiles (via a free Cesium ion account/token, no Google Cloud billing account required — this was a deliberate choice over Google's native `gmp-map-3d` component, which mandates a billed GCP project). Weather via Open-Meteo. The project moved from a 3-hour hackathon build to an ongoing personal project, so later choices (Cesium, the visual redesigns) accept more setup/complexity than the original build did, but still avoid mandatory billing where a free alternative exists.
+Next.js (App Router, TypeScript) + Tailwind v4 for the web client and the server every client shares. **SQLite via `libsql`** — a single local `tripmate.db` by default, or a hosted Turso database by setting `TURSO_DATABASE_URL`; the API stayed synchronous through that swap, which is why it was a constructor change rather than a port. No accounts: identity is an owner id in a cookie, minted per browser.
+
+**A React Native client (`mobile/`, Expo SDK 57 + expo-router) targets iOS and Android from one codebase** and talks to the same REST routes unchanged. It ships the plan wizard end to end, SSE generation with stops appearing as they stream, Keep, a trip screen with map/chat/spend, a memories wall and a profile tab. **The earlier SwiftUI app in `ios/` is frozen rather than deleted** — `ios/TripMateKit` remains the reference both later clients were ported from.
+
+Model calls go through one chokepoint with **two interchangeable transports**: the local `claude` CLI (the default — free under an existing subscription, no key) or the Anthropic API (`LLM_TRANSPORT=api`, used where there is no CLI, i.e. the deployed container). Model choice differs by transport and lives in one file.
+
+**The map has two engines behind one interface, and MapLibre is now the default** — MapLibre GL JS with OpenFreeMap vector tiles, terrain and extruded buildings, deliberately no satellite imagery. CesiumJS + Google Photorealistic 3D Tiles is one flag away and fully wired; it was the original choice, made via a free Cesium ion token specifically to avoid Google's `gmp-map-3d`, which mandates a billed GCP project. MapLibre became the default on measured cost: under a drag Cesium issues 3.4× the draw calls and streams roughly twice the bytes, and every map frame re-blurs the glass panels above it.
+
+Weather, geocoding, holidays, POI hours and highway geometry come from free sources (Open-Meteo, Nager.Date, Overpass/OSM, GDELT). Four API keys are **optional** and each degrades to "no suggestions" rather than an error: OpenTripMap, Yelp, Brave Search, Google Places.
 
 ## Users
 
-A traveler planning an upcoming trip: enters a destination, date range, and total budget, and wants a realistic day-by-day plan back, not a generic checklist. Same person may later revisit the plan while actually traveling to track real spending against it.
+A traveler planning an upcoming trip: enters a destination, date range, and budget, and wants a realistic day-by-day plan back, not a generic checklist. The same person may revisit the plan while actually traveling — to track real spending against it, ask for changes in plain language, or have the day read aloud while the map flies it. Planning happens on a laptop or a phone; the phone client is the one likelier to be open mid-trip.
 
 ## Product Purpose
 
-TripMate turns a destination + dates + budget into an AI-generated day-by-day itinerary (stops, lodging, weather-aware activity choices) that actually reflects the traveler's intended spending level, then lets them refine it conversationally, save it, and revisit it later — including tracking real spend against the plan while traveling.
+TripMate turns a destination + dates + budget into an AI-generated day-by-day itinerary (stops, lodging, weather-aware activity choices) that respects what the traveler said they'd spend, then lets them refine it conversationally, save it, and revisit it later — including tracking real spend against the plan while traveling, and watching a day play back as a narrated film over the map.
 
 ## Positioning
 
-Most trip planners either hand back generic top-10 lists or ignore the budget entirely. TripMate anchors generation to a chosen spending tier (Budget/Mid-range/Luxury) with real lodging costs included, explicitly instructs the model to spend close to the stated budget rather than lowballing it, and folds live weather into stop selection (indoor vs. outdoor by day). The screen is one persistent scene rather than a dashboard: a full-bleed, always-live 3D globe that physically flies to your destination and to each place you tap, with the itinerary — real times, durations, tag pills, per-day category budget breakdowns — floating above it as dark frosted glass, never a separate opaque pane. Tapping a stop swaps in a real guidebook-style entry instead of a one-line description. It is also the only one of its kind to route generation through the user's own Claude Code CLI session instead of a paid LLM API.
+Most trip planners either hand back generic top-10 lists or ignore the budget entirely. TripMate's difference is that the *constraints are real*: a stated budget is a ceiling the plan stays inside rather than a number it pads out to, live weather changes which stops get picked on which day, and stated access and dietary needs outrank pace and preference rather than being appended as a note.
+
+Behind that sits a governing rule set — a single ordered precedence for what wins when constraints collide — plus deterministic checks in code that run over the finished plan and hand what they find to a review pass. **Arithmetic is code's job and judgment is the model's:** whether a plan suits this traveler is a model question; whether 13:30 + 90min + 28min reaches a 15:15 reservation is not.
+
+The screen is one persistent scene rather than a dashboard: a full-bleed, always-live 3D map that flies to your destination and to each place you tap, with the itinerary — real times, durations, per-day category budget breakdowns — floating above it as dark frosted glass. Tapping a stop swaps in a guidebook-style entry instead of a one-line description. It is also the only one of its kind that can route generation through the user's own Claude CLI session instead of a paid LLM API.
 
 ## Operating Context
 
-Two distinct moments of use: (1) planning — fill in trip details, pick a spending tier, generate, give feedback and regenerate until satisfied, save; (2) during-trip — revisit the saved trip, click a stop to fly the map to it and open a detailed guidebook-style view (history, best time to visit, tips), and log actual spend per stop/lodging so the remaining days can be rebalanced if a day runs over.
+Three distinct moments of use:
+
+1. **Planning** — fill in trip details, answer a short profile (who's going, pace, interests, dietary and access needs, anything already booked, anything they must see or want avoided), generate, refine in plain language, Keep.
+2. **During-trip** — revisit the saved trip, tap a stop to fly the map to it and open a detailed view, log actual spend per stop so remaining days can be rebalanced if a day runs over.
+3. **Playback (web only)** — press Play on a day and the camera flies each stop while a voice reads a story-format script and the matching line lights up.
+
+A plan is persisted the moment it is generated, as a `draft`, so a back press or a closed tab no longer discards a two-minute generation; Keep promotes that same row to `saved`. Unkept drafts are swept after a TTL.
 
 ## Capabilities and Constraints
 
-- No user accounts — trips are stored in a single shared local SQLite file, addressable by a generated id/URL, not scoped per-user.
-- Itinerary, place-detail, and place-photo lookups all depend on external services being reachable (`claude` CLI for the first two; Wikipedia's public API for photos) — there is no fallback LLM provider, and a photo miss falls back to a category icon rather than failing.
-- Weather is a real forecast within ~16 days of the trip start, otherwise a "typical weather" estimate from the same calendar dates a year prior.
-- Trip length is capped at 30 days, enforced both client-side (before generation is attempted) and server-side (the generation endpoint itself rejects a longer range) — no LLM call is ever attempted for a longer trip.
-- Screen layout is a persistent full-bleed 3D globe (Cesium + Google Photorealistic 3D Tiles) with every other surface — itinerary, place detail, forms, saved-trip list — floating above it as a translucent glass panel, not a separate opaque pane; the panel and the globe occupy the same screen space rather than splitting it. Google's tiles are regional/city-scale data, so the whole-earth idle view has little to render and isn't meant to look like a polished "Blue Marble" globe.
-- On phones, the glass panel can collapse to a bottom sheet, revealing a reduced map control set (zoom, compass/reset-north) in the space it frees; the full control set (zoom, 2D/3D, tilt, compass) is desktop/tablet-only.
-- Real per-stop/lodging "actual spend" tracking and automatic remaining-day rebalancing on overspend are shipped, working end-to-end.
-- Per-place detail content (history, best time to visit, tips, duration) and per-stop photos are both generated/fetched on-demand only when a stop is clicked/rendered, not persisted — reopening the same stop regenerates the detail text (photos are cached in-memory per browser session).
+**Accounts and data**
+- No sign-up. Identity is an owner id in a cookie, so trips and the profile are per-browser rather than per-person. The React Native client mints its own id and sends it as a header, because RN's networking owns cookies end to end and a hand-set `Cookie` was being overwritten from the native store.
+- `trips` rows are not yet scoped by owner — the profile is, trips are not. Adding real auth means a `trips` migration, not just a login screen.
+
+**What the traveler can state, and what happens to it**
+- Destination, dates, budget (with a **per-person / whole-party basis** — the plan reads and prices everything as a party total), party composition down to children and infants, pace, energy, crowd tolerance, interests with up to three starred as primary.
+- Dietary needs and access needs are **hard constraints**, not preferences; a stated step-free requirement outranks pace and priorities. Both persist on the traveler profile so they are not re-asked every trip.
+- Named must-sees and exclusions, plus a free-text "anything already booked or off-limits" box that reaches the model verbatim.
+- Arrival and departure times bound the first and last day. Departure reserves travel time to the airport **plus** a processing buffer (≈2h domestic, 3h international) — two separate figures, because collapsing them is how a traveler misses a flight.
+
+**Generation and checking**
+- Two generation paths coexist. The traveler-facing route is the incumbent; a staged pipeline (facts digested into a context file, rules held in a separate skill, the ask held separately again) is the intended direction and is where generation logic should be extended. Migration is blocked on a data contract, not on missing work.
+- A review pass runs over the finished plan and can rewrite days it finds wanting. Deterministic checks — travel-time feasibility, overlapping stops, over-long days, budget ceiling, duplicate stops, booked commitments, named must-sees — run in code and are handed to that pass as fact.
+- A benchmark harness scores generations against frozen fixtures on route efficiency, constraint adherence, weather/feasibility, meal and vibe fit, and coverage/grounding, with an optional blinded model judge. `docs/itinerary-quality.md` records the measured before/after of the current rule set, including the one axis that regressed.
+
+**Known limits**
+- Generation depends on a reachable model transport; there is no fallback provider.
+- Weather is a real forecast within ~16 days of the trip start, otherwise a typical-weather estimate from the same dates a year prior.
+- Trip length is capped at 30 days, enforced client- and server-side; no model call is attempted beyond it.
+- Coordinates the model writes are corrected against OSM where a name resolves; unmatched names keep the model's guess.
+- Place-detail text and photos are generated on demand and not persisted — reopening a stop regenerates the text.
+- Narrated playback is web-only, and its natural voice downloads 88–326MB on first use, disclosed with a live percentage. The platform voice narrates the download and is the fallback at every level.
+- Full-viewport 3D map on web; the React Native client uses a day-scoped map rather than a persistent globe.
 
 ## Brand Commitments
 
@@ -43,7 +76,7 @@ Product name is "TripMate." No logo — a drawn six-point asterisk mark beside t
 lockup beyond that.
 
 The visual identity is "Kiln", shipped 2026-09-08 and documented in DESIGN.md: a warm near-neutral
-near-black ground with translucent glass floating over the persistent globe, and **three named colour
+near-black ground with translucent glass floating over the persistent map, and **three named colour
 roles rather than one accent** — jade for action, gold for money, coral for alert. Edges follow one
 rule: round what you touch, square what you read.
 
@@ -51,6 +84,12 @@ rule: round what you touch, square what you read.
 superfamily Kiln launched with. See DESIGN.md § Typography; the short version is a high-contrast
 display serif at a single light weight against a neutral grotesk, with the landing price re-set as
 the serif's own moment rather than as a monospace figure.
+
+**The identity crosses to mobile under a ratified boundary** (DESIGN.md's third boundary, extended
+from iOS to Android): Kiln owns the content surfaces; Profile is settings-shaped and takes each
+platform's native list conventions with the palette unchanged. Melodrama and Tabular carry display
+and figures, but **system sans carries all body text — that is what buys Dynamic Type and Android
+font scaling**, and a custom face there would freeze it.
 
 **Standing preference, recorded because it governs future design work: the arrangement is
 conventional on purpose.** Offered a choice between four distinct visual worlds and the category
@@ -82,11 +121,28 @@ only to record that the identity is settled, not in progress.
 
 ## Evidence on Hand
 
-No real user content, testimonials, or case studies. All itinerary content shown during development (e.g. Kyoto examples) is live LLM-generated output, not fixture/sample data to preserve.
+No real users, testimonials, or case studies. All itinerary content shown during development is live
+model output, not fixture data to preserve.
+
+What does exist is **measured internal evidence**: a frozen seven-fixture benchmark with a recorded
+before/after of the current rule set (`docs/itinerary-quality.md`), and a side-by-side GPU cost
+measurement of the two map engines (`docs/map-engine-gpu.md`). Both were produced by scripts in
+`scripts/` and can be re-run. The itinerary measurement is n=7 with one generation per arm — enough
+to catch a collapse or a consistent shift, not enough to call a small difference real, and it says
+so.
 
 ## Product Principles
 
-- Budget realism over generic optimism: the plan should cost what the traveler said they want to spend, not the cheapest defensible itinerary.
-- Weather and place are inputs to the plan, not decoration — they should visibly change what gets suggested.
-- Refinement is a conversation, not a form: feedback in plain language should visibly change the next version of the plan.
-- Keep the stack dependency-light and signup-free wherever a free/local alternative exists (no paid API keys, no accounts).
+- **A stated budget is a ceiling, not a quota.** The plan stays comfortably inside it and leaves
+  room for the unplanned; nothing is added to a trip because money remains. This reversed an earlier
+  rule that asked the plan to consume 85–100% of the budget, which padded good cheap trips.
+- Weather, daylight, opening hours and place are inputs to the plan, not decoration — they should
+  visibly change what gets suggested.
+- **Stated needs outrank inferred ones.** Access and dietary requirements are asked, never derived
+  from proxies, and they beat pace and preference when they collide.
+- **Judgment to the model, arithmetic to the code.** Whether a day suits this traveler is a model
+  question. Whether the times add up is not, and should never be left to one.
+- Refinement is a conversation, not a form: feedback in plain language should visibly change the
+  next version — and change only what was asked about.
+- Keep the stack dependency-light and signup-free wherever a free or local alternative exists. Every
+  external key is optional and degrades to a smaller plan rather than an error.
