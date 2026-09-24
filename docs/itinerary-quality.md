@@ -168,7 +168,7 @@ tradeoff. It is not, on this data, a fix for perceived slowness.
 
 ## Constraint-system rewrite — A/B against the pre-change baseline (2026-09-23, Claude)
 
-Twenty-two commits rewrote the planner's constraint rules: a precedence order (§0), a budget that
+Twenty-six commits rewrote the planner's constraint rules: a precedence order (§0), a budget that
 is a ceiling rather than a quota (§5), two separate arrival and departure buffers (§4c-bis), a
 no-duplicates rule (§14e), a whole-trip audit pass (§15), minimal-change editing (§12d), and three
 new `UserAnswers` fields (`mustInclude`, `avoid`, `constraintsNote`) carried through both wizards,
@@ -211,11 +211,14 @@ pairs changes what the number means.
 | bangkok-solo-degraded | 0 → 2 | worse |
 | queenstown-couple-noweather | 1 → 4 | worse |
 
-**The two worst offenders both improved; the two cleanest both got worse.** The entire +3 net is
-queenstown and bangkok. So "5 of 7 fixtures worse" on the normalized axis and "the rule backfired"
-are not the same claim, and only the first is supported: this is a rule that **helped where
-duplication was already severe and hurt where the plan was already clean.** Directional, not
-uniform.
+**The two worst offenders both improved, and the entire +3 net is two fixtures that started at 0
+and 1.** It is not "the cleanest both got worse": of the two fixtures with no repeats at all,
+bangkok went to 2 and kyoto stayed at 0, and queenstown started at 1 — tied with barcelona and
+lisbon, which both stayed there — and went to 4. So "5 of 7 fixtures worse" on the normalized axis
+and "the rule backfired" are not the same claim, and only the first is supported: this is a rule
+that **helped where duplication was already severe and hurt two of the five plans that were
+already clean or near it.** Directional, not uniform — and two of five is not a pattern these seven
+cells can settle.
 
 **Queenstown's four repeats are all `by: "name"`, not proximity:**
 
