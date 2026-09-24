@@ -1936,7 +1936,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   name="Basics"
                   step="basics"
                   title="Where and when"
-                  subtitle="Destination, dates and what you want to spend in total."
+                  subtitle="Destination, dates, and what you're comfortable spending."
                 >
                   {/* One instrument, not four widgets. The trough is `--surface-deep` at a lower
                       alpha than the panel around it, so it reads as recessed into the glass rather
@@ -2017,7 +2017,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                           className={`${fieldInputClass} tabular-nums ${endDate ? fieldFilledTone : fieldEmptyTone}`}
                         />
                       </Field>
-                      <Field icon={Wallet} label="Total budget" delay={260}>
+                      {/* "Budget", not "Total budget": the per-person/total control below decides the basis now,
+                          so a label asserting one of them contradicts the other. */}
+                      <Field icon={Wallet} label="Budget" delay={260}>
                         {/* The `$` belongs in the field, not parenthesised in the label — budget is
                             the product's whole mechanism, so it should read as a figure being
                             entered rather than as a number with a unit noted elsewhere. */}

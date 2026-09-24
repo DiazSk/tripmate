@@ -80,7 +80,7 @@ export const sceneBeats: SceneBeat[] = [
     label: "Real Prices",
     stat: "Lodging, food, and transit — itemized",
     detail:
-      "Say what you want to spend and get a plan that actually spends it, priced in before you land — not a lowball guess.",
+      "Say what you can spend and get a plan costed against it before you land — every stop priced, nothing padded to use the budget up.",
   },
   {
     id: "weather",

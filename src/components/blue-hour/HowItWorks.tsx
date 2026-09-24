@@ -35,7 +35,7 @@ const STEPS: { number: string; label: string; body: string; Icon: ComponentType<
   {
     number: "01",
     label: "You set the constraints",
-    body: "Where, when, how much, and who is going. The budget is a target to hit, not a ceiling to stay under.",
+    body: "Where, when, how much, and who is going. The budget is a ceiling — the plan stays inside it rather than spending up to it.",
     Icon: MapPin,
   },
   {
