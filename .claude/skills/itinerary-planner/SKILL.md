@@ -124,6 +124,12 @@ plus one or two example spots (e.g. "Seafood counters everywhere; e.g. Pike Plac
 invent hours, wait times, or menu prices for an area-level stop. The area must sit within or next
 to that part of the day's route — a meal should never pull the day across town.
 
+**Returning to an area you have already used for a meal is its own exception: name the venue that
+time.** A base in a small town makes "dinner near where they sleep" (§4d) land in the same place
+every evening, and four stops all called "Dinner in Arrowtown" tell the traveler nothing about four
+different nights — §14e reads them as the same meal repeated because, as written, they are. Name
+the restaurant, or name the street, but make the second visit distinguishable from the first.
+
 ### §3c. Sequencing and travel legs
 
 Cluster each day's stops by geographic proximity before ordering them. Never put scattered stops on
