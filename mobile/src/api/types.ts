@@ -190,6 +190,15 @@ export interface PlanDraft {
    * typed, and neither case ever blocks generating.
    */
   destinationMissed: boolean;
+  /**
+   * Where the destination actually is, kept so the later steps need not geocode again.
+   *
+   * Filled from whichever answer arrived first — a picked suggestion carries coordinates, and the
+   * blur geocode returns them too. Absent until one of those happens, which is why the arrival
+   * points it feeds are a convenience rather than a step anything waits on.
+   */
+  destinationLat?: number;
+  destinationLng?: number;
 
   group: GroupType;
   groupOther: string;
@@ -415,4 +424,15 @@ export interface TripEdit {
    *  is the server saying its picture is stale, and echoing the null is what forces a resync. */
   sessionId: string | null;
   syncedHash: string | null;
+}
+
+/** An airport or station near the destination, from `GET /api/arrival-points`. */
+export interface ArrivalPoint {
+  /** Display name, with the IATA code appended for airports: "Kansai Intl (KIX)". */
+  name: string;
+  kind: string;
+  distanceKm: number;
+  /** Sorts before distance. 0 for an international airport, 1 for anything else. */
+  tier: number;
+  iata: string | null;
 }

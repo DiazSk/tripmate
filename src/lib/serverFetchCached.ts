@@ -56,12 +56,10 @@ export function getCandidatePoisCached(
   lon: number,
   limit?: number,
   opts?: { radiusM?: number; minRate?: number }
-): Promise<CandidatePoi[]> {
-  // The missing-key case returns before the cache is consulted. `getCandidatePois` answers `[]`
-  // both when there is no `OPENTRIPMAP_API_KEY` and when the fetch fails, so caching it blind
-  // would write "this city has no points of interest" and — worse — adding the key later would
-  // change nothing until the rows expired.
-  if (!process.env.OPENTRIPMAP_API_KEY) return Promise.resolve([]);
+): Promise<CandidatePoi[] | null> {
+  // Short-circuited before the cache is consulted, so a key added later takes effect immediately
+  // rather than waiting out rows written while there wasn't one.
+  if (!process.env.OPENTRIPMAP_API_KEY) return Promise.resolve(null);
 
   const key = [
     "otm",
@@ -72,13 +70,11 @@ export function getCandidatePoisCached(
     limit ?? "",
   ].join(":");
 
-  return cached(key, TTL.SLOW, async () => {
-    const pois = await getCandidatePois(lat, lon, limit, opts);
-    // Still `[]`-on-failure inside `pois.ts`, so an empty answer is ambiguous here. Treated as
-    // "could not ask" and left uncached: a real 250m radius with nothing in it costs one cheap
-    // re-ask, while a cached outage would blank a neighbourhood for a month.
-    return pois.length ? pois : null;
-  }).then((pois) => pois ?? []);
+  // `getCandidatePois` now answers `null` for "could not ask", which is exactly the sentinel
+  // `cached` already uses to mean "do not write this, and serve a stale row if there is one".
+  // So an outage no longer blanks a neighbourhood for a month, and an empty answer from a real
+  // 250m radius is cached as the honest finding it is rather than re-asked forever.
+  return cached(key, TTL.SLOW, () => getCandidatePois(lat, lon, limit, opts));
 }
 
 /**

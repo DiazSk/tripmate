@@ -72,6 +72,29 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
+/**
+ * How wide the box behind a prefixed value is.
+ *
+ * **Only a prefixed field is sized to its content, and that is the whole point.** A plain field
+ * fills the row and right-aligns, so its text ends at the column whatever its length. Put a `$` to
+ * the left of that and the symbol is stranded at the far end of the row, a whole field away from
+ * the number it belongs to — there is no gap to close, because the gap *is* the field.
+ *
+ * `ponytail:` a digit-width estimate rather than a measurement. `TextInput` does not report a
+ * usable intrinsic width here — left to size itself it collapses toward its minimum and scrolls,
+ * which shows the tail of a long value and nothing else. Estimating is sound for the only prefixed
+ * field this app has, a numeric one, because digits share an advance width. If a prefixed *text*
+ * field ever appears, measure with `onContentSizeChange` instead of widening this guess.
+ */
+const DIGIT_WIDTH = 10;
+
+function prefixedWidth(value: string, placeholder?: string): number {
+  // The placeholder's width while empty, so the box does not jump on the first keystroke. Three
+  // characters is the floor once something is typed — a tap target, not a text width.
+  const chars = value.length > 0 ? Math.max(value.length, 3) : (placeholder?.length ?? 4);
+  return chars * DIGIT_WIDTH;
+}
+
 export function TextField({
   label,
   prefix,
@@ -93,7 +116,13 @@ export function TextField({
           placeholderTextColor={Colors.muted}
           selectionColor={Colors.accent}
           {...input}
-          style={[styles.input, input.style]}
+          style={[
+            styles.input,
+            prefix
+              ? { width: prefixedWidth(String(input.value ?? ''), input.placeholder) }
+              : styles.inputFill,
+            input.style,
+          ]}
         />
       </View>
     </FieldRow>
@@ -149,6 +178,108 @@ export function DateField({
       </View>
     </FieldRow>
   );
+}
+
+/**
+ * A clock time, drawn by the platform.
+ *
+ * The same native picker `DateField` uses, in `time` mode — so an arrival time is set the way the
+ * OS sets one rather than typed into a free-text box that accepted "half two" and "2pm ish" and
+ * sent them on to the planner as facts. The value stays a `"HH:MM"` string, which is what
+ * `TripLogistics` already carried and what the prompt already reads.
+ *
+ * **Empty stays empty.** A picker always draws *some* time, so a field nobody has answered would
+ * otherwise read as "arriving at midnight" — which the planning rules would then schedule around.
+ * Until it is tapped this renders the placeholder, and the picker only appears once there is a
+ * time to show; `onValueChange` firing is what turns one into the other.
+ */
+export function TimeField({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  /** `HH:MM` in 24-hour form, or empty for unset. */
+  value: string;
+  placeholder: string;
+  onChange: (time: string) => void;
+}) {
+  const { fontScale } = useWindowDimensions();
+  const wide = fontScale > STACK_ABOVE_SCALE;
+
+  if (!value) {
+    return (
+      <FieldRow label={label}>
+        <Pressable
+          onPress={() => onChange(nowTime())}
+          accessibilityRole="button"
+          accessibilityLabel={`Set ${label.toLowerCase()} time`}
+          style={styles.timeEmpty}>
+          <ThemedText type="bodyLarge" themeColor="muted">
+            {placeholder}
+          </ThemedText>
+        </Pressable>
+      </FieldRow>
+    );
+  }
+
+  return (
+    <FieldRow label={label}>
+      <View style={styles.timeRow}>
+        {/* **A way back to unanswered, which a picker does not otherwise have.** This whole
+            section is optional, and a picker can only ever hand back *a* time — so without this,
+            one stray tap turns "they didn't say" into "they land at 23:00", which the planning
+            rules then build a day around. The free-text field this replaced could always be
+            emptied; losing that would be a worse trade than the native picker is worth. */}
+        <Pressable
+          onPress={() => onChange('')}
+          accessibilityRole="button"
+          accessibilityLabel={`Clear ${label.toLowerCase()} time`}
+          hitSlop={8}>
+          <ThemedText type="detail" themeColor="muted">
+            Clear
+          </ThemedText>
+        </Pressable>
+        <View style={[styles.dateWrap, wide && styles.dateWrapWide]}>
+          <NativeDatePicker
+            style={
+              wide
+                ? [styles.datePickerWide, { height: Math.round(36 * fontScale) }]
+                : styles.timePicker
+            }
+            value={toTimeDate(value)}
+            mode="time"
+            accentColor={Colors.accent}
+            themeVariant="dark"
+            onChange={(event, date) =>
+              onChange(toClock(date ?? new Date(event.nativeEvent.timestamp)))
+            }
+          />
+        </View>
+      </View>
+    </FieldRow>
+  );
+}
+
+/** The next whole hour — a plausible opening value that is never "00:00 because nothing was set". */
+function nowTime(): string {
+  const d = new Date();
+  d.setHours(d.getHours() + 1, 0, 0, 0);
+  return toClock(d);
+}
+
+/** `"14:00"` onto today's date. Only the clock is read back out, so the day does not matter. */
+function toTimeDate(clock: string): Date {
+  const [h, m] = clock.split(':').map(Number);
+  const d = new Date();
+  if (Number.isFinite(h) && Number.isFinite(m)) d.setHours(h, m, 0, 0);
+  return d;
+}
+
+/** Back to `"HH:MM"`, zero-padded and 24-hour whatever the picker displayed. */
+function toClock(d: Date): string {
+  return `${`${d.getHours()}`.padStart(2, '0')}:${`${d.getMinutes()}`.padStart(2, '0')}`;
 }
 
 /**
@@ -249,15 +380,34 @@ const styles = StyleSheet.create({
   rowStacked: { flexDirection: 'column', alignItems: 'stretch', gap: Spacing.tight },
   // `flex: 1` would stretch the control down the column instead of across it.
   rowControlStacked: { flex: 0, alignSelf: 'stretch' },
-  textWrap: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  // **Inset to the date chip's text, not to the row's padding.** Every value in a trough reads as
+  // one right-hand column, and the date rows put theirs inside a native pill whose own padding
+  // holds it ~12pt clear of the pill's edge. Lining the boxes up (which `datePicker`'s negative
+  // margin does) therefore leaves the *words* out of line by that much, which is what the eye
+  // actually reads. Taken on this side rather than by pushing the chip further right, because the
+  // chip's slack inside its fixed box shrinks as it grows with Dynamic Type — a margin tuned to
+  // today's scale would push the year past the trough's edge at a larger one. A pill's internal
+  // padding does not scale that way, so 12 stays true.
+  // Stretched, so an unprefixed field can fill the row and right-align inside it; a prefixed one
+  // is sized by `prefixedWidth` and this pushes the pair to the same right edge.
+  textWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 2,
+    alignSelf: 'stretch',
+    paddingRight: 12,
+  },
   input: {
     color: Colors.foreground,
     fontSize: 16,
     lineHeight: 20,
     paddingVertical: Spacing.tight,
     textAlign: 'right',
-    minWidth: 120,
   },
+  // The row's leftovers, which is what keeps a long value whole: a `TextInput` asked to size
+  // itself collapses toward its minimum and scrolls, so "Lisbon, Portugal" rendered as "rtugal".
+  inputFill: { flex: 1 },
   // Wide enough for the longest rendering the compact picker produces ("Sep 22, 2026") plus its
   // own chip padding; without a floor it is handed the row's leftovers and truncates.
   //
@@ -274,6 +424,13 @@ const styles = StyleSheet.create({
   dateWrapWide: { alignSelf: 'stretch', marginHorizontal: -Spacing.read },
   datePickerWide: { width: '100%' },
   datePicker: { width: 150, height: 36, marginRight: -11 },
+  // Narrower than a date, and the slack inside it is smaller to match — same reasoning as
+  // `datePicker`'s margin, measured against "14:00" rather than "Sep 22, 2026".
+  timePicker: { width: 96, height: 36, marginRight: -8 },
+  // Matches the text rows' own inset so an unanswered time sits in the same column as an answered
+  // one, and gives the placeholder a real target rather than a word to hit.
+  timeEmpty: { paddingRight: 12, paddingVertical: Spacing.tight },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows },
   button: {
     backgroundColor: Colors.accent,
     borderRadius: Radius.pill,

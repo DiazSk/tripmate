@@ -88,6 +88,11 @@ export async function fetchRawTrip(params: {
     // geocode rather than on finding something. No system found for a city we did locate is a
     // real finding ("no bikeshare here"); no system found because we never had coordinates is not.
     bikeshare: { available: Boolean(geo), system: bikeshare },
-    candidatePois: pois ? { available: pois.length > 0, pois } : { available: false, pois: [] },
+    // `available` tracks whether the lookup ran and answered, like `bikeshare` above — not
+    // whether it found anything. It read `pois.length > 0`, which is a different claim and a
+    // wrong one twice over: an empty array is truthy, so a city the provider genuinely has
+    // nothing for was reported as a failed lookup, and `pois.ts` returned that same empty array
+    // when there was no API key at all.
+    candidatePois: pois ? { available: true, pois } : { available: false, pois: [] },
   };
 }
