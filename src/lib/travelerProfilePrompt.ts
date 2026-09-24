@@ -127,7 +127,7 @@ export function formatTravelLegs(logistics: TripLogistics | null): string {
 
   if (logistics.stayBooked) {
     lines.push(
-      `Lodging is already booked: ${logistics.stayBooked}. Use it for every night instead of choosing one, and route the days around it.`
+      `Lodging is already booked: ${logistics.stayBooked}. Use it for every night instead of choosing one, route the days around it, and give it a cost of 0 — SKILL.md §4e: charging again for something already paid for distorts what is left to spend.`
     );
   }
 

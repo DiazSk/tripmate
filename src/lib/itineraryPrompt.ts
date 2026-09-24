@@ -264,6 +264,8 @@ export function buildRefinePrompt(params: {
 
 ${JSON.stringify(params.previousItinerary)}
 
+${PRECEDENCE_INSTRUCTION}
+
 Style: ${tierStyle(params.previousItinerary.tier)}
 
 The user's feedback on this itinerary: "${params.feedback}"

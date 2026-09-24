@@ -167,6 +167,12 @@ test("a refine prompt carries a named must-include and a named exclusion", () =>
   assert.match(prompt, /Do not include: nightclubs/);
 });
 
+test("a refine prompt carries the precedence order — \u00a70 governs edits too", () => {
+  // A refine regenerates whole days, so it needs the same answer to "what wins when two valid
+  // rules disagree" that the generate prompt gets.
+  assert.match(buildRefinePrompt(refineBase), /this is the order that decides it, highest first/);
+});
+
 test("a refine call with nothing stated is byte-identical to a call that never passed answers", () => {
   // Mirrors formatTravelLegs's own "absent logistics leave the prompt byte-identical" contract:
   // a traveler who named nothing must not change a single byte of what the model sees, and a

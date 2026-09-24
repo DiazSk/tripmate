@@ -215,8 +215,13 @@ test("an arrival still allows 90 minutes, which is a different thing from a depa
   assert.match(text, /90 minutes/);
 });
 
-test("booked lodging tells the model to stop choosing one", () => {
-  assert.match(formatTravelLegs(legs({ stayBooked: "Guesthouse in Gion" })), /already booked/);
+test("booked lodging tells the model to stop choosing one, and to price it at 0", () => {
+  // The cost-0 half is §4e and was missing here, so the legacy generator priced a booked stay and
+  // `checkCommitments` then reported it on every `stayBooked` trip — a defect manufactured for the
+  // critique to repair, which it fails to do about a third of the time.
+  const text = formatTravelLegs(legs({ stayBooked: "Guesthouse in Gion" }));
+  assert.match(text, /already booked/);
+  assert.match(text, /cost of 0/);
 });
 
 // --- stated requirements ------------------------------------------------------------------------
