@@ -22,7 +22,7 @@ import InterestPicker from "@/components/InterestPicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
 import PartyCounter, { DEFAULT_PARTY, PartyStepButton } from "@/components/PartyCounter";
-import { PARTY_MAX_PER_BAND } from "@/lib/userAnswers";
+import { PARTY_MAX_PER_BAND, sanitizeNamedList } from "@/lib/userAnswers";
 import DietaryPicker from "@/components/DietaryPicker";
 import SuggestInput, { TIME_OPTIONS, SuggestOption } from "@/components/SuggestInput";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
@@ -416,6 +416,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // all — a default-valued object would claim the traveler stated "no needs" when they were never
   // asked, and `deriveMobilityProfile` treats those two cases differently.
   const [accessibility, setAccessibility] = useState<AccessibilityNeeds | null>(null);
+  /** Comma-separated as typed; split on submit. A chip editor is the nicer control and is not
+   *  worth a component here — the field is optional and most travelers leave it empty. */
+  const [mustInclude, setMustInclude] = useState("");
+  const [avoid, setAvoid] = useState("");
+  const [constraintsNote, setConstraintsNote] = useState("");
 
   /** Patches one accessibility field, materialising the object on first touch. */
   function setAccess(patch: Partial<AccessibilityNeeds>) {
@@ -704,6 +709,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setDeparturePoint(restore("departurePoint", ""));
     setStayBooked(restore("stayBooked", ""));
     setAccessibility(restore("accessibility", null as AccessibilityNeeds | null));
+    setMustInclude(restore("mustInclude", ""));
+    setAvoid(restore("avoid", ""));
+    setConstraintsNote(restore("constraintsNote", ""));
     setStep("plan");
     setPlanStep(urlStep);
   }, []);
@@ -719,7 +727,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
       explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
       arrivalTime, arrivalPoint, departureTime, departurePoint,
-      stayBooked, accessibility,
+      stayBooked, accessibility, mustInclude, avoid, constraintsNote,
     };
     try {
       sessionStorage.setItem(PLAN_DRAFT_KEY, JSON.stringify(draft));
@@ -730,7 +738,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     step, destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
     explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
     arrivalTime, arrivalPoint, departureTime, departurePoint,
-    stayBooked, accessibility,
+    stayBooked, accessibility, mustInclude, avoid, constraintsNote,
   ]);
 
   // The fix for the wizard destroying every answer on a back-swipe. Before this, leaving the
@@ -1068,6 +1076,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         stayBooked: stayBooked || null,
       },
       accessibility,
+      // Split here rather than in state so the field stays a plain text input; `sanitizeNamedList`
+      // (shared with the server) drops blanks and de-dupes, returning `undefined` rather than `[]`
+      // for an empty field — the guardrail and prompt both branch on "did the traveler name
+      // anything", and `[]` reads as a demand for nothing rather than as silence.
+      mustInclude: sanitizeNamedList(mustInclude.split(",")),
+      avoid: sanitizeNamedList(avoid.split(",")),
+      constraintsNote: constraintsNote.trim() || null,
     };
   }
 
@@ -2291,6 +2306,40 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                           className={`${fieldInputClass} ${accessibility?.note ? fieldFilledTone : fieldEmptyTone}`}
                         />
                       </div>
+                    </div>
+                    {/* Named outright, as distinct from the interest tags below: an interest is a
+                        weight, these are requirements. The `required` guardrail matches against
+                        the first two, which is why they are their own fields rather than folded
+                        into the note. */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Anything you must see</label>
+                      <input
+                        type="text"
+                        value={mustInclude}
+                        placeholder="The Louvre, Versailles"
+                        onChange={(e) => setMustInclude(e.target.value)}
+                        className={`${fieldInputClass} ${mustInclude ? fieldFilledTone : fieldEmptyTone}`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Anything to leave out</label>
+                      <input
+                        type="text"
+                        value={avoid}
+                        placeholder="Nightclubs, seafood"
+                        onChange={(e) => setAvoid(e.target.value)}
+                        className={`${fieldInputClass} ${avoid ? fieldFilledTone : fieldEmptyTone}`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">Anything already booked or off-limits</label>
+                      <input
+                        type="text"
+                        value={constraintsNote}
+                        placeholder="No rental car; dinner booked Thursday 8pm"
+                        onChange={(e) => setConstraintsNote(e.target.value)}
+                        className={`${fieldInputClass} ${constraintsNote ? fieldFilledTone : fieldEmptyTone}`}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-muted">What matters most</label>
