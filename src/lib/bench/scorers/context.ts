@@ -205,25 +205,31 @@ const MEAL_WORDS = /\b(breakfast|brunch|lunch|dinner|supper|meal|dining|restaura
  *
  * 1. **Stated costs** — §11 requires a `$cost` on every stop and on the lodging line, so when the
  *    output carries them this sums the real numbers, lodging included. This is the only basis that
- *    can see the §5 rule at all, which asks the total to land at 85-100% of the budget.
+ *    can total a plan against §5's ceiling at all.
  * 2. **The estimate table** — the fallback for output with no costs in it (every run before §11's
  *    format landed). Lodging and flights are excluded there, because pricing a recommended *area*
  *    would be inventing a second number on top of an estimate.
  *
- * 1.0 = inside the target band. Overspending scores the ratio of budget to spend, so twice the
- * budget scores 0.5. Underspending scores the fraction of the budget used against the 85% floor —
- * a plan that spends a third of a luxury budget is not a good plan, and the old estimate-only
- * scorer called that a perfect 1.0.
+ * 1.0 = at or under the budget. Overspending scores the ratio of budget to spend, so twice the
+ * budget scores 0.5. Underspending is *not* penalised: §5 now states a budget as a ceiling rather
+ * than a quota, so a plan that comes in well under it has obeyed the rule. `budgetUsedFraction`
+ * reports the underspend beside the score for anyone who wants to see it.
  */
-/** Skill §5's target band: "come close to the full stated budget (aim for 85-100% of it)". */
-export const BUDGET_TARGET_FLOOR = 0.85;
-
-/** 1.0 inside the band; the shortfall ratio below it, the overshoot ratio above it. Both sides are
- *  penalised because §5 treats an unspent budget as a failure to plan, not as thrift. */
+/**
+ * 1.0 at or under budget; the overshoot ratio above it.
+ *
+ * This used to penalise *underspend* against an 85% floor, mirroring a §5 that asked the total to
+ * land at 85-100% of the budget. That rule is gone — a stated budget is a ceiling, and a plan that
+ * correctly stops at 65% of it is a good plan, not a 0.76. `budgetUsedFraction` is still reported
+ * beside this so the underspend is visible; it is simply no longer scored as a fault.
+ *
+ * Changing this does not bias the A/B: both arms are re-scored by this same function at compare
+ * time. And budget is not in COMPOSITE_WEIGHTS, so the composites in docs/itinerary-quality.md
+ * stay comparable across the change.
+ */
 export function scoreAgainstBand(total: number, budget: number): number {
   if (total > budget) return Math.max(0, budget / total);
-  const used = total / budget;
-  return used >= BUDGET_TARGET_FLOOR ? 1 : Math.max(0, used / BUDGET_TARGET_FLOOR);
+  return 1;
 }
 
 export function scoreBudget(itinerary: ParsedItinerary, fixture: BenchFixture): BudgetScore {

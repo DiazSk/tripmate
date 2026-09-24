@@ -812,17 +812,18 @@ test("classifyExposure reads kinds first, then words, and admits ignorance", () 
   assert.notEqual(classifyExposure(entry("Walk to the gallery"), KYOTO), "outdoor");
 });
 
-test("scoreBudget reads stated costs, and penalises underspend as well as overspend", () => {
+test("scoreBudget reads stated costs, and treats the budget as a ceiling", () => {
   // §11 puts a $cost on every stop and on the lodging line, so this is the model's own arithmetic
-  // rather than the estimate table. WELL_FORMED totals $90 of stops + $210 lodging = $300.
+  // rather than the estimate table. WELL_FORMED totals $115 of stops + $210 lodging = $325.
   const cheap = scoreBudget(parseItinerary(WELL_FORMED), KYOTO); // $2600 budget
   assert.equal(cheap.estimateBased, false, "stated costs beat the estimate table");
   assert.equal(cheap.estimatedUsd, 325, "$115 of stops across both days + $210 lodging");
   assert.equal(cheap.withinBudget, true);
   assert.ok(cheap.budgetUsedFraction < 0.2);
-  assert.ok(
-    cheap.normalized > 0 && cheap.normalized < 1,
-    "§5 asks for 85-100% of the budget, so spending a tenth of it is a miss too"
+  assert.equal(
+    cheap.normalized,
+    1,
+    "a budget is a ceiling: spending a tenth of it is thrift, not a miss. The underspend is still reported in budgetUsedFraction"
   );
 
   const tiny = { ...KYOTO, reconciled: { ...KYOTO.reconciled, userAnswers: { ...KYOTO.reconciled.userAnswers, budget: 100 } } };
@@ -831,7 +832,7 @@ test("scoreBudget reads stated costs, and penalises underspend as well as oversp
   assert.ok(over.normalized > 0 && over.normalized < 1, "over-budget is proportional, not zero");
 
   const onTarget = { ...KYOTO, reconciled: { ...KYOTO.reconciled, userAnswers: { ...KYOTO.reconciled.userAnswers, budget: 350 } } };
-  assert.equal(scoreBudget(parseItinerary(WELL_FORMED), onTarget).normalized, 1, "$325 of $350 is in band");
+  assert.equal(scoreBudget(parseItinerary(WELL_FORMED), onTarget).normalized, 1, "$325 of $350 is under the ceiling");
 
   // No costs in the output at all — the estimate table is still the fallback.
   const stripped = WELL_FORMED.replace(/\$\d+, /g, "").replace(/ — \$210 —/, " —");

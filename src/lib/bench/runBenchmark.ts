@@ -26,6 +26,7 @@ import {
 } from "./scorers/domain";
 import { scoreBacktrack, scoreDowntime, scoreMealProximity } from "./scorers/route";
 import { scoreBudget, scoreVibe, scoreWeatherAlignment } from "./scorers/context";
+import { scoreCommitments, scoreDuplicates, scoreMustInclude } from "./scorers/commitments";
 import { outputSimilarity, scoreLexical, scoreSemantic } from "./scorers/text";
 import { deltaGroups, measuredGroups, refineComposite, scorePatch } from "./scorers/patch";
 import { COMPOSITE_WEIGHTS, RADAR_AXES } from "./types";
@@ -79,13 +80,19 @@ export function compositeGroups(scores: BenchCellScores): CompositeGroups {
   };
 }
 
-/** The twelve scorers over an already-parsed itinerary. `scoreItinerary` is this plus the parse. */
+/**
+ * Every scorer over an already-parsed itinerary. `scoreItinerary` is this plus the parse.
+ *
+ * `duplicates`, `commitments` and `mustInclude` are reported here but deliberately absent from
+ * `compositeGroups` below — see the note above `COMPOSITE_WEIGHTS`.
+ */
 export function scoreParsed(
   fixture: BenchFixture,
   parsed: ParsedItinerary,
   rawText: string,
   operational: OperationalScore
 ): BenchCellScores {
+  const answers = fixture.reconciled.userAnswers;
   return {
     geoCoherence: scoreGeoCoherence(parsed, fixture),
     constraints: scoreConstraints(parsed, fixture),
@@ -98,6 +105,9 @@ export function scoreParsed(
     downtime: scoreDowntime(parsed),
     weather: scoreWeatherAlignment(parsed, fixture),
     budget: scoreBudget(parsed, fixture),
+    duplicates: scoreDuplicates(parsed),
+    commitments: scoreCommitments(parsed, answers.logistics),
+    mustInclude: scoreMustInclude(parsed, answers.mustInclude ?? [], answers.avoid ?? []),
     vibe: scoreVibe(parsed, fixture),
     lexical: scoreLexical(rawText),
     semantic: scoreSemantic(rawText, fixture),
