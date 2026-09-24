@@ -1,6 +1,8 @@
 import { Stack, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+
+import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
 
 import { geocode } from '@/api/tripMateApi';
 import { usePlanDraft } from '@/lib/planDraft';
@@ -28,10 +30,78 @@ export default function Basics() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setDestination = (value: string) => patch({ destination: value });
-  const setStartDate = (value: string) => patch({ startDate: value });
-  const setEndDate = (value: string) => patch({ endDate: value });
+  /**
+   * Type-ahead for Where, from the same free Open-Meteo geocoder `/api/geocode` wraps — reached
+   * through `@shared/*` rather than a route, exactly as `DestinationSearch.tsx` reaches it on the
+   * web. The Swift app uses `MKLocalSearchCompleter` instead, which answers better but is an
+   * Apple framework with no reach from Expo Go.
+   *
+   * Picking only fills the text. `checkDestination` still runs on blur, because the "couldn't
+   * find that place" notice reads the geocode and two sources answering one question would be two
+   * ideas of where the trip is.
+   */
+  const [suggestions, setSuggestions] = useState<GeoSuggestion[]>([]);
+  /** Bumped per keystroke so a slow lookup cannot overwrite the answer to a newer one. */
+  const lookup = useRef(0);
+  const typing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const setDestination = (value: string) => {
+    patch({ destination: value });
+    if (typing.current) clearTimeout(typing.current);
+    const query = value.trim();
+    // Two characters, or the list is most of the planet. Debounced rather than per keystroke for
+    // the same reason `checkDestination` waits for blur: every prefix of a word is also a query.
+    if (query.length < 2) {
+      lookup.current++;
+      setSuggestions([]);
+      return;
+    }
+    const id = ++lookup.current;
+    typing.current = setTimeout(async () => {
+      const found = await suggestDestinations(query);
+      if (id === lookup.current) setSuggestions(found.slice(0, 5));
+    }, 300);
+  };
+
+  /** Fills the field and closes the list — deliberately not through `setDestination`, which would
+   *  queue a lookup for the text it just accepted and reopen the list under the answer. */
+  const pickDestination = (suggestion: GeoSuggestion) => {
+    closeSuggestions();
+    // The coordinates ride along, which is the whole reason a picked suggestion beats a typed
+    // name: the next step's arrival points need a point, and this saves it a geocode.
+    patch({
+      destination: suggestionLabel(suggestion),
+      destinationMissed: false,
+      destinationLat: suggestion.lat,
+      destinationLng: suggestion.lon,
+    });
+  };
+
+  /**
+   * Answering anything else puts the list away.
+   *
+   * **Not `onBlur`, deliberately.** Blur fires before the press it was caused by lands, so
+   * clearing there unmounts the row under the finger that was choosing it — the tap is delivered
+   * (`keyboardShouldPersistTaps="handled"`) but there is nothing left to deliver it to. Keying off
+   * the *next* field instead has no timing in it at all: by the time one of these runs, the
+   * traveller has demonstrably moved on.
+   */
+  const closeSuggestions = () => {
+    if (typing.current) clearTimeout(typing.current);
+    lookup.current++;
+    setSuggestions([]);
+  };
+
+  const setStartDate = (value: string) => {
+    closeSuggestions();
+    patch({ startDate: value });
+  };
+  const setEndDate = (value: string) => {
+    closeSuggestions();
+    patch({ endDate: value });
+  };
   const setBudget = (text: string) => {
+    closeSuggestions();
     setBudgetText(text);
     patch({ budget: Number(text.replace(/[^0-9.]/g, '')) || 0 });
   };
@@ -59,6 +129,10 @@ export default function Basics() {
     }
     const result = await geocode(name);
     patch({ destinationMissed: result !== undefined && 'missed' in result });
+    // The same coordinates a picked suggestion carries, for a name that was typed straight in.
+    if (result && 'place' in result) {
+      patch({ destinationLat: result.place.lat, destinationLng: result.place.lng });
+    }
   }
 
 
@@ -84,6 +158,28 @@ export default function Basics() {
             autoCorrect={false}
             returnKeyType="next"
           />
+          {/* Inside the trough and above the next hairline, so the list reads as belonging to the
+              field rather than floating over the form — the same call the Swift wizard makes. An
+              overlay here would cover Arrive, and a suggestion that hides the next question is how
+              you fill one field and lose another. */}
+          {suggestions.length > 0 ? (
+            <View>
+              {suggestions.map((suggestion) => (
+                <Pressable
+                  key={`${suggestion.lat},${suggestion.lon}`}
+                  onPress={() => pickDestination(suggestion)}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.suggestion, pressed && styles.suggestionPressed]}>
+                  <ThemedText type="detail" themeColor="muted" numberOfLines={1}>
+                    {suggestionLabel(suggestion)}
+                    {suggestion.admin1 && suggestion.admin1 !== suggestion.name
+                      ? ` · ${suggestion.admin1}`
+                      : ''}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           <DateField label="Arrive" value={startDate} onChange={setStartDate} />
           <DateField
             label="Leave"
@@ -179,6 +275,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.canvas },
   content: { padding: Spacing.read, paddingBottom: Spacing.regular * 2, gap: Spacing.read },
   headline: { marginBottom: Spacing.tight },
+  // 44 is the tap-target floor, and the row is the target rather than the words in it.
+  suggestion: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.read },
+  suggestionPressed: { backgroundColor: Colors.pressed },
   note: { marginTop: -Spacing.tight },
   readout: { marginTop: -Spacing.tight },
   action: { marginTop: Spacing.tight, gap: Spacing.rows },

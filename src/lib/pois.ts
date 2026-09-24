@@ -27,18 +27,25 @@ export interface PoiSearchOptions {
   minRate?: number;
 }
 
-/** Top-attractions candidate list for the Step 2b POI picker, and the nearby lookup behind
- *  adding a stop by clicking the map. Requires OPENTRIPMAP_API_KEY (free tier at
- *  https://opentripmap.io) — fails soft: missing key, network error, or a non-ok response all
- *  return []. */
+/**
+ * Top-attractions candidate list for the Step 2b POI picker, and the nearby lookup behind adding
+ * a stop by clicking the map. Requires OPENTRIPMAP_API_KEY (free tier at https://opentripmap.io).
+ *
+ * **`null` is "we could not ask", `[]` is "we asked and there is nothing"** — the house
+ * distinction, and here it is the difference between two sentences a traveller reads very
+ * differently. This returned `[]` for both, so a deployment with no key told everyone their
+ * destination had no notable places in it; the same string that is honest about a click on open
+ * water was a lie about Mumbai. A missing key, a network error, a non-ok response and a shape we
+ * cannot read are all the first kind.
+ */
 export async function getCandidatePois(
   lat: number,
   lon: number,
   limit = 12,
   { radiusM = DEFAULT_RADIUS_M, minRate = 2 }: PoiSearchOptions = {}
-): Promise<CandidatePoi[]> {
+): Promise<CandidatePoi[] | null> {
   const apiKey = process.env.OPENTRIPMAP_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) return null;
 
   try {
     const url = new URL(OPENTRIPMAP_BASE);
@@ -51,9 +58,9 @@ export async function getCandidatePois(
     url.searchParams.set("apikey", apiKey);
 
     const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const data = await res.json();
-    if (!Array.isArray(data)) return [];
+    if (!Array.isArray(data)) return null;
 
     return data
       .filter((p) => p.name && p.point)
@@ -71,7 +78,7 @@ export async function getCandidatePois(
           squaredDegreeDistance(a, lat, lon) - squaredDegreeDistance(b, lat, lon)
       );
   } catch {
-    return [];
+    return null;
   }
 }
 

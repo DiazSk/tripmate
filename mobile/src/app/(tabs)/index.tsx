@@ -20,7 +20,7 @@ const METHOD = [
   {
     number: '01',
     title: 'You set the constraints',
-    prose: 'Where, when, how much, and who is going. The budget is a target to hit, not a ceiling to stay under.',
+    prose: 'Where, when, how much, and who is going. The budget is a ceiling — the plan stays inside it rather than spending up to it.',
   },
   {
     number: '02',

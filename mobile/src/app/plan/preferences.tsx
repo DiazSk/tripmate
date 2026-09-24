@@ -145,7 +145,17 @@ export default function PreferencesStep() {
               label="Must see"
               value={draft.mustInclude}
               onChangeText={(mustInclude) => patch({ mustInclude })}
-              placeholder="The Louvre, Versailles"
+              // **Names the city, not a landmark in it.** This read "The Louvre, Versailles"
+              // whatever the destination was, so a Mumbai trip was shown two places in France —
+              // a placeholder that is wrong about the trip is worse than one that is vague, and
+              // this one was wrong for every destination but one. Real suggestions would mean
+              // `/api/trip-fetch`, which does not run until the step after this; the caption
+              // above already carries the comma format, so the example never had to.
+              placeholder={
+                cityOf(draft.destination)
+                  ? `Somewhere in ${cityOf(draft.destination)}`
+                  : 'Somewhere you must not miss'
+              }
             />
           </FieldTrough>
         </Question>
@@ -178,6 +188,12 @@ export default function PreferencesStep() {
       </ScrollView>
     </KeyboardAvoidingView>
   );
+}
+
+/** "Mumbai, India" → "Mumbai". The suggestion list fills the destination with the disambiguated
+ *  form, which is right for the planner and too long for a placeholder sharing a row with a label. */
+function cityOf(destination: string): string {
+  return destination.split(',')[0].trim();
 }
 
 const styles = StyleSheet.create({

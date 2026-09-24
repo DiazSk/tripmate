@@ -1,6 +1,7 @@
 import { fetchWithSession } from "./session";
 import { createSseParser } from "./sse";
 import type {
+  ArrivalPoint,
   CandidatePoi,
   ChatTurn,
   CreateTripRequest,
@@ -443,6 +444,26 @@ export async function chatTurns(tripId: string): Promise<ChatTurn[]> {
     if (!res.ok) return [];
     const body = (await res.json()) as { turns?: ChatTurn[] };
     return body.turns ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * `GET /api/arrival-points` — the airports and stations somebody could land at.
+ *
+ * **Always a list, never a failure.** The route itself answers 200 with `[]` when Overpass is
+ * unreachable, and this keeps that posture rather than adding an `undefined` the caller would have
+ * to tell apart: the fields it fills are optional and free-text, so a throttled lookup costs a
+ * convenience and nothing else. Somewhere with no airport within range answers the same way, and
+ * the two are not worth distinguishing on a question nobody has to answer.
+ */
+export async function arrivalPoints(lat: number, lng: number): Promise<ArrivalPoint[]> {
+  try {
+    const res = await fetchWithSession(`/api/arrival-points?lat=${lat}&lon=${lng}`, {});
+    if (!res.ok) return [];
+    const body = (await res.json()) as { points?: ArrivalPoint[] };
+    return body.points ?? [];
   } catch {
     return [];
   }
