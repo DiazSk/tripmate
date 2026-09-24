@@ -167,6 +167,35 @@ test("two non-food, non-transit stops still trip on proximity — the narrowing 
   assert.equal(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate").length, 1);
 });
 
+test("a food stop at the same point as a prior sight is not a duplicate", () => {
+  // The mixed pair the same-category tests cannot reach: the exemption has to hold on the
+  // CURRENT stop as well as the prior one. "Pike Place Market" is `other`, and a meal there the
+  // next day is `food` carrying the market's own coordinates per §3b — two different things at
+  // one point, and the prior-side filter alone would not spare them.
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      { date: "2026-09-19", weather: "Clear", stops: [{ name: "Pike Place Market", lat: 47.6097, lng: -122.3422, cost: 0, note: "", time: "10:00", durationLabel: "1 hour", category: "other" }] },
+      { date: "2026-09-20", weather: "Clear", stops: [{ name: "Lunch at Pike Place", lat: 47.6097, lng: -122.3422, cost: 25, note: "", time: "12:00", durationLabel: "1 hour", category: "food" }] },
+    ],
+  };
+  assert.deepEqual(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate"), []);
+});
+
+test("two unlocated stops are not the same place just because both sit at 0,0", () => {
+  // `STOP_SHAPE` literally ships `"lat":0.0,"lng":0.0`, so a model copying the template lands
+  // every unlocated stop on Null Island, and `normalizeDays` passes 0 through. Mirrors
+  // `scoreDuplicates`, which falls back to name matching when a coordinate is missing.
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      { date: "2026-09-19", weather: "Clear", stops: [{ name: "Teamlab Planets", lat: 0, lng: 0, cost: 30, note: "", time: "10:00", durationLabel: "1 hour", category: "entry" }] },
+      { date: "2026-09-20", weather: "Clear", stops: [{ name: "Shibuya Sky", lat: 0, lng: 0, cost: 20, note: "", time: "10:00", durationLabel: "1 hour", category: "entry" }] },
+    ],
+  };
+  assert.deepEqual(evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate"), []);
+});
+
 test("the same stop twice within one day is also a duplicate", () => {
   const itinerary = {
     tier: "mid-range",
@@ -218,6 +247,18 @@ test("a stop before the arrival buffer clears is a commitment finding", () => {
   assert.equal(found.length, 1);
   assert.match(found[0].message, /arriv/i);
   assert.equal(found[0].dayIndex, 0);
+});
+
+test("the arrival buffer is 90 minutes, not some shorter number", () => {
+  // The existing arrival test uses a 15-minute violation, which fires against any buffer at all.
+  // 15:00 is the discriminating case: it clears a 60-minute buffer (14:45) and violates the
+  // 90-minute one (15:15). ARRIVAL_BUFFER_MIN is mirrored by contract in SKILL.md §4c-bis, in
+  // formatTravelLegs's prompt text and in the benchmark scorer — move one, move all three, and
+  // this is what notices when only the constant moves.
+  const found = evaluateItinerary(twoDayTrip("15:00", "09:00"), { logistics: LOGISTICS })
+    .filter((g) => g.rule === "commitment");
+  assert.equal(found.length, 1, "lands 13:45, so 15:00 is still inside the 90-minute buffer");
+  assert.match(found[0].message, /90 min/);
 });
 
 test("a stop running into the departure buffer is a commitment finding", () => {
@@ -342,6 +383,12 @@ test("an exclusion matches whole words only, so 'bar' does not fire on Barcelona
 test("no must-include and no exclusions means no required findings at all", () => {
   // The gate, matching the one `commitment` has: an absent option means "not asked", never
   // "nothing was named", so the check must not run at all.
+  //
+  // **This one cannot be made to discriminate, and that is a property of the gate rather than of
+  // the test.** `commitment`'s gate is load-bearing — dropping it would read absent times as a
+  // boundary of midnight. This gate is a short-circuit over two empty arrays, and
+  // `checkRequired(itinerary, [], [])` returns `[]` by construction, so deleting it changes no
+  // output for any fixture. The assert states the contract; nothing can state more than that.
   assert.deepEqual(
     evaluateItinerary(oneStop("Musee d'Orsay")).filter((g) => g.rule === "required"),
     []

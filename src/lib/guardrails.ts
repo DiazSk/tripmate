@@ -190,6 +190,15 @@ export function evaluateBudget(itinerary: Itinerary, budget: number): Guardrail[
  *  plans trips at, and a haversine here would be precision the comparison does not need. */
 const DUPLICATE_DEGREES = 0.0015;
 
+/** `Stop.lat`/`lng` are typed `number`, so "unlocated" here is not null — it is 0,0. That is the
+ *  coordinate `STOP_SHAPE` ships in the template (`"lat":0.0,"lng":0.0`), the one a model copying
+ *  the shape writes, and the one `normalizeDays` passes through untouched while it drops
+ *  non-finite values. Two unrelated stops both parked there are not the same place. Mirrors
+ *  `scoreDuplicates`'s "an unlocated stop falls back to name matching alone". */
+function located(lat: number, lng: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+}
+
 /**
  * §14e: the same place scheduled twice across the trip.
  *
@@ -209,6 +218,8 @@ const DUPLICATE_DEGREES = 0.0015;
  * working as a fault. A transit leg to a station and the leg back from it are the same coordinate
  * on purpose for the same reason. Name matching still applies to both categories unchanged — two
  * dinners at the literally same restaurant, or the same transit leg logged twice, are still caught.
+ *
+ * An unlocated stop is skipped by the proximity branch too, for the reason `located` gives.
  */
 function checkDuplicates(itinerary: Itinerary): Guardrail[] {
   const found: Guardrail[] = [];
@@ -225,6 +236,8 @@ function checkDuplicates(itinerary: Itinerary): Guardrail[] {
           (!coLocationExpected &&
             s.category !== "food" &&
             s.category !== "transit" &&
+            located(stop.lat, stop.lng) &&
+            located(s.lat, s.lng) &&
             Math.abs(s.lat - stop.lat) < DUPLICATE_DEGREES &&
             Math.abs(s.lng - stop.lng) < DUPLICATE_DEGREES)
       );
