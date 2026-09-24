@@ -32,6 +32,16 @@ import type { CommitmentScore, DuplicateScore, MustIncludeScore } from "../types
  * - **The departure check compares each stop's END time, not its start.** A stop that begins
  *   before the buffer and runs through it is the miss worth catching.
  *
+ * And one place where the parsed shape forces this scorer to be **more conservative than the
+ * guardrail**, rather than merely different: `ParsedEntry.category` can be null where
+ * `Stop.category` cannot, so an unreadable category is counted as co-location-expected and its
+ * proximity check is skipped. A benchmark is least trustworthy exactly where its inputs are lossy,
+ * which is where it should lean towards a miss over a false alarm — the same direction
+ * `checkPartyBudget`, `stayBooked` and the original food/transit narrowing each went. The cost of
+ * getting it the other way round is not a stray warning here but a biased instrument: an arm with
+ * weaker format adherence would be penalised on the duplicates axis for something that is not a
+ * duplicate, and the A/B would read that as a rule regression.
+ *
  * Every `normalized` here is `null`, never 1.0, when the fixture stated nothing to check — see the
  * `DuplicateScore` docblock in `../types`.
  */
@@ -41,10 +51,19 @@ import type { CommitmentScore, DuplicateScore, MustIncludeScore } from "../types
  *  duplication above is on notice for. */
 const DUPLICATE_DEGREES = 0.0015;
 
-/** §11's `food`/`transit` categories, where sharing a coordinate is by design. `guardrails.ts`
- *  reads the same two off `StopCategory`; the parser's vocabulary is a subset of it. */
+/**
+ * §11's `food`/`transit` categories, where sharing a coordinate is by design — **plus the
+ * unreadable one.**
+ *
+ * `guardrails.ts` reads the same two off `StopCategory`, which is never null. `ParsedEntry.category`
+ * is null whenever §11's category field is missing or malformed, and treating that as "not food,
+ * not transit" would let two area-level food stops carrying one neighbourhood's coordinates score
+ * as a repeat — precisely the false positive the exemption was added to stop, reintroduced through
+ * the one input the scorer cannot trust. So proximity matching applies only where the category is
+ * positively KNOWN to be neither. Name matching is untouched and still catches these.
+ */
 function coLocationExpected(entry: ParsedEntry): boolean {
-  return entry.category === "food" || entry.category === "transit";
+  return entry.category === null || entry.category === "food" || entry.category === "transit";
 }
 
 /**
@@ -53,11 +72,12 @@ function coLocationExpected(entry: ParsedEntry): boolean {
  * Trip-wide rather than per-day, because reading a plan day by day is exactly how a repeat
  * survives. Matches on the normalized name OR on proximity, never requiring both.
  *
- * **Divergence forced by the parsed shape:** lodging is exempt in the guardrail by living on its
- * own field, and it is exempt here for free — `dayEntries` never returns the lodging line. And
- * `lat`/`lng` are nullable here where `Stop` guarantees numbers, so the proximity branch needs
- * both points present; an unlocated stop falls back to name matching alone rather than being
- * compared against 0,0.
+ * **Divergences forced by the parsed shape**, all three towards a miss rather than a false alarm:
+ * lodging is exempt in the guardrail by living on its own field, and it is exempt here for free —
+ * `dayEntries` never returns the lodging line. `lat`/`lng` are nullable here where `Stop`
+ * guarantees numbers, so the proximity branch needs both points present; an unlocated stop falls
+ * back to name matching alone rather than being compared against 0,0. And an unreadable category
+ * is treated as co-location-expected — see `coLocationExpected` below.
  */
 export function scoreDuplicates(itinerary: ParsedItinerary): DuplicateScore {
   const seen: { key: string; entry: ParsedEntry }[] = [];
