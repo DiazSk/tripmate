@@ -82,6 +82,42 @@ What you still cannot do: change the destination, the budget, or the trip's star
 traveler asks for one of those, say plainly that it can't be done from this chat and offer the
 nearest thing you can.`;
 
+/**
+ * The half of this conversation that is not an edit.
+ *
+ * **Both Mode A prompts already said "answer it and return an EMPTY ops array", and that was a
+ * guard rather than a job.** It told the model not to edit a plan somebody only asked about; it
+ * never told it that answering *is* what it is for the rest of the time, and the response contract
+ * capped every reply at 1-3 sentences — which is a length that can confirm an edit and cannot
+ * answer "how much am I spending on food?" or "what should I know before I go?". So a traveller's
+ * question got a sentence and an offer to change something.
+ *
+ * Nothing new is fetched for this. The context and the compacted plan already carry the day's
+ * weather and daylight, every stop's time, duration, cost and coordinates, the lodging, the budget
+ * and the traveller's own profile — the answers were in the prompt all along.
+ */
+const CHAT_ANSWERING = `**Half of what travelers ask for is not a change.** "How much of the budget is
+food?", "how far is the temple from the hotel?", "what time does it get dark on day 3?", "is day 1
+too much walking?", "what should I know before I go?" — these are the job too, not an interruption
+before the real work. Answer them properly, from the trip context and the plan above: both carry
+each day's forecast and daylight, every stop's time, duration, cost and position, the lodging, the
+budget and what the traveler already told you about themselves. Do the arithmetic rather than
+describing how they could do it.
+
+Answer at the length the question deserves. A confirmed edit is one or two lines. A real question
+is as long as answering it honestly takes, and no longer — and then STOP, rather than filling the
+rest with changes nobody asked for.
+
+You also know about the destination generally — customs, transport, what a neighbourhood is like,
+what to book ahead — and that knowledge is welcome. But **say plainly when you do not know, and
+never invent a specific.** Opening hours, prices, a timetable and whether somewhere is shut on a
+Tuesday are not in anything you have been given, and a confident wrong one is the single worst
+thing this conversation can produce: it is the kind a traveler acts on and finds out at the door.
+"I don't have its hours — worth checking before you go" is a good answer.
+
+Offer a change only when it actually follows from what you said, and never more than one. A
+question answered and left alone is a complete turn.`
+
 /** Trimmed view of the itinerary: enough to reason about geography, timing and sequence without
  *  spending tokens on fields an edit never consults. */
 function compactDay(day: DayPlan, dayIndex: number): string {
@@ -164,9 +200,11 @@ The trip already includes every stop listed above. Never add a place that alread
 ${transcript}
 </conversation>
 
-You are helping the traveler refine this itinerary through conversation. Scope: ${scope}.
+You are helping the traveler with this itinerary through conversation — answering what they ask about it, and changing it when they ask you to. Scope: ${scope}.
 
 Answer their latest message.
+
+${CHAT_ANSWERING}
 
 Only return operations when the traveler has actually ASKED FOR A CHANGE. If they asked a question, wondered aloud, or invited an opinion ("is day 1 too packed?", "what do you think of..."), answer it and return an EMPTY ops array — you may suggest what you would change and offer to do it, but do not change their plan until they say yes. Changing a plan someone only asked about is worse than being unhelpful.
 
@@ -189,7 +227,7 @@ The traveler having asked for it is NOT a reason to leave it out. "I don't mind 
 ${SHARED_RULES}
 
 Respond with ONLY valid JSON, no markdown fences:
-{"reply":"conversational answer to their message, 1-3 sentences","options":["short tappable reply","another"],"changes":["one short line per change, in plain language"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an unavoidable adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
+{"reply":"your answer to their message — as long as the question deserves, and short when it was a change","options":["short tappable reply","another"],"changes":["one short line per change, in plain language"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an unavoidable adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
 
 "ops" may mix the op types shown above. "warnings" is an empty array when nothing tripped a guardrail. "options" must be an empty array unless you asked a question. Each option is what the traveler would tap to answer it — under 6 words, and directly usable as their next message.`;
 }
@@ -256,7 +294,10 @@ ${compactItinerary(params.itinerary, params.dayIndex)}
 ${params.message}
 </traveler_message>
 
-Continue helping the traveler refine the itinerary you planned for them. Scope: ${scope}.
+Continue helping the traveler with the itinerary you planned for them — answering what they ask
+about it, and changing it when they ask you to. Scope: ${scope}.
+
+${CHAT_ANSWERING}
 
 The planning rules, trip context and traveler profile from earlier in this conversation remain in
 force — don't ask them for anything they've already told you.
@@ -276,7 +317,7 @@ ${SHARED_RULES}
 
 Respond with ONLY valid JSON, no markdown fences — NOT the {"days":[...]} shape you used when you
 first wrote this itinerary:
-{"reply":"conversational answer, 1-3 sentences","options":["short tappable reply","another"],"changes":["one short line per change"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
+{"reply":"your answer to their message — as long as the question deserves, and short when it was a change","options":["short tappable reply","another"],"changes":["one short line per change"],"warnings":["one line per guardrail worth flagging"],"knockOn":"one line if a change forced an adjustment elsewhere, else null","ops":[${CHAT_OPS_SHAPE}]}
 
 "options" must be an empty array unless you asked a question.`;
 }
