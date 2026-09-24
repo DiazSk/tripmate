@@ -199,23 +199,6 @@ export function stopPrices(): Record<string, number> {
 const MEAL_WORDS = /\b(breakfast|brunch|lunch|dinner|supper|meal|dining|restaurant|food)\b/i;
 
 /**
- * budget_accuracy_score — would this plan fit the traveler's stated budget?
- *
- * Two bases, and which one was used is reported rather than assumed:
- *
- * 1. **Stated costs** — §11 requires a `$cost` on every stop and on the lodging line, so when the
- *    output carries them this sums the real numbers, lodging included. This is the only basis that
- *    can total a plan against §5's ceiling at all.
- * 2. **The estimate table** — the fallback for output with no costs in it (every run before §11's
- *    format landed). Lodging and flights are excluded there, because pricing a recommended *area*
- *    would be inventing a second number on top of an estimate.
- *
- * 1.0 = at or under the budget. Overspending scores the ratio of budget to spend, so twice the
- * budget scores 0.5. Underspending is *not* penalised: §5 now states a budget as a ceiling rather
- * than a quota, so a plan that comes in well under it has obeyed the rule. `budgetUsedFraction`
- * reports the underspend beside the score for anyone who wants to see it.
- */
-/**
  * 1.0 at or under budget; the overshoot ratio above it.
  *
  * This used to penalise *underspend* against an 85% floor, mirroring a §5 that asked the total to
@@ -232,6 +215,23 @@ export function scoreAgainstBand(total: number, budget: number): number {
   return 1;
 }
 
+/**
+ * budget_accuracy_score — would this plan fit the traveler's stated budget?
+ *
+ * Two bases, and which one was used is reported rather than assumed:
+ *
+ * 1. **Stated costs** — §11 requires a `$cost` on every stop and on the lodging line, so when the
+ *    output carries them this sums the real numbers, lodging included. This is the only basis that
+ *    can total a plan against §5's ceiling at all.
+ * 2. **The estimate table** — the fallback for output with no costs in it (every run before §11's
+ *    format landed). Lodging and flights are excluded there, because pricing a recommended *area*
+ *    would be inventing a second number on top of an estimate.
+ *
+ * 1.0 = at or under the budget. Overspending scores the ratio of budget to spend, so twice the
+ * budget scores 0.5. Underspending is *not* penalised: §5 now states a budget as a ceiling rather
+ * than a quota, so a plan that comes in well under it has obeyed the rule. `budgetUsedFraction`
+ * reports the underspend beside the score for anyone who wants to see it.
+ */
 export function scoreBudget(itinerary: ParsedItinerary, fixture: BenchFixture): BudgetScore {
   const prices = stopPrices();
   const budget = fixture.reconciled.userAnswers.budget;

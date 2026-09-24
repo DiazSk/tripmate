@@ -14,6 +14,14 @@ test("every fixture with a base itinerary has refine tasks", () => {
   }
 });
 
+/** The state the two `if (!f.baseItinerary) continue;` guards above would otherwise let through
+ *  in silence: a fixture with neither a base itinerary nor refine tasks passes both of them and
+ *  their inverse. Exactly one fixture is generation-only, and it is named here on purpose — a
+ *  second one appearing is a decision, not something to discover from an empty refine grid. */
+test("exactly one fixture is generation-only", () => {
+  assert.deepEqual(BENCH_FIXTURES.filter((f) => !f.baseItinerary).map((f) => f.id), ["paris-requirements"]);
+});
+
 test("every task's day index exists in its fixture's trip", () => {
   for (const f of BENCH_FIXTURES) {
     const dayCount = f.reconciled.rawFetch.dateContext.days.length;

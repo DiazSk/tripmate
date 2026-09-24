@@ -57,6 +57,51 @@ test("a repeated stop lowers the duplicate score", () => {
   assert.ok(score.normalized < 1);
 });
 
+/** Same entry, but located and categorised — proximity matching reads all three fields. */
+const pinned = (name, category, lat, lng) => ({
+  ...entry(name, 10 * 60, 12 * 60),
+  category,
+  lat,
+  lng,
+});
+
+test("a category the parser could not read blocks proximity matching, not name matching", () => {
+  // `ParsedEntry.category` is null whenever §11's field is missing or malformed, where
+  // `Stop.category` never is. Two area-level food stops legitimately share one neighbourhood's
+  // coordinates, so an unreadable category has to count as co-location-expected — otherwise a
+  // model with weaker format adherence is penalised on this axis for something that is not a
+  // duplicate, which biases the A/B.
+  const unreadable = parsed(
+    day(pinned("Lunch around Le Marais", null, 48.857, 2.359)),
+    day(pinned("Dinner around Le Marais", null, 48.857, 2.359))
+  );
+  assert.equal(scoreDuplicates(unreadable).repeats, 0);
+  assert.equal(scoreDuplicates(unreadable).normalized, 1);
+
+  // The stated food category is exempt for the same reason, and always was.
+  const stated = parsed(
+    day(pinned("Lunch around Le Marais", "food", 48.857, 2.359)),
+    day(pinned("Dinner around Le Marais", "food", 48.857, 2.359))
+  );
+  assert.equal(scoreDuplicates(stated).repeats, 0);
+
+  // Name matching is untouched by any of that.
+  const sameName = parsed(
+    day(pinned("Le Marais", null, 48.857, 2.359)),
+    day(pinned("le  marais", null, null, null))
+  );
+  assert.equal(scoreDuplicates(sameName).repeats, 1);
+  assert.equal(scoreDuplicates(sameName).examples[0].by, "name");
+
+  // And proximity still fires where the category is positively known to be neither.
+  const neighbours = parsed(
+    day(pinned("Sensō-ji", "entry", 35.7148, 139.7967)),
+    day(pinned("Asakusa Kannon Temple", "entry", 35.7148, 139.7967))
+  );
+  assert.equal(scoreDuplicates(neighbours).repeats, 1);
+  assert.equal(scoreDuplicates(neighbours).examples[0].by, "proximity");
+});
+
 test("must-includes present score 1, absent score the fraction found", () => {
   const plan = parsed(day(LOUVRE()));
   assert.equal(scoreMustInclude(plan, ["Louvre Museum"], []).normalized, 1);
