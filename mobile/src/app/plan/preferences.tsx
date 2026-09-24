@@ -136,6 +136,42 @@ export default function PreferencesStep() {
           </FieldTrough>
         </Question>
 
+        {/* A different kind of answer from the interests above: an interest is a weight, these
+            are requirements. The first two are their own fields rather than free text because the
+            server-side check matches against a list. */}
+        <Question title="Anything you must see" caption="Optional. Separate with commas.">
+          <FieldTrough>
+            <TextField
+              label="Must see"
+              value={draft.mustInclude}
+              onChangeText={(mustInclude) => patch({ mustInclude })}
+              placeholder="The Louvre, Versailles"
+            />
+          </FieldTrough>
+        </Question>
+
+        <Question title="Anything to leave out" caption="Optional.">
+          <FieldTrough>
+            <TextField
+              label="Skip"
+              value={draft.avoid}
+              onChangeText={(avoid) => patch({ avoid })}
+              placeholder="Nightclubs, seafood"
+            />
+          </FieldTrough>
+        </Question>
+
+        <Question title="Already booked or off-limits" caption="Optional.">
+          <FieldTrough>
+            <TextField
+              label="Also"
+              value={draft.constraintsNote}
+              onChangeText={(constraintsNote) => patch({ constraintsNote })}
+              placeholder="No rental car; dinner booked Thursday"
+            />
+          </FieldTrough>
+        </Question>
+
         <View style={styles.action}>
           <PrimaryButton title="Next" onPress={() => router.push('/plan/review')} />
         </View>

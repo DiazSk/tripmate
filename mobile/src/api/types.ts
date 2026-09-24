@@ -202,6 +202,12 @@ export interface PlanDraft {
 
   selectedPois: CandidatePoi[];
   customPois: string[];
+
+  /** Comma-separated as typed, split into `UserAnswers.mustInclude`/`.avoid` on submit — plain
+   *  strings so the field stays a plain text input, matching how the web wizard holds them. */
+  mustInclude: string;
+  avoid: string;
+  constraintsNote: string;
 }
 
 /** The answer tree the generate route stores and the edit loop later reuses. */
@@ -221,6 +227,14 @@ export interface UserAnswers {
   customPois?: string[];
   dietary?: DietaryNeeds | null;
   accessibility?: AccessibilityNeeds | null;
+  /** Places the traveler named outright, as distinct from an interest tag. Absent means none were
+   *  named — never `[]`, which the server's guardrail and prompt would read as a demand for
+   *  nothing rather than as silence. */
+  mustInclude?: string[];
+  /** Hard negative constraints — "no nightclubs", "no seafood". Absent means none were named. */
+  avoid?: string[];
+  /** Free text — already booked or otherwise fixed. Absent means nothing was said. */
+  constraintsNote?: string;
 }
 
 export interface GenerateRequest {
