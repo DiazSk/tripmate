@@ -524,6 +524,69 @@ const SPECS: FixtureSpec[] = [
       topPriorities: ["Nature & Outdoors", "Wellness & Fitness"],
     },
   },
+  {
+    // The only fixture carrying named requirements, an exclusion and a free-text constraint. It
+    // is deliberately OUTSIDE the A/B set: the seven above predate these fields, so both arms
+    // would see them empty, and adding them to an existing fixture would mean the arms compared
+    // different trips. This one is measured single-arm against the `mustInclude` and
+    // `commitments` scorers — "does the field change the plan", not "is v2 better than v1".
+    id: "paris-requirements",
+    title: "Paris — two must-sees, one exclusion, no car",
+    covers:
+      "must_include / avoid / constraints note all stated; a must-see outside the anchor set; an exclusion that a naive food plan would violate.",
+    region: "Île-de-France, France",
+    lat: 48.8566,
+    lon: 2.3522,
+    timezone: "Europe/Paris",
+    countryCode: "FR",
+    startDate: "2026-11-09",
+    tripDays: 4,
+    leadTimeDays: 47,
+    season: "fall",
+    weatherDays: [
+      weather("2026-11-09", 7, 13, 30, "08:07", "17:15"),
+      weather("2026-11-10", 6, 12, 60, "08:08", "17:14"),
+      weather("2026-11-11", 5, 11, 20, "08:10", "17:13"),
+      weather("2026-11-12", 7, 14, 10, "08:11", "17:11"),
+    ],
+    holidays: [{ date: "2026-11-11", name: "Armistice Day", localName: "Armistice 1918" }],
+    transportModes: ["walk", "transit"],
+    candidates: [
+      { name: "Musée d'Orsay", lat: 48.8600, lon: 2.3266, kinds: "museums", openingHours: "Tu-Su 09:30-18:00; Mo off", wheelchair: "yes" },
+      { name: "Sainte-Chapelle", lat: 48.8554, lon: 2.3450, kinds: "religion,historic", openingHours: "Mo-Su 09:00-17:00", wheelchair: "limited" },
+      { name: "Marché d'Aligre", lat: 48.8496, lon: 2.3780, kinds: "foods,marketplaces", openingHours: "Tu-Su 07:30-13:30; Mo off", wheelchair: "yes" },
+      { name: "Père Lachaise Cemetery", lat: 48.8614, lon: 2.3933, kinds: "historic", openingHours: "Mo-Su 08:00-17:30", wheelchair: "limited" },
+      { name: "Canal Saint-Martin", lat: 48.8709, lon: 2.3655, kinds: "architecture,natural", openingHours: null },
+      { name: "Le Marais", lat: 48.8570, lon: 2.3590, kinds: "historic,architecture", openingHours: null },
+    ],
+    // The Louvre and Versailles are deliberately NOT candidates: a must-include the model has to
+    // supply itself is the case worth testing, since a must-include that happens to be an anchor
+    // would pass on the anchor rule alone.
+    anchorIndexes: [0, 2],
+    answers: {
+      purpose: "First trip to Paris together; there are two things we're not leaving without",
+      explorerStyle: "mixed",
+      group: "couple",
+      party: { adults: 2, children: 0, infants: 0 },
+      energy: "moderate",
+      crowds: "mixed",
+      budget: 2600,
+      priorities: ["Culture & History", "Food", "Shopping"],
+      topPriorities: ["Culture & History", "Food"],
+      mustInclude: ["Louvre Museum", "Palace of Versailles"],
+      // A food-led Paris plan routes through seafood by default, which is what makes this
+      // exclusion worth checking rather than decorative.
+      avoid: ["seafood", "nightclubs"],
+      constraintsNote: "No rental car, and the budget is for both of us together, not each.",
+      logistics: {
+        arrivalTime: "10:20",
+        arrivalPoint: "Charles de Gaulle (CDG)",
+        departureTime: "19:40",
+        departurePoint: "Charles de Gaulle (CDG)",
+        stayBooked: null,
+      },
+    },
+  },
 ];
 
 export const BENCH_FIXTURES: BenchFixture[] = SPECS.map(buildFixture);

@@ -4,8 +4,12 @@ import test from "node:test";
 import { BENCH_FIXTURES } from "./fixtures.ts";
 import { benchTripSummary, benchUserAnswers, findRefineTask, refineTasksFor } from "./refineTasks.ts";
 
-test("every built-in fixture has refine tasks", () => {
+/** Scoped to the fixtures refine cells can actually run against. `runRefineCell` throws without a
+ *  `baseItinerary`, so a generation-only fixture (`paris-requirements`) has nothing to refine and
+ *  a task list for it would never be reached. */
+test("every fixture with a base itinerary has refine tasks", () => {
   for (const f of BENCH_FIXTURES) {
+    if (!f.baseItinerary) continue;
     assert.ok(refineTasksFor(f.id).length > 0, `${f.id} has no refine tasks`);
   }
 });
@@ -20,8 +24,9 @@ test("every task's day index exists in its fixture's trip", () => {
   }
 });
 
-test("every fixture has exactly one restraint task, and it expects no ops", () => {
+test("every refinable fixture has exactly one restraint task, and it expects no ops", () => {
   for (const f of BENCH_FIXTURES) {
+    if (!f.baseItinerary) continue;
     const restraint = refineTasksFor(f.id).filter((t) => !t.expect.opsExpected);
     assert.equal(restraint.length, 1, `${f.id} should have one ask-don't-tell task`);
   }
