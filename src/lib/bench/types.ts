@@ -183,9 +183,10 @@ export interface BudgetScore {
   excludes: string[];
   /** Always true: the pipeline carries no prices, so this rests on a configurable estimate table. */
   estimateBased: boolean;
-  /** How much of the trip's total is the traveler's target. §5 asks for 85-100% of the budget, so
-   *  a plan that lands at 40% is a miss in the other direction — one the estimate table could
-   *  never see, since it priced stops rather than reading them. Null when not measurable. */
+  /** How much of the stated budget the trip's total uses. Reported, not scored: §5 now treats a
+   *  budget as a ceiling, so a plan landing at 40% is thrift rather than a miss. This is what
+   *  keeps the underspend visible now that `normalized` no longer penalises it. Null when not
+   *  measurable. */
   budgetUsedFraction: number | null;
   normalized: number | null;
 }
@@ -210,6 +211,42 @@ export interface CompositeGroups {
   coverageGrounding: number | null;
 }
 
+/**
+ * The three §0/§14e requirement axes, scored beside the composite rather than inside it.
+ *
+ * Each `normalized` is `null` — never 1.0 — when the fixture states nothing to check. Six of the
+ * eight built-in fixtures name no must-includes and no logistics, and scoring those a perfect 1.0
+ * would drown the two that do under six free passes.
+ */
+export interface DuplicateScore {
+  /** Entries with a usable name — the denominator `repeats` is a fraction of. */
+  checkedStops: number;
+  /** Stops that were already in the trip, by name or by proximity. */
+  repeats: number;
+  examples: { dayIndex: number; name: string; priorName: string; by: "name" | "proximity" }[];
+  normalized: number | null;
+}
+
+export interface MustIncludeScore {
+  /** Must-includes found in the plan, over the ones stated. */
+  includedCount: number;
+  missing: string[];
+  /** Exclusions the plan does not breach, over the ones stated. */
+  respectedCount: number;
+  violated: { term: string; stopName: string }[];
+  /** Must-includes + exclusions stated. 0 means the axis is unmeasurable. */
+  checked: number;
+  normalized: number | null;
+}
+
+export interface CommitmentScore {
+  /** Individual stop/lodging checks the stated logistics made possible. */
+  checked: number;
+  passed: number;
+  breaches: { dayIndex: number; name: string; reason: "arrival" | "departure" | "prepaid" }[];
+  normalized: number | null;
+}
+
 export interface BenchCellScores {
   geoCoherence: GeoCoherenceScore;
   constraints: ConstraintViolationScore;
@@ -222,6 +259,9 @@ export interface BenchCellScores {
   downtime: DowntimeScore;
   weather: WeatherAlignmentScore;
   budget: BudgetScore;
+  duplicates: DuplicateScore;
+  commitments: CommitmentScore;
+  mustInclude: MustIncludeScore;
   vibe: VibeScore;
   lexical: LexicalScore;
   semantic: SemanticScore;
@@ -253,9 +293,14 @@ export interface ModelAgreement {
 /**
  * The composite's weights, as specified. They sum to 1.0.
  *
- * Note what is NOT weighted: `format_adherence` and `budget_accuracy` are computed and shown, but
- * neither appears in these five groups, so neither moves the composite. That's deliberate rather
- * than an oversight — flagged so it can be changed on purpose.
+ * Note what is NOT weighted: `format_adherence`, `budget_accuracy` and the three requirement axes
+ * (`duplicates`, `commitments`, `must_include`) are computed and shown, but none appears in these
+ * five groups, so none moves the composite. That's deliberate rather than an oversight — flagged
+ * so it can be changed on purpose.
+ *
+ * For the three newest it is also what makes the A/B readable: every composite already recorded in
+ * docs/itinerary-quality.md was scored without them, and folding a sixth group in would silently
+ * re-base every prior number. They are reported beside the composite instead.
  */
 export const COMPOSITE_WEIGHTS: Record<keyof CompositeGroups, number> = {
   routeEfficiency: 0.15,
