@@ -178,6 +178,9 @@ export interface PlanDraft {
   startDate: string;
   endDate: string;
   budget: number;
+  /** Whether `budget` is one person's or the whole party's. Absent reads as whole-party,
+   *  which is what every reader assumed before the field existed. */
+  budgetBasis?: "per_person" | "whole_party";
   /**
    * Set only when a geocode came back a genuine **miss** (404), never when the lookup failed to
    * complete (500). A third-party geocoder's outage is not a claim about what the traveller
@@ -221,6 +224,9 @@ export interface UserAnswers {
   energy?: EnergyLevel;
   crowds?: CrowdPreference;
   budget?: number;
+  /** Whether `budget` is one person's or the whole party's. Absent reads as whole-party,
+   *  which is what every reader assumed before the field existed. */
+  budgetBasis?: "per_person" | "whole_party";
   priorities?: string[];
   topPriorities?: string[];
   selectedPois?: CandidatePoi[];

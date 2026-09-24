@@ -418,6 +418,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [accessibility, setAccessibility] = useState<AccessibilityNeeds | null>(null);
   /** Comma-separated as typed; split on submit. A chip editor is the nicer control and is not
    *  worth a component here — the field is optional and most travelers leave it empty. */
+  /** Whether `budget` is one person's or everyone's. Defaults to the basis every reader
+   *  already assumed, so an untouched control changes nothing. */
+  const [budgetBasis, setBudgetBasis] = useState<"per_person" | "whole_party">("whole_party");
   const [mustInclude, setMustInclude] = useState("");
   const [avoid, setAvoid] = useState("");
   const [constraintsNote, setConstraintsNote] = useState("");
@@ -709,6 +712,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setDeparturePoint(restore("departurePoint", ""));
     setStayBooked(restore("stayBooked", ""));
     setAccessibility(restore("accessibility", null as AccessibilityNeeds | null));
+    setBudgetBasis(restore("budgetBasis", "whole_party"));
     setMustInclude(restore("mustInclude", ""));
     setAvoid(restore("avoid", ""));
     setConstraintsNote(restore("constraintsNote", ""));
@@ -727,7 +731,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
       explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
       arrivalTime, arrivalPoint, departureTime, departurePoint,
-      stayBooked, accessibility, mustInclude, avoid, constraintsNote,
+      stayBooked, accessibility, mustInclude, avoid, constraintsNote, budgetBasis,
     };
     try {
       sessionStorage.setItem(PLAN_DRAFT_KEY, JSON.stringify(draft));
@@ -738,7 +742,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     step, destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
     explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
     arrivalTime, arrivalPoint, departureTime, departurePoint,
-    stayBooked, accessibility, mustInclude, avoid, constraintsNote,
+    stayBooked, accessibility, mustInclude, avoid, constraintsNote, budgetBasis,
   ]);
 
   // The fix for the wizard destroying every answer on a back-swipe. Before this, leaving the
@@ -1080,6 +1084,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       // (shared with the server) drops blanks and de-dupes, returning `undefined` rather than `[]`
       // for an empty field — the guardrail and prompt both branch on "did the traveler name
       // anything", and `[]` reads as a demand for nothing rather than as silence.
+      budgetBasis,
       mustInclude: sanitizeNamedList(mustInclude.split(",")),
       avoid: sanitizeNamedList(avoid.split(",")),
       constraintsNote: constraintsNote.trim() || null,
@@ -2028,6 +2033,31 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                             onChange={(e) => setBudget(Number(e.target.value))}
                             className={`${fieldInputClass} tabular-nums ${budget === 0 ? fieldEmptyTone : fieldFilledTone}`}
                           />
+                        </div>
+                        {/* The number above is meaningless without this. "$3,000" for a family of
+                            four is either a comfortable trip or a tight one, and everything
+                            downstream — the budget bar, the ceiling check, the planner — reads a
+                            party total. `partyBudget()` converts once, server-side; nothing here
+                            multiplies. */}
+                        <div className="flex gap-1 text-[11px]">
+                          {([
+                            ["whole_party", "Total for everyone"],
+                            ["per_person", "Per person"],
+                          ] as const).map(([value, label]) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setBudgetBasis(value)}
+                              aria-pressed={budgetBasis === value}
+                              className={`rounded-full px-3 py-1 transition ${
+                                budgetBasis === value
+                                  ? "bg-accent/20 text-accent"
+                                  : "text-muted hover:text-foreground"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
                         </div>
                         {/* Compact — one band, not the three-band PartyCounter that owns the full
                             breakdown on "Who's going?". Party size is the largest multiplier on

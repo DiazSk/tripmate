@@ -4,7 +4,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View
 
 import { geocode } from '@/api/tripMateApi';
 import { usePlanDraft } from '@/lib/planDraft';
-import { DateField, FieldTrough, PrimaryButton, TextField } from '@/components/form';
+import { ChoiceRow, DateField, FieldTrough, PrimaryButton, TextField } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
 import { closestTier, isEndBeforeStart, isTripTooLong, tierName, tripDays } from '@/lib/tiers';
@@ -13,6 +13,7 @@ export default function Basics() {
   const router = useRouter();
   const { draft, patch } = usePlanDraft();
   const { destination, startDate, endDate, budget } = draft;
+  const budgetBasis = draft.budgetBasis ?? 'whole_party';
   /** Held as a string, not a number: a numeric binding renders "$ 01800" while you type. */
   const [budgetText, setBudgetText] = useState(budget ? String(budget) : '');
 
@@ -97,6 +98,17 @@ export default function Basics() {
             placeholder="2,600"
             keyboardType="number-pad"
             prefix="$"
+          />
+          {/* The number above means nothing without this. "$2,600" for a family of four is either
+              comfortable or tight, and everything downstream reads a party total — the server's
+              `partyBudget()` converts a per-person figure once, so nothing here multiplies. */}
+          <ChoiceRow
+            options={[
+              { value: 'whole_party', label: 'Total' },
+              { value: 'per_person', label: 'Per person' },
+            ]}
+            value={budgetBasis}
+            onChange={(next) => patch({ budgetBasis: next })}
           />
         </FieldTrough>
 
