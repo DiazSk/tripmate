@@ -39,11 +39,16 @@ import { closestTier } from "../src/lib/tiers.ts";
 const BASE = process.env.AB_BASE_URL ?? "http://localhost:3000";
 const PATH_KIND = process.env.AB_PATH ?? "staged";
 
-/** Every built-in by default. The seven frozen fixtures are what the composite in
+/** The A/B set: the seven that predate the requirement fields, so both arms see the same trips.
+ *  `paris-requirements` is deliberately out — it exists to exercise fields arm A cannot consume,
+ *  which makes it a single-arm measurement rather than a comparison. Ask for it by id. */
+const AB_SET = BENCH_FIXTURES.filter((f) => f.id !== "paris-requirements");
+
+/** The A/B set by default. Those seven frozen fixtures are what the composite in
  *  docs/itinerary-quality.md is scored against, so an arm over a different set is not comparable. */
 function selectedFixtures() {
   const ids = process.env.AB_FIXTURES?.split(",").map((s) => s.trim()).filter(Boolean);
-  if (!ids || ids.length === 0) return BENCH_FIXTURES;
+  if (!ids || ids.length === 0) return AB_SET;
   return ids.map((id) => {
     const f = getFixture(id);
     if (!f) throw new Error(`no fixture ${id}`);
