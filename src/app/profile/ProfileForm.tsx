@@ -14,6 +14,7 @@ import DietaryPicker from "@/components/DietaryPicker";
 import ErrorNote from "@/components/ErrorNote";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
+import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile } from "@/lib/travelerProfile";
 import type {
   CrowdPreference,
@@ -31,6 +32,7 @@ const DEFAULTS: TravelerProfile = {
   priorities: [],
   topPriorities: [],
   dietary: { tags: [], note: "" },
+  accessibility: NO_ACCESSIBILITY_NEEDS,
 };
 
 const MAX_STARRED = 3;

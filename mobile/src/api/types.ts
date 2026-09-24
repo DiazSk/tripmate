@@ -120,6 +120,9 @@ export interface TravelerProfile {
   priorities: string[];
   topPriorities: string[];
   dietary: DietaryNeeds;
+  /** A fact about the traveler, not the trip — kept here for the same reason `dietary` is.
+   *  Absent on rows written before the field existed; the server's parser defaults it. */
+  accessibility?: AccessibilityNeeds;
 }
 
 export interface PlacePhoto {

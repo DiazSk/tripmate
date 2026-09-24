@@ -1,4 +1,10 @@
-import type { CrowdPreference, EnergyLevel, ExplorerStyle, GroupType } from "./types";
+import type {
+  AccessibilityNeeds,
+  CrowdPreference,
+  EnergyLevel,
+  ExplorerStyle,
+  GroupType,
+} from "./types";
 
 /** The single implicit local user. Replaced by a real auth subject id if and when
  *  authentication lands — see FUTURE-INTEGRATION.md. */
@@ -30,7 +36,22 @@ export interface TravelerProfile {
   priorities: string[];
   topPriorities: string[];
   dietary: DietaryNeeds;
+  /**
+   * Stated access needs, here for the same reason `dietary` is: they are a fact about the
+   * traveler, not about the trip, and re-asking a wheelchair user on every trip is how a hard
+   * constraint gets skipped on the one trip they forget. §9e treats a step-free requirement as
+   * outranking pace and priority, so an unstated one is the expensive kind of missing.
+   */
+  accessibility: AccessibilityNeeds;
 }
+
+/** "Nothing stated", which is a real answer and not a missing value — same contract as an
+ *  empty `dietary`. Shared so the parser, the profile form and the wizard cannot drift. */
+export const NO_ACCESSIBILITY_NEEDS: AccessibilityNeeds = {
+  stepFreeRequired: false,
+  limitStairs: false,
+  note: "",
+};
 
 const GROUPS: GroupType[] = ["solo", "couple", "family_with_kids", "other"];
 const STYLES: ExplorerStyle[] = ["packed", "relaxed", "offbeat", "mixed"];
@@ -59,6 +80,23 @@ function parseDietary(value: unknown): DietaryNeeds | null {
   return { tags, note };
 }
 
+/** Same absent-is-default, malformed-is-rejected contract as `parseDietary`, and for the same
+ *  reason: a profile written before this field existed is valid, and failing it would wipe the
+ *  traveler's saved preferences on first load. */
+function parseAccessibility(value: unknown): AccessibilityNeeds | null {
+  if (value === undefined || value === null) return NO_ACCESSIBILITY_NEEDS;
+  if (typeof value !== "object" || Array.isArray(value)) return null;
+  const a = value as Record<string, unknown>;
+
+  const flag = (x: unknown): boolean | null =>
+    x === undefined ? false : typeof x === "boolean" ? x : null;
+  const stepFreeRequired = flag(a.stepFreeRequired);
+  const limitStairs = flag(a.limitStairs);
+  const note = a.note === undefined ? "" : typeof a.note === "string" ? a.note : null;
+  if (stepFreeRequired === null || limitStairs === null || note === null) return null;
+  return { stepFreeRequired, limitStairs, note };
+}
+
 /**
  * The trust boundary. Rejects anything that isn't a known enum value and returns
  * only known fields, so a bad enum value can never reach storage — from there it
@@ -77,10 +115,12 @@ export function parseProfile(value: unknown): TravelerProfile | null {
     Array.isArray(x) && x.every((s) => typeof s === "string") ? (x as string[]) : null;
 
   const dietary = parseDietary(v.dietary);
+  const accessibility = parseAccessibility(v.accessibility);
   const priorities = stringList(v.priorities);
   const topPriorities = stringList(v.topPriorities);
   if (
     dietary === null ||
+    accessibility === null ||
     !GROUPS.includes(v.group as GroupType) ||
     !STYLES.includes(v.explorerStyle as ExplorerStyle) ||
     !ENERGIES.includes(v.energy as EnergyLevel) ||
@@ -99,5 +139,6 @@ export function parseProfile(value: unknown): TravelerProfile | null {
     priorities,
     topPriorities,
     dietary,
+    accessibility,
   };
 }

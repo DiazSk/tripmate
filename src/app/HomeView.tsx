@@ -60,6 +60,7 @@ import { formatMoney } from "@/lib/format";
 import type { ArrivalPoint } from "@/lib/arrivalPoints";
 import { devLabel } from "@/lib/devInspector";
 import { clearUnseenDay, changedDayNumbers, markUnseenDays } from "@/lib/unseenChanges";
+import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile, DietaryNeeds } from "@/lib/travelerProfile";
 import { readEventStream } from "@/lib/eventStream";
 import { STAGE_ORDER, StageEvent, TYPICAL_WAIT_PHRASE } from "@/lib/generationStages";
@@ -415,7 +416,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // Asked rather than inferred from `energy`. Starts null so an untouched form sends nothing at
   // all — a default-valued object would claim the traveler stated "no needs" when they were never
   // asked, and `deriveMobilityProfile` treats those two cases differently.
-  const [accessibility, setAccessibility] = useState<AccessibilityNeeds | null>(null);
+  /** Seeded from the saved profile, the same way `dietary` is. Access needs are a fact about
+   *  the traveler rather than the trip, and re-asking every time is how a hard constraint
+   *  (§9e) gets skipped on the one trip they forget. Still editable per trip. */
+  const [accessibility, setAccessibility] = useState<AccessibilityNeeds | null>(
+    initialProfile?.accessibility ?? null
+  );
   /** Comma-separated as typed; split on submit. A chip editor is the nicer control and is not
    *  worth a component here — the field is optional and most travelers leave it empty. */
   /** Whether `budget` is one person's or everyone's. Defaults to the basis every reader
@@ -2672,6 +2678,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                     crowds,
                     priorities: interests,
                     topPriorities: starredInterests,
+                    // The wizard already asked; carry it so the saved profile starts out
+                    // matching what they just said rather than blank.
+                    accessibility: accessibility ?? NO_ACCESSIBILITY_NEEDS,
                   }}
                   onSaved={(dietary) => {
                     setHasProfile(true);

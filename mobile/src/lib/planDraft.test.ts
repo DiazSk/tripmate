@@ -141,6 +141,8 @@ test('the traveler profile excludes dates, budget and pinned places', () => {
     priorities: ['Food'],
     topPriorities: ['Food'],
     dietary: { tags: [], note: '' },
+    // Durable like dietary: a wheelchair user should not restate it on every trip.
+    accessibility: { stepFreeRequired: false, limitStairs: false, note: '' },
   });
   expect(Object.keys(profile)).not.toContain('startDate');
   expect(Object.keys(profile)).not.toContain('budget');
