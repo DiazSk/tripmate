@@ -268,5 +268,6 @@ export function toTravelerProfile(draft: PlanDraft): TravelerProfile {
     priorities: draft.interests,
     topPriorities: draft.starredInterests,
     dietary: draft.dietary,
+    accessibility: draft.accessibility,
   };
 }

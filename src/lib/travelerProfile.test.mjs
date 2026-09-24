@@ -15,6 +15,7 @@ const valid = {
   priorities: ["Food", "Shopping"],
   topPriorities: ["Food"],
   dietary: { tags: ["Vegetarian"], note: "no shellfish" },
+  accessibility: { stepFreeRequired: true, limitStairs: true, note: "manual wheelchair" },
 };
 
 test("accepts a fully valid profile", () => {
@@ -85,4 +86,28 @@ test('a saved profile with the "other" group parses', () => {
   // Rejecting it would silently wipe the traveler's whole saved profile back to defaults the
   // first time they loaded the page after picking the new pill.
   assert.deepEqual(parseProfile({ ...valid, group: "other" }), { ...valid, group: "other" });
+});
+
+test("an absent accessibility is an old row, not a bad one", () => {
+  // Rows written before the field existed must still parse — rejecting them would wipe a
+  // traveler's saved preferences the first time they loaded the page.
+  const { accessibility: _omitted, ...withoutIt } = valid;
+  assert.deepEqual(parseProfile(withoutIt).accessibility, {
+    stepFreeRequired: false,
+    limitStairs: false,
+    note: "",
+  });
+});
+
+test("a malformed accessibility is refused, the same as a bad enum", () => {
+  // §9e treats a step-free requirement as outranking pace and priority, so a junk value
+  // reaching storage would silently mis-plan every future trip.
+  assert.equal(parseProfile({ ...valid, accessibility: "wheelchair" }), null);
+  assert.equal(parseProfile({ ...valid, accessibility: { stepFreeRequired: "yes" } }), null);
+  assert.equal(parseProfile({ ...valid, accessibility: [] }), null);
+});
+
+test("a stated accessibility survives the round trip", () => {
+  const stated = { stepFreeRequired: true, limitStairs: true, note: "manual wheelchair" };
+  assert.deepEqual(parseProfile({ ...valid, accessibility: stated }).accessibility, stated);
 });
