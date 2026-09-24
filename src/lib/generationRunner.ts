@@ -586,8 +586,8 @@ export async function runGeneration(
     travelFindings = evaluateItinerary(itinerary, {
       realMinutes,
       logistics,
-      mustInclude: (userAnswers as UserAnswers | undefined)?.mustInclude,
-      avoid: (userAnswers as UserAnswers | undefined)?.avoid,
+      mustInclude: answers?.mustInclude,
+      avoid: answers?.avoid,
     })
       .filter((g) => g.rule !== "budget")
       .map((g) => g.message)
