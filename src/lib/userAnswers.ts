@@ -144,6 +144,25 @@ export function sanitizeNamedList(value: unknown): string[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+/**
+ * The budget as a party total, whatever basis the traveler stated it in.
+ *
+ * This exists so the multiplication happens exactly once, in code, at the boundary where the
+ * number becomes a prompt fact. An earlier revision of the critique prompt asked the *model* to
+ * multiply per-person costs by party size, which double-counted every group trip — the figure it
+ * was multiplying was already a party total. Converting here keeps every downstream reader
+ * (`tripSpend`, `BudgetBar`, `evaluateBudget`, both prompt paths) on the single basis they already
+ * assume, and leaves nobody else a multiplication to get wrong.
+ */
+export function partyBudget(
+  budget: number,
+  basis: UserAnswers["budgetBasis"],
+  partySize: number | null
+): number {
+  if (basis !== "per_person") return budget;
+  return Math.round(budget * Math.max(partySize ?? 1, 1));
+}
+
 export function sanitizeAnswers(answers: UserAnswers): UserAnswers {
   const party = sanitizeParty(answers.party);
   const logistics = sanitizeLogistics(answers.logistics);
@@ -157,6 +176,9 @@ export function sanitizeAnswers(answers: UserAnswers): UserAnswers {
     ...(mustInclude ? { mustInclude } : { mustInclude: undefined }),
     ...(avoid ? { avoid } : { avoid: undefined }),
     constraintsNote: sanitizeFreeText(answers.constraintsNote),
+    // Anything other than the one alternative means the default; a junk value must not
+    // become a silent multiplication.
+    budgetBasis: answers.budgetBasis === "per_person" ? "per_person" : "whole_party",
     logistics,
   };
 }

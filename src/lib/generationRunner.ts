@@ -30,7 +30,7 @@ import { llmMode } from "./llmConfig";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
 import { carryOverDaySummaries, normalizeDays } from "./itinerary";
 import { tripDays, TierId } from "./tiers";
-import { deriveFlags, sanitizeLogistics } from "./userAnswers";
+import { deriveFlags, partyBudget, sanitizeLogistics } from "./userAnswers";
 import {
   CritiqueResult,
   Itinerary,
@@ -144,6 +144,20 @@ export async function runGeneration(
     }
   }
 
+  /**
+   * The budget every prompt below is handed, always as a party total.
+   *
+   * Resolved once here rather than inside the prompt builders, so the three of them
+   * (`buildGeneratePrompt`, `buildRefinePrompt`, `buildCritiquePrompt`) keep taking a plain
+   * number and cannot disagree about its basis. A traveler who stated a per-person figure has it
+   * multiplied here and nowhere else — the critique prompt used to ask the *model* to multiply,
+   * which double-counted every group trip because the stop costs it was multiplying were already
+   * party totals.
+   */
+  const partyTotalBudget = answers
+    ? partyBudget(budget, answers.budgetBasis, resolvedFlags?.partySize ?? null)
+    : budget;
+
   const runId = randomUUID();
   insertRun({
     id: runId,
@@ -175,7 +189,7 @@ export async function runGeneration(
       destination,
       startDate,
       endDate,
-      budget,
+      budget: partyTotalBudget,
       previousItinerary,
       feedback,
       contextInsight,
@@ -234,7 +248,7 @@ export async function runGeneration(
       destination,
       startDate,
       endDate,
-      budget,
+      budget: partyTotalBudget,
       tier,
       weather,
       preferences,
@@ -609,7 +623,7 @@ export async function runGeneration(
     try {
       const critiquePrompt = buildCritiquePrompt({
         itinerary,
-        budget,
+        budget: partyTotalBudget,
         contextInsight,
         interestTags: preferences?.tags,
         resolvedFlags,

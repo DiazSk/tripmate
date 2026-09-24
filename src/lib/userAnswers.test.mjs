@@ -17,6 +17,7 @@ import {
   sanitizeLogistics,
   sanitizeParty,
   deriveGroupLabel,
+  partyBudget,
 } from "./userAnswers.ts";
 
 const answers = (over) => ({
@@ -216,4 +217,21 @@ test("the constraints note is trimmed and capped like any other free text", () =
   const out = sanitizeAnswers(answers({ constraintsNote: "  No rental car.  " }));
   assert.equal(out.constraintsNote, "No rental car.");
   assert.equal(sanitizeAnswers(answers({ constraintsNote: "   " })).constraintsNote, null);
+});
+
+test("partyBudget multiplies only a per-person figure, and only once", () => {
+  // The default, and what every reader assumed before the field existed.
+  assert.equal(partyBudget(3000, "whole_party", 4), 3000);
+  assert.equal(partyBudget(3000, undefined, 4), 3000);
+  // Stated per head, so the trip's ceiling is four of them.
+  assert.equal(partyBudget(750, "per_person", 4), 3000);
+  // A party of one, or none stated, cannot change the number.
+  assert.equal(partyBudget(750, "per_person", 1), 750);
+  assert.equal(partyBudget(750, "per_person", null), 750);
+});
+
+test("a junk basis is read as whole party, never as a silent multiplication", () => {
+  const out = sanitizeAnswers(answers({ budgetBasis: "PER_PERSON" }));
+  assert.equal(out.budgetBasis, "whole_party");
+  assert.equal(partyBudget(750, out.budgetBasis, 4), 750);
 });

@@ -1,3 +1,4 @@
+import { partyBudget } from "./userAnswers";
 import type {
   DestinationContext,
   EnrichedPoi,
@@ -59,7 +60,9 @@ function flagsSection(trip: ReconciledTrip): string {
     `explorer_style (stated intent, already applied to pace): ${a.explorerStyle}`,
     `energy: ${a.energy}`,
     `crowds: ${a.crowds}`,
-    `budget_usd: ${a.budget}`
+    // Already a party total — `partyBudget` converted a per-person figure at this one
+    // boundary, so nothing reading this line multiplies again.
+    `budget_usd (whole party): ${partyBudget(a.budget, a.budgetBasis, f.partySize)}`
   );
   if (a.purpose.trim()) lines.push(`purpose: ${a.purpose.trim()}`);
   return lines.join("\n");

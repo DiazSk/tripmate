@@ -229,6 +229,13 @@ export interface UserAnswers {
   energy: EnergyLevel;
   crowds: CrowdPreference;
   budget: number;
+  /**
+   * Whether `budget` is what one traveler spends or what the whole party spends. Absent means
+   * whole-party, which is what every reader assumed before the field existed — `tripSpend()`,
+   * `BudgetBar` and `evaluateBudget` all compare their sum straight to `budget` with no multiplier.
+   * `partyBudget()` is the one place the conversion happens; nothing downstream multiplies.
+   */
+  budgetBasis?: "per_person" | "whole_party";
   /** Every tag the traveler selected. */
   priorities: string[];
   /** The (up to) 3 they starred, in the order starred — the primary weighting signal.
