@@ -166,6 +166,176 @@ ops, restraint intact, a 3-point composite gap — but shipping it should wait o
 sweep confirming the weatherFeasibility gap is real, or accepting that gap explicitly as a known
 tradeoff. It is not, on this data, a fix for perceived slowness.
 
+## Constraint-system rewrite — A/B against the pre-change baseline (2026-09-23, Claude)
+
+Twenty-two commits rewrote the planner's constraint rules: a precedence order (§0), a budget that
+is a ceiling rather than a quota (§5), two separate arrival and departure buffers (§4c-bis), a
+no-duplicates rule (§14e), a whole-trip audit pass (§15), minimal-change editing (§12d), and three
+new `UserAnswers` fields (`mustInclude`, `avoid`, `constraintsNote`) carried through both wizards,
+both prompt paths and the critique. Four guardrail rules and four benchmark scorers were added to
+check them. This section is the measurement, not the change.
+
+`docs/superpowers/plans/baseline-2026-09-23.json` is raw model output from the seven frozen
+fixtures, captured before a single prompt edit landed. `candidate-2026-09-23.json` is the same
+seven, same staged path, run at the end — 7/7 cells, no failures, 241s mean. **Neither arm stores
+a score.** `--compare` re-scores both with today's scorer code, so one copy of the scorer grades
+both arms and it cannot flatter the arm it grew up beside.
+
+### The headline, both halves of it
+
+**The composite moved 0.8345 → 0.8642, +0.0297**, and every weighted group held or improved.
+**`SKILL.md` is now 627 lines, up from 482 before this plan — 30% growth.** Those two numbers
+belong in the same eyeline: the external review that started this work warned that growth past
+~480 lines could make the model *less* consistent rather than more. On this evidence it did not.
+That is the only evidence either way, and it is n=7.
+
+**And the one axis the new rules most directly targeted went the wrong way.** `duplicates`
+regressed 0.9283 → 0.8921, with 5 of 7 fixtures worse and only 1 better: 14 repeated stops before,
+**17 after**, out of a stop count that itself fell from 164 to 154. §14e ("never send them to the
+same place twice"), the §15 whole-trip read, and the new `duplicate` guardrail were all written for
+exactly this, and the measured rate of repeats rose. It is unweighted, so it does not touch the
+composite — that is the axis being honest rather than the axis being excused.
+
+### Paired table — seven fixtures, staged path
+
+| Axis | Baseline | Candidate | Δ | Split |
+|---|---|---|---|---|
+| **composite** | **0.8345** | **0.8642** | **+0.0297** | 4 better, 3 worse, measurable 7/7 |
+| routeEfficiency | 0.8259 | 0.8259 | +0.0000 | 4 better, 2 worse, measurable 6/7 |
+| constraintAdherence | 0.6246 | 0.6841 | +0.0595 | 5 better, 2 worse, measurable 7/7 |
+| weatherFeasibility | 0.8460 | 0.8806 | +0.0345 | 3 better, 1 worse, measurable 7/7 |
+| mealVibeAlignment | 0.8701 | 0.9006 | +0.0305 | 5 better, 2 worse, measurable 7/7 |
+| coverageGrounding | 0.9810 | 1.0000 | +0.0190 | 2 better, 0 worse, measurable 7/7 |
+| duplicates *(unweighted)* | 0.9283 | **0.8921** | **−0.0362** | 1 better, 5 worse, measurable 7/7 |
+| budget *(unweighted)* | 1.0000 | 1.0000 | +0.0000 | 0 better, 0 worse, measurable 7/7 |
+
+`routeEfficiency` reads +0.0000 as a *mean*, not as a flat line — four fixtures improved and two
+got worse and they cancelled. That is the shape a mean alone hides, which is why the split column
+is printed beside every axis.
+
+**`commitments` and `mustInclude` are deliberately absent from that table, and their absence is
+the design.** Inside these seven fixtures `mustInclude` is measurable on **zero** and `commitments`
+on **exactly one** — the seven predate the three new fields, and keeping them free of those fields
+is what makes the arms comparable trips. A near-empty row rendered as a delta reads as "the rule
+did nothing", which is the misreading this whole phase exists to prevent. They are measured
+single-arm below. The raw output records their measurability verbatim:
+
+```
+paired fixtures: 7/7
+
+composite               0.8345  →  0.8642   +0.0297   (4 better, 3 worse, measurable on 7/7)
+  routeEfficiency       0.8259  →  0.8259   +0.0000   (4 better, 2 worse, measurable on 6/7)
+  constraintAdherence   0.6246  →  0.6841   +0.0595   (5 better, 2 worse, measurable on 7/7)
+  weatherFeasibility    0.8460  →  0.8806   +0.0345   (3 better, 1 worse, measurable on 7/7)
+  mealVibeAlignment     0.8701  →  0.9006   +0.0305   (5 better, 2 worse, measurable on 7/7)
+  coverageGrounding     0.9810  →  1.0000   +0.0190   (2 better, 0 worse, measurable on 7/7)
+
+unweighted — new axes, not in the composite:
+  duplicates            0.9283  →  0.8921   -0.0362   (1 better, 5 worse, measurable on 7/7)
+                          repeats 14→17  (of 164→154 checked, summed over the 7 measurable fixture(s))
+  commitments           1.0000  →  1.0000   +0.0000   (0 better, 0 worse, measurable on 1/7)
+                          breaches 0→0  (of 6→4 checked, summed over the 1 measurable fixture(s))
+  mustInclude           n/a — unmeasurable on 0/7 fixtures (nothing stated to check)
+  budget                1.0000  →  1.0000   +0.0000   (0 better, 0 worse, measurable on 7/7)
+```
+
+### Judge tally — blinded
+
+Two anonymous candidates per fixture, seed-shuffled by fixture id, model and vendor identity
+stripped.
+
+| Fixture | Arm A (baseline) | Arm B (candidate) |
+|---|---|---|
+| barcelona-access-dietary | 6.000 | **7.500** |
+| kyoto-couple-mixed | 7.500 | 7.500 |
+| lisbon-solo-offbeat | 6.500 | 6.500 |
+| rome-family-slow | 5.500 | **7.500** |
+| reykjavik-couple-packed | 5.000 | **7.500** |
+| bangkok-solo-degraded | 6.500 | **8.000** |
+| queenstown-couple-noweather | **7.500** | 6.000 |
+
+**Judge prefers: arm A 1, arm B 4, ties 2.** The candidate's wins are also its larger margins
+(+2.5 on reykjavik, +2.0 on rome); its one loss is −1.5. The judge never scored the candidate
+below 6.0 and scored the baseline at 5.0 once, so the floor rose.
+
+### Phase C — single-arm, `paris-requirements` only
+
+**This is not a v1/v2 delta and must not be read as one.** `paris-requirements` is the one fixture
+carrying `mustInclude`, `avoid`, `constraintsNote` and `logistics`, and it is deliberately outside
+the A/B set: arm A's prompts could not consume those fields, so there is nothing to compare
+against. The question here is "does stating the field change the plan", not "is v2 better".
+
+One generation, 238.8s, composite 0.8746. By scorer:
+
+| Scorer | Result |
+|---|---|
+| `mustInclude` | **4/4** — `includedCount` 2, `respectedCount` 2, nothing missing, nothing violated |
+| `commitments` | **7/7 passed**, zero breaches |
+| `duplicates` | **0 repeats** of 17 checked stops |
+| `budget` | $1,148 of $2,600 — `budgetUsedFraction` 0.44, within budget |
+
+By eye, against the four things the fixture was built to catch:
+
+- **"Louvre Museum" appears exactly once as a stop** (Day 2, 9:00 AM, 3.5h, $36). Its six other
+  mentions in the document are cross-references in `why`/`note` prose ("steps from Louvre",
+  "complement Louvre's older masters"), not scheduled stops.
+- **"Palace of Versailles" appears exactly once as a stop** (Day 3, 9:30 AM, 5h, $54). The RER C
+  leg out, the lunch in Versailles town and the leg back share the name and the coordinate; the
+  two transit legs are category-exempt from the proximity check by design, and the lunch is a
+  distinct food stop. Neither the scorer nor a reader counts these as the palace twice.
+- **Seafood is absent.** No `seafood`, `fish`, `oyster`, `moules`, `huîtres`, `fruits de mer`,
+  `sushi` or similar anywhere in the document. The single `brasserie` hit is an area description
+  of Saint-Germain, not a dish.
+- **No day assumes a car.** No `car`, `taxi`, `rental` or `drive` anywhere. Every leg is metro,
+  RER or on foot; the CDG transfer is "RER B direct from Luxembourg or Saint-Michel".
+
+Both must-sees were also supplied *by the model* — the Louvre and Versailles are deliberately not
+in the fixture's candidate list, so passing on the anchor rule alone was not available.
+
+The departure boundary held with room: Day 4's last entry is a 1:30 PM transit to CDG for a 19:40
+flight, noting "arrive airport by 16:00".
+
+### Legacy-path sanity read — n=1, no paired baseline
+
+Task 1 captured the staged path only, so **there is no legacy baseline and this is not a
+comparison.** It is one run of `POST /api/itinerary` — the route the traveller-facing wizard
+actually posts to, critique included — against `kyoto-couple-mixed`, to check the new rules did not
+break the path that ships.
+
+- **The plan comes back.** HTTP 200, 4 days, tier `luxury`, composite 0.7809 (lower than the
+  staged arm's, as expected — this path includes critique and is a different, noisier prompt).
+- **The budget lands under rather than at the ceiling.** $1,774 estimated against $2,600 —
+  `budgetUsedFraction` **0.68**. Under the pre-change §5 the scorer would have marked that down for
+  not reaching the 85-100% band; that is precisely the behaviour the ceiling rewrite was for.
+- **The departure buffer question is unanswerable on this fixture.** `kyoto-couple-mixed` states
+  `logistics: null`, so `scoreCommitments` returns `checked: 0` and `normalized: null` — the rule
+  had nothing to bite on. What can be said is that the last day is light and ends early (two
+  stops, finishing around 12:00, no lodging booked for the final night), which is at least not a
+  violation. A real departure-buffer read needs a fixture that states a departure time.
+- `duplicates` 0 repeats of 16 stops.
+
+**One operational finding worth recording:** `skill-ab.mjs`'s legacy arm failed with a bare
+`fetch failed`. The route was fine — it answered **200 in 312.7 seconds**. Node's `fetch` has an
+undici `headersTimeout` of 300s that no `fetch` option exposes, and `benchTimeoutMs()` cannot
+raise it because it is not the thing doing the timing out. The run above was made with `curl`
+instead. Anyone re-running `AB_PATH=legacy` will hit this whenever the route exceeds five minutes.
+
+### What this measurement does not establish
+
+- **n=7 paired, one generation per arm per fixture.** That is enough to catch a collapse or a
+  consistent shift, and not enough to call a small delta real. A +0.0297 composite on seven
+  unreplicated pairs is a direction, not a number to quote.
+- **The judge is a Claude model scoring Claude output.** That is a preference signal, never ground
+  truth. A 4-1-2 tally from it is corroboration of the scorer's direction, not independent
+  evidence.
+- **`mustInclude` has been exercised on exactly one trip, and `commitments` on two.** Both passed
+  perfectly, which is what a rule with one test looks like whether it is robust or lucky.
+- **The duplicates regression is the finding most worth following up**, and this run cannot say
+  why. Both candidates are plausible on this data and neither is tested: the trip got shorter
+  (154 stops against 164), which concentrates any repeat into a smaller denominator; or the
+  rules genuinely made repetition more likely. A sweep with more generations per fixture, and a
+  look at the 17 flagged pairs by hand, would separate them.
+
 ## Still open
 
 **Not fixable by rules — no data behind them.** Adding skill rules for these would be instructions
