@@ -7,6 +7,7 @@
  * are what fail if the three shapes drift apart again. */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { deriveFlags } from "./userAnswers.ts";
 import {
   buildCritiquePrompt,
   buildGeneratePrompt,
@@ -175,4 +176,30 @@ test("a refine call with nothing stated is byte-identical to a call that never p
   const withEmptyAnswers = buildRefinePrompt({ ...refineBase, answers: bareAnswers() });
   assert.equal(withoutAnswersKey, withEmptyAnswers);
   assert.doesNotMatch(withoutAnswersKey, /Stated requirements/);
+});
+
+/* --- §3a's party basis, on both halves of the legacy path ---
+ *
+ * A stop's cost is what the whole party pays, and every surface that reads it — `tripSpend`,
+ * `BudgetBar`, `evaluateBudget` — sums it with no multiplier. The critique checklist used to ask
+ * for "per-person costs multiplied by party size" while `formatTravelerProfile` spliced in
+ * "Party of N" right above it, so a $3,200 family plan against a $4,000 budget was computed as
+ * $12,800 and came back with stops stripped. These two asserts are the pair: the generator must
+ * state the basis, and the critique must not multiply. */
+
+test("the generate prompt states that a stop's cost is the whole party's", () => {
+  assert.match(PROMPTS.generate(), /WHOLE party pays there, never one person's share/);
+});
+
+test("the critique prompt never asks for costs to be multiplied by party size", () => {
+  const prompt = buildCritiquePrompt({
+    itinerary: { tier: "comfort", days: DAYS },
+    budget: 1500,
+    // The multiplier and the party size in one prompt is the whole shape of the defect: this is
+    // what `formatTravelerProfile` emits for a family of four.
+    resolvedFlags: deriveFlags(bareAnswers({ group: "family_with_kids", party: { adults: 2, children: 2 } })),
+  });
+  assert.match(prompt, /Party of 4/, "the party size is in the prompt — that is half of the defect");
+  assert.doesNotMatch(prompt, /multipl/i, "and nothing in it may ask for the costs to be scaled by it");
+  assert.match(prompt, /party total it already is/);
 });
