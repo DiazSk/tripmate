@@ -2,6 +2,7 @@ import type { PlanDraft } from '@/api/types';
 
 import {
   MAX_STARRED,
+  emptyDraft,
   toGenerateRequest,
   toTravelerProfile,
   toUserAnswers,
@@ -31,6 +32,9 @@ function draft(overrides: Partial<PlanDraft> = {}): PlanDraft {
     accessibility: { stepFreeRequired: false, limitStairs: false, note: '' },
     selectedPois: [],
     customPois: [],
+    mustInclude: '',
+    avoid: '',
+    constraintsNote: '',
     ...overrides,
   };
 }
@@ -114,6 +118,14 @@ test('the generate request derives its tier and carries the answers', () => {
   expect(request.tier).toBe('midrange');
   expect(request.preferences).toEqual({ tags: ['Food'] });
   expect(request.userAnswers).toBeDefined();
+});
+
+test('named requirements reach the payload as lists, and blanks drop out', () => {
+  const draft = { ...emptyDraft(), mustInclude: 'Louvre Museum, Versailles', avoid: '', constraintsNote: '  ' };
+  const answers = toUserAnswers(draft);
+  expect(answers.mustInclude).toEqual(['Louvre Museum', 'Versailles']);
+  expect(answers.avoid).toBeUndefined();
+  expect(answers.constraintsNote).toBeUndefined();
 });
 
 // A business trip and an anniversary are the same person: only the durable half carries over.

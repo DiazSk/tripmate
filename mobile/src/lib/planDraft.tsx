@@ -105,6 +105,9 @@ export function emptyDraft(): PlanDraft {
     accessibility: { stepFreeRequired: false, limitStairs: false, note: '' },
     selectedPois: [],
     customPois: [],
+    mustInclude: '',
+    avoid: '',
+    constraintsNote: '',
   };
 }
 
@@ -185,6 +188,17 @@ export function toggleStarred(picks: Picks, tag: string): Picks {
 
 const hasText = (v?: string) => !!v?.trim();
 
+/** Comma-separated as typed, split here. `undefined` for an empty result, never `[]` — the server
+ *  and the guardrail both branch on "did they name anything", and an empty array reads as a
+ *  demand for nothing rather than as silence. */
+const namedList = (raw: string) => {
+  const items = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return items.length ? items : undefined;
+};
+
 /** Nothing said means the whole object is dropped, rather than sent as a shape full of blanks. */
 function logisticsOrNull(l: TripLogistics): TripLogistics | null {
   const any =
@@ -217,6 +231,9 @@ export function toUserAnswers(draft: PlanDraft): UserAnswers {
     customPois: draft.customPois.length ? draft.customPois : undefined,
     dietary: dietarySaid ? dietary : null,
     accessibility: accessSaid ? accessibility : null,
+    mustInclude: namedList(draft.mustInclude),
+    avoid: namedList(draft.avoid),
+    constraintsNote: draft.constraintsNote.trim() || undefined,
   };
 }
 
