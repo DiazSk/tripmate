@@ -4,6 +4,7 @@
 import type { DayWeather } from "./weather";
 import type { BikeshareSystem } from "./bikeshare";
 import type {
+  Anchor,
   DestinationContext,
   Itinerary,
   ItineraryPreferences,
@@ -37,7 +38,7 @@ const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one 
  * in itinerary.ts covers the case where a model ignores the shape anyway.
  */
 const DAY_SHAPE = `{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}`;
-const SHAPE_HINT = `{"days":[${DAY_SHAPE}]}`;
+const SHAPE_HINT = `{"days":[${DAY_SHAPE}],"unplaced":[{"name":"one of the traveler's MUST places","reason":"one concrete line"}]}`;
 
 // Concrete stop-selection guidance per interest tag — generic "weight toward
 // this interest" phrasing wasn't specific enough to reliably avoid the
@@ -202,6 +203,20 @@ const STOP_LINES_INSTRUCTION = `Each stop also needs exactly two one-line fields
 // cannot carry this — it is a knowledge problem, and the model has no coordinates to give.
 const FOOD_STOP_INSTRUCTION = `For "food" stops, prefer an AREA over a specific restaurant unless the place itself is the point (it's a landmark eatery, it needs a reservation, or a stated interest is the reason the day routes there). An area-level food stop uses the neighborhood/market as its "name" (e.g. "Dinner around Pike Place Market"), the area's approximate lat/lng, and a "why"/"note" that says what to look for there plus one or two example spots (e.g. "Seafood counters everywhere; e.g. Pike Place Chowder"). Never invent hours, wait times, or menu prices for an area-level stop. If a later meal returns to an area you already used for one, name the specific venue that time instead — a base in a small town otherwise yields four stops all called "Dinner in <that town>", which tells the traveler nothing about four different nights. The area must sit within or next to that part of the day's route — a meal should never pull the day across town.`;
 
+/** The traveler's own places. The rule lives here, not in SKILL.md, because this legacy path never
+ *  loads the skill — every rule it follows is a constant in this file. SKILL.md §15 carries the
+ *  same rule for the edit loop, which does load it. Keep the two in step. */
+const ANCHOR_INSTRUCTION = `Schedule every MUST place as a stop, on a day and at a time it is open, unless that is impossible — closed on every day the trip is near it, too far to reach and return within a day, or more MUST places than the days can hold. Fit WANT places where they suit a day's route; skipping one is fine. Use the traveler's name for the place in the stop's "name" so it can be recognised. For every MUST place you could not schedule, add an entry to the top-level "unplaced" array with a one-line, concrete reason (e.g. "Closed Tuesdays, the only day the plan is nearby"). Never drop a MUST place silently. Use "unplaced": [] when everything fits.`;
+
+export function formatAnchors(anchors: Anchor[] | undefined): string {
+  if (!anchors || anchors.length === 0) return "";
+  const lines = anchors.map((a) => {
+    const where = a.lat !== null && a.lng !== null ? `(${a.lat}, ${a.lng})` : "(location unknown)";
+    return `- ${a.priority === "must" ? "MUST" : "WANT"}: ${a.name} ${where}`;
+  });
+  return `\nThe traveler's own places — they chose these before asking for a plan:\n${lines.join("\n")}\n${ANCHOR_INSTRUCTION}\n`;
+}
+
 // Lodging came back as the same mid-range city hotel every night regardless of who
 // was travelling or where the days actually went. The type of stay is a real choice
 // (hostel, B&B, apartment, camp, houseboat, farmstay) and often the memorable part of
@@ -223,6 +238,7 @@ export function buildGeneratePrompt(params: {
   logistics?: TripLogistics | null;
   bikeshare?: BikeshareSystem | null;
   answers?: UserAnswers | null;
+  anchors?: Anchor[];
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -232,7 +248,7 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}
+${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}${formatAnchors(params.anchors)}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
 Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${lodgingInstruction()}
@@ -259,6 +275,7 @@ export function buildRefinePrompt(params: {
   dietary?: DietaryNeeds | null;
   logistics?: TripLogistics | null;
   answers?: UserAnswers | null;
+  anchors?: Anchor[];
 }): string {
   return `Here is a trip itinerary for ${params.destination} (${params.startDate} to ${params.endDate}, budget $${params.budget}):
 
@@ -269,7 +286,7 @@ ${PRECEDENCE_INSTRUCTION}
 Style: ${tierStyle(params.previousItinerary.tier)}
 
 The user's feedback on this itinerary: "${params.feedback}"
-${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}
+${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatContextBlock(params.contextInsight)}${formatAnchors(params.anchors)}
 Revise the itinerary to address this feedback. Keep real, well-known places with real approximate latitude/longitude, keep the lodging entries, and keep per-stop costs realistic.
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
