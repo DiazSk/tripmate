@@ -2426,7 +2426,7 @@ Respond with ONLY valid JSON, no code fences, in exactly this shape:
   - the pins appeared;
   - the sketch themes appeared before the stops;
   - the receipt counts the stars correctly;
-  - "Fit it anyway" starts a refine;
+  - "Fit it anyway" opens the chat editor pre-filled;
   - after the refine, the receipt is still there (Review focus #5).
 
   Take a screenshot of the final plan with its receipt.
