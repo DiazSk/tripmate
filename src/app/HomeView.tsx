@@ -17,6 +17,7 @@ import {
   Wallet,
 } from "lucide-react";
 import type { DayEditUpdates } from "@/components/DayHeader";
+import { fitMessage } from "@/components/AnchorReceipt";
 import FeedbackLoop, { type DraftState } from "@/components/FeedbackLoop";
 import InterestPicker from "@/components/InterestPicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
@@ -2697,6 +2698,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   dayIndex={focus.target.dayIndex}
                   scope={focus.target.scope}
                   sessionId={lastSessionId}
+                  initialMessage={focus.target.initialMessage}
                   dirty={focus.dirty}
                   onDaysModified={(days) =>
                     setUnseenChangedDays((prev) =>
@@ -2770,9 +2772,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   animateReveal={revealAnimation}
                   panelCollapsed={planCollapsed}
                   onMinimize={() => setPlanCollapsed(true)}
-                  onFitAnchor={(name) =>
-                    refine(`Please fit ${name} into the plan. It matters to us; drop or move something else to make room.`)
-                  }
+                  onFitAnchor={(name) => focus.open(activeDayIndex, "trip", fitMessage(name))}
                 />
               )}
 

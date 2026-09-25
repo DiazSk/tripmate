@@ -61,6 +61,7 @@ export default function EditChatPanel({
   onItineraryChange,
   onDaysModified,
   onBusyChange,
+  initialMessage,
 }: {
   trip: TripSummary;
   userAnswers?: UserAnswers | null;
@@ -68,6 +69,9 @@ export default function EditChatPanel({
   /** Undefined = whole trip. Set = that day only. */
   dayIndex?: number;
   tripId?: string | null;
+  /** Pre-fills the input on open — e.g. "Fit it anyway" from AnchorReceipt. Never auto-sent; the
+   *  traveler still presses send. */
+  initialMessage?: string;
   /** The CLI session the itinerary was generated in, so this chat continues that same
    *  conversation. Undefined on a trip generated before sessions existed — the route then falls
    *  back to a fully-rebuilt prompt, so this is optional rather than required. */
@@ -84,10 +88,16 @@ export default function EditChatPanel({
   /** True while the saved transcript is still on its way, so the empty state does not flash the
    *  "start a conversation" copy at someone who already has one. */
   const [loadingHistory, setLoadingHistory] = useState(!!tripId);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialMessage ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (initialMessage) textareaRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // The live session id, which can differ from the prop: if the generation session has expired,
   // the route opens a new one and returns it, and every later turn must continue from THAT.
   const [chatSession, setChatSession] = useState<string | null>(sessionId ?? null);
@@ -328,6 +338,7 @@ export default function EditChatPanel({
 
       <div className="flex items-end gap-2 border-t border-card-border p-3">
         <textarea
+          ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {

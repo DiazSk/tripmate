@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import ItineraryCard from "@/components/ItineraryCard";
+import { fitMessage } from "@/components/AnchorReceipt";
 import { useStoryControls } from "@/lib/storyMode";
 import { PlayIcon } from "@/components/icons";
 import FocusEditMode from "@/components/FocusEditMode";
@@ -408,6 +409,7 @@ export default function TripView({
               scope={focus.target.scope}
               tripId={trip.id}
               sessionId={trip.chatSessionId ?? null}
+              initialMessage={focus.target.initialMessage}
               dirty={focus.dirty}
               saving={savingFocus}
               onDaysModified={(days) =>
@@ -461,6 +463,7 @@ export default function TripView({
                   // clicked: one chat surface with day navigation, rather than a second
                   // day-locked variant that looked identical but couldn't reach other days.
                   onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
+                  onFitAnchor={(name) => focus.open(activeDayIndex, "trip", fitMessage(name))}
                   onItineraryChange={handleRearrange}
                   trip={trip}
                   panelCollapsed={planCollapsed}
