@@ -446,27 +446,32 @@ function runClaudeViaCli(
       ? ["--output-format", "stream-json", "--verbose", "--include-partial-messages"]
       : ["--output-format", "json"];
 
-    const child = spawn(
-      /* turbopackIgnore: true */ cliBin,
-      [
-        ...(images ? ["-p", "--input-format", "stream-json"] : ["-p", prompt]),
-        "--model",
-        model,
-        ...formatArgs,
-        "--tools",
-        "",
-        ...sessionArgs,
-        "--setting-sources",
-        "",
-        // Measured on real edit calls: ~96% of generated tokens are internal reasoning that never
-        // reaches the caller (12.4k output tokens for a 450-token JSON patch), and time-to-first-
-        // token is ~95% of the wall clock. "low" is the floor the CLI exposes — there is no way to
-        // turn thinking off — and it cut a representative edit from 105s to 84s with identical,
-        // valid output. Only passed where the task is a narrow, well-specified patch.
-        ...(meta?.effort ? ["--effort", meta.effort] : []),
-      ],
-      { env, stdio: [images ? "pipe" : "ignore", "pipe", "pipe"] }
-    );
+    const args = [
+      ...(images ? ["-p", "--input-format", "stream-json"] : ["-p", prompt]),
+      "--model",
+      model,
+      ...formatArgs,
+      "--tools",
+      "",
+      ...sessionArgs,
+      "--setting-sources",
+      "",
+      // Measured on real edit calls: ~96% of generated tokens are internal reasoning that never
+      // reaches the caller (12.4k output tokens for a 450-token JSON patch), and time-to-first-
+      // token is ~95% of the wall clock. "low" is the floor the CLI exposes — there is no way to
+      // turn thinking off — and it cut a representative edit from 105s to 84s with identical,
+      // valid output. Only passed where the task is a narrow, well-specified patch.
+      ...(meta?.effort ? ["--effort", meta.effort] : []),
+    ];
+    const child = images
+      ? spawn(/* turbopackIgnore: true */ cliBin, args, {
+          env,
+          stdio: ["pipe", "pipe", "pipe"] as const,
+        })
+      : spawn(/* turbopackIgnore: true */ cliBin, args, {
+          env,
+          stdio: ["ignore", "pipe", "pipe"] as const,
+        });
 
     if (images) child.stdin?.end(cliStdinMessage(prompt, images));
 
