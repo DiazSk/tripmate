@@ -106,6 +106,9 @@ describe("model routing", () => {
       "critique",
       "chat",
       "element-edit",
+      "story",
+      "extract",
+      "sketch",
       "judge",
     ];
     for (const type of types) assert.ok(apiModelFor(type), `${type} routed nowhere`);
@@ -139,7 +142,7 @@ describe("model routing", () => {
   it("gives every call type a token ceiling, largest for whole itineraries", () => {
     assert.ok(maxTokensFor("generate") > maxTokensFor("chat"));
     assert.ok(maxTokensFor("chat") > maxTokensFor("place-detail"));
-    for (const type of ["generate", "refine", "rebalance", "critique", "chat", "element-edit", "place-detail", "context", "judge"]) {
+    for (const type of ["generate", "refine", "rebalance", "critique", "chat", "element-edit", "place-detail", "context", "story", "extract", "sketch", "judge"]) {
       assert.ok(maxTokensFor(type) > 0, type);
     }
   });
@@ -220,5 +223,15 @@ describe("cost", () => {
     for (const model of ["claude-opus-5", "claude-haiku-4-5", CHAT_FALLBACK_MODEL]) {
       assert.ok(MODEL_PRICES[model], `${model} has no price, so its traces would show no cost`);
     }
+  });
+});
+
+describe("extract and sketch call types", () => {
+  it("route to the cheap tier with bounded output", () => {
+    for (const type of ["extract", "sketch"]) {
+      assert.equal(apiModelFor(type), cheapModel());
+    }
+    assert.equal(maxTokensFor("extract"), 4_000);
+    assert.equal(maxTokensFor("sketch"), 6_000);
   });
 });
