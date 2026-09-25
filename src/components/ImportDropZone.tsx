@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { anchorKey } from "@/lib/anchors";
 import type { Anchor } from "@/lib/types";
 
 /** Long edge the model reads at full fidelity; anything larger only costs upload time. */
@@ -39,7 +40,7 @@ export default function ImportDropZone({
 }: {
   destination: string;
   anchors: Anchor[];
-  onAnchorsChange: (anchors: Anchor[]) => void;
+  onAnchorsChange: (update: (prev: Anchor[]) => Anchor[]) => void;
   onDestinationGuess: (guess: string) => void;
 }) {
   const [pending, setPending] = useState<Pending[]>([]);
@@ -75,8 +76,20 @@ export default function ImportDropZone({
         setUnread([json.error ?? "Couldn't read these right now."]);
         return;
       }
-      const known = new Set(anchors.map((a) => a.name.toLowerCase()));
-      onAnchorsChange([...anchors, ...(json.places ?? []).filter((p) => !known.has(p.name.toLowerCase()))]);
+      const incoming = json.places ?? [];
+      onAnchorsChange((prev) => {
+        const byKey = new Map(prev.map((a) => [anchorKey(a.name), a] as const));
+        for (const place of incoming) {
+          const key = anchorKey(place.name);
+          const existing = byKey.get(key);
+          if (!existing) {
+            byKey.set(key, place);
+          } else if (existing.lat === null && place.lat !== null) {
+            byKey.set(key, { ...existing, lat: place.lat, lng: place.lng });
+          }
+        }
+        return Array.from(byKey.values());
+      });
       if (json.destinationGuess && !destination.trim()) onDestinationGuess(json.destinationGuess);
       setUnread((json.unread ?? []).map((u) => u.reason));
       setPending([]);
@@ -88,8 +101,8 @@ export default function ImportDropZone({
   }
 
   const toggleMust = (name: string) =>
-    onAnchorsChange(anchors.map((a) => (a.name === name ? { ...a, priority: a.priority === "must" ? "want" : "must" } : a)));
-  const remove = (name: string) => onAnchorsChange(anchors.filter((a) => a.name !== name));
+    onAnchorsChange((prev) => prev.map((a) => (a.name === name ? { ...a, priority: a.priority === "must" ? "want" : "must" } : a)));
+  const remove = (name: string) => onAnchorsChange((prev) => prev.filter((a) => a.name !== name));
 
   return (
     <div className="mt-4">

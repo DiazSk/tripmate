@@ -102,3 +102,36 @@ test("resolveFinalUrl follows a Maps short link to the place URL", async () => {
   const net = fakeNet({ "https://maps.app.goo.gl/abc": redirect(long), [long]: () => new Response("ok") });
   assert.equal(await resolveFinalUrl("https://maps.app.goo.gl/abc", net), long);
 });
+
+/** An uncancelled body would otherwise leak the connection — see importSources.ts's guardedFetch. */
+const trackedBody = (onCancel) => new ReadableStream({ cancel: onCancel });
+
+test("guardedFetch drains a non-ok response's body instead of leaking it", async () => {
+  let cancelled = false;
+  const net = fakeNet({
+    "https://dead.test/link": () => new Response(trackedBody(() => { cancelled = true; }), { status: 404 }),
+  });
+  assert.equal(await readLink("https://dead.test/link", net), null);
+  assert.equal(cancelled, true);
+});
+
+test("guardedFetch drains a redirect response with no location header", async () => {
+  let cancelled = false;
+  const net = fakeNet({
+    "https://dead.test/redirect": () => new Response(trackedBody(() => { cancelled = true; }), { status: 302 }),
+  });
+  assert.equal(await readLink("https://dead.test/redirect", net), null);
+  assert.equal(cancelled, true);
+});
+
+test("guardedFetch drains each redirect hop's body before following it", async () => {
+  let cancelled = false;
+  const long = "https://www.google.com/maps/place/X/@1,2,15z";
+  const net = fakeNet({
+    "https://maps.app.goo.gl/abc": () =>
+      new Response(trackedBody(() => { cancelled = true; }), { status: 302, headers: { location: long } }),
+    [long]: () => new Response("ok"),
+  });
+  assert.equal(await resolveFinalUrl("https://maps.app.goo.gl/abc", net), long);
+  assert.equal(cancelled, true);
+});
