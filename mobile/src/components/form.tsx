@@ -542,21 +542,28 @@ export function ChoiceRow<T extends string>({
 }
 
 /**
- * Chips. `starred` turns the grid into the two-state one interests need — tap to select, tap a
- * selected chip again to star it, which is what actually weights the plan.
+ * Chips. Passing `onCycle` turns the grid into the three-state one interests need: every tap
+ * advances the same chip, off → chosen → starred → off, and the parent's rule decides what comes
+ * next (see `cycleInterest`).
+ *
+ * **There is deliberately no long-press.** Removal used to live on one, which meant the only way
+ * to un-choose a tag was a gesture nothing on screen mentioned — and a tap that could neither star
+ * nor remove simply did nothing. A grid where one gesture does everything has no unreachable
+ * state and nothing to document.
  */
 export function TagGrid({
   tags,
   selected,
   starred,
   onToggle,
-  onStar,
+  onCycle,
 }: {
   tags: string[];
   selected: string[];
   starred?: string[];
+  /** For the grids with no starring — dietary tags, the POI picker. */
   onToggle: (tag: string) => void;
-  onStar?: (tag: string) => void;
+  onCycle?: (tag: string) => void;
 }) {
   return (
     <View style={styles.grid}>
@@ -569,8 +576,12 @@ export function TagGrid({
             accessibilityRole="button"
             accessibilityState={{ selected: isOn }}
             accessibilityLabel={isStar ? `${tag}, starred` : tag}
-            onPress={() => (isOn && onStar ? onStar(tag) : onToggle(tag))}
-            onLongPress={isOn && onStar ? () => onToggle(tag) : undefined}
+            // Says what the *next* tap does, since one gesture has three outcomes and the chip
+            // alone cannot show which is coming.
+            accessibilityHint={
+              onCycle ? (isStar ? 'Removes it' : isOn ? 'Stars it' : 'Chooses it') : undefined
+            }
+            onPress={() => (onCycle ? onCycle(tag) : onToggle(tag))}
             style={[styles.chip, isOn && styles.chipOn, isStar && styles.chipStarred]}
             android_ripple={{ color: Colors.pressed }}>
             <ThemedText

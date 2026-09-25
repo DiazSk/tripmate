@@ -141,50 +141,58 @@ export function usePlanDraft(): Ctx {
   return ctx;
 }
 
-/** Toggle a tag in a list. Used by the dietary grid, and by `toggleInterest` below. */
+/** Toggle a tag in a list. Used by the grids that have no starring — dietary, and the POI picker. */
 export const toggleTag = (list: string[], tag: string) =>
   list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag];
 
 /**
- * The interest grid's two rules, over a plain pair of lists.
+ * The interest grid's rule, over a plain pair of lists.
  *
  * **Lists rather than a `PlanDraft`, because two screens hold the same pair under different
  * names** — the wizard calls them `interests`/`starredInterests`, the Profile tab receives them
  * from the server as `priorities`/`topPriorities`. Keying the rules to one screen's field names is
  * what made the other screen inline its own copy.
  *
- * And they were already drifting: rule one below lived nowhere but a `.filter()` inside the
- * wizard's JSX, which is why it had never been tested.
+ * It was two rules on two gestures and is now one on one; see `cycleInterest`.
  */
 export type Picks = { selected: string[]; starred: string[] };
 
-/** Tap a chip: select or deselect. **Deselecting takes the star with it** — a starred tag that is
- *  no longer chosen would be weighting a plan by something the traveller just removed. */
-export function toggleInterest(picks: Picks, tag: string): Picks {
-  const selected = toggleTag(picks.selected, tag);
-  return selected.includes(tag)
-    ? { selected, starred: picks.starred }
-    : { selected, starred: picks.starred.filter((t) => t !== tag) };
-}
-
 /**
- * Tap a chosen chip's star: star or unstar.
+ * Tap a chip: off → chosen → starred → off.
  *
- * Two rules beyond the obvious. **Starring a tag that was not chosen chooses it too**, so a star
- * is never orphaned. And **the fourth star is a silent no-op, not an eviction** of the oldest —
- * quietly dropping someone's earlier choice to honour their latest is the worse surprise.
+ * **One rule on one gesture, because the two-gesture version was unusable.** A tap used to mean
+ * "choose" on an unchosen chip and "star" on a chosen one, with removal bound to a long-press that
+ * nothing on screen mentioned — so the only way to un-choose something was a gesture nobody was
+ * told about, and once three tags were starred a tap on a chosen-but-unstarred chip did nothing at
+ * all: it could not star (full) and it could not un-choose (wrong gesture). A control that ignores
+ * you is worse than one that does the wrong thing, because there is nothing to undo and nothing to
+ * learn from.
  *
- * Order is preserved because the order *is* the weighting: the server reads the first three.
+ * So tapping always advances, and a third tap always gets you back to where you started. **When
+ * the stars are full the middle rung is skipped** — a chosen chip goes straight off, rather than
+ * stopping on a star it cannot have. That is the one place the cycle is not literal, and it is the
+ * whole reason the dead tap existed.
+ *
+ * Two older rules survive inside it. Clearing a chip **takes its star with it**: a starred tag that
+ * is no longer chosen would weight a plan by something the traveller just removed. And a fourth
+ * star is still never an eviction — it simply cannot be reached, because you have to clear one
+ * yourself first. Order is preserved throughout, since the order *is* the weighting: the server
+ * reads the first three.
  */
-export function toggleStarred(picks: Picks, tag: string): Picks {
+export function cycleInterest(picks: Picks, tag: string): Picks {
   if (picks.starred.includes(tag)) {
-    return { selected: picks.selected, starred: picks.starred.filter((t) => t !== tag) };
+    return {
+      selected: picks.selected.filter((t) => t !== tag),
+      starred: picks.starred.filter((t) => t !== tag),
+    };
   }
-  if (picks.starred.length >= MAX_STARRED) return picks;
-  return {
-    selected: picks.selected.includes(tag) ? picks.selected : [...picks.selected, tag],
-    starred: [...picks.starred, tag],
-  };
+  if (!picks.selected.includes(tag)) {
+    return { selected: [...picks.selected, tag], starred: picks.starred };
+  }
+  if (picks.starred.length >= MAX_STARRED) {
+    return { selected: picks.selected.filter((t) => t !== tag), starred: picks.starred };
+  }
+  return { selected: picks.selected, starred: [...picks.starred, tag] };
 }
 
 const hasText = (v?: string) => !!v?.trim();

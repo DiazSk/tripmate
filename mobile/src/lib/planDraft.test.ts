@@ -6,8 +6,7 @@ import {
   toGenerateRequest,
   toTravelerProfile,
   toUserAnswers,
-  toggleInterest,
-  toggleStarred,
+  cycleInterest,
   toggleTag,
 } from './planDraft';
 
@@ -46,40 +45,46 @@ test('toggleTag adds then removes', () => {
 
 const picks = (selected: string[] = [], starred: string[] = []) => ({ selected, starred });
 
-test('tapping a chip selects it, and tapping again deselects it', () => {
-  expect(toggleInterest(picks(), 'Food')).toEqual(picks(['Food']));
-  expect(toggleInterest(picks(['Food', 'Nightlife']), 'Food')).toEqual(picks(['Nightlife']));
+// Every tap advances the same chip and the third gets you back where you started. This is the
+// whole interaction: there is no second gesture, so anything unreachable here is unreachable.
+test('a chip cycles off, chosen, starred, off again', () => {
+  let p = picks();
+  p = cycleInterest(p, 'Food');
+  expect(p).toEqual(picks(['Food']));
+  p = cycleInterest(p, 'Food');
+  expect(p).toEqual(picks(['Food'], ['Food']));
+  p = cycleInterest(p, 'Food');
+  expect(p).toEqual(picks());
 });
 
-// This rule used to live in the wizard's JSX, where no test could reach it. A starred tag that is
-// no longer chosen would weight a plan by something the traveller had just removed.
-test('deselecting an interest takes its star with it', () => {
-  expect(toggleInterest(picks(['Food', 'Nightlife'], ['Food']), 'Food')).toEqual(
+// A starred tag that is no longer chosen would weight a plan by something just removed.
+test('clearing a chip takes its star with it', () => {
+  expect(cycleInterest(picks(['Food', 'Nightlife'], ['Food']), 'Food')).toEqual(
     picks(['Nightlife'], [])
   );
 });
 
-test('starring selects the tag too, so a star is never orphaned', () => {
-  expect(toggleStarred(picks(), 'Food')).toEqual(picks(['Food'], ['Food']));
+// The bug this whole rule exists for: with the stars full, a tap on a chosen-but-unstarred chip
+// could neither star nor clear, so it did nothing and said nothing. The middle rung is skipped.
+test('with the stars full a chosen chip clears instead of stalling', () => {
+  const full = picks(['A', 'B', 'C', 'D'], ['A', 'B', 'C']);
+  expect(full.starred).toHaveLength(MAX_STARRED);
+  const after = cycleInterest(full, 'D');
+  expect(after).not.toEqual(full);
+  expect(after).toEqual(picks(['A', 'B', 'C'], ['A', 'B', 'C']));
+});
+
+// The cap is still never an eviction — it is simply unreachable until you clear one yourself.
+test('a fourth star cannot be reached by tapping', () => {
+  const full = picks(['A', 'B', 'C', 'D'], ['A', 'B', 'C']);
+  expect(cycleInterest(full, 'D').starred).toEqual(['A', 'B', 'C']);
 });
 
 // The order is the weighting — the server reads the first three — so it must be preserved.
 test('stars keep the order they were added in', () => {
   let p = picks(['Food', 'Nightlife', 'Shopping']);
-  for (const tag of ['Shopping', 'Food']) p = toggleStarred(p, tag);
+  for (const tag of ['Shopping', 'Food']) p = cycleInterest(p, tag);
   expect(p.starred).toEqual(['Shopping', 'Food']);
-});
-
-// Silently dropping an earlier choice to honour the latest is the worse surprise, so the cap
-// refuses rather than evicting.
-test('the fourth star is refused rather than silently replacing one', () => {
-  const full = picks(['A', 'B', 'C', 'D'], ['A', 'B', 'C']);
-  expect(full.starred).toHaveLength(MAX_STARRED);
-  expect(toggleStarred(full, 'D')).toEqual(full);
-});
-
-test('unstarring leaves the tag selected', () => {
-  expect(toggleStarred(picks(['Food'], ['Food']), 'Food')).toEqual(picks(['Food'], []));
 });
 
 // A shape full of blanks is not the same as saying nothing, and the prompt reads them differently.
