@@ -106,6 +106,7 @@ export function emptyDraft(): PlanDraft {
     accessibility: { stepFreeRequired: false, limitStairs: false, note: '' },
     selectedPois: [],
     customPois: [],
+    anchors: [],
     mustInclude: '',
     avoid: '',
     constraintsNote: '',
@@ -114,7 +115,10 @@ export function emptyDraft(): PlanDraft {
 
 type Ctx = {
   draft: PlanDraft;
-  patch: (changes: Partial<PlanDraft>) => void;
+  /** Also accepts an updater, so a caller can merge against the *latest* draft rather than one
+   *  closed over at call time — needed wherever a change can land mid-await (e.g. anchors arriving
+   *  from an import while a star was tapped). */
+  patch: (changes: Partial<PlanDraft> | ((prev: PlanDraft) => Partial<PlanDraft>)) => void;
 };
 
 const PlanDraftContext = createContext<Ctx | null>(null);
@@ -129,7 +133,11 @@ const PlanDraftContext = createContext<Ctx | null>(null);
 export function PlanDraftProvider({ children }: { children: React.ReactNode }) {
   const [draft, setDraft] = useState<PlanDraft>(emptyDraft);
   const value = useMemo<Ctx>(
-    () => ({ draft, patch: (changes) => setDraft((prev) => ({ ...prev, ...changes })) }),
+    () => ({
+      draft,
+      patch: (changes) =>
+        setDraft((prev) => ({ ...prev, ...(typeof changes === 'function' ? changes(prev) : changes) })),
+    }),
     [draft]
   );
   return <PlanDraftContext.Provider value={value}>{children}</PlanDraftContext.Provider>;
@@ -239,6 +247,7 @@ export function toUserAnswers(draft: PlanDraft): UserAnswers {
     topPriorities: draft.starredInterests,
     selectedPois: draft.selectedPois.length ? draft.selectedPois : undefined,
     customPois: draft.customPois.length ? draft.customPois : undefined,
+    anchors: draft.anchors.length ? draft.anchors : undefined,
     dietary: dietarySaid ? dietary : null,
     accessibility: accessSaid ? accessibility : null,
     mustInclude: namedList(draft.mustInclude),

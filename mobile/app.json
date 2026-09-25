@@ -36,7 +36,13 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TripMate reads the places in screenshots you pick. They are never stored."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

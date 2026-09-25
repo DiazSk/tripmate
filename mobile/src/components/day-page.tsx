@@ -170,6 +170,12 @@ function DayMasthead({
         </View>
       </PlacePhoto>
 
+      {day.theme ? (
+        <ThemedText type="heading" style={styles.theme}>
+          {day.theme}
+        </ThemedText>
+      ) : null}
+
       {day.summary ? (
         <ThemedText type="detail" themeColor="muted" style={styles.summary}>
           {day.summary}
@@ -345,6 +351,7 @@ const styles = StyleSheet.create({
   dateline: { padding: Spacing.rows, gap: Spacing.hair },
   datelineOverline: { opacity: 0.72 },
   datelineTitle: { opacity: 0.8 },
+  theme: { marginTop: Spacing.rows },
   summary: { marginTop: Spacing.rows },
 
   sectionRule: {

@@ -22,6 +22,7 @@ import {
 } from '@/api/tripMateApi';
 import type { ChatTurn, Stop, Trip } from '@/api/types';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
+import { AnchorReceipt } from '@/components/anchor-receipt';
 import { BudgetBar } from '@/components/budget-bar';
 import { ChatSheet } from '@/components/chat-sheet';
 import { DayMap } from '@/components/day-map';
@@ -30,6 +31,7 @@ import { PrimaryButton } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import { fitMessage } from '@/lib/anchors';
 import { formatRange } from '@/lib/dayDisplay';
 import { regionForStops } from '@/lib/mapRegion';
 
@@ -66,6 +68,13 @@ export default function TripDetail() {
    */
   const [probe, setProbe] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const chat = useChat(id, trip, setTrip);
+  /** What "Fit it anyway" seeds the chat composer with, or undefined for a plain "Ask". Cleared on
+   *  the plain path so an earlier fit request doesn't linger into an unrelated question. */
+  const [chatSeed, setChatSeed] = useState<string | undefined>(undefined);
+  /** Bumped on every open, and fed to `ChatSheet` as its `key` — `initialDraft` only seeds a fresh
+   *  mount, so without this a second "Fit it anyway" for a different place would leave the first
+   *  place's text sitting in the composer. */
+  const [chatOpenId, setChatOpenId] = useState(0);
 
   function closeSheet() {
     setAdding(false);
@@ -137,7 +146,11 @@ export default function TripDetail() {
                   ordinary one. Not the nav bar's `headerRight`, which is where this started: Expo
                   Go parks its own floating dev button exactly there and swallows every tap. */}
               <Pressable
-                onPress={chat.open}
+                onPress={() => {
+                  setChatSeed(undefined);
+                  setChatOpenId((n) => n + 1);
+                  chat.open();
+                }}
                 accessibilityRole="button"
                 accessibilityLabel="Ask for a change"
                 style={({ pressed }) => [styles.ask, pressed && styles.askPressed]}>
@@ -161,6 +174,15 @@ export default function TripDetail() {
               the row with the controls. Shown on the map face too: it is a fact about the trip,
               not about the list, and hiding it there would make the face swap jump. */}
           <BudgetBar days={days} budget={trip.budget} activeDayIndex={day} />
+
+          <AnchorReceipt
+            itinerary={trip.itinerary}
+            onFitAnchor={(name) => {
+              setChatSeed(fitMessage(name));
+              setChatOpenId((n) => n + 1);
+              chat.open();
+            }}
+          />
 
           <View style={styles.faces}>
             <DayPager
@@ -210,12 +232,14 @@ export default function TripDetail() {
       />
 
       <ChatSheet
+        key={chatOpenId}
         visible={chat.visible}
         onClose={chat.close}
         turns={chat.turns}
         replying={chat.replying}
         failure={chat.failure}
         onSend={chat.send}
+        initialDraft={chatSeed}
       />
 
       {trip.status === 'draft' ? (

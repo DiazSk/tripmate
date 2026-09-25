@@ -31,6 +31,7 @@ function draft(overrides: Partial<PlanDraft> = {}): PlanDraft {
     accessibility: { stepFreeRequired: false, limitStairs: false, note: '' },
     selectedPois: [],
     customPois: [],
+    anchors: [],
     mustInclude: '',
     avoid: '',
     constraintsNote: '',
@@ -123,6 +124,16 @@ test('the generate request derives its tier and carries the answers', () => {
   expect(request.tier).toBe('midrange');
   expect(request.preferences).toEqual({ tags: ['Food'] });
   expect(request.userAnswers).toBeDefined();
+});
+
+test('anchors are sent only when the traveler gathered at least one', () => {
+  expect(toUserAnswers(draft()).anchors).toBeUndefined();
+  const withAnchor = draft({
+    anchors: [{ name: 'Louvre', lat: 48.86, lng: 2.33, priority: 'must' as const }],
+  });
+  expect(toUserAnswers(withAnchor).anchors).toEqual([
+    { name: 'Louvre', lat: 48.86, lng: 2.33, priority: 'must' },
+  ]);
 });
 
 test('named requirements reach the payload as lists, and blanks drop out', () => {

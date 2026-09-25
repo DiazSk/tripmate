@@ -58,13 +58,38 @@ export interface DayPlan {
   weatherDetail?: DayWeather;
   summary?: string;
   title?: string;
+  /** A short label for the day's shape ("Old town on foot"), from the sketch stage. Absent on
+   *  plans generated before the field existed. */
+  theme?: string;
   lodging?: Lodging;
   stops: Stop[];
+}
+
+/** A place the traveler already committed to — imported from a screenshot/link/note, or typed. */
+export type AnchorPriority = 'must' | 'want';
+
+export interface Anchor {
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  priority: AnchorPriority;
+  source?: 'import' | 'picked' | 'typed';
+}
+
+/** Why an anchor didn't make it into the plan, as the model explained it. */
+export interface UnplacedAnchor {
+  name: string;
+  reason: string;
 }
 
 export interface Itinerary {
   tier?: TierId;
   days: DayPlan[];
+  /** The traveler's `must`/`want` places, echoed back so the receipt can check coverage. */
+  anchors?: Anchor[];
+  /** A `must` anchor the model deliberately left out, with its reason. Anything neither here nor
+   *  placed was dropped silently. */
+  unplaced?: UnplacedAnchor[];
 }
 
 export interface TripSummary {
@@ -217,6 +242,8 @@ export interface PlanDraft {
 
   selectedPois: CandidatePoi[];
   customPois: string[];
+  /** Places found from a screenshot, link or note, plus anything typed straight into a chip. */
+  anchors: Anchor[];
 
   /** Comma-separated as typed, split into `UserAnswers.mustInclude`/`.avoid` on submit — plain
    *  strings so the field stays a plain text input, matching how the web wizard holds them. */
@@ -245,6 +272,9 @@ export interface UserAnswers {
   customPois?: string[];
   dietary?: DietaryNeeds | null;
   accessibility?: AccessibilityNeeds | null;
+  /** Places found from a screenshot, link or note, plus anything typed straight into a chip.
+   *  Absent means none were gathered — the server also still reads the legacy `customPois`. */
+  anchors?: Anchor[];
   /** Places the traveler named outright, as distinct from an interest tag. Absent means none were
    *  named — never `[]`, which the server's guardrail and prompt would read as a demand for
    *  nothing rather than as silence. */
@@ -297,6 +327,21 @@ export interface GeocodedPlace {
   name: string;
 }
 
+// --- Chaos in, trip out: importing places from screenshots, links, notes --
+
+export type ImportItem =
+  | { kind: 'image'; mediaType: 'image/jpeg' | 'image/png' | 'image/webp'; data: string }
+  | { kind: 'url'; url: string }
+  | { kind: 'text'; text: string };
+
+/** `POST /api/import`'s answer. A 400/413/429/503 comes back as `{error}` instead — see
+ *  `importPlaces`, which folds that into the same return type. */
+export interface ImportResult {
+  destinationGuess: string | null;
+  places: Anchor[];
+  unread: { index: number; reason: string }[];
+}
+
 // --- The generation stream -------------------------------------------------
 
 export type GenerationStage = 'geocode' | 'context' | 'generate' | 'critique' | 'placing';
@@ -305,6 +350,11 @@ export type StageStatus = 'start' | 'done' | 'skipped' | 'failed';
 export interface StageEvent {
   stage: GenerationStage;
   status: StageStatus;
+}
+
+/** The `sketch` stream event — a day-by-day outline, before any stop is written. */
+export interface SketchEvent {
+  days: { date: string; theme: string; area: string; anchors: string[] }[];
 }
 
 /** A stop as it is parsed out of the model's token stream, before the plan is complete. */
@@ -331,6 +381,7 @@ export interface GenerationResult {
 export interface GenerateHandlers {
   onStage?: (event: StageEvent) => void;
   onStop?: (event: StreamedStop) => void;
+  onSketch?: (event: SketchEvent) => void;
   onPlan: (result: GenerationResult) => void;
 }
 

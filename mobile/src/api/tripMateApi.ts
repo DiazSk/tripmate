@@ -10,11 +10,14 @@ import type {
   GenerateRequest,
   GenerationResult,
   GeocodedPlace,
+  ImportItem,
+  ImportResult,
   Itinerary,
   PlaceCategory,
   PlacePhoto,
   PlaceSearchResult,
   ProfileStats,
+  SketchEvent,
   StageEvent,
   StreamedStop,
   Trip,
@@ -122,6 +125,30 @@ export async function geocode(
     if (res.status === 404) return { missed: true };
     if (!res.ok) return undefined;
     return { place: (await res.json()) as GeocodedPlace };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `POST /api/import` — read screenshots, links and notes for the places they name.
+ *
+ * A string return is the route's own `{error}` body (400/413/429/503) — a real answer about why
+ * these couldn't be read, not a transport failure, so the caller shows it rather than the generic
+ * "couldn't reach TripMate" line. `undefined` is the transport failure, per the house rule.
+ */
+export async function importPlaces(
+  items: ImportItem[],
+  destination?: string
+): Promise<ImportResult | string | undefined> {
+  try {
+    const res = await fetchWithSession('/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, destination }),
+    });
+    if (!res.ok) return errorMessage(res);
+    return (await res.json()) as ImportResult;
   } catch {
     return undefined;
   }
@@ -285,6 +312,9 @@ export async function generateTrip(
         break;
       case 'stop':
         handlers.onStop?.(payload as StreamedStop);
+        break;
+      case 'sketch':
+        handlers.onSketch?.(payload as SketchEvent);
         break;
       case 'plan':
       case 'done':
