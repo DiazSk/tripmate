@@ -31,7 +31,10 @@ import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./i
 import { carryOverDaySummaries, normalizeDays } from "./itinerary";
 import { tripDays, TierId } from "./tiers";
 import { deriveFlags, partyBudget, sanitizeLogistics } from "./userAnswers";
+import { geocodeAnchors } from "./anchorGeocode";
+import { normalizeAnchors, readUnplaced } from "./anchors";
 import {
+  Anchor,
   CritiqueResult,
   Itinerary,
   ItineraryPreferences,
@@ -158,6 +161,12 @@ export async function runGeneration(
     ? partyBudget(budget, answers.budgetBasis, resolvedFlags?.partySize ?? null)
     : budget;
 
+  // Refine keeps the places the plan was generated around; a refine body carries no answers of
+  // its own worth trusting over them. Generate normalises whatever the wizard sent.
+  let anchors: Anchor[] = isRefine
+    ? previousItinerary?.anchors ?? []
+    : normalizeAnchors(userAnswers);
+
   const runId = randomUUID();
   insertRun({
     id: runId,
@@ -201,6 +210,7 @@ export async function runGeneration(
       // absent rather than fatal. Not re-cast here: a second, differently-guarded read of
       // `userAnswers` right beside the first would be the inconsistency this exists to avoid.
       answers,
+      anchors,
     }));
   } else {
     if (!tier) {
@@ -242,6 +252,9 @@ export async function runGeneration(
     // broken"; surfacing it as a failure to a traveller would do that for something the plan
     // recovers from on its own.
     onStage({ stage: "geocode", status: geoPoint ? "done" : "skipped" });
+    // Import already geocoded what it could; this only fills typed and legacy entries. Skipped
+    // with no city point, and never fatal — an unplaced anchor still reaches the model by name.
+    if (geoPoint && anchors.length > 0) anchors = await geocodeAnchors(anchors, geoPoint);
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
     prompt = buildGeneratePrompt((contextPayload = {
@@ -262,6 +275,7 @@ export async function runGeneration(
       // which reads to the model as "no bikeshare here" rather than "not asked". The previous
       // itinerary it is handed already carries whatever bike legs the first pass wrote.
       bikeshare,
+      anchors,
     }));
   }
 
@@ -353,10 +367,12 @@ export async function runGeneration(
   }
 
   // The model returns just { days: [...] } — tier is known server-side, not part of its output.
-  const { days } = parseJsonResponse<{ days: Itinerary["days"] }>(raw);
+  const { days, unplaced } = parseJsonResponse<{ days: Itinerary["days"]; unplaced?: unknown }>(raw);
   const itinerary: Itinerary = {
     tier: effectiveTier,
     days: normalizeDays(days),
+    // Echoed back so the receipt survives save/reload/critique — critique only reassigns `days`.
+    ...(anchors.length > 0 ? { anchors, unplaced: readUnplaced(unplaced) } : {}),
   };
 
   // Look up real listings for the stops where the answer can change the plan, then check the

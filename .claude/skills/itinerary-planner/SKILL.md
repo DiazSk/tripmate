@@ -631,3 +631,18 @@ were food, history and nature. Before you commit a complete itinerary:
 
 This is a pass over what you have written, not a re-plan. Fix what it finds; don't rebuild what it
 doesn't.
+
+## §16. The traveler's own places
+
+A plan may carry `anchors`: places the traveler chose before asking for a plan, each `must` or `want`.
+
+- Schedule every `must` unless it is impossible: closed on every day the plan is nearby, too far to
+  reach and return within a day, or more `must` places than the days can hold. List each one you could
+  not schedule in `unplaced` with a one-line, concrete reason.
+- Fit `want` places where they suit a day's route; skipping one needs no explanation.
+- When editing, never remove a `must` stop unless the traveler asked for that place to go. If an edit
+  forces it out, say so in the reply and add it to `unplaced`.
+- Use the traveler's name for the place as the stop name, so it can be matched back.
+
+The generate prompt in `src/lib/itineraryPrompt.ts` (`ANCHOR_INSTRUCTION`) carries the same rule for
+the legacy path, which does not load this skill. Keep the two in step.

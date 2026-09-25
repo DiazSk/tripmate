@@ -13,6 +13,7 @@ import {
   buildGeneratePrompt,
   buildRebalancePrompt,
   buildRefinePrompt,
+  formatAnchors,
 } from "./itineraryPrompt.ts";
 
 const DAYS = [
@@ -208,4 +209,36 @@ test("the critique prompt never asks for costs to be multiplied by party size", 
   assert.match(prompt, /Party of 4/, "the party size is in the prompt — that is half of the defect");
   assert.doesNotMatch(prompt, /multipl/i, "and nothing in it may ask for the costs to be scaled by it");
   assert.match(prompt, /party total it already is/);
+});
+
+test("formatAnchors is empty when there are no anchors", () => {
+  assert.equal(formatAnchors(undefined), "");
+  assert.equal(formatAnchors([]), "");
+});
+
+test("formatAnchors lists priority, name and coordinates, and states the rule", () => {
+  const out = formatAnchors([
+    { name: "teamLab Planets", lat: 35.649, lng: 139.79, priority: "must" },
+    { name: "Yanaka Ginza", lat: null, lng: null, priority: "want" },
+  ]);
+  assert.match(out, /MUST: teamLab Planets \(35\.649, 139\.79\)/);
+  assert.match(out, /WANT: Yanaka Ginza \(location unknown\)/);
+  assert.match(out, /"unplaced"/);
+  assert.match(out, /Never drop a MUST place silently/);
+});
+
+test("generate and refine prompts carry the anchors block and ask for unplaced", () => {
+  const anchors = [{ name: "teamLab Planets", lat: 35.6, lng: 139.8, priority: "must" }];
+  const gen = buildGeneratePrompt({
+    destination: "Tokyo", startDate: "2026-10-01", endDate: "2026-10-03", budget: 2000,
+    tier: "midrange", weather: [], anchors,
+  });
+  const ref = buildRefinePrompt({
+    destination: "Tokyo", startDate: "2026-10-01", endDate: "2026-10-03", budget: 2000,
+    previousItinerary: { tier: "midrange", days: DAYS }, feedback: "slower", anchors,
+  });
+  for (const p of [gen, ref]) {
+    assert.match(p, /MUST: teamLab Planets/);
+    assert.match(p, /"unplaced":\[/);
+  }
 });
