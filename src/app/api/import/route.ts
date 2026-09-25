@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runClaude, type ImageInput } from "@/lib/claude";
-import { cheapModel } from "@/lib/llmConfig";
+import { extractModel } from "@/lib/llmConfig";
 import { classifyItem, parseGoogleMapsUrl, readLink, resolveFinalUrl, type ImportItem } from "@/lib/importSources";
 import { buildExtractPrompt, parseExtraction, type ExtractSource } from "@/lib/importExtract";
 import { normalizeAnchors } from "@/lib/anchors";
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
         buildExtractPrompt(sources, imageIndices, destination),
         "extract",
         EXTRACT_TIMEOUT_MS,
-        { model: cheapModel(), images }
+        { model: extractModel(), images }
       );
       const parsed = parseExtraction(result);
       destinationGuess = parsed?.destinationGuess ?? null;

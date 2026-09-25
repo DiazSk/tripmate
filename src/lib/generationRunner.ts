@@ -26,7 +26,7 @@ import {
 } from "./placeConflicts";
 import { getDestinationContextInsight } from "./destinationContext";
 import { insertGeneration, insertRun } from "./db";
-import { cheapModel, llmMode } from "./llmConfig";
+import { sketchModel, llmMode } from "./llmConfig";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
 import { buildSketchPrompt, formatSketchForGenerate, parseSketch, type SketchDay } from "./sketch";
 import { carryOverDaySummaries, normalizeDays } from "./itinerary";
@@ -256,16 +256,14 @@ export async function runGeneration(
     // broken"; surfacing it as a failure to a traveller would do that for something the plan
     // recovers from on its own.
     onStage({ stage: "geocode", status: geoPoint ? "done" : "skipped" });
-    // Import already geocoded what it could; this only fills typed and legacy entries. Skipped
-    // with no city point, and never fatal — an unplaced anchor still reaches the model by name.
-    if (geoPoint && anchors.length > 0) anchors = await geocodeAnchors(anchors, geoPoint);
 
     const SKETCH_TIMEOUT_MS = 45_000;
     const dates = Array.from({ length: dayCount }, (_, i) =>
       new Date(Date.parse(startDate) + i * 86_400_000).toISOString().slice(0, 10)
     );
-    // Overlaps the context call already in flight, so it costs the traveller almost no wall clock.
-    // Never on the failure path: a sketch that errors or times out simply isn't shown.
+    // Kicked off before the geocode/weather work above so it runs concurrently rather than
+    // waiting for it. The sketch needs anchor names, not coordinates, so geocoding would only
+    // add latency. Awaited after the context call, not here.
     const sketchPromise: Promise<SketchDay[] | null> = runClaude(
       buildSketchPrompt({
         destination,
@@ -276,13 +274,17 @@ export async function runGeneration(
       }),
       "sketch",
       SKETCH_TIMEOUT_MS,
-      { runId, model: cheapModel() }
+      { runId, model: sketchModel() }
     )
       .then(({ result }) => parseSketch(result, dates))
       .catch((err) => {
         console.error("[itinerary] sketch failed", err);
         return null;
       });
+
+    // Import already geocoded what it could; this only fills typed and legacy entries. Skipped
+    // with no city point, and never fatal — an unplaced anchor still reaches the model by name.
+    if (geoPoint && anchors.length > 0) anchors = await geocodeAnchors(anchors, geoPoint);
 
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });

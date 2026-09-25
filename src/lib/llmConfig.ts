@@ -163,6 +163,30 @@ export function storyModel(): string {
 }
 
 /**
+ * Photo reading for chaos-in import: names every place in a pile of screenshots.
+ *
+ * Routed to claude-sonnet-5 by default. Measured on 2026-09-25: Haiku 4.5 read 2/5 photos
+ * correctly with one confidently wrong name (misidentified Peleș Castle as Neuschwanstein);
+ * Sonnet 5 read 4/5 across two runs with zero wrong names (correctly abstained on an unmarked
+ * desert). 5s per photo vs 9s on Haiku. Set `LLM_MODEL_EXTRACT=claude-haiku-4-5` to revert to
+ * the cheaper model if speed matters more than accuracy.
+ */
+export function extractModel(): string {
+  return envModel("LLM_MODEL_EXTRACT", "claude-sonnet-5");
+}
+
+/**
+ * The ~20s day sketch shown before the full plan: themes, areas and anchor assignment.
+ *
+ * Routed to claude-sonnet-5 by default. Measured on 2026-09-25: Haiku 4.5 sketched in 23.0s;
+ * Sonnet 5 in 8.4s — 2.7x faster. Set `LLM_MODEL_SKETCH=claude-haiku-4-5` to revert to the
+ * cheaper model if cost matters more than latency.
+ */
+export function sketchModel(): string {
+  return envModel("LLM_MODEL_SKETCH", "claude-sonnet-5");
+}
+
+/**
  * The plan's second opinion.
  *
  * **Cheap tier, and this is the app's single largest cost lever rather than a tidy-up.** Measured
@@ -217,11 +241,13 @@ export function apiModelFor(type: ClaudeCallType): string {
       return chatModel();
     case "story":
       return storyModel();
+    case "extract":
+      return extractModel();
+    case "sketch":
+      return sketchModel();
     case "element-edit":
     case "place-detail":
     case "context":
-    case "extract":
-    case "sketch":
       return cheapModel();
   }
 }

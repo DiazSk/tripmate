@@ -7,10 +7,12 @@ import {
   chatModel,
   cheapModel,
   computeCostUsd,
+  extractModel,
   llmMode,
   llmModeSource,
   maxTokensFor,
   setLlmMode,
+  sketchModel,
   strongModel,
   supportsAdaptiveThinking,
   supportsEffort,
@@ -24,6 +26,8 @@ const ENV_KEYS = [
   "LLM_MODEL_STRONG",
   "LLM_MODEL_CHEAP",
   "LLM_MODEL_CHAT",
+  "LLM_MODEL_EXTRACT",
+  "LLM_MODEL_SKETCH",
   "LLM_REFUSAL_FALLBACK",
 ];
 
@@ -227,11 +231,22 @@ describe("cost", () => {
 });
 
 describe("extract and sketch call types", () => {
-  it("route to the cheap tier with bounded output", () => {
-    for (const type of ["extract", "sketch"]) {
-      assert.equal(apiModelFor(type), cheapModel());
-    }
+  it("route to their own models with bounded output", () => {
+    assert.equal(apiModelFor("extract"), extractModel());
+    assert.equal(apiModelFor("sketch"), sketchModel());
     assert.equal(maxTokensFor("extract"), 4_000);
     assert.equal(maxTokensFor("sketch"), 6_000);
+  });
+
+  it("lets extract be overridden from the environment", () => {
+    process.env.LLM_MODEL_EXTRACT = "claude-haiku-4-5";
+    try {
+      assert.equal(extractModel(), "claude-haiku-4-5");
+      assert.equal(apiModelFor("extract"), "claude-haiku-4-5");
+      // Must not drag sketch with it
+      assert.equal(apiModelFor("sketch"), sketchModel());
+    } finally {
+      delete process.env.LLM_MODEL_EXTRACT;
+    }
   });
 });
