@@ -59,3 +59,29 @@ test("thinkingFor omits thinking for small lookups with no effort passed", () =>
     assert.equal(thinkingFor(type), undefined);
   }
 });
+
+import { cliStdinMessage, imageTraceMarker, userContent } from "./claude.ts";
+
+const IMG = { mediaType: "image/jpeg", data: "A".repeat(4096) };
+
+test("image trace marker records count and size, never the bytes", () => {
+  const marker = imageTraceMarker([IMG, IMG]);
+  assert.equal(marker, "\n\n[image 1 · 3KB] [image 2 · 3KB]");
+  assert.ok(!marker.includes("AAAA"));
+});
+
+test("userContent is the bare string without images, blocks with them", () => {
+  assert.equal(userContent("hi", undefined), "hi");
+  const blocks = userContent("hi", [IMG]);
+  assert.deepEqual(blocks.map((b) => b.type), ["image", "text"]);
+  assert.equal(blocks[0].source.media_type, "image/jpeg");
+});
+
+test("cliStdinMessage is one SDK user message line", () => {
+  const line = cliStdinMessage("hi", [IMG]);
+  assert.ok(line.endsWith("\n"));
+  const msg = JSON.parse(line);
+  assert.equal(msg.type, "user");
+  assert.equal(msg.message.role, "user");
+  assert.equal(msg.message.content.length, 2);
+});
