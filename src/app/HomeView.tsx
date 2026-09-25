@@ -27,6 +27,7 @@ import DietaryPicker from "@/components/DietaryPicker";
 import SuggestInput, { TIME_OPTIONS, SuggestOption } from "@/components/SuggestInput";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import PoiCandidatePicker from "@/components/PoiCandidatePicker";
+import ImportDropZone from "@/components/ImportDropZone";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
 import DestinationSearch from "@/components/DestinationSearch";
@@ -41,6 +42,7 @@ import { backPillClass } from "@/components/BrandMark";
 import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId, TIERS } from "@/lib/tiers";
 import {
   AccessibilityNeeds,
+  Anchor,
   CrowdPreference,
   DayPlan,
   DestinationContext,
@@ -469,6 +471,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   const [crowds, setCrowds] = useState<CrowdPreference>(initialProfile?.crowds ?? "mixed");
   const [selectedPois, setSelectedPois] = useState<CandidatePoi[]>([]);
   const [customPois, setCustomPois] = useState<string[]>([]);
+  const [anchors, setAnchors] = useState<Anchor[]>([]);
 
   // Durable, and unlike the others it has no wizard screen — /profile is where it's set.
   // Held here only so generate()/refine() can send it.
@@ -648,7 +651,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     detailLoading,
     detailError,
   } = useTripCamera(destination);
-  const { resetToHome } = useMapCamera();
+  const { resetToHome, showTripRoute, setRouteConnectorsHidden } = useMapCamera();
   // The camera for the length of a run. Holds `showTripRoute`'s own per-stop framing and moves
   // once per day instead, when that day's real coordinates land — see `useStreamingCamera`.
   useStreamingCamera(generating || refining, draftItinerary, coordsDay);
@@ -712,6 +715,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setStarredInterests(restore("starredInterests", [] as string[]));
     setSelectedPois(restore("selectedPois", [] as CandidatePoi[]));
     setCustomPois(restore("customPois", [] as string[]));
+    setAnchors(restore("anchors", [] as Anchor[]));
     setArrivalTime(restore("arrivalTime", ""));
     setArrivalPoint(restore("arrivalPoint", ""));
     setDepartureTime(restore("departureTime", ""));
@@ -736,6 +740,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     const draft = {
       destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
       explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
+      anchors,
       arrivalTime, arrivalPoint, departureTime, departurePoint,
       stayBooked, accessibility, mustInclude, avoid, constraintsNote, budgetBasis,
     };
@@ -747,6 +752,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   }, [
     step, destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
     explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
+    anchors,
     arrivalTime, arrivalPoint, departureTime, departurePoint,
     stayBooked, accessibility, mustInclude, avoid, constraintsNote, budgetBasis,
   ]);
@@ -830,6 +836,17 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * not a plan anybody can keep yet.
    */
   const shownItinerary = step === "result" ? (draftItinerary ?? itinerary) : draftItinerary;
+
+  // The pile, on the map, before any plan exists: pins only, no route between them — they are
+  // not an order yet. Hands the map back the moment a plan (draft or final) takes over.
+  useEffect(() => {
+    if (shownItinerary) return;
+    const pins = anchors.flatMap((a) => (a.lat !== null && a.lng !== null ? [{ lat: a.lat, lng: a.lng, name: a.name, day: 0 }] : []));
+    if (pins.length === 0) return;
+    setRouteConnectorsHidden(true);
+    showTripRoute([pins], null, true, false);
+    return () => setRouteConnectorsHidden(false);
+  }, [anchors, shownItinerary, showTripRoute, setRouteConnectorsHidden]);
 
   /** True exactly while the card is showing a half-written plan. Preferred over `generating` for
    *  gating the card's own controls: the two come apart at both ends of a run — `generating` is
@@ -1076,6 +1093,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
       topPriorities: starredInterests,
       selectedPois,
       customPois,
+      anchors,
       // Sent as-is; `sanitizeLogistics` on the server collapses an all-empty object to null, so
       // a traveler who skipped the row gets the prompt they'd have got before it existed.
       logistics: {
@@ -2201,6 +2219,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                       </Field>
                     </div>
                   </div>
+
+                  <ImportDropZone
+                    destination={destination}
+                    anchors={anchors}
+                    onAnchorsChange={setAnchors}
+                    onDestinationGuess={setDestination}
+                  />
 
                   {/* Read by skill §4e ("already booked beats anything you would recommend"),
                       by `formatTravelerProfile` and by `trip-context.md` — all three already
