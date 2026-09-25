@@ -184,5 +184,7 @@ export async function readLink(url: string, deps: LinkDeps = defaultLinkDeps): P
 /** Where a link ends up after redirects — for Maps short links, whose target URL carries the place. */
 export async function resolveFinalUrl(url: string, deps: LinkDeps = defaultLinkDeps): Promise<string | null> {
   const got = await guardedFetch(url, deps);
-  return got?.url ?? null;
+  if (!got) return null;
+  await got.res.body?.cancel().catch(() => {});
+  return got.url;
 }

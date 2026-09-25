@@ -99,6 +99,6 @@ test("readLink reads an ordinary page's title and og tags", async () => {
 
 test("resolveFinalUrl follows a Maps short link to the place URL", async () => {
   const long = "https://www.google.com/maps/place/X/@1,2,15z";
-  const net = fakeNet({ "https://maps.app.goo.gl/abc": redirect(long), [long]: new Response("ok") });
+  const net = fakeNet({ "https://maps.app.goo.gl/abc": redirect(long), [long]: () => new Response("ok") });
   assert.equal(await resolveFinalUrl("https://maps.app.goo.gl/abc", net), long);
 });
