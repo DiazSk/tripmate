@@ -34,6 +34,27 @@ export interface Lodging {
   actualCost?: number;
 }
 
+export type AnchorPriority = "must" | "want";
+
+/**
+ * A place the traveler chose themselves: imported from a screenshot or link, picked from the POI
+ * suggestions, or typed. `must` is scheduled unless impossible; `want` is fitted where it suits.
+ * Coordinates are null when nothing could place it — the model still sees it by name.
+ */
+export interface Anchor {
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  priority: AnchorPriority;
+  source?: "import" | "picked" | "typed";
+}
+
+/** A `must` anchor the planner could not schedule, with the model's one-line reason. */
+export interface UnplacedAnchor {
+  name: string;
+  reason: string;
+}
+
 export interface DayPlan {
   date: string;
   weather: string;
@@ -54,6 +75,11 @@ export interface DayPlan {
 export interface Itinerary {
   tier: TierId;
   days: DayPlan[];
+  /** The traveler's own places this plan was generated around, echoed back server-side so the
+   *  receipt survives save, reload and critique. Absent on plans generated before anchors. */
+  anchors?: Anchor[];
+  /** `must` anchors the model says it could not schedule, and why. */
+  unplaced?: UnplacedAnchor[];
 }
 
 /**
@@ -245,6 +271,9 @@ export interface UserAnswers {
    *  traveler profile above; these just pin anything already decided on. */
   selectedPois: CandidatePoi[];
   customPois: string[];
+  /** The traveler's own places, with priority. Supersedes `selectedPois`/`customPois`, which are
+   *  still accepted (the iOS wizard sends only those) and folded in by `normalizeAnchors`. */
+  anchors?: Anchor[];
   /** Carried per-trip even though it lives on the profile: the legacy prompt has had this since
    *  `formatDietary` shipped, and the staged pipeline dropped it silently — a food stop the
    *  traveler cannot eat at is the worst defect this app can produce. Both fields empty means
