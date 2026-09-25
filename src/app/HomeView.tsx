@@ -845,7 +845,10 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     if (pins.length === 0) return;
     setRouteConnectorsHidden(true);
     showTripRoute([pins], null, true, false);
-    return () => setRouteConnectorsHidden(false);
+    return () => {
+      setRouteConnectorsHidden(false);
+      showTripRoute([], null, true, false);
+    };
   }, [anchors, shownItinerary, showTripRoute, setRouteConnectorsHidden]);
 
   /** True exactly while the card is showing a half-written plan. Preferred over `generating` for

@@ -34,9 +34,32 @@ export async function POST(req: NextRequest) {
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "That's a lot at once — try fewer screenshots." }, { status: 413 });
   }
+  // The header above is a fast path only — it's client-supplied and a chunked request can omit
+  // it entirely. This counts the bytes actually read off the stream, so a spoofed or missing
+  // header can't bypass the cap.
+  const reader = req.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let tooBig = false;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        tooBig = true;
+        await reader.cancel();
+        break;
+      }
+      chunks.push(value);
+    }
+  }
+  if (tooBig) {
+    return NextResponse.json({ error: "That's a lot at once — try fewer screenshots." }, { status: 413 });
+  }
   let body: { items?: unknown; destination?: unknown };
   try {
-    body = await req.json();
+    body = JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
