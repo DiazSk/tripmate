@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { lookup as dnsLookup } from "node:dns/promises";
 import type { ImageInput } from "./claude";
 
 /**
@@ -74,4 +75,114 @@ export function isPublicAddress(ip: string): boolean {
     return !(v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || /^fe[89ab]/.test(v));
   }
   return false;
+}
+
+const LINK_TIMEOUT_MS = 8_000;
+const MAX_REDIRECTS = 3;
+const MAX_BODY_BYTES = 512 * 1024;
+
+export interface LinkDeps {
+  fetch: typeof fetch;
+  lookup: (host: string) => Promise<string>;
+}
+
+const defaultLinkDeps: LinkDeps = {
+  fetch: (...args) => fetch(...args),
+  lookup: async (host) => (await dnsLookup(host)).address,
+};
+
+/**
+ * https only, public addresses only, every redirect hop re-checked, bounded time.
+ * ponytail: checks the address, then lets fetch resolve again — a DNS-rebinding host could answer
+ * differently the second time. Pin the socket to the checked address if this ever serves more
+ * than a demo beta.
+ */
+async function guardedFetch(url: string, deps: LinkDeps): Promise<{ res: Response; url: string } | null> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    let u: URL;
+    try {
+      u = new URL(current);
+    } catch {
+      return null;
+    }
+    if (u.protocol !== "https:") return null;
+    try {
+      const host = u.hostname.replace(/^\[|\]$/g, "");
+      const address = isIP(host) ? host : await deps.lookup(host);
+      if (!isPublicAddress(address)) return null;
+      const res = await deps.fetch(u.toString(), {
+        redirect: "manual",
+        signal: AbortSignal.timeout(LINK_TIMEOUT_MS),
+        headers: { "user-agent": "TripMate/1.0 (+place import)" },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) return null;
+        current = new URL(location, u).toString();
+        continue;
+      }
+      return res.ok ? { res, url: current } : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function readCapped(res: Response): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (size < MAX_BODY_BYTES) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    size += value.byteLength;
+  }
+  await reader.cancel().catch(() => {});
+  return new TextDecoder().decode(Buffer.concat(chunks).subarray(0, MAX_BODY_BYTES));
+}
+
+const decodeEntities = (s: string) =>
+  s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
+
+function metaContent(html: string, prop: string): string {
+  const m =
+    html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']*)["']`, "i")) ??
+    html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${prop}["']`, "i"));
+  return m ? decodeEntities(m[1]) : "";
+}
+
+/** What a link says about itself: an oEmbed caption for TikTok/YouTube, title + og tags otherwise.
+ *  `null` means the link could not be read — never "it said nothing". */
+export async function readLink(url: string, deps: LinkDeps = defaultLinkDeps): Promise<{ title: string; text: string } | null> {
+  const kind = classifyItem({ kind: "url", url });
+  if (kind === "tiktok" || kind === "youtube") {
+    const endpoint =
+      kind === "tiktok"
+        ? `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`
+        : `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`;
+    const got = await guardedFetch(endpoint, deps);
+    if (!got) return null;
+    try {
+      const json = JSON.parse(await readCapped(got.res)) as { title?: unknown };
+      return typeof json.title === "string" ? { title: json.title, text: "" } : null;
+    } catch {
+      return null;
+    }
+  }
+  const got = await guardedFetch(url, deps);
+  if (!got) return null;
+  const html = await readCapped(got.res);
+  const title = metaContent(html, "og:title") || decodeEntities(html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? "");
+  const text = metaContent(html, "og:description") || metaContent(html, "description");
+  return title || text ? { title, text } : null;
+}
+
+/** Where a link ends up after redirects — for Maps short links, whose target URL carries the place. */
+export async function resolveFinalUrl(url: string, deps: LinkDeps = defaultLinkDeps): Promise<string | null> {
+  const got = await guardedFetch(url, deps);
+  return got?.url ?? null;
 }

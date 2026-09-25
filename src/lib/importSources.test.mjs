@@ -1,7 +1,7 @@
 /* Run: node --import ./scripts/ts-resolve.mjs --test src/lib/importSources.test.mjs */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyItem, isPublicAddress, parseGoogleMapsUrl } from "./importSources.ts";
+import { classifyItem, isPublicAddress, parseGoogleMapsUrl, readLink, resolveFinalUrl } from "./importSources.ts";
 
 test("classifyItem recognises each source", () => {
   const url = (u) => classifyItem({ kind: "url", url: u });
@@ -43,4 +43,62 @@ test("isPublicAddress refuses private, loopback, link-local and mapped addresses
   for (const ip of ["8.8.8.8", "172.32.0.1", "2606:4700:4700::1111"]) {
     assert.equal(isPublicAddress(ip), true, ip);
   }
+});
+
+/** A fake network: `routes` maps a URL to a Response or a function returning one; `ips` maps a host to an address. */
+const fakeNet = (routes, ips = {}) => ({
+  lookup: async (host) => ips[host] ?? "93.184.216.34",
+  fetch: async (input) => {
+    const url = String(input);
+    const r = routes[url];
+    if (!r) throw new Error(`unexpected fetch ${url}`);
+    return typeof r === "function" ? r() : r.clone();
+  },
+});
+const redirect = (to) => new Response(null, { status: 302, headers: { location: to } });
+
+test("readLink refuses http and private hosts", async () => {
+  assert.equal(await readLink("http://example.com/", fakeNet({})), null);
+  assert.equal(await readLink("https://internal.example/", fakeNet({}, { "internal.example": "10.0.0.5" })), null);
+});
+
+test("readLink refuses a redirect into the private network", async () => {
+  const net = fakeNet(
+    { "https://bit.ly/x": redirect("https://metadata.local/latest") },
+    { "metadata.local": "169.254.169.254" }
+  );
+  assert.equal(await readLink("https://bit.ly/x", net), null);
+});
+
+test("readLink stops after 3 redirects", async () => {
+  const net = fakeNet({
+    "https://a.test/0": redirect("https://a.test/1"),
+    "https://a.test/1": redirect("https://a.test/2"),
+    "https://a.test/2": redirect("https://a.test/3"),
+    "https://a.test/3": redirect("https://a.test/4"),
+  });
+  assert.equal(await readLink("https://a.test/0", net), null);
+});
+
+test("readLink reads a TikTok caption through oEmbed", async () => {
+  const video = "https://www.tiktok.com/@a/video/1";
+  const net = fakeNet({
+    [`https://www.tiktok.com/oembed?url=${encodeURIComponent(video)}`]: new Response(
+      JSON.stringify({ title: "Best ramen in Shibuya: Ichiran & Afuri" }),
+      { headers: { "content-type": "application/json" } }
+    ),
+  });
+  assert.deepEqual(await readLink(video, net), { title: "Best ramen in Shibuya: Ichiran & Afuri", text: "" });
+});
+
+test("readLink reads an ordinary page's title and og tags", async () => {
+  const html = `<html><head><title>10 Kyoto cafés</title><meta property="og:description" content="Weekenders, % Arabica"></head></html>`;
+  const net = fakeNet({ "https://blog.test/kyoto": new Response(html, { headers: { "content-type": "text/html" } }) });
+  assert.deepEqual(await readLink("https://blog.test/kyoto", net), { title: "10 Kyoto cafés", text: "Weekenders, % Arabica" });
+});
+
+test("resolveFinalUrl follows a Maps short link to the place URL", async () => {
+  const long = "https://www.google.com/maps/place/X/@1,2,15z";
+  const net = fakeNet({ "https://maps.app.goo.gl/abc": redirect(long), [long]: new Response("ok") });
+  assert.equal(await resolveFinalUrl("https://maps.app.goo.gl/abc", net), long);
 });
