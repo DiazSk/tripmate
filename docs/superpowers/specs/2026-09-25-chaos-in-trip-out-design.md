@@ -222,3 +222,8 @@ Alternatives we rejected:
 4. **Sketch:** the `sketch` call type, the SSE event, `DayPlan.theme` and the client seeding.
 
 Each step ships with its tests and its `docs/` tracker row (Features table, Developer column).
+
+## Spike result (2026-09-25)
+
+`claude -p --input-format stream-json` with one base64 image block, `--tools ""`, CLI 2.1.258:
+WORKS — answered "Neuschwanstein Castle, Bavaria, Germany." in 3538ms.
