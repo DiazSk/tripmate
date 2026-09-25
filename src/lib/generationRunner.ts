@@ -261,9 +261,10 @@ export async function runGeneration(
     const dates = Array.from({ length: dayCount }, (_, i) =>
       new Date(Date.parse(startDate) + i * 86_400_000).toISOString().slice(0, 10)
     );
-    // Kicked off before the geocode/weather work above so it runs concurrently rather than
-    // waiting for it. The sketch needs anchor names, not coordinates, so geocoding would only
-    // add latency. Awaited after the context call, not here.
+    // Started before the anchor geocode below and overlapping the context call already in flight:
+    // the sketch needs anchor names, not coordinates, so waiting for geocoding would only add
+    // latency. Awaited after the context call. Never on the failure path — a sketch that errors
+    // or times out simply isn't shown.
     const sketchPromise: Promise<SketchDay[] | null> = runClaude(
       buildSketchPrompt({
         destination,
