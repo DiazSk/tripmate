@@ -65,7 +65,8 @@
             "video/*"
           ]
         }
-      ]
+      ],
+      "./plugins/withSceneLifecycle"
     ],
     "experiments": {
       "typedRoutes": true,
