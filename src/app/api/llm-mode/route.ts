@@ -23,7 +23,9 @@ import {
 /** Every call type, in the order they occur in a trip's life, so the report reads as a pipeline
  *  rather than as an alphabetised list. */
 const CALL_TYPES: ClaudeCallType[] = [
+  "extract",
   "context",
+  "sketch",
   "generate",
   "refine",
   "critique",

@@ -32,6 +32,10 @@ export type ClaudeCallType =
   | "element-edit"
   /** Story mode's narration script — one day of a finished plan, re-voiced for playback. */
   | "story"
+  /** Chaos-in import: names every place in a pile of screenshots, links and notes. */
+  | "extract"
+  /** The ~20s day sketch — themes, areas and anchor assignment — shown before the full plan. */
+  | "sketch"
   /** Dev-only: the blinded quality judge in the model benchmark harness (src/lib/bench). */
   | "judge";
 
@@ -216,6 +220,8 @@ export function apiModelFor(type: ClaudeCallType): string {
     case "element-edit":
     case "place-detail":
     case "context":
+    case "extract":
+    case "sketch":
       return cheapModel();
   }
 }
@@ -281,6 +287,12 @@ export function maxTokensFor(type: ClaudeCallType): number {
     // A dozen beats of at most 55 words each, plus the JSON around them.
     case "story":
       return 8_000;
+    // A list of place names, one short object each.
+    case "extract":
+      return 4_000;
+    // One short object per day, at most 14 days.
+    case "sketch":
+      return 6_000;
     // Six short fields since pros/cons joined the four — still nowhere near this ceiling, which
     // exists to bound a runaway rather than to fit the answer.
     case "place-detail":
