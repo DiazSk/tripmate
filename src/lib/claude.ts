@@ -303,6 +303,47 @@ export interface ClaudeResult {
  */
 export type { ClaudeCallType };
 
+/** A screenshot, base64-encoded, for the chaos-in import. Never persisted anywhere. */
+export interface ImageInput {
+  mediaType: "image/jpeg" | "image/png" | "image/webp";
+  data: string;
+}
+
+/**
+ * Set from the 2026-09-25 spike (see the chaos-in spec): whether `claude -p --input-format
+ * stream-json` accepts an image block with `--tools ""`. When false, an image call on the CLI
+ * transport throws a clear error rather than silently dropping the pictures.
+ */
+export const CLI_SUPPORTS_IMAGES = true;
+
+/** What `llm_traces.prompt` records in place of image bytes — the SQLite file is shared, and
+ *  every traveller's camera roll must not end up in it. */
+export function imageTraceMarker(images: ImageInput[]): string {
+  const parts = images.map(
+    (img, i) => `[image ${i + 1} · ${Math.round((img.data.length * 3) / 4 / 1024)}KB]`
+  );
+  return `\n\n${parts.join(" ")}`;
+}
+
+export function userContent(
+  prompt: string,
+  images: ImageInput[] | undefined
+): string | Anthropic.Messages.ContentBlockParam[] {
+  if (!images?.length) return prompt;
+  return [
+    ...images.map((img) => ({
+      type: "image" as const,
+      source: { type: "base64" as const, media_type: img.mediaType, data: img.data },
+    })),
+    { type: "text" as const, text: prompt },
+  ];
+}
+
+/** One SDK user message on one line, for `--input-format stream-json` over stdin. */
+export function cliStdinMessage(prompt: string, images: ImageInput[]): string {
+  return `${JSON.stringify({ type: "user", message: { role: "user", content: userContent(prompt, images) } })}\n`;
+}
+
 /**
  * The `claude` CLI subprocess transport — unchanged from before the API transport existed. Every
  * doc comment above (spawn-vs-execFile, CLAUDECODE stripping, PATH resolution, resolveCliBin) and
@@ -322,6 +363,7 @@ function runClaudeViaCli(
      *  that omits it gets byte-identical behaviour, including the trace row. Only the
      *  streaming generate path supplies one. */
     onText?: (delta: string) => void;
+    images?: ImageInput[];
   }
 ): Promise<ClaudeResult> {
   return new Promise((resolve, reject) => {
@@ -360,8 +402,21 @@ function runClaudeViaCli(
     const cliBin = resolveCliBin(env.PATH);
 
     const model = meta?.model ?? MODEL;
-    const traceId = insertTrace({ type, prompt, model, runId: meta?.runId });
+    const traceId = insertTrace({
+      type,
+      prompt: meta?.images?.length ? prompt + imageTraceMarker(meta.images) : prompt,
+      model,
+      runId: meta?.runId,
+    });
     const startedAt = Date.now();
+
+    const images = meta?.images?.length ? meta.images : null;
+    if (images && !CLI_SUPPORTS_IMAGES) {
+      const message = "screenshot reading needs LLM_TRANSPORT=api — this CLI cannot take image input";
+      updateTrace(traceId, { status: "error", durationMs: 0, errorMessage: message });
+      reject(new Error(message));
+      return;
+    }
 
     // Default stays one-shot. `--resume` implies persistence (the turn is appended to the
     // session file), so the two flags are mutually exclusive — passing both makes the CLI
@@ -385,7 +440,8 @@ function runClaudeViaCli(
     // shapes living in raw_response side by side. Verified against CLI 2.1.243: the final
     // `result` event of a stream-json run carries the identical key set to a one-shot envelope,
     // `modelUsage` and `total_cost_usd` included.
-    const streaming = Boolean(meta?.onText);
+    // Image input requires stream-json in *and* out; the existing result-line handling covers it.
+    const streaming = Boolean(meta?.onText) || Boolean(images);
     const formatArgs = streaming
       ? ["--output-format", "stream-json", "--verbose", "--include-partial-messages"]
       : ["--output-format", "json"];
@@ -393,8 +449,7 @@ function runClaudeViaCli(
     const child = spawn(
       /* turbopackIgnore: true */ cliBin,
       [
-        "-p",
-        prompt,
+        ...(images ? ["-p", "--input-format", "stream-json"] : ["-p", prompt]),
         "--model",
         model,
         ...formatArgs,
@@ -410,8 +465,10 @@ function runClaudeViaCli(
         // valid output. Only passed where the task is a narrow, well-specified patch.
         ...(meta?.effort ? ["--effort", meta.effort] : []),
       ],
-      { env, stdio: ["ignore", "pipe", "pipe"] }
+      { env, stdio: [images ? "pipe" : "ignore", "pipe", "pipe"] }
     );
+
+    if (images) child.stdin?.end(cliStdinMessage(prompt, images));
 
     let stdout = "";
     let stderr = "";
@@ -665,6 +722,7 @@ function runClaudeViaApi(
      *  that omits it gets byte-identical behaviour, including the trace row. Only the
      *  streaming generate path supplies one. */
     onText?: (delta: string) => void;
+    images?: ImageInput[];
   }
 ): Promise<ClaudeResult> {
   return (async () => {
@@ -672,7 +730,12 @@ function runClaudeViaApi(
     // go to the strong tier; patches and lookups go to the cheap one. `MODEL` still serves the CLI
     // transport unchanged — its timeout constants above were calibrated against that model.
     const model = meta?.model ?? apiModelFor(type);
-    const traceId = insertTrace({ type, prompt, model, runId: meta?.runId });
+    const traceId = insertTrace({
+      type,
+      prompt: meta?.images?.length ? prompt + imageTraceMarker(meta.images) : prompt,
+      model,
+      runId: meta?.runId,
+    });
     const startedAt = Date.now();
 
     let priorMessages: Anthropic.Messages.MessageParam[] = [];
@@ -692,7 +755,7 @@ function runClaudeViaApi(
     }
     const messages: Anthropic.Messages.MessageParam[] = [
       ...priorMessages,
-      { role: "user", content: prompt },
+      { role: "user", content: userContent(prompt, meta?.images) },
     ];
 
     const controller = new AbortController();
@@ -850,6 +913,7 @@ export function runClaude(
      *  that omits it gets byte-identical behaviour, including the trace row. Only the
      *  streaming generate path supplies one. */
     onText?: (delta: string) => void;
+    images?: ImageInput[];
   }
 ): Promise<ClaudeResult> {
   // Through llmConfig rather than reading the env var here, so that POST /api/llm-mode can flip
