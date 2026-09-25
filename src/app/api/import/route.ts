@@ -20,7 +20,9 @@ import type { Anchor } from "@/lib/types";
 
 const MAX_IMAGES = 20;
 const MAX_OTHER = 20;
-const MAX_BODY_BYTES = 25 * 1024 * 1024;
+// Next 16 truncates route-handler bodies at 10MB (middlewareClientMaxBodySize) regardless of
+// this constant, so a larger cap here is unreachable; matching it keeps the friendly 413.
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const EXTRACT_TIMEOUT_MS = 60_000;
 const MEDIA = new Set(["image/jpeg", "image/png", "image/webp"]);
 

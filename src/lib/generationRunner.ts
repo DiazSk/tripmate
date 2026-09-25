@@ -260,7 +260,7 @@ export async function runGeneration(
     // with no city point, and never fatal — an unplaced anchor still reaches the model by name.
     if (geoPoint && anchors.length > 0) anchors = await geocodeAnchors(anchors, geoPoint);
 
-    const SKETCH_TIMEOUT_MS = 30_000;
+    const SKETCH_TIMEOUT_MS = 45_000;
     const dates = Array.from({ length: dayCount }, (_, i) =>
       new Date(Date.parse(startDate) + i * 86_400_000).toISOString().slice(0, 10)
     );
