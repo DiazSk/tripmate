@@ -1,14 +1,26 @@
+import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
 
-import { geocode } from '@/api/tripMateApi';
+import { geocode, importPlaces } from '@/api/tripMateApi';
+import type { Anchor, ImportItem } from '@/api/types';
 import { usePlanDraft } from '@/lib/planDraft';
 import { ChoiceRow, DateField, FieldTrough, PrimaryButton, TextField } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { mergeAnchors } from '@/lib/anchors';
 import { closestTier, isEndBeforeStart, isTripTooLong, tierName, tripDays } from '@/lib/tiers';
 
 export default function Basics() {
@@ -208,6 +220,15 @@ export default function Basics() {
           />
         </FieldTrough>
 
+        <ImportSection
+          destination={destination}
+          anchors={draft.anchors}
+          onAnchorsChange={(update) => patch((prev) => ({ anchors: update(prev.anchors) }))}
+          onDestinationGuess={(guess) =>
+            patch((prev) => (prev.destination.trim() ? {} : { destination: guess }))
+          }
+        />
+
         {/* A miss is a fact about the geocoder's index, not a verdict on the trip — so it is said
             plainly and the button stays enabled. A failed lookup says nothing at all. */}
         {missed ? (
@@ -252,6 +273,175 @@ export default function Basics() {
   );
 }
 
+/**
+ * "Chaos in, trip out" — paste what you already saved (screenshots, links, notes) and get the
+ * places back as starrable chips. Mirrors the web's `ImportDropZone.tsx`.
+ *
+ * Holds its own pending text/images/busy/unread state — none of that belongs in the draft, which
+ * only ever wants the finished `Anchor[]`. `onAnchorsChange` always goes through the draft's own
+ * `patch`, functional-form, so a star tapped mid-import merges against the *latest* anchors rather
+ * than whatever this component saw when the request started.
+ */
+function ImportSection({
+  destination,
+  anchors,
+  onAnchorsChange,
+  onDestinationGuess,
+}: {
+  destination: string;
+  anchors: Anchor[];
+  onAnchorsChange: (update: (prev: Anchor[]) => Anchor[]) => void;
+  onDestinationGuess: (guess: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const [images, setImages] = useState<
+    { mediaType: 'image/jpeg' | 'image/png' | 'image/webp'; data: string }[]
+  >([]);
+  const [busy, setBusy] = useState(false);
+  const [unread, setUnread] = useState<string[]>([]);
+
+  async function pickScreenshots() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: 20,
+      quality: 0.5,
+      base64: true,
+    });
+    if (result.canceled) return;
+    const picked = result.assets
+      .filter((asset) => asset.base64)
+      .map((asset) => ({
+        mediaType: mediaTypeOf(asset.mimeType),
+        data: asset.base64!,
+      }));
+    setImages((prev) => [...prev, ...picked]);
+  }
+
+  async function findPlaces() {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const urls = lines.filter((l) => /^https?:\/\/\S+$/.test(l));
+    const rest = lines.filter((l) => !urls.includes(l)).join('\n');
+    const items: ImportItem[] = [
+      ...images.map((img) => ({ kind: 'image' as const, mediaType: img.mediaType, data: img.data })),
+      ...urls.map((url) => ({ kind: 'url' as const, url })),
+      ...(rest ? [{ kind: 'text' as const, text: rest }] : []),
+    ];
+    if (items.length === 0) return;
+
+    setBusy(true);
+    setUnread([]);
+    const result = await importPlaces(items, destination.trim() || undefined);
+    setBusy(false);
+
+    if (result === undefined) {
+      setUnread(["Couldn't read these right now."]);
+      return;
+    }
+    if (typeof result === 'string') {
+      setUnread([result]);
+      return;
+    }
+    onAnchorsChange((prev) => mergeAnchors(prev, result.places));
+    if (result.destinationGuess) onDestinationGuess(result.destinationGuess);
+    setUnread(result.unread.map((u) => u.reason));
+    setText('');
+    setImages([]);
+  }
+
+  const toggleMust = (name: string) =>
+    onAnchorsChange((prev) =>
+      prev.map((a) => (a.name === name ? { ...a, priority: a.priority === 'must' ? 'want' : 'must' } : a))
+    );
+  const remove = (name: string) => onAnchorsChange((prev) => prev.filter((a) => a.name !== name));
+  const canFind = !busy && (text.trim().length > 0 || images.length > 0);
+
+  return (
+    <View style={styles.import}>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        placeholder="Paste links or notes"
+        placeholderTextColor={Colors.muted}
+        selectionColor={Colors.accent}
+        multiline
+        maxFontSizeMultiplier={1.6}
+        style={styles.importInput}
+      />
+
+      <View style={styles.importActions}>
+        <Pressable
+          onPress={() => void pickScreenshots()}
+          accessibilityRole="button"
+          style={styles.importButton}>
+          <ThemedText type="label" themeColor="foreground">
+            {images.length > 0 ? `Screenshots (${images.length})` : 'Add screenshots'}
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => void findPlaces()}
+          disabled={!canFind}
+          accessibilityRole="button"
+          style={[styles.importButton, styles.importButtonPrimary, !canFind && styles.importButtonInert]}>
+          {busy ? (
+            <ActivityIndicator color={Colors.accentForeground} />
+          ) : (
+            <ThemedText type="label" themeColor="accentForeground">
+              Find the places
+            </ThemedText>
+          )}
+        </Pressable>
+      </View>
+
+      {unread.length > 0 ? (
+        <View accessibilityLiveRegion="polite" style={styles.importUnread}>
+          {unread.map((reason, i) => (
+            <ThemedText key={i} type="detail" themeColor="muted">
+              {reason}
+            </ThemedText>
+          ))}
+        </View>
+      ) : null}
+
+      {anchors.length > 0 ? (
+        <View style={styles.chips}>
+          {anchors.map((a) => (
+            <View key={a.name} style={styles.chip}>
+              <Pressable
+                onPress={() => toggleMust(a.name)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: a.priority === 'must' }}
+                accessibilityLabel={`Must-see: ${a.name}`}
+                hitSlop={8}>
+                <ThemedText type="detail">{a.priority === 'must' ? '★' : '☆'}</ThemedText>
+              </Pressable>
+              <ThemedText type="detail" themeColor="muted" style={styles.chipName} numberOfLines={1}>
+                {a.name}
+                {a.lat === null ? ' · couldn’t place it' : ''}
+              </ThemedText>
+              <Pressable
+                onPress={() => remove(a.name)}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${a.name}`}
+                hitSlop={8}>
+                <ThemedText type="detail" themeColor="muted">
+                  ×
+                </ThemedText>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function mediaTypeOf(mimeType: string | undefined | null): 'image/jpeg' | 'image/png' | 'image/webp' {
+  if (mimeType === 'image/png') return 'image/png';
+  if (mimeType === 'image/webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
 /** `YYYY-MM-DD`, n days from today, read with local accessors to match the date picker. */
 function isoDaysFromNow(days: number): string {
   const d = new Date();
@@ -277,6 +467,44 @@ const styles = StyleSheet.create({
   headline: { marginBottom: Spacing.tight },
   // 44 is the tap-target floor, and the row is the target rather than the words in it.
   suggestion: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.read },
+  import: { gap: Spacing.tight },
+  importInput: {
+    minHeight: 72,
+    color: Colors.foreground,
+    fontSize: 14,
+    lineHeight: 20,
+    backgroundColor: Colors.panel,
+    borderColor: Colors.cardBorder,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.surface,
+    paddingHorizontal: Spacing.read,
+    paddingVertical: Spacing.tight,
+    textAlignVertical: 'top',
+  },
+  importActions: { flexDirection: 'row', gap: Spacing.tight },
+  importButton: {
+    minHeight: 44,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.control,
+    paddingHorizontal: Spacing.rows,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importButtonPrimary: { backgroundColor: Colors.accent },
+  importButtonInert: { opacity: 0.4 },
+  importUnread: { gap: Spacing.hair },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.tight },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.hair,
+    maxWidth: '100%',
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.control,
+    paddingHorizontal: Spacing.rows,
+    paddingVertical: Spacing.tight,
+  },
+  chipName: { flexShrink: 1 },
   suggestionPressed: { backgroundColor: Colors.pressed },
   note: { marginTop: -Spacing.tight },
   readout: { marginTop: -Spacing.tight },

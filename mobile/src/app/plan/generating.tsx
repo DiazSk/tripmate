@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { createTripDraft, generateTrip, saveProfile } from '@/api/tripMateApi';
-import type { GenerationStage, StreamedStop } from '@/api/types';
+import type { GenerationStage, SketchEvent, StreamedStop } from '@/api/types';
 import { PrimaryButton } from '@/components/form';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
@@ -26,6 +26,7 @@ export default function Generating() {
 
   const [stage, setStage] = useState<GenerationStage>('geocode');
   const [stops, setStops] = useState<StreamedStop[]>([]);
+  const [sketch, setSketch] = useState<SketchEvent['days']>([]);
   const [failure, setFailure] = useState<string | undefined>();
 
   // A generation is 60-246 seconds of billed work. Under React 19's development double-invoke
@@ -58,6 +59,9 @@ export default function Generating() {
               (a, b) => a.dayIndex - b.dayIndex || a.stopIndex - b.stopIndex
             );
           });
+        },
+        onSketch: (event) => {
+          if (!cancelled) setSketch(event.days);
         },
         onPlan: async (result) => {
           if (cancelled) return;
@@ -130,6 +134,18 @@ export default function Generating() {
           This takes a few minutes. The days appear as they are written.
         </ThemedText>
 
+        {/* The sketch arrives before any stop does — a day-by-day outline worth showing on its
+            own while the detail is still being written. */}
+        {sketch.length > 0 ? (
+          <View style={styles.sketch}>
+            {sketch.map((day, index) => (
+              <ThemedText key={day.date || index} type="detail" themeColor="muted">
+                {`Day ${index + 1}: ${day.theme}`}
+              </ThemedText>
+            ))}
+          </View>
+        ) : null}
+
         {byDay.map(({ dayIndex, date, items }) => (
           <View key={dayIndex} style={styles.day}>
             <View style={styles.dayHead}>
@@ -173,6 +189,7 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.read, paddingBottom: Spacing.regular * 2, gap: Spacing.hair },
   stage: { marginTop: Spacing.tight, marginBottom: Spacing.hair },
   failure: { paddingTop: Spacing.regular, gap: Spacing.read },
+  sketch: { marginTop: Spacing.tight, gap: Spacing.hair },
   retry: { paddingHorizontal: Spacing.read },
   day: { marginTop: Spacing.compact },
   dayHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },

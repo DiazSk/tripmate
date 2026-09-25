@@ -35,6 +35,7 @@ export function ChatSheet({
   replying,
   failure,
   onSend,
+  initialDraft,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -44,8 +45,14 @@ export function ChatSheet({
   failure: string | null;
   /** Resolves false when the turn failed, which is what keeps the draft. */
   onSend: (text: string) => Promise<boolean>;
+  /** Seeds the composer on open — e.g. "Fit it anyway" from the anchor receipt. Never auto-sent:
+   *  the traveler still has to press Send. **The caller must remount this component (a `key` that
+   *  changes per open) for a new seed to take** — a plain `useState(initialDraft ?? '')` default
+   *  only runs once, so without a remount a second "Fit it anyway" for a different place would
+   *  leave the first place's text sitting in the composer. */
+  initialDraft?: string;
 }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(initialDraft ?? '');
   const transcript = useRef<ScrollView>(null);
 
   // Any content change, not just a new turn: the keyboard appearing and the composer growing to a
