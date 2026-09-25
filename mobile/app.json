@@ -1,17 +1,19 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "TripMate",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "tripmate",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#121110",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "app.tripmate"
     },
     "android": {
+      "package": "app.tripmate",
       "userInterfaceStyle": "dark",
       "backgroundColor": "#121110",
       "adaptiveIcon": {
@@ -41,6 +43,27 @@
         "expo-image-picker",
         {
           "photosPermission": "TripMate reads the places in screenshots you pick. They are never stored."
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsImageWithMaxCount": 20,
+            "NSExtensionActivationSupportsMovieWithMaxCount": 3
+          },
+          "iosAppGroupIdentifier": "group.app.tripmate.shared",
+          "androidIntentFilters": [
+            "text/*",
+            "image/*",
+            "video/*"
+          ],
+          "androidMultiIntentFilters": [
+            "image/*",
+            "video/*"
+          ]
         }
       ]
     ],

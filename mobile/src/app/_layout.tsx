@@ -2,6 +2,7 @@ import { useFonts } from 'expo-font';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { ShareIntentProvider } from 'expo-share-intent';
 
 import MelodramaRegular from '../../assets/fonts/Melodrama-Regular.ttf';
 import TabularMedium from '../../assets/fonts/Tabular-Medium.ttf';
@@ -36,23 +37,27 @@ export default function RootLayout() {
   // Unconditionally dark. Kiln has one ground and no light variant, so reading the system scheme
   // could only ever produce a surface the design system does not define.
   return (
-    <ThemeProvider value={DarkTheme}>
-      {/* Without this, Android's forced edge-to-edge draws dark system icons over the near-black
-          canvas and the clock and battery disappear into it. */}
-      <StatusBar style="light" />
-      <AnimatedSplashOverlay />
-      <Stack
-        screenOptions={{
-          contentStyle: { backgroundColor: Colors.canvas },
-          headerStyle: { backgroundColor: Colors.canvas },
-          headerTintColor: Colors.foreground,
-          headerTitleStyle: { color: Colors.foreground },
-          headerShadowVisible: false,
-        }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        {/* The plan flow has its own Stack, which draws the per-step headers. */}
-        <Stack.Screen name="plan" options={{ headerShown: false }} />
-      </Stack>
-    </ThemeProvider>
+    <ShareIntentProvider>
+      <ThemeProvider value={DarkTheme}>
+        {/* Without this, Android's forced edge-to-edge draws dark system icons over the near-black
+            canvas and the clock and battery disappear into it. */}
+        <StatusBar style="light" />
+        <AnimatedSplashOverlay />
+        <Stack
+          screenOptions={{
+            contentStyle: { backgroundColor: Colors.canvas },
+            headerStyle: { backgroundColor: Colors.canvas },
+            headerTintColor: Colors.foreground,
+            headerTitleStyle: { color: Colors.foreground },
+            headerShadowVisible: false,
+          }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          {/* The plan flow has its own Stack, which draws the per-step headers. */}
+          <Stack.Screen name="plan" options={{ headerShown: false }} />
+          {/* SPIKE ONLY — replaced in Task 5. */}
+          <Stack.Screen name="share" options={{ presentation: 'modal', headerShown: false }} />
+        </Stack>
+      </ThemeProvider>
+    </ShareIntentProvider>
   );
 }
