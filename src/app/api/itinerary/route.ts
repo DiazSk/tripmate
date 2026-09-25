@@ -9,6 +9,7 @@ import { DayPlan } from "@/lib/types";
 import { GenerationParams, runGeneration } from "@/lib/generationRunner";
 import { StageEvent } from "@/lib/generationStages";
 import type { StreamedStop } from "@/lib/streamingItinerary";
+import type { SketchDay } from "@/lib/sketch";
 import { isThrottled } from "@/lib/ipThrottle";
 import { isOverDailyCap } from "@/lib/spendCap";
 
@@ -182,6 +183,7 @@ export async function POST(req: NextRequest) {
         onPlan: (result: Awaited<ReturnType<typeof runGeneration>>) => safeEnqueue("plan", result),
         onRevised: (revision: { days: DayPlan[]; issues: string[] }) =>
           safeEnqueue("revised", revision),
+        onSketch: (days: SketchDay[]) => safeEnqueue("sketch", { days }),
       };
       try {
         const result = await runGeneration(params, onStage, live);

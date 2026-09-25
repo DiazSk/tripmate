@@ -37,7 +37,7 @@ const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one 
  * the omission visible. One literal means a field added here reaches all three, and `carryOverDaySummaries`
  * in itinerary.ts covers the case where a model ignores the shape anyway.
  */
-const DAY_SHAPE = `{"date":"YYYY-MM-DD","weather":"short weather summary","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}`;
+const DAY_SHAPE = `{"date":"YYYY-MM-DD","weather":"short weather summary","theme":"2-5 word identity for the day","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}`;
 const SHAPE_HINT = `{"days":[${DAY_SHAPE}],"unplaced":[{"name":"one of the traveler's MUST places","reason":"one concrete line"}]}`;
 
 // Concrete stop-selection guidance per interest tag — generic "weight toward
@@ -84,7 +84,7 @@ function formatPreferences(preferences?: ItineraryPreferences | null): string {
   return out;
 }
 
-function formatWeather(weather: DayWeather[]): string {
+export function formatWeather(weather: DayWeather[]): string {
   if (weather.length === 0) return "No weather data available.";
   return weather
     .map(
@@ -239,6 +239,7 @@ export function buildGeneratePrompt(params: {
   bikeshare?: BikeshareSystem | null;
   answers?: UserAnswers | null;
   anchors?: Anchor[];
+  sketch?: string;
 }): string {
   return `Plan a day-by-day trip itinerary for ${params.destination}, from ${params.startDate} to ${params.endDate}, with a total budget of $${params.budget}.
 
@@ -248,7 +249,7 @@ Style: ${tierStyle(params.tier)}
 
 Daily weather:
 ${formatWeather(params.weather)}
-${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}${formatAnchors(params.anchors)}
+${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}${formatAnchors(params.anchors)}${params.sketch ?? ""}
 Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
 Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${lodgingInstruction()}
