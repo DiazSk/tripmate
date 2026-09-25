@@ -8,6 +8,8 @@ export interface FocusTarget {
   /** "day" edits one day; "trip" lets the conversation range across the whole plan while the
    *  preview still shows one day at a time. */
   scope: "day" | "trip";
+  /** Pre-fills the chat input on open — e.g. "Fit it anyway". Never auto-sent. */
+  initialMessage?: string;
 }
 
 /**
@@ -24,10 +26,10 @@ export function useFocusEdit(source: Itinerary | null) {
   const [dirty, setDirty] = useState(false);
 
   const open = useCallback(
-    (dayIndex: number, scope: FocusTarget["scope"] = "day") => {
+    (dayIndex: number, scope: FocusTarget["scope"] = "day", initialMessage?: string) => {
       if (!source) return;
       setDraft(structuredClone(source));
-      setTarget({ dayIndex, scope });
+      setTarget({ dayIndex, scope, initialMessage });
       setDirty(false);
     },
     [source]

@@ -3,6 +3,11 @@
 import { anchorCoverage } from "@/lib/guardrails";
 import type { Itinerary } from "@/lib/types";
 
+/** Shared by every "Fit it anyway" call site — both open the chat editor pre-filled with this,
+ *  never auto-sent. */
+export const fitMessage = (name: string) =>
+  `Please fit ${name} into the plan. It matters to us; drop or move something else to make room, and tell me what you changed.`;
+
 /**
  * "11 of your 12 places are in the plan" — the promise the import step made, kept in writing.
  * Computed from the plan itself (anchorCoverage), never from what the model claimed.

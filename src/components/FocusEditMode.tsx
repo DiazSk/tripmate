@@ -154,6 +154,7 @@ export default function FocusEditMode({
   onDraftChange,
   onSave,
   onCancel,
+  initialMessage,
 }: {
   trip: TripSummary;
   userAnswers?: UserAnswers | null;
@@ -163,6 +164,8 @@ export default function FocusEditMode({
   tripId?: string | null;
   /** Passed straight through to the chat panel — see EditChatPanel. */
   sessionId?: string | null;
+  /** Also straight through: pre-fills the chat input, e.g. "Fit it anyway". */
+  initialMessage?: string;
   /** Also straight through: 1-based days a chat turn changed, for the host's day-tab markers. */
   onDaysModified?: (days: number[]) => void;
   dirty: boolean;
@@ -412,6 +415,7 @@ export default function FocusEditMode({
             sessionId={sessionId}
             onDaysModified={onDaysModified}
             onBusyChange={setBusy}
+            initialMessage={initialMessage}
             onItineraryChange={(next) => {
               // Jump the preview to the first day the turn changed, so a stop moved to another
               // day is watched landing there rather than just disappearing from this one.

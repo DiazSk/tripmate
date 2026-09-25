@@ -55,9 +55,8 @@ and this spec fixes it as its first build step.
    - Those anchors are drawn on the map, and the theme shows in the day header until real stops stream in.
 5. **Receipt (after generation).** For example: *"11 of your 12 places are in the plan. teamLab moved to Wednesday
    (closed Tuesdays). Kawagoe didn't fit: 70 min each way."* Every unplaced place gets a "Fit it anyway" action,
-   which sends a chat edit through the existing `/api/trip-edit`. **Deviation, shipped:** "Fit it anyway"
-   regenerates through `refine()` rather than a `/api/trip-edit` chat edit; on saved trips the receipt shows
-   without the button (a known gap).
+   which opens the existing chat editor pre-filled with the request — the traveler still sends it themselves.
+   Same surface on the fresh plan and on saved trips.
 
 ## Architecture
 
