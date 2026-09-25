@@ -26,8 +26,9 @@ import {
 } from "./placeConflicts";
 import { getDestinationContextInsight } from "./destinationContext";
 import { insertGeneration, insertRun } from "./db";
-import { llmMode } from "./llmConfig";
+import { cheapModel, llmMode } from "./llmConfig";
 import { buildCritiquePrompt, buildGeneratePrompt, buildRefinePrompt } from "./itineraryPrompt";
+import { buildSketchPrompt, formatSketchForGenerate, parseSketch, type SketchDay } from "./sketch";
 import { carryOverDaySummaries, normalizeDays } from "./itinerary";
 import { tripDays, TierId } from "./tiers";
 import { deriveFlags, partyBudget, sanitizeLogistics } from "./userAnswers";
@@ -60,6 +61,8 @@ export interface LiveSink {
   onPlan(result: { itinerary: Itinerary; traceId: string; runId: string; sessionId?: string }): void;
   /** Critique returned a corrected day set. The client decides whether to take it. */
   onRevised(revision: { days: Itinerary["days"]; issues: string[] }): void;
+  /** The day sketch, ~20s in. Optional so the JSON caller and older sinks need nothing. */
+  onSketch?(days: SketchDay[]): void;
 }
 
 export interface GenerationParams {
@@ -119,6 +122,7 @@ export async function runGeneration(
   let weather: DayWeather[] = [];
   let geoPoint: { lat: number; lon: number } | null = null;
   let bikeshare: BikeshareSystem | null = null;
+  let sketch: SketchDay[] | null = null;
   const isRefine = Boolean(previousItinerary && feedback);
 
   // The wizard has always sent these; the route simply never read them, so six
@@ -255,8 +259,35 @@ export async function runGeneration(
     // Import already geocoded what it could; this only fills typed and legacy entries. Skipped
     // with no city point, and never fatal — an unplaced anchor still reaches the model by name.
     if (geoPoint && anchors.length > 0) anchors = await geocodeAnchors(anchors, geoPoint);
+
+    const SKETCH_TIMEOUT_MS = 30_000;
+    const dates = Array.from({ length: dayCount }, (_, i) =>
+      new Date(Date.parse(startDate) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    // Overlaps the context call already in flight, so it costs the traveller almost no wall clock.
+    // Never on the failure path: a sketch that errors or times out simply isn't shown.
+    const sketchPromise: Promise<SketchDay[] | null> = runClaude(
+      buildSketchPrompt({
+        destination,
+        dates,
+        anchors,
+        priorities: (userAnswers as UserAnswers | undefined)?.topPriorities ?? [],
+        weather,
+      }),
+      "sketch",
+      SKETCH_TIMEOUT_MS,
+      { runId, model: cheapModel() }
+    )
+      .then(({ result }) => parseSketch(result, dates))
+      .catch((err) => {
+        console.error("[itinerary] sketch failed", err);
+        return null;
+      });
+
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
+    sketch = await sketchPromise;
+    if (sketch) live?.onSketch?.(sketch);
     prompt = buildGeneratePrompt((contextPayload = {
       destination,
       startDate,
@@ -276,6 +307,7 @@ export async function runGeneration(
       // itinerary it is handed already carries whatever bike legs the first pass wrote.
       bikeshare,
       anchors,
+      sketch: formatSketchForGenerate(sketch),
     }));
   }
 
@@ -374,6 +406,11 @@ export async function runGeneration(
     // Echoed back so the receipt survives save/reload/critique — critique only reassigns `days`.
     ...(anchors.length > 0 ? { anchors, unplaced: readUnplaced(unplaced) } : {}),
   };
+
+  if (sketch) {
+    const themeByDate = new Map(sketch.map((d) => [d.date, d.theme]));
+    for (const day of itinerary.days) if (!day.theme?.trim()) day.theme = themeByDate.get(day.date);
+  }
 
   // Look up real listings for the stops where the answer can change the plan, then check the
   // schedule against them. Selective on purpose: a call per stop put one 44-stop trip at ~91

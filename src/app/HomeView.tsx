@@ -54,6 +54,7 @@ import {
   RawFetch,
 } from "@/lib/types";
 import type { StreamedStop } from "@/lib/streamingItinerary";
+import type { SketchDay } from "@/lib/sketch";
 import { CandidatePoi } from "@/lib/pois";
 import { useStreamingCamera, useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
@@ -1277,6 +1278,23 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         // Monotonic: days arrive in order, but a `Math.max` costs nothing and keeps the camera
         // from walking backwards if one ever outran another.
         setCoordsDay((prev) => (prev === null ? dayIndex : Math.max(prev, dayIndex)));
+      } else if (event === "sketch") {
+        // The day sketch: themes and places per day, seconds in. Seeds empty days so the headers
+        // have something to say while the stops are still being written; stops fill them in place.
+        const { days } = JSON.parse(data) as { days: SketchDay[] };
+        setDraftItinerary((prev) => {
+          const next = [...(prev?.days ?? [])];
+          days.forEach((d, i) => {
+            while (next.length <= i) next.push({ date: "", weather: "", stops: [] });
+            next[i] = {
+              ...next[i],
+              date: next[i].date || d.date,
+              theme: d.theme,
+              summary: next[i].summary || [d.area, ...d.anchors].filter(Boolean).join(" · "),
+            };
+          });
+          return { tier: (prev?.tier ?? tier) as Itinerary["tier"], days: next };
+        });
       } else if (event === "plan") {
         // Bound to a local first: `result` is `T | null`, and TypeScript does not narrow a
         // closed-over `let` across the assignment, so passing it straight to `planned` is an

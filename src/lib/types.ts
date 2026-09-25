@@ -65,6 +65,9 @@ export interface DayPlan {
   /** Short model-written narrative for the day's theme/flow. Absent on
    *  itineraries saved before this field existed. */
   summary?: string;
+  /** Model-written 2-5 word identity for the day ("Old Tokyo, slowly"), from the sketch. Distinct
+   *  from `title`, which only the traveler writes. */
+  theme?: string;
   /** User-authored day title (e.g. "Arrival Day"), set via the day header's
    *  edit control — never written by the model. */
   title?: string;

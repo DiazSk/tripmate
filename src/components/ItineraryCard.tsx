@@ -1067,6 +1067,7 @@ export default function ItineraryCard({
             keeps its height and the stops below it do not shift. Editing offers the field even
             when the day has no summary yet — a plan generated before the field existed should be
             able to gain one — while reading still renders nothing rather than an empty line. */}
+        {day.theme && <p className="mb-1 font-display text-lg leading-snug">{day.theme}</p>}
         {day.summary && <p className="mb-3 text-sm text-muted">{day.summary}</p>}
 
         {/* `py-2` and `leading-snug`, not the `p-3`/normal leading this had. Measured at 88px tall

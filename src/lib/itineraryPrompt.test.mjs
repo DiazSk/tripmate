@@ -37,7 +37,7 @@ const DAYS = [
 ];
 
 /** Every field a day-returning prompt must name in its response shape. */
-const DAY_FIELDS = ["date", "weather", "summary", "lodging", "stops"];
+const DAY_FIELDS = ["date", "weather", "theme", "summary", "lodging", "stops"];
 
 const PROMPTS = {
   generate: () =>

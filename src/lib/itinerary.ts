@@ -261,16 +261,15 @@ export function normalizeDays(days: unknown): DayPlan[] {
  * same array in the same breath.
  */
 export function carryOverDaySummaries(revised: DayPlan[], previous: DayPlan[]): void {
-  const byDate = new Map<string, string>();
-  for (const day of previous) {
-    // A blank summary is not worth carrying and would only overwrite `undefined` with noise.
-    if (day?.date && day.summary?.trim()) byDate.set(day.date, day.summary);
-  }
+  const byDate = new Map<string, DayPlan>();
+  for (const day of previous) if (day?.date) byDate.set(day.date, day);
   if (byDate.size === 0) return;
   for (const day of revised) {
-    if (!day || day.summary?.trim()) continue;
-    const inherited = byDate.get(day.date);
-    if (inherited) day.summary = inherited;
+    const prev = day && byDate.get(day.date);
+    if (!prev) continue;
+    // A blank field is not worth carrying and would only overwrite `undefined` with noise.
+    if (!day.summary?.trim() && prev.summary?.trim()) day.summary = prev.summary;
+    if (!day.theme?.trim() && prev.theme?.trim()) day.theme = prev.theme;
   }
 }
 
