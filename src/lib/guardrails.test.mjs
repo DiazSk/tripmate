@@ -6,7 +6,13 @@
  * written about. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateBudget, evaluateDay, evaluateItinerary } from "./guardrails.ts";
+import {
+  anchorCoverage,
+  evaluateAnchors,
+  evaluateBudget,
+  evaluateDay,
+  evaluateItinerary,
+} from "./guardrails.ts";
 
 /** One stop, one day, priced to whatever the case needs. */
 const itineraryCosting = (cost) => ({
@@ -393,4 +399,57 @@ test("no must-include and no exclusions means no required findings at all", () =
     evaluateItinerary(oneStop("Musee d'Orsay")).filter((g) => g.rule === "required"),
     []
   );
+});
+
+/* --- Anchor coverage: which of the traveler's places made it in --- */
+
+const stop = (name, lat = 0, lng = 0) => ({
+  name, lat, lng, cost: 0, note: "", time: "9:00 AM", durationLabel: "1 hour", category: "other",
+});
+const planWith = (stopsByDay, anchors, unplaced = []) => ({
+  tier: "midrange",
+  days: stopsByDay.map((stops, i) => ({ date: `2026-10-0${i + 1}`, weather: "", stops })),
+  anchors,
+  unplaced,
+});
+
+test("anchorCoverage is null for a plan with no anchors", () => {
+  assert.equal(anchorCoverage({ tier: "midrange", days: [] }), null);
+});
+
+test("a must counts as placed by a wrapping stop name, on the right day", () => {
+  const cov = anchorCoverage(planWith(
+    [[stop("Breakfast nearby")], [stop("Morning at teamLab Planets")]],
+    [{ name: "teamLab Planets", lat: null, lng: null, priority: "must" }]
+  ));
+  assert.deepEqual(cov.placed, [{ name: "teamLab Planets", dayIndex: 1 }]);
+  assert.deepEqual(cov.missing, []);
+});
+
+test("a must counts as placed within 150m even under another name", () => {
+  const cov = anchorCoverage(planWith(
+    [[stop("Senso-ji Temple", 35.7148, 139.7967)]],
+    [{ name: "浅草寺", lat: 35.7149, lng: 139.7966, priority: "must" }]
+  ));
+  assert.equal(cov.placed.length, 1);
+});
+
+test("an explained must is unplaced; an unexplained one is missing and warned", () => {
+  const plan = planWith(
+    [[stop("Somewhere else", 10, 10)]],
+    [
+      { name: "Kawagoe", lat: 35.9, lng: 139.5, priority: "must" },
+      { name: "Ghibli Museum", lat: 35.69, lng: 139.57, priority: "must" },
+      { name: "Yanaka Ginza", lat: null, lng: null, priority: "want" },
+    ],
+    [{ name: "Kawagoe", reason: "70 min each way" }]
+  );
+  const cov = anchorCoverage(plan);
+  assert.equal(cov.total, 2);
+  assert.deepEqual(cov.unplaced, [{ name: "Kawagoe", reason: "70 min each way" }]);
+  assert.deepEqual(cov.missing, ["Ghibli Museum"]);
+  const warnings = evaluateAnchors(plan);
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].rule, "anchors");
+  assert.match(warnings[0].message, /Ghibli Museum/);
 });

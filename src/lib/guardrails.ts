@@ -9,7 +9,16 @@ import {
 } from "./itinerary";
 import { normalizeStopName } from "./placeConflicts";
 import { legMinutes } from "./schedule";
-import type { DayPlan, Itinerary, Stop, StopCategory, TransportMode, TripLogistics } from "./types";
+import type {
+  DayPlan,
+  Itinerary,
+  Stop,
+  StopCategory,
+  TransportMode,
+  TripLogistics,
+  UnplacedAnchor,
+} from "./types";
+import { anchorKey } from "./anchors";
 
 /**
  * The §12 guardrails, evaluated in code.
@@ -45,7 +54,8 @@ export type GuardrailRule =
   | "budget"
   | "duplicate"
   | "commitment"
-  | "required";
+  | "required"
+  | "anchors";
 
 /** Looked-up door-to-door minutes for one hop, or `null` when no route was found. */
 export type LegMinutesLookup = (from: Stop, to: Stop) => number | null;
@@ -385,6 +395,61 @@ function checkRequired(
   return found;
 }
 
+/** How close a stop must be to an anchor's coordinates to count as that place, whatever it's called. */
+const ANCHOR_MATCH_METRES = 150;
+
+function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const p = Math.PI / 180;
+  const h =
+    Math.sin(((b.lat - a.lat) * p) / 2) ** 2 +
+    Math.cos(a.lat * p) * Math.cos(b.lat * p) * Math.sin(((b.lng - a.lng) * p) / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
+}
+
+export interface AnchorCoverage {
+  /** `must` anchors only — a skipped `want` needs no explanation. */
+  total: number;
+  placed: { name: string; dayIndex: number }[];
+  unplaced: UnplacedAnchor[];
+  /** Neither scheduled nor explained: the model dropped it silently. */
+  missing: string[];
+}
+
+/**
+ * Which of the traveler's `must` places made it into the plan. Checked here, in code, because the
+ * receipt is a promise to the traveler — it must never take the model's word for it.
+ */
+export function anchorCoverage(itinerary: Itinerary): AnchorCoverage | null {
+  const musts = (itinerary.anchors ?? []).filter((a) => a.priority === "must");
+  if (musts.length === 0) return null;
+  const explained = new Map((itinerary.unplaced ?? []).map((u) => [anchorKey(u.name), u]));
+  const cov: AnchorCoverage = { total: musts.length, placed: [], unplaced: [], missing: [] };
+  for (const anchor of musts) {
+    const key = anchorKey(anchor.name);
+    const dayIndex = itinerary.days.findIndex((day) =>
+      day.stops.some(
+        (s) =>
+          (key && anchorKey(s.name).includes(key)) ||
+          (anchor.lat !== null &&
+            anchor.lng !== null &&
+            metresBetween(s, { lat: anchor.lat, lng: anchor.lng }) <= ANCHOR_MATCH_METRES)
+      )
+    );
+    if (dayIndex !== -1) cov.placed.push({ name: anchor.name, dayIndex });
+    else if (explained.has(key)) cov.unplaced.push(explained.get(key)!);
+    else cov.missing.push(anchor.name);
+  }
+  return cov;
+}
+
+export function evaluateAnchors(itinerary: Itinerary): Guardrail[] {
+  return (anchorCoverage(itinerary)?.missing ?? []).map((name) => ({
+    rule: "anchors" as const,
+    message: `${name} isn't in the plan, and the planner didn't say why.`,
+    dayIndex: null,
+  }));
+}
+
 /**
  * Everything wrong with the plan as it currently stands.
  *
@@ -415,13 +480,15 @@ export function evaluateItinerary(
     options.mustInclude?.length || options.avoid?.length
       ? checkRequired(itinerary, options.mustInclude ?? [], options.avoid ?? [])
       : [];
-  // `checkDuplicates` needs no option, so every existing caller gains it — a duplicate is a defect
-  // whether the model wrote it or an edit introduced it.
+  // `checkDuplicates` and `evaluateAnchors` need no option, so every existing caller gains them —
+  // a duplicate or an unexplained missing anchor is a defect whether the model wrote it or an edit
+  // introduced it.
   return [
     ...perDay,
     ...checkDuplicates(itinerary),
     ...commitments,
     ...required,
+    ...evaluateAnchors(itinerary),
     ...budget,
   ];
 }

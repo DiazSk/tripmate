@@ -19,6 +19,7 @@ import {
   useRouteProfile,
 } from "@/lib/dayRoutes";
 import BudgetBar from "./BudgetBar";
+import AnchorReceipt from "./AnchorReceipt";
 import SplitEditor from "./SplitEditor";
 import DayHeader, { DayEditUpdates } from "./DayHeader";
 import StopList from "./StopList";
@@ -204,6 +205,7 @@ export default function ItineraryCard({
   unseenChangedDays,
   panelCollapsed = false,
   onMinimize,
+  onFitAnchor,
 }: {
   itinerary: Itinerary;
   budget: number;
@@ -260,6 +262,8 @@ export default function ItineraryCard({
   /** Shuts the panel to its capsule. Given, the header image grows a grab line along its top
    *  edge — the handle belongs on the picture rather than on a bar of chrome above it. */
   onMinimize?: () => void;
+  /** Callback to fit an unplaced anchor into the plan; passed to AnchorReceipt buttons. */
+  onFitAnchor?: (name: string) => void;
 }) {
   const [uncontrolledDayIndex, setUncontrolledDayIndex] = useState(0);
   const activeDayIndex = controlledDayIndex ?? uncontrolledDayIndex;
@@ -1056,6 +1060,8 @@ export default function ItineraryCard({
             </div>
           )}
         </div>
+
+        <AnchorReceipt itinerary={itinerary} onFitAnchor={onFitAnchor} />
 
         {/* Same box either way: `mb-3 text-sm text-muted`, so the line under the heading
             keeps its height and the stops below it do not shift. Editing offers the field even
