@@ -33,3 +33,20 @@ test("geocodeAnchors never throws when the lookups do", async () => {
   });
   assert.deepEqual(out, anchors);
 });
+
+test("geocodeAnchors returns within budget when the batch and every fuzzy lookup hang", async () => {
+  const hang = () => new Promise(() => {}); // never resolves
+  const anchors = [
+    { name: "A", lat: null, lng: null, priority: "want" },
+    { name: "B", lat: null, lng: null, priority: "want" },
+  ];
+  const started = Date.now();
+  const out = await geocodeAnchors(
+    anchors,
+    { lat: 0, lon: 0 },
+    { resolve: hang, search: hang },
+    50 // tiny budget so the test stays fast
+  );
+  assert.ok(Date.now() - started < 1000, "must not wait for the hung calls");
+  assert.deepEqual(out, anchors);
+});
