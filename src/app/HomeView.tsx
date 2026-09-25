@@ -2724,6 +2724,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   animateReveal={revealAnimation}
                   panelCollapsed={planCollapsed}
                   onMinimize={() => setPlanCollapsed(true)}
+                  onFitAnchor={(name) =>
+                    refine(`Please fit ${name} into the plan. It matters to us; drop or move something else to make room.`)
+                  }
                 />
               )}
 
