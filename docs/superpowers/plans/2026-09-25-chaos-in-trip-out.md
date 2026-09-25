@@ -47,6 +47,8 @@ Every path below is relative to it. The shell resets its cwd after each command,
 5. **The sketch doesn't place anchor pins during generation.** Seeding provisional stops would collide with the
    stream's `stopIndex` slots. Each sketched day shows its theme plus the names of its anchors instead. The pins are
    already on the map from the import step.
+6. **"Fit it anyway" regenerates through `refine()` rather than a `/api/trip-edit` chat edit; on saved trips the
+   receipt shows without the button (a known gap).**
 
 ## Global constraints
 
