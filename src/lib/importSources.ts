@@ -118,11 +118,16 @@ async function guardedFetch(url: string, deps: LinkDeps): Promise<{ res: Respons
       });
       if (res.status >= 300 && res.status < 400) {
         const location = res.headers.get("location");
+        await res.body?.cancel().catch(() => {});
         if (!location) return null;
         current = new URL(location, u).toString();
         continue;
       }
-      return res.ok ? { res, url: current } : null;
+      if (!res.ok) {
+        await res.body?.cancel().catch(() => {});
+        return null;
+      }
+      return { res, url: current };
     } catch {
       return null;
     }

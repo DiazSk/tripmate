@@ -47,6 +47,17 @@ test("caps at 40 anchors", () => {
   assert.equal(normalizeAnchors({ customPois }).length, 40);
 });
 
+test("a must past position 40 survives the cap; a want in its place does not", () => {
+  const anchors = [
+    ...Array.from({ length: 40 }, (_, i) => ({ name: `Want ${i}`, lat: null, lng: null, priority: "want" })),
+    { name: "Late Must", lat: null, lng: null, priority: "must" },
+  ];
+  const out = normalizeAnchors({ anchors });
+  assert.equal(out.length, 40);
+  assert.ok(out.some((a) => a.name === "Late Must"), "the must at position 41 must survive the cap");
+  assert.ok(!out.some((a) => a.name === "Want 39"), "a want should drop instead");
+});
+
 test("readUnplaced keeps only well-formed entries", () => {
   assert.deepEqual(readUnplaced("nope"), []);
   assert.deepEqual(readUnplaced(null), []);

@@ -69,7 +69,11 @@ export function normalizeAnchors(answers: unknown): Anchor[] {
       lng: prev.lng ?? anchor.lng,
     });
   }
-  return Array.from(byKey.values()).slice(0, MAX_ANCHORS);
+  // Stable sort (must before want) so a must past position 40 survives the cap instead of a want
+  // that happened to be typed or imported earlier — the guardrail only ever sees this array.
+  const ordered = Array.from(byKey.values());
+  ordered.sort((a, b) => (a.priority === b.priority ? 0 : a.priority === "must" ? -1 : 1));
+  return ordered.slice(0, MAX_ANCHORS);
 }
 
 /** The model's `unplaced` array, validated. Anything malformed is dropped. */
