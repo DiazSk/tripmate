@@ -30,8 +30,7 @@ import {
   emptyDraft,
   labelOf,
   toTravelerProfile,
-  toggleInterest,
-  toggleStarred,
+  cycleInterest,
   toggleTag,
 } from '@/lib/planDraft';
 import { dietaryValue, interestsValue } from '@/lib/profileRows';
@@ -344,8 +343,8 @@ function Sheets({
           profile.topPriorities.length === 0
             ? 'Tap to choose. Tap a chosen one again to star it — up to three.'
             : starsLeft > 0
-              ? `Star ${starsLeft} more. Long-press to remove one.`
-              : 'Those three drive which stops get picked. Long-press to remove one.'
+              ? `Star ${starsLeft} more. Tap again to clear one.`
+              : 'Those three drive which stops get picked. Clear one to free up a star.'
         }
         onClose={onClose}
       >
@@ -353,8 +352,8 @@ function Sheets({
           tags={INTERESTS}
           selected={profile.priorities}
           starred={profile.topPriorities}
-          onToggle={(tag) => edit(fromPicks(toggleInterest(picks, tag)))}
-          onStar={(tag) => edit(fromPicks(toggleStarred(picks, tag)))}
+          onToggle={(tag) => edit(fromPicks(cycleInterest(picks, tag)))}
+          onCycle={(tag) => edit(fromPicks(cycleInterest(picks, tag)))}
         />
       </FieldSheet>
 

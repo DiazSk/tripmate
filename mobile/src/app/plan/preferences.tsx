@@ -19,8 +19,7 @@ import {
   INTERESTS,
   MAX_STARRED,
   STYLES,
-  toggleInterest,
-  toggleStarred,
+  cycleInterest,
   toggleTag,
   usePlanDraft,
 } from '@/lib/planDraft';
@@ -36,13 +35,20 @@ export default function PreferencesStep() {
     starredInterests: next.starred,
   });
 
+  /**
+   * Every state names what the next tap does, because one gesture now has three outcomes.
+   *
+   * The count is the only thing worth saying out loud: the cycle itself is discoverable by tapping
+   * — which is the point of collapsing it onto one gesture — but "why can I not star a fourth"
+   * is not, and that was the state where a tap used to do nothing at all.
+   */
   const starsLeft = MAX_STARRED - starredInterests.length;
   const interestCaption =
     starredInterests.length === 0
-      ? 'Tap to pick. Tap again to star — starred ones count most.'
+      ? 'Tap to pick, again to star, again to clear.'
       : starsLeft > 0
-        ? `Star up to ${starsLeft} more — those count most.`
-        : 'Those three count most.';
+        ? `Star ${starsLeft} more — those count most. Tap again to clear one.`
+        : 'Three stars is the most — clear a starred one to free it up.';
 
   return (
     <KeyboardAvoidingView
@@ -73,8 +79,8 @@ export default function PreferencesStep() {
             // Both rules live in `planDraft`, because the Profile tab edits the same pair under
             // the names the server uses. The unstar-on-deselect rule used to be written here, in
             // this JSX, where nothing could test it.
-            onToggle={(tag) => patch(fromPicks(toggleInterest(picks, tag)))}
-            onStar={(tag) => patch(fromPicks(toggleStarred(picks, tag)))}
+            onToggle={(tag) => patch(fromPicks(cycleInterest(picks, tag)))}
+            onCycle={(tag) => patch(fromPicks(cycleInterest(picks, tag)))}
           />
         </Question>
 
