@@ -1,3 +1,4 @@
+import { nameMatches } from "./scorers/domain";
 import type { DayWeather } from "../weather";
 import type { BenchFixture } from "./fixtures";
 import type { BenchCellScores } from "./types";
@@ -124,4 +125,26 @@ export function legacyDestination(fixture: Pick<BenchFixture, "title"> & {
   const city = fixture.title.split(" — ")[0].trim();
   const country = fixture.reconciled.rawFetch.destination.region?.split(",").pop()?.trim();
   return country ? `${city}, ${country}` : city;
+}
+
+/**
+ * The fixture, but with each anchor's hours as the route actually gave them to the model.
+ *
+ * Fixture hours are sometimes deliberate tests — `kyoto-couple-mixed` closes Nijo Castle on
+ * Mondays; OSM has it open daily. Fair on the staged path, whose context carries those hours;
+ * unanswerable on the legacy path, which never saw them. So a legacy anchor is checked against
+ * the hours in its own context, and against nothing (null = unchecked) when it had none. The
+ * anchors themselves stay, so coverage and missing-anchor checks are unchanged.
+ */
+export function withSeenAnchorHours(
+  fixture: BenchFixture,
+  seen: { name: string; openingHours?: string | null; closedDays?: string[] | null }[]
+): BenchFixture {
+  const pois = fixture.poiDetails.pois.map((p) => {
+    const hit = seen.find((s) => nameMatches(s.name, p.name));
+    return hit?.openingHours
+      ? { ...p, openingHours: hit.openingHours, closedDays: hit.closedDays ?? null }
+      : { ...p, openingHours: null, closedDays: null };
+  });
+  return { ...fixture, poiDetails: { ...fixture.poiDetails, pois } };
 }
