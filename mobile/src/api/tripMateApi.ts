@@ -17,6 +17,8 @@ import type {
   PlacePhoto,
   PlaceSearchResult,
   ProfileStats,
+  SavedPlace,
+  SavedSource,
   SketchEvent,
   StageEvent,
   StreamedStop,
@@ -151,6 +153,45 @@ export async function importPlaces(
     return (await res.json()) as ImportResult;
   } catch {
     return undefined;
+  }
+}
+
+/** `GET /api/saved-places` — the traveller's "save now, plan later" inbox, newest first. */
+export async function listSavedPlaces(): Promise<SavedPlace[] | undefined> {
+  try {
+    const res = await fetchWithSession('/api/saved-places', {});
+    if (!res.ok) return undefined;
+    return ((await res.json()) as { places: SavedPlace[] }).places;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `POST /api/saved-places`. False on any failure — the caller offers Retry. */
+export async function saveSavedPlaces(body: {
+  places: { name: string; lat: number | null; lng: number | null }[];
+  city?: string | null;
+  source: SavedSource;
+  url?: string;
+}): Promise<boolean> {
+  try {
+    const res = await fetchWithSession('/api/saved-places', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteSavedPlace(id: string): Promise<boolean> {
+  try {
+    const res = await fetchWithSession(`/api/saved-places?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

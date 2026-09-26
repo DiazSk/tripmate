@@ -487,3 +487,17 @@ export interface ArrivalPoint {
   tier: number;
   iata: string | null;
 }
+
+export type SavedSource = 'screenshot' | 'video' | 'tiktok' | 'youtube' | 'gmaps' | 'url' | 'text' | 'instagram';
+
+/** A place shared into TripMate before planning — see /api/saved-places. */
+export interface SavedPlace {
+  id: string;
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  city: string | null;
+  source: SavedSource;
+  url: string | null;
+  createdAt: string;
+}
