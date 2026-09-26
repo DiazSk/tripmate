@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { anchorKey } from "@/lib/anchors";
 import type { Anchor } from "@/lib/types";
@@ -47,6 +47,14 @@ export default function ImportDropZone({
   const [unread, setUnread] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [saved, setSaved] = useState<{ id: string; name: string; lat: number | null; lng: number | null; city: string | null; source: string }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/saved-places")
+      .then((r) => (r.ok ? r.json() : { places: [] }))
+      .then((j) => setSaved((j.places ?? []).filter((p: { source: string }) => p.source !== "instagram")))
+      .catch(() => setSaved([]));
+  }, []);
 
   async function take(files: File[], text: string) {
     const images = await Promise.all(files.filter((f) => f.type.startsWith("image/")).map(downscale));
@@ -103,9 +111,39 @@ export default function ImportDropZone({
   const toggleMust = (name: string) =>
     onAnchorsChange((prev) => prev.map((a) => (a.name === name ? { ...a, priority: a.priority === "must" ? "want" : "must" } : a)));
   const remove = (name: string) => onAnchorsChange((prev) => prev.filter((a) => a.name !== name));
+  const chosen = new Set(anchors.map((a) => anchorKey(a.name)));
 
   return (
     <div className="mt-4">
+      {saved.length > 0 && (
+        <div className="mb-3">
+          <p className="text-sm text-muted">Your saved places ({saved.length})</p>
+          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Your saved places">
+            {saved.map((p) => {
+              const on = chosen.has(anchorKey(p.name));
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      onAnchorsChange((prev) =>
+                        on
+                          ? prev.filter((a) => anchorKey(a.name) !== anchorKey(p.name))
+                          : [...prev, { name: p.name, lat: p.lat, lng: p.lng, priority: "want", source: "import" }]
+                      )
+                    }
+                    className="rounded-full bg-white/10 px-3.5 py-1.5 text-sm font-medium text-muted"
+                  >
+                    {p.name}
+                    {p.city ? <span className="text-muted"> · {p.city.split(",")[0]}</span> : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       <label
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
