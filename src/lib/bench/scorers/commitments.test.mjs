@@ -127,3 +127,27 @@ test("a stop inside the departure buffer fails the commitment check", () => {
 test("no logistics makes the commitment axis unmeasurable rather than perfect", () => {
   assert.equal(scoreCommitments(parsed(day(LOUVRE())), null).normalized, null);
 });
+
+// --- what the critical gate counts as a duplicate (review C1, I1) ---
+
+test("hardRepeats counts only a sight named twice", () => {
+  const plan = parsed(
+    day(pinned("Louvre Museum", "entry", 48.861, 2.336), pinned("Breakfast at hotel", "food", 48.87, 2.35)),
+    day(pinned("louvre museum", "entry", 48.861, 2.336), pinned("Breakfast at hotel", "food", 48.87, 2.35)),
+    day(pinned("Rest break", "other", 48.8, 2.3), pinned("Rest break", "other", 48.8, 2.3))
+  );
+  assert.equal(scoreDuplicates(plan).hardRepeats, 1, "the Louvre, not breakfast and not the rest");
+});
+
+test("a proximity-only match is soft, never hard", () => {
+  // Two different museums 100m apart are two places, even if the model wrote near-identical pins.
+  const plan = parsed(day(pinned("Museu Picasso", "entry", 41.3852, 2.181)), day(pinned("Palau Dalmases", "entry", 41.3855, 2.1812)));
+  const s = scoreDuplicates(plan);
+  assert.equal(s.repeats, 1);
+  assert.equal(s.hardRepeats, 0);
+});
+
+test("two unresolved stops at 0,0 are not the same place", () => {
+  const plan = parsed(day(pinned("Hidden Temple", "entry", 0, 0)), day(pinned("Secret Garden", "entry", 0, 0)));
+  assert.equal(scoreDuplicates(plan).repeats, 0);
+});

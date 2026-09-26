@@ -223,6 +223,10 @@ export interface DuplicateScore {
   checkedStops: number;
   /** Stops that were already in the trip, by name or by proximity. */
   repeats: number;
+  /** Name repeats of a sight — not a meal, transit leg or rest entry, and never proximity alone.
+   *  The subset the critical gate counts: two museums 100m apart are two places, and "Breakfast at
+   *  hotel" on four mornings is a routine, not §14e sending someone back to the same place. */
+  hardRepeats: number;
   examples: { dayIndex: number; name: string; priorName: string; by: "name" | "proximity" }[];
   normalized: number | null;
 }

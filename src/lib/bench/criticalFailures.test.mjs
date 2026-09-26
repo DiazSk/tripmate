@@ -11,7 +11,7 @@ const clean = () => ({
   mustInclude: { missing: [], violated: [] },
   coverage: { missingAnchors: [] },
   budget: { budgetUsedFraction: 0.9 },
-  duplicates: { repeats: 0 },
+  duplicates: { repeats: 0, hardRepeats: 0 },
   dietary: { contradictions: 0 },
 });
 
@@ -30,7 +30,7 @@ const cases = [
   ["excluded", (s) => s.mustInclude.violated.push({ term: "bar", stopName: "Bar X" })],
   ["missing_anchor", (s) => s.coverage.missingAnchors.push("Kinkaku-ji")],
   ["over_budget", (s) => (s.budget.budgetUsedFraction = 1.2)],
-  ["duplicate", (s) => (s.duplicates.repeats = 1)],
+  ["duplicate", (s) => (s.duplicates.hardRepeats = 1)],
   ["dietary", (s) => (s.dietary.contradictions = 1)],
 ];
 for (const [code, breakIt] of cases) {
@@ -73,4 +73,29 @@ test("travel_leg is only checked when the typed itinerary is supplied", () => {
   };
   assert.deepEqual(criticalFailures(clean()), [], "no itinerary, no travel check");
   assert.deepEqual(criticalFailures(clean(), { itinerary: tight, modes: ["walk"] }), ["travel_leg"]);
+});
+
+test("duplicate gates on hard repeats only", () => {
+  const s = clean();
+  s.duplicates = { repeats: 4, hardRepeats: 0 };
+  assert.deepEqual(criticalFailures(s), []);
+  s.duplicates.hardRepeats = 1;
+  assert.deepEqual(criticalFailures(s), ["duplicate"]);
+});
+
+test("a stop at 0,0 does not make a travel leg infeasible", () => {
+  const plan = {
+    tier: "comfort",
+    days: [
+      {
+        date: "2026-09-19",
+        weather: "",
+        stops: [
+          { name: "Kinkaku-ji", lat: 35.0394, lng: 135.7292, cost: 0, note: "", time: "9:00 AM", durationLabel: "1h", category: "entry" },
+          { name: "Unresolved Stop", lat: 0, lng: 0, cost: 0, note: "", time: "10:15 AM", durationLabel: "1h", category: "entry" },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(criticalFailures(clean(), { itinerary: plan, modes: ["walk"] }), []);
 });
