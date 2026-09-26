@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getFixture } from "./fixtures.ts";
-import { criticalRate, errorText, headlineDelta, isFailedRun, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "./sweep.ts";
+import { criticalRate, errorText, headlineDelta, isFailedRun, legacyDestination, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "./sweep.ts";
 
 const KYOTO = getFixture("kyoto-couple-mixed");
 
@@ -79,4 +79,11 @@ test("the headline delta says when the two arms were not gated alike", () => {
   // travel_leg only runs on legacy JSON, so a staged-vs-legacy delta is biased against legacy.
   assert.equal(headlineDelta(a, b, "staged", "legacy").likeForLike, false);
   assert.equal(headlineDelta({ rate: null }, b, "legacy", "legacy").delta, null);
+});
+
+test("the legacy arm asks for the city, not the region the geocoder cannot find", () => {
+  // "Catalonia, Spain" geocodes to nothing, and the route then plans with no weather at all.
+  assert.equal(legacyDestination(getFixture("barcelona-access-dietary")), "Barcelona, Spain");
+  assert.equal(legacyDestination(getFixture("reykjavik-couple-packed")), "Reykjavík, Iceland");
+  assert.equal(legacyDestination({ title: "Nowhere", reconciled: { rawFetch: { destination: { region: null } } } }), "Nowhere");
 });
