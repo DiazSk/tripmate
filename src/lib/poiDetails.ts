@@ -12,21 +12,63 @@ const OVERPASS_TIMEOUT_MS = 45_000;
  *  drift between OpenTripMap's centroid and OSM's — not city-scale search like roads.ts. */
 const MATCH_RADIUS_M = 300;
 
-interface OverpassPoiElement {
+export interface OverpassPoiElement {
   lat?: number;
   lon?: number;
   center?: { lat: number; lon: number };
   tags?: Record<string, string>;
 }
 
-function escapeForOverpass(name: string): string {
-  return name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
 /** Names go into an Overpass regex, so regex metacharacters have to be neutralised as well as
  *  the surrounding quotes — stop names routinely contain "(", ")" and "-". */
 function escapeForOverpassRegex(name: string): string {
   return name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/"/g, '\\"');
+}
+
+/** Every tag a traveller's name for a place can sit in. OSM's `name` is the LOCAL name — 二条城,
+ *  Colosseo — so an exact `name` match found nothing for most of the world's sights, and the
+ *  closed-day check after generation silently had no facts. Same `nwr["key"~"^…$"]` shape
+ *  `resolveNamedPlaceCoords` below already runs. */
+const NAME_KEYS = ["name", "name:en", "int_name", "alt_name"] as const;
+
+export function poiNameClauses(poi: { name: string; lat: number; lon: number }, radiusM = MATCH_RADIUS_M): string {
+  const value = escapeForOverpassRegex(poi.name);
+  return NAME_KEYS.map((key) => `nwr["${key}"~"^${value}$",i](around:${radiusM},${poi.lat},${poi.lon});`).join("");
+}
+
+/** Case- and Unicode-safe. `normalizeStopName` cannot be used: it strips every non-ASCII
+ *  character, so "二条城" would normalise to "". */
+const sameName = (a: string, b: string) =>
+  a.normalize("NFKC").trim().toLowerCase() === b.normalize("NFKC").trim().toLowerCase();
+
+function elementPoint(el: OverpassPoiElement): { lat: number; lon: number } | null {
+  return el.center ?? (el.lat !== undefined && el.lon !== undefined ? { lat: el.lat, lon: el.lon } : null);
+}
+
+/**
+ * Files each OSM element under the REQUESTED name it answers to — every caller looks results up by
+ * the name it asked for, and the old keying by the element's own `name` filed 二条城 where nobody
+ * would ever read it. An element goes to the nearest request whose name equals any of its name
+ * tags and that lies within the match radius; the first element per request wins, so a place
+ * mapped as both a way and a node is not overwritten by its duplicate.
+ */
+export function matchElementsToPois(
+  elements: OverpassPoiElement[],
+  pois: { name: string; lat: number; lon: number }[]
+): Map<string, OverpassPoiElement> {
+  const out = new Map<string, OverpassPoiElement>();
+  for (const el of elements) {
+    const point = elementPoint(el);
+    const names = NAME_KEYS.map((k) => el.tags?.[k]).filter((n): n is string => Boolean(n));
+    if (!point || names.length === 0) continue;
+    const best = pois
+      .filter((p) => names.some((n) => sameName(n, p.name)))
+      .map((p) => ({ p, m: haversineKm(point, { lat: p.lat, lon: p.lon }) * 1000 }))
+      .filter(({ m }) => m <= MATCH_RADIUS_M)
+      .sort((x, y) => x.m - y.m)[0]?.p;
+    if (best && !out.has(best.name)) out.set(best.name, el);
+  }
+  return out;
 }
 
 /** Opening hours / closed-days for named POIs, from OSM via the same free no-key Overpass API
@@ -49,12 +91,7 @@ export async function fetchPoiOsmTags(
 ): Promise<Record<string, PoiOsmTags> | null> {
   if (pois.length === 0) return {};
 
-  const clauses = pois
-    .map(
-      (p) =>
-        `nwr["name"="${escapeForOverpass(p.name)}"](around:${MATCH_RADIUS_M},${p.lat},${p.lon});`
-    )
-    .join("");
+  const clauses = pois.map((p) => poiNameClauses(p)).join("");
   const query = `[out:json][timeout:30];(${clauses});out center tags;`;
 
   // Keyed on the whole batch, sorted so callers passing the same POIs in a different order share
@@ -62,17 +99,19 @@ export async function fetchPoiOsmTags(
   // the callers fire per-run with a stable set. Shortest TTL in the app — `opening_hours` is the
   // one Overpass payload that genuinely churns.
   const key =
-    "osmtags:" +
+    // v2: results are now keyed by the requested name; v1 rows are keyed by OSM's local name.
+    "osmtags2:" +
     pois
       .map((p) => `${p.name}@${p.lat.toFixed(4)},${p.lon.toFixed(4)}`)
       .sort()
       .join("|");
 
-  return cached(key, TTL.CHURNING, () => fetchPoiOsmTagsUncached(query, timeoutMs));
+  return cached(key, TTL.CHURNING, () => fetchPoiOsmTagsUncached(query, pois, timeoutMs));
 }
 
 async function fetchPoiOsmTagsUncached(
   query: string,
+  pois: { name: string; lat: number; lon: number }[],
   timeoutMs: number
 ): Promise<Record<string, PoiOsmTags> | null> {
   try {
@@ -85,9 +124,7 @@ async function fetchPoiOsmTagsUncached(
     if (elements === null) return null;
 
     const byName: Record<string, PoiOsmTags> = {};
-    for (const el of elements) {
-      const name = el.tags?.name;
-      if (!name || byName[name]) continue;
+    for (const [name, el] of matchElementsToPois(elements, pois)) {
       const point = el.center ?? (el.lat !== undefined && el.lon !== undefined ? { lat: el.lat, lon: el.lon } : null);
       const tags = el.tags;
       // `addr:place` as well as `addr:street`: a venue on a named square carries the square, and
