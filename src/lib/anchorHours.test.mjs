@@ -56,3 +56,17 @@ test("fetchAnchorHours survives a lookup that throws", async () => {
   });
   assert.deepEqual(out, [NIJO]);
 });
+
+test("fetchAnchorHours says so when the lookup comes back empty", async () => {
+  const warned = [];
+  const orig = console.warn;
+  console.warn = (...a) => warned.push(a.join(" "));
+  try {
+    await fetchAnchorHours([NIJO], async () => null);
+    await fetchAnchorHours([NIJO], () => new Promise(() => {}), 20);
+  } finally {
+    console.warn = orig;
+  }
+  assert.equal(warned.length, 2, "a failed and a timed-out lookup each leave a line in the log");
+  assert.match(warned[1], /20ms/);
+});
