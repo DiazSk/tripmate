@@ -1061,7 +1061,7 @@ export default function ItineraryCard({
           )}
         </div>
 
-        <AnchorReceipt itinerary={itinerary} onFitAnchor={onFitAnchor} />
+        <AnchorReceipt itinerary={itinerary} onFitAnchor={onFitAnchor} kept={trip?.status === "saved"} />
 
         {/* Same box either way: `mb-3 text-sm text-muted`, so the line under the heading
             keeps its height and the stops below it do not shift. Editing offers the field even

@@ -177,6 +177,7 @@ export default function TripDetail() {
 
           <AnchorReceipt
             itinerary={trip.itinerary}
+            kept={trip.status !== 'draft'}
             onFitAnchor={(name) => {
               setChatSeed(fitMessage(name));
               setChatOpenId((n) => n + 1);

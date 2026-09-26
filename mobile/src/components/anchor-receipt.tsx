@@ -13,10 +13,13 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 export function AnchorReceipt({
   itinerary,
   onFitAnchor,
+  kept,
 }: {
   itinerary: Itinerary;
   /** Absent where the plan can't be regenerated: the button is then hidden. */
   onFitAnchor?: (name: string) => void;
+  /** A kept trip with every must-see placed has nothing left to act on, so it shows nothing. */
+  kept?: boolean;
 }) {
   const cov = anchorCoverage(itinerary);
   if (!cov) return null;
@@ -24,6 +27,7 @@ export function AnchorReceipt({
     ...cov.unplaced,
     ...cov.missing.map((name) => ({ name, reason: 'Left out without a reason.' })),
   ];
+  if (kept && notIn.length === 0) return null;
 
   return (
     <View style={styles.card}>
