@@ -14,6 +14,7 @@ test("the prompt labels every item and says which images are which", () => {
   assert.match(p, /attached images are, in order, items 0, 3/);
   assert.match(p, /Kyoto/);
   assert.match(p, /never guess/i);
+  assert.match(p, /unmistakable well-known landmark/);
 });
 
 test("parseExtraction keeps high-confidence places, dedupes by key, drops junk", () => {

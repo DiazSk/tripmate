@@ -29,7 +29,7 @@ Rules:
 - Only places actually named in the text, or clearly readable or unmistakably pictured in an image. Never guess a venue from mood, food or scenery alone.
 - Use the place's own name as it would appear on a map, without "the best…" framing.
 - "sourceIndex" is the item number the place came from.
-- "confidence": "high" when the name is explicit, "low" otherwise.
+- "confidence": "high" when the place is named in the text, readable in an image, or an unmistakable well-known landmark in a photo; "low" when you are unsure which place it is.
 - "destinationGuess": the city or region most of the places are in, as "City, Country", or null.
 
 Respond with ONLY valid JSON, no code fences, in exactly this shape:
