@@ -22,7 +22,7 @@ import { ChoiceRow, DateField, FieldTrough, PrimaryButton, TextField } from '@/c
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { anchorKey, mergeAnchors } from '@/lib/anchors';
-import { cityMatches, groupByCity, toAnchor } from '@/lib/savedPlaces';
+import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
 import { closestTier, isEndBeforeStart, isTripTooLong, tierName, tripDays } from '@/lib/tiers';
 
@@ -298,11 +298,17 @@ function SavedPlacesSection({
 }) {
   const saved = useFocusedFetch(listSavedPlaces);
   const places = saved ?? [];
-  // Pre-select the places saved for this destination, once per destination change.
+  /** The destination (by `anchorKey`) the pre-select below last ran for. `null` before the first
+   *  run. Guards against `useFocusedFetch` delivering fresh data — on every refocus of this tab —
+   *  re-merging a chip the traveller had just deselected, for the same destination they never
+   *  changed. */
+  const preselectedFor = useRef<string | null>(null);
   useEffect(() => {
+    if (!saved || !shouldPreselect(destination, preselectedFor.current)) return;
+    preselectedFor.current = anchorKey(destination);
     const matches = places.filter((p) => p.source !== 'instagram' && cityMatches(p.city, destination));
     if (matches.length) onAnchorsChange((prev) => mergeAnchors(prev, matches.map(toAnchor)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run on destination/list change only
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per distinct destination, once the list has loaded
   }, [destination, saved]);
   if (places.length === 0) return null;
   const chosen = new Set(anchors.map((a) => anchorKey(a.name)));

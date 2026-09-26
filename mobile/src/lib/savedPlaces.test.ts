@@ -1,4 +1,4 @@
-import { cityMatches, groupByCity, toAnchor } from './savedPlaces';
+import { cityMatches, groupByCity, shouldPreselect, toAnchor } from './savedPlaces';
 
 const sp = (name: string, city: string | null, source = 'screenshot') =>
   ({ id: name, name, lat: null, lng: null, city, source, url: null, createdAt: '2026-09-25T00:00:00.000Z' }) as never;
@@ -28,4 +28,17 @@ describe('groupByCity', () => {
 
 it('toAnchor makes a want anchor from an import source', () => {
   expect(toAnchor(sp('A', 'Kyoto'))).toEqual({ name: 'A', lat: null, lng: null, priority: 'want', source: 'import' });
+});
+
+describe('shouldPreselect', () => {
+  it('runs on the first call, when last is null', () => {
+    expect(shouldPreselect('Kyoto', null)).toBe(true);
+  });
+  it('does not run again for the same destination, however it is styled', () => {
+    expect(shouldPreselect('Kyoto', 'kyoto')).toBe(false);
+    expect(shouldPreselect('Kyoto, Japan', 'kyoto japan')).toBe(false);
+  });
+  it('runs again once the destination actually changes', () => {
+    expect(shouldPreselect('Tokyo', 'kyoto')).toBe(true);
+  });
 });
