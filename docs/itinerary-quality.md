@@ -434,12 +434,10 @@ partial arm, so the sweep can be finished later into the same file.
 
 ### What the repeats show that n=1 could not
 
-- **Kyoto fails the same way every time.** All three runs break opening hours: Nijo Castle on a
-  Monday, when it is shut all day (runs 1 and 3), and Kinkaku-ji outside 09:00-17:00 (runs 1
-  and 2). The staged 2026-09-23 baseline arm failed Kyoto on the same Nijo-on-Monday. One run would
-  have been an anecdote; three out of three, on two paths, is the most reproducible defect measured
-  here. Whether the legacy route hands the model those hours at all is not yet checked, and is the
-  first thing to read before changing a rule for it.
+- **Kyoto fails the same way every time — but read the correction below first.** All three runs
+  break an anchor's hours: Nijo Castle on a Monday (runs 1 and 3), Kinkaku-ji outside 09:00-17:00
+  (runs 1 and 2). The Nijo half turned out to be the fixture's invented closure, not a real one —
+  see "Addendum" below.
 - **Barcelona's airport transfers don't fit the schedule.** `travel_leg` fired on all three runs.
   The legs are the booked-flight transfers: "Private transfer from Barcelona-El Prat Airport to
   Museu Picasso takes about 55 min, but only 15 min is left for it." That is §4c-bis's arrival
@@ -471,6 +469,38 @@ partial arm, so the sweep can be finished later into the same file.
   constraint rewrite's effect on hard failures, which the composite alone had shown as +0.03.
 - **Staged vs legacy is not like-for-like on the headline.** `travel_leg` needs typed stops and
   runs on the legacy arm only; `--compare` says so when the paths differ.
+
+### Addendum — two weather runs, and why the hours failures are data, not rules (2026-09-26, Claude)
+
+Two more legacy runs (`legacy-baseline-2026-09-26.json`, `AB_RUNS=1`, Kyoto and Rome), the first
+with weather — `legacyDestination()` now sends "City, Country", and the route received 4 and 5
+forecast days. **Both still broke an anchor's hours:** Kyoto scheduled Nijo Castle on Monday
+(plus a 6-minute walk with 0 minutes left for it); Rome scheduled the Colosseum outside
+09:00-16:30. So weather was not the cause. Reading the stored prompts and traces settled what is:
+
+- **The generator is never told any anchor's hours.** `formatAnchors()` (`itineraryPrompt.ts`)
+  writes each anchor as a name and coordinates, then `ANCHOR_INSTRUCTION` says "schedule every MUST
+  place … at a time it is open". No hours string from either fixture appears anywhere in either
+  prompt. The rule is there; the fact it needs is not. **Another prompt rule cannot fix this.**
+- **The post-generation safety net finds nothing for these places.** The critique prompt for both
+  runs carried no closed or conflict findings. Cause, confirmed against Overpass:
+  `fetchPoiOsmTags()` matches OSM's `name` tag exactly, and outside English-speaking countries that
+  tag holds the local name. `"Nijo Castle"` and `"Colosseum"` return nothing; `"二条城"` returns
+  `Mo-Su 08:45-17:00`. Results are also keyed by the element's own `name`, so even a match would be
+  filed under a key the caller never asks for. Every non-English-named stop on the legacy path goes
+  unenriched — no closed-day conflict, no step-free check, no pinned admission cost.
+- **Correction: the Kyoto closure is the fixture's, not Nijo's.** `kyoto-couple-mixed` hard-codes
+  `"Tu-Su 08:45-17:00; Mo off"` for Nijo Castle — a deliberate closed-day test ("anchors with real
+  hours + closed days"). OpenStreetMap says open daily. On the staged path that is a fair test: the
+  fixture's hours are in `trip-context.md`. On the legacy path it tests a fact the model was never
+  given and that reality contradicts, which is the weather trap again. **The "Kyoto 3/3" finding
+  above measured the fixture, not the product.** The Kinkaku-ji and Colosseum windows are
+  plausible real hours and still stand as misses — unverified guesses from memory, since the model
+  had nothing else.
+
+Next is `docs/superpowers/specs/2026-09-26-anchor-hours-before-generation-design.md`: look anchor
+hours up **before** generation, by any OSM name tag, and write them beside each anchor — and score
+the legacy arm's hours checks against the hours the route actually had, the way weather already is.
 
 ## Still open
 
