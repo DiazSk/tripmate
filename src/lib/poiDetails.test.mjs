@@ -48,10 +48,20 @@ test("between two elements that both have hours, the nearer wins", () => {
   assert.equal(matchElementsToPois([far, near], [NIJO]).get("Nijo Castle"), near);
 });
 
-test("the name clause searches name, name:en, int_name and alt_name, case-insensitively", () => {
+test("the name clause matches the local name exactly and the English name tolerantly", () => {
   const q = poiNameClauses(NIJO);
-  for (const key of ["name", "name:en", "int_name", "alt_name"]) {
-    assert.ok(q.includes(`nwr["${key}"~"^${nameRegex("Nijo Castle")}$",i](around:300,35.0142,135.7481);`), key);
+  // Two clauses, not four: `name` stays the cheap exact match it always was (local names such as
+  // 二条城 match as before), and only `name:en` carries the accent- and dash-tolerant regex.
+  assert.equal((q.match(/nwr\[/g) ?? []).length, 2);
+  assert.ok(q.includes(`nwr["name"="Nijo Castle"](around:300,35.0142,135.7481);`));
+  assert.ok(q.includes(`nwr["name:en"~"^${nameRegex("Nijo Castle")}$",i](around:300,35.0142,135.7481);`));
+});
+
+test("a name in a non-Latin script still matches itself", () => {
+  // Stripping every combining mark split Hangul into jamo and dropped Thai and Devanagari vowel
+  // signs, so the pattern could not match the place's own name.
+  for (const n of ["경복궁", "ताज महल", "วัดโพธิ์", "ガンダムベース", "Hồ Hoàn Kiếm", "二条城"]) {
+    assert.ok(new RegExp(`^${nameRegex(n)}$`, "i").test(n), n);
   }
 });
 

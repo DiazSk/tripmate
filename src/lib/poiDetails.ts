@@ -19,13 +19,18 @@ export interface OverpassPoiElement {
   tags?: Record<string, string>;
 }
 
+function escapeForOverpass(name: string): string {
+  return name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 /** Names go into an Overpass regex, so regex metacharacters have to be neutralised as well as
  *  the surrounding quotes — stop names routinely contain "(", ")" and "-". */
 function escapeForOverpassRegex(name: string): string {
   return name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/"/g, '\\"');
 }
 
-/** Every tag a traveller's name for a place can sit in. OSM's `name` is the LOCAL name — 二条城,
+/** Every tag a traveller's name for a place can sit in — read on the JS side, where it costs
+ *  nothing. The Overpass query itself asks only `name` and `name:en`: see `poiNameClauses`. OSM's `name` is the LOCAL name — 二条城,
  *  Colosseo — so an exact `name` match found nothing for most of the world's sights, and the
  *  closed-day check after generation silently had no facts. Same `nwr["key"~"^…$"]` shape
  *  `resolveNamedPlaceCoords` below already runs. */
@@ -44,21 +49,42 @@ const foldName = (n: string) =>
   n.normalize("NFKD").replace(/\p{M}/gu, "").replace(/[\s\-‐–—]+/g, " ").replace(/[’‘]/g, "'").trim().toLowerCase();
 
 /** Overpass regex for a name, tolerant of accents, dashes-for-spaces and curly apostrophes.
+ *  Built from the name's own characters: only a Latin letter whose accent-free base is in
+ *  `ACCENTS` becomes an alternation (which keeps the original letter, so "ồ" still matches
+ *  itself). Everything else is emitted as written — stripping every combining mark split Hangul
+ *  into jamo and dropped Thai and Devanagari vowel signs, so the pattern missed the name itself.
  *  Exported for its test; anchored by the caller. */
 export function nameRegex(name: string): string {
   let out = "";
-  for (const ch of foldName(name)) {
-    if (ch === " ") out += "[- ]+";
-    else if (ch === "'") out += "('|’)";
-    else if (ACCENTS[ch]) out += `(${[...ACCENTS[ch]].join("|")})`;
-    else out += escapeForOverpassRegex(ch);
+  let inGap = false;
+  for (const ch of name.normalize("NFC").trim()) {
+    if (/[\s\-‐–—]/.test(ch)) {
+      if (!inGap) out += "[- ]+";
+      inGap = true;
+      continue;
+    }
+    inGap = false;
+    const lower = ch.toLowerCase();
+    const base = lower.normalize("NFD").replace(/\p{M}/gu, "");
+    if (ch === "'" || ch === "’" || ch === "‘") out += "('|’)";
+    else if (base.length === 1 && ACCENTS[base]) {
+      const forms = new Set([...ACCENTS[base], lower]);
+      out += `(${[...forms].join("|")})`;
+    } else out += escapeForOverpassRegex(ch);
   }
   return out;
 }
 
+/**
+ * Two clauses per place. `name` stays the exact match it always was — cheap, and how a local name
+ * (二条城, 경복궁) is found. `name:en` carries the tolerant regex, because that is where "Nijō
+ * Castle" lives when the traveller typed "Nijo Castle". Four regex clauses per stop (all four
+ * `NAME_KEYS`) were tried and made a 6-place batch fail on every mirror; post-generation
+ * enrichment sends one of these per stop.
+ */
 export function poiNameClauses(poi: { name: string; lat: number; lon: number }, radiusM = MATCH_RADIUS_M): string {
-  const value = nameRegex(poi.name);
-  return NAME_KEYS.map((key) => `nwr["${key}"~"^${value}$",i](around:${radiusM},${poi.lat},${poi.lon});`).join("");
+  const around = `(around:${radiusM},${poi.lat},${poi.lon});`;
+  return `nwr["name"="${escapeForOverpass(poi.name)}"]${around}nwr["name:en"~"^${nameRegex(poi.name)}$",i]${around}`;
 }
 
 /** Case-, accent- and dash-insensitive, and Unicode-safe. `normalizeStopName` cannot be used: it
@@ -131,9 +157,10 @@ export async function fetchPoiOsmTags(
   // the callers fire per-run with a stable set. Shortest TTL in the app — `opening_hours` is the
   // one Overpass payload that genuinely churns.
   const key =
-    // v4: keyed by the requested name (v1: OSM's local name), accent- and dash-insensitive (v2
-    // missed "Nijō Castle"), and preferring the element that carries hours (v3 kept the first).
-    "osmtags4:" +
+    // v5: keyed by the requested name (v1: OSM's local name), accent-tolerant on name:en (v2
+    // missed "Nijō Castle"), preferring the element with hours (v3 kept the first), exact on
+    // name again (v4's regex could not match non-Latin names).
+    "osmtags5:" +
     pois
       .map((p) => `${p.name}@${p.lat.toFixed(4)},${p.lon.toFixed(4)}`)
       .sort()
