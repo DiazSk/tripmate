@@ -151,3 +151,12 @@ test("two unresolved stops at 0,0 are not the same place", () => {
   const plan = parsed(day(pinned("Hidden Temple", "entry", 0, 0)), day(pinned("Secret Garden", "entry", 0, 0)));
   assert.equal(scoreDuplicates(plan).repeats, 0);
 });
+
+test("a journey leg named twice is not a hard repeat, whatever its category", () => {
+  const plan = parsed(
+    day(pinned("Drive back to Reykjavik", "other", 64.14, -21.94)),
+    day(pinned("Drive back to Reykjavik", "other", 64.14, -21.94)),
+    day(pinned("Return to hotel", "other", 64.15, -21.95), pinned("Return to hotel", "other", 64.15, -21.95))
+  );
+  assert.equal(scoreDuplicates(plan).hardRepeats, 0);
+});

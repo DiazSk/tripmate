@@ -62,8 +62,10 @@ const DUPLICATE_DEGREES = 0.0015;
  * the one input the scorer cannot trust. So proximity matching applies only where the category is
  * positively KNOWN to be neither. Name matching is untouched and still catches these.
  */
-/** Rest/break entries repeat by nature; like meals, they are not a place visited twice. */
-const REST_ENTRY = /\b(rest|break)\b/i;
+/** Rest/break entries and journey legs repeat by nature; like meals, they are not a place visited
+ *  twice. The model tags "Drive back to Reykjavik" as `other` as often as `transit`, so the leg is
+ *  read off the name. */
+const REST_ENTRY = /\b(rest|break)\b|^(drive|return|head|transfer|travel|walk|ride|train|bus|ferry|taxi)\b/i;
 
 /** 0,0 is the unresolved sentinel (guardrails.ts `located`), not a shared point. */
 const unresolved = (e: ParsedEntry) => e.lat === 0 && e.lng === 0;
