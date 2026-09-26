@@ -295,6 +295,8 @@ export function scoreGeoCoherence(
 // --- constraint_violations ---------------------------------------------------------------------
 
 const BREAK_WORDS = /\b(break|rest|coffee|tea|sit|lunch|dinner|breakfast|picnic)\b/i;
+/** Narrower than BREAK_WORDS on purpose: "Tea ceremony at Camellia" is a sight, "Rest break" is not. */
+const REST_ENTRY = /\b(rest|break)\b/i;
 
 /**
  * constraint_violations — breaches of the rules the skill and the resolved flags impose, counted
@@ -401,7 +403,12 @@ export function scoreConstraints(
     }
 
     // --- pace (a cap, so only over-run is a breach)
-    const majorStops = entries.filter((e) => !e.areaLevel).length;
+    // The target counts sightseeing stops. Both prompts say so outright — "Meals, coffee and rest
+    // breaks do NOT count toward that number" (travelerProfilePrompt.ts) — so a family day of two
+    // sights plus lunch and dinner is on pace, not double it.
+    const majorStops = entries.filter(
+      (e) => !e.areaLevel && e.category !== "food" && e.category !== "transit" && !REST_ENTRY.test(e.name)
+    ).length;
     checkedByType.pace++;
     if (majorStops > flags.paceSpotsPerDay) {
       add(
