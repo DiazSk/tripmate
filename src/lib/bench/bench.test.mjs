@@ -892,3 +892,65 @@ test("compositeScore weights constraint adherence more heavily than route effici
     "25% constraint weight must bite harder than 15% route weight"
   );
 });
+
+// --- coordinate fallback (legacy-path stops are rarely in the fixture's POI list) ---
+
+const located = (name, lat, lng, startMin) => ({
+  raw: name,
+  name,
+  window: { startMin, endMin: startMin + 60 },
+  durationMin: 60,
+  category: "entry",
+  costUsd: null,
+  lat,
+  lng,
+  why: null,
+  note: null,
+  transport: null,
+  areaLevel: false,
+  slot: startMin < 12 * 60 ? "Morning" : startMin < 17 * 60 ? "Afternoon" : "Evening",
+});
+
+const locatedDay = (...entries) => ({
+  headingRaw: "## 2026-09-19",
+  date: "2026-09-19",
+  dayOfWeek: "Saturday",
+  theme: null,
+  weather: null,
+  lodging: null,
+  entriesBySlot: {
+    Morning: entries.filter((e) => e.slot === "Morning"),
+    Afternoon: entries.filter((e) => e.slot === "Afternoon"),
+    Evening: entries.filter((e) => e.slot === "Evening"),
+  },
+  stayNear: null,
+  note: null,
+});
+
+// Names deliberately absent from the Kyoto fixture, so only their own coordinates can place them.
+const OFF_LIST = () => ({
+  days: [
+    locatedDay(
+      located("Tiny Tea House North", 35.04, 135.73, 9 * 60),
+      located("Back Alley Gallery", 35.0, 135.77, 11 * 60),
+      located("Riverside Noodle Bar", 34.97, 135.77, 13 * 60)
+    ),
+  ],
+  preamble: "",
+  hadCodeFence: false,
+});
+
+test("unlisted stops are located by their own coordinates", () => {
+  const geo = scoreGeoCoherence(OFF_LIST(), KYOTO);
+  assert.equal(geo.matchedLegs, 2);
+  assert.notEqual(geo.normalized, null);
+  assert.equal(scoreBacktrack(OFF_LIST(), KYOTO).scoredDays, 1);
+});
+
+test("a stop at 0,0 is unresolved, not located", () => {
+  const p = OFF_LIST();
+  p.days[0].entriesBySlot.Morning[0].lat = 0;
+  p.days[0].entriesBySlot.Morning[0].lng = 0;
+  assert.equal(scoreGeoCoherence(p, KYOTO).matchedLegs, 1);
+  assert.equal(scoreBacktrack(p, KYOTO).scoredDays, 0, "two located stops is no ordering to judge");
+});

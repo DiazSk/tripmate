@@ -1,7 +1,7 @@
 import { haversineKm } from "../../travelTime";
 import { knownPois } from "../fixtures";
 import { dayEntries } from "../parseItinerary";
-import { findPoi } from "./domain";
+import { locateEntry } from "./domain";
 import type { BenchFixture } from "../fixtures";
 import type { ParsedDay, ParsedEntry, ParsedItinerary } from "../parseItinerary";
 import type {
@@ -144,7 +144,7 @@ function heuristicPathKm(points: Located[]): number {
 function locatedStops(day: ParsedDay, fixture: BenchFixture): Located[] {
   const pois = knownPois(fixture);
   return dayEntries(day)
-    .map((entry) => (entry.areaLevel ? null : findPoi(entry.name, pois)))
+    .map((entry) => (entry.areaLevel ? null : locateEntry(entry, pois)))
     .filter((p): p is { name: string; lat: number; lon: number } =>
       p !== null && p.lat !== null && p.lon !== null
     )
@@ -259,8 +259,8 @@ export function scoreMealProximity(
       let minutes: number | null = null;
       let source = "";
 
-      const from = previous.areaLevel ? null : findPoi(previous.name, pois);
-      const to = entry.areaLevel ? null : findPoi(entry.name, pois);
+      const from = previous.areaLevel ? null : locateEntry(previous, pois);
+      const to = entry.areaLevel ? null : locateEntry(entry, pois);
       if (from?.lat != null && from.lon != null && to?.lat != null && to.lon != null) {
         const km = legKm(
           { name: from.name, lat: from.lat, lon: from.lon },
