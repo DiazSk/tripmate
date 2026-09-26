@@ -31,15 +31,39 @@ function escapeForOverpassRegex(name: string): string {
  *  `resolveNamedPlaceCoords` below already runs. */
 const NAME_KEYS = ["name", "name:en", "int_name", "alt_name"] as const;
 
+/** Accented forms each plain letter should also match. OSM's `name:en` follows English Wikipedia
+ *  ("Nijō Castle", "Musée d'Orsay"), and a traveller types it plain. Alternations rather than
+ *  bracket classes, so a multi-byte letter is never split inside a byte-oriented class. */
+const ACCENTS: Record<string, string> = {
+  a: "aàáâäãåā", e: "eèéêëē", i: "iìíîïī", o: "oòóôöõōø", u: "uùúûüū", c: "cç", n: "nñ",
+};
+
+/** Folds a name the way both sides of a match must: no accents, any run of spaces or dashes read
+ *  as one space, typographic apostrophes as plain ones. Non-Latin script is left untouched. */
+const foldName = (n: string) =>
+  n.normalize("NFKD").replace(/\p{M}/gu, "").replace(/[\s\-‐–—]+/g, " ").replace(/[’‘]/g, "'").trim().toLowerCase();
+
+/** Overpass regex for a name, tolerant of accents, dashes-for-spaces and curly apostrophes.
+ *  Exported for its test; anchored by the caller. */
+export function nameRegex(name: string): string {
+  let out = "";
+  for (const ch of foldName(name)) {
+    if (ch === " ") out += "[- ]+";
+    else if (ch === "'") out += "('|’)";
+    else if (ACCENTS[ch]) out += `(${[...ACCENTS[ch]].join("|")})`;
+    else out += escapeForOverpassRegex(ch);
+  }
+  return out;
+}
+
 export function poiNameClauses(poi: { name: string; lat: number; lon: number }, radiusM = MATCH_RADIUS_M): string {
-  const value = escapeForOverpassRegex(poi.name);
+  const value = nameRegex(poi.name);
   return NAME_KEYS.map((key) => `nwr["${key}"~"^${value}$",i](around:${radiusM},${poi.lat},${poi.lon});`).join("");
 }
 
-/** Case- and Unicode-safe. `normalizeStopName` cannot be used: it strips every non-ASCII
- *  character, so "二条城" would normalise to "". */
-const sameName = (a: string, b: string) =>
-  a.normalize("NFKC").trim().toLowerCase() === b.normalize("NFKC").trim().toLowerCase();
+/** Case-, accent- and dash-insensitive, and Unicode-safe. `normalizeStopName` cannot be used: it
+ *  strips every non-ASCII character, so "二条城" would normalise to "". */
+const sameName = (a: string, b: string) => foldName(a) === foldName(b);
 
 function elementPoint(el: OverpassPoiElement): { lat: number; lon: number } | null {
   return el.center ?? (el.lat !== undefined && el.lon !== undefined ? { lat: el.lat, lon: el.lon } : null);
@@ -99,8 +123,9 @@ export async function fetchPoiOsmTags(
   // the callers fire per-run with a stable set. Shortest TTL in the app — `opening_hours` is the
   // one Overpass payload that genuinely churns.
   const key =
-    // v2: results are now keyed by the requested name; v1 rows are keyed by OSM's local name.
-    "osmtags2:" +
+    // v3: keyed by the requested name (v1 keyed by OSM's local name) and matched accent- and
+    // dash-insensitively (v2 missed "Nijō Castle" for "Nijo Castle").
+    "osmtags3:" +
     pois
       .map((p) => `${p.name}@${p.lat.toFixed(4)},${p.lon.toFixed(4)}`)
       .sort()
