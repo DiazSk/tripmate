@@ -1,4 +1,5 @@
 import type { Anchor, SavedPlace } from '@/api/types';
+import { anchorKey } from './anchors';
 
 const cityPart = (s: string) => s.split(',')[0].trim().toLowerCase();
 
@@ -23,4 +24,17 @@ export function groupByCity(places: SavedPlace[]): { city: string; places: Saved
 
 export function toAnchor(p: SavedPlace): Anchor {
   return { name: p.name, lat: p.lat, lng: p.lng, priority: 'want', source: 'import' };
+}
+
+/**
+ * Whether the pre-select effect should run for this destination. `last` is the destination it
+ * last ran for (`null` before the first run) — comparing by `anchorKey` rather than the raw string
+ * means "Kyoto" and "kyoto " count as the same destination, not two separate pre-selects.
+ *
+ * This is what stops a refetch (a place shared while the wizard was backgrounded) from re-adding
+ * a chip the traveller had just deselected: the effect that calls this also fires whenever
+ * `useFocusedFetch` delivers fresh data, with the destination unchanged.
+ */
+export function shouldPreselect(destination: string, last: string | null): boolean {
+  return anchorKey(destination) !== last;
 }
