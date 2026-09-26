@@ -73,26 +73,34 @@ function elementPoint(el: OverpassPoiElement): { lat: number; lon: number } | nu
  * Files each OSM element under the REQUESTED name it answers to — every caller looks results up by
  * the name it asked for, and the old keying by the element's own `name` filed 二条城 where nobody
  * would ever read it. An element goes to the nearest request whose name equals any of its name
- * tags and that lies within the match radius; the first element per request wins, so a place
- * mapped as both a way and a node is not overwritten by its duplicate.
+ * tags and that lies within the match radius.
+ *
+ * When several elements answer one request — OSM maps a sight as a bare node AND as the way or
+ * relation carrying its tags — the one with `opening_hours` wins, then the nearer. Keeping the
+ * first match instead threw the Pantheon's hours away behind a tagless node 132m off.
  */
 export function matchElementsToPois(
   elements: OverpassPoiElement[],
   pois: { name: string; lat: number; lon: number }[]
 ): Map<string, OverpassPoiElement> {
-  const out = new Map<string, OverpassPoiElement>();
+  const best = new Map<string, { el: OverpassPoiElement; m: number; hours: boolean }>();
   for (const el of elements) {
     const point = elementPoint(el);
     const names = NAME_KEYS.map((k) => el.tags?.[k]).filter((n): n is string => Boolean(n));
     if (!point || names.length === 0) continue;
-    const best = pois
+    const hit = pois
       .filter((p) => names.some((n) => sameName(n, p.name)))
       .map((p) => ({ p, m: haversineKm(point, { lat: p.lat, lon: p.lon }) * 1000 }))
       .filter(({ m }) => m <= MATCH_RADIUS_M)
-      .sort((x, y) => x.m - y.m)[0]?.p;
-    if (best && !out.has(best.name)) out.set(best.name, el);
+      .sort((x, y) => x.m - y.m)[0];
+    if (!hit) continue;
+    const hours = Boolean(el.tags?.opening_hours);
+    const cur = best.get(hit.p.name);
+    if (!cur || (hours && !cur.hours) || (hours === cur.hours && hit.m < cur.m)) {
+      best.set(hit.p.name, { el, m: hit.m, hours });
+    }
   }
-  return out;
+  return new Map([...best].map(([name, { el }]) => [name, el]));
 }
 
 /** Opening hours / closed-days for named POIs, from OSM via the same free no-key Overpass API
@@ -123,9 +131,9 @@ export async function fetchPoiOsmTags(
   // the callers fire per-run with a stable set. Shortest TTL in the app — `opening_hours` is the
   // one Overpass payload that genuinely churns.
   const key =
-    // v3: keyed by the requested name (v1 keyed by OSM's local name) and matched accent- and
-    // dash-insensitively (v2 missed "Nijō Castle" for "Nijo Castle").
-    "osmtags3:" +
+    // v4: keyed by the requested name (v1: OSM's local name), accent- and dash-insensitive (v2
+    // missed "Nijō Castle"), and preferring the element that carries hours (v3 kept the first).
+    "osmtags4:" +
     pois
       .map((p) => `${p.name}@${p.lat.toFixed(4)},${p.lon.toFixed(4)}`)
       .sort()
