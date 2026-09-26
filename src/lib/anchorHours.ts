@@ -3,8 +3,9 @@ import type { Anchor, PoiOsmTags } from "./types";
 
 /** On the critical path before the plan exists, so far tighter than the 45s batch default. It
  *  overlaps the context and sketch waits in `runGeneration`, so it costs nothing unless Overpass is
- *  slower than both. */
-export const ANCHOR_HOURS_BUDGET_MS = 15_000;
+ *  slower than both. 20s, not the spec's 15s: the live Kyoto+Rome lookup took 11.7-15.2s, so 15s
+ *  would drop the hours on an ordinary day. */
+export const ANCHOR_HOURS_BUDGET_MS = 20_000;
 
 type FetchTags = (
   pois: { name: string; lat: number; lon: number }[],
