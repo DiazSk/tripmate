@@ -34,6 +34,7 @@ import { tripDays, TierId } from "./tiers";
 import { deriveFlags, partyBudget, sanitizeLogistics } from "./userAnswers";
 import { geocodeAnchors } from "./anchorGeocode";
 import { normalizeAnchors, readUnplaced } from "./anchors";
+import { fetchAnchorHours } from "./anchorHours";
 import {
   Anchor,
   CritiqueResult,
@@ -287,9 +288,16 @@ export async function runGeneration(
     // with no city point, and never fatal — an unplaced anchor still reaches the model by name.
     if (geoPoint && anchors.length > 0) anchors = await geocodeAnchors(anchors, geoPoint);
 
+    // The planner is told to schedule each place "at a time it is open" and, until now, never
+    // told when that was. Started here — it needs the coordinates just resolved — and awaited
+    // after the context and sketch calls already in flight, so it costs wall clock only when
+    // Overpass is slower than both. Bounded and fail-soft inside `fetchAnchorHours`.
+    const anchorHoursPromise = anchors.length > 0 ? fetchAnchorHours(anchors) : Promise.resolve(anchors);
+
     contextInsight = await contextInsightPromise;
     onStage({ stage: "context", status: "done" });
     sketch = await sketchPromise;
+    anchors = await anchorHoursPromise;
     if (sketch) live?.onSketch?.(sketch);
     prompt = buildGeneratePrompt((contextPayload = {
       destination,
