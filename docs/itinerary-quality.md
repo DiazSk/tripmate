@@ -407,6 +407,70 @@ instead. Anyone re-running `AB_PATH=legacy` will hit this whenever the route exc
   one generation per fixture. The aggregate rate may still be partly a denominator effect on the
   other six fixtures, which shed 11 stops between them.
 
+## Legacy-path baseline — partial, 3 fixtures × 3 runs (2026-09-25, Claude)
+
+The first measurement of the path travellers actually get (`POST /api/itinerary`, critique
+included), repeated rather than run once. `scripts/skill-ab.mjs` gained `AB_RUNS`, a `node:http`
+transport (the route answered in 302-574s; `fetch` dies at 300s), a hard-failure gate
+(`src/lib/bench/criticalFailures.ts`) and `--report`. Raw output is in
+`docs/superpowers/plans/legacy-baseline-2026-09-25.json`, re-scored at report time like every arm.
+
+**Partial by decision.** The plan was 7 fixtures × 3. It was stopped after 9 runs because the CLI
+transport, though free per call, spends the developer's Claude subscription — ~7 minutes and several
+model calls per run. Rome, Reykjavík, Bangkok and Queenstown were not run; the report reads a
+partial arm, so the sweep can be finished later into the same file.
+
+- **Transport:** CLI (default). Models from `getRunSteps`: generate and critique `claude-sonnet-4-5`,
+  sketch `claude-sonnet-5`. Production's API transport routes generation to `claude-opus-5`, so
+  these numbers are comparable only to other CLI-transport arms.
+- **Headline — critical-trip failure rate: 89% (8 of 9 runs broke at least one hard rule).**
+  Composite mean 0.902, worst 0.821 (grounding outside the composite, see below).
+
+| Fixture | Mean | Worst | Critical | Codes |
+|---|---|---|---|---|
+| barcelona-access-dietary | 0.876 | 0.821 | 3/3 | travel_leg (3), mobility (2), dietary (2), closed_or_hours (1) |
+| kyoto-couple-mixed | 0.890 | 0.887 | 3/3 | closed_or_hours (3) |
+| lisbon-solo-offbeat | 0.940 | 0.904 | 2/3 | pace (1), travel_leg (1) |
+
+### What the repeats show that n=1 could not
+
+- **Kyoto fails the same way every time.** All three runs break opening hours: Nijo Castle on a
+  Monday, when it is shut all day (runs 1 and 3), and Kinkaku-ji outside 09:00-17:00 (runs 1
+  and 2). The staged 2026-09-23 baseline arm failed Kyoto on the same Nijo-on-Monday. One run would
+  have been an anecdote; three out of three, on two paths, is the most reproducible defect measured
+  here — and the pinned anchors' hours *are* in what the route fetches, so it is not missing data.
+- **Barcelona's airport transfers don't fit the schedule.** `travel_leg` fired on all three runs.
+  The legs are the booked-flight transfers: "Private transfer from Barcelona-El Prat Airport to
+  Museu Picasso takes about 55 min, but only 15 min is left for it." That is §4c-bis's arrival
+  buffer being written into the plan and then not left room for.
+- **The dietary gate caught two real misses for a vegan traveller:** "Late lunch in El Born"
+  suggesting seafood, and "Wine tasting in El Born" suggesting cheese. It is a keyword proxy (see
+  `scoreDietary`), so these were read by hand before being counted.
+- **Lisbon is the only fixture that ever passed** — once in three runs, which is exactly the
+  instability a single run hides.
+
+### Caveats — read these before quoting any number above
+
+- **No weather reached any of the nine runs.** The harness sent the fixture's admin region
+  ("Catalonia, Spain", "Lisboa, Portugal") as the destination; Open-Meteo geocodes that to nothing,
+  and a failed geocode is non-blocking by design, so the route planned with no forecast and said
+  nothing. The wizard sends "City, Country", which geocodes fine — so **this is a harness bug, not a
+  product one**, fixed in `legacyDestination()` after the sweep stopped. These nine runs are
+  therefore harsher than production (no weather, no bikeshare) and their weather axis is unmeasured.
+  A resumed sweep will not be like-for-like with them on anything weather touches.
+- **N=3 on three fixtures.** Enough to separate "always" from "once" — Kyoto from Lisbon — and not
+  enough to call a small composite difference real.
+- **Grounding is outside the legacy composite.** It scores only claims that contradict context the
+  legacy path is never given, so it reads a near-vacuous 1.0 there and would lift the composite for
+  nothing. It is still printed as its own column.
+- **Scorer changes landed with this sweep, so older composites moved.** Route scorers now fall back
+  to a stop's own coordinates (`locateEntry`), and `pace` counts sightseeing stops only, as both
+  prompts define it (it had been counting meals). Re-scored with today's code, the 2026-09-23 staged
+  arms read **71% critical (5/7) for the baseline and 43% (3/7) for the candidate** — the
+  constraint rewrite's effect on hard failures, which the composite alone had shown as +0.03.
+- **Staged vs legacy is not like-for-like on the headline.** `travel_leg` needs typed stops and
+  runs on the legacy arm only; `--compare` says so when the paths differ.
+
 ## Still open
 
 **Not fixable by rules — no data behind them.** Adding skill rules for these would be instructions
@@ -422,5 +486,6 @@ with no facts to act on:
 | Real prices | Every cost is the model's estimate |
 | Per-POI crowd data | The crowd *preference* plumbing is complete; busyness itself is not fetched |
 
-**Needs a run, not a change:** the benchmark has not been swept since the format fix or the model
-change. Every number in the audit baseline above predates both.
+**Needs a run, not a change:** the legacy path now has a partial baseline (3 of 7 fixtures, see
+"Legacy-path baseline" above), taken without weather because of a harness bug since fixed. Finishing
+it — the remaining four fixtures, and a re-run of the three with weather — is the next measurement.
