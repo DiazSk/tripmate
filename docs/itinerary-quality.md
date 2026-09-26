@@ -438,7 +438,8 @@ partial arm, so the sweep can be finished later into the same file.
   Monday, when it is shut all day (runs 1 and 3), and Kinkaku-ji outside 09:00-17:00 (runs 1
   and 2). The staged 2026-09-23 baseline arm failed Kyoto on the same Nijo-on-Monday. One run would
   have been an anecdote; three out of three, on two paths, is the most reproducible defect measured
-  here — and the pinned anchors' hours *are* in what the route fetches, so it is not missing data.
+  here. Whether the legacy route hands the model those hours at all is not yet checked, and is the
+  first thing to read before changing a rule for it.
 - **Barcelona's airport transfers don't fit the schedule.** `travel_leg` fired on all three runs.
   The legs are the booked-flight transfers: "Private transfer from Barcelona-El Prat Airport to
   Museu Picasso takes about 55 min, but only 15 min is left for it." That is §4c-bis's arrival
