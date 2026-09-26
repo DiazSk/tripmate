@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -14,13 +15,15 @@ import {
 
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
 
-import { geocode, importPlaces } from '@/api/tripMateApi';
+import { geocode, importPlaces, listSavedPlaces } from '@/api/tripMateApi';
 import type { Anchor, ImportItem } from '@/api/types';
 import { usePlanDraft } from '@/lib/planDraft';
 import { ChoiceRow, DateField, FieldTrough, PrimaryButton, TextField } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { mergeAnchors } from '@/lib/anchors';
+import { anchorKey, mergeAnchors } from '@/lib/anchors';
+import { cityMatches, groupByCity, toAnchor } from '@/lib/savedPlaces';
+import { useFocusedFetch } from '@/lib/useFocusedFetch';
 import { closestTier, isEndBeforeStart, isTripTooLong, tierName, tripDays } from '@/lib/tiers';
 
 export default function Basics() {
@@ -220,6 +223,12 @@ export default function Basics() {
           />
         </FieldTrough>
 
+        <SavedPlacesSection
+          destination={destination}
+          anchors={draft.anchors}
+          onAnchorsChange={(update) => patch((prev) => ({ anchors: update(prev.anchors) }))}
+        />
+
         <ImportSection
           destination={destination}
           anchors={draft.anchors}
@@ -270,6 +279,70 @@ export default function Basics() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+/**
+ * Places the traveller shared into TripMate before planning (Task 5), grouped by the city they
+ * were saved under. Loading the destination's own city pre-selects them into `draft.anchors`, the
+ * same list the chips below toggle in and out of.
+ */
+function SavedPlacesSection({
+  destination,
+  anchors,
+  onAnchorsChange,
+}: {
+  destination: string;
+  anchors: Anchor[];
+  onAnchorsChange: (update: (prev: Anchor[]) => Anchor[]) => void;
+}) {
+  const saved = useFocusedFetch(listSavedPlaces);
+  const places = saved ?? [];
+  // Pre-select the places saved for this destination, once per destination change.
+  useEffect(() => {
+    const matches = places.filter((p) => p.source !== 'instagram' && cityMatches(p.city, destination));
+    if (matches.length) onAnchorsChange((prev) => mergeAnchors(prev, matches.map(toAnchor)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run on destination/list change only
+  }, [destination, saved]);
+  if (places.length === 0) return null;
+  const chosen = new Set(anchors.map((a) => anchorKey(a.name)));
+  const reminders = places.filter((p) => p.source === 'instagram');
+  return (
+    <View style={styles.saved}>
+      <ThemedText type="label">Your saved places ({places.length - reminders.length})</ThemedText>
+      {groupByCity(places).map((g) => (
+        <View key={g.city} style={styles.savedGroup}>
+          <ThemedText themeColor="muted">{g.city}</ThemedText>
+          <View style={styles.chips}>
+            {g.places.map((p) => {
+              const on = chosen.has(anchorKey(p.name));
+              return (
+                <Pressable
+                  key={p.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={`${on ? 'Remove' : 'Add'} ${p.name}`}
+                  onPress={() =>
+                    onAnchorsChange((prev) =>
+                      on ? prev.filter((a) => anchorKey(a.name) !== anchorKey(p.name)) : mergeAnchors(prev, [toAnchor(p)])
+                    )
+                  }
+                  style={[styles.chip, on && styles.chipOn]}>
+                  <ThemedText type="detail">{p.name}</ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ))}
+      {reminders.map((r) => (
+        <Pressable key={r.id} accessibilityRole="link" onPress={() => r.url && Linking.openURL(r.url)}>
+          <ThemedText type="detail" themeColor="muted">
+            Instagram post: screenshot it to add places
+          </ThemedText>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -467,6 +540,9 @@ const styles = StyleSheet.create({
   headline: { marginBottom: Spacing.tight },
   // 44 is the tap-target floor, and the row is the target rather than the words in it.
   suggestion: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.read },
+  saved: { gap: Spacing.tight },
+  savedGroup: { gap: Spacing.hair },
+  chipOn: { backgroundColor: Colors.accent },
   import: { gap: Spacing.tight },
   importInput: {
     minHeight: 72,
