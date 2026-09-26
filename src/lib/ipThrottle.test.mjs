@@ -45,3 +45,12 @@ test("isThrottled applies regardless of transport, given a real IP", () => {
     else process.env.LLM_TRANSPORT = prev;
   }
 });
+
+test("buckets are independent and max is per call", () => {
+  const req = fakeRequest("9.9.9.9");
+  for (let i = 0; i < 3; i += 1) isThrottled(req);
+  assert.equal(isThrottled(req), true); // model bucket full
+  assert.equal(isThrottled(req, { bucket: "import", max: 30 }), false); // import bucket untouched
+  for (let i = 0; i < 29; i += 1) isThrottled(req, { bucket: "import", max: 30 });
+  assert.equal(isThrottled(req, { bucket: "import", max: 30 }), true);
+});
