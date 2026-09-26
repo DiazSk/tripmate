@@ -32,7 +32,7 @@ import { compositeScore, paretoFrontier, balancedPanel, aggregateByModel } from 
 import { getFixture } from "./fixtures.ts";
 import { toItineraryJson, countStops } from "./itineraryJson.ts";
 import { shortestPathKm, scoreBacktrack, scoreMealProximity, scoreDowntime } from "./scorers/route.ts";
-import { scoreWeatherAlignment, scoreBudget, scoreVibe, isAdverseDay, classifyExposure } from "./scorers/context.ts";
+import { scoreWeatherAlignment, scoreBudget, scoreVibe, scoreDietary, isAdverseDay, classifyExposure } from "./scorers/context.ts";
 import { compositeGroups } from "./runBenchmark.ts";
 import { COMPOSITE_WEIGHTS } from "./types.ts";
 
@@ -953,4 +953,47 @@ test("a stop at 0,0 is unresolved, not located", () => {
   p.days[0].entriesBySlot.Morning[0].lng = 0;
   assert.equal(scoreGeoCoherence(p, KYOTO).matchedLegs, 1);
   assert.equal(scoreBacktrack(p, KYOTO).scoredDays, 0, "two located stops is no ordering to judge");
+});
+
+// --- dietary ---
+
+const food = (name, why = null) => ({ ...located(name, 41.39, 2.17, 13 * 60), category: "food", why });
+const onePlan = (...entries) => ({ days: [locatedDay(...entries)], preamble: "", hadCodeFence: false });
+
+test("scoreDietary is unmeasured when no diet was stated", () => {
+  assert.equal(scoreDietary(onePlan(food("Steak House")), null).normalized, null);
+  assert.equal(scoreDietary(onePlan(food("Steak House")), { tags: [], note: "" }).normalized, null);
+});
+
+test("scoreDietary flags a vegan trip sent to a steakhouse", () => {
+  const s = scoreDietary(onePlan(food("El Asador Steak House"), food("Veggie Garden", "fully vegan menu")), {
+    tags: ["Vegan"],
+    note: "",
+  });
+  assert.equal(s.foodStops, 2);
+  assert.equal(s.contradictions, 1);
+  assert.equal(s.acknowledged, 1);
+  assert.equal(s.normalized, 0.5);
+  assert.match(s.flagged[0], /steak/);
+});
+
+test("scoreDietary reads an allergy out of the free-text note", () => {
+  const s = scoreDietary(onePlan(food("Almond Blossom Café")), { tags: [], note: "severe tree-nut allergy" });
+  assert.equal(s.contradictions, 1);
+});
+
+test("scoreDietary catches a peanut allergy stated in the note", () => {
+  const s = scoreDietary(onePlan(food("Satay Street Stall")), { tags: [], note: "peanut allergy" });
+  assert.equal(s.contradictions, 1);
+});
+
+test("scoreDietary matches whole words, so Hamburg is not ham", () => {
+  const s = scoreDietary(onePlan(food("Hamburg Hauptbahnhof Food Hall")), { tags: ["Halal"], note: "" });
+  assert.equal(s.contradictions, 0);
+});
+
+test("scoreDietary ignores non-food stops", () => {
+  const s = scoreDietary(onePlan(located("Steak Museum", 41.39, 2.17, 10 * 60)), { tags: ["Vegan"], note: "" });
+  assert.equal(s.foodStops, 0);
+  assert.equal(s.normalized, null);
 });
