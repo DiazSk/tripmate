@@ -51,7 +51,7 @@ import {
 import { itineraryToParsed } from "../src/lib/bench/itineraryToParsed.ts";
 import { judgeFixture } from "../src/lib/bench/scorers/judge.ts";
 import { criticalFailures } from "../src/lib/bench/criticalFailures.ts";
-import { criticalRate, errorText, headlineDelta, isFailedRun, legacyDestination, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "../src/lib/bench/sweep.ts";
+import { criticalRate, errorText, headlineDelta, isFailedRun, legacyDestination, runsOf, summarizeRuns, withSeenAnchorHours, withSeenWeather, withoutGrounding } from "../src/lib/bench/sweep.ts";
 import { postJson } from "../src/lib/bench/postJson.ts";
 
 const BASE = process.env.AB_BASE_URL ?? "http://localhost:3000";
@@ -123,8 +123,12 @@ async function runLegacy(fixture) {
     throw new Error(`HTTP ${status}: ${JSON.stringify(payload).slice(0, 300)}`);
   }
   // The legacy route fetched its own live forecast; score against that, not the fixture's.
-  const context = getGeneration(payload.runId)?.context_json;
-  const seenWeather = context ? JSON.parse(context).weather ?? [] : null;
+  const contextJson = getGeneration(payload.runId)?.context_json;
+  const context = contextJson ? JSON.parse(contextJson) : null;
+  const seenWeather = context ? context.weather ?? [] : null;
+  // What the route told the model about each anchor, hours included. Absent on runs recorded
+  // before anchor hours existed; those are scored exactly as they were.
+  const seenAnchors = context ? context.anchors ?? [] : null;
   const steps = getRunSteps(payload.runId);
   return {
     fixtureId: fixture.id,
@@ -133,6 +137,7 @@ async function runLegacy(fixture) {
     itineraryJson: payload.itinerary,
     runId: payload.runId,
     seenWeather,
+    seenAnchors,
     wallMs,
     costUsd: steps.reduce((n, s) => n + (s.cost_usd ?? 0), 0),
   };
@@ -299,7 +304,8 @@ function printAxis(rows, label, pick, rawKey) {
 function scoreCell(fixture, cell) {
   const operational = { latencyMs: cell.wallMs, inputTokens: null, outputTokens: null, costUsd: cell.costUsd, cliReportedCostUsd: null, parsedOk: true, failed: false, errorMessage: null };
   if (cell.itineraryMd) return scoreItinerary(fixture, cell.itineraryMd, operational);
-  const seen = cell.seenWeather ? withSeenWeather(fixture, cell.seenWeather) : fixture;
+  const weathered = cell.seenWeather ? withSeenWeather(fixture, cell.seenWeather) : fixture;
+  const seen = cell.seenAnchors ? withSeenAnchorHours(weathered, cell.seenAnchors) : weathered;
   return scoreParsed(seen, itineraryToParsed(cell.itineraryJson), JSON.stringify(cell.itineraryJson), operational);
 }
 

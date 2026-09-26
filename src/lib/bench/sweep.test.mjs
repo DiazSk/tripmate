@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getFixture } from "./fixtures.ts";
-import { criticalRate, errorText, headlineDelta, isFailedRun, legacyDestination, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "./sweep.ts";
+import { criticalRate, errorText, headlineDelta, isFailedRun, legacyDestination, runsOf, summarizeRuns, withSeenAnchorHours, withSeenWeather, withoutGrounding } from "./sweep.ts";
 
 const KYOTO = getFixture("kyoto-couple-mixed");
 
@@ -86,4 +86,28 @@ test("the legacy arm asks for the city, not the region the geocoder cannot find"
   assert.equal(legacyDestination(getFixture("barcelona-access-dietary")), "Barcelona, Spain");
   assert.equal(legacyDestination(getFixture("reykjavik-couple-packed")), "Reykjavík, Iceland");
   assert.equal(legacyDestination({ title: "Nowhere", reconciled: { rawFetch: { destination: { region: null } } } }), "Nowhere");
+});
+
+test("withSeenAnchorHours scores anchors against the hours the route had", () => {
+  const nijoBefore = KYOTO.poiDetails.pois.find((p) => p.name === "Nijo Castle");
+  assert.match(nijoBefore.openingHours, /Mo off/, "the fixture's invented Monday closure");
+  const f = withSeenAnchorHours(KYOTO, [{ name: "Nijo Castle", openingHours: "Mo-Su 08:45-17:00", closedDays: [] }]);
+  const nijo = f.poiDetails.pois.find((p) => p.name === "Nijo Castle");
+  assert.equal(nijo.openingHours, "Mo-Su 08:45-17:00");
+  assert.deepEqual(nijo.closedDays, []);
+});
+
+test("an anchor the route had no hours for is unchecked, not judged on the fixture", () => {
+  const f = withSeenAnchorHours(KYOTO, [{ name: "Nijo Castle" }]);
+  for (const p of f.poiDetails.pois) {
+    assert.equal(p.openingHours, null, p.name);
+    assert.equal(p.closedDays, null, p.name);
+  }
+  assert.equal(f.poiDetails.pois.length, KYOTO.poiDetails.pois.length, "anchors stay, so coverage is unchanged");
+});
+
+test("withSeenAnchorHours does not mutate the frozen fixture", () => {
+  const before = JSON.stringify(KYOTO.poiDetails);
+  withSeenAnchorHours(KYOTO, []);
+  assert.equal(JSON.stringify(KYOTO.poiDetails), before);
 });
