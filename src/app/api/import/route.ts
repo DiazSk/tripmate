@@ -27,7 +27,9 @@ const EXTRACT_TIMEOUT_MS = 60_000;
 const MEDIA = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export async function POST(req: NextRequest) {
-  if (isThrottled(req)) {
+  if (isThrottled(req, { bucket: "import", max: 30 })) {
+    // One import is one short extract call; a traveller shares several screenshots in a row;
+    // the daily spend cap (isOverDailyCap) stays the real backstop.
     return NextResponse.json({ error: "Too many requests — slow down and try again shortly." }, { status: 429 });
   }
   if (isOverDailyCap()) {
