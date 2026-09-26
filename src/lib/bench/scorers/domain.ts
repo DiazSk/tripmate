@@ -3,7 +3,7 @@ import { haversineKm } from "../../travelTime";
 import { knownPois } from "../fixtures";
 import type { BenchFixture } from "../fixtures";
 import { dayEntries, parseClock } from "../parseItinerary";
-import type { ParsedItinerary, Slot } from "../parseItinerary";
+import type { ParsedEntry, ParsedItinerary, Slot } from "../parseItinerary";
 import { VIOLATION_TYPES } from "../types";
 import type {
   TripLogistics,
@@ -98,6 +98,23 @@ export interface LocatedPoi {
 
 export function findPoi(entryName: string, pois: LocatedPoi[]): LocatedPoi | null {
   return pois.find((p) => nameMatches(entryName, p.name)) ?? null;
+}
+
+/**
+ * Where an entry is: the fixture's POI when the name matches, else the model's own coordinates.
+ *
+ * The legacy path picks stops from memory and never sees a candidate list, so most of its stops
+ * miss `findPoi` — but their lat/lng were already resolved against Overpass by
+ * `resolveNamedPlaceCoords`. Without this, backtrack, geo coherence and meal proximity go
+ * unmeasured on the path travellers actually get. 0,0 is the unresolved sentinel, not a place.
+ */
+export function locateEntry(entry: ParsedEntry, pois: LocatedPoi[]): LocatedPoi | null {
+  const known = findPoi(entry.name, pois);
+  if (known) return known;
+  const { lat, lng } = entry;
+  if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat === 0 && lng === 0) return null;
+  return { name: entry.name, lat, lon: lng };
 }
 
 // --- Opening-hours parsing (scorer-local) ------------------------------------------------------
@@ -225,7 +242,7 @@ export function scoreGeoCoherence(
 
   for (const day of itinerary.days) {
     const located = dayEntries(day)
-      .map((e) => findPoi(e.name, pois))
+      .map((e) => locateEntry(e, pois))
       .filter((p): p is LocatedPoi => p !== null && p.lat !== null && p.lon !== null);
 
     const dayKm: number[] = [];
