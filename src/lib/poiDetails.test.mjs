@@ -32,10 +32,20 @@ test("an element beyond the match radius, or matching nothing, is dropped", () =
   assert.equal(matchElementsToPois([far, other], [NIJO]).size, 0);
 });
 
-test("the first matching element wins when OSM returns the place twice", () => {
-  const way = { center: { lat: 35.0142, lon: 135.7481 }, tags: { name: "二条城", "name:en": "Nijo Castle", opening_hours: "A" } };
-  const node = { lat: 35.0142, lon: 135.7481, tags: { "name:en": "Nijo Castle", opening_hours: "B" } };
-  assert.equal(matchElementsToPois([way, node], [NIJO]).get("Nijo Castle"), way);
+// Real Overpass output, 2026-09-26: a bare node 132m off and the relation carrying the hours 6m
+// off, in that order. Keeping the first match threw the Pantheon's hours away.
+test("an element with opening hours beats a bare duplicate of the same place", () => {
+  const PANTHEON = { name: "Pantheon", lat: 41.8986, lon: 12.4769 };
+  const node = { lat: 41.8998, lon: 12.4769, tags: { name: "Pantheon" } };
+  const relation = { center: { lat: 41.89865, lon: 12.47695 }, tags: { name: "Pantheon", "name:en": "Pantheon", opening_hours: "Mo-Sa 08:30-19:15; Su 09:00-17:45" } };
+  assert.equal(matchElementsToPois([node, relation], [PANTHEON]).get("Pantheon"), relation);
+  assert.equal(matchElementsToPois([relation, node], [PANTHEON]).get("Pantheon"), relation, "order-independent");
+});
+
+test("between two elements that both have hours, the nearer wins", () => {
+  const far = { lat: 35.0162, lon: 135.7481, tags: { "name:en": "Nijo Castle", opening_hours: "FAR" } };
+  const near = { center: { lat: 35.0143, lon: 135.7481 }, tags: { "name:en": "Nijo Castle", opening_hours: "NEAR" } };
+  assert.equal(matchElementsToPois([far, near], [NIJO]).get("Nijo Castle"), near);
 });
 
 test("the name clause searches name, name:en, int_name and alt_name, case-insensitively", () => {
