@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getFixture } from "./fixtures.ts";
-import { criticalRate, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "./sweep.ts";
+import { criticalRate, errorText, isFailedRun, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "./sweep.ts";
 
 const KYOTO = getFixture("kyoto-couple-mixed");
 
@@ -58,4 +58,16 @@ test("criticalRate is failing runs over all runs", () => {
     rate: 0.5,
   });
   assert.equal(criticalRate([]).rate, null);
+});
+
+test("a run that produced no plan is failed, even when its error message is empty", () => {
+  // ECONNREFUSED over node:http arrives as an AggregateError whose `message` is "".
+  const refused = new AggregateError([new Error("connect ECONNREFUSED ::1:3000")], "");
+  refused.code = "ECONNREFUSED";
+  assert.equal(errorText(refused), "ECONNREFUSED");
+  assert.equal(errorText(new Error("boom")), "boom");
+  assert.equal(isFailedRun({ error: "", itineraryMd: null, itineraryJson: null }), true);
+  assert.equal(isFailedRun({ itineraryMd: null, itineraryJson: null }), true);
+  assert.equal(isFailedRun({ itineraryMd: "md" }), false);
+  assert.equal(isFailedRun({ itineraryMd: null, itineraryJson: { days: [] } }), false);
 });

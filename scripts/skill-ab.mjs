@@ -26,14 +26,22 @@
  *   # legacy sanity check (needs `npm run dev` running):
  *   AB_PATH=legacy AB_FIXTURES=kyoto-couple-mixed \
  *     node --import ./scripts/ts-resolve.mjs scripts/skill-ab.mjs --arm legacy-a.json
+ *
+ * **Repeats.** `AB_RUNS=3` generates each fixture three times. One run is a direction; three
+ * show whether a rule holds or merely held once. `--report arm.json` prints mean, worst, and how
+ * many runs broke a hard rule, per fixture, with the critical-trip failure rate as the headline.
+ *
+ *   AB_PATH=legacy AB_RUNS=3 node --import ./scripts/ts-resolve.mjs scripts/skill-ab.mjs --arm legacy.json
+ *   node --import ./scripts/ts-resolve.mjs scripts/skill-ab.mjs --report legacy.json
  */
 import { readFileSync, writeFileSync } from "fs";
+import { request } from "node:http";
 
 import { BENCH_FIXTURES, getFixture } from "../src/lib/bench/fixtures.ts";
 import { benchUserAnswers } from "../src/lib/bench/refineTasks.ts";
 import { benchTimeoutMs } from "../src/lib/bench/models.ts";
 import { generateItinerary } from "../src/lib/generateItinerary.ts";
-import { getRunSteps } from "../src/lib/db.ts";
+import { getGeneration, getRunSteps } from "../src/lib/db.ts";
 import { closestTier } from "../src/lib/tiers.ts";
 import {
   compositeGroups,
@@ -43,9 +51,12 @@ import {
 } from "../src/lib/bench/runBenchmark.ts";
 import { itineraryToParsed } from "../src/lib/bench/itineraryToParsed.ts";
 import { judgeFixture } from "../src/lib/bench/scorers/judge.ts";
+import { criticalFailures } from "../src/lib/bench/criticalFailures.ts";
+import { criticalRate, errorText, isFailedRun, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "../src/lib/bench/sweep.ts";
 
 const BASE = process.env.AB_BASE_URL ?? "http://localhost:3000";
 const PATH_KIND = process.env.AB_PATH ?? "staged";
+const RUNS = Math.max(1, Number(process.env.AB_RUNS ?? 1) || 1);
 
 /** The A/B set: the seven that predate the requirement fields, so both arms see the same trips.
  *  `paris-requirements` is deliberately out — it exists to exercise fields arm A cannot consume,
@@ -88,16 +99,47 @@ async function runStaged(fixture) {
   };
 }
 
+/**
+ * POST JSON without undici. Node's `fetch` gives up at a 300s `headersTimeout` that no fetch
+ * option exposes, and the legacy route routinely answers after 300s (312.7s on 2026-09-23).
+ * `node:http` has no such ceiling; its socket timeout is set to the bench's own.
+ */
+function postJson(url, body, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = request(
+      url,
+      { method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) }, timeout: timeoutMs },
+      (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => (text += chunk));
+        res.on("end", () => {
+          let payload;
+          try {
+            payload = JSON.parse(text);
+          } catch {
+            payload = { raw: text.slice(0, 300) };
+          }
+          resolve({ status: res.statusCode ?? 0, payload });
+        });
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error(`no answer after ${timeoutMs}ms`)));
+    req.on("error", reject);
+    req.end(data);
+  });
+}
+
 async function runLegacy(fixture) {
   const answers = benchUserAnswers(fixture);
   const days = fixture.reconciled.rawFetch.dateContext.days;
   const startDate = days[0].date;
   const endDate = days[days.length - 1].date;
   const startedAt = Date.now();
-  const res = await fetch(`${BASE}/api/itinerary`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const { status, payload } = await postJson(
+    `${BASE}/api/itinerary`,
+    {
       destination: fixture.reconciled.rawFetch.destination.region ?? fixture.title,
       startDate,
       endDate,
@@ -105,13 +147,16 @@ async function runLegacy(fixture) {
       tier: closestTier(answers.budget, days.length),
       userAnswers: answers,
       preferences: { tags: answers.priorities ?? [] },
-    }),
-  });
+    },
+    benchTimeoutMs()
+  );
   const wallMs = Date.now() - startedAt;
-  const payload = await res.json();
-  if (!res.ok || !payload.itinerary) {
-    throw new Error(`HTTP ${res.status}: ${JSON.stringify(payload).slice(0, 300)}`);
+  if (status < 200 || status >= 300 || !payload.itinerary) {
+    throw new Error(`HTTP ${status}: ${JSON.stringify(payload).slice(0, 300)}`);
   }
+  // The legacy route fetched its own live forecast; score against that, not the fixture's.
+  const context = getGeneration(payload.runId)?.context_json;
+  const seenWeather = context ? JSON.parse(context).weather ?? [] : null;
   const steps = getRunSteps(payload.runId);
   return {
     fixtureId: fixture.id,
@@ -119,6 +164,7 @@ async function runLegacy(fixture) {
     itineraryMd: null,
     itineraryJson: payload.itinerary,
     runId: payload.runId,
+    seenWeather,
     wallMs,
     costUsd: steps.reduce((n, s) => n + (s.cost_usd ?? 0), 0),
   };
@@ -131,21 +177,26 @@ async function runArm(out) {
 
   const cells = [];
   for (const fixture of fixtures) {
-    process.stdout.write(`  ${fixture.id} … `);
-    try {
-      const cell = PATH_KIND === "legacy" ? await runLegacy(fixture) : await runStaged(fixture);
-      cells.push(cell);
-      console.log(`${(cell.wallMs / 1000).toFixed(1)}s  $${cell.costUsd.toFixed(6)}`);
-    } catch (err) {
-      // One fixture failing must not lose the arms that already ran — 90s each is too expensive
-      // to throw away over an unrelated timeout.
-      console.log(`FAILED: ${err.message}`);
-      cells.push({ fixtureId: fixture.id, itineraryMd: null, itineraryJson: null, runId: null, wallMs: 0, costUsd: 0, error: String(err.message) });
+    const runs = [];
+    for (let i = 0; i < RUNS; i++) {
+      process.stdout.write(`  ${fixture.id} [${i + 1}/${RUNS}] … `);
+      try {
+        const run = PATH_KIND === "legacy" ? await runLegacy(fixture) : await runStaged(fixture);
+        runs.push(run);
+        console.log(`${(run.wallMs / 1000).toFixed(1)}s  $${run.costUsd.toFixed(6)}`);
+      } catch (err) {
+        // One run failing must not lose the runs that already finished — each costs minutes.
+        const reason = errorText(err);
+        console.log(`FAILED: ${reason}`);
+        runs.push({ fixtureId: fixture.id, itineraryMd: null, itineraryJson: null, runId: null, wallMs: 0, costUsd: 0, error: reason });
+      }
     }
+    cells.push({ fixtureId: fixture.id, runs });
   }
 
-  writeFileSync(out, JSON.stringify({ arm: out, path: PATH_KIND, cells }, null, 2));
-  console.log(`\nwrote ${out} — ${cells.filter((c) => !c.error).length}/${cells.length} cells`);
+  writeFileSync(out, JSON.stringify({ arm: out, path: PATH_KIND, runsPerFixture: RUNS, cells }, null, 2));
+  const ok = cells.flatMap((c) => c.runs).filter((r) => !isFailedRun(r)).length;
+  console.log(`\nwrote ${out} — ${ok}/${cells.length * RUNS} runs`);
 }
 
 /**
@@ -162,16 +213,27 @@ async function compare(aPath, bPath) {
   const rows = [];
   for (const cellA of a.cells) {
     const cellB = b.cells.find((c) => c.fixtureId === cellA.fixtureId);
-    // A cell may carry `itineraryMd: null` plus an `error` string (Task 17 brief ruling 5) —
-    // unpaired or errored fixtures are skipped rather than scored as zero or crashing scoreCell.
-    if (!cellB || cellA.error || cellB.error) continue;
+    // A run may carry `itineraryMd: null` plus an `error` string (Task 17 brief ruling 5) —
+    // unpaired or all-errored fixtures are skipped rather than scored as zero or crashing scoreCell.
+    const firstOk = (cell) => runsOf(cell).find((r) => !isFailedRun(r));
+    const runA = firstOk(cellA);
+    const runB = cellB && firstOk(cellB);
+    if (!runA || !runB) continue;
     const fixture = getFixture(cellA.fixtureId);
     if (!fixture) continue;
-    rows.push({ fixture, a: scoreCell(fixture, cellA), b: scoreCell(fixture, cellB), cellA, cellB });
+    rows.push({ fixture, a: scoreCell(fixture, runA), b: scoreCell(fixture, runB), cellA: runA, cellB: runB });
   }
 
   console.log(`\npaired fixtures: ${rows.length}/${a.cells.length}\n`);
-  printAxis(rows, "composite", (s) => compositeScore(s));
+  const tableA = armTable(a);
+  const tableB = armTable(b);
+  printArmTable(`arm A — ${aPath}`, tableA);
+  printArmTable(`arm B — ${bPath}`, tableB);
+  const d =
+    tableA.headline.rate !== null && tableB.headline.rate !== null ? tableB.headline.rate - tableA.headline.rate : null;
+  console.log(`\ncritical-trip failure rate delta  ${d === null ? "n/a" : `${d >= 0 ? "+" : ""}${(d * 100).toFixed(0)} pts`}`);
+  console.log(`\naxes below use each fixture's first successful run per arm\n`);
+  printAxis(rows, "composite", (s, cell) => compositeOf(cell, s));
   for (const key of ["routeEfficiency", "constraintAdherence", "weatherFeasibility", "mealVibeAlignment", "coverageGrounding"]) {
     printAxis(rows, `  ${key}`, (s) => compositeGroups(s)[key]);
   }
@@ -179,6 +241,7 @@ async function compare(aPath, bPath) {
   printAxis(rows, "  duplicates", (s) => s.duplicates.normalized, "duplicates");
   printAxis(rows, "  commitments", (s) => s.commitments.normalized, "commitments");
   printAxis(rows, "  mustInclude", (s) => s.mustInclude.normalized, "mustInclude");
+  printAxis(rows, "  dietary", (s) => s.dietary.normalized);
   printAxis(rows, "  budget", (s) => s.budget.normalized);
 
   // The judge sees two anonymous candidates per fixture, seed-shuffled by fixture id, with model
@@ -201,7 +264,7 @@ async function compare(aPath, bPath) {
     console.log(`  ${row.fixture.id.padEnd(26)} a=${fmt(scoreA)}  b=${fmt(scoreB)}`);
   }
   console.log(`\njudge prefers: arm A ${aWins}, arm B ${bWins}, ties ${rows.length - aWins - bWins}`);
-  console.log(`\nn=${rows.length} paired, one generation per arm per fixture. Enough to catch a`);
+  console.log(`\nn=${rows.length} paired, ${a.runsPerFixture ?? 1} vs ${b.runsPerFixture ?? 1} generation(s) per fixture. Enough to catch a`);
   console.log(`collapse or a consistent shift; not enough to call a small delta real. The judge is`);
   console.log(`a Claude model scoring Claude output — a preference signal, not ground truth.`);
 }
@@ -232,16 +295,16 @@ const RAW_EXTRACTORS = {
  *  count out of the total paired fixtures, not just the ones with nothing to show. */
 function printAxis(rows, label, pick, rawKey) {
   const total = rows.length;
-  const pairs = rows.filter((r) => pick(r.a) !== null && pick(r.b) !== null);
+  const pairs = rows.filter((r) => pick(r.a, r.cellA) !== null && pick(r.b, r.cellB) !== null);
   if (pairs.length === 0) {
     console.log(`${label.padEnd(24)}n/a — unmeasurable on 0/${total} fixtures (nothing stated to check)`);
     return;
   }
   const mean = (xs) => xs.reduce((n, x) => n + x, 0) / xs.length;
-  const mA = mean(pairs.map((r) => pick(r.a)));
-  const mB = mean(pairs.map((r) => pick(r.b)));
-  const better = pairs.filter((r) => pick(r.b) > pick(r.a)).length;
-  const worse = pairs.filter((r) => pick(r.b) < pick(r.a)).length;
+  const mA = mean(pairs.map((r) => pick(r.a, r.cellA)));
+  const mB = mean(pairs.map((r) => pick(r.b, r.cellB)));
+  const better = pairs.filter((r) => pick(r.b, r.cellB) > pick(r.a, r.cellA)).length;
+  const worse = pairs.filter((r) => pick(r.b, r.cellB) < pick(r.a, r.cellA)).length;
   const delta = mB - mA;
   console.log(
     `${label.padEnd(24)}${mA.toFixed(4)}  →  ${mB.toFixed(4)}   ${(delta >= 0 ? "+" : "") + delta.toFixed(4)}   (${better} better, ${worse} worse, measurable on ${pairs.length}/${total})`
@@ -257,11 +320,73 @@ function printAxis(rows, label, pick, rawKey) {
 }
 
 /** A staged arm stores markdown; the legacy arm stores the route's JSON. Both reach the same
- *  scorers, by different doors. */
+ *  scorers, by different doors. The legacy door is scored against the weather it was given, with
+ *  grounding out of the composite — see withoutGrounding for why. */
 function scoreCell(fixture, cell) {
   const operational = { latencyMs: cell.wallMs, inputTokens: null, outputTokens: null, costUsd: cell.costUsd, cliReportedCostUsd: null, parsedOk: true, failed: false, errorMessage: null };
   if (cell.itineraryMd) return scoreItinerary(fixture, cell.itineraryMd, operational);
-  return scoreParsed(fixture, itineraryToParsed(cell.itineraryJson), JSON.stringify(cell.itineraryJson), operational);
+  const seen = cell.seenWeather ? withSeenWeather(fixture, cell.seenWeather) : fixture;
+  return scoreParsed(seen, itineraryToParsed(cell.itineraryJson), JSON.stringify(cell.itineraryJson), operational);
+}
+
+/** Composite for display: grounding out for JSON runs (see scoreCell). */
+function compositeOf(cell, scores) {
+  return compositeScore(cell.itineraryJson ? withoutGrounding(scores) : scores);
+}
+
+function scoreRun(fixture, run) {
+  if (isFailedRun(run)) {
+    return { failed: true, composite: null, critical: ["generation_failed"], costUsd: run.costUsd ?? 0, wallMs: run.wallMs ?? 0, grounding: null, dietaryFlags: [] };
+  }
+  const scores = scoreCell(fixture, run);
+  return {
+    failed: false,
+    composite: compositeOf(run, scores),
+    critical: criticalFailures(scores, { itinerary: run.itineraryJson, modes: fixture.reconciled.transportModes }),
+    costUsd: run.costUsd,
+    wallMs: run.wallMs,
+    grounding: scores.grounding.normalized,
+    dietaryFlags: scores.dietary.flagged,
+  };
+}
+
+/** One arm, every run re-scored now. Mean hides the bad run, so worst and k/N sit beside it. */
+function armTable(arm) {
+  const all = [];
+  const rows = [];
+  for (const cell of arm.cells) {
+    const fixture = getFixture(cell.fixtureId);
+    if (!fixture) continue;
+    const scored = runsOf(cell).map((r) => scoreRun(fixture, r));
+    all.push(...scored);
+    rows.push({ fixtureId: cell.fixtureId, summary: summarizeRuns(scored), scored });
+  }
+  return { rows, headline: criticalRate(all), all };
+}
+
+function printArmTable(label, { rows, headline, all }) {
+  console.log(`\n${label}`);
+  console.log(`${"fixture".padEnd(28)}${"mean".padEnd(8)}${"worst".padEnd(8)}${"crit".padEnd(7)}${"ground".padEnd(8)}${"cost".padEnd(11)}wall   codes`);
+  for (const { fixtureId, summary: s, scored } of rows) {
+    const g = scored.map((r) => r.grounding).filter((x) => x !== null);
+    const ground = g.length ? g.reduce((x, y) => x + y, 0) / g.length : null;
+    console.log(
+      `${fixtureId.padEnd(28)}${fmt(s.meanComposite).padEnd(8)}${fmt(s.worstComposite).padEnd(8)}${`${s.criticalRuns}/${s.n}`.padEnd(7)}${fmt(ground).padEnd(8)}${`$${s.meanCostUsd.toFixed(4)}`.padEnd(11)}${`${(s.meanWallMs / 1000).toFixed(0)}s`.padEnd(7)}${s.codes.join(",") || "—"}`
+    );
+    for (const r of scored) for (const f of r.dietaryFlags) console.log(`${"".padEnd(30)}dietary: ${f}`);
+  }
+  const overall = summarizeRuns(all);
+  const rate = headline.rate === null ? "n/a" : `${(headline.rate * 100).toFixed(0)}%`;
+  console.log(`\ncritical-trip failure rate  ${rate}  (${headline.failing}/${headline.total} runs broke a hard rule)`);
+  console.log(`composite  mean ${fmt(overall.meanComposite)}  worst ${fmt(overall.worstComposite)}`);
+}
+
+function report(path) {
+  const arm = JSON.parse(readFileSync(path, "utf8"));
+  printArmTable(`${path} — ${arm.path} path, ${arm.runsPerFixture ?? 1} run(s) per fixture`, armTable(arm));
+  console.log(`\nN=${arm.runsPerFixture ?? 1} per fixture catches instability, not small deltas. Grounding is`);
+  console.log(`outside the composite for legacy runs: that path is never given the context it checks,`);
+  console.log(`so its grounding is near-vacuously 1.0.`);
 }
 
 function armText(cell) {
@@ -287,7 +412,14 @@ if (mode === "--arm") {
     process.exit(1);
   }
   await compare(aPath, bPath);
+} else if (mode === "--report") {
+  const path = process.argv[3];
+  if (!path) {
+    console.error("usage: skill-ab.mjs --report <arm.json>");
+    process.exit(1);
+  }
+  report(path);
 } else {
-  console.error("usage: skill-ab.mjs --arm <out.json> | --compare <a.json> <b.json>");
+  console.error("usage: skill-ab.mjs --arm <out.json> | --compare <a.json> <b.json> | --report <arm.json>");
   process.exit(1);
 }

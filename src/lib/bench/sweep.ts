@@ -23,9 +23,11 @@ export function withSeenWeather(fixture: BenchFixture, days: DayWeather[]): Benc
 }
 
 /**
- * Grounding counts stops missing from the candidate list, and the legacy path is never given one —
- * so for that path it measures the pipeline, not the plan. Unmeasured, `compositeScore`
- * renormalises over the groups that remain. The raw number is still reported beside it.
+ * Grounding scores only claims that contradict the context — invented hours for an anchor whose
+ * hours were unknown, a travel time for an anchor pair with no leg. The legacy path is never given
+ * that context (no candidate list, no anchor legs), so its grounding is near-vacuously 1.0: not
+ * biased low, just unearned, and it would lift the composite for nothing. Unmeasured,
+ * `compositeScore` renormalises over the groups that remain. The raw number is still reported.
  */
 export function withoutGrounding(scores: BenchCellScores): BenchCellScores {
   return { ...scores, grounding: { ...scores.grounding, normalized: null } };
@@ -74,4 +76,22 @@ export function summarizeRuns(runs: ScoredRun[]): RunSummary {
 export function criticalRate(runs: ScoredRun[]): { failing: number; total: number; rate: number | null } {
   const failing = runs.filter((r) => r.critical.length > 0).length;
   return { failing, total: runs.length, rate: runs.length ? failing / runs.length : null };
+}
+
+/**
+ * A readable reason for a failed run. `ECONNREFUSED` over `node:http` arrives as an
+ * AggregateError whose `message` is "" — and an empty reason once let a dead server's run be
+ * stored as falsy `error: ""`, then counted and scored as a success.
+ */
+export function errorText(err: unknown): string {
+  if (err instanceof Error) {
+    const code = (err as Error & { code?: unknown }).code;
+    return err.message || (typeof code === "string" ? code : "") || err.name || "unknown error";
+  }
+  return String(err) || "unknown error";
+}
+
+/** Failed means no plan came back — decided by the missing plan, not by the error's wording. */
+export function isFailedRun(run: { error?: string; itineraryMd?: string | null; itineraryJson?: unknown }): boolean {
+  return run.error !== undefined || (!run.itineraryMd && !run.itineraryJson);
 }
