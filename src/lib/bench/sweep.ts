@@ -109,3 +109,19 @@ export function headlineDelta(
 ): { delta: number | null; likeForLike: boolean } {
   return { delta: a.rate !== null && b.rate !== null ? b.rate - a.rate : null, likeForLike: pathA === pathB };
 }
+
+/**
+ * What the legacy arm types into the destination box: "City, Country", the shape the wizard sends.
+ *
+ * The fixture's `region` is an admin area ("Catalonia, Spain", "Lisboa, Portugal") that the
+ * Open-Meteo geocoder returns nothing for, and a failed geocode is deliberately non-blocking — so
+ * the first 2026-09-25 sweep planned all nine runs with no weather at all, silently. The city is
+ * the title's lead; the country is the region's last part.
+ */
+export function legacyDestination(fixture: Pick<BenchFixture, "title"> & {
+  reconciled: { rawFetch: { destination: { region: string | null } } };
+}): string {
+  const city = fixture.title.split(" — ")[0].trim();
+  const country = fixture.reconciled.rawFetch.destination.region?.split(",").pop()?.trim();
+  return country ? `${city}, ${country}` : city;
+}

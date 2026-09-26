@@ -51,7 +51,7 @@ import {
 import { itineraryToParsed } from "../src/lib/bench/itineraryToParsed.ts";
 import { judgeFixture } from "../src/lib/bench/scorers/judge.ts";
 import { criticalFailures } from "../src/lib/bench/criticalFailures.ts";
-import { criticalRate, errorText, headlineDelta, isFailedRun, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "../src/lib/bench/sweep.ts";
+import { criticalRate, errorText, headlineDelta, isFailedRun, legacyDestination, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "../src/lib/bench/sweep.ts";
 import { postJson } from "../src/lib/bench/postJson.ts";
 
 const BASE = process.env.AB_BASE_URL ?? "http://localhost:3000";
@@ -108,7 +108,7 @@ async function runLegacy(fixture) {
   const { status, payload } = await postJson(
     `${BASE}/api/itinerary`,
     {
-      destination: fixture.reconciled.rawFetch.destination.region ?? fixture.title,
+      destination: legacyDestination(fixture),
       startDate,
       endDate,
       budget: answers.budget,
