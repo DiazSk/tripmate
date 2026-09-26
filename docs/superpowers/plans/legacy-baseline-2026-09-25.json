@@ -1,0 +1,3274 @@
+{
+  "arm": "docs/superpowers/plans/legacy-baseline-2026-09-25.json",
+  "path": "legacy",
+  "runsPerFixture": 3,
+  "cells": [
+    {
+      "fixtureId": "barcelona-access-dietary",
+      "runs": [
+        {
+          "fixtureId": "barcelona-access-dietary",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-10-15",
+                "weather": "Mild and partly sunny, 20°C (68°F)",
+                "theme": "Gothic alleys, old masters",
+                "summary": "Afternoon arrival sets the stage for Picasso's early works and twilight wandering through medieval lanes. 🎨🏛️",
+                "lodging": {
+                  "name": "Hotel Ronda Sant Pere",
+                  "cost": 0,
+                  "note": "Pre-booked 5-star near Arc de Triomf; central base for Gothic Quarter and Eixample"
+                },
+                "stops": [
+                  {
+                    "name": "Private transfer from Barcelona-El Prat Airport",
+                    "lat": 41.2971,
+                    "lng": 2.0833,
+                    "cost": 80,
+                    "why": "Direct luxury transfer avoids public transport after international flight",
+                    "note": "Driver meets at arrivals; 90 minutes for immigration, bags, and 30-min drive to hotel",
+                    "time": "3:15 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  },
+                  {
+                    "name": "Museu Picasso",
+                    "lat": 41.3851,
+                    "lng": 2.181,
+                    "cost": 40,
+                    "why": "Early Picasso works and Blue Period — deep culture/history in the Born",
+                    "note": "5-minute walk from hotel; book skip-the-line tickets online",
+                    "time": "5:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Culture"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Basílica de Santa Maria del Mar",
+                    "lat": 41.3839,
+                    "lng": 2.1826,
+                    "cost": 10,
+                    "why": "Gothic maritime cathedral in El Born — stunning architecture, quick visit before dinner",
+                    "note": "5-minute walk from Museu Picasso; accessible interior, minimal stairs",
+                    "time": "6:45 PM",
+                    "durationLabel": "30 minutes",
+                    "tags": [
+                      "Historic Site",
+                      "Architecture"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Gothic Quarter evening stroll",
+                    "lat": 41.3825,
+                    "lng": 2.1769,
+                    "cost": 0,
+                    "why": "Medieval alleys and Roman walls — photography golden hour without crowds",
+                    "note": "10-minute walk from basilica; flat stone streets, mostly accessible",
+                    "time": "7:30 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner in El Born",
+                    "lat": 41.3851,
+                    "lng": 2.183,
+                    "cost": 200,
+                    "why": "Upscale Catalan cuisine in atmospheric medieval quarter — food focus",
+                    "note": "Many fine options on Carrer de la Princesa; reserve ahead",
+                    "time": "8:30 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-16",
+                "weather": "Sunny with light clouds, 21°C (70°F)",
+                "theme": "Market smells, medieval streets",
+                "summary": "From Boqueria's gourmet chaos to Gothic spires and contemporary art — a sensory tour of old and new Barcelona. 🍅🏰",
+                "lodging": {
+                  "name": "Hotel Ronda Sant Pere",
+                  "cost": 0,
+                  "note": "Same central base; no need to change hotels within Barcelona"
+                },
+                "stops": [
+                  {
+                    "name": "Breakfast at Federal Café",
+                    "lat": 41.387,
+                    "lng": 2.181,
+                    "cost": 60,
+                    "why": "Upscale brunch spot in Born — fresh start before market exploration",
+                    "note": "5-minute walk from hotel; known for quality coffee and local ingredients",
+                    "time": "9:00 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Mercat de Sant Josep de la Boqueria",
+                    "lat": 41.3817,
+                    "lng": 2.1717,
+                    "cost": 20,
+                    "why": "Iconic food market — food interest and photography; gourmet stalls and produce",
+                    "note": "20-minute walk or quick metro; go before 11 AM to avoid peak tourist crowds",
+                    "time": "10:20 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Food Market"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Cathedral of the Holy Cross and Saint Eulalia",
+                    "lat": 41.384,
+                    "lng": 2.176,
+                    "cost": 20,
+                    "why": "Gothic masterpiece and cloister — culture/history with peaceful courtyard rest",
+                    "note": "10-minute walk from Boqueria; elevator to roof for views, skip cloister stairs",
+                    "time": "12:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Historic Site",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Gothic Quarter",
+                    "lat": 41.382,
+                    "lng": 2.175,
+                    "cost": 120,
+                    "why": "Refined Catalan lunch in medieval setting — food focus, central location",
+                    "note": "Try Carrer dels Banys Nous for upscale options; many have courtyards",
+                    "time": "2:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Fine Dining"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Palau de la Música Catalana",
+                    "lat": 41.3875,
+                    "lng": 2.1752,
+                    "cost": 60,
+                    "why": "Modernist concert hall — culture/history and stunning photography inside",
+                    "note": "15-minute walk; guided tour includes concert hall, no stairs required",
+                    "time": "3:45 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Architecture",
+                      "Guided Tour"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "MACBA (Museu d'Art Contemporani)",
+                    "lat": 41.383,
+                    "lng": 2.1668,
+                    "cost": 30,
+                    "why": "Contemporary art in striking Meier building — culture focus, modern contrast",
+                    "note": "15-minute walk to Raval; wheelchair accessible, fully flat inside",
+                    "time": "5:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Art Museum"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Dinner in Gothic Quarter",
+                    "lat": 41.383,
+                    "lng": 2.175,
+                    "cost": 220,
+                    "why": "Fine Catalan dining in medieval setting — food focus, atmospheric location",
+                    "note": "Try Els Quatre Gats or similar upscale Gothic spot; reserve ahead",
+                    "time": "7:30 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-17",
+                "weather": "Clear and pleasant, 22°C (72°F)",
+                "summary": "Gaudí's sacred spires to his undulating facades — a full day immersed in Catalan modernisme. 🌈🏗️",
+                "theme": "Modernisme in stone",
+                "lodging": {
+                  "name": "Hotel Ronda Sant Pere",
+                  "cost": 0,
+                  "note": "Same base throughout Barcelona stay; central for all day trips"
+                },
+                "stops": [
+                  {
+                    "name": "Breakfast at Brunch & Cake",
+                    "lat": 41.39,
+                    "lng": 2.164,
+                    "cost": 60,
+                    "why": "Upscale brunch near Eixample — fuel for architecture-heavy day",
+                    "note": "Popular spot; go early or reserve ahead",
+                    "time": "9:00 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Sagrada Família",
+                    "lat": 41.4036,
+                    "lng": 2.1744,
+                    "cost": 80,
+                    "why": "Gaudí's masterwork — culture/history and photography, iconic Barcelona",
+                    "note": "Book timed entry with audio guide; elevator to towers optional (no stairs)",
+                    "time": "10:15 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Must-See",
+                      "Reservation Needed"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Private car to Passeig de Gràcia",
+                    "lat": 41.39,
+                    "lng": 2.164,
+                    "cost": 20,
+                    "why": "Quick luxury transfer between sites — fits mobility preference",
+                    "note": "15-minute drive; saves walking after Sagrada visit",
+                    "time": "12:30 PM",
+                    "durationLabel": "15 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  },
+                  {
+                    "name": "Lunch in Eixample",
+                    "lat": 41.391,
+                    "lng": 2.164,
+                    "cost": 140,
+                    "why": "Refined dining on modernist boulevard — food focus, central to afternoon stops",
+                    "note": "Passeig de Gràcia has many upscale options; Casa Calvet for Gaudí-designed space",
+                    "time": "12:45 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Fine Dining"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Casa Batlló",
+                    "lat": 41.3916,
+                    "lng": 2.1649,
+                    "cost": 70,
+                    "why": "Gaudí's fantastical house — culture/history and photography, color and curves",
+                    "note": "5-minute walk from lunch; augmented reality guide included, elevator access",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Architecture",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Casa Milà (La Pedrera)",
+                    "lat": 41.3954,
+                    "lng": 2.162,
+                    "cost": 60,
+                    "why": "Gaudí's wave-like apartment building — culture/history, rooftop chimneys iconic",
+                    "note": "10-minute walk up Passeig de Gràcia; elevator to roof for photography",
+                    "time": "4:15 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Architecture",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "El Born artisan shopping",
+                    "lat": 41.3851,
+                    "lng": 2.183,
+                    "cost": 0,
+                    "why": "Independent boutiques and local designers — shopping interest, different area from Eixample",
+                    "note": "15-minute taxi/metro from Casa Milà; pedestrian-friendly medieval streets",
+                    "time": "6:00 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Shopping",
+                      "Local Pick"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner at Moments",
+                    "lat": 41.395,
+                    "lng": 2.162,
+                    "cost": 250,
+                    "why": "Two-Michelin-star Catalan cuisine — food focus, peak luxury dining",
+                    "note": "In Mandarin Oriental hotel; reserve weeks ahead; tasting menu available",
+                    "time": "7:30 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-18",
+                "weather": "Mild morning, 19°C (66°F)",
+                "theme": "Morning farewell",
+                "summary": "Early breakfast and a smooth departure — Montserrat's monastery awaits another trip. ✈️☕",
+                "stops": [
+                  {
+                    "name": "Early breakfast at hotel",
+                    "lat": 41.3895,
+                    "lng": 2.177,
+                    "cost": 50,
+                    "why": "Convenient hotel breakfast — early departure for airport",
+                    "note": "Request 6:30 AM service; quick fuel before transfer",
+                    "time": "6:30 AM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Hotel Breakfast"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Private transfer to Barcelona-El Prat Airport",
+                    "lat": 41.2971,
+                    "lng": 2.0833,
+                    "cost": 80,
+                    "why": "Direct luxury transfer for early departure — fits comfort preference",
+                    "note": "Arrive 3 hours before international flight; 60-min drive with morning traffic",
+                    "time": "7:15 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  }
+                ]
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Sagrada Família",
+                "lat": 41.4036,
+                "lng": 2.1744,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Mercat de Sant Josep de la Boqueria",
+                "lat": 41.3817,
+                "lng": 2.1717,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Museu Picasso",
+                "lat": 41.3851,
+                "lng": 2.181,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "e302ae67-861b-40e4-b509-593ec07d92c1",
+          "seenWeather": [],
+          "wallMs": 460826,
+          "costUsd": 0
+        },
+        {
+          "fixtureId": "barcelona-access-dietary",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-10-15",
+                "weather": "Mild October afternoon in Barcelona",
+                "theme": "Gothic quarter, layered history",
+                "summary": "An elegant introduction to Barcelona's medieval heart with Renaissance masterworks and atmospheric Gothic lanes. 🏛️🎨",
+                "lodging": {
+                  "name": "Hotel Ronda Sant Pere (prepaid)",
+                  "cost": 0,
+                  "note": "Central Eixample location; luxury 4-star near Plaça de Catalunya; already booked"
+                },
+                "stops": [
+                  {
+                    "name": "Late lunch in El Born",
+                    "lat": 41.3851,
+                    "lng": 2.184,
+                    "cost": 120,
+                    "why": "Fresh from arrival, Born is a 10-minute walk from the hotel — relaxed start",
+                    "note": "Light Mediterranean plates; e.g. Cal Pep for seafood, El Xampanyet for tapas",
+                    "time": "3:30 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Museu Picasso",
+                    "lat": 41.3851,
+                    "lng": 2.181,
+                    "cost": 40,
+                    "why": "Early Picasso works in medieval palaces — culture and art without late crowds",
+                    "note": "Book timed entry online; wheelchair accessible via elevator; closes 19:00",
+                    "time": "5:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Must-See",
+                      "Reservation Needed"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Santa Maria del Mar",
+                    "lat": 41.3833,
+                    "lng": 2.1825,
+                    "cost": 10,
+                    "why": "Pure Catalan Gothic, flat approach — evening light filters through the rose window",
+                    "note": "5-minute walk from museum; donation expected; photography allowed inside",
+                    "time": "7:15 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Evening stroll through El Born",
+                    "lat": 41.3851,
+                    "lng": 2.184,
+                    "cost": 0,
+                    "why": "Medieval lanes and artisan shops at dusk — photogenic, minimal walking required",
+                    "note": "Carrer Montcada area; artisan boutiques and vintage shops; benches throughout",
+                    "time": "8:15 PM",
+                    "durationLabel": "30 minutes",
+                    "tags": [
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner at Euskal Etxea",
+                    "lat": 41.3837,
+                    "lng": 2.1765,
+                    "cost": 250,
+                    "why": "Basque fine dining in a Gothic Quarter palau — inventive cuisine, culture immersion",
+                    "note": "Reservations essential; tasting menu available; 10-minute walk from Born",
+                    "time": "9:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-16",
+                "weather": "Clear October skies in Barcelona",
+                "theme": "Gaudí's unfinished cathedral",
+                "summary": "A full immersion in Gaudí's visionary architecture, from the sacred Sagrada to modernist mansions on his boulevard. 🏰✨",
+                "lodging": {
+                  "name": "Hotel Ronda Sant Pere (prepaid)",
+                  "cost": 0,
+                  "note": "Central Eixample location; luxury 4-star near Plaça de Catalunya; already booked"
+                },
+                "stops": [
+                  {
+                    "name": "Breakfast at Federal Café",
+                    "lat": 41.3784,
+                    "lng": 2.165,
+                    "cost": 80,
+                    "why": "Australian-style breakfast in Sant Antoni — quality coffee, relaxed morning start",
+                    "note": "Parlament 39; upscale casual; 15-minute walk or quick taxi from hotel",
+                    "time": "9:00 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Sagrada Família with private guide",
+                    "lat": 41.4036,
+                    "lng": 2.1744,
+                    "cost": 180,
+                    "why": "Gaudí's unfinished masterwork with expert narration — essential culture and photography",
+                    "note": "Book Nativity tower access + guide ahead; elevator to towers; arrive by 10:30",
+                    "time": "10:30 AM",
+                    "durationLabel": "2.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Reservation Needed"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Eixample",
+                    "lat": 41.3917,
+                    "lng": 2.1649,
+                    "cost": 150,
+                    "why": "Modernist neighborhood dining near Passeig de Gràcia — elegant, fits the Gaudí day",
+                    "note": "E.g. Cervecería Catalana for upscale tapas; Carrer Mallorca 236; reservations wise",
+                    "time": "1:15 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Casa Batlló",
+                    "lat": 41.3917,
+                    "lng": 2.1649,
+                    "cost": 90,
+                    "why": "Gaudí's residential fantasy with immersive video guide — no stairs to main floors",
+                    "note": "Buy Blue ticket for skip-the-line; wheelchair accessible; 5-minute walk from lunch",
+                    "time": "3:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Reservation Needed"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Casa Amatller",
+                    "lat": 41.3916,
+                    "lng": 2.165,
+                    "cost": 50,
+                    "why": "Modernist gem next to Batlló — chocolate-themed architecture and boutique museum",
+                    "note": "Quick visit; same block as Batlló; shop sells artisan chocolate; closes 19:00",
+                    "time": "4:45 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Casa Milà (La Pedrera)",
+                    "lat": 41.3954,
+                    "lng": 2.162,
+                    "cost": 80,
+                    "why": "Gaudí's undulating stone façade and rooftop chimneys — iconic photography spot",
+                    "note": "Buy tickets online; elevator to apartments and roof; 10-minute walk up Passeig",
+                    "time": "5:45 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Reservation Needed"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Dinner at Moments",
+                    "lat": 41.3893,
+                    "lng": 2.1673,
+                    "cost": 300,
+                    "why": "Two Michelin stars, Catalan haute cuisine — peak luxury food experience for foodies",
+                    "note": "Book weeks ahead; Mandarin Oriental hotel; tasting menu; dress code applies",
+                    "time": "8:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-17",
+                "weather": "Pleasant October day in Barcelona",
+                "theme": "Market stalls, old Rambla",
+                "summary": "A sensory journey through Barcelona's most famous market, Gaudí's early palace, and Gothic treasures. 🍎🏛️",
+                "lodging": {
+                  "name": "Hotel Ronda Sant Pere (prepaid)",
+                  "cost": 0,
+                  "note": "Central Eixample location; luxury 4-star near Plaça de Catalunya; already booked"
+                },
+                "stops": [
+                  {
+                    "name": "Breakfast at Granja Petitbo",
+                    "lat": 41.392,
+                    "lng": 2.182,
+                    "cost": 70,
+                    "why": "Traditional Catalan breakfast near hotel — local pa amb tomàquet, unhurried start",
+                    "note": "Passeig de Sant Joan 82; known for Catalan classics; upscale casual",
+                    "time": "9:00 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Mercat de Sant Josep de la Boqueria",
+                    "lat": 41.3817,
+                    "lng": 2.1717,
+                    "cost": 80,
+                    "why": "Barcelona's iconic food market — peak culture and photography for food lovers",
+                    "note": "Off La Rambla; arrive before 11:00 for best selection; sample jamón, fresh juice",
+                    "time": "10:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Local Pick"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch near La Boqueria",
+                    "lat": 41.3817,
+                    "lng": 2.1717,
+                    "cost": 120,
+                    "why": "Market-fresh ingredients at nearby restaurants — authentic Barcelona food scene",
+                    "note": "E.g. Pinotxo Bar (market counter) or El Quim for tapas; both get busy after 13:00",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Palau Güell",
+                    "lat": 41.3789,
+                    "lng": 2.1744,
+                    "cost": 30,
+                    "why": "Early Gaudí palace just off La Rambla — culture and architecture, elevator inside",
+                    "note": "Rooftop chimney sculptures are iconic; buy tickets online; closes 17:30 in Oct",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Reservation Needed"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Barcelona Cathedral",
+                    "lat": 41.384,
+                    "lng": 2.176,
+                    "cost": 15,
+                    "why": "Gothic masterpiece with cloister — layered history fits the culture interest",
+                    "note": "Main nave free, €9 for cloister and rooftop; 10-minute walk from Palau Güell",
+                    "time": "4:30 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Must-See"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Plaça del Rei",
+                    "lat": 41.3838,
+                    "lng": 2.1766,
+                    "cost": 0,
+                    "why": "Medieval royal square steps from the cathedral — historic architecture and photography",
+                    "note": "Free to walk through; medieval palace facade; quiet plaza with benches",
+                    "time": "5:45 PM",
+                    "durationLabel": "30 minutes",
+                    "tags": [
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Coffee at Satan's Coffee Corner",
+                    "lat": 41.3838,
+                    "lng": 2.1753,
+                    "cost": 40,
+                    "why": "Specialty coffee in a quiet Gothic Quarter nook — sit-down rest break with character",
+                    "note": "Arc de Sant Ramon del Call 11; third-wave coffee; tiny but charming interior",
+                    "time": "6:30 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Dinner at Caelis",
+                    "lat": 41.3835,
+                    "lng": 2.1754,
+                    "cost": 280,
+                    "why": "Michelin-starred French-Catalan fusion — refined food experience in historic setting",
+                    "note": "Book ahead; tasting menus; Carrer Lledó 5; dress code recommended",
+                    "time": "7:45 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-18",
+                "weather": "Early morning in Barcelona",
+                "theme": "Morning departure",
+                "summary": "A gentle farewell breakfast before the journey home. ☕✈️",
+                "stops": [
+                  {
+                    "name": "Early breakfast near hotel",
+                    "lat": 41.3889,
+                    "lng": 2.1733,
+                    "cost": 60,
+                    "why": "Close, no rushing — fuel for the journey with time to settle the bill",
+                    "note": "Hotel breakfast or nearby café; check luggage, confirm airport transfer",
+                    "time": "6:00 AM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Private transfer to Barcelona-El Prat Airport",
+                    "lat": 41.2974,
+                    "lng": 2.0833,
+                    "cost": 80,
+                    "why": "Direct, no stairs, on-time arrival — comfort and accessibility over metro",
+                    "note": "Depart hotel 7:15 AM; arrive terminal by 8:00; 3-hour buffer for 11:00 departure",
+                    "time": "7:15 AM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Reservation Needed"
+                    ],
+                    "category": "transit"
+                  }
+                ]
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Sagrada Família",
+                "lat": 41.4036,
+                "lng": 2.1744,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Mercat de Sant Josep de la Boqueria",
+                "lat": 41.3817,
+                "lng": 2.1717,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Museu Picasso",
+                "lat": 41.3851,
+                "lng": 2.181,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "932c6f97-4157-4efb-b891-5f9ffabd8c16",
+          "seenWeather": [],
+          "wallMs": 397722,
+          "costUsd": 0
+        },
+        {
+          "fixtureId": "barcelona-access-dietary",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-10-15",
+                "weather": "Partly cloudy, pleasant autumn temperatures",
+                "theme": "Arrival and Gaudí's vision",
+                "summary": "After settling in from your international arrival, immerse yourself in Gaudí's sacred masterpiece at golden hour. ⛪✨",
+                "lodging": {
+                  "name": "5-star hotel in Eixample (Hotel Ronda Sant Pere, already paid)",
+                  "cost": 0,
+                  "note": "Perfect base between Gaudí landmarks; alternative: luxury boutique in Gothic Quarter"
+                },
+                "stops": [
+                  {
+                    "name": "Private transfer from El Prat Airport",
+                    "lat": 41.2974,
+                    "lng": 2.0833,
+                    "cost": 80,
+                    "why": "Comfortable arrival after international flight, no stairs or long walks",
+                    "note": "Pre-book with flight details; allows 90 min for customs/bags after 1:45 PM arrival",
+                    "time": "3:15 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  },
+                  {
+                    "name": "Sagrada Família",
+                    "lat": 41.4036,
+                    "lng": 2.1744,
+                    "cost": 250,
+                    "why": "Gaudí's unfinished masterpiece blends culture, history, and photography in one iconic stop",
+                    "note": "Private guide included; skip-the-line access; elevator to towers available",
+                    "time": "4:30 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Must-See",
+                      "Private Tour"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Dinner in Eixample",
+                    "lat": 41.3917,
+                    "lng": 2.165,
+                    "cost": 250,
+                    "why": "Upscale Catalan cuisine in Barcelona's modernist heart fits your luxury tier",
+                    "note": "Passeig de Gràcia area; try Moments or Cinc Sentits for Michelin-level tasting menus",
+                    "time": "7:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-16",
+                "weather": "Sunny with mild temperatures, ideal for outdoor exploration",
+                "theme": "Market mornings, Gothic streets",
+                "summary": "From La Boqueria's vibrant produce stalls through medieval lanes to Gaudí's residential masterpiece at dusk. 🏛️🍅",
+                "lodging": {
+                  "name": "5-star hotel in Eixample (Hotel Ronda Sant Pere, already paid)",
+                  "cost": 0,
+                  "note": "Same base for all Barcelona nights; easy metro access to all neighborhoods"
+                },
+                "stops": [
+                  {
+                    "name": "Mercat de Sant Josep de la Boqueria",
+                    "lat": 41.3817,
+                    "lng": 2.1717,
+                    "cost": 200,
+                    "why": "Private food tour hits your culture, history, and food interests in one iconic market",
+                    "note": "10am start avoids peak crowds; includes tastings of jamón, cheese, seafood",
+                    "time": "10:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Food Tour",
+                      "Local Pick"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Gothic Quarter private walking tour",
+                    "lat": 41.3825,
+                    "lng": 2.1769,
+                    "cost": 200,
+                    "why": "Expert-led walk through medieval history with photo stops at Plaça del Rei and hidden Roman walls",
+                    "note": "Covers Gothic Quarter highlights including the royal square; focuses on Roman and medieval layers",
+                    "time": "12:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Private Tour",
+                      "Culture & History"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch around Gothic Quarter",
+                    "lat": 41.383,
+                    "lng": 2.1765,
+                    "cost": 150,
+                    "why": "Traditional Catalan cuisine in a medieval setting suits your culture and food focus",
+                    "note": "Plaça Sant Felip Neri area; try Els Quatre Gats (Picasso's haunt) or Agut",
+                    "time": "2:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Traditional",
+                      "Historic"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Barcelona Cathedral",
+                    "lat": 41.3841,
+                    "lng": 2.1765,
+                    "cost": 25,
+                    "why": "Gothic architecture masterpiece with cloister and rooftop; skip-line entry included",
+                    "note": "Elevator to rooftop for panoramic photos; 5-minute walk from lunch",
+                    "time": "4:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Skip-the-Line",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Casa Batlló",
+                    "lat": 41.3917,
+                    "lng": 2.1649,
+                    "cost": 90,
+                    "why": "Gaudí's residential masterpiece showcases his organic style; stunning for photography",
+                    "note": "Late afternoon entry means fewer crowds; augmented reality guide included",
+                    "time": "6:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Skip-the-Line"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Dinner around Gothic Quarter",
+                    "lat": 41.3825,
+                    "lng": 2.177,
+                    "cost": 300,
+                    "why": "Michelin-level dining in historic surroundings matches your luxury tier and culture focus",
+                    "note": "El Call area; Hofmann or Alkimia for inventive Catalan tasting menus",
+                    "time": "8:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-17",
+                "weather": "Clear skies, perfect for concert halls and photography",
+                "theme": "Art, music, medieval charm",
+                "summary": "Picasso's formative years, a soaring Gothic basilica, and modernist concert hall mosaics in El Born's preserved quarter. 🎨🎵",
+                "lodging": {
+                  "name": "5-star hotel in Eixample (Hotel Ronda Sant Pere, already paid)",
+                  "cost": 0,
+                  "note": "Same location for continuity; 15-minute walk to El Born through La Ribera"
+                },
+                "stops": [
+                  {
+                    "name": "Museu Picasso",
+                    "lat": 41.3851,
+                    "lng": 2.181,
+                    "cost": 180,
+                    "why": "Largest collection of Picasso's early work with art historian guide fits your culture focus",
+                    "note": "Skip-line morning entry; focuses on Blue Period and Las Meninas series",
+                    "time": "10:00 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Private Tour",
+                      "Culture & History"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Santa Maria del Mar",
+                    "lat": 41.3833,
+                    "lng": 2.1822,
+                    "cost": 20,
+                    "why": "Pure Catalan Gothic cathedral built by merchants; stunning light for photography",
+                    "note": "5-minute walk from Picasso; free entry outside mass times, fee for rooftop",
+                    "time": "12:15 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in El Born",
+                    "lat": 41.385,
+                    "lng": 2.183,
+                    "cost": 150,
+                    "why": "Trendy tapas scene in medieval lanes blends food and historic atmosphere",
+                    "note": "Passeig del Born strip; Cal Pep or Euskal Etxea for upscale traditional bites",
+                    "time": "1:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Traditional",
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Palau de la Música Catalana",
+                    "lat": 41.3875,
+                    "lng": 2.1754,
+                    "cost": 60,
+                    "why": "Modernist concert hall with stained glass and mosaics; UNESCO site for culture and photography",
+                    "note": "Guided tour of the stunning auditorium; 10-minute walk from El Born",
+                    "time": "3:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Culture & History",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Passeig del Born",
+                    "lat": 41.3849,
+                    "lng": 2.183,
+                    "cost": 0,
+                    "why": "Medieval promenade for photography and people-watching without stairs or long walks",
+                    "note": "Former jousting grounds, now café-lined; 10-minute walk back from Palau",
+                    "time": "5:15 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Wine tasting in El Born",
+                    "lat": 41.3845,
+                    "lng": 2.1825,
+                    "cost": 60,
+                    "why": "Curated Catalan wines in intimate setting suits your food interest and luxury tier",
+                    "note": "Vila Viniteca or similar; seated tasting with local cheese pairings",
+                    "time": "6:30 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick",
+                      "Seated"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Dinner in El Born",
+                    "lat": 41.385,
+                    "lng": 2.1828,
+                    "cost": 280,
+                    "why": "Contemporary Catalan fine dining caps a day of art and history in this quarter",
+                    "note": "5-minute walk from wine bar; Caelis or similar for tasting menu with wine pairings",
+                    "time": "8:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-18",
+                "weather": "Cool morning, ideal for hilltop views before departure",
+                "theme": "Hilltop farewell",
+                "summary": "Sunrise panoramas over Barcelona from Montjuïc's fortress heights before your departure. 🌅🏰",
+                "lodging": null,
+                "stops": [
+                  {
+                    "name": "Montjuïc Castle",
+                    "lat": 41.3637,
+                    "lng": 2.166,
+                    "cost": 80,
+                    "why": "Military history and 360° city views at sunrise capture culture and photography interests",
+                    "note": "Private car picks up at 6am; cable car to summit avoids the uphill climb",
+                    "time": "6:30 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Photography",
+                      "Accessible"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Private transfer to El Prat Airport",
+                    "lat": 41.2974,
+                    "lng": 2.0833,
+                    "cost": 80,
+                    "why": "Direct, comfortable departure without navigating transit with luggage",
+                    "note": "Departs 8:15 AM for 11am flight; allows 44-min drive and 3-hour airport buffer",
+                    "time": "8:15 AM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  }
+                ]
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Sagrada Família",
+                "lat": 41.4036,
+                "lng": 2.1744,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Mercat de Sant Josep de la Boqueria",
+                "lat": 41.3817,
+                "lng": 2.1717,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Museu Picasso",
+                "lat": 41.3851,
+                "lng": 2.181,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "04372dd0-77ac-435b-9273-a58ab365fc03",
+          "seenWeather": [],
+          "wallMs": 459613,
+          "costUsd": 0
+        }
+      ]
+    },
+    {
+      "fixtureId": "kyoto-couple-mixed",
+      "runs": [
+        {
+          "fixtureId": "kyoto-couple-mixed",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-09-19",
+                "weather": "Weather data unavailable",
+                "theme": "Vermilion gates, thousand steps",
+                "summary": "Begin with the endless vermilion torii gates of Fushimi Inari, then explore sake brewing heritage and serene temple gardens. End in the traditional geisha district of Gion. ⛩️🍶",
+                "lodging": {
+                  "name": "Luxury ryokan in Central Kyoto",
+                  "cost": 450,
+                  "note": "Traditional Japanese inn with kaiseki breakfasts and onsen; alternative: modern 5-star hotel"
+                },
+                "stops": [
+                  {
+                    "name": "Fushimi Inari Taisha",
+                    "lat": 34.9671,
+                    "lng": 135.7727,
+                    "cost": 0,
+                    "why": "Iconic torii tunnel for photography; early start avoids crowds",
+                    "note": "2-3 hour summit trail; go at 7 AM before tour groups arrive",
+                    "time": "7:00 AM",
+                    "durationLabel": "2.5 hours",
+                    "category": "other",
+                    "tags": []
+                  },
+                  {
+                    "name": "Gekkeikan Sake Museum",
+                    "lat": 34.9274,
+                    "lng": 135.7614,
+                    "cost": 6,
+                    "why": "Historic sake brewing culture fits food interests",
+                    "note": "Museum tour includes tastings; Fushimi water famous for sake",
+                    "time": "10:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": []
+                  },
+                  {
+                    "name": "Lunch in Fushimi",
+                    "lat": 34.935,
+                    "lng": 135.765,
+                    "cost": 70,
+                    "why": "Local tofu and sake-paired dishes unique to this district",
+                    "note": "Try Torisei for yakitori and sake, or traditional tofu kaiseki",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": []
+                  },
+                  {
+                    "name": "Tofuku-ji Temple",
+                    "lat": 34.9764,
+                    "lng": 135.773,
+                    "cost": 8,
+                    "why": "Zen gardens and temple architecture without the crowds",
+                    "note": "10-minute walk from Fushimi Inari; famous for autumn colors",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": []
+                  },
+                  {
+                    "name": "Dinner in Gion",
+                    "lat": 35.0036,
+                    "lng": 135.7753,
+                    "cost": 180,
+                    "why": "Geisha district atmosphere with upscale kaiseki dining",
+                    "note": "Reserve at Kikunoi or Gion Karyo; spot maiko at dusk",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": []
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-20",
+                "weather": "Weather data unavailable",
+                "theme": "Temple lanes and street food",
+                "summary": "Discover Kiyomizu-dera's wooden stage overlooking Kyoto, wander preserved Edo-period lanes, and taste your way through Nishiki Market's food stalls. 🏯🍡",
+                "lodging": {
+                  "name": "Luxury ryokan in Central Kyoto",
+                  "cost": 450,
+                  "note": "Traditional Japanese inn with kaiseki breakfasts and onsen; alternative: modern 5-star hotel"
+                },
+                "stops": [
+                  {
+                    "name": "Kiyomizu-dera",
+                    "lat": 34.9949,
+                    "lng": 135.785,
+                    "cost": 8,
+                    "why": "UNESCO temple with sweeping views; wooden stage is iconic photo",
+                    "note": "Arrive 7:30 AM to beat crowds; 15-min uphill walk from parking",
+                    "time": "7:30 AM",
+                    "durationLabel": "2 hours",
+                    "category": "entry",
+                    "tags": []
+                  },
+                  {
+                    "name": "Ninnen-zaka & Sannen-zaka",
+                    "lat": 34.9965,
+                    "lng": 135.781,
+                    "cost": 0,
+                    "why": "Edo-period preserved lanes with tea houses and craft shops",
+                    "note": "Connects Kiyomizu to downtown; stop for matcha at Tsujiri teahouse",
+                    "time": "10:00 AM",
+                    "durationLabel": "1 hour",
+                    "category": "other",
+                    "tags": []
+                  },
+                  {
+                    "name": "Lunch at Nishiki Market",
+                    "lat": 35.005,
+                    "lng": 135.765,
+                    "cost": 60,
+                    "why": "400m covered market showcasing every Kyoto street food specialty",
+                    "note": "Fresh sashimi, pickles, yuba at stalls; mostly closes by 6 PM",
+                    "time": "12:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": []
+                  },
+                  {
+                    "name": "Yasaka Shrine",
+                    "lat": 35.0036,
+                    "lng": 135.7786,
+                    "cost": 0,
+                    "why": "Vermilion shrine and adjacent park offer peaceful stroll",
+                    "note": "Free entry; connects to Maruyama Park; evening lanterns beautiful",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "other",
+                    "tags": []
+                  },
+                  {
+                    "name": "Dinner in Pontocho",
+                    "lat": 35.0046,
+                    "lng": 135.7703,
+                    "cost": 170,
+                    "why": "Narrow riverside alley with traditional ambiance and fine dining",
+                    "note": "Summer terraces (kawadoko) over Kamo River; e.g. Pontocho Misoguigawa",
+                    "time": "6:30 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": []
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-21",
+                "weather": "Weather data unavailable",
+                "theme": "Shogun halls, quiet gardens",
+                "summary": "Tour the shogun's ornate palace with its famous nightingale floors, stroll Imperial gardens, and find tranquility in Nanzen-ji's zen temple complex. 🏰🍃",
+                "lodging": {
+                  "name": "Luxury ryokan in Central Kyoto",
+                  "cost": 450,
+                  "note": "Traditional Japanese inn with kaiseki breakfasts and onsen; alternative: modern 5-star hotel"
+                },
+                "stops": [
+                  {
+                    "name": "Nijo Castle",
+                    "lat": 35.0142,
+                    "lng": 135.7481,
+                    "cost": 12,
+                    "why": "Shogun's palace with 'nightingale floors' and ornate paintings",
+                    "note": "Opens 8 AM; tour nightingale floors first before groups arrive",
+                    "time": "8:00 AM",
+                    "durationLabel": "2 hours",
+                    "category": "entry",
+                    "tags": []
+                  },
+                  {
+                    "name": "Kyoto Imperial Palace",
+                    "lat": 35.0252,
+                    "lng": 135.7619,
+                    "cost": 0,
+                    "why": "Vast gardens and ceremonial architecture, free and serene",
+                    "note": "Register online ahead or same-day at office for inner palace tour",
+                    "time": "10:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "other",
+                    "tags": []
+                  },
+                  {
+                    "name": "Lunch in Central Kyoto",
+                    "lat": 35.007,
+                    "lng": 135.768,
+                    "cost": 85,
+                    "why": "Near Nishiki Market's northern shops and local lunch spots",
+                    "note": "Try Omen for Kyoto-style udon or Menami for tempura donburi",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": []
+                  },
+                  {
+                    "name": "Nanzen-ji Temple",
+                    "lat": 35.0116,
+                    "lng": 135.7939,
+                    "cost": 10,
+                    "why": "Massive zen temple complex with tranquil gardens and aqueduct",
+                    "note": "Suirokaku brick aqueduct is photogenic; zen gardens included",
+                    "time": "3:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "entry",
+                    "tags": []
+                  },
+                  {
+                    "name": "Kaiseki dinner in Central Kyoto",
+                    "lat": 35.005,
+                    "lng": 135.775,
+                    "cost": 220,
+                    "why": "Multi-course haute cuisine showcasing seasonal Kyoto ingredients",
+                    "note": "Reserve at Hyotei or Kikunoi Roan; expect 2-hour tasting menu",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": []
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-22",
+                "weather": "Weather data unavailable",
+                "theme": "Golden pavilion, final reflections",
+                "summary": "The golden pavilion reflects in its pond at dawn, followed by Ryoan-ji's contemplative rock garden and Arashiyama's ethereal bamboo forest. ✨🎋",
+                "stops": [
+                  {
+                    "name": "Kinkaku-ji",
+                    "lat": 35.0394,
+                    "lng": 135.7292,
+                    "cost": 8,
+                    "why": "Gold-leaf pavilion reflected in pond is Kyoto's most iconic image",
+                    "note": "Arrive 7:30 AM for serene, crowd-free photos; one-way route",
+                    "time": "7:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": []
+                  },
+                  {
+                    "name": "Ryoan-ji Temple",
+                    "lat": 35.0345,
+                    "lng": 135.7183,
+                    "cost": 10,
+                    "why": "Famous minimalist rock garden, contemplative and photogenic",
+                    "note": "15-minute walk from Kinkaku-ji; sit and sketch the garden",
+                    "time": "9:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": []
+                  },
+                  {
+                    "name": "Lunch in Arashiyama",
+                    "lat": 35.0094,
+                    "lng": 135.6706,
+                    "cost": 90,
+                    "why": "Riverside dining with views of Togetsukyo Bridge and mountains",
+                    "note": "Try Shoraian for tofu cuisine in thatched house with garden views",
+                    "time": "12:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": []
+                  },
+                  {
+                    "name": "Arashiyama Bamboo Grove",
+                    "lat": 35.0172,
+                    "lng": 135.6722,
+                    "cost": 0,
+                    "why": "Towering bamboo forest creates ethereal tunnel effect for photos",
+                    "note": "Free; early afternoon best for diffused light; 5-min walk from lunch",
+                    "time": "3:00 PM",
+                    "durationLabel": "1 hour",
+                    "category": "other",
+                    "tags": []
+                  }
+                ]
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Fushimi Inari Taisha",
+                "lat": 34.9671,
+                "lng": 135.7727,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kinkaku-ji",
+                "lat": 35.0394,
+                "lng": 135.7292,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kiyomizu-dera",
+                "lat": 34.9949,
+                "lng": 135.785,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Nijo Castle",
+                "lat": 35.0142,
+                "lng": 135.7481,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "7d433f64-84b4-4e12-ba98-5f1ba9eced44",
+          "seenWeather": [],
+          "wallMs": 391621,
+          "costUsd": 0
+        },
+        {
+          "fixtureId": "kyoto-couple-mixed",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-09-19",
+                "weather": "No weather data available",
+                "theme": "Vermilion gates, mountain trails",
+                "summary": "Begin with Fushimi Inari's iconic torii gates mid-morning, then explore Zen temples and sake heritage in the quieter southern district. ⛩️🍶",
+                "lodging": {
+                  "name": "5-star hotel in Central Kyoto",
+                  "cost": 370,
+                  "note": "Central base near transit and dining; alternative: luxury ryokan for traditional experience"
+                },
+                "stops": [
+                  {
+                    "name": "Fushimi Inari Taisha",
+                    "lat": 34.9671,
+                    "lng": 135.7727,
+                    "cost": 0,
+                    "why": "Iconic vermilion torii gates and forested trails blend culture, nature, photography",
+                    "note": "Start at 8 AM to photograph the upper trails with softer light and fewer crowds",
+                    "time": "8:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Free"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Tofuku-ji Temple",
+                    "lat": 34.976,
+                    "lng": 135.773,
+                    "cost": 14,
+                    "why": "Historic Zen temple with tranquil gardens, far quieter than headline attractions",
+                    "note": "15-minute walk from Fushimi Inari; famous wooden bridges frame the valley",
+                    "time": "10:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Zen Garden",
+                      "Local Pick"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Fushimi district",
+                    "lat": 34.928,
+                    "lng": 135.762,
+                    "cost": 60,
+                    "why": "Local sake breweries and tofu restaurants showcase Fushimi's culinary heritage",
+                    "note": "Try Gekkeikan area for tofu kaiseki lunch sets",
+                    "time": "12:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local",
+                      "Traditional"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Gekkeikan Okura Sake Museum",
+                    "lat": 34.928,
+                    "lng": 135.762,
+                    "cost": 12,
+                    "why": "Historic brewery ties food culture to 400 years of sake craftsmanship",
+                    "note": "Admission includes tasting; 5-minute walk from lunch area",
+                    "time": "2:30 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Culture",
+                      "Tasting"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Dinner in Gion district",
+                    "lat": 34.999,
+                    "lng": 135.776,
+                    "cost": 190,
+                    "why": "Kaiseki haute cuisine in historic geisha quarter delivers luxury dining experience",
+                    "note": "Reserve ahead; refined multi-course kaiseki in traditional setting",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-20",
+                "weather": "No weather data available",
+                "theme": "Temples, tea, old streets",
+                "summary": "Explore Higashiyama's hillside temples and preserved streets at dawn, then dine along the riverside in traditional Pontocho. 🏯🍵",
+                "lodging": {
+                  "name": "5-star hotel in Central Kyoto",
+                  "cost": 370,
+                  "note": "Central base near transit and dining; alternative: luxury ryokan for traditional experience"
+                },
+                "stops": [
+                  {
+                    "name": "Kiyomizu-dera",
+                    "lat": 34.9949,
+                    "lng": 135.785,
+                    "cost": 12,
+                    "why": "Hillside temple with panoramic views blends architecture, culture, and photography",
+                    "note": "Arrive at 7:30 AM to capture the wooden stage with softer morning light",
+                    "time": "7:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Early Opening"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Ninenzaka and Sannenzaka streets",
+                    "lat": 34.995,
+                    "lng": 135.78,
+                    "cost": 0,
+                    "why": "Preserved Edo-era lanes offer photogenic streets and craft shops, fewer tourists",
+                    "note": "Connects downhill from Kiyomizu-dera; 10-minute scenic walk through history",
+                    "time": "9:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Historic",
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch in Higashiyama",
+                    "lat": 34.996,
+                    "lng": 135.781,
+                    "cost": 65,
+                    "why": "Traditional teahouses and yudofu restaurants showcase Kyoto's temple cuisine",
+                    "note": "Near Maruyama Park; yudofu (tofu hot pot) is the area's Buddhist specialty",
+                    "time": "12:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Traditional",
+                      "Local"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Kodai-ji Temple",
+                    "lat": 34.998,
+                    "lng": 135.781,
+                    "cost": 16,
+                    "why": "Zen garden built by a shogun's widow, intimate and far less crowded",
+                    "note": "10-minute walk from lunch; dry landscape garden reflects tea ceremony aesthetics",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Zen Garden",
+                      "Quiet"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Dinner in Pontocho",
+                    "lat": 35.006,
+                    "lng": 135.769,
+                    "cost": 180,
+                    "why": "Riverside dining alley combines traditional kaiseki with elegant modern Japanese",
+                    "note": "Book ahead for river-facing window seats; narrow lane along Kamo River",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Riverside",
+                      "Fine Dining"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-21",
+                "weather": "No weather data available",
+                "theme": "Golden pavilion, quiet gardens",
+                "summary": "Northern Kyoto's golden temple and contemplative rock gardens offer serene cultural photography away from the crowds. ✨🪨",
+                "lodging": {
+                  "name": "5-star hotel in Central Kyoto",
+                  "cost": 370,
+                  "note": "Central base near transit and dining; alternative: luxury ryokan for traditional experience"
+                },
+                "stops": [
+                  {
+                    "name": "Kinkaku-ji",
+                    "lat": 35.0394,
+                    "lng": 135.7292,
+                    "cost": 14,
+                    "why": "Golden pavilion reflected in water is Kyoto's most iconic photographic subject",
+                    "note": "Arrive at 8:30 AM for optimal morning light and manageable crowds",
+                    "time": "8:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Ryoan-ji Temple",
+                    "lat": 35.034,
+                    "lng": 135.718,
+                    "cost": 14,
+                    "why": "Famous rock garden epitomizes Zen philosophy and Japanese aesthetic principles",
+                    "note": "15-minute walk from Kinkaku-ji; sit quietly to absorb the contemplative design",
+                    "time": "10:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Zen Garden",
+                      "Contemplative"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Kita district",
+                    "lat": 35.037,
+                    "lng": 135.725,
+                    "cost": 60,
+                    "why": "Local neighborhood restaurants near temple row serve authentic home-style meals",
+                    "note": "Spots along Kinukake-no-Michi path; lunch sets feature seasonal Kyoto ingredients",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local",
+                      "Home-style"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Daitoku-ji Temple complex",
+                    "lat": 35.04,
+                    "lng": 135.747,
+                    "cost": 16,
+                    "why": "Sprawling sub-temple complex offers intimate gardens with minimal visitors",
+                    "note": "Multiple sub-temples at ¥400-600 each; Daisen-in has renowned rock garden",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Quiet",
+                      "Garden"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Dinner in Kawaramachi",
+                    "lat": 35.004,
+                    "lng": 135.768,
+                    "cost": 170,
+                    "why": "Downtown district offers variety from kaiseki to teppanyaki and premium sushi",
+                    "note": "Dense restaurant district near Shijo; book ahead for counter seating",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Upscale",
+                      "Variety"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-22",
+                "weather": "No weather data available",
+                "theme": "Shoguns, screens, stillness",
+                "summary": "Explore the shogun's palace and its painted screens, then wander Nishiki Market's culinary culture before a farewell dinner. 🏯🦐",
+                "stops": [
+                  {
+                    "name": "Nijo Castle",
+                    "lat": 35.0142,
+                    "lng": 135.7481,
+                    "cost": 36,
+                    "why": "Shogun's palace with nightingale floors and painted screens reveals feudal power",
+                    "note": "Opens 8:45 AM; head to Ninomaru Palace first to see interiors before crowds",
+                    "time": "8:45 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Historic",
+                      "Must-See"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Nishiki Market",
+                    "lat": 35.005,
+                    "lng": 135.763,
+                    "cost": 20,
+                    "why": "400m covered food market showcases Kyoto's culinary ingredients and culture",
+                    "note": "Sample pickles, sweets, fresh seafood; covered arcade stays dry in any weather",
+                    "time": "11:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Food Market",
+                      "Shopping"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch around Nishiki Market",
+                    "lat": 35.005,
+                    "lng": 135.763,
+                    "cost": 75,
+                    "why": "Market perimeter restaurants use the freshest ingredients from surrounding stalls",
+                    "note": "Nishiki Warai for okonomiyaki or nearby sushi counters with market-fresh fish",
+                    "time": "1:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Market Fresh",
+                      "Casual"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Kyoto Imperial Palace Park",
+                    "lat": 35.025,
+                    "lng": 135.762,
+                    "cost": 0,
+                    "why": "Expansive palace gardens offer peaceful nature walk in the city center",
+                    "note": "Free park entry; palace interior tours require advance online reservation",
+                    "time": "3:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Free",
+                      "Gardens"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner near Kyoto Station",
+                    "lat": 34.985,
+                    "lng": 135.758,
+                    "cost": 160,
+                    "why": "Farewell dinner with station skyline views allows relaxed, upscale seasonal kaiseki",
+                    "note": "Hotel restaurants in Kyoto Station Building offer refined cuisine and city views",
+                    "time": "6:30 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Farewell"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Fushimi Inari Taisha",
+                "lat": 34.9671,
+                "lng": 135.7727,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kinkaku-ji",
+                "lat": 35.0394,
+                "lng": 135.7292,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kiyomizu-dera",
+                "lat": 34.9949,
+                "lng": 135.785,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Nijo Castle",
+                "lat": 35.0142,
+                "lng": 135.7481,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "14e5a14b-2305-4faa-bcff-de430548e283",
+          "seenWeather": [],
+          "wallMs": 356875,
+          "costUsd": 0
+        },
+        {
+          "fixtureId": "kyoto-couple-mixed",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-09-19",
+                "weather": "No weather data available",
+                "theme": "Temple lanes and tea sweets",
+                "summary": "Begin in Higashiyama's temple lanes with morning serenity at Kiyomizu-dera, then wander preserved streets and evening kaiseki in Gion. 🏯🍵",
+                "lodging": {
+                  "name": "Traditional luxury ryokan in Higashiyama",
+                  "cost": 450,
+                  "note": "Authentic tatami experience with kaiseki breakfast matches cultural interests; alternative: modern 5-star hotel for convenience"
+                },
+                "stops": [
+                  {
+                    "name": "Kiyomizu-dera",
+                    "lat": 34.9949,
+                    "lng": 135.785,
+                    "cost": 6,
+                    "why": "Iconic wooden terrace with city views - early morning beats the crowds",
+                    "note": "Opens 6:30 AM; arrive by 9 to avoid tour groups",
+                    "time": "9:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Must-See",
+                      "Early Access"
+                    ]
+                  },
+                  {
+                    "name": "Sannenzaka and Ninenzaka Streets",
+                    "lat": 34.9965,
+                    "lng": 135.7805,
+                    "cost": 0,
+                    "why": "Preserved Edo lanes perfect for photography and traditional crafts",
+                    "note": "10-minute walk downhill from Kiyomizu; many tea houses along the way",
+                    "time": "10:45 AM",
+                    "durationLabel": "1 hour",
+                    "category": "other",
+                    "tags": [
+                      "Local Pick",
+                      "Free"
+                    ]
+                  },
+                  {
+                    "name": "Lunch in Higashiyama",
+                    "lat": 35,
+                    "lng": 135.78,
+                    "cost": 60,
+                    "why": "Historic district filled with traditional restaurants and tea houses",
+                    "note": "Try yudofu (tofu hot pot) or obanzai; e.g. Okutan near Nanzen-ji",
+                    "time": "12:30 PM",
+                    "durationLabel": "1 hour",
+                    "category": "food",
+                    "tags": [
+                      "Traditional",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Kodai-ji Temple",
+                    "lat": 35,
+                    "lng": 135.781,
+                    "cost": 9,
+                    "why": "Exquisite Zen gardens with fewer crowds than major temples",
+                    "note": "Built 1606 for Hideyoshi's widow; beautiful tea houses in grounds",
+                    "time": "2:30 PM",
+                    "durationLabel": "1 hour",
+                    "category": "entry",
+                    "tags": [
+                      "Hidden Gem",
+                      "Gardens"
+                    ]
+                  },
+                  {
+                    "name": "Dinner in Gion",
+                    "lat": 35.003,
+                    "lng": 135.775,
+                    "cost": 180,
+                    "why": "Premier geisha district with high-end kaiseki showcasing seasonal ingredients",
+                    "note": "Multi-course kaiseki dinner; reservation recommended; e.g. Gion Nanba",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": [
+                      "Fine Dining",
+                      "Kaiseki"
+                    ]
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-20",
+                "weather": "No weather data available",
+                "theme": "Torii gates into the hills",
+                "summary": "Dawn hike through thousands of torii gates at Fushimi Inari, followed by sake-brewing heritage and tastings in historic Fushimi. ⛩️🍶",
+                "lodging": {
+                  "name": "Traditional luxury ryokan in Higashiyama",
+                  "cost": 450,
+                  "note": "Authentic tatami experience with kaiseki breakfast matches cultural interests; alternative: modern 5-star hotel for convenience"
+                },
+                "stops": [
+                  {
+                    "name": "Fushimi Inari Taisha",
+                    "lat": 34.9671,
+                    "lng": 135.7727,
+                    "cost": 0,
+                    "why": "Thousands of vermillion torii gates winding up the mountain - magical at dawn",
+                    "note": "Free entry, 24 hours; 2-hour summit hike or shorter circuits available",
+                    "time": "7:00 AM",
+                    "durationLabel": "2 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Must-See",
+                      "Free"
+                    ]
+                  },
+                  {
+                    "name": "Fushimi Sake District",
+                    "lat": 34.935,
+                    "lng": 135.76,
+                    "cost": 0,
+                    "why": "Historic sake-brewing district with traditional architecture and willow-lined canal",
+                    "note": "Many breweries open for tastings; stroll along Horikawa canal",
+                    "time": "10:00 AM",
+                    "durationLabel": "1 hour",
+                    "category": "other",
+                    "tags": [
+                      "Local Pick",
+                      "Free"
+                    ]
+                  },
+                  {
+                    "name": "Lunch in Fushimi",
+                    "lat": 34.935,
+                    "lng": 135.76,
+                    "cost": 65,
+                    "why": "Pair local cuisine with Fushimi's renowned sake at brewery restaurants",
+                    "note": "Many tasting rooms offer food; e.g. Gekkeikan has a restaurant",
+                    "time": "12:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": [
+                      "Sake Pairing",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Gekkeikan Okura Sake Museum",
+                    "lat": 34.935,
+                    "lng": 135.755,
+                    "cost": 9,
+                    "why": "Learn sake-making history with tastings - culture through craft tradition",
+                    "note": "Housed in 1909 brewery; includes 3 sake samples with admission",
+                    "time": "2:00 PM",
+                    "durationLabel": "1 hour",
+                    "category": "entry",
+                    "tags": [
+                      "Museum",
+                      "Tastings"
+                    ]
+                  },
+                  {
+                    "name": "Dinner in Central Kyoto",
+                    "lat": 35.004,
+                    "lng": 135.768,
+                    "cost": 150,
+                    "why": "Upscale dining in downtown Kyoto with seasonal Japanese cuisine",
+                    "note": "Kyo-kaiseki or sushi omakase; e.g. Kawaramachi area restaurants",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": [
+                      "Fine Dining",
+                      "Seasonal"
+                    ]
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-21",
+                "weather": "No weather data available",
+                "theme": "Shoguns, moats, and quiet gardens",
+                "summary": "Explore the shogun's palace at Nijo Castle, stroll imperial gardens, and browse Kyoto's Kitchen market for local flavors. 🏰🍱",
+                "lodging": {
+                  "name": "Traditional luxury ryokan in Higashiyama",
+                  "cost": 450,
+                  "note": "Authentic tatami experience with kaiseki breakfast matches cultural interests; alternative: modern 5-star hotel for convenience"
+                },
+                "stops": [
+                  {
+                    "name": "Nijo Castle",
+                    "lat": 35.0142,
+                    "lng": 135.7481,
+                    "cost": 12,
+                    "why": "Shogunate palace with stunning gardens and famous nightingale floors",
+                    "note": "Opens 8:45 AM; arrive at opening to see before tour buses arrive",
+                    "time": "9:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Must-See",
+                      "UNESCO"
+                    ]
+                  },
+                  {
+                    "name": "Kyoto Imperial Palace Grounds",
+                    "lat": 35.025,
+                    "lng": 135.762,
+                    "cost": 0,
+                    "why": "Serene imperial gardens open to public - peaceful city-center retreat",
+                    "note": "Free entry to grounds; palace interior requires advance reservation",
+                    "time": "11:00 AM",
+                    "durationLabel": "1 hour",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Gardens"
+                    ]
+                  },
+                  {
+                    "name": "Lunch near Imperial Palace",
+                    "lat": 35.025,
+                    "lng": 135.762,
+                    "cost": 70,
+                    "why": "Quiet neighborhood restaurants serving authentic Kyoto home cooking",
+                    "note": "Try obanzai (Kyoto small plates); e.g. around Karasuma-Imadegawa",
+                    "time": "12:45 PM",
+                    "durationLabel": "1 hour",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick",
+                      "Traditional"
+                    ]
+                  },
+                  {
+                    "name": "Nishiki Market",
+                    "lat": 35.005,
+                    "lng": 135.765,
+                    "cost": 0,
+                    "why": "Kyoto's Kitchen - 400m of local foods, pickles, and kitchenware to explore",
+                    "note": "Browse and sample street foods; most shops close by 6 PM",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "other",
+                    "tags": [
+                      "Market",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Dinner at fine dining restaurant",
+                    "lat": 35,
+                    "lng": 135.77,
+                    "cost": 160,
+                    "why": "Elevated kaiseki or contemporary Japanese to cap the day",
+                    "note": "Book ahead for top restaurants; e.g. Pontocho alley options",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ]
+                  }
+                ]
+              },
+              {
+                "date": "2026-09-22",
+                "weather": "No weather data available",
+                "theme": "Gold on still water",
+                "summary": "Golden reflections at Kinkaku-ji and Zen meditation at Ryoan-ji, ending with Arashiyama's bamboo forest and riverside tranquility. 🌟🎋",
+                "stops": [
+                  {
+                    "name": "Kinkaku-ji",
+                    "lat": 35.0394,
+                    "lng": 135.7292,
+                    "cost": 8,
+                    "why": "Iconic gold-leaf pavilion reflected in pond - quintessential Kyoto photo",
+                    "note": "Opens 9 AM; arrive early before it gets extremely crowded",
+                    "time": "9:00 AM",
+                    "durationLabel": "1 hour",
+                    "category": "entry",
+                    "tags": [
+                      "Must-See",
+                      "UNESCO"
+                    ]
+                  },
+                  {
+                    "name": "Ryoan-ji",
+                    "lat": 35.034,
+                    "lng": 135.718,
+                    "cost": 10,
+                    "why": "Japan's most famous rock garden - meditative simplicity for culture lovers",
+                    "note": "15-minute walk or taxi from Kinkaku-ji; best viewed in quiet",
+                    "time": "10:30 AM",
+                    "durationLabel": "1 hour",
+                    "category": "entry",
+                    "tags": [
+                      "Zen Garden",
+                      "UNESCO"
+                    ]
+                  },
+                  {
+                    "name": "Lunch in Arashiyama",
+                    "lat": 35.015,
+                    "lng": 135.675,
+                    "cost": 75,
+                    "why": "Riverside dining with mountain views and local tofu specialties",
+                    "note": "Try yudofu or seasonal river fish; e.g. along Togetsukyo Bridge",
+                    "time": "12:15 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": [
+                      "Scenic",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Arashiyama Bamboo Grove",
+                    "lat": 35.017,
+                    "lng": 135.672,
+                    "cost": 0,
+                    "why": "Towering bamboo forest creates otherworldly atmosphere - photographer's dream",
+                    "note": "Can get crowded midday; stroll to quieter temple paths beyond",
+                    "time": "2:00 PM",
+                    "durationLabel": "1 hour",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Nature"
+                    ]
+                  },
+                  {
+                    "name": "Dinner in Pontocho",
+                    "lat": 35.004,
+                    "lng": 135.769,
+                    "cost": 140,
+                    "why": "Atmospheric riverside dining alley with traditional kaiseki and yakitori",
+                    "note": "Narrow lantern-lit lane along Kamo River; reservation recommended",
+                    "time": "6:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": [
+                      "Fine Dining",
+                      "Atmospheric"
+                    ]
+                  }
+                ]
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Fushimi Inari Taisha",
+                "lat": 34.9671,
+                "lng": 135.7727,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kinkaku-ji",
+                "lat": 35.0394,
+                "lng": 135.7292,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kiyomizu-dera",
+                "lat": 34.9949,
+                "lng": 135.785,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Nijo Castle",
+                "lat": 35.0142,
+                "lng": 135.7481,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "2d7b2a11-ad61-4cf3-baf4-d8aa215b79f6",
+          "seenWeather": [],
+          "wallMs": 301977,
+          "costUsd": 0
+        }
+      ]
+    },
+    {
+      "fixtureId": "lisbon-solo-offbeat",
+      "runs": [
+        {
+          "fixtureId": "lisbon-solo-offbeat",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "midrange",
+            "days": [
+              {
+                "date": "2026-10-08",
+                "weather": "Mild October weather, pleasant for walking",
+                "theme": "Riverside bites and fado nights",
+                "summary": "Wander Alfama's Moorish alleyways and fortress views, sample Lisboa's best at Time Out Market, then lose yourself in intimate fado performances. 🎵🍤",
+                "lodging": {
+                  "name": "Boutique hotel in Baixa or Chiado",
+                  "cost": 140,
+                  "note": "Central base between all three areas; solo-friendly; alternative: guesthouse for ~$90"
+                },
+                "stops": [
+                  {
+                    "name": "Alfama historic quarter",
+                    "lat": 38.713,
+                    "lng": -9.129,
+                    "cost": 0,
+                    "why": "Moorish maze of cobblestone streets and viewpoints - perfect for photography and culture",
+                    "note": "Start at Portas do Sol miradouro; free and walkable, best in morning light",
+                    "time": "10:00 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Time Out Market Lisboa",
+                    "lat": 38.7065,
+                    "lng": -9.1459,
+                    "cost": 25,
+                    "why": "Food hall with dozens of stalls from Lisboa's best chefs - street food variety",
+                    "note": "15-min walk from Alfama; try seafood or petiscos; popular but turnover is quick",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Casual"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Castelo de São Jorge",
+                    "lat": 38.7139,
+                    "lng": -9.1334,
+                    "cost": 15,
+                    "why": "Hilltop Moorish fortress with panoramic city views - history meets photography",
+                    "note": "5-min walk uphill from central Alfama; closes at 6 PM in October",
+                    "time": "2:30 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Must-See",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Dinner around Alfama",
+                    "lat": 38.7125,
+                    "lng": -9.1295,
+                    "cost": 40,
+                    "why": "Traditional Portuguese tascas in the fado district - authentic local dining",
+                    "note": "Many small restaurants on Rua dos Remédios; e.g. Páteo 13 or Cantinho do Aziz",
+                    "time": "7:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Casual"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Mouraria fado house",
+                    "lat": 38.719,
+                    "lng": -9.132,
+                    "cost": 35,
+                    "why": "Intimate traditional fado in historic Mouraria - Lisboa's multicultural fado quarter",
+                    "note": "Reserve ahead; minimum includes 1-2 drinks; try A Parreirinha de Alfama nearby",
+                    "time": "9:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Must-See",
+                      "Reservation Needed"
+                    ],
+                    "category": "entry"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-09",
+                "weather": "Mild October weather, pleasant for walking",
+                "theme": "Hilltop tascas, golden hour wine",
+                "summary": "Explore LX Factory's industrial-chic creativity and Manueline monasteries, then toast sunset from hilltop perches before diving into Bairro Alto's bar-hopping ritual. 🍷🎨",
+                "lodging": {
+                  "name": "Boutique hotel in Baixa or Chiado",
+                  "cost": 140,
+                  "note": "Same central base; solo-friendly; alternative: guesthouse for ~$90"
+                },
+                "stops": [
+                  {
+                    "name": "LX Factory",
+                    "lat": 38.7044,
+                    "lng": -9.1783,
+                    "cost": 0,
+                    "why": "Industrial-chic creative hub with street art and indie shops - photography paradise",
+                    "note": "Free to explore; 15-min taxi from center; Sunday market also happens here",
+                    "time": "10:00 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch at LX Factory area",
+                    "lat": 38.7045,
+                    "lng": -9.178,
+                    "cost": 20,
+                    "why": "Casual cafes and food spots in the creative district - local worker crowd",
+                    "note": "Multiple options on-site; e.g. Landeau Chocolate for dessert after",
+                    "time": "12:30 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Casual",
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Mosteiro dos Jerónimos",
+                    "lat": 38.6979,
+                    "lng": -9.2062,
+                    "cost": 12,
+                    "why": "UNESCO World Heritage Manueline architecture - Lisboa's crown cultural jewel",
+                    "note": "10-min walk from LX Factory; closes at 5:30 PM Oct-Apr; lines shorter after 3 PM",
+                    "time": "2:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Culture"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Miradouro de Santa Catarina",
+                    "lat": 38.7097,
+                    "lng": -9.1505,
+                    "cost": 12,
+                    "why": "Sunset viewpoint with wine - golden hour photography over the Tagus River",
+                    "note": "Taxi from Belém; kiosk sells drinks; popular with locals and street musicians",
+                    "time": "5:30 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Free Entry",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner around Bairro Alto",
+                    "lat": 38.713,
+                    "lng": -9.145,
+                    "cost": 35,
+                    "why": "Traditional tascas on hilltop streets - authentic Portuguese small-plate dining",
+                    "note": "5-min walk from miradouro; many small restaurants; e.g. Tasca do Chico, Bota Alta",
+                    "time": "7:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Tascas"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Bairro Alto bars and Pink Street",
+                    "lat": 38.712,
+                    "lng": -9.1455,
+                    "cost": 40,
+                    "why": "Lisboa's main bar district - street drinking culture and late-night energy",
+                    "note": "Walk between both; Bairro Alto = bars, Pink Street = clubs; gets busy after 11 PM",
+                    "time": "9:30 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Nightlife",
+                      "Local Pick"
+                    ],
+                    "category": "other"
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-10",
+                "weather": "Mild October weather, pleasant for walking",
+                "theme": "Riverside grills, warehouse beats",
+                "summary": "Hunt for antiques at Feira da Ladra, stroll the Tagus waterfront, then feast on grilled seafood before dancing into the small hours at Lisboa's iconic riverside club. 🐙🎧",
+                "stops": [
+                  {
+                    "name": "Feira da Ladra flea market",
+                    "lat": 38.7149,
+                    "lng": -9.1262,
+                    "cost": 20,
+                    "why": "Saturday flea market with antiques and vintage finds - local shopping culture",
+                    "note": "Alfama location; only Tuesdays and Saturdays; bargaining expected; cash-friendly",
+                    "time": "10:00 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Free Entry",
+                      "Shopping"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Mercado da Ribeira",
+                    "lat": 38.7065,
+                    "lng": -9.1459,
+                    "cost": 25,
+                    "why": "Return to food hall for different stalls - endless street food variety for last lunch",
+                    "note": "Same as Day 1 but try different vendors; 15-min walk from market; Saturday crowds",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Casual"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Tagus River promenade",
+                    "lat": 38.7055,
+                    "lng": -9.1465,
+                    "cost": 0,
+                    "why": "Waterfront stroll from Cais do Sodré to Praça do Comércio - photography and city views",
+                    "note": "Free walk along the river; street performers and kiosks; great for solo wandering",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Elevador da Bica or Miradouro de São Pedro de Alcântara",
+                    "lat": 38.7147,
+                    "lng": -9.1438,
+                    "cost": 4,
+                    "why": "Quick funicular ride or hilltop viewpoint - golden hour photography before dinner",
+                    "note": "Bica funicular is iconic shot; or walk to São Pedro for sunset; both nearby",
+                    "time": "4:15 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Photography",
+                      "Viewpoint"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner around Cais do Sodré",
+                    "lat": 38.7063,
+                    "lng": -9.1457,
+                    "cost": 50,
+                    "why": "Riverside grilled seafood at the waterfront - Lisboa's signature fish and shellfish",
+                    "note": "Multiple spots along the river; e.g. Sea Me for modern seafood, or Peixaria da Esquina",
+                    "time": "6:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Seafood",
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Lux Frágil nightclub",
+                    "lat": 38.717,
+                    "lng": -9.124,
+                    "cost": 40,
+                    "why": "Legendary riverside warehouse club - Lisboa's most iconic electronic music venue",
+                    "note": "Santa Apolónia; opens late, peaks after midnight; rooftop terrace with Tagus views",
+                    "time": "9:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Nightlife",
+                      "Must-See"
+                    ],
+                    "category": "other"
+                  }
+                ]
+              }
+            ]
+          },
+          "runId": "2536c8c7-5dfd-4144-b9b9-8c68696b302d",
+          "seenWeather": [],
+          "wallMs": 573997,
+          "costUsd": 0
+        },
+        {
+          "fixtureId": "lisbon-solo-offbeat",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "midrange",
+            "days": [
+              {
+                "date": "2026-10-08",
+                "weather": "No specific data - expect mild October shoulder season conditions",
+                "theme": "Chiado Ruins & Fado Night",
+                "summary": "Explore earthquake-scarred Gothic ruins and castle ramparts, then dive into traditional fado and Bairro Alto's bar scene. 🏛️🎶",
+                "lodging": {
+                  "name": "Boutique hotel in Chiado",
+                  "cost": 115,
+                  "note": "Central location for nightlife and culture; hostel alternative for more social atmosphere"
+                },
+                "stops": [
+                  {
+                    "name": "Airport to hotel",
+                    "lat": 38.7756,
+                    "lng": -9.1354,
+                    "cost": 22,
+                    "why": "Direct taxi suits solo traveler arriving with luggage",
+                    "note": "30-40 min ride; pre-book or use Bolt/Uber for better rates",
+                    "time": "9:00 AM",
+                    "durationLabel": "40 minutes",
+                    "category": "transit",
+                    "tags": [
+                      "Arrival"
+                    ]
+                  },
+                  {
+                    "name": "Lunch in Chiado area",
+                    "lat": 38.7107,
+                    "lng": -9.1424,
+                    "cost": 22,
+                    "why": "Pedestrian streets with casual-to-nice spots match mid-range budget and food interest",
+                    "note": "Try Café Buenos Aires or Landeau for local vibe; walkable from hotel",
+                    "time": "12:30 PM",
+                    "durationLabel": "1 hour",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Carmo Convent",
+                    "lat": 38.7118,
+                    "lng": -9.1402,
+                    "cost": 5,
+                    "why": "Gothic ruins from 1755 earthquake combine culture and photography interests",
+                    "note": "In Chiado; roofless nave is most photogenic 2-5pm; includes archaeology museum",
+                    "time": "2:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Culture",
+                      "Photography"
+                    ]
+                  },
+                  {
+                    "name": "São Jorge Castle",
+                    "lat": 38.7139,
+                    "lng": -9.1333,
+                    "cost": 11,
+                    "why": "Moorish fortress with panoramic city views suits culture and photography focus",
+                    "note": "Uphill from Carmo; arrive before 5pm for golden hour shots over the Tagus",
+                    "time": "4:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Must-See",
+                      "Photography"
+                    ]
+                  },
+                  {
+                    "name": "Fado dinner in Alfama",
+                    "lat": 38.7118,
+                    "lng": -9.1287,
+                    "cost": 60,
+                    "why": "Traditional fado houses serve dinner with live music - hits food, culture, and nightlife",
+                    "note": "Reserve ahead at Mesa de Frades or Clube de Fado; €40-50 min per person",
+                    "time": "7:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": [
+                      "Reservation Needed",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Bairro Alto bar district",
+                    "lat": 38.7148,
+                    "lng": -9.1456,
+                    "cost": 32,
+                    "why": "Hilltop maze of bars and crowd energy matches nightlife priority and crowd preference",
+                    "note": "15-min walk from Alfama; starts lively around 10pm, hop between venues",
+                    "time": "9:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "other",
+                    "tags": [
+                      "Nightlife",
+                      "Local Pick"
+                    ]
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-09",
+                "weather": "No specific data - expect mild October shoulder season conditions",
+                "theme": "Belém Monuments & Market Nights",
+                "summary": "Journey through Portugal's Age of Discovery in Belém's golden monastery, then feast at Time Out Market before Pink Street's neon nightlife. 🏛️✨",
+                "lodging": {
+                  "name": "Boutique hotel in Chiado",
+                  "cost": 115,
+                  "note": "Central location for nightlife and culture; hostel alternative for more social atmosphere"
+                },
+                "stops": [
+                  {
+                    "name": "Breakfast café in Baixa",
+                    "lat": 38.7115,
+                    "lng": -9.1391,
+                    "cost": 11,
+                    "why": "Historic district with traditional cafés suits food interest before Belém trip",
+                    "note": "Confeitaria Nacional or Café Nicola; 5-min walk from hotel",
+                    "time": "8:30 AM",
+                    "durationLabel": "30 minutes",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Tram 15E to Belém",
+                    "lat": 38.7063,
+                    "lng": -9.1457,
+                    "cost": 3,
+                    "why": "Scenic tram ride along the river adds local transport experience",
+                    "note": "Catch at Cais do Sodré; 25-30 min ride with Tagus views",
+                    "time": "9:30 AM",
+                    "durationLabel": "30 minutes",
+                    "category": "transit",
+                    "tags": [
+                      "Scenic"
+                    ]
+                  },
+                  {
+                    "name": "Jerónimos Monastery",
+                    "lat": 38.6979,
+                    "lng": -9.2061,
+                    "cost": 11,
+                    "why": "UNESCO Manueline masterpiece anchors Portugal's maritime history and culture interest",
+                    "note": "Book online to skip ticket line; cloisters are the photography highlight",
+                    "time": "10:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Must-See",
+                      "Photography"
+                    ]
+                  },
+                  {
+                    "name": "Pastéis de Belém",
+                    "lat": 38.6976,
+                    "lng": -9.2034,
+                    "cost": 6,
+                    "why": "Iconic 1837 bakery with original custard tart recipe - food landmark itself",
+                    "note": "5-min walk from monastery; eat warm at counter to skip dining room wait",
+                    "time": "12:30 PM",
+                    "durationLabel": "30 minutes",
+                    "category": "food",
+                    "tags": [
+                      "Must-See",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Lunch in Belém area",
+                    "lat": 38.6963,
+                    "lng": -9.2074,
+                    "cost": 24,
+                    "why": "Waterfront seafood spots match food priority and photogenic setting",
+                    "note": "Try Ponto Final across the river or Darwin's Café by the marina",
+                    "time": "1:30 PM",
+                    "durationLabel": "1 hour",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Tram 15E return",
+                    "lat": 38.6979,
+                    "lng": -9.2061,
+                    "cost": 3,
+                    "why": "Same scenic route back to city center",
+                    "note": "Catch near monastery; allows time for LX Factory visit",
+                    "time": "3:00 PM",
+                    "durationLabel": "30 minutes",
+                    "category": "transit",
+                    "tags": [
+                      "Scenic"
+                    ]
+                  },
+                  {
+                    "name": "LX Factory",
+                    "lat": 38.7063,
+                    "lng": -9.1785,
+                    "cost": 0,
+                    "why": "Converted industrial creative hub with indie shops and street art suits photography interest",
+                    "note": "Under the bridge in Alcântara; Ler Devagar bookshop is the photo highlight",
+                    "time": "3:45 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ]
+                  },
+                  {
+                    "name": "Time Out Market",
+                    "lat": 38.7063,
+                    "lng": -9.1457,
+                    "cost": 30,
+                    "why": "Curated food hall with chef kiosks and communal tables hits food priority and crowd energy",
+                    "note": "In Cais do Sodré; 40+ vendors, share tables, bustling evening atmosphere",
+                    "time": "7:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": [
+                      "Must-See",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Pink Street nightlife",
+                    "lat": 38.7066,
+                    "lng": -9.1448,
+                    "cost": 45,
+                    "why": "Neon-lit club and bar strip next to market matches nightlife priority and loves crowds",
+                    "note": "Adjacent to Time Out Market; peaks after 11pm, mix of clubs and cocktail bars",
+                    "time": "9:00 PM",
+                    "durationLabel": "2 hours",
+                    "category": "other",
+                    "tags": [
+                      "Nightlife",
+                      "Local Pick"
+                    ]
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-10",
+                "weather": "No specific data - expect mild October shoulder season conditions",
+                "theme": "Tiles, Views & Farewell",
+                "summary": "Discover Portugal's azulejo art heritage, browse Príncipe Real's boutiques, and capture sunset from Alfama's miradouros. 🎨📸",
+                "lodging": null,
+                "stops": [
+                  {
+                    "name": "Breakfast near National Tile Museum",
+                    "lat": 38.7283,
+                    "lng": -9.1098,
+                    "cost": 11,
+                    "why": "Local café en route to museum suits relaxed final morning",
+                    "note": "Pastelaria Benard or similar; taxi/Uber to museum area from hotel",
+                    "time": "8:30 AM",
+                    "durationLabel": "30 minutes",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "National Tile Museum",
+                    "lat": 38.7283,
+                    "lng": -9.1098,
+                    "cost": 5,
+                    "why": "Azulejo history from 15th century onward hits culture interest and photography focus",
+                    "note": "In Madre de Deus convent; panels tell Portuguese history through ceramic art",
+                    "time": "10:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Culture",
+                      "Photography"
+                    ]
+                  },
+                  {
+                    "name": "Príncipe Real shopping district",
+                    "lat": 38.7158,
+                    "lng": -9.1494,
+                    "cost": 0,
+                    "why": "Independent boutiques and vintage stores match solo browsing and optional souvenir hunting",
+                    "note": "Taxi from museum; garden square with weekend market Saturdays",
+                    "time": "12:00 PM",
+                    "durationLabel": "1 hour",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Shopping"
+                    ]
+                  },
+                  {
+                    "name": "Lunch in Príncipe Real area",
+                    "lat": 38.7158,
+                    "lng": -9.1494,
+                    "cost": 24,
+                    "why": "Leafy square with terrace restaurants suits relaxed final lunch before departure",
+                    "note": "Pavilhão Chinês nearby for quirky bar lunch or terrace spots around the garden",
+                    "time": "1:30 PM",
+                    "durationLabel": "1 hour",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Miradouro de Santa Luzia",
+                    "lat": 38.7122,
+                    "lng": -9.1302,
+                    "cost": 0,
+                    "why": "Tiled viewpoint over Alfama and Tagus delivers photography and final city views",
+                    "note": "15-min walk downhill from Príncipe Real; pairs with nearby Portas do Sol viewpoint",
+                    "time": "3:00 PM",
+                    "durationLabel": "45 minutes",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ]
+                  },
+                  {
+                    "name": "A Brasileira café",
+                    "lat": 38.7107,
+                    "lng": -9.1424,
+                    "cost": 9,
+                    "why": "Historic 1905 café where poets gathered suits culture interest and final coffee ritual",
+                    "note": "In Chiado; bronze Pessoa statue outside, Art Nouveau interior",
+                    "time": "4:15 PM",
+                    "durationLabel": "30 minutes",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick",
+                      "Historic"
+                    ]
+                  },
+                  {
+                    "name": "Hotel to airport",
+                    "lat": 38.7107,
+                    "lng": -9.1424,
+                    "cost": 22,
+                    "why": "Direct taxi for departure convenience with luggage",
+                    "note": "Book 30-40 min before flight check-in; Bolt/Uber or hotel taxi",
+                    "time": "5:30 PM",
+                    "durationLabel": "40 minutes",
+                    "category": "transit",
+                    "tags": [
+                      "Departure"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "runId": "7034048e-9a74-4ad9-9552-22d32aba2dc0",
+          "seenWeather": [],
+          "wallMs": 431210,
+          "costUsd": 0
+        },
+        {
+          "fixtureId": "lisbon-solo-offbeat",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "midrange",
+            "days": [
+              {
+                "date": "2026-10-08",
+                "weather": "Mild and mostly sunny, around 20°C (68°F)",
+                "theme": "Alfama & Fado Evening",
+                "summary": "Medieval Alfama's twisting streets and castle views by day, traditional fado in its birthplace by night. 🏰🎵",
+                "lodging": {
+                  "name": "Boutique hotel in Baixa",
+                  "cost": 150,
+                  "note": "Central location for walkable access to all neighborhoods"
+                },
+                "stops": [
+                  {
+                    "name": "Café A Brasileira",
+                    "lat": 38.7108,
+                    "lng": -9.142,
+                    "cost": 12,
+                    "why": "Historic literary café where Pessoa wrote, sets the Lisboa mood",
+                    "note": "Outdoor tables perfect for solo people-watching in Chiado",
+                    "time": "9:00 AM",
+                    "durationLabel": "45 minutes",
+                    "category": "food",
+                    "tags": [
+                      "Iconic",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Alfama neighborhood walk",
+                    "lat": 38.7139,
+                    "lng": -9.1289,
+                    "cost": 0,
+                    "why": "Maze of medieval streets perfect for solo wandering and photography",
+                    "note": "Start at Miradouro de Santa Luzia for panoramic castle and river views",
+                    "time": "10:00 AM",
+                    "durationLabel": "2 hours",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Must-See"
+                    ]
+                  },
+                  {
+                    "name": "Lunch in Alfama",
+                    "lat": 38.715,
+                    "lng": -9.13,
+                    "cost": 30,
+                    "why": "Traditional tascas serve authentic grilled fish and petiscos",
+                    "note": "Pateo 13 or Tasca do Chico for local atmosphere, cash-friendly",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Castelo de São Jorge",
+                    "lat": 38.7139,
+                    "lng": -9.1334,
+                    "cost": 15,
+                    "why": "Medieval fortress with 360° city views, merges history and photography interests",
+                    "note": "10-minute uphill from Alfama; bring water, minimal shade",
+                    "time": "2:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Must-See",
+                      "Iconic"
+                    ]
+                  },
+                  {
+                    "name": "Dinner in Alfama",
+                    "lat": 38.713,
+                    "lng": -9.131,
+                    "cost": 45,
+                    "why": "Stay in the historic district for traditional cuisine before fado",
+                    "note": "Pois Café or Chapitô à Mesa for relaxed solo-friendly atmosphere with views",
+                    "time": "6:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Traditional fado in Alfama",
+                    "lat": 38.713,
+                    "lng": -9.129,
+                    "cost": 50,
+                    "why": "Fado originated in Alfama — experience it where it's most authentic and intimate",
+                    "note": "Mesa de Frades or Sr. Vinho in the neighborhood; booking ahead recommended",
+                    "time": "8:30 PM",
+                    "durationLabel": "2 hours",
+                    "category": "other",
+                    "tags": [
+                      "Must-See",
+                      "Reservation Needed"
+                    ]
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-09",
+                "weather": "Pleasant autumn day, around 20°C (68°F), partly cloudy",
+                "theme": "Belém & Riverside",
+                "summary": "Belém's monumental architecture and legendary pastéis, then creative LX Factory at dusk. 🏛️✨",
+                "lodging": {
+                  "name": "Boutique hotel in Baixa",
+                  "cost": 150,
+                  "note": "Same central base; no need to change hotels within Lisboa"
+                },
+                "stops": [
+                  {
+                    "name": "Mercado da Ribeira (Time Out Market)",
+                    "lat": 38.7065,
+                    "lng": -9.1459,
+                    "cost": 35,
+                    "why": "Curated food hall with top Lisboa chefs, peak food experience for your interest",
+                    "note": "In Cais do Sodré; try 2-3 stalls for variety, gets busy after noon",
+                    "time": "10:00 AM",
+                    "durationLabel": "2 hours",
+                    "category": "food",
+                    "tags": [
+                      "Must-See",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Transit to Belém",
+                    "lat": 38.6979,
+                    "lng": -9.2061,
+                    "cost": 5,
+                    "why": "Scenic westward journey to monument district",
+                    "note": "Tram 15E is scenic; allow 25 minutes for the route",
+                    "time": "12:00 PM",
+                    "durationLabel": "25 minutes",
+                    "category": "transit",
+                    "tags": [
+                      "Scenic"
+                    ]
+                  },
+                  {
+                    "name": "Mosteiro dos Jerónimos",
+                    "lat": 38.6979,
+                    "lng": -9.2061,
+                    "cost": 15,
+                    "why": "UNESCO masterpiece of Manueline architecture, iconic for both history and photos",
+                    "note": "Lines shorter in afternoon; monastery and church both included",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "entry",
+                    "tags": [
+                      "Must-See",
+                      "Iconic"
+                    ]
+                  },
+                  {
+                    "name": "Pastéis de Belém",
+                    "lat": 38.6976,
+                    "lng": -9.2031,
+                    "cost": 10,
+                    "why": "Legendary pastéis de nata at the source, essential Lisboa food pilgrimage",
+                    "note": "Next to monastery; lines move fast, eat fresh at counter",
+                    "time": "2:15 PM",
+                    "durationLabel": "30 minutes",
+                    "category": "food",
+                    "tags": [
+                      "Must-See",
+                      "Iconic"
+                    ]
+                  },
+                  {
+                    "name": "LX Factory",
+                    "lat": 38.7044,
+                    "lng": -9.1767,
+                    "cost": 0,
+                    "why": "Industrial-chic complex with street art and indie scene, perfect for photography",
+                    "note": "Under Ponte 25 de Abril in Alcântara; wander shops and galleries",
+                    "time": "3:15 PM",
+                    "durationLabel": "2.5 hours",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Dinner at LX Factory",
+                    "lat": 38.7044,
+                    "lng": -9.1767,
+                    "cost": 50,
+                    "why": "Stay in the creative zone with casual-to-nice dining and river views",
+                    "note": "Rio Maravilha rooftop bar-restaurant for sunset cocktails with meal",
+                    "time": "6:15 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Taxi back to Baixa",
+                    "lat": 38.7108,
+                    "lng": -9.1393,
+                    "cost": 12,
+                    "why": "Return to hotel area after riverside evening",
+                    "note": "15-minute ride from Alcântara to central Lisboa",
+                    "time": "8:15 PM",
+                    "durationLabel": "15 minutes",
+                    "category": "transit",
+                    "tags": [
+                      "Convenience"
+                    ]
+                  }
+                ]
+              },
+              {
+                "date": "2026-10-10",
+                "weather": "Mild morning, around 19°C (66°F), clear skies",
+                "theme": "Príncipe Real & Nightlife",
+                "summary": "Elegant Príncipe Real and sweeping miradouro views set the stage for Bairro Alto's bar scene. 🌆🍷",
+                "stops": [
+                  {
+                    "name": "Morning coffee in Príncipe Real",
+                    "lat": 38.7166,
+                    "lng": -9.1508,
+                    "cost": 12,
+                    "why": "Neighborhood cafés are lower-key than touristy spots, good solo vibe",
+                    "note": "Near Jardim do Príncipe Real; wander the garden first",
+                    "time": "9:30 AM",
+                    "durationLabel": "45 minutes",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Príncipe Real & Jardim",
+                    "lat": 38.7166,
+                    "lng": -9.1508,
+                    "cost": 0,
+                    "why": "Elegant garden square with local vibe and boutique shops, less touristy",
+                    "note": "Cedar tree canopy covers garden; small bars and shops around perimeter",
+                    "time": "10:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Lunch in Príncipe Real",
+                    "lat": 38.7166,
+                    "lng": -9.1508,
+                    "cost": 35,
+                    "why": "Trendy yet casual neighborhood with bistros that welcome solo diners",
+                    "note": "Lost In has rooftop views; Pavilhão Chinês for quirky baroque interior",
+                    "time": "12:15 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Miradouro de São Pedro de Alcântara",
+                    "lat": 38.7146,
+                    "lng": -9.1481,
+                    "cost": 0,
+                    "why": "Best panoramic viewpoint for photography, overlooks Castelo and Baixa",
+                    "note": "5-minute walk down from Príncipe Real; kiosk bar for drinks with view",
+                    "time": "2:00 PM",
+                    "durationLabel": "45 minutes",
+                    "category": "other",
+                    "tags": [
+                      "Free",
+                      "Must-See"
+                    ]
+                  },
+                  {
+                    "name": "Dinner in Bairro Alto",
+                    "lat": 38.7136,
+                    "lng": -9.145,
+                    "cost": 40,
+                    "why": "Position yourself in the nightlife heart for easy bar hopping after",
+                    "note": "Taberna Tosca or Adega das Merces for traditional small plates",
+                    "time": "6:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "category": "food",
+                    "tags": [
+                      "Local Pick"
+                    ]
+                  },
+                  {
+                    "name": "Bairro Alto bar hopping",
+                    "lat": 38.7136,
+                    "lng": -9.145,
+                    "cost": 60,
+                    "why": "Peak Lisboa nightlife scene with dense bars and street crowds, easy solo mingling",
+                    "note": "Bars are tiny; crowds spill onto streets by 10pm, stay in main area",
+                    "time": "8:30 PM",
+                    "durationLabel": "2 hours",
+                    "category": "other",
+                    "tags": [
+                      "Must-See",
+                      "Local Pick"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "runId": "57eb7b3f-4a9e-4fe5-a236-f4e5ceef0115",
+          "seenWeather": [],
+          "wallMs": 394496,
+          "costUsd": 0
+        }
+      ]
+    }
+  ]
+}
