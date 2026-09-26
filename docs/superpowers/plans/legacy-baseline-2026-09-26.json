@@ -1,0 +1,980 @@
+{
+  "arm": "docs/superpowers/plans/legacy-baseline-2026-09-26.json",
+  "path": "legacy",
+  "runsPerFixture": 1,
+  "cells": [
+    {
+      "fixtureId": "kyoto-couple-mixed",
+      "runs": [
+        {
+          "fixtureId": "kyoto-couple-mixed",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-09-19",
+                "weather": "Partly cloudy, 22-30°C, 42% chance of rain",
+                "theme": "Temple lanes, street food",
+                "summary": "Early morning serenity at Kiyomizu-dera followed by historic lanes and evening kaiseki in Gion. 🏯🍜",
+                "lodging": {
+                  "name": "Luxury ryokan in Central Kyoto",
+                  "cost": 450,
+                  "note": "Traditional Japanese luxury with kaiseki breakfast suits culture focus; alternative: 5-star hotel for modern comfort"
+                },
+                "stops": [
+                  {
+                    "name": "Kiyomizu-dera",
+                    "lat": 34.9949,
+                    "lng": 135.785,
+                    "cost": 8,
+                    "why": "UNESCO wooden stage temple, arrive at 8am for lighter crowds and morning light",
+                    "note": "Hillside views over Kyoto; veranda offers classic photography with fewer crowds early",
+                    "time": "8:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Early Entry"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Sannenzaka & Ninenzaka Streets",
+                    "lat": 34.9962,
+                    "lng": 135.7813,
+                    "cost": 0,
+                    "why": "Historic preserved lanes descending from temple, ideal for quiet photo walks and craft shops",
+                    "note": "Traditional machiya houses and ceramics; connects directly below Kiyomizu-dera",
+                    "time": "9:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Free",
+                      "Local Pick"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch in Gion District",
+                    "lat": 35.0036,
+                    "lng": 135.775,
+                    "cost": 70,
+                    "why": "Historic geisha quarter with refined traditional eateries in preserved machiya buildings",
+                    "note": "Obanzai-style Kyoto lunch; try Gion Karyo or similar spot for seasonal small plates",
+                    "time": "12:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Traditional"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Yasaka Shrine",
+                    "lat": 35.0036,
+                    "lng": 135.7786,
+                    "cost": 0,
+                    "why": "Major shrine at Gion's edge with vivid vermillion gates, fewer crowds than headline temples",
+                    "note": "Free entry, 10-minute walk from lunch; connects to Maruyama Park's gardens",
+                    "time": "2:00 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner in Pontocho Alley",
+                    "lat": 35.0047,
+                    "lng": 135.7707,
+                    "cost": 180,
+                    "why": "Multi-course kaiseki in intimate riverside setting captures Kyoto's refined culinary tradition",
+                    "note": "Reserve ahead; narrow alley's traditional restaurants overlook Kamogawa River",
+                    "time": "6:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ],
+                "weatherDetail": {
+                  "date": "2026-09-19",
+                  "tempMaxC": 29.8,
+                  "tempMinC": 21.7,
+                  "sunrise": "2026-09-19T05:42",
+                  "sunset": "2026-09-19T17:58",
+                  "precipitationProbability": 42,
+                  "weatherCode": 51,
+                  "humidity": 77,
+                  "historical": false
+                }
+              },
+              {
+                "date": "2026-09-20",
+                "weather": "Cloudy, 22-28°C, 53% chance of rain",
+                "theme": "Golden pavilion, quiet north",
+                "summary": "Gilded Kinkaku-ji reflections and serene zen gardens before bamboo forest walks. ✨🎋",
+                "lodging": {
+                  "name": "Luxury ryokan in Central Kyoto",
+                  "cost": 450,
+                  "note": "Same refined base for second night; traditional Japanese luxury with kaiseki breakfast"
+                },
+                "stops": [
+                  {
+                    "name": "Kinkaku-ji",
+                    "lat": 35.0394,
+                    "lng": 135.7292,
+                    "cost": 8,
+                    "why": "Golden pavilion reflected in pond, quintessential Kyoto; 9am arrival for best light and fewer groups",
+                    "note": "Golden foil catches morning sun; weekday opening sees lighter crowds than afternoons",
+                    "time": "9:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Ryoan-ji",
+                    "lat": 35.0345,
+                    "lng": 135.7184,
+                    "cost": 10,
+                    "why": "Famous minimalist zen rock garden embodies contemplative philosophy, fits culture focus",
+                    "note": "15-minute taxi from Kinkaku-ji; sit quietly on veranda to absorb the arrangement",
+                    "time": "11:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "UNESCO Site",
+                      "Quiet"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Arashiyama",
+                    "lat": 35.0092,
+                    "lng": 135.6722,
+                    "cost": 80,
+                    "why": "Riverside dining district near bamboo grove with seasonal tofu and river fish specialties",
+                    "note": "Mountain views; try Arashiyama Yoshimura for soba or temple vegetarian cuisine",
+                    "time": "1:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Scenic",
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Arashiyama Bamboo Grove",
+                    "lat": 35.0169,
+                    "lng": 135.6719,
+                    "cost": 0,
+                    "why": "Iconic bamboo path creates ethereal green light, classic Kyoto nature photography opportunity",
+                    "note": "Late afternoon brings softer light and thinner crowds; path extends to nearby temples",
+                    "time": "3:00 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner in Downtown Kyoto",
+                    "lat": 35.0047,
+                    "lng": 135.7681,
+                    "cost": 160,
+                    "why": "Upscale kaiseki or innovative izakaya near hotel allows leisurely return after bamboo grove",
+                    "note": "Reserve ahead; Kawaramachi area offers riverside options and intimate counter seating",
+                    "time": "6:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ],
+                "weatherDetail": {
+                  "date": "2026-09-20",
+                  "tempMaxC": 28,
+                  "tempMinC": 22.1,
+                  "sunrise": "2026-09-20T05:43",
+                  "sunset": "2026-09-20T17:57",
+                  "precipitationProbability": 53,
+                  "weatherCode": 51,
+                  "humidity": 76,
+                  "historical": false
+                }
+              },
+              {
+                "date": "2026-09-21",
+                "weather": "Rainy, 23-26°C, 94% chance of rain - expect heavy rain",
+                "theme": "Castle walls in the rain",
+                "summary": "Nijo Castle's fortifications and indoor cultural treasures shelter from heavy rain. 🏰☔",
+                "lodging": {
+                  "name": "Luxury ryokan in Central Kyoto",
+                  "cost": 450,
+                  "note": "Final night at same refined base; traditional Japanese luxury with kaiseki breakfast"
+                },
+                "stops": [
+                  {
+                    "name": "Nijo Castle",
+                    "lat": 35.0142,
+                    "lng": 135.7481,
+                    "cost": 12,
+                    "why": "Shogun's palace with 'nightingale floors', covered walkways ideal for rainy conditions",
+                    "note": "Opens 8:45am; roofed corridors stay dry, exceptional Kano school painted screens",
+                    "time": "9:00 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "UNESCO Site",
+                      "Must-See"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Kyoto National Museum",
+                    "lat": 34.9879,
+                    "lng": 135.7721,
+                    "cost": 10,
+                    "why": "Major cultural collection spans Kyoto's history, completely indoor for heavy rain day",
+                    "note": "20-minute taxi; rotating exhibitions of Buddhist art, samurai artifacts, ceramics",
+                    "time": "11:30 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Indoor",
+                      "Culture"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Higashiyama",
+                    "lat": 34.997,
+                    "lng": 135.78,
+                    "cost": 70,
+                    "why": "Near museum with refined kaiseki lunch sets at covered traditional venues",
+                    "note": "Indoor dining; area offers quality set lunches in historic buildings, dry walk",
+                    "time": "1:35 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Indoor"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Nishiki Market",
+                    "lat": 35.005,
+                    "lng": 135.7639,
+                    "cost": 40,
+                    "why": "400-year covered food arcade showcases Kyoto ingredients, dry shopping for rainy afternoon",
+                    "note": "Fully covered; sample pickles, tea, sweets; closes around 5-6pm weekdays",
+                    "time": "3:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Covered"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner in Kawaramachi District",
+                    "lat": 35.0047,
+                    "lng": 135.7681,
+                    "cost": 180,
+                    "why": "Upscale kaiseki or tempura in downtown's refined dining district, indoor elegance for rain",
+                    "note": "Reserve ahead; atmospheric traditional buildings with tatami rooms and river views",
+                    "time": "6:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ],
+                "weatherDetail": {
+                  "date": "2026-09-21",
+                  "tempMaxC": 26.1,
+                  "tempMinC": 22.7,
+                  "sunrise": "2026-09-21T05:43",
+                  "sunset": "2026-09-21T17:56",
+                  "precipitationProbability": 94,
+                  "weatherCode": 51,
+                  "humidity": 83,
+                  "historical": false
+                }
+              },
+              {
+                "date": "2026-09-22",
+                "weather": "Partly cloudy, 20-27°C, 16% chance of rain - good weather",
+                "theme": "Torii gates at dawn",
+                "summary": "Dawn ascent through thousands of vermillion gates before exploring sake breweries. ⛩️🍶",
+                "stops": [
+                  {
+                    "name": "Fushimi Inari Taisha",
+                    "lat": 34.9671,
+                    "lng": 135.7727,
+                    "cost": 0,
+                    "why": "Thousands of torii gates ascending the mountain, dawn arrival means solitude for photography",
+                    "note": "Open 24 hours; arrive before sunrise, hike partway up for best gate corridors",
+                    "time": "6:00 AM",
+                    "durationLabel": "2.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Fushimi Sake District",
+                    "lat": 34.9276,
+                    "lng": 135.7614,
+                    "cost": 40,
+                    "why": "Historic sake brewing quarter with tastings reflects Kyoto's culinary craft tradition",
+                    "note": "15-minute walk from Inari; Gekkeikan or Kizakura breweries offer tours and tastings",
+                    "time": "9:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Tasting"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch in Fushimi",
+                    "lat": 34.93,
+                    "lng": 135.76,
+                    "cost": 70,
+                    "why": "Sake-friendly izakaya near breweries pair local sake with seasonal small plates",
+                    "note": "Try Torisei for yakitori and sake, or spots serving sake-steamed seasonal dishes",
+                    "time": "11:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Sake Pairing"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Tofuku-ji",
+                    "lat": 34.9765,
+                    "lng": 135.7734,
+                    "cost": 8,
+                    "why": "Zen temple with spectacular gardens on return route, autumn maple photography spot",
+                    "note": "Between Fushimi and central; dry landscape garden and covered walkways over ravine",
+                    "time": "1:30 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Photography",
+                      "Gardens"
+                    ],
+                    "category": "entry"
+                  }
+                ],
+                "weatherDetail": {
+                  "date": "2026-09-22",
+                  "tempMaxC": 27.2,
+                  "tempMinC": 20.2,
+                  "sunrise": "2026-09-22T05:44",
+                  "sunset": "2026-09-22T17:54",
+                  "precipitationProbability": 16,
+                  "weatherCode": 3,
+                  "humidity": 70,
+                  "historical": false
+                }
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Fushimi Inari Taisha",
+                "lat": 34.9671,
+                "lng": 135.7727,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kinkaku-ji",
+                "lat": 35.0394,
+                "lng": 135.7292,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kiyomizu-dera",
+                "lat": 34.9949,
+                "lng": 135.785,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Nijo Castle",
+                "lat": 35.0142,
+                "lng": 135.7481,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "2ff97932-3156-470e-b388-82ce90ce0432",
+          "seenWeather": [
+            {
+              "date": "2026-09-19",
+              "tempMaxC": 29.8,
+              "tempMinC": 21.7,
+              "sunrise": "2026-09-19T05:42",
+              "sunset": "2026-09-19T17:58",
+              "precipitationProbability": 42,
+              "weatherCode": 51,
+              "humidity": 77,
+              "historical": false
+            },
+            {
+              "date": "2026-09-20",
+              "tempMaxC": 28,
+              "tempMinC": 22.1,
+              "sunrise": "2026-09-20T05:43",
+              "sunset": "2026-09-20T17:57",
+              "precipitationProbability": 53,
+              "weatherCode": 51,
+              "humidity": 76,
+              "historical": false
+            },
+            {
+              "date": "2026-09-21",
+              "tempMaxC": 26.1,
+              "tempMinC": 22.7,
+              "sunrise": "2026-09-21T05:43",
+              "sunset": "2026-09-21T17:56",
+              "precipitationProbability": 94,
+              "weatherCode": 51,
+              "humidity": 83,
+              "historical": false
+            },
+            {
+              "date": "2026-09-22",
+              "tempMaxC": 27.2,
+              "tempMinC": 20.2,
+              "sunrise": "2026-09-22T05:44",
+              "sunset": "2026-09-22T17:54",
+              "precipitationProbability": 16,
+              "weatherCode": 3,
+              "humidity": 70,
+              "historical": false
+            }
+          ],
+          "wallMs": 475960,
+          "costUsd": 0
+        }
+      ]
+    },
+    {
+      "fixtureId": "rome-family-slow",
+      "runs": [
+        {
+          "fixtureId": "rome-family-slow",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-11-01",
+                "weather": "Mild and pleasant, 13-23°C",
+                "theme": "Ancient Rome, underfoot",
+                "summary": "Ancient Rome comes alive at the Colosseum and Forum, with authentic Roman flavors in Monti and Testaccio. 🏛️🍝",
+                "lodging": {
+                  "name": "4.5-star hotel near Spanish Steps",
+                  "cost": 390,
+                  "note": "Central luxury base near shopping; alternative: stay in Prati near Vatican"
+                },
+                "stops": [
+                  {
+                    "name": "Colosseum",
+                    "lat": 41.8901896,
+                    "lng": 12.4924174,
+                    "cost": 80,
+                    "why": "Ancient history focus with family-friendly skip-the-line tour avoiding crowds",
+                    "note": "Book timed entry for 8:30am opening; elevator access to upper levels",
+                    "time": "8:30 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Must-See",
+                      "Skip-the-Line"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Monti",
+                    "lat": 41.8947,
+                    "lng": 12.4914,
+                    "cost": 90,
+                    "why": "Authentic Roman trattorias steps from Forum with kid-friendly menus",
+                    "note": "Try Alle Carrette for family-style classics; 5-minute walk from Colosseum",
+                    "time": "11:00 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick",
+                      "Family-Friendly"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Roman Forum",
+                    "lat": 41.8916837,
+                    "lng": 12.4870791,
+                    "cost": 0,
+                    "why": "Extends ancient Rome immersion with mostly flat terrain suited to mobility needs",
+                    "note": "Included with Colosseum ticket; some uneven stones but manageable",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Historic Site",
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Cafe break in Monti",
+                    "lat": 41.8947,
+                    "lng": 12.4914,
+                    "cost": 15,
+                    "why": "Sit-down rest between sights in quiet neighborhood away from tourist crowds",
+                    "note": "Monti has many cozy cafes with outdoor seating and pastries",
+                    "time": "2:30 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Rest Break",
+                      "Local Pick"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner in Testaccio",
+                    "lat": 41.8767,
+                    "lng": 12.477,
+                    "cost": 120,
+                    "why": "Working-class Roman neighborhood famous for authentic cuisine away from crowds",
+                    "note": "Classic carbonara and cacio e pepe territory; taxi advised for mobility",
+                    "time": "6:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Fine Dining"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-11-02",
+                "weather": "Mild and comfortable, 14-22°C",
+                "theme": "Faith, marble, ceilings",
+                "summary": "Masterpieces of faith and art unfold through the Vatican Museums and St. Peter's magnificent basilica. 🎨⛪",
+                "lodging": {
+                  "name": "4.5-star hotel near Spanish Steps",
+                  "cost": 390,
+                  "note": "Same central base; alternative: Prati apartment for kitchen access"
+                },
+                "stops": [
+                  {
+                    "name": "Vatican Museums & Sistine Chapel",
+                    "lat": 41.9065,
+                    "lng": 12.4536,
+                    "cost": 90,
+                    "why": "World-class art and history with early-entry crowd avoidance and elevator access",
+                    "note": "Book skip-the-line tickets; elevators available; rest in courtyard gardens",
+                    "time": "8:00 AM",
+                    "durationLabel": "3 hours",
+                    "tags": [
+                      "Must-See",
+                      "Skip-the-Line"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Prati",
+                    "lat": 41.9073,
+                    "lng": 12.4596,
+                    "cost": 90,
+                    "why": "Family-friendly neighborhood near Vatican with less tourist-trap dining",
+                    "note": "Via Cola di Rienzo has many options; 10-minute walk from St. Peter's",
+                    "time": "11:30 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick",
+                      "Family-Friendly"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "St. Peter's Basilica",
+                    "lat": 41.9022,
+                    "lng": 12.4539,
+                    "cost": 0,
+                    "why": "Magnificent Renaissance architecture central to faith and history interests",
+                    "note": "Free entry; skip dome climb due to stairs; arrive early afternoon for crowds",
+                    "time": "1:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Rest at Castel Sant'Angelo gardens",
+                    "lat": 41.9031,
+                    "lng": 12.4663,
+                    "cost": 0,
+                    "why": "Peaceful riverside gardens for sitting between Vatican sights",
+                    "note": "Free park area along Tiber with benches and views; 10-minute walk",
+                    "time": "3:00 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Rest Break",
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner near Piazza Navona",
+                    "lat": 41.8977974,
+                    "lng": 12.4731816,
+                    "cost": 120,
+                    "why": "Baroque square dining with beautiful evening lighting suits culture interests",
+                    "note": "Restaurants on side streets better value than piazza-facing ones",
+                    "time": "6:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Historic Area"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-11-03",
+                "weather": "Mild and clear, 14-21°C",
+                "theme": "Baroque splendor, cobblestones",
+                "summary": "The Pantheon's ancient dome and Trevi's cascading baroque beauty, finishing with Trastevere's medieval charm. ⛲🌙",
+                "lodging": {
+                  "name": "4.5-star hotel near Spanish Steps",
+                  "cost": 390,
+                  "note": "Same base; alternative: boutique hotel in Trastevere for neighborhood immersion"
+                },
+                "stops": [
+                  {
+                    "name": "Pantheon",
+                    "lat": 41.8977668,
+                    "lng": 12.4780301,
+                    "cost": 0,
+                    "why": "Free ancient temple with accessible flat entry and impressive cultural significance",
+                    "note": "Go at opening to beat crowds; completely flat access; 2000-year-old concrete dome",
+                    "time": "9:00 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Must-See",
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Gelato break",
+                    "lat": 41.9003,
+                    "lng": 12.4775,
+                    "cost": 15,
+                    "why": "Rest with authentic Roman gelato at historic institution",
+                    "note": "Giolitti nearby has been serving since 1900; sit-down break before lunch",
+                    "time": "10:30 AM",
+                    "durationLabel": "30 minutes",
+                    "tags": [
+                      "Local Pick",
+                      "Rest Break"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch at Campo de' Fiori",
+                    "lat": 41.8953228,
+                    "lng": 12.4726086,
+                    "cost": 90,
+                    "why": "Historic market square with food stalls and casual trattorias offering local atmosphere",
+                    "note": "Morning market; lunch at Forno Campo de' Fiori for pizza bianca",
+                    "time": "12:00 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick",
+                      "Market"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Trevi Fountain",
+                    "lat": 41.9009648,
+                    "lng": 12.4832817,
+                    "cost": 5,
+                    "why": "Iconic baroque fountain visit timed for post-lunch lull in crowds",
+                    "note": "10-minute walk from Campo; kids toss coins for luck; watch for pickpockets",
+                    "time": "2:00 PM",
+                    "durationLabel": "45 minutes",
+                    "tags": [
+                      "Must-See",
+                      "Family-Friendly"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner in Trastevere",
+                    "lat": 41.8897,
+                    "lng": 12.4698,
+                    "cost": 140,
+                    "why": "Medieval neighborhood ambiance with cobblestone charm and family trattorias",
+                    "note": "Cross Tiber via Ponte Sisto; book ahead at Da Enzo al 29 for Roman classics",
+                    "time": "6:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-11-04",
+                "weather": "Cooler morning, 10-19°C",
+                "theme": "Gardens and small wonders",
+                "summary": "Gardens and play merge at Villa Borghese and the interactive Explora Museum designed for young minds. 🌳🎨",
+                "lodging": {
+                  "name": "4.5-star hotel near Spanish Steps",
+                  "cost": 390,
+                  "note": "Same base; alternative: 4-star near Villa Borghese for park access"
+                },
+                "stops": [
+                  {
+                    "name": "Villa Borghese Gardens",
+                    "lat": 41.9142,
+                    "lng": 12.4922,
+                    "cost": 20,
+                    "why": "Peaceful green space with flat paths, boat rentals for kids, and rest benches",
+                    "note": "Rent rowboat on lake or pedal cart; completely flat; 15-minute taxi from hotel",
+                    "time": "9:00 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Family-Friendly",
+                      "Outdoors"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Lunch near Flaminio",
+                    "lat": 41.911,
+                    "lng": 12.476,
+                    "cost": 90,
+                    "why": "Flaminio area has family cafes convenient before museum timed entry",
+                    "note": "Quick casual lunch; museum requires 2-hour timed slot starting at 1pm",
+                    "time": "11:30 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Family-Friendly",
+                      "Quick Bite"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Explora Children's Museum",
+                    "lat": 41.911,
+                    "lng": 12.476,
+                    "cost": 25,
+                    "why": "Hands-on interactive museum designed for kids with educational focus",
+                    "note": "Book timed entry online; ages 0-12; rest area for adults inside",
+                    "time": "1:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Family-Friendly",
+                      "Kids Activity"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Rest at hotel",
+                    "lat": 41.9058,
+                    "lng": 12.4824,
+                    "cost": 0,
+                    "why": "Downtime after active morning for kids to recharge mid-afternoon",
+                    "note": "Walk back through Pincio Gardens or take taxi; nap time for little ones",
+                    "time": "3:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Rest Break",
+                      "Free"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner near Piazza del Popolo",
+                    "lat": 41.9102581,
+                    "lng": 12.476951,
+                    "cost": 130,
+                    "why": "Elegant square with upscale family dining and evening people-watching",
+                    "note": "Il Margutta RistorArte has vegetarian options and art-filled interior",
+                    "time": "6:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Family-Friendly"
+                    ],
+                    "category": "food"
+                  }
+                ]
+              },
+              {
+                "date": "2026-11-05",
+                "weather": "Cool and crisp, 7-19°C",
+                "theme": "Riverside, quieter history",
+                "summary": "History's quieter corners at the Capitoline, then a final riverside stroll through Trastevere's timeless streets. 🏛️🌉",
+                "stops": [
+                  {
+                    "name": "Capitoline Museums",
+                    "lat": 41.892888,
+                    "lng": 12.4827602,
+                    "cost": 50,
+                    "why": "World's oldest public museum with major sculpture and history plus elevator access",
+                    "note": "Elevator available; less crowded than Vatican; Michelangelo's piazza design",
+                    "time": "9:30 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Must-See",
+                      "Accessible"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Trastevere",
+                    "lat": 41.8897,
+                    "lng": 12.4698,
+                    "cost": 80,
+                    "why": "Final meal in Rome's most charming neighborhood before departure",
+                    "note": "Tonnarello for hearty cacio e pepe; 15-minute walk across river or taxi",
+                    "time": "12:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Pick",
+                      "Fine Dining"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Trastevere streets & Tiber walk",
+                    "lat": 41.8897,
+                    "lng": 12.4698,
+                    "cost": 0,
+                    "why": "Gentle riverside stroll through medieval lanes wraps up quieter history theme",
+                    "note": "Flat walking; stop at Santa Maria in Trastevere church if open; final memories",
+                    "time": "2:00 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Free",
+                      "Historic Area"
+                    ],
+                    "category": "other"
+                  }
+                ]
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Colosseum",
+                "lat": 41.8902,
+                "lng": 12.4922,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Explora Children's Museum",
+                "lat": 41.911,
+                "lng": 12.476,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Pantheon",
+                "lat": 41.8986,
+                "lng": 12.4769,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "02915131-5148-4124-803c-1f3092e78e04",
+          "seenWeather": [
+            {
+              "date": "2025-11-01",
+              "tempMaxC": 23.2,
+              "tempMinC": 12.9,
+              "sunrise": "2025-11-01T07:42",
+              "sunset": "2025-11-01T18:03",
+              "precipitationProbability": null,
+              "weatherCode": null,
+              "humidity": null,
+              "historical": true
+            },
+            {
+              "date": "2025-11-02",
+              "tempMaxC": 21.6,
+              "tempMinC": 13.9,
+              "sunrise": "2025-11-02T07:43",
+              "sunset": "2025-11-02T18:02",
+              "precipitationProbability": null,
+              "weatherCode": null,
+              "humidity": null,
+              "historical": true
+            },
+            {
+              "date": "2025-11-03",
+              "tempMaxC": 21,
+              "tempMinC": 14,
+              "sunrise": "2025-11-03T07:44",
+              "sunset": "2025-11-03T18:01",
+              "precipitationProbability": null,
+              "weatherCode": null,
+              "humidity": null,
+              "historical": true
+            },
+            {
+              "date": "2025-11-04",
+              "tempMaxC": 19.1,
+              "tempMinC": 9.7,
+              "sunrise": "2025-11-04T07:45",
+              "sunset": "2025-11-04T18:00",
+              "precipitationProbability": null,
+              "weatherCode": null,
+              "humidity": null,
+              "historical": true
+            },
+            {
+              "date": "2025-11-05",
+              "tempMaxC": 18.7,
+              "tempMinC": 6.6,
+              "sunrise": "2025-11-05T07:47",
+              "sunset": "2025-11-05T17:59",
+              "precipitationProbability": null,
+              "weatherCode": null,
+              "humidity": null,
+              "historical": true
+            }
+          ],
+          "wallMs": 481702,
+          "costUsd": 0
+        }
+      ]
+    }
+  ]
+}
