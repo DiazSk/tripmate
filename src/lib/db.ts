@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { parseProfile, type TravelerProfile } from "./travelerProfile";
 import { staleDraftCutoff } from "./drafts";
 import { LEGACY_OWNER, readableOwners } from "./owner";
+import { anchorKey } from "./anchors";
 import type { TripStatus } from "./types";
 
 /**
@@ -1369,4 +1370,82 @@ export function getSpendSince(isoCutoff: string): number {
     .prepare(`SELECT COALESCE(SUM(cost_usd), 0) as total FROM llm_traces WHERE created_at >= ?`)
     .get(isoCutoff) as { total: number };
   return row.total;
+}
+
+/**
+ * Places a traveller shared into TripMate before planning — "save now, plan later". One row per
+ * place per owner, keyed by `anchorKey(name)` so the same café shared from a screenshot and then a
+ * reel is one entry. Instagram links (which cannot be read) are kept as reminders keyed by URL.
+ * Holds names and coordinates only: the screenshots and frames they came from are never stored.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS saved_places (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    place_key TEXT NOT NULL,
+    lat REAL,
+    lng REAL,
+    city TEXT,
+    source TEXT NOT NULL,
+    url TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (owner_id, place_key)
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_saved_places_owner ON saved_places (owner_id, created_at)`);
+
+export interface SavedPlaceRow {
+  id: string;
+  owner_id: string;
+  name: string;
+  place_key: string;
+  lat: number | null;
+  lng: number | null;
+  city: string | null;
+  source: string;
+  url: string | null;
+  created_at: string;
+}
+
+export function upsertSavedPlaces(
+  ownerId: string,
+  rows: { name: string; lat: number | null; lng: number | null; city: string | null; source: string; url: string | null }[]
+): number {
+  const stmt = db.prepare(
+    `INSERT INTO saved_places (id, owner_id, name, place_key, lat, lng, city, source, url, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (owner_id, place_key) DO UPDATE SET
+       lat = COALESCE(excluded.lat, saved_places.lat),
+       lng = COALESCE(excluded.lng, saved_places.lng),
+       city = COALESCE(excluded.city, saved_places.city),
+       created_at = excluded.created_at`
+  );
+  let written = 0;
+  for (const r of rows) {
+    const key = r.source === "instagram" && r.url ? `ig:${r.url}` : anchorKey(r.name);
+    if (!key) continue;
+    stmt.run(randomUUID(), ownerId, r.name, key, r.lat, r.lng, r.city, r.source, r.url, new Date().toISOString());
+    written++;
+  }
+  return written;
+}
+
+export function listSavedPlaces(ownerId: string): SavedPlaceRow[] {
+  const owners = readableOwners(ownerId);
+  return db
+    .prepare(
+      `SELECT * FROM saved_places WHERE owner_id IN (${owners.map(() => "?").join(",")})
+       ORDER BY created_at DESC, rowid DESC`
+    )
+    .all(...owners) as SavedPlaceRow[];
+}
+
+export function deleteSavedPlace(ownerId: string, id: string): boolean {
+  const owners = readableOwners(ownerId);
+  return (
+    db
+      .prepare(`DELETE FROM saved_places WHERE id = ? AND owner_id IN (${owners.map(() => "?").join(",")})`)
+      .run(id, ...owners).changes > 0
+  );
 }
