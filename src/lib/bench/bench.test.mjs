@@ -997,3 +997,22 @@ test("scoreDietary ignores non-food stops", () => {
   assert.equal(s.foodStops, 0);
   assert.equal(s.normalized, null);
 });
+
+// --- pace counts sightseeing stops only (travelerProfilePrompt.ts: meals and breaks do not count) ---
+
+test("pace ignores meals, transit and rest breaks", () => {
+  const rome = getFixture("rome-family-slow");
+  const cap = rome.reconciled.resolvedFlags.paceSpotsPerDay;
+  const sights = Array.from({ length: cap }, (_, i) => located(`Sight ${i}`, 41.9, 12.49, (9 + i) * 60));
+  const extras = [
+    { ...located("Lunch in Trastevere", 41.89, 12.47, 12 * 60 + 30), category: "food" },
+    { ...located("Tram to Testaccio", 41.88, 12.47, 14 * 60), category: "transit" },
+    { ...located("Gelato and rest break", 41.88, 12.48, 15 * 60), category: "other", raw: "Gelato and rest break" },
+    { ...located("Dinner near Campo de' Fiori", 41.895, 12.472, 19 * 60), category: "food" },
+  ];
+  const plan = { days: [locatedDay(...sights, ...extras)], preamble: "", hadCodeFence: false };
+  assert.equal(scoreConstraints(plan, rome).byType.pace, 0);
+
+  const over = { days: [locatedDay(...sights, located("One sight too many", 41.9, 12.5, 16 * 60))], preamble: "", hadCodeFence: false };
+  assert.equal(scoreConstraints(over, rome).byType.pace, 1);
+});
