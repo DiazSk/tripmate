@@ -133,7 +133,7 @@ export default function ImportDropZone({
                           : [...prev, { name: p.name, lat: p.lat, lng: p.lng, priority: "want", source: "import" }]
                       )
                     }
-                    className="rounded-full bg-white/10 px-3.5 py-1.5 text-sm font-medium text-muted"
+                    className={`rounded-full px-3.5 py-1.5 text-sm font-medium ${on ? "bg-accent text-accent-foreground" : "bg-white/10 text-muted"}`}
                   >
                     {p.name}
                     {p.city ? <span className="text-muted"> · {p.city.split(",")[0]}</span> : null}
