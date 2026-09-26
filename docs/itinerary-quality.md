@@ -502,6 +502,39 @@ Next is `docs/superpowers/specs/2026-09-26-anchor-hours-before-generation-design
 hours up **before** generation, by any OSM name tag, and write them beside each anchor — and score
 the legacy arm's hours checks against the hours the route actually had, the way weather already is.
 
+#### After: anchor hours in the prompt (2026-09-26, Claude)
+
+Built from `docs/superpowers/specs/2026-09-26-anchor-hours-before-generation-design.md`. The legacy
+route now looks each anchor's OSM hours up before generating (`src/lib/anchorHours.ts`, a 20s race
+overlapping the context and sketch calls), and `formatAnchors` writes them beside the place. The OSM
+lookup itself was fixed for every caller: it matches the exact local `name` and an accent- and
+dash-tolerant `name:en`, and files results under the name that was asked for. Offline, against live
+Overpass, all six Kyoto and Rome anchors that OSM holds hours for now resolve — including Nijo Castle
+("Nijō Castle" in `name:en`) and the Pantheon (whose hours sit on a relation behind a bare node) — in
+4.3s. Fushimi Inari correctly gets none; OSM carries no hours for it.
+
+Two generations (`legacy-hours-2026-09-26.json`, `AB_RUNS=1`):
+
+- **Rome — the hours worked.** The prompt read
+  `- WANT: Pantheon (41.8986, 12.4769) — open Mo-Sa 08:30-19:15; Su 09:00-17:45 (OpenStreetMap)` and
+  the Colosseum's seasonal hours likewise. The model put the Colosseum at 9:00-11:00 on 1 November
+  (hours 08:30-16:30) and the Pantheon at 9:30-10:30 on a Monday (08:30-19:15): both inside. The
+  one remaining critical code is `mobility` — three family days with over 3h of activity and no rest
+  entry, a real miss and a rule matter, not a data one.
+- **Kyoto — no hours reached the prompt.** The lookup came back empty inside the server, most likely
+  because the run started while a heavier four-key query was live (since replaced after review; it
+  had failed on every mirror once). Nothing logged it, so the cause is not proven; the lookup now
+  warns when it returns nothing. The harness correctly left Kyoto's anchor hours unchecked, so this
+  run measures nothing about hours.
+- **A scorer false alarm, fixed.** The first report failed Rome on "Colosseum is shut all day on Sun".
+  Real OSM hours had never reached the bench's parser before, and it read the month-range clauses
+  (`Oct 25-Feb 28 08:30-16:30`) as no hours for that weekday. `hoursForWeekday` now leaves seasonal
+  syntax unchecked, as `closedDaysFromOpeningHours` already did.
+
+Headline: 2/2 runs broke a hard rule — Kyoto on `over_budget`, Rome on `mobility`. **Neither broke an
+anchor's hours**, which on every earlier legacy run one or both had. Two runs, one of which had no
+hours, is a direction and not a measurement; the Kyoto re-run with hours is the next thing to take.
+
 ## Still open
 
 **Not fixable by rules — no data behind them.** Adding skill rules for these would be instructions
