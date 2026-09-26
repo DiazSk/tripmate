@@ -183,3 +183,22 @@ Instagram reminders, the URL.
   Android Studio being installed. Until then, Android is **unverified at runtime**.
 - **Before each step is done:** `npm test`, `tsc` and lint at the repo root, and `npx jest`, `npx tsc --noEmit` and
   `npx expo lint` in `mobile/`.
+
+## Spike result (2026-09-25)
+
+**Works, on the iOS 27.0 simulator (iPhone 17), with no paid Apple account.** expo-share-intent 8.0.1: a real Photos →
+Share → TripMate share opened the app on `/share` with
+`{ files: [{ path: ".../Shared/AppGroup/<id>/<uuid>.JPG", mimeType: "image/jpeg", fileName, width, height, size, duration: null }], text: null, webUrl: null, type: "media" }`.
+`files[].duration` is in milliseconds (README).
+
+**iOS 27 finding.** Expo SDK 57's prebuild template produces a window-based AppDelegate with no
+`UIApplicationSceneManifest`, and iOS 27 aborts at launch (`_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`,
+SIGTRAP) for **every** launch. This is app-wide and not caused by sharing. Expo already ships
+`ExpoAppSceneDelegate` (`@objc EXExpoAppSceneDelegate`) for this, but the template doesn't wire it.
+`mobile/plugins/withSceneLifecycle.js` does: it adds the scene manifest and makes the AppDelegate an
+`ExpoReactNativeFactoryProvider` that no longer starts React Native itself. It can be deleted once Expo's template adopts it.
+
+**Two build notes:**
+- CocoaPods silently installs nothing unless `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8` is set.
+- A hand-typed `tripmate://dataUrl=x` link with no `#media`/`#weburl`/`#text` fragment crashes inside expo-share-intent
+  (it force-unwraps `url.fragment`). Real shares always carry the fragment.
