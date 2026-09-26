@@ -45,10 +45,16 @@ export function criticalFailures(
   if (s.mustInclude.violated.length > 0) codes.push("excluded");
   if (s.coverage.missingAnchors.length > 0) codes.push("missing_anchor");
   if (s.budget.budgetUsedFraction !== null && s.budget.budgetUsedFraction > 1) codes.push("over_budget");
-  if (s.duplicates.repeats > 0) codes.push("duplicate");
+  if (s.duplicates.hardRepeats > 0) codes.push("duplicate");
   if (s.dietary.contradictions > 0) codes.push("dietary");
   if (opts.itinerary) {
-    const travel = evaluateItinerary(opts.itinerary, { modes: opts.modes }).some((g) => g.rule === "travel");
+    // A 0,0 stop is one the route could not place; measuring a leg to it is measuring to the
+    // Gulf of Guinea. Drop those before the check rather than fail the trip on them.
+    const placed = {
+      ...opts.itinerary,
+      days: opts.itinerary.days.map((d) => ({ ...d, stops: d.stops.filter((st) => !(st.lat === 0 && st.lng === 0)) })),
+    };
+    const travel = evaluateItinerary(placed, { modes: opts.modes }).some((g) => g.rule === "travel");
     if (travel) codes.push("travel_leg");
   }
   return codes;

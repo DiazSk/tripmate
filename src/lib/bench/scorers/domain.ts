@@ -100,13 +100,18 @@ export function findPoi(entryName: string, pois: LocatedPoi[]): LocatedPoi | nul
   return pois.find((p) => nameMatches(entryName, p.name)) ?? null;
 }
 
+/** Same radius as `guardrails.ts`' `ANCHOR_MATCH_METRES`: a stop this close to an anchor is it. */
+const ANCHOR_MATCH_METRES = 150;
+
 /**
  * Where an entry is: the fixture's POI when the name matches, else the model's own coordinates.
  *
  * The legacy path picks stops from memory and never sees a candidate list, so most of its stops
- * miss `findPoi` — but their lat/lng were already resolved against Overpass by
- * `resolveNamedPlaceCoords`. Without this, backtrack, geo coherence and meal proximity go
- * unmeasured on the path travellers actually get. 0,0 is the unresolved sentinel, not a place.
+ * miss `findPoi`. Their lat/lng are the best position there is — Overpass-resolved where
+ * `placeStops` matched the name, the model's own guess where it did not. The same holds for
+ * staged markdown, whose §11 lines carry model-written lat/lng. Unverified either way, but a
+ * guess measured beats a stop silently dropped from backtrack, geo coherence and meal proximity.
+ * 0,0 is the unresolved sentinel, not a place.
  */
 export function locateEntry(entry: ParsedEntry, pois: LocatedPoi[]): LocatedPoi | null {
   const known = findPoi(entry.name, pois);
@@ -242,7 +247,7 @@ export function scoreGeoCoherence(
 
   for (const day of itinerary.days) {
     const located = dayEntries(day)
-      .map((e) => locateEntry(e, pois))
+      .map((e) => (e.areaLevel ? null : locateEntry(e, pois)))
       .filter((p): p is LocatedPoi => p !== null && p.lat !== null && p.lon !== null);
 
     const dayKm: number[] = [];
@@ -574,9 +579,23 @@ export function scoreCoverage(itinerary: ParsedItinerary, fixture: BenchFixture)
     return !terms.some((t) => haystack.includes(t));
   });
 
-  const entryNames = itinerary.days.flatMap((d) => dayEntries(d).map((e) => e.name));
+  // By name OR within ANCHOR_MATCH_METRES of the anchor — the app's own `anchorCoverage` rule.
+  // "La Boqueria market breakfast" is the Mercat de Sant Josep de la Boqueria under a shorter name.
+  const entries = itinerary.days.flatMap(dayEntries);
   const missingAnchors = anchors
-    .filter((a) => !entryNames.some((n) => nameMatches(n, a.name)))
+    .filter(
+      (a) =>
+        !entries.some(
+          (e) =>
+            nameMatches(e.name, a.name) ||
+            (a.lat !== null &&
+              a.lon !== null &&
+              e.lat !== null &&
+              e.lng !== null &&
+              !(e.lat === 0 && e.lng === 0) &&
+              haversineKm({ lat: e.lat, lon: e.lng }, { lat: a.lat, lon: a.lon }) * 1000 <= ANCHOR_MATCH_METRES)
+        )
+    )
     .map((a) => a.name);
 
   const starredCovered = starred.length - missingStarred.length;

@@ -440,9 +440,10 @@ const DIET_ACK: Record<string, string[]> = {
 };
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-/** Whole-word, Unicode-aware: "Hamburg" is not "ham", "jamón" still matches. */
-const wordHit = (text: string, word: string) =>
-  new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(word)}(?![\\p{L}\\p{N}])`, "iu").test(text);
+/** Whole-word, Unicode-aware: "Hamburg" is not "ham", "jamón" still matches. `plural` lets a deny
+ *  word match "Oysters" and "Burgers" too. */
+const wordHit = (text: string, word: string, plural = false) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(word)}${plural ? "(?:e?s)?" : ""}(?![\\p{L}\\p{N}])`, "iu").test(text);
 
 /**
  * dietary — do the food stops fit what the traveller can eat?
@@ -465,12 +466,15 @@ export function scoreDietary(itinerary: ParsedItinerary, dietary: DietaryNeeds |
   const flagged: string[] = [];
   for (const entry of foods) {
     const text = [entry.name, entry.why, entry.note].filter(Boolean).join(" ");
-    const hit = active.flatMap((k) => DIET_DENY[k]).find((w) => wordHit(text, w));
+    // A stop that says how it fits the diet is not a contradiction: `why` is where the model writes
+    // "no pork broth, fully plant-based", and "Gluten-free Bakery" names its own accommodation.
+    const acks = active.some((k) => DIET_ACK[k].some((w) => wordHit(text, w)));
+    if (acks) acknowledged++;
+    const hit = acks ? undefined : active.flatMap((k) => DIET_DENY[k]).find((w) => wordHit(text, w, true));
     if (hit) {
       contradictions++;
       flagged.push(`${entry.name}: ${hit}`);
     }
-    if (active.some((k) => DIET_ACK[k].some((w) => wordHit(text, w)))) acknowledged++;
   }
   return { foodStops: foods.length, contradictions, acknowledged, flagged, normalized: 1 - contradictions / foods.length };
 }

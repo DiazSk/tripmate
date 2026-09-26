@@ -95,3 +95,17 @@ export function errorText(err: unknown): string {
 export function isFailedRun(run: { error?: string; itineraryMd?: string | null; itineraryJson?: unknown }): boolean {
   return run.error !== undefined || (!run.itineraryMd && !run.itineraryJson);
 }
+
+/**
+ * Headline delta between two arms, and whether it compares like with like. `travel_leg` needs typed
+ * stops, so it runs on legacy JSON only — a staged arm is gated on one rule fewer, and a
+ * staged-vs-legacy delta is biased against legacy.
+ */
+export function headlineDelta(
+  a: { rate: number | null },
+  b: { rate: number | null },
+  pathA: string,
+  pathB: string
+): { delta: number | null; likeForLike: boolean } {
+  return { delta: a.rate !== null && b.rate !== null ? b.rate - a.rate : null, likeForLike: pathA === pathB };
+}

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getFixture } from "./fixtures.ts";
-import { criticalRate, errorText, isFailedRun, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "./sweep.ts";
+import { criticalRate, errorText, headlineDelta, isFailedRun, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "./sweep.ts";
 
 const KYOTO = getFixture("kyoto-couple-mixed");
 
@@ -70,4 +70,13 @@ test("a run that produced no plan is failed, even when its error message is empt
   assert.equal(isFailedRun({ itineraryMd: null, itineraryJson: null }), true);
   assert.equal(isFailedRun({ itineraryMd: "md" }), false);
   assert.equal(isFailedRun({ itineraryMd: null, itineraryJson: { days: [] } }), false);
+});
+
+test("the headline delta says when the two arms were not gated alike", () => {
+  const a = { failing: 1, total: 2, rate: 0.5 };
+  const b = { failing: 2, total: 2, rate: 1 };
+  assert.deepEqual(headlineDelta(a, b, "legacy", "legacy"), { delta: 0.5, likeForLike: true });
+  // travel_leg only runs on legacy JSON, so a staged-vs-legacy delta is biased against legacy.
+  assert.equal(headlineDelta(a, b, "staged", "legacy").likeForLike, false);
+  assert.equal(headlineDelta({ rate: null }, b, "legacy", "legacy").delta, null);
 });

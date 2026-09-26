@@ -62,6 +62,12 @@ const DUPLICATE_DEGREES = 0.0015;
  * the one input the scorer cannot trust. So proximity matching applies only where the category is
  * positively KNOWN to be neither. Name matching is untouched and still catches these.
  */
+/** Rest/break entries repeat by nature; like meals, they are not a place visited twice. */
+const REST_ENTRY = /\b(rest|break)\b/i;
+
+/** 0,0 is the unresolved sentinel (guardrails.ts `located`), not a shared point. */
+const unresolved = (e: ParsedEntry) => e.lat === 0 && e.lng === 0;
+
 function coLocationExpected(entry: ParsedEntry): boolean {
   return entry.category === null || entry.category === "food" || entry.category === "transit";
 }
@@ -84,6 +90,7 @@ export function scoreDuplicates(itinerary: ParsedItinerary): DuplicateScore {
   const examples: DuplicateScore["examples"] = [];
   let checkedStops = 0;
   let repeats = 0;
+  let hardRepeats = 0;
 
   itinerary.days.forEach((day, dayIndex) => {
     for (const entry of dayEntries(day)) {
@@ -98,12 +105,16 @@ export function scoreDuplicates(itinerary: ParsedItinerary): DuplicateScore {
         entry.lng !== null &&
         prior.lat !== null &&
         prior.lng !== null &&
+        !unresolved(entry) &&
+        !unresolved(prior) &&
         Math.abs(prior.lat - entry.lat) < DUPLICATE_DEGREES &&
         Math.abs(prior.lng - entry.lng) < DUPLICATE_DEGREES;
 
       const prior = seen.find((s) => s.key === key || near(s.entry));
       if (prior) {
         repeats++;
+        const byName = prior.key === key;
+        if (byName && !coLocationExpected(entry) && !REST_ENTRY.test(entry.name)) hardRepeats++;
         examples.push({
           dayIndex,
           name: entry.name,
@@ -119,6 +130,7 @@ export function scoreDuplicates(itinerary: ParsedItinerary): DuplicateScore {
   return {
     checkedStops,
     repeats,
+    hardRepeats,
     examples,
     normalized: checkedStops > 0 ? Math.max(0, 1 - repeats / checkedStops) : null,
   };

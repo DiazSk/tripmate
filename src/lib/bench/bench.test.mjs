@@ -1016,3 +1016,32 @@ test("pace ignores meals, transit and rest breaks", () => {
   const over = { days: [locatedDay(...sights, located("One sight too many", 41.9, 12.5, 16 * 60))], preamble: "", hadCodeFence: false };
   assert.equal(scoreConstraints(over, rome).byType.pace, 1);
 });
+
+// --- review fixes: anchors by proximity, dietary negation and plurals, geo skips area-level ---
+
+test("an anchor in the plan under a shorter name is not missing", () => {
+  const bcn = getFixture("barcelona-access-dietary");
+  const anchor = bcn.poiDetails.pois.find((p) => /Boqueria/i.test(p.name));
+  assert.ok(anchor, "fixture anchors the Boqueria");
+  const plan = onePlan({ ...located("La Boqueria market breakfast", anchor.lat + 0.0003, anchor.lon, 9 * 60), category: "food" });
+  assert.ok(!scoreCoverage(plan, bcn).missingAnchors.includes(anchor.name));
+});
+
+test("scoreDietary does not flag a stop that says how it fits the diet", () => {
+  const gf = scoreDietary(onePlan(food("Gluten-free Bakery Ichi")), { tags: ["Gluten-free"], note: "" });
+  assert.equal(gf.contradictions, 0);
+  const vegan = scoreDietary(onePlan(food("Ramen Ohana", "no pork broth, fully plant-based")), { tags: ["Vegan"], note: "" });
+  assert.equal(vegan.contradictions, 0);
+});
+
+test("scoreDietary deny words match plurals", () => {
+  assert.equal(scoreDietary(onePlan(food("Oysters & Co")), { tags: ["Vegetarian"], note: "" }).contradictions, 1);
+  assert.equal(scoreDietary(onePlan(food("Burgers and Fries")), { tags: ["Vegan"], note: "" }).contradictions, 1);
+});
+
+test("geo coherence skips area-level entries, like the route scorers", () => {
+  const area = { ...located("Dinner around Gion", 35.0037, 135.7788, 19 * 60), areaLevel: true };
+  const p = OFF_LIST();
+  p.days[0].entriesBySlot.Evening.push(area);
+  assert.equal(scoreGeoCoherence(p, KYOTO).matchedLegs, 2);
+});

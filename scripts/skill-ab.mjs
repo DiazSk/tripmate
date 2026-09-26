@@ -35,7 +35,6 @@
  *   node --import ./scripts/ts-resolve.mjs scripts/skill-ab.mjs --report legacy.json
  */
 import { readFileSync, writeFileSync } from "fs";
-import { request } from "node:http";
 
 import { BENCH_FIXTURES, getFixture } from "../src/lib/bench/fixtures.ts";
 import { benchUserAnswers } from "../src/lib/bench/refineTasks.ts";
@@ -52,7 +51,8 @@ import {
 import { itineraryToParsed } from "../src/lib/bench/itineraryToParsed.ts";
 import { judgeFixture } from "../src/lib/bench/scorers/judge.ts";
 import { criticalFailures } from "../src/lib/bench/criticalFailures.ts";
-import { criticalRate, errorText, isFailedRun, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "../src/lib/bench/sweep.ts";
+import { criticalRate, errorText, headlineDelta, isFailedRun, runsOf, summarizeRuns, withSeenWeather, withoutGrounding } from "../src/lib/bench/sweep.ts";
+import { postJson } from "../src/lib/bench/postJson.ts";
 
 const BASE = process.env.AB_BASE_URL ?? "http://localhost:3000";
 const PATH_KIND = process.env.AB_PATH ?? "staged";
@@ -97,38 +97,6 @@ async function runStaged(fixture) {
     wallMs: Date.now() - startedAt,
     costUsd: steps.reduce((n, s) => n + (s.cost_usd ?? 0), 0),
   };
-}
-
-/**
- * POST JSON without undici. Node's `fetch` gives up at a 300s `headersTimeout` that no fetch
- * option exposes, and the legacy route routinely answers after 300s (312.7s on 2026-09-23).
- * `node:http` has no such ceiling; its socket timeout is set to the bench's own.
- */
-function postJson(url, body, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(body);
-    const req = request(
-      url,
-      { method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) }, timeout: timeoutMs },
-      (res) => {
-        let text = "";
-        res.setEncoding("utf8");
-        res.on("data", (chunk) => (text += chunk));
-        res.on("end", () => {
-          let payload;
-          try {
-            payload = JSON.parse(text);
-          } catch {
-            payload = { raw: text.slice(0, 300) };
-          }
-          resolve({ status: res.statusCode ?? 0, payload });
-        });
-      }
-    );
-    req.on("timeout", () => req.destroy(new Error(`no answer after ${timeoutMs}ms`)));
-    req.on("error", reject);
-    req.end(data);
-  });
 }
 
 async function runLegacy(fixture) {
@@ -176,8 +144,13 @@ async function runArm(out) {
   console.log(`fixtures  ${fixtures.map((f) => f.id).join(", ")}`);
 
   const cells = [];
+  // Written after every run, not once at the end: a sweep is hours of generations, and a crash on
+  // run 20 must not take runs 1-19 with it. The partial file is a valid arm.
+  const save = () =>
+    writeFileSync(out, JSON.stringify({ arm: out, path: PATH_KIND, runsPerFixture: RUNS, cells }, null, 2));
   for (const fixture of fixtures) {
     const runs = [];
+    cells.push({ fixtureId: fixture.id, runs });
     for (let i = 0; i < RUNS; i++) {
       process.stdout.write(`  ${fixture.id} [${i + 1}/${RUNS}] … `);
       try {
@@ -190,11 +163,10 @@ async function runArm(out) {
         console.log(`FAILED: ${reason}`);
         runs.push({ fixtureId: fixture.id, itineraryMd: null, itineraryJson: null, runId: null, wallMs: 0, costUsd: 0, error: reason });
       }
+      save();
     }
-    cells.push({ fixtureId: fixture.id, runs });
   }
-
-  writeFileSync(out, JSON.stringify({ arm: out, path: PATH_KIND, runsPerFixture: RUNS, cells }, null, 2));
+  save();
   const ok = cells.flatMap((c) => c.runs).filter((r) => !isFailedRun(r)).length;
   console.log(`\nwrote ${out} — ${ok}/${cells.length * RUNS} runs`);
 }
@@ -229,9 +201,11 @@ async function compare(aPath, bPath) {
   const tableB = armTable(b);
   printArmTable(`arm A — ${aPath}`, tableA);
   printArmTable(`arm B — ${bPath}`, tableB);
-  const d =
-    tableA.headline.rate !== null && tableB.headline.rate !== null ? tableB.headline.rate - tableA.headline.rate : null;
+  const { delta: d, likeForLike } = headlineDelta(tableA.headline, tableB.headline, a.path, b.path);
   console.log(`\ncritical-trip failure rate delta  ${d === null ? "n/a" : `${d >= 0 ? "+" : ""}${(d * 100).toFixed(0)} pts`}`);
+  if (!likeForLike) {
+    console.log(`  not like-for-like: ${a.path} vs ${b.path} — travel_leg is only checked on the legacy path`);
+  }
   console.log(`\naxes below use each fixture's first successful run per arm\n`);
   printAxis(rows, "composite", (s, cell) => compositeOf(cell, s));
   for (const key of ["routeEfficiency", "constraintAdherence", "weatherFeasibility", "mealVibeAlignment", "coverageGrounding"]) {
