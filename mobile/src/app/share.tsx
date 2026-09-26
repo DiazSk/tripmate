@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { readAsStringAsync } from 'expo-file-system/legacy';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { importPlaces, saveSavedPlaces } from '@/api/tripMateApi';
 import type { ImportItem, ImportResult, SavedSource } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
@@ -50,6 +51,16 @@ export default function ShareScreen() {
           images.push({ kind: 'image', mediaType: 'image/jpeg', data: await readAsStringAsync(path, { encoding: 'base64' }) });
         } catch {
           // An unreadable file is skipped; the result line says how many places were found.
+        }
+      }
+      for (const v of plan.videoFrames) {
+        for (const t of v.times) {
+          try {
+            const { uri } = await VideoThumbnails.getThumbnailAsync(v.path, { time: t * 1000, quality: 0.5 });
+            images.push({ kind: 'image', mediaType: 'image/jpeg', data: await readAsStringAsync(uri, { encoding: 'base64' }) });
+          } catch {
+            // Past the end of an unknown-duration video, or an unreadable frame — skipped.
+          }
         }
       }
       setMeta({ hasVideo: plan.videoFrames.length > 0, truncated: plan.truncated, instagramUrls: plan.instagramUrls });
