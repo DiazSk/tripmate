@@ -47,6 +47,12 @@ export interface Anchor {
   lng: number | null;
   priority: AnchorPriority;
   source?: "import" | "picked" | "typed";
+  /** OSM `opening_hours`, looked up before generation (`anchorHours.ts`). Absent or null means
+   *  not known — never "no hours". Optional so every stored anchor stays valid. */
+  openingHours?: string | null;
+  /** Derived from `openingHours` by `closedDaysFromOpeningHours`; null when that syntax is too
+   *  rich to read confidently. */
+  closedDays?: string[] | null;
 }
 
 /** A `must` anchor the planner could not schedule, with the model's one-line reason. */
