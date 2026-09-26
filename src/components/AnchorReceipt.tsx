@@ -15,10 +15,13 @@ export const fitMessage = (name: string) =>
 export default function AnchorReceipt({
   itinerary,
   onFitAnchor,
+  kept,
 }: {
   itinerary: Itinerary;
   /** Absent where the plan can't be regenerated (saved-trip views): the button is then hidden. */
   onFitAnchor?: (name: string) => void;
+  /** A kept trip with every must-see placed has nothing left to act on, so it shows nothing. */
+  kept?: boolean;
 }) {
   const cov = anchorCoverage(itinerary);
   if (!cov) return null;
@@ -26,6 +29,7 @@ export default function AnchorReceipt({
     ...cov.unplaced,
     ...cov.missing.map((name) => ({ name, reason: "Left out without a reason." })),
   ];
+  if (kept && notIn.length === 0) return null;
   return (
     <section aria-label="Your places" className="mb-3 rounded-xl bg-[var(--surface-deep)]/60 px-3 py-2 text-sm">
       <p className="font-medium">
