@@ -25,7 +25,7 @@ import {
   scoreGrounding,
 } from "./scorers/domain";
 import { scoreBacktrack, scoreDowntime, scoreMealProximity } from "./scorers/route";
-import { scoreBudget, scoreVibe, scoreWeatherAlignment } from "./scorers/context";
+import { scoreBudget, scoreDietary, scoreVibe, scoreWeatherAlignment } from "./scorers/context";
 import { scoreCommitments, scoreDuplicates, scoreMustInclude } from "./scorers/commitments";
 import { outputSimilarity, scoreLexical, scoreSemantic } from "./scorers/text";
 import { deltaGroups, measuredGroups, refineComposite, scorePatch } from "./scorers/patch";
@@ -83,7 +83,7 @@ export function compositeGroups(scores: BenchCellScores): CompositeGroups {
 /**
  * Every scorer over an already-parsed itinerary. `scoreItinerary` is this plus the parse.
  *
- * `duplicates`, `commitments` and `mustInclude` are reported here but deliberately absent from
+ * `duplicates`, `commitments`, `mustInclude` and `dietary` are reported here but deliberately absent from
  * `compositeGroups` below — see the note above `COMPOSITE_WEIGHTS`.
  */
 export function scoreParsed(
@@ -108,6 +108,7 @@ export function scoreParsed(
     duplicates: scoreDuplicates(parsed),
     commitments: scoreCommitments(parsed, answers.logistics),
     mustInclude: scoreMustInclude(parsed, answers.mustInclude ?? [], answers.avoid ?? []),
+    dietary: scoreDietary(parsed, answers.dietary ?? null),
     vibe: scoreVibe(parsed, fixture),
     lexical: scoreLexical(rawText),
     semantic: scoreSemantic(rawText, fixture),

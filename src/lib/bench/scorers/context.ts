@@ -2,7 +2,8 @@ import { dayEntries } from "../parseItinerary";
 import { nameMatches } from "./domain";
 import type { BenchFixture } from "../fixtures";
 import type { ParsedEntry, ParsedItinerary } from "../parseItinerary";
-import type { BudgetScore, VibeScore, WeatherAlignmentScore } from "../types";
+import type { BudgetScore, DietaryScore, VibeScore, WeatherAlignmentScore } from "../types";
+import type { DietaryNeeds } from "../../travelerProfile";
 
 /**
  * Scorers that judge the itinerary against the trip's own context — weather, budget, persona.
@@ -409,4 +410,67 @@ export function scoreVibe(itinerary: ParsedItinerary, fixture: BenchFixture): Vi
     jaccard: union > 0 ? intersection / union : null,
     normalized: classifiedStops > 0 ? matchedStops / classifiedStops : null,
   };
+}
+
+// --- dietary ---------------------------------------------------------------------------------
+
+/** Words that, on a food stop, name something the diet rules out. Keys are lower-cased
+ *  `DIETARY_TAGS` (src/components/DietaryPicker.tsx), plus "nut allergy" for one in the note. */
+const DIET_DENY: Record<string, string[]> = {
+  vegan: ["steak", "steakhouse", "bbq", "barbecue", "jamón", "jamon", "ham", "chicken", "pork", "beef", "lamb", "seafood", "fish", "sushi", "oyster", "cheese", "burger"],
+  vegetarian: ["steak", "steakhouse", "bbq", "barbecue", "jamón", "jamon", "ham", "chicken", "pork", "beef", "lamb", "seafood", "fish", "sushi", "oyster", "burger"],
+  pescatarian: ["steak", "steakhouse", "bbq", "barbecue", "jamón", "jamon", "ham", "chicken", "pork", "beef", "lamb", "burger"],
+  halal: ["pork", "jamón", "jamon", "ham", "bacon", "brewery", "beer hall"],
+  kosher: ["pork", "jamón", "jamon", "ham", "bacon", "shellfish", "oyster"],
+  "gluten-free": ["bakery", "pasta", "pizza", "pizzeria", "ramen", "udon", "brewery"],
+  "dairy-free": ["cheese", "gelato", "gelateria", "creamery", "fondue"],
+  "nut allergy": ["almond", "pistachio", "praline", "marzipan", "hazelnut", "walnut", "pecan", "peanut", "satay", "nutella"],
+};
+
+/** A food stop "acknowledges" the diet when it says so. Soft — reported, never critical. */
+const DIET_ACK: Record<string, string[]> = {
+  vegan: ["vegan", "plant-based"],
+  vegetarian: ["vegetarian", "veggie", "vegan", "plant-based"],
+  pescatarian: ["pescatarian", "vegetarian", "seafood", "fish"],
+  halal: ["halal"],
+  kosher: ["kosher"],
+  "gluten-free": ["gluten-free", "gluten free", "celiac", "coeliac"],
+  "dairy-free": ["dairy-free", "dairy free", "vegan"],
+  "nut allergy": ["nut-free", "nut free", "allergy", "allergen"],
+};
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Whole-word, Unicode-aware: "Hamburg" is not "ham", "jamón" still matches. */
+const wordHit = (text: string, word: string) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(word)}(?![\\p{L}\\p{N}])`, "iu").test(text);
+
+/**
+ * dietary — do the food stops fit what the traveller can eat?
+ *
+ * ponytail: keyword proxy — a steakhouse with a vegan menu is a false positive; the judge spec
+ * replaces this. Reported beside the composite, never inside it (see COMPOSITE_WEIGHTS).
+ */
+export function scoreDietary(itinerary: ParsedItinerary, dietary: DietaryNeeds | null): DietaryScore {
+  const keys = (dietary?.tags ?? []).map((t) => t.toLowerCase()).filter((k) => k in DIET_DENY);
+  if (dietary?.note && /(?<![\p{L}])(?:pea)?nuts?(?![\p{L}])/iu.test(dietary.note)) keys.push("nut allergy");
+  const active = [...new Set(keys)];
+
+  const foods = itinerary.days.flatMap(dayEntries).filter((e) => e.category === "food");
+  if (active.length === 0 || foods.length === 0) {
+    return { foodStops: foods.length, contradictions: 0, acknowledged: 0, flagged: [], normalized: null };
+  }
+
+  let contradictions = 0;
+  let acknowledged = 0;
+  const flagged: string[] = [];
+  for (const entry of foods) {
+    const text = [entry.name, entry.why, entry.note].filter(Boolean).join(" ");
+    const hit = active.flatMap((k) => DIET_DENY[k]).find((w) => wordHit(text, w));
+    if (hit) {
+      contradictions++;
+      flagged.push(`${entry.name}: ${hit}`);
+    }
+    if (active.some((k) => DIET_ACK[k].some((w) => wordHit(text, w)))) acknowledged++;
+  }
+  return { foodStops: foods.length, contradictions, acknowledged, flagged, normalized: 1 - contradictions / foods.length };
 }

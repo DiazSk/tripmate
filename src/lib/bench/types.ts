@@ -247,6 +247,19 @@ export interface CommitmentScore {
   normalized: number | null;
 }
 
+export interface DietaryScore {
+  /** Entries categorised `food` — the denominator. */
+  foodStops: number;
+  /** Food stops whose text names something the stated diet or allergy rules out. */
+  contradictions: number;
+  /** Food stops that mention the diet (or a synonym) at all. Reported, never critical. */
+  acknowledged: number;
+  /** `"<stop name>: <term>"` for each contradiction, for the report. */
+  flagged: string[];
+  /** 1 − contradictions/foodStops; null when no diet was stated or there are no food stops. */
+  normalized: number | null;
+}
+
 export interface BenchCellScores {
   geoCoherence: GeoCoherenceScore;
   constraints: ConstraintViolationScore;
@@ -262,6 +275,7 @@ export interface BenchCellScores {
   duplicates: DuplicateScore;
   commitments: CommitmentScore;
   mustInclude: MustIncludeScore;
+  dietary: DietaryScore;
   vibe: VibeScore;
   lexical: LexicalScore;
   semantic: SemanticScore;
