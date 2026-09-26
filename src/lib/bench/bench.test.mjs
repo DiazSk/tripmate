@@ -1045,3 +1045,13 @@ test("geo coherence skips area-level entries, like the route scorers", () => {
   p.days[0].entriesBySlot.Evening.push(area);
   assert.equal(scoreGeoCoherence(p, KYOTO).matchedLegs, 2);
 });
+
+// Real OSM for the Colosseum, 2026-09-26. Clauses start with a month, not a weekday, so the
+// weekday reader skipped them all and reported "shut all day on Sun" — for a stop at 9:00 on a
+// November Sunday, when it opens at 08:30. Anything seasonal is unchecked, never "closed".
+test("hoursForWeekday leaves seasonal month-range hours unchecked", () => {
+  const colosseum = "Mar 29-Sep 30 08:30-19:15; Oct 01-Oct 24 08:30-18:30; Oct 25-Feb 28 08:30-16:30; Jan 01 off; Dec 25 off";
+  assert.equal(hoursForWeekday(colosseum, "Sun"), null);
+  assert.equal(hoursForWeekday("Nov-Mar Mo-Fr 10:00-16:00", "Mon"), null);
+  assert.deepEqual(hoursForWeekday("Mo-Su 09:00-17:00", "Sun"), { ranges: [[540, 1020]] }, "plain hours still read");
+});

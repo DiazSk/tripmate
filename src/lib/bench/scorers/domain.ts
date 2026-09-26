@@ -166,6 +166,9 @@ export function hoursForWeekday(
   if (!openingHours) return null;
   if (openingHours.includes("24/7")) return { ranges: [[0, 24 * 60]] };
   if (/PH|"/i.test(openingHours)) return null;
+  // Seasonal syntax ("Oct 25-Feb 28 08:30-16:30") names months, and a weekday reader skipping
+  // those clauses would report the place shut all day — the Colosseum on a November Sunday.
+  if (/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/.test(openingHours)) return null;
 
   const target = DAY_CODES.findIndex((d) => d.toLowerCase() === weekday.slice(0, 2).toLowerCase());
   if (target === -1) return null;
