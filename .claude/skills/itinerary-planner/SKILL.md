@@ -640,6 +640,8 @@ A plan may carry `anchors`: places the traveler chose before asking for a plan, 
   reach and return within a day, or more `must` places than the days can hold. List each one you could
   not schedule in `unplaced` with a one-line, concrete reason.
 - Fit `want` places where they suit a day's route; skipping one needs no explanation.
+- Where an anchor carries opening hours, they are OpenStreetMap data: schedule it inside them, on a
+  day it is open. Where none are given, do not state hours for it.
 - When editing, never remove a `must` stop unless the traveler asked for that place to go. If an edit
   forces it out, say so in the reply and add it to `unplaced`.
 - Use the traveler's name for the place as the stop name, so it can be matched back.

@@ -206,13 +206,17 @@ const FOOD_STOP_INSTRUCTION = `For "food" stops, prefer an AREA over a specific 
 /** The traveler's own places. The rule lives here, not in SKILL.md, because this legacy path never
  *  loads the skill — every rule it follows is a constant in this file. SKILL.md §15 carries the
  *  same rule for the edit loop, which does load it. Keep the two in step. */
-const ANCHOR_INSTRUCTION = `Schedule every MUST place as a stop, on a day and at a time it is open, unless that is impossible — closed on every day the trip is near it, too far to reach and return within a day, or more MUST places than the days can hold. Fit WANT places where they suit a day's route; skipping one is fine. Use the traveler's name for the place in the stop's "name" so it can be recognised. For every MUST place you could not schedule, add an entry to the top-level "unplaced" array with a one-line, concrete reason (e.g. "Closed Tuesdays, the only day the plan is nearby"). Never drop a MUST place silently. Use "unplaced": [] when everything fits.`;
+const ANCHOR_INSTRUCTION = `Schedule every MUST place as a stop, on a day and at a time it is open, unless that is impossible — closed on every day the trip is near it, too far to reach and return within a day, or more MUST places than the days can hold. Fit WANT places where they suit a day's route; skipping one is fine. Use the traveler's name for the place in the stop's "name" so it can be recognised. For every MUST place you could not schedule, add an entry to the top-level "unplaced" array with a one-line, concrete reason (e.g. "Closed Tuesdays, the only day the plan is nearby"). Never drop a MUST place silently. Use "unplaced": [] when everything fits. Where a place's hours are given, they are OpenStreetMap data — schedule it inside them; where none are given, do not state hours for it.`;
 
 export function formatAnchors(anchors: Anchor[] | undefined): string {
   if (!anchors || anchors.length === 0) return "";
   const lines = anchors.map((a) => {
     const where = a.lat !== null && a.lng !== null ? `(${a.lat}, ${a.lng})` : "(location unknown)";
-    return `- ${a.priority === "must" ? "MUST" : "WANT"}: ${a.name} ${where}`;
+    // Raw OSM string always, plus "closed" only where the narrow parser is sure — "PH off" and
+    // seasonal syntax pass through for the model to read rather than being guessed at here.
+    const closed = a.closedDays && a.closedDays.length > 0 ? `; closed ${a.closedDays.join(", ")}` : "";
+    const hours = a.openingHours ? ` — open ${a.openingHours}${closed} (OpenStreetMap)` : "";
+    return `- ${a.priority === "must" ? "MUST" : "WANT"}: ${a.name} ${where}${hours}`;
   });
   return `\nThe traveler's own places — they chose these before asking for a plan:\n${lines.join("\n")}\n${ANCHOR_INSTRUCTION}\n`;
 }
