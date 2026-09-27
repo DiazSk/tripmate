@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 
 import { listTrips, readProfile } from "@/lib/db";
-import { currentOwnerId } from "@/lib/ownerRequest";
+import { currentOwner } from "@/lib/ownerRequest";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { toTripSummary } from "@/lib/tripPayload";
 import ProfileForm from "./ProfileForm";
 
@@ -46,11 +48,15 @@ const RECENT_TRIP_COUNT = 3;
 export default async function ProfilePage() {
   // One resolve, two reads: the profile and the trips belong to the same caller, and awaiting
   // `currentOwnerId()` twice in one render would invite them to drift.
-  const ownerId = await currentOwnerId();
+  const { id: ownerId, signedIn } = await currentOwner();
+  // The account's own details, for the row that offers the way out. Read here rather than in the
+  // client so this page keeps its one promise: the first paint is already correct.
+  const session = signedIn ? await auth.api.getSession({ headers: await headers() }) : null;
   return (
     <ProfileForm
       initialProfile={readProfile(ownerId)}
-      recentTrips={listTrips("saved", ownerId).slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
+      recentTrips={listTrips("saved", ownerId, signedIn).slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
+      accountEmail={session?.user?.email ?? null}
     />
   );
 }
