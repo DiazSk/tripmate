@@ -12,6 +12,7 @@ import GroupTypePicker from "@/components/GroupTypePicker";
 import InterestPicker from "@/components/InterestPicker";
 import DietaryPicker from "@/components/DietaryPicker";
 import ErrorNote from "@/components/ErrorNote";
+import AccountRow from "./AccountRow";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
@@ -210,8 +211,12 @@ function Memories({ trips }: { trips: TripSummary[] }) {
 export default function ProfileForm({
   initialProfile,
   recentTrips,
+  accountEmail,
 }: {
   initialProfile: TravelerProfile | null;
+  /** The signed-in account's email, or `null` when this is an anonymous browser. Resolved on the
+   *  server so the account row paints correct on the first frame, like the rest of this page. */
+  accountEmail: string | null;
   /** Up to three most-recent saved trips, newest first, for the memories column. Empty is a real
    *  state (nothing saved yet), not a loading one — the server read is synchronous. */
   recentTrips: TripSummary[];
@@ -417,6 +422,8 @@ export default function ProfileForm({
 
             <div className="space-y-3 pt-5">
               {error && <ErrorNote>{error}</ErrorNote>}
+
+              <AccountRow email={accountEmail} />
 
               <div className="flex items-center gap-3">
                 <button
