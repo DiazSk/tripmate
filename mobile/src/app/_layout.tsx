@@ -56,6 +56,9 @@ export default function RootLayout() {
           <Stack.Screen name="plan" options={{ headerShown: false }} />
           {/* SPIKE ONLY — replaced in Task 5. */}
           <Stack.Screen name="share" options={{ presentation: 'modal', headerShown: false }} />
+          {/* A sheet rather than a push: signing in is something you step aside to do and come
+              back from, and nothing in this app sits behind it. */}
+          <Stack.Screen name="signin" options={{ presentation: 'modal', headerShown: false }} />
         </Stack>
       </ThemeProvider>
     </ShareIntentProvider>
