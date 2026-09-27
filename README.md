@@ -51,6 +51,24 @@ using an HTTP SDK, so that needs to be installed and authenticated.
 
 Weather, geocoding, public holidays and OSM data need no key.
 
+### Accounts
+
+Sign-up and sign-in are email and password, via [Better Auth](https://www.better-auth.com), with
+users and sessions in the same SQLite/Turso database as everything else — no external auth service
+and nothing to pay for.
+
+| Variable | Effect if absent |
+|---|---|
+| `BETTER_AUTH_SECRET` | Development still runs on a built-in default, with a warning. **Set it in production** — it signs and encrypts sessions, and must be ≥32 random characters |
+| `BETTER_AUTH_URL` | Defaults to the request's own origin. Set it where the app sits behind a proxy that rewrites the host |
+
+Generate one with `openssl rand -hex 32`.
+
+**An account is never required.** You can plan, generate and keep a trip without one — those land
+under an anonymous owner cookie, and signing in afterwards moves them, your saved places and your
+traveller profile onto the account (`claimAnonymousOwner` in `src/lib/db.ts`). That is why there is
+no login wall anywhere in the app.
+
 ### Two integrations deliberately not used
 
 `YELP_API_KEY` and `GOOGLE_PLACES_API_KEY` are both read by the code and neither will be set. Both
