@@ -241,8 +241,12 @@ flowchart TB
 
 ## 6. Open questions
 
-- Should the trace viewer be gated behind anything (it's currently a public app with no
-  auth), given prompts could include a destination/budget a user might not want public?
-  For now, scope this as a local/dev-facing tool, same trust level as `/trips`.
+- ~~Should the trace viewer be gated behind anything (it's currently a public app with no
+  auth), given prompts could include a destination/budget a user might not want public?~~
+  **Settled, and not by auth.** `src/proxy.ts` 404s `/api/llm-traces`, `/api/llm-mode`,
+  `/api/bench`, `/backend` and `/bench` outside development, so the trace viewer is unreachable
+  in production regardless of who is signed in. Accounts arrived on 2026-09-27 (see
+  `docs/backend.md`) and deliberately did **not** become the gate here: a dev-only surface should
+  be absent in production, not merely guarded.
 - Should trending tags eventually be destination-aware (v2, see §2.1 note) instead of a
   fixed curated list?

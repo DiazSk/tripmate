@@ -36,12 +36,22 @@ parity, so it must not be an iOS surface first.
 | Content type | `application/json` both directions, except `trips/:id/export` (see below). |
 | Casing | DB rows are `snake_case`; **every API surface is `camelCase`**. `src/lib/tripPayload.ts` centralizes the mapping for trips. |
 | CORS | Not applicable. `URLSession` is not subject to it and `next.config.ts` configures none. |
-| Auth **[A2]** | `Authorization: Bearer <identity token>`, verified server-side against Apple's public keys. |
+| Auth | `Authorization: Bearer <session token>`, issued by `POST /api/auth/sign-in/email`. Optional — every route still serves anonymous callers. |
 
-**Identity today [today]** is a cookie, not auth. `src/proxy.ts` mints `tripmate_owner`
-(httpOnly, sameSite lax); `src/lib/owner.ts:12-16` states plainly that it *"deliberately is NOT an
-authorization boundary."* A native client that sends no cookie resolves to `LEGACY_OWNER` and sees
-every legacy-bucket trip. Do not build on this — it is what **[A2]** replaces.
+**Identity is two things at once, and both stay.** An anonymous owner still exists and still
+works: `src/proxy.ts` mints `tripmate_owner` (httpOnly, sameSite lax) for browsers and folds the
+`X-TripMate-Owner` header into it for native clients, because planning a trip has never required
+an account and still does not. On top of that, a **signed-in account wins** — `currentOwner()` in
+`src/lib/ownerRequest.ts` prefers a verified session over the cookie, and every route below it is
+unchanged and unaware.
+
+The practical consequences for a client:
+
+- Send `X-TripMate-Owner` always. It is the identity while signed out, and the thing that gets
+  *claimed* into the account on sign-in.
+- Send `Authorization: Bearer <token>` when you have one. It overrides the owner header.
+- A caller that sends neither resolves to `LEGACY_OWNER` and sees the pre-ownership rows, exactly
+  as before. A **signed-in** caller never sees that bucket — see `readableOwners`.
 
 ## Decoder rules
 
@@ -181,9 +191,11 @@ it exists but is not yours. **Match on status, never on text.**
 `GET /api/trips/:id/export` returns HTML, not JSON — **branch on `Content-Type`.** Route it to a
 share sheet.
 
-**Authorization today [today]:** `GET` and `PATCH` are both unscoped; only `DELETE` checks
-ownership. Anyone with a trip id can overwrite its itinerary and promote a draft. **[A2]** scopes
-`PATCH`; `GET` may stay unscoped so shared links keep working, which is the documented intent.
+**Authorization:** `PATCH` and `DELETE` are both owner-scoped, and the check now lives in
+`promoteTripToSaved` and `updateTripItinerary` themselves (`src/lib/db.ts`) rather than only in the
+route — a guard a second caller has to remember is one that eventually gets forgotten. A caller
+who is not the owner gets **404**, not 403: whether a trip exists is not something to confirm to
+someone who cannot have it. `GET` stays deliberately unscoped so shared links keep working.
 
 ### Generation and editing
 
@@ -205,33 +217,58 @@ behind the session's back and re-sends full state. Dropping it silently degrades
 `candidatePois`. There is no shared generic wrapper; each needs its own nested Swift struct.
 `transportModes.modes` is `[String]`, not the `TransportMode` enum — do not decode it as one.
 
-### Auth **[A2]** — proposed, needs backend agreement
+### Auth — built
 
-This is the one shape in this document that was **not** read off an existing handler, because
-there is no handler yet. The iOS client is built against it and the mock implements it; **A2 must
-either adopt it or amend this section before building something else.**
-
-`POST /api/auth/apple` — unauthenticated by nature, since it is the call that establishes a
-session.
+Better Auth (`better-auth@1.7.6`), email and password, sessions in the same libsql database as
+everything else. `src/lib/auth.ts` is the whole server-side configuration; the endpoints are
+mounted by one catch-all at `src/app/api/auth/[...all]/route.ts`.
 
 ```
+POST /api/auth/sign-up/email   → { email, password, name }   ← { user, token }
+POST /api/auth/sign-in/email   → { email, password }         ← { user, token }
+POST /api/auth/sign-out        → {}                          ← { success }
+GET  /api/auth/get-session                                   ← { user, session } | null
+```
+
+Four things a client has to get right, and none of them are guessable from the shapes:
+
+- **The bearer token arrives in a header, not the body.** Read `set-auth-token` off the sign-in or
+  sign-up response and store it; the `token` in the body is not the one to send back. This is
+  Better Auth's `bearer` plugin, enabled precisely so a native client never has to rely on a
+  cookie jar.
+- **Send an `Origin` header.** Better Auth validates it against `trustedOrigins`, but *only* on a
+  request that also carries a `Cookie` — so a bearer-only request would skip the check. Relying on
+  that here would be unwise: this is the app whose native cookie store was caught attaching ids
+  the client never set. The RN client sends `Origin: tripmate://`, which the server trusts.
+- **A 401 is a sign-out, not a retry.** Nothing a client can do makes a rejected token acceptable,
+  and retrying turns one failure into a loop. Drop the token and continue anonymously.
+- **Signing in claims your anonymous work.** On session creation the server moves the trips, saved
+  places and traveller profile held by the `tripmate_owner` in the request over to the account
+  (`claimAnonymousOwner`). Send your owner header on the sign-in request or that work is stranded.
+  The profile is the one thing that does not overwrite: an account that already has one keeps it.
+
+<details>
+<summary>Eliminated: <code>POST /api/auth/apple</code> — Sign in with Apple (proposed, never built)</summary>
+
+The original proposal, which the frozen Swift app (`ios/TripMateKit/AuthSession.swift`) is still
+written against. It was never implemented on the backend. The replacement is email and password
+via Better Auth, chosen because it covers the web, iOS and Android with one mechanism and no
+Apple Developer Services ID, and because the React Native app — not the Swift one — is the mobile
+client going forward.
+
+```
+POST /api/auth/apple
 → { identityToken, authorizationCode?, fullName?, email? }
 ← { token, userId, expiresAt? }
 ```
 
-Three notes, and the first is the one that bites:
+The one note worth keeping if Apple sign-in is ever added as a provider: **`fullName` and `email`
+come back from Apple only on the very first authorization** for a given Apple ID, and are nil on
+every later sign-in. They must be persisted on that first exchange or they are gone permanently.
+This is the most common Sign in with Apple defect and it is invisible in testing, because the
+developer's own first sign-in already happened.
 
-- **`fullName` and `email` arrive from Apple only on the very first authorization** for a given
-  Apple ID. Every later sign-in returns them nil, by design — Apple treats them as one-time
-  information the relying party is expected to have kept. The server must persist them on that
-  first exchange or they are gone permanently, and the only recovery is the traveler revoking the
-  app in Settings. This is the most common Sign in with Apple defect and it is invisible in
-  testing, because the developer's own first sign-in already happened.
-- **`identityToken` is exchanged, not used as a bearer.** It is a short-lived JWT verified against
-  Apple's public keys; it cannot be refreshed without re-authorizing, so a server-issued session
-  token is what the client actually carries.
-- `expiresAt` is optional. When absent the client learns of expiry from a 401 rather than
-  pre-empting it, which is why the 401 row above is a hard sign-out.
+</details>
 
 ### Lookups
 

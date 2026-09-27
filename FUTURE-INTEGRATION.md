@@ -532,6 +532,18 @@ is a lead worth its own investigation, not a multi-agent design.
 
 ## Authentication
 
+> **Done — 2026-09-27.** Better Auth (email + password), users and sessions in the same libsql
+> database, `currentOwner()` in `src/lib/ownerRequest.ts` as the seam. The rest of this section is
+> kept as written, because the prediction it makes is the thing worth keeping: *"Real auth later
+> fills it with a real subject id and nothing restructures."* That held exactly. `owner_id` needed
+> no migration, and not one of the ~31 routes changed — the only edits were the seam itself, an
+> ownership guard pushed down into two `db.ts` functions, and `readableOwners` learning not to
+> widen for a signed-in account. Where it was wrong: the options table below lists Clerk, Better
+> Auth and Auth.js; Better Auth won for a reason not named there — it is the only one of the three
+> that serves a browser and a React Native app from one mechanism, via its `bearer` plugin, which
+> mattered because the mobile client cannot use cookies (see `mobile/src/api/session.ts`).
+> See README → Accounts, and `docs/api-contract-v1.md` → Auth.
+
 The app has no users, no sessions, and a single SQLite file at the repo root.
 Every trip and every trace belongs to whoever is running the dev server.
 
