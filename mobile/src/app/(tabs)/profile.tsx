@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { signOut, useAccount } from '@/api/auth';
+import { subscribeToSession } from '@/api/session';
 import { getProfile, getProfileStats, saveProfile } from '@/api/tripMateApi';
 import type { ProfileStats, TravelerProfile } from '@/api/types';
 import { FieldSheet } from '@/components/field-sheet';
@@ -143,25 +144,51 @@ export default function Profile() {
     });
   }, []);
 
+  /** Read the profile and the stats for whoever the caller currently is. Returns its own cancel:
+   *  a tab change and a sign-out can each land mid-flight, and a late reply must not win. */
+  const load = useCallback(() => {
+    let active = true;
+    if (!unsaved.current) {
+      void getProfile().then((result) => {
+        if (!active || unsaved.current) return;
+        setProfile(result === undefined ? null : result === null ? 'none' : result);
+      });
+    }
+    void getProfileStats().then((result) => {
+      if (active) setStats(result);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      if (!unsaved.current) {
-        void getProfile().then((result) => {
-          if (!active || unsaved.current) return;
-          setProfile(result === undefined ? null : result === null ? 'none' : result);
-        });
-      }
-      void getProfileStats().then((result) => {
-        if (active) setStats(result);
-      });
+      const cancel = load();
       // Leaving the tab mid-debounce must not sit on an unsent edit.
       return () => {
-        active = false;
+        cancel();
         flush();
       };
-    }, [flush])
+    }, [flush, load])
   );
+
+  /**
+   * Signing in or out changes *whose* figures these are, and it happens on this very screen —
+   * the account rows are at the foot of it, so `useFocusEffect` never fires again and the trip
+   * count would keep showing the account's numbers to somebody who just signed out of it.
+   */
+  useEffect(() => {
+    let cancel: (() => void) | undefined;
+    const unsubscribe = subscribeToSession(() => {
+      cancel?.();
+      cancel = load();
+    });
+    return () => {
+      cancel?.();
+      unsubscribe();
+    };
+  }, [load]);
 
   /**
    * Queue an edit. **The whole profile goes every time**, because `PUT /api/profile` replaces

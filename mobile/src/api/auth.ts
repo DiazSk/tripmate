@@ -68,25 +68,36 @@ export function signIn(email: string, password: string): Promise<AuthResult> {
 }
 
 /**
- * Sign out locally first, then tell the server.
+ * Tell the server first, then drop the token. **This order is the fix for a real bug.**
  *
- * The order matters on a phone. The traveller asked to be signed out; a request that hangs on a
- * dead connection must not leave them signed in while it does. The server-side session is left to
- * expire on its own in that case, which is the lesser problem.
+ * Dropping the token locally does not sign this app out, because the bearer is not the only thing
+ * authenticating it. `session.ts` records the platform keeping cookies JS cannot see; signing in
+ * seeds Better Auth's session cookie into that store, and it keeps going out on every request
+ * afterwards. Clearing the token first therefore announced a sign-out while the very next request
+ * was still the account — observed as Profile's trip count and spend still reading the account's
+ * figures after signing out, until the revoke happened to land.
+ *
+ * Revoking first closes both: the session is dead before anything re-reads, and Better Auth's
+ * response carries an expiring `Set-Cookie` that clears the copy the platform was holding.
+ *
+ * ponytail: offline, the POST fails and the token is dropped anyway — the traveller asked to be
+ * signed out and must be. The cookie then outlives it until the session expires server-side. The
+ * upgrade, if that matters, is a locally-recorded revocation the next successful request replays.
  */
 export async function signOut(): Promise<void> {
   const token = await currentToken();
-  await clearToken();
-  if (!token) return;
-  try {
-    await fetchWithSession("/api/auth/sign-out", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: "{}",
-    });
-  } catch {
-    // Already signed out locally — see above.
+  if (token) {
+    try {
+      await fetchWithSession("/api/auth/sign-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: "{}",
+      });
+    } catch {
+      // Offline. Fall through: the local token goes regardless — see the note above.
+    }
   }
+  await clearToken();
 }
 
 /** The signed-in account, or `null`. `undefined` while the first read is still in flight. */
