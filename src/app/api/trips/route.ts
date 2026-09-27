@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { insertTrip, linkGenerationToTrip, listTrips, purgeStaleDrafts } from "@/lib/db";
 import { toTripSummary } from "@/lib/tripPayload";
 import { itineraryRejection } from "@/lib/itinerary";
-import { currentOwnerId } from "@/lib/ownerRequest";
+import { currentOwner, currentOwnerId } from "@/lib/ownerRequest";
 import type { TripStatus } from "@/lib/types";
 
 /** `?status=draft` for the unsaved plans, anything else for the kept ones. Narrowed rather than
@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("[trips] draft sweep failed", err);
   }
-  return NextResponse.json({ trips: listTrips(status, await currentOwnerId()).map(toTripSummary) });
+  const { id: ownerId, signedIn } = await currentOwner();
+  return NextResponse.json({ trips: listTrips(status, ownerId, signedIn).map(toTripSummary) });
 }
 
 export async function POST(req: NextRequest) {

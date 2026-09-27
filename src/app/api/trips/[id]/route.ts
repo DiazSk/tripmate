@@ -8,7 +8,7 @@ import {
 } from "@/lib/db";
 import { itineraryRejection } from "@/lib/itinerary";
 import { readableOwners } from "@/lib/owner";
-import { currentOwnerId } from "@/lib/ownerRequest";
+import { currentOwner } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
 // Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
 // use of `normalizeDays` moved into `toTripDetail`, but this did not.
@@ -45,7 +45,9 @@ export async function PATCH(
   // confer. Without this, anyone holding an id could overwrite another traveller's itinerary and
   // promote their draft. `readableOwners` rather than a bare equality so the pre-ownership rows
   // stay editable by the person who made them — see LEGACY_OWNER.
-  if (!readableOwners(await currentOwnerId()).includes(trip.owner_id)) {
+  const { id: ownerId, signedIn } = await currentOwner();
+  const owners = readableOwners(ownerId, signedIn);
+  if (!owners.includes(trip.owner_id)) {
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
@@ -73,11 +75,11 @@ export async function PATCH(
   const days = Array.isArray(itinerary.days) ? itinerary.days : [];
   const endDate = days.length ? tripEndDate(trip.start_date, days.length) : undefined;
 
-  updateTripItinerary(id, JSON.stringify(itinerary), endDate);
+  updateTripItinerary(id, JSON.stringify(itinerary), owners, endDate);
   // After the itinerary write, not before. Promotion is the traveler saying "keep this plan", and
   // the plan they mean is the one in this request body — flipping the status first would leave a
   // window where a saved trip holds the pre-edit itinerary if the write then failed.
-  if (promote) promoteTripToSaved(id);
+  if (promote) promoteTripToSaved(id, owners);
   // A refine on the pre-save view replaces the conversation the plan was written in, so the row's
   // handle has to move with it — otherwise a promoted trip opens its chat resuming a session that
   // only knows the plan before the rework. Written only for a non-empty string: `null` here means
@@ -107,7 +109,8 @@ export async function DELETE(
 
   // Scoped, unlike the GET beside it: reading a trip by an unguessable id is how a shared link
   // works, but destroying one is the operation where being wrong cannot be undone.
-  if (!deleteTrip(id, await currentOwnerId())) {
+  const { id: deleterId, signedIn: deleterSignedIn } = await currentOwner();
+  if (!deleteTrip(id, deleterId, deleterSignedIn)) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
   return NextResponse.json({ ok: true });

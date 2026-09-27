@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { currentOwnerId } from "@/lib/ownerRequest";
+import { currentOwner } from "@/lib/ownerRequest";
 import { redirect } from "next/navigation";
 import { listTrips } from "@/lib/db";
 
@@ -14,7 +14,8 @@ import { listTrips } from "@/lib/db";
  * A static segment wins over `[id]`, so this never collides with a trip whose id is "latest".
  */
 export default async function LatestTripPage() {
-  const [newest] = listTrips("saved", await currentOwnerId());
+  const { id: ownerId, signedIn } = await currentOwner();
+  const [newest] = listTrips("saved", ownerId, signedIn);
 
   if (newest) redirect(`/trip/${newest.id}`);
 

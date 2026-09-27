@@ -3,7 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { parseProfile, type TravelerProfile } from "./travelerProfile";
 import { staleDraftCutoff } from "./drafts";
-import { LEGACY_OWNER, readableOwners } from "./owner";
+import { LEGACY_OWNER, isValidOwnerId, readableOwners } from "./owner";
 import { anchorKey } from "./anchors";
 import type { TripStatus } from "./types";
 
@@ -24,7 +24,19 @@ import type { TripStatus } from "./types";
  * a local file and pushes writes on. Same synchronous API, so it stays a constructor change.
  */
 const url = process.env.TURSO_DATABASE_URL?.trim();
-const db = wrap(
+
+/**
+ * The same connection, unwrapped, for Better Auth.
+ *
+ * Exported rather than opened a second time. Two handles on one SQLite file is how this app
+ * reacquaints itself with SQLITE_BUSY — see the `timeout` note below, where nine parallel build
+ * workers already made that point. Better Auth drives it through Kysely's `SqliteDialect`, which
+ * wants exactly the better-sqlite3 surface `libsql` provides, so it can share this one.
+ *
+ * `wrap()` is deliberately not applied: its `_metadata` strip exists for rows this file hands to
+ * `NextResponse.json`, and Kysely reads its own results.
+ */
+export const rawDb =
   url
     ? // `authToken` is a real option — `libsql/index.js:81,91` reads it — but the shipped
       // `types/index.d.ts` predates it and declares only `syncUrl`. Asserted rather than left
@@ -42,8 +54,9 @@ const db = wrap(
       // rather than picked: the number's job is to make the swap behaviour-preserving.
       new Database(process.env.DB_PATH ?? path.join(process.cwd(), "tripmate.db"), {
         timeout: 5000,
-      })
-);
+      });
+
+const db = wrap(rawDb);
 
 /**
  * The one behavioural difference between the two drivers, fixed once here.
@@ -196,6 +209,78 @@ db.exec(`
     updated_at TEXT NOT NULL
   )
 `);
+
+/**
+ * Better Auth's four tables, created here rather than by its migrator.
+ *
+ * `CLAUDE.md` is explicit that this file creates every table at import with
+ * `CREATE TABLE IF NOT EXISTS` and adds later columns through `addColumnIfMissing()`, and that
+ * this repo does not carry migration files. An auth library that provisioned its own schema by a
+ * separate CLI step would give this app two ways to be ready, and a fresh Turso database would
+ * come up half-built — the app's own tables present, sign-in broken.
+ *
+ * **The DDL is Better Auth's, not hand-written.** It was taken verbatim from what its own
+ * migrator emits (`better-auth@1.7.6`, `getMigrations().runMigrations()` against an empty file,
+ * read back out of `sqlite_master`), with only `IF NOT EXISTS` added. Regenerate it the same way
+ * on a version bump rather than editing columns by hand — `advanced.database.generateId` in
+ * `auth.ts` is the only part of this shape this app chooses.
+ *
+ * The quoting is load-bearing: `user` and `session` are keywords in enough SQL dialects that
+ * Better Auth emits them quoted, and its queries reference them quoted.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS "user" (
+    "id" text NOT NULL PRIMARY KEY,
+    "name" text NOT NULL,
+    "email" text NOT NULL UNIQUE,
+    "emailVerified" integer NOT NULL,
+    "image" text,
+    "createdAt" date NOT NULL,
+    "updatedAt" date NOT NULL
+  )
+`);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS "session" (
+    "id" text NOT NULL PRIMARY KEY,
+    "expiresAt" date NOT NULL,
+    "token" text NOT NULL UNIQUE,
+    "createdAt" date NOT NULL,
+    "updatedAt" date NOT NULL,
+    "ipAddress" text,
+    "userAgent" text,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE
+  )
+`);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS "account" (
+    "id" text NOT NULL PRIMARY KEY,
+    "accountId" text NOT NULL,
+    "providerId" text NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "accessToken" text,
+    "refreshToken" text,
+    "idToken" text,
+    "accessTokenExpiresAt" date,
+    "refreshTokenExpiresAt" date,
+    "scope" text,
+    "password" text,
+    "createdAt" date NOT NULL,
+    "updatedAt" date NOT NULL
+  )
+`);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS "verification" (
+    "id" text NOT NULL PRIMARY KEY,
+    "identifier" text NOT NULL,
+    "value" text NOT NULL,
+    "expiresAt" date NOT NULL,
+    "createdAt" date NOT NULL,
+    "updatedAt" date NOT NULL
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS session_userId_idx ON "session" ("userId")`);
+db.exec(`CREATE INDEX IF NOT EXISTS account_userId_idx ON "account" ("userId")`);
+db.exec(`CREATE INDEX IF NOT EXISTS verification_identifier_idx ON "verification" ("identifier")`);
 
 // Dev-only: one row per (fixture x model) benchmark cell. Kept here with every other table so it
 // follows the same create-at-import convention, but nothing in the production app reads it — see
@@ -628,9 +713,10 @@ export function setTripChatSession(id: string, sessionId: string | null): void {
  * is the hot path, keeps not paying for it.
  */
 export function listTripItineraries(
-  ownerId: string = LEGACY_OWNER
+  ownerId: string = LEGACY_OWNER,
+  signedIn = false
 ): { destination: string; itinerary_json: string }[] {
-  const owners = readableOwners(ownerId);
+  const owners = readableOwners(ownerId, signedIn);
   return db
     .prepare(
       `SELECT destination, itinerary_json
@@ -668,9 +754,10 @@ export type TripListRow = Pick<
  */
 export function listTrips(
   status: TripStatus = "saved",
-  ownerId: string = LEGACY_OWNER
+  ownerId: string = LEGACY_OWNER,
+  signedIn = false
 ): TripListRow[] {
-  const owners = readableOwners(ownerId);
+  const owners = readableOwners(ownerId, signedIn);
   return db
     .prepare(
       // No `itinerary_json`: it was being selected and then dropped by every caller, which meant
@@ -691,9 +778,22 @@ export function listTrips(
  * Inserting a copy on Save would leave all of that pointing at a row nobody opens again.
  *
  * Idempotent and safe on an already-saved trip, so a double-clicked Save button is not a bug.
+ *
+ * **`owners` is required, and that is the point.** This guard used to live only in the PATCH route
+ * — correct there, but a guard a second caller has to remember is a guard that will eventually be
+ * forgotten, and what it protects is one traveller's plan from anyone who has seen its id. Pass
+ * `readableOwners(...)`. Returns whether a row actually moved, so a caller can tell "not yours"
+ * from "already saved".
  */
-export function promoteTripToSaved(id: string): void {
-  db.prepare(`UPDATE trips SET status = 'saved' WHERE id = ?`).run(id);
+export function promoteTripToSaved(id: string, owners: string[]): boolean {
+  return (
+    db
+      .prepare(
+        `UPDATE trips SET status = 'saved'
+           WHERE id = ? AND owner_id IN (${owners.map(() => "?").join(",")})`
+      )
+      .run(id, ...owners).changes > 0
+  );
 }
 
 /**
@@ -725,21 +825,29 @@ export function getTrip(id: string): TripRow | undefined {
  * The two have to move together: `trips.end_date` is what the trip list and every date range in the
  * UI read, so an itinerary that grew a day while the row still claimed the old end date would show
  * a 4-day plan filed under a 3-day trip. One statement, so they can't diverge halfway.
+ *
+ * **`owners` is required** — see `promoteTripToSaved` for why the ownership check belongs here
+ * rather than at the call site. Returns whether a row was written.
  */
 export function updateTripItinerary(
   id: string,
   itineraryJson: string,
+  owners: string[],
   endDate?: string
-): void {
+): boolean {
+  const scope = `AND owner_id IN (${owners.map(() => "?").join(",")})`;
   if (endDate) {
-    db.prepare(`UPDATE trips SET itinerary_json = ?, end_date = ? WHERE id = ?`).run(
-      itineraryJson,
-      endDate,
-      id
+    return (
+      db
+        .prepare(`UPDATE trips SET itinerary_json = ?, end_date = ? WHERE id = ? ${scope}`)
+        .run(itineraryJson, endDate, id, ...owners).changes > 0
     );
-    return;
   }
-  db.prepare(`UPDATE trips SET itinerary_json = ? WHERE id = ?`).run(itineraryJson, id);
+  return (
+    db
+      .prepare(`UPDATE trips SET itinerary_json = ? WHERE id = ? ${scope}`)
+      .run(itineraryJson, id, ...owners).changes > 0
+  );
 }
 
 /**
@@ -758,8 +866,8 @@ export function updateTripItinerary(
  * so it is the one that checks. Returns whether a row actually went, so a caller can tell "deleted"
  * from "not yours" instead of reporting success either way.
  */
-export function deleteTrip(id: string, ownerId: string = LEGACY_OWNER): boolean {
-  const owners = readableOwners(ownerId);
+export function deleteTrip(id: string, ownerId: string = LEGACY_OWNER, signedIn = false): boolean {
+  const owners = readableOwners(ownerId, signedIn);
   const result = db
     .prepare(
       `DELETE FROM trips WHERE id = ? AND owner_id IN (${owners.map(() => "?").join(",")})`
@@ -1431,8 +1539,8 @@ export function upsertSavedPlaces(
   return written;
 }
 
-export function listSavedPlaces(ownerId: string): SavedPlaceRow[] {
-  const owners = readableOwners(ownerId);
+export function listSavedPlaces(ownerId: string, signedIn = false): SavedPlaceRow[] {
+  const owners = readableOwners(ownerId, signedIn);
   return db
     .prepare(
       `SELECT * FROM saved_places WHERE owner_id IN (${owners.map(() => "?").join(",")})
@@ -1441,11 +1549,71 @@ export function listSavedPlaces(ownerId: string): SavedPlaceRow[] {
     .all(...owners) as SavedPlaceRow[];
 }
 
-export function deleteSavedPlace(ownerId: string, id: string): boolean {
-  const owners = readableOwners(ownerId);
+export function deleteSavedPlace(ownerId: string, id: string, signedIn = false): boolean {
+  const owners = readableOwners(ownerId, signedIn);
   return (
     db
       .prepare(`DELETE FROM saved_places WHERE id = ? AND owner_id IN (${owners.map(() => "?").join(",")})`)
       .run(id, ...owners).changes > 0
   );
+}
+
+/**
+ * Hands everything an anonymous visitor made to the account they just signed in to.
+ *
+ * This is what keeps "plan first, sign up later" honest. A traveller generates a trip under the
+ * cookie-minted owner, decides to keep it, and creates an account — at which point their plan,
+ * their traveller profile and anything they had shared into the app have to follow them, or
+ * signing up is punished by an empty memories wall.
+ *
+ * Called from the `session.create.after` hook in `auth.ts`, so it runs on sign-up *and* on every
+ * later sign-in — signing in on a second device pulls that device's anonymous work in too.
+ *
+ * Returns the number of trips moved, which is the only count worth reporting: it is the one a
+ * traveller would notice was wrong.
+ */
+export function claimAnonymousOwner(fromOwnerId: string, toOwnerId: string): number {
+  // Four refusals, and each is a different way to destroy data rather than move it.
+  //
+  // `LEGACY_OWNER` as the source is the dangerous one: it is a *shared* bucket holding every row
+  // written before ownership existed, visible to everybody. Claiming it would hand one arbitrary
+  // account the app's entire history and take it away from every other visitor. As the target it
+  // is equally wrong — that would push a real account's rows back into the shared pool.
+  if (fromOwnerId === toOwnerId) return 0;
+  if (fromOwnerId === LEGACY_OWNER || toOwnerId === LEGACY_OWNER) return 0;
+  if (!isValidOwnerId(fromOwnerId) || !isValidOwnerId(toOwnerId)) return 0;
+
+  db.prepare("BEGIN").run();
+  try {
+    const moved = db
+      .prepare(`UPDATE trips SET owner_id = ? WHERE owner_id = ?`)
+      .run(toOwnerId, fromOwnerId).changes;
+
+    // `saved_places` carries `UNIQUE (owner_id, place_key)`, so a place the account already saved
+    // would make the whole statement fail. `OR IGNORE` skips exactly those collisions; the second
+    // statement then clears the duplicates it left behind, matched on the key that collided rather
+    // than on "whatever is still here", so a row that failed to move for any other reason stays
+    // put instead of being quietly deleted.
+    db.prepare(`UPDATE OR IGNORE saved_places SET owner_id = ? WHERE owner_id = ?`)
+      .run(toOwnerId, fromOwnerId);
+    db.prepare(
+      `DELETE FROM saved_places WHERE owner_id = ?
+         AND place_key IN (SELECT place_key FROM saved_places WHERE owner_id = ?)`
+    ).run(fromOwnerId, toOwnerId);
+
+    // The profile moves only into an account that has none. `owner_id` is this table's PRIMARY
+    // KEY, so there is at most one row either side — and signing in on a second device must not
+    // let that device's leftover anonymous answers overwrite the profile the account already
+    // holds. An untouched anonymous row is the right outcome there, not a merge.
+    db.prepare(
+      `UPDATE traveler_profile SET owner_id = ? WHERE owner_id = ?
+         AND NOT EXISTS (SELECT 1 FROM traveler_profile WHERE owner_id = ?)`
+    ).run(toOwnerId, fromOwnerId, toOwnerId);
+
+    db.prepare("COMMIT").run();
+    return moved;
+  } catch (err) {
+    db.prepare("ROLLBACK").run();
+    throw err;
+  }
 }

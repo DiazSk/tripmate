@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { listTripItineraries } from "@/lib/db";
 import { normalizeDays, tripSpend } from "@/lib/itinerary";
-import { currentOwnerId } from "@/lib/ownerRequest";
+import { currentOwner } from "@/lib/ownerRequest";
 
 /**
  * `GET /api/profile/stats` → `{ trips, places, spend }` — what somebody's kept trips add up to.
@@ -25,7 +25,8 @@ import { currentOwnerId } from "@/lib/ownerRequest";
  * because one bad plan should not blank the other nine.
  */
 export async function GET() {
-  const rows = listTripItineraries(await currentOwnerId());
+  const { id: ownerId, signedIn } = await currentOwner();
+  const rows = listTripItineraries(ownerId, signedIn);
 
   let spend = 0;
   for (const row of rows) {
