@@ -535,6 +535,18 @@ Headline: 2/2 runs broke a hard rule — Kyoto on `over_budget`, Rome on `mobili
 anchor's hours**, which on every earlier legacy run one or both had. Two runs, one of which had no
 hours, is a direction and not a measurement; the Kyoto re-run with hours is the next thing to take.
 
+**Kyoto, with hours (`legacy-hours-kyoto-2-2026-09-26.json`): the first legacy Kyoto run to pass the
+gate — 0 critical codes, composite 0.925.** Getting there took two more findings. A second Kyoto run
+again reached the model without hours, and this time the new warning said why: the lookup failed or
+ran out its budget. From the command line the identical query failed once after 55.5s on every
+mirror, then answered in 4.3s — Overpass is intermittent, and `askOverpass` gives each mirror its own
+timeout, so handing each the whole 20s let one slow mirror spend it all. `fetchAnchorHours` now gives
+each mirror a third. With the hours in front of it the model put Kiyomizu-dera at 7:30 (06:00-18:00),
+Kinkaku-ji at 9:00 (09:00-17:00) and Nijo Castle at 9:00 on the Monday (08:45-17:00, daily) —
+every anchor inside its real hours. One run; and the no-hours run before it also happened to get the
+anchors right from memory, so this shows the mechanism working end to end rather than proving the
+hours are what fixed it. Repeats would settle that.
+
 ## Still open
 
 **Not fixable by rules — no data behind them.** Adding skill rules for these would be instructions
