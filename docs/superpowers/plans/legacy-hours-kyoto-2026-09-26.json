@@ -1,0 +1,631 @@
+{
+  "arm": "docs/superpowers/plans/legacy-hours-kyoto-2026-09-26.json",
+  "path": "legacy",
+  "runsPerFixture": 1,
+  "cells": [
+    {
+      "fixtureId": "kyoto-couple-mixed",
+      "runs": [
+        {
+          "fixtureId": "kyoto-couple-mixed",
+          "itineraryMd": null,
+          "itineraryJson": {
+            "tier": "luxury",
+            "days": [
+              {
+                "date": "2026-09-19",
+                "weather": "Partly cloudy, 22-30°C, 42% chance of rain",
+                "theme": "Golden temple, quiet gardens",
+                "summary": "Start with the iconic Golden Pavilion and serene Zen gardens, then enjoy refined kaiseki in Gion's geisha district. ⛩️🍵",
+                "lodging": {
+                  "name": "5-star hotel in Central Kyoto",
+                  "cost": 420,
+                  "note": "Hyatt Regency or similar luxury property; well-located for all areas. Alternative: Aman Kyoto for seclusion."
+                },
+                "stops": [
+                  {
+                    "name": "Kinkaku-ji",
+                    "lat": 35.0394,
+                    "lng": 135.7292,
+                    "cost": 8,
+                    "why": "Golden Pavilion embodies Kyoto's cultural heritage; pristine photography",
+                    "note": "Arrive at 9am opening to beat midday crowds and tour buses",
+                    "time": "9:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Ryoan-ji Temple",
+                    "lat": 35.0345,
+                    "lng": 135.7183,
+                    "cost": 10,
+                    "why": "Famous rock garden epitomizes Zen philosophy; contemplative space",
+                    "note": "15-minute taxi from Kinkaku-ji; best before group tours arrive",
+                    "time": "11:00 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Zen Garden",
+                      "Local Pick"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch around Kita",
+                    "lat": 35.032,
+                    "lng": 135.725,
+                    "cost": 90,
+                    "why": "Traditional tofu kaiseki suits refined palate; area known for temple cuisine",
+                    "note": "Try Shigetsu at Tenryu-ji or similar; reservation recommended",
+                    "time": "12:15 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Cuisine"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Kitano Tenmangu Shrine",
+                    "lat": 35.0317,
+                    "lng": 135.7353,
+                    "cost": 0,
+                    "why": "Scholar deity shrine with beautiful architecture; less touristy atmosphere",
+                    "note": "10-minute walk from lunch area; treasure house costs extra",
+                    "time": "2:00 PM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Free",
+                      "Historic Site"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Private car to Gion area",
+                    "lat": 35.015,
+                    "lng": 135.745,
+                    "cost": 40,
+                    "why": "Luxury private transport between sites and return to hotel",
+                    "note": "Comfortable transfers throughout the day; suits premium tier",
+                    "time": "3:30 PM",
+                    "durationLabel": "30 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Kaiseki dinner in Gion",
+                    "lat": 35.0036,
+                    "lng": 135.7751,
+                    "cost": 180,
+                    "why": "Gion's geisha district offers high-end kaiseki in historic atmosphere",
+                    "note": "Pontocho alley or Gion proper; e.g. Gion Karyo; reservation required",
+                    "time": "7:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ],
+                "weatherDetail": {
+                  "date": "2026-09-19",
+                  "tempMaxC": 29.8,
+                  "tempMinC": 21.7,
+                  "sunrise": "2026-09-19T05:42",
+                  "sunset": "2026-09-19T17:58",
+                  "precipitationProbability": 42,
+                  "weatherCode": 51,
+                  "humidity": 77,
+                  "historical": false
+                }
+              },
+              {
+                "date": "2026-09-20",
+                "weather": "Partly cloudy, 22-28°C, 53% chance of rain",
+                "theme": "Hillside lanes, old Kyoto",
+                "summary": "Dawn at Kiyomizu-dera temple followed by a stroll through preserved Edo-era lanes and elegant moss gardens. 🏯🌿",
+                "lodging": {
+                  "name": "Same 5-star hotel in Central Kyoto",
+                  "cost": 420,
+                  "note": "Continue same luxury base — efficient for touring different areas each day"
+                },
+                "stops": [
+                  {
+                    "name": "Private taxi to Kiyomizu-dera",
+                    "lat": 34.995,
+                    "lng": 135.785,
+                    "cost": 20,
+                    "why": "Early departure to catch golden hour at hilltop temple",
+                    "note": "Temple opens 6am; sunrise timing ideal for photography",
+                    "time": "6:45 AM",
+                    "durationLabel": "15 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  },
+                  {
+                    "name": "Kiyomizu-dera",
+                    "lat": 34.9949,
+                    "lng": 135.785,
+                    "cost": 6,
+                    "why": "Wooden stage with sweeping views showcases historic architecture",
+                    "note": "Golden hour light perfect for photos; minimal crowds before 9am",
+                    "time": "7:00 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Sannenzaka & Ninenzaka lanes",
+                    "lat": 34.996,
+                    "lng": 135.7805,
+                    "cost": 0,
+                    "why": "Preserved Edo streets reveal authentic old Kyoto atmosphere",
+                    "note": "Walk directly downhill from temple; browse traditional craft shops",
+                    "time": "8:45 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Free",
+                      "Historic District"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Breakfast in Higashiyama",
+                    "lat": 34.998,
+                    "lng": 135.782,
+                    "cost": 35,
+                    "why": "Traditional machiya cafe suits cultural immersion; charming setting",
+                    "note": "Many options on Ninenzaka; e.g. Arabica % or traditional tea house",
+                    "time": "10:00 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Lunch in Higashiyama",
+                    "lat": 35.01,
+                    "lng": 135.794,
+                    "cost": 85,
+                    "why": "Area rich in yudofu tofu hot pot with temple garden settings",
+                    "note": "Try Okutan or Junsei near Nanzen-ji; peaceful ambiance",
+                    "time": "12:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Cuisine"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Ginkaku-ji",
+                    "lat": 35.0265,
+                    "lng": 135.7983,
+                    "cost": 10,
+                    "why": "Refined garden aesthetic with moss and sand; photographer's dream",
+                    "note": "Northern Higashiyama; afternoon light flattering; closes 5pm",
+                    "time": "2:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Garden",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Taxi back to hotel",
+                    "lat": 35.015,
+                    "lng": 135.745,
+                    "cost": 15,
+                    "why": "Rest before dinner; return to central hotel area",
+                    "note": "Early evening timing allows refresh time",
+                    "time": "4:00 PM",
+                    "durationLabel": "15 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  },
+                  {
+                    "name": "Dinner in Pontocho",
+                    "lat": 35.0045,
+                    "lng": 135.7695,
+                    "cost": 170,
+                    "why": "Narrow atmospheric alley along river; high-end kaiseki specialists",
+                    "note": "Reservations essential; many Michelin-starred options available",
+                    "time": "7:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Riverside"
+                    ],
+                    "category": "food"
+                  }
+                ],
+                "weatherDetail": {
+                  "date": "2026-09-20",
+                  "tempMaxC": 28,
+                  "tempMinC": 22.1,
+                  "sunrise": "2026-09-20T05:43",
+                  "sunset": "2026-09-20T17:57",
+                  "precipitationProbability": 53,
+                  "weatherCode": 51,
+                  "humidity": 76,
+                  "historical": false
+                }
+              },
+              {
+                "date": "2026-09-21",
+                "weather": "Rain likely, 23-26°C, 94% chance of rain",
+                "theme": "Shelter in shoguns' halls",
+                "summary": "Explore the shogun's palace and covered Nishiki Market, perfect shelter from the rain with culture and cuisine. 🏰🍜",
+                "lodging": {
+                  "name": "Same 5-star hotel in Central Kyoto",
+                  "cost": 420,
+                  "note": "Final night at same luxury base; consistent high-end experience"
+                },
+                "stops": [
+                  {
+                    "name": "Nijo Castle",
+                    "lat": 35.0142,
+                    "lng": 135.7481,
+                    "cost": 14,
+                    "why": "Shogun palace with famous nightingale floors; extensive indoor tour",
+                    "note": "Ninomaru Palace is 90% indoors; sheltered from rain",
+                    "time": "9:00 AM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Must-See",
+                      "Indoor"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch near Nijo",
+                    "lat": 35.01,
+                    "lng": 135.755,
+                    "cost": 85,
+                    "why": "Central location for sheltered dining; noodle or tempura specialists",
+                    "note": "Covered arcade shopping streets have many restaurants",
+                    "time": "11:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Cuisine"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Nishiki Market",
+                    "lat": 35.005,
+                    "lng": 135.7661,
+                    "cost": 30,
+                    "why": "Covered 400-year-old food market showcases Kyoto ingredients",
+                    "note": "Completely sheltered; sample pickles, seafood, sweets",
+                    "time": "1:30 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Market",
+                      "Food Culture"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Kyoto National Museum",
+                    "lat": 34.9878,
+                    "lng": 135.7725,
+                    "cost": 12,
+                    "why": "World-class Japanese art collection; fully climate-controlled",
+                    "note": "Perfect rainy day alternative to outdoor sites; in Higashiyama",
+                    "time": "4:00 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Museum",
+                      "Indoor"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Private car to hotel",
+                    "lat": 35.015,
+                    "lng": 135.745,
+                    "cost": 30,
+                    "why": "Covered transfers throughout rainy day; return to hotel area",
+                    "note": "Stay dry between indoor destinations; luxury comfort",
+                    "time": "6:00 PM",
+                    "durationLabel": "30 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Dinner in Central Kyoto",
+                    "lat": 35.01,
+                    "lng": 135.768,
+                    "cost": 170,
+                    "why": "Premium kaiseki or tempura; sheltered indoor dining experience",
+                    "note": "E.g. Kikunoi, Yoshikawa Inn; advance reservations required",
+                    "time": "7:00 PM",
+                    "durationLabel": "2 hours",
+                    "tags": [
+                      "Fine Dining",
+                      "Reservation Needed"
+                    ],
+                    "category": "food"
+                  }
+                ],
+                "weatherDetail": {
+                  "date": "2026-09-21",
+                  "tempMaxC": 26.1,
+                  "tempMinC": 22.7,
+                  "sunrise": "2026-09-21T05:43",
+                  "sunset": "2026-09-21T17:56",
+                  "precipitationProbability": 94,
+                  "weatherCode": 51,
+                  "humidity": 83,
+                  "historical": false
+                }
+              },
+              {
+                "date": "2026-09-22",
+                "weather": "Mostly sunny, 20-27°C, 16% chance of rain",
+                "theme": "Thousand gates, clear skies",
+                "summary": "Sunrise among thousands of vermillion gates at Fushimi Inari, then sake tastings in historic breweries. ⛩️🍶",
+                "stops": [
+                  {
+                    "name": "Private taxi to Fushimi Inari",
+                    "lat": 34.967,
+                    "lng": 135.773,
+                    "cost": 25,
+                    "why": "Early departure to catch dawn light at the gates",
+                    "note": "Depart hotel by 6am for sunrise timing; worth the early start",
+                    "time": "6:00 AM",
+                    "durationLabel": "30 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  },
+                  {
+                    "name": "Fushimi Inari Taisha",
+                    "lat": 34.9671,
+                    "lng": 135.7727,
+                    "cost": 0,
+                    "why": "Thousands of vermillion torii gates create iconic photo opportunity",
+                    "note": "Arrive pre-dawn for solitude and golden light; hike to summit",
+                    "time": "6:30 AM",
+                    "durationLabel": "2.5 hours",
+                    "tags": [
+                      "Must-See",
+                      "Free",
+                      "Photography"
+                    ],
+                    "category": "other"
+                  },
+                  {
+                    "name": "Breakfast in Fushimi",
+                    "lat": 34.967,
+                    "lng": 135.772,
+                    "cost": 35,
+                    "why": "Traditional Japanese breakfast after mountain hike; local atmosphere",
+                    "note": "Restaurants near shrine; inari-zushi specialty here",
+                    "time": "9:15 AM",
+                    "durationLabel": "1 hour",
+                    "tags": [
+                      "Local Pick"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Tofuku-ji Temple",
+                    "lat": 34.9768,
+                    "lng": 135.7736,
+                    "cost": 8,
+                    "why": "Renowned Zen gardens with less tourist density than main temples",
+                    "note": "15-minute walk from Fushimi Inari; famous for autumn foliage",
+                    "time": "10:30 AM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Garden",
+                      "Photography"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Lunch in Fushimi Sake District",
+                    "lat": 34.9294,
+                    "lng": 135.7604,
+                    "cost": 70,
+                    "why": "Historic breweries with sake tastings; deep dive into Kyoto culture",
+                    "note": "Gekkeikan Okura area; brewery restaurants for lunch",
+                    "time": "12:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Local Cuisine",
+                      "Sake"
+                    ],
+                    "category": "food"
+                  },
+                  {
+                    "name": "Fushimi sake breweries",
+                    "lat": 34.9294,
+                    "lng": 135.7604,
+                    "cost": 20,
+                    "why": "Hands-on brewing education complements food interest; unique to area",
+                    "note": "Museum entry plus tasting; Gekkeikan or Kizakura both excellent",
+                    "time": "2:15 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Cultural Experience",
+                      "Food & Drink"
+                    ],
+                    "category": "entry"
+                  },
+                  {
+                    "name": "Taxi to central Kyoto",
+                    "lat": 35.015,
+                    "lng": 135.745,
+                    "cost": 25,
+                    "why": "Return to central Kyoto for final evening; comfortable ride",
+                    "note": "Enough time to rest before farewell dinner",
+                    "time": "4:15 PM",
+                    "durationLabel": "30 minutes",
+                    "tags": [
+                      "Private Transport"
+                    ],
+                    "category": "transit"
+                  },
+                  {
+                    "name": "Farewell dinner near hotel",
+                    "lat": 35.01,
+                    "lng": 135.768,
+                    "cost": 140,
+                    "why": "Final Kyoto meal; celebratory kaiseki or specialty cuisine",
+                    "note": "Try Kyoto beef or seasonal kaiseki; central for convenience",
+                    "time": "6:30 PM",
+                    "durationLabel": "1.5 hours",
+                    "tags": [
+                      "Fine Dining"
+                    ],
+                    "category": "food"
+                  }
+                ],
+                "weatherDetail": {
+                  "date": "2026-09-22",
+                  "tempMaxC": 27.2,
+                  "tempMinC": 20.2,
+                  "sunrise": "2026-09-22T05:44",
+                  "sunset": "2026-09-22T17:54",
+                  "precipitationProbability": 16,
+                  "weatherCode": 3,
+                  "humidity": 70,
+                  "historical": false
+                }
+              }
+            ],
+            "anchors": [
+              {
+                "name": "Fushimi Inari Taisha",
+                "lat": 34.9671,
+                "lng": 135.7727,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kinkaku-ji",
+                "lat": 35.0394,
+                "lng": 135.7292,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Kiyomizu-dera",
+                "lat": 34.9949,
+                "lng": 135.785,
+                "priority": "want",
+                "source": "picked"
+              },
+              {
+                "name": "Nijo Castle",
+                "lat": 35.0142,
+                "lng": 135.7481,
+                "priority": "want",
+                "source": "picked"
+              }
+            ],
+            "unplaced": []
+          },
+          "runId": "34c32d6f-cad9-49d6-b4f3-dedba558d13a",
+          "seenWeather": [
+            {
+              "date": "2026-09-19",
+              "tempMaxC": 29.8,
+              "tempMinC": 21.7,
+              "sunrise": "2026-09-19T05:42",
+              "sunset": "2026-09-19T17:58",
+              "precipitationProbability": 42,
+              "weatherCode": 51,
+              "humidity": 77,
+              "historical": false
+            },
+            {
+              "date": "2026-09-20",
+              "tempMaxC": 28,
+              "tempMinC": 22.1,
+              "sunrise": "2026-09-20T05:43",
+              "sunset": "2026-09-20T17:57",
+              "precipitationProbability": 53,
+              "weatherCode": 51,
+              "humidity": 76,
+              "historical": false
+            },
+            {
+              "date": "2026-09-21",
+              "tempMaxC": 26.1,
+              "tempMinC": 22.7,
+              "sunrise": "2026-09-21T05:43",
+              "sunset": "2026-09-21T17:56",
+              "precipitationProbability": 94,
+              "weatherCode": 51,
+              "humidity": 83,
+              "historical": false
+            },
+            {
+              "date": "2026-09-22",
+              "tempMaxC": 27.2,
+              "tempMinC": 20.2,
+              "sunrise": "2026-09-22T05:44",
+              "sunset": "2026-09-22T17:54",
+              "precipitationProbability": 16,
+              "weatherCode": 3,
+              "humidity": 70,
+              "historical": false
+            }
+          ],
+          "seenAnchors": [
+            {
+              "name": "Fushimi Inari Taisha",
+              "lat": 34.9671,
+              "lng": 135.7727,
+              "priority": "want",
+              "source": "picked"
+            },
+            {
+              "name": "Kinkaku-ji",
+              "lat": 35.0394,
+              "lng": 135.7292,
+              "priority": "want",
+              "source": "picked"
+            },
+            {
+              "name": "Kiyomizu-dera",
+              "lat": 34.9949,
+              "lng": 135.785,
+              "priority": "want",
+              "source": "picked"
+            },
+            {
+              "name": "Nijo Castle",
+              "lat": 35.0142,
+              "lng": 135.7481,
+              "priority": "want",
+              "source": "picked"
+            }
+          ],
+          "wallMs": 652166,
+          "costUsd": 0
+        }
+      ]
+    }
+  ]
+}
