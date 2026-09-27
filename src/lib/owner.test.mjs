@@ -68,6 +68,18 @@ describe("readableOwners", () => {
     assert.deepEqual(readableOwners(LEGACY_OWNER), [LEGACY_OWNER]);
   });
 
+  it("never shows a signed-in account the shared legacy bucket", () => {
+    // The legacy bucket holds every pre-ownership row and is readable by anyone who asks. Widening
+    // an account's reads into it would put the whole app's history on one person's memories wall.
+    const id = newOwnerId();
+    assert.deepEqual(readableOwners(id, true), [id]);
+  });
+
+  it("still widens for anonymous visitors, which is the migration affordance", () => {
+    const id = newOwnerId();
+    assert.deepEqual(readableOwners(id, false), [id, LEGACY_OWNER]);
+  });
+
   it("never lets one browser read another's rows", () => {
     const a = newOwnerId();
     const b = newOwnerId();

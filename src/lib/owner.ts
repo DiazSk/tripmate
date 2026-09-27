@@ -94,7 +94,21 @@ export function resolveOwnerId(raw: string | undefined | null): string {
  * Reads are widened, writes are not — a new row always carries exactly one owner. See LEGACY_OWNER
  * for why the pre-ownership rows stay visible. Returns one entry when the caller *is* the legacy
  * bucket, so a cookieless client doesn't ask the database for the same value twice.
+ *
+ * **A signed-in account is never widened, and that is a privacy boundary rather than a tidy-up.**
+ * The legacy bucket is *shared* — every row written before ownership existed lives in it and is
+ * visible to whoever asks. That was harmless while the only readers were anonymous browsers of a
+ * single-player app, which is the case LEGACY_OWNER was written for. Once real accounts exist and
+ * the app is deployed, widening would show every person who signed up the entire pre-ownership
+ * history of the app, under the heading "my memories". So an account reads its own rows and
+ * nothing else; anonymous visitors keep the migration affordance exactly as before.
+ *
+ * `signedIn` has to be passed rather than derived: an account id and an anonymous cookie id are
+ * both UUIDv4 by design, so nothing about the value distinguishes them. It defaults to `false` so
+ * every existing caller keeps its previous behaviour — the same additive shape `owner_id` itself
+ * was introduced with.
  */
-export function readableOwners(ownerId: string): string[] {
+export function readableOwners(ownerId: string, signedIn = false): string[] {
+  if (signedIn) return [ownerId];
   return ownerId === LEGACY_OWNER ? [LEGACY_OWNER] : [ownerId, LEGACY_OWNER];
 }

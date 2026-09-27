@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { listTrips, purgeStaleDrafts } from "@/lib/db";
-import { currentOwnerId } from "@/lib/ownerRequest";
+import { currentOwner } from "@/lib/ownerRequest";
 import { toTripSummary } from "@/lib/tripPayload";
 import TripsView from "./TripsView";
 
@@ -50,11 +50,11 @@ export default async function TripsPage() {
   // Both lists are scoped to the browser that made them — see `currentOwnerId`. Resolved once and
   // passed to both calls rather than awaited twice, so a saved trip and a draft can never be read
   // against two different owners.
-  const ownerId = await currentOwnerId();
+  const { id: ownerId, signedIn } = await currentOwner();
   return (
     <TripsView
-      initialTrips={listTrips("saved", ownerId).map(toTripSummary)}
-      initialDrafts={listTrips("draft", ownerId).map(toTripSummary)}
+      initialTrips={listTrips("saved", ownerId, signedIn).map(toTripSummary)}
+      initialDrafts={listTrips("draft", ownerId, signedIn).map(toTripSummary)}
     />
   );
 }
