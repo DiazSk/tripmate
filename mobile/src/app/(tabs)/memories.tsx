@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAccount } from '@/api/auth';
 import { listTrips } from '@/api/tripMateApi';
 import type { TripSummary } from '@/api/types';
 import { PlacePhoto } from '@/components/place-photo';
@@ -13,6 +14,7 @@ import { useFocusedFetch } from '@/lib/useFocusedFetch';
 
 export default function Memories() {
   const router = useRouter();
+  const { account } = useAccount();
   // undefined = still loading, null = the fetch failed, [] = fetched fine, no trips yet.
   // Re-read on focus rather than on mount: a trip kept in the wizard has to show up here.
   const trips = useFocusedFetch<TripSummary[] | null>(async () => (await listTrips()) ?? null);
@@ -39,11 +41,24 @@ export default function Memories() {
           ) : trips === null ? (
             <Notice>Couldn&rsquo;t reach TripMate. Check your connection.</Notice>
           ) : (
-            <Invitation
-              title="No trips kept yet"
-              body="Plans you keep are collected here, with the places you chose."
-              note="Start one from Home"
-            />
+            <View>
+              <Invitation
+                title="No trips kept yet"
+                body="Plans you keep are collected here, with the places you chose."
+                note="Start one from Home"
+              />
+              {/* Only when signed out, and only when there is nothing here. Somebody who already
+                  has trips on the web opens this app to a blank wall and no reason for it; this
+                  is the reason. Offered to a signed-in traveller it would be nonsense, and
+                  offered above a full grid it would be an advert. */}
+              {!account ? (
+                <Pressable onPress={() => router.push('/signin')} style={styles.signIn}>
+                  <ThemedText type="detail" themeColor="muted">
+                    Already have trips? <ThemedText type="detail">Sign in</ThemedText>
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
           )
         }
         renderItem={({ item }) =>
@@ -118,6 +133,8 @@ const formatBudget = (budget: number) =>
   budget > 0 ? `$${Math.round(budget).toLocaleString('en-US')}` : '—';
 
 const styles = StyleSheet.create({
+  // 44pt is the platform's minimum touch target; a line of text is otherwise ~18pt tall.
+  signIn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.read },
   screen: { flex: 1, backgroundColor: Colors.canvas },
   content: { padding: Spacing.read, gap: Spacing.rows },
   row: { gap: Spacing.rows },

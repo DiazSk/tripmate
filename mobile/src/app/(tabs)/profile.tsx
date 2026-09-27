@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useRef, useState } from 'react';
 import {
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { signOut, useAccount } from '@/api/auth';
 import { getProfile, getProfileStats, saveProfile } from '@/api/tripMateApi';
 import type { ProfileStats, TravelerProfile } from '@/api/types';
 import { FieldSheet } from '@/components/field-sheet';
@@ -262,6 +263,8 @@ export default function Profile() {
           </>
         )}
 
+        <AccountSection />
+
         {/* One line, at the foot, rather than Swift's per-section footer: a single PUT writes all
             seven fields, so blaming the section you last touched would be a guess. */}
         {failed ? (
@@ -446,6 +449,49 @@ function portraitSentence(profile: TravelerProfile | null): string {
 
 /** A grouped section: a header above, rows in a surface, and the explanation underneath — which is
  *  where the native idiom puts it, rather than above the control it describes. */
+/**
+ * The account, as one more settings section.
+ *
+ * At the foot rather than the head: the rows above are what this screen is *for*, and they work
+ * signed out. This is the answer to "will I still have this on my other phone", which is a
+ * question you ask after reading them, not before.
+ *
+ * Signed out it offers rather than nags, and names what signing in does — the trips already made
+ * on this phone follow the account, so there is nothing to weigh up.
+ */
+function AccountSection() {
+  const { account, loading } = useAccount();
+  const [busy, setBusy] = useState(false);
+
+  // No row at all while the first read is in flight. A row that says "Not signed in" and then
+  // corrects itself a frame later is worse than a section that arrives a frame late.
+  if (loading) return null;
+
+  if (!account) {
+    return (
+      <Section title="Account" footer="Your trips stay on this phone until you do.">
+        <Row label="Sign in" value="" onPress={() => router.push('/signin')} first />
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Account" footer="Your trips and this profile follow you.">
+      <Row label="Signed in" value={account.email} onPress={() => {}} first />
+      <Row
+        label="Sign out"
+        value={busy ? 'Signing out…' : ''}
+        onPress={async () => {
+          if (busy) return;
+          setBusy(true);
+          await signOut();
+          setBusy(false);
+        }}
+      />
+    </Section>
+  );
+}
+
 function Section({
   title,
   footer,

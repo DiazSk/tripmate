@@ -3,7 +3,11 @@ jest.mock("expo-secure-store");
 type Store = {
   getItemAsync: jest.Mock;
   setItemAsync: jest.Mock;
+  deleteItemAsync: jest.Mock;
 };
+
+const OWNER_KEY = "tripmate.session.owner";
+const TOKEN_KEY = "tripmate.session.token";
 
 /**
  * A fresh copy of the module, with its secure-store mock from the same registry.
@@ -11,13 +15,21 @@ type Store = {
  * `session` memoises the owner for the life of the process — that memo is what stops two
  * concurrent first requests minting two identities — so each test needs the module reloaded, and
  * a reload gives it a new `expo-secure-store` instance that the outer mock handles would miss.
+ *
+ * **The store is mocked per key, not per call.** Two things live in it now, and a blanket
+ * `mockResolvedValue` hands the same string back for both — which reads as a signed-in session
+ * whose token happens to equal the anonymous owner id. Every assertion below about a bearer being
+ * absent would pass for the wrong reason.
  */
-function freshSession(stored: string | null = null) {
+function freshSession({ owner = null, token = null }: { owner?: string | null; token?: string | null } = {}) {
   jest.resetModules();
   /* eslint-disable @typescript-eslint/no-require-imports */
   const store = require("expo-secure-store") as Store;
-  store.getItemAsync.mockResolvedValue(stored);
+  store.getItemAsync.mockImplementation(async (key: string) =>
+    key === TOKEN_KEY ? token : key === OWNER_KEY ? owner : null,
+  );
   store.setItemAsync.mockResolvedValue(undefined);
+  store.deleteItemAsync.mockResolvedValue(undefined);
   const mod = require("./session") as typeof import("./session");
   /* eslint-enable @typescript-eslint/no-require-imports */
   return { ...mod, store };
@@ -46,7 +58,7 @@ test("mints an owner on first use and stores it", async () => {
 });
 
 test("reuses the stored owner rather than minting another", async () => {
-  const { fetchWithSession, store } = freshSession("11111111-2222-4333-8444-555555555555");
+  const { fetchWithSession, store } = freshSession({ owner: "11111111-2222-4333-8444-555555555555" });
 
   await fetchWithSession("/api/trips");
 
@@ -94,4 +106,78 @@ test("no Cookie header is sent", async () => {
   await fetchWithSession("/api/trips");
 
   expect(headersOf(0).Cookie).toBeUndefined();
+});
+
+// --- accounts -------------------------------------------------------------------------------
+//
+// The bearer rides in a header for the same reason the owner does: this platform's cookie store
+// is not somewhere this app can put an identity and expect to find it again.
+
+test("no Authorization header when signed out", async () => {
+  const { fetchWithSession } = freshSession();
+
+  await fetchWithSession("/api/trips");
+
+  expect(headersOf(0).Authorization).toBeUndefined();
+  // The anonymous identity still travels, so a signed-out app is a working app.
+  expect(ownerOf(0)).toBeDefined();
+});
+
+test("a stored token rides on every request, beside the owner", async () => {
+  const { fetchWithSession } = freshSession({ token: "tok_abc" });
+
+  await fetchWithSession("/api/trips");
+  await fetchWithSession("/api/profile");
+
+  expect(headersOf(0).Authorization).toBe("Bearer tok_abc");
+  expect(headersOf(1).Authorization).toBe("Bearer tok_abc");
+  expect(ownerOf(0)).toBeDefined();
+});
+
+test("adopting a token takes effect on the very next request", async () => {
+  const { fetchWithSession, adoptToken, store } = freshSession();
+
+  await fetchWithSession("/api/trips");
+  await adoptToken("tok_fresh");
+  await fetchWithSession("/api/trips");
+
+  expect(headersOf(0).Authorization).toBeUndefined();
+  expect(headersOf(1).Authorization).toBe("Bearer tok_fresh");
+  expect(store.setItemAsync).toHaveBeenCalledWith(TOKEN_KEY, "tok_fresh");
+});
+
+// A rejected token is a sign-out, not a retry: nothing the app can do makes it acceptable again,
+// and retrying turns one failure into a loop.
+test("a 401 drops the token, so the next request goes out anonymously", async () => {
+  const { fetchWithSession, store } = freshSession({ token: "tok_stale" });
+  (globalThis.fetch as unknown as jest.Mock).mockResolvedValueOnce(new Response("{}", { status: 401 }));
+
+  await fetchWithSession("/api/trips");
+  await fetchWithSession("/api/trips");
+
+  expect(headersOf(0).Authorization).toBe("Bearer tok_stale");
+  expect(headersOf(1).Authorization).toBeUndefined();
+  expect(store.deleteItemAsync).toHaveBeenCalledWith(TOKEN_KEY);
+});
+
+// Clearing a token nobody holds would announce a sign-out that never happened, and a 401 on an
+// anonymous request means something else entirely.
+test("a 401 while signed out clears nothing", async () => {
+  const { fetchWithSession, store } = freshSession();
+  (globalThis.fetch as unknown as jest.Mock).mockResolvedValueOnce(new Response("{}", { status: 401 }));
+
+  await fetchWithSession("/api/trips");
+
+  expect(store.deleteItemAsync).not.toHaveBeenCalled();
+});
+
+test("signing out tells anything watching", async () => {
+  const { adoptToken, clearToken, subscribeToSession } = freshSession();
+  const seen: boolean[] = [];
+  subscribeToSession(() => seen.push(true));
+
+  await adoptToken("tok");
+  await clearToken();
+
+  expect(seen).toHaveLength(2);
 });
