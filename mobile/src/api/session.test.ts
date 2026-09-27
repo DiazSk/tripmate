@@ -108,11 +108,6 @@ test("no Cookie header is sent", async () => {
   expect(headersOf(0).Cookie).toBeUndefined();
 });
 
-// --- accounts -------------------------------------------------------------------------------
-//
-// The bearer rides in a header for the same reason the owner does: this platform's cookie store
-// is not somewhere this app can put an identity and expect to find it again.
-
 test("no Authorization header when signed out", async () => {
   const { fetchWithSession } = freshSession();
 
