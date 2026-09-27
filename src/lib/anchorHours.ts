@@ -1,3 +1,4 @@
+import { OVERPASS_URLS } from "./overpass";
 import { closedDaysFromOpeningHours, fetchPoiOsmTags } from "./poiDetails";
 import type { Anchor, PoiOsmTags } from "./types";
 
@@ -45,7 +46,11 @@ export async function fetchAnchorHours(
     timer = setTimeout(() => resolve(null), budgetMs);
   });
   try {
-    const tags = await Promise.race([fetchTags(located, budgetMs).catch(() => null), deadline]);
+    // `askOverpass` applies its timeout per mirror and tries them in turn. Handing each the whole
+    // budget let one slow mirror spend all of it before the next was asked — how the 2026-09-26
+    // Kyoto lookup failed twice while the same query answered in 4.3s moments later.
+    const perMirrorMs = Math.floor(budgetMs / OVERPASS_URLS.length);
+    const tags = await Promise.race([fetchTags(located, perMirrorMs).catch(() => null), deadline]);
     // Fail-soft must not mean silent: a plan written without its places' hours reads exactly like
     // one where OSM had none, and the 2026-09-26 Kyoto run was only caught by reading the prompt.
     if (tags === null) {

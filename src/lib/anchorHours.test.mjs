@@ -70,3 +70,11 @@ test("fetchAnchorHours says so when the lookup comes back empty", async () => {
   assert.equal(warned.length, 2, "a failed and a timed-out lookup each leave a line in the log");
   assert.match(warned[1], /20ms/);
 });
+
+test("each Overpass mirror gets a third of the budget, so a slow one cannot spend it all", async () => {
+  // askOverpass applies timeoutMs per mirror and tries up to three. Handing each the whole budget
+  // let one slow mirror use all of it; the 2026-09-26 Kyoto lookup failed that way twice.
+  let perMirror = null;
+  await fetchAnchorHours([NIJO], async (_pois, timeoutMs) => ((perMirror = timeoutMs), {}), 21_000);
+  assert.equal(perMirror, 7_000);
+});
