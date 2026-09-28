@@ -74,6 +74,8 @@ export default function TripDetail() {
   /** What "Fit it anyway" seeds the chat composer with, or undefined for a plain "Ask". Cleared on
    *  the plain path so an earlier fit request doesn't linger into an unrelated question. */
   const [chatSeed, setChatSeed] = useState<string | undefined>(undefined);
+  /** The scope a seeded opening arrives with: a day index, or null for the whole trip. */
+  const [chatScope, setChatScope] = useState<number | null>(null);
   /** Bumped on every open, and fed to `ChatSheet` as its `key` — `initialDraft` only seeds a fresh
    *  mount, so without this a second "Fit it anyway" for a different place would leave the first
    *  place's text sitting in the composer. */
@@ -114,9 +116,15 @@ export default function TripDetail() {
   /**
    * Open the chat composer pre-filled. Never sends — every caller here is offering words, not
    * taking an action, and the traveler still presses Send.
+   *
+   * `scope` is the sheet's starting scope, and the two seeded openings genuinely differ. A leg
+   * that does not fit, or a stop somebody pressed "Fix this" on, is a problem inside one day and
+   * opens narrowed to it. An unplaced must-see has no day yet — finding it one is the whole
+   * request — so it opens on the whole trip. Either can be changed before sending.
    */
-  function askWith(message: string) {
+  function askWith(message: string, scope: number | null = null) {
     setChatSeed(message);
+    setChatScope(scope);
     setChatOpenId((n) => n + 1);
     chat.open();
   }
@@ -237,6 +245,9 @@ export default function TripDetail() {
               <Pressable
                 onPress={() => {
                   setChatSeed(undefined);
+                  // The plain Ask button is not about the day you happen to be reading — see
+                  // the scope note in `chat-sheet.tsx`.
+                  setChatScope(null);
                   setChatOpenId((n) => n + 1);
                   chat.open();
                 }}
@@ -294,7 +305,7 @@ export default function TripDetail() {
               onFindNearby={findNearby}
               findings={findings}
               onToggleLock={toggleLock}
-              onAsk={askWith}
+              onAsk={(message: string) => askWith(message, day)}
             />
 
             {mapBuilt ? (
@@ -351,6 +362,8 @@ export default function TripDetail() {
         failure={chat.failure}
         onSend={chat.send}
         initialDraft={chatSeed}
+        days={days}
+        initialScope={chatScope}
         pending={chat.pending?.diff ?? null}
         applying={chat.applying}
         onApply={chat.apply}
@@ -413,7 +426,7 @@ function useChat(
     chatTurns(id).then((saved) => saved.length && setTurns(saved));
   }
 
-  async function send(text: string): Promise<boolean> {
+  async function send(text: string, dayIndex?: number): Promise<boolean> {
     if (!trip) return false;
     setTurns((prior) => [...prior, { role: 'user', content: text }]);
     setReplying(true);
@@ -439,6 +452,9 @@ function useChat(
         userAnswers: trip.userAnswers,
         sessionId: session.current.id,
         syncedHash: session.current.hash,
+        // Absent for the whole trip. The applier enforces it, so an op that lands on another
+        // day comes back as a rejection the traveler reads rather than a change they discover.
+        dayIndex,
       });
       if (!edit) {
         // Dropped, not left greyed out: this array mirrors the conversation the *server* has, and

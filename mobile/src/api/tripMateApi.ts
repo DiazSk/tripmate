@@ -493,9 +493,15 @@ export async function saveProfile(profile: TravelerProfile): Promise<boolean> {
 /**
  * `POST /api/trip-edit` — ask the planner for a change and take the plan it sends back.
  *
- * **No `dayIndex`, deliberately, where the Swift app sends `activeDay`.** That scope-locks the
- * conversation to the day you happen to be looking at, so "move the market to day 3" is refused by
- * the applier rather than done. A change is a thing you ask of a trip.
+ * **`dayIndex` is the traveler's choice, never the screen's.** The Swift app sent `activeDay`,
+ * which scope-locked the conversation to whatever day you happened to be looking at — so "move
+ * the market to day 3" came back refused by the applier, and nothing on screen had said it would
+ * be. This app sent nothing at all for the same reason: a change is a thing you ask of a trip.
+ *
+ * It is sent now only when the sheet's scope control is set to a day, which it never is by
+ * default. The difference from `activeDay` is the whole point — the narrower scope is stated
+ * before you ask, and choosing it is an act rather than a side effect of where you were
+ * standing. The applier enforces whatever arrives here; see `applyPatch`'s `scope`.
  *
  * The route does NOT persist the plan — it returns it, and the caller writes it back with
  * `updateTripItinerary`. `undefined` is the transport failure, per the house rule; there is no
@@ -509,6 +515,8 @@ export async function editTrip(params: {
   userAnswers: unknown | null;
   sessionId: string | null;
   syncedHash: string | null;
+  /** The one day this turn may change, or omitted for the whole trip. */
+  dayIndex?: number;
 }): Promise<TripEdit | undefined> {
   try {
     const res = await fetchWithSession('/api/trip-edit', {

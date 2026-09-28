@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     }
 
     let prompt: string;
-    let scope: { dayIndex: number; stopIndex: number } | undefined;
+    let scope: { dayIndex: number; stopIndex?: number } | undefined;
     // Chat continues the session the itinerary was generated in; element edits deliberately do
     // not. An element edit is scope-locked and one-shot, and threading it through the chat
     // session would bury the traveler's conversation under machine turns it never asked for —
@@ -126,6 +126,18 @@ export async function POST(req: NextRequest) {
       if (!Array.isArray(messages) || messages.length === 0) {
         return NextResponse.json({ error: "Missing messages" }, { status: 400 });
       }
+      /**
+       * A day-scoped chat is now *enforced*, not merely requested.
+       *
+       * Both chat prompts have always stated a scope and marked the other days read-only, and
+       * nothing contradicted a model that went outside it — so the narrower scope was a claim
+       * the product could not keep. Handing it to the applier makes the out-of-scope op a
+       * rejection the traveler reads, in the same place a locked stop's refusal appears.
+       *
+       * Absent `dayIndex` still means the whole trip, which is what every caller sent before
+       * this and what the sheet sends when the traveler widens the scope themselves.
+       */
+      if (Number.isInteger(dayIndex) && dayIndex !== undefined) scope = { dayIndex };
       // Prefer what the caller is holding (an unsaved trip has a session but no row yet), then
       // the saved trip. Null on a trip generated before sessions existed — that is the normal
       // no-session case, not an error, and it simply takes the rebuild path.
