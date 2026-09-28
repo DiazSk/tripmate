@@ -34,6 +34,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { fitMessage } from '@/lib/anchors';
 import { formatDayChip, formatRange } from '@/lib/dayDisplay';
+import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/itineraryDiff';
 import { tripHealth, type Guardrail } from '@/lib/health';
 import { regionForStops } from '@/lib/mapRegion';
 
@@ -258,6 +259,18 @@ export default function TripDetail() {
             </View>
           </View>
 
+          {/* A parked proposal is invisible behind a closed sheet, and an approved one is easy
+              to regret once you see it in the plan rather than in a list. One bar answers both,
+              because they are the same question — "something just happened to this plan, and
+              here is the way back" — and two bars competing for the same slot would be a state
+              machine nobody asked for. */}
+          <EditBar
+            pending={chat.pending !== null && !chat.visible}
+            onReview={chat.open}
+            undoable={chat.undoable}
+            onUndo={chat.undo}
+          />
+
           {/* Below the chrome and outside it, so the bar spans the width rather than sitting in
               the row with the controls. Shown on the map face too: it is a fact about the trip,
               not about the list, and hiding it there would make the face swap jump. */}
@@ -331,6 +344,10 @@ export default function TripDetail() {
         failure={chat.failure}
         onSend={chat.send}
         initialDraft={chatSeed}
+        pending={chat.pending?.diff ?? null}
+        applying={chat.applying}
+        onApply={chat.apply}
+        onDiscard={chat.discard}
       />
 
       {trip.status === 'draft' ? (
@@ -368,6 +385,13 @@ function useChat(
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [replying, setReplying] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  /** A change the model has proposed and nobody has approved. At most one: see `send`. */
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [applying, setApplying] = useState(false);
+  /** The plan as it was before the last approval, for as long as undoing it is still the
+   *  obvious thing to want. Cleared by the next proposal rather than by a timer — a window that
+   *  closes on its own is one somebody watches instead of reading their plan. */
+  const [undoable, setUndoable] = useState<{ itinerary: Itinerary; days: number[] } | null>(null);
   const session = useRef<{ id: string | null; hash: string | null }>({ id: null, hash: null });
   const restored = useRef(false);
 
@@ -387,6 +411,9 @@ function useChat(
     setTurns((prior) => [...prior, { role: 'user', content: text }]);
     setReplying(true);
     setFailure(null);
+    // Undoing the *previous* approval once a newer ask is in flight would restore a plan two
+    // edits old, which is not what the word means.
+    setUndoable(null);
     try {
       const edit = await editTrip({
         trip: {
@@ -423,19 +450,95 @@ function useChat(
           rejected: edit.rejected,
         },
       ]);
-      setTrip({ ...trip, itinerary: edit.itinerary });
-      // Persisted after the plan is on screen, and NOT rolled back if this fails. The edit is
-      // real, the model has acted on it, and a plan that reverts under you is worse than one that
-      // needs asking for again — the opposite bargain from `onAdd`, which knew its own answer.
-      const saved = await updateTripItinerary(trip.id, edit.itinerary, edit.sessionId);
-      if (!saved) setFailure("The plan changed, but saving it failed. It may not survive a reopen.");
+
+      /**
+       * **The plan does not change here.** It used to: the itinerary was swapped in
+       * unconditionally and the only account of what had happened was the model's own prose
+       * about its own work — with nothing to compare against and no way back, since
+       * `updateTripItinerary` overwrites and this database keeps no earlier version.
+       *
+       * What gets parked instead is the proposal plus a diff computed from the two plans, which
+       * the sheet renders for approval. A second question while one is parked replaces it: the
+       * base plan has not moved, so the newer ask is the one that was made about what is on
+       * screen.
+       */
+      const diff = diffItineraries(trip.itinerary, edit.itinerary);
+      if (diff.empty) {
+        // Nothing to approve — a question answered, a refusal, or a reply that only rewrote a
+        // note. Applied quietly rather than shown as a change that is not one.
+        setTrip({ ...trip, itinerary: edit.itinerary });
+        await updateTripItinerary(trip.id, edit.itinerary, edit.sessionId);
+        return true;
+      }
+      setPending({ itinerary: edit.itinerary, sessionId: edit.sessionId, diff });
       return true;
     } finally {
       setReplying(false);
     }
   }
 
-  return { visible, open, close: () => setVisible(false), turns, replying, failure, send };
+  async function apply() {
+    const proposal = pending;
+    if (!proposal || !trip) return;
+    setApplying(true);
+    const previous = trip.itinerary;
+    try {
+      setTrip({ ...trip, itinerary: proposal.itinerary });
+      setUndoable({ itinerary: previous, days: proposal.diff.days });
+      setPending(null);
+      // Persisted after the plan is on screen, and NOT rolled back if this fails. The edit is
+      // one the traveler just approved, and a plan that reverts under you is worse than one
+      // that needs saving again — the same bargain the unconditional swap used to make.
+      const saved = await updateTripItinerary(trip.id, proposal.itinerary, proposal.sessionId);
+      if (!saved) setFailure("The plan changed, but saving it failed. It may not survive a reopen.");
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  /**
+   * Turning a proposal down is not a no-op for the conversation.
+   *
+   * The model now believes it changed a plan it did not change, so its picture and ours have
+   * parted — which is exactly the condition a null `syncedHash` exists to announce. Echoing null
+   * next turn forces the resync, the same way a server-side rejected op does.
+   */
+  function discard() {
+    setPending(null);
+    session.current.hash = null;
+  }
+
+  async function undo() {
+    const back = undoable;
+    if (!back || !trip) return;
+    setUndoable(null);
+    setTrip({ ...trip, itinerary: back.itinerary });
+    session.current.hash = null;
+    const saved = await updateTripItinerary(trip.id, back.itinerary, session.current.id);
+    if (!saved) setFailure("Undone here, but saving that failed. It may not survive a reopen.");
+  }
+
+  return {
+    visible,
+    open,
+    close: () => setVisible(false),
+    turns,
+    replying,
+    failure,
+    send,
+    pending,
+    applying,
+    apply,
+    discard,
+    undoable,
+    undo,
+  };
+}
+
+interface Pending {
+  itinerary: Itinerary;
+  sessionId: string | null;
+  diff: ItineraryDiff;
 }
 
 /**
@@ -523,6 +626,45 @@ function DayPager({
         </View>
       ))}
     </ScrollView>
+  );
+}
+
+/**
+ * One slim line for the two things that happen around an edit.
+ *
+ * Pending outranks undoable: a change waiting for an answer is a question, and a change already
+ * made is only an offer. Neither is a toast — nothing here disappears on a timer, because both
+ * are things a traveler may want after reading a screenful, and a control that leaves while you
+ * are still deciding is worse than one that stays a little too long.
+ *
+ * Jade on the label, because both are actions. The bar renders nothing at all when there is
+ * neither, rather than reserving the space.
+ */
+function EditBar({
+  pending,
+  onReview,
+  undoable,
+  onUndo,
+}: {
+  pending: boolean;
+  onReview: () => void;
+  undoable: { days: number[] } | null;
+  onUndo: () => void;
+}) {
+  if (!pending && !undoable) return null;
+  const waiting = pending;
+  return (
+    <Pressable
+      onPress={waiting ? onReview : onUndo}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.editBar, pressed && styles.editBarPressed]}>
+      <ThemedText type="detail" themeColor="muted" style={styles.grow}>
+        {waiting ? 'A change is waiting' : daysUpdatedLabel(undoable?.days ?? [])}
+      </ThemedText>
+      <ThemedText type="label" themeColor="accent">
+        {waiting ? 'Review' : 'Undo'}
+      </ThemedText>
+    </Pressable>
   );
 }
 
@@ -741,6 +883,21 @@ const styles = StyleSheet.create({
   // Pushes Ask and + to the trailing end, so the row reads as "view here, actions there"
   // rather than as four controls in a queue.
   spacer: { flex: 1 },
+  editBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.tight,
+    marginHorizontal: Spacing.read,
+    marginBottom: Spacing.tight,
+    paddingHorizontal: Spacing.rows,
+    minHeight: 44,
+    borderRadius: Radius.read,
+    backgroundColor: Colors.surfaceDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
+  editBarPressed: { backgroundColor: Colors.pressed },
+  grow: { flex: 1 },
   faces: { flex: 1 },
   strip: { gap: Spacing.tight, paddingRight: Spacing.tight, alignItems: 'flex-end' },
   toggle: {

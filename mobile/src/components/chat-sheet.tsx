@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,8 +13,10 @@ import {
 } from 'react-native';
 
 import type { ChatTurn } from '@/api/types';
+import { ChangePreview } from '@/components/change-preview';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import type { ItineraryDiff } from '@/lib/itineraryDiff';
 
 /**
  * Ask the planner for a change.
@@ -36,6 +39,10 @@ export function ChatSheet({
   failure,
   onSend,
   initialDraft,
+  pending,
+  applying,
+  onApply,
+  onDiscard,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -51,9 +58,32 @@ export function ChatSheet({
    *  only runs once, so without a remount a second "Fit it anyway" for a different place would
    *  leave the first place's text sitting in the composer. */
   initialDraft?: string;
+  /** What the last reply would do to the plan, or null when there is nothing to approve.
+   *  The plan itself does not move until `onApply` — see `useChat.send`. */
+  pending: ItineraryDiff | null;
+  applying: boolean;
+  onApply: () => void;
+  onDiscard: () => void;
 }) {
   const [draft, setDraft] = useState(initialDraft ?? '');
   const transcript = useRef<ScrollView>(null);
+
+  /**
+   * How far down the screen this sheet starts — and without it the composer sits **behind the
+   * keyboard**, which made this screen unusable by touch: you could not see what you were
+   * typing and Send could not be pressed.
+   *
+   * `KeyboardAvoidingView` lifts by `frame.y + frame.height - keyboardScreenY`, and its frame
+   * comes from its own `onLayout` — which is relative to this modal, not the screen. A
+   * `pageSheet` is inset from the top, so its height is short by that inset and every lift is
+   * short by the same amount. The keyboard's `screenY`, meanwhile, is in screen coordinates.
+   * Handing the inset back as `keyboardVerticalOffset` puts the two in the same frame again.
+   *
+   * Measured rather than hardcoded: the inset differs per device, and it is zero for a
+   * full-screen presentation, where this correctly becomes a no-op.
+   */
+  const [sheetHeight, setSheetHeight] = useState(0);
+  const inset = sheetHeight ? Math.max(0, Dimensions.get('screen').height - sheetHeight) : 0;
 
   // Any content change, not just a new turn: the keyboard appearing and the composer growing to a
   // third line both push the last bubble above the fold, and neither is a turn.
@@ -71,10 +101,15 @@ export function ChatSheet({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}>
+      {/* The measurement lives on a wrapper, not on the KeyboardAvoidingView: that component
+          reads its own `onLayout`, and passing one through would replace the handler it
+          depends on. */}
+      <View style={styles.sheet} onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}>
       <KeyboardAvoidingView
         style={styles.sheet}
         // Height on Android, where the window resizes itself and padding would double-count it.
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={inset}>
         <View style={styles.bar}>
           <ThemedText type="title" numberOfLines={1} style={styles.grow}>
             Ask for a change
@@ -95,6 +130,11 @@ export function ChatSheet({
           {turns.map((turn, i) => (
             <Turn key={i} turn={turn} />
           ))}
+          {/* Under the last turn, which is always the reply it belongs to: there is only
+              ever one parked proposal, and a newer ask replaces it. */}
+          {pending ? (
+            <ChangePreview diff={pending} onApply={onApply} onDiscard={onDiscard} busy={applying} />
+          ) : null}
           {replying ? (
             <View style={styles.thinking}>
               {/* A spinner with no denominator, next to the word, because the wait is a model
@@ -144,6 +184,7 @@ export function ChatSheet({
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -154,7 +195,8 @@ function Invitation() {
     <View style={styles.invitation}>
       <ThemedText type="detail" themeColor="muted">
         Ask for as many changes as you like in one go — swap a stop, move one to another day, make
-        a day quieter, add a day. The whole plan is in scope.
+        a day quieter, add a day. The whole plan is in scope, and nothing changes until you have
+        seen what would change and said yes.
       </ThemedText>
     </View>
   );
