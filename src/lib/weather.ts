@@ -61,19 +61,49 @@ export async function geocodeDestination(name: string): Promise<GeoResult | null
   };
 }
 
-/** Typeahead suggestions for the destination field — same free Open-Meteo geocoder as
- *  `geocodeDestination`, just asking for several candidates instead of the single best match. */
+/**
+ * GeoNames feature-code prefixes for somewhere a trip can be *to*.
+ *
+ * `PPL*` populated places, `ADM*` administrative divisions, `PCL*` political entities
+ * (countries), plus islands and regions. Everything else the gazetteer knows is a thing inside a
+ * destination rather than a destination: searching "Kyoto" returns `AIRH` Kyoto Heliport and
+ * `PRK` Kyoto Imperial Palace alongside the city, and both are answers to a different question.
+ */
+const PLACE_CODES = ["PPL", "ADM", "PCL", "ISL", "RGN", "TERR", "CONT"];
+
+const isPlace = (code: unknown) =>
+  typeof code === "string" && PLACE_CODES.some((prefix) => code.startsWith(prefix));
+
+/**
+ * Typeahead suggestions for the destination field — same free Open-Meteo geocoder as
+ * `geocodeDestination`, just asking for several candidates instead of the single best match.
+ *
+ * **Non-places are dropped, and that is a correctness fix rather than tidying.** This field sets
+ * the coordinate every later distance, forecast and travel-time in the trip is measured from.
+ * Picking `AIRH Kyoto Heliport` anchors a week in Kyoto to a landing pad six kilometres from the
+ * city it meant, and nothing downstream can tell that happened — the name reads right and the
+ * arithmetic is confidently wrong.
+ *
+ * **An empty filter falls back to the unfiltered list**, the same fail-soft bargain the rest of
+ * this file strikes. Somebody who types a landmark by name has asked for it plainly enough, and
+ * a field that answers a real query with nothing is worse than one that answers it oddly.
+ *
+ * Over-fetching covers the drop: asking for `count` and filtering would show three rows where the
+ * caller asked for six.
+ */
 export async function suggestDestinations(query: string, count = 6): Promise<GeoSuggestion[]> {
   const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
   url.searchParams.set("name", query);
-  url.searchParams.set("count", String(count));
+  url.searchParams.set("count", String(count * 2));
 
   const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) return [];
   const data = await res.json();
   const results = data?.results;
   if (!Array.isArray(results)) return [];
-  return results.map((r) => ({
+
+  const places = results.filter((r) => isPlace(r?.feature_code));
+  return (places.length ? places : results).slice(0, count).map((r) => ({
     lat: r.latitude,
     lon: r.longitude,
     name: r.name,
