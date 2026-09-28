@@ -112,3 +112,8 @@ DerivedData/
 # ios/ rather than a bare `build/` so it cannot silently swallow a directory somebody means to
 # track elsewhere; the existing `/build` above is root-anchored and does not reach here.
 ios/**/build/
+
+# Design board: the full-resolution simulator captures. The 880px copies under
+# shots/web/ are what build.py actually reads, and index.html embeds them, so these
+# originals are only worth keeping locally for a higher-resolution rebuild.
+docs/design-board/shots/*.png
