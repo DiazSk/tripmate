@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseProfile } from "./travelerProfile.ts";
+import { derivePaceSpotsPerDay, travelStyleOf } from "./userAnswers.ts";
 
 const valid = {
   group: "family_with_kids",
@@ -110,4 +111,47 @@ test("a malformed accessibility is refused, the same as a bad enum", () => {
 test("a stated accessibility survives the round trip", () => {
   const stated = { stepFreeRequired: true, limitStairs: true, note: "manual wheelchair" };
   assert.deepEqual(parseProfile({ ...valid, accessibility: stated }).accessibility, stated);
+});
+
+/* Splitting `explorerStyle` into pace + discovery is only safe if every profile written before
+ * the split keeps working. This is a real row, copied verbatim out of a developer's own
+ * tripmate.db: no `pace`, no `discovery`, and it must neither be rejected nor read differently
+ * than it did before. */
+const STORED_BEFORE_THE_SPLIT = {
+  group: "family_with_kids",
+  explorerStyle: "packed",
+  energy: "high",
+  crowds: "love",
+  priorities: ["food", "art", "history"],
+  topPriorities: ["food", "art"],
+  dietary: { tags: ["vegetarian", "nut-free"], note: "no shellfish" },
+};
+
+test("a profile written before the split still parses, and reads the same", () => {
+  const parsed = parseProfile(STORED_BEFORE_THE_SPLIT);
+  assert.notEqual(parsed, null, "a stored row must not be rejected by the new fields");
+  assert.equal(parsed.explorerStyle, "packed");
+  assert.equal(parsed.pace, undefined, "nothing invented a pace that was never stored");
+  assert.deepEqual(travelStyleOf(parsed), { pace: "packed", discovery: "mix" });
+});
+
+test("and the plans it produces are unchanged", () => {
+  const { group, energy } = STORED_BEFORE_THE_SPLIT;
+  // packed, with kids, high energy: 5 - 1 = 4 spots a day, exactly as before the split.
+  assert.equal(derivePaceSpotsPerDay(travelStyleOf(STORED_BEFORE_THE_SPLIT).pace, group, energy), 4);
+});
+
+test("a profile written after the split carries both shapes", () => {
+  const parsed = parseProfile({ ...STORED_BEFORE_THE_SPLIT, pace: "relaxed", discovery: "local" });
+  assert.equal(parsed.pace, "relaxed");
+  assert.equal(parsed.discovery, "local");
+});
+
+/* Junk in the new fields must read as "not answered" rather than rejecting a row that is
+ * otherwise fine — the legacy field is still there to answer for it. */
+test("a junk pace does not throw the whole profile away", () => {
+  const parsed = parseProfile({ ...STORED_BEFORE_THE_SPLIT, pace: "sprint" });
+  assert.notEqual(parsed, null);
+  assert.equal(parsed.pace, undefined);
+  assert.equal(travelStyleOf(parsed).pace, "packed");
 });

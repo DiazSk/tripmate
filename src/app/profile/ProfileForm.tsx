@@ -7,7 +7,8 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import SiteFooter from "@/components/SiteFooter";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
-import ExplorerStylePicker from "@/components/ExplorerStylePicker";
+import { DiscoveryPicker, PacePicker } from "@/components/ExplorerStylePicker";
+import { legacyExplorerStyle, travelStyleOf } from "@/lib/userAnswers";
 import GroupTypePicker from "@/components/GroupTypePicker";
 import InterestPicker from "@/components/InterestPicker";
 import DietaryPicker from "@/components/DietaryPicker";
@@ -22,7 +23,8 @@ import type { ProfileStats } from "@/lib/profileStats";
 import type {
   CrowdPreference,
   EnergyLevel,
-  ExplorerStyle,
+  DiscoveryPreference,
+  PacePreference,
   GroupType,
   TripSummary,
 } from "@/lib/types";
@@ -444,6 +446,21 @@ export default function ProfileForm({
     setSaved(false);
   };
 
+  /**
+   * One half of the travel style, plus the legacy field both halves derive to.
+   *
+   * Written together rather than left to drift: `explorerStyle` is still what a stored row and
+   * the frozen Swift app read, so a profile that changed its pace without updating it would
+   * answer two different things to two readers.
+   */
+  const setStyle = (change: { pace?: PacePreference; discovery?: DiscoveryPreference }) => {
+    setProfile((p) => {
+      const next = { ...travelStyleOf(p), ...change };
+      return { ...p, ...change, explorerStyle: legacyExplorerStyle(next) };
+    });
+    setSaved(false);
+  };
+
   function toggleInterest(tag: string) {
     const selected = profile.priorities.includes(tag)
       ? profile.priorities.filter((t) => t !== tag)
@@ -575,10 +592,21 @@ export default function ProfileForm({
               <GroupTypePicker selected={profile.group} onSelect={(v: GroupType) => set("group", v)} />
             </Section>
 
-            <Section title="Explorer style">
-              <ExplorerStylePicker
-                selected={profile.explorerStyle}
-                onSelect={(v: ExplorerStyle) => set("explorerStyle", v)}
+            {/* Two sections, because "Explorer style" was two questions. A stored profile has
+                neither field, so `travelStyleOf` reads the legacy one; each picker writes its
+                own half and the legacy field both halves derive to, so a profile saved here
+                stays readable by anything that only knows `explorerStyle`. */}
+            <Section title="How full a day">
+              <PacePicker
+                selected={travelStyleOf(profile).pace}
+                onSelect={(v: PacePreference) => setStyle({ pace: v })}
+              />
+            </Section>
+
+            <Section title="What to see">
+              <DiscoveryPicker
+                selected={travelStyleOf(profile).discovery}
+                onSelect={(v: DiscoveryPreference) => setStyle({ discovery: v })}
               />
             </Section>
 

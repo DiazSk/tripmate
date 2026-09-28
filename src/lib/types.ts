@@ -254,7 +254,30 @@ export interface RawFetch {
 
 // --- Step 2b: user_answers -------------------------------------------------------------------
 
+/**
+ * **Superseded by `pace` + `discovery`, and kept because it is written down everywhere.**
+ *
+ * One question was asked — "how you like to explore" — and its four answers were two different
+ * questions wearing one coat. `packed` and `relaxed` describe how full a day is; `offbeat`
+ * describes which places go in it; `mixed` is ambiguous about which of the two it answers. A
+ * traveler who wants an off-the-beaten-path trip at a packed pace could not say so, and the
+ * picker's own hints gave the game away: "4–5 stops a day" beside "Local spots over headline
+ * attractions".
+ *
+ * Worse, it drove a number. `offbeat` set a ceiling of 3 stops a day, so choosing it quietly
+ * made somebody's days relaxed on the strength of an answer about *taste*.
+ *
+ * It stays on the wire because every stored `user_answers_json`, every `traveler_profile` row
+ * and the frozen Swift app all carry it. `travelStyleOf` reads either shape; nothing downstream
+ * branches on this type any more.
+ */
 export type ExplorerStyle = "packed" | "relaxed" | "offbeat" | "mixed";
+
+/** How full a day should be. Asked on its own, and the only thing that sets the pace ceiling. */
+export type PacePreference = "relaxed" | "balanced" | "packed";
+
+/** Which places fill it. Named like `CrowdPreference`, being the same kind of stated taste. */
+export type DiscoveryPreference = "iconic" | "local" | "mix";
 export type GroupType = "solo" | "couple" | "family_with_kids" | "other";
 export type Pace = "slow" | "moderate" | "fast";
 
@@ -304,7 +327,14 @@ export interface TripLogistics {
  *  (see `deriveFlags`), never asked — the traveler answers who they are, not how fast to go. */
 export interface UserAnswers {
   purpose: string;
+  /** Legacy, and still required so that every existing row and the frozen Swift app stay valid.
+   *  New clients send it alongside the pair below, derived by `legacyExplorerStyle`, so a reader
+   *  that only knows this field still gets a sensible answer. */
   explorerStyle: ExplorerStyle;
+  /** The pair that replaces `explorerStyle`. Optional because no stored row has them — absence
+   *  means "derive from `explorerStyle`", which is exactly what `travelStyleOf` does. */
+  pace?: PacePreference;
+  discovery?: DiscoveryPreference;
   group: GroupType;
   /** Free text, meaningful only when `group` is "other" — "five college friends", "work offsite". */
   groupOther?: string;

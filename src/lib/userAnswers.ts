@@ -7,7 +7,9 @@ import type {
   FamilyRules,
   GroupType,
   MobilityProfile,
+  DiscoveryPreference,
   Pace,
+  PacePreference,
   PartyCounts,
   ResolvedFlags,
   TripLogistics,
@@ -19,11 +21,10 @@ import type {
 // and they're the first thing anyone will want to adjust after reading a few real itineraries.
 
 /** Ceiling only. What the traveler *aspires* to, before their own constraints reduce it. */
-export const PACE_CEILING_BY_STYLE: Record<ExplorerStyle, number> = {
+export const PACE_CEILING_BY_PACE: Record<PacePreference, number> = {
   packed: 5,
-  mixed: 4,
+  balanced: 4,
   relaxed: 3,
-  offbeat: 3,
 };
 
 /** Energy is the strongest step-down: it's the one answer about physical capacity. */
@@ -180,21 +181,96 @@ export function sanitizeAnswers(answers: UserAnswers): UserAnswers {
     // become a silent multiplication.
     budgetBasis: answers.budgetBasis === "per_person" ? "per_person" : "whole_party",
     logistics,
+    // Normalised at the barrier rather than trusted, same as everything above — and dropped
+    // rather than defaulted when junk, because absent has a meaning here: `travelStyleOf`
+    // falls back to the legacy field, which is the right answer for a row that predates these.
+    pace: PACES.includes(answers.pace as PacePreference) ? answers.pace : undefined,
+    discovery: DISCOVERIES.includes(answers.discovery as DiscoveryPreference)
+      ? answers.discovery
+      : undefined,
   };
+}
+
+// --- Travel style ----------------------------------------------------------------------------
+
+/**
+ * How full the day is, and what fills it — from whichever shape the answers happen to carry.
+ *
+ * **The whole migration is this function.** New clients send `pace` and `discovery`; every
+ * stored row and the frozen Swift app send `explorerStyle`; and nothing downstream should have
+ * to know which it got. Readers call this and branch on the pair.
+ *
+ * The legacy mapping un-does an inference rather than preserving it. `offbeat` used to set a
+ * ceiling of 3 stops a day, which was never something the traveler said — it was a guess
+ * standing in for the question nobody asked. It maps to `balanced`, the neutral answer, so an
+ * existing off-the-beaten-path profile gets a slightly fuller day than before and a pace it can
+ * now state for itself. `mixed` was ambiguous between the two axes; it means neutral on both.
+ */
+export function travelStyleOf(answers: {
+  explorerStyle?: ExplorerStyle | null;
+  pace?: PacePreference | null;
+  discovery?: DiscoveryPreference | null;
+}): { pace: PacePreference; discovery: DiscoveryPreference } {
+  const legacy = LEGACY_STYLE[answers.explorerStyle as ExplorerStyle] ?? LEGACY_STYLE.mixed;
+  return {
+    pace: PACES.includes(answers.pace as PacePreference)
+      ? (answers.pace as PacePreference)
+      : legacy.pace,
+    discovery: DISCOVERIES.includes(answers.discovery as DiscoveryPreference)
+      ? (answers.discovery as DiscoveryPreference)
+      : legacy.discovery,
+  };
+}
+
+const LEGACY_STYLE: Record<
+  ExplorerStyle,
+  { pace: PacePreference; discovery: DiscoveryPreference }
+> = {
+  packed: { pace: "packed", discovery: "mix" },
+  relaxed: { pace: "relaxed", discovery: "mix" },
+  offbeat: { pace: "balanced", discovery: "local" },
+  mixed: { pace: "balanced", discovery: "mix" },
+};
+
+export const PACES: PacePreference[] = ["relaxed", "balanced", "packed"];
+export const DISCOVERIES: DiscoveryPreference[] = ["iconic", "local", "mix"];
+
+/**
+ * The pair squeezed back into the one field, for readers that still take one — stored rows,
+ * the frozen Swift app's profile screen, the dev consoles.
+ *
+ * **It is lossy, and only in the direction that costs least.** One field cannot hold two axes,
+ * so a traveler who wants local places at a packed pace comes back out as `offbeat`: taste wins,
+ * because the pace is the half this app now derives from its own explicit answer anyway. Every
+ * caller that matters reads `travelStyleOf` instead, so the loss reaches nothing but a label.
+ */
+export function legacyExplorerStyle(style: {
+  pace: PacePreference;
+  discovery: DiscoveryPreference;
+}): ExplorerStyle {
+  if (style.discovery === "local") return "offbeat";
+  if (style.pace === "packed") return "packed";
+  if (style.pace === "relaxed") return "relaxed";
+  return "mixed";
 }
 
 // --- Derivation ------------------------------------------------------------------------------
 
 export function derivePaceSpotsPerDay(
-  explorerStyle: ExplorerStyle,
+  /** The pace answer itself. A legacy `explorerStyle` is accepted and translated, so a caller
+   *  holding an old row does not have to remember to convert first. */
+  pace: PacePreference | ExplorerStyle,
   group: GroupType,
   energy: EnergyLevel,
   party: PartyCounts | null = null
 ): number {
-  // `??` fallback: an out-of-enum value (e.g. a raw POST with a bad `explorerStyle`/`energy`)
-  // makes the lookup undefined, and undefined + number is NaN — which throws nowhere, so it
-  // would otherwise ride silently all the way into the generated prompt.
-  const ceiling = PACE_CEILING_BY_STYLE[explorerStyle] ?? PACE_CEILING_BY_STYLE.mixed;
+  const stated = PACES.includes(pace as PacePreference)
+    ? (pace as PacePreference)
+    : travelStyleOf({ explorerStyle: pace as ExplorerStyle }).pace;
+  // `??` fallback: an out-of-enum value (e.g. a raw POST with a bad pace or `energy`) makes the
+  // lookup undefined, and undefined + number is NaN — which throws nowhere, so it would
+  // otherwise ride silently all the way into the generated prompt.
+  const ceiling = PACE_CEILING_BY_PACE[stated] ?? PACE_CEILING_BY_PACE.balanced;
   const energyStep = PACE_STEP_BY_ENERGY[energy] ?? 0;
   const familyStep = travellingWithKids(group, party) ? PACE_STEP_FAMILY : 0;
   // Stacks on the family step rather than replacing it: an infant is an additional cost, not an
@@ -307,7 +383,7 @@ export function deriveFamilyRules(
 export function deriveFlags(answers: UserAnswers): ResolvedFlags {
   const party = sanitizeParty(answers.party);
   const paceSpotsPerDay = derivePaceSpotsPerDay(
-    answers.explorerStyle,
+    travelStyleOf(answers).pace,
     answers.group,
     answers.energy,
     party

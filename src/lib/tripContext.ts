@@ -1,4 +1,4 @@
-import { partyBudget } from "./userAnswers";
+import { partyBudget, travelStyleOf } from "./userAnswers";
 import type {
   DestinationContext,
   EnrichedPoi,
@@ -57,7 +57,11 @@ function flagsSection(trip: ReconciledTrip): string {
   }
 
   lines.push(
-    `explorer_style (stated intent, already applied to pace): ${a.explorerStyle}`,
+    // Two lines, because this was two answers in one field and the model could not tell which
+    // it was being told. `pace` is the intent behind `pace_spots_per_day` above it; `discovery`
+    // is about which places get picked and has nothing to do with how many.
+    `pace (stated intent, already applied above): ${travelStyleOf(a).pace}`,
+    `discovery (iconic landmarks vs local places): ${travelStyleOf(a).discovery}`,
     `energy: ${a.energy}`,
     `crowds: ${a.crowds}`,
     // Already a party total — `partyBudget` converted a per-person figure at this one

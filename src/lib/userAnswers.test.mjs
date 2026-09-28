@@ -18,6 +18,8 @@ import {
   sanitizeParty,
   deriveGroupLabel,
   partyBudget,
+  travelStyleOf,
+  legacyExplorerStyle,
 } from "./userAnswers.ts";
 
 const answers = (over) => ({
@@ -234,4 +236,75 @@ test("a junk basis is read as whole party, never as a silent multiplication", ()
   const out = sanitizeAnswers(answers({ budgetBasis: "PER_PERSON" }));
   assert.equal(out.budgetBasis, "whole_party");
   assert.equal(partyBudget(750, out.budgetBasis, 4), 750);
+});
+
+/* One question was two questions wearing one coat: `packed`/`relaxed` describe how full a day
+ * is, `offbeat` describes which places go in it, and `mixed` did not say which it answered. The
+ * split is only safe if every stored row and the frozen Swift app keep reading correctly. */
+test("the legacy field still answers both halves for a stored row", () => {
+  assert.deepEqual(travelStyleOf({ explorerStyle: "packed" }), { pace: "packed", discovery: "mix" });
+  assert.deepEqual(travelStyleOf({ explorerStyle: "relaxed" }), { pace: "relaxed", discovery: "mix" });
+  assert.deepEqual(travelStyleOf({ explorerStyle: "mixed" }), { pace: "balanced", discovery: "mix" });
+});
+
+/* The point of the split. `offbeat` used to set a ceiling of 3 stops a day — a pace nobody
+ * stated, inferred from an answer about taste. It maps to the neutral pace instead, which
+ * deliberately gives an existing offbeat profile a slightly fuller day than before. */
+test("offbeat stops being read as a pace", () => {
+  assert.deepEqual(travelStyleOf({ explorerStyle: "offbeat" }), {
+    pace: "balanced",
+    discovery: "local",
+  });
+  assert.equal(derivePaceSpotsPerDay("offbeat", "solo", "high"), 4);
+  assert.equal(derivePaceSpotsPerDay("balanced", "solo", "high"), 4);
+});
+
+test("a stated pair outranks the legacy field, and junk in either falls back", () => {
+  assert.deepEqual(travelStyleOf({ explorerStyle: "relaxed", pace: "packed", discovery: "iconic" }), {
+    pace: "packed",
+    discovery: "iconic",
+  });
+  // A raw POST can put anything here; it must read as "not answered", not as undefined.
+  assert.deepEqual(travelStyleOf({ explorerStyle: "offbeat", pace: "bogus" }), {
+    pace: "balanced",
+    discovery: "local",
+  });
+  assert.deepEqual(travelStyleOf({}), { pace: "balanced", discovery: "mix" });
+});
+
+/* New clients write the legacy field beside the pair so old readers keep working. It is lossy
+ * in one direction only, and that is the cheaper direction: taste survives, pace does not,
+ * because pace is the half this app now derives from its own explicit answer. */
+test("the pair squeezes back into one field, losing only what it must", () => {
+  assert.equal(legacyExplorerStyle({ pace: "packed", discovery: "iconic" }), "packed");
+  assert.equal(legacyExplorerStyle({ pace: "relaxed", discovery: "mix" }), "relaxed");
+  assert.equal(legacyExplorerStyle({ pace: "balanced", discovery: "mix" }), "mixed");
+  assert.equal(legacyExplorerStyle({ pace: "packed", discovery: "local" }), "offbeat");
+});
+
+test("a legacy value survives a round trip through the pair", () => {
+  for (const style of ["packed", "relaxed", "offbeat", "mixed"]) {
+    assert.equal(legacyExplorerStyle(travelStyleOf({ explorerStyle: style })), style);
+  }
+});
+
+test("sanitize keeps a valid pair and drops junk rather than defaulting it", () => {
+  const base = {
+    purpose: "",
+    explorerStyle: "mixed",
+    group: "solo",
+    energy: "high",
+    crowds: "mixed",
+    budget: 1000,
+    priorities: [],
+    topPriorities: [],
+  };
+  const good = sanitizeAnswers({ ...base, pace: "packed", discovery: "local" });
+  assert.equal(good.pace, "packed");
+  assert.equal(good.discovery, "local");
+
+  // Dropped, not defaulted: absence means "read the legacy field", which is a real answer.
+  const bad = sanitizeAnswers({ ...base, pace: "sprint", discovery: 7 });
+  assert.equal(bad.pace, undefined);
+  assert.equal(bad.discovery, undefined);
 });

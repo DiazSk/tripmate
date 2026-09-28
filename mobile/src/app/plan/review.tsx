@@ -9,7 +9,7 @@ import { Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
-import { CROWDS, ENERGY, STYLES, labelOf, usePlanDraft } from '@/lib/planDraft';
+import { CROWDS, DISCOVERIES, ENERGY, PACES, labelOf, usePlanDraft } from '@/lib/planDraft';
 import { accessibilityValue, dietaryValue } from '@/lib/profileRows';
 import { closestTier, tierName, tripDays } from '@/lib/tiers';
 
@@ -51,14 +51,21 @@ export default function ReviewStep() {
             onEdit={() => router.dismissTo('/plan/preferences')}
           />
           {/* Three answers on one row because they are one question about tempo, and because
-              Edit can only land on the step that holds them all anyway. */}
+              Edit can only land on the step that holds them all anyway. Discovery gets its own
+              row rather than joining them: it is a taste, not a tempo, and the two sharing one
+              line is the exact conflation this wizard just stopped making. */}
           <SummaryRow
             label="Pace"
             value={[
-              labelOf(STYLES, draft.explorerStyle),
+              labelOf(PACES, draft.pace),
               labelOf(ENERGY, draft.energy),
               labelOf(CROWDS, draft.crowds),
             ].join(' · ')}
+            onEdit={() => router.dismissTo('/plan/preferences')}
+          />
+          <SummaryRow
+            label="Seeing"
+            value={labelOf(DISCOVERIES, draft.discovery)}
             onEdit={() => router.dismissTo('/plan/preferences')}
           />
           {/* The last two rows print even when nothing is set, unlike everything above them.

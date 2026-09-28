@@ -23,7 +23,8 @@ function draft(overrides: Partial<PlanDraft> = {}): PlanDraft {
     party: { adults: 1, children: 0, infants: 0 },
     logistics: {},
     purpose: '',
-    explorerStyle: 'mixed',
+    pace: 'balanced',
+    discovery: 'mix',
     energy: 'moderate',
     crowds: 'mixed',
     interests: [],
@@ -152,6 +153,9 @@ test('the traveler profile excludes dates, budget and pinned places', () => {
   );
   expect(profile).toEqual({
     group: 'solo',
+    // Both shapes: the pair is the answer, `explorerStyle` is what older readers still take.
+    pace: 'balanced',
+    discovery: 'mix',
     explorerStyle: 'mixed',
     energy: 'moderate',
     crowds: 'mixed',
@@ -174,4 +178,18 @@ test('a preset seeds the counters it names, and seeds nothing when it names no n
   expect(partyForGroup('family_with_kids')?.children).toBeGreaterThan(0);
   // "Friends / group" is the one option naming no headcount, which is why it asks in words.
   expect(partyForGroup('other')).toBeNull();
+});
+
+/* The draft holds what the traveler answered; `explorerStyle` is derived on the way out, so
+ * the two can never disagree. It is still written, because every stored row and the frozen
+ * Swift app read it. */
+test('the wizard sends both shapes, with the legacy one derived from the pair', () => {
+  const answers = toUserAnswers(draft({ pace: 'packed', discovery: 'local' }));
+  expect(answers.pace).toBe('packed');
+  expect(answers.discovery).toBe('local');
+  expect(answers.explorerStyle).toBe('offbeat');
+
+  const profile = toTravelerProfile(draft({ pace: 'relaxed', discovery: 'mix' }));
+  expect(profile.pace).toBe('relaxed');
+  expect(profile.explorerStyle).toBe('relaxed');
 });
