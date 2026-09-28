@@ -238,6 +238,16 @@ const dayName = (days: { date: string }[], index: number) => {
   return chip ? `Day ${index + 1} · ${chip.weekday} ${chip.dayOfMonth}` : `Day ${index + 1}`;
 };
 
+/**
+ * **The chosen half has to be obvious, and a darker slate on a slate is not.** This borrowed the
+ * List/Map toggle's look, where the active half is `surfaceDeep` on a `control` track — two
+ * alphas of the same colour, which reads as one flat bar with a faint seam and leaves somebody
+ * about to change their trip unsure what they are about to change.
+ *
+ * So it takes the wizard's answer instead: `accentWash` and a jade tick are what every
+ * single-select in this app already means by "this one". Jade at 9% rather than filled keeps
+ * the One Meaning Rule intact — the strong colour still belongs to Send.
+ */
 function ScopeHalf({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   return (
     <Pressable
@@ -245,7 +255,12 @@ function ScopeHalf({ label, on, onPress }: { label: string; on: boolean; onPress
       accessibilityRole="button"
       accessibilityState={{ selected: on }}
       style={[styles.toggleHalf, on && styles.toggleHalfActive]}>
-      <ThemedText type="label" themeColor={on ? 'foreground' : 'muted'}>
+      {on ? (
+        <ThemedText type="label" themeColor="accent">
+          ✓
+        </ThemedText>
+      ) : null}
+      <ThemedText type="label" themeColor={on ? 'foreground' : 'muted'} numberOfLines={1}>
         {label}
       </ThemedText>
     </Pressable>
@@ -321,12 +336,15 @@ const styles = StyleSheet.create({
   },
   toggleHalf: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.hair,
     paddingVertical: 7,
     paddingHorizontal: Spacing.tight,
     borderRadius: Radius.pill,
   },
-  toggleHalfActive: { backgroundColor: Colors.surfaceDeep },
+  toggleHalfActive: { backgroundColor: Colors.accentWash },
 
   transcript: { padding: Spacing.read, gap: Spacing.rows },
   invitation: { paddingVertical: Spacing.compact },
