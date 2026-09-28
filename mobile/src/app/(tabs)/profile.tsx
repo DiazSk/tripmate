@@ -385,7 +385,7 @@ function Sheets({
 
       {/* Each picker writes its own half AND the legacy field the pair derives to, so a
           profile saved here stays readable by anything that only knows `explorerStyle`. */}
-      <FieldSheet visible={editing === 'pace'} title="How full a day" onClose={onClose}>
+      <FieldSheet visible={editing === 'pace'} title="How full each day" onClose={onClose}>
         <ChoiceRow
           options={PACES}
           value={travelStyleOf(profile).pace}
@@ -460,8 +460,11 @@ function Sheets({
 /**
  * What the trips you kept add up to.
  *
- * `spend` is real spend through the same summation the trip screen's budget bar uses, so a cost
- * corrected on a trip shows up here too. Rendered only once the figures arrive — a record of three
+ * `spend` runs through the same summation the trip screen's budget bar uses, so a cost corrected
+ * on a trip shows up here too. **It is labelled "Planned", not "Spent".** `tripSpend` coalesces
+ * `actualCost ?? cost`, and nothing in this product collects transactions — so across a lifetime
+ * of kept trips the figure is overwhelmingly what those trips were planned to cost. Calling it
+ * spend states a fact the app does not have. Rendered only once the figures arrive — a record of three
  * dashes says nothing an absent record does not.
  */
 function Record({ stats }: { stats: ProfileStats }) {
@@ -469,7 +472,7 @@ function Record({ stats }: { stats: ProfileStats }) {
     <View style={styles.record}>
       <Figure label="Trips" value={String(stats.trips)} />
       <Figure label="Places" value={String(stats.places)} />
-      <Figure label="Spent" value={formatMoney(stats.spend)} money />
+      <Figure label="Planned" value={formatMoney(stats.spend)} money />
     </View>
   );
 }

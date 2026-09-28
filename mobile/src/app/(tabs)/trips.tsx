@@ -125,8 +125,15 @@ function TripTile({ trip, onPress }: { trip: TripSummary; onPress: () => void })
   );
 }
 
+/**
+ * Gold says money and only money — which is exactly why the figure needs a noun.
+ *
+ * `trip.budget` is the ceiling the traveler set, not what the plan came to and not what they
+ * paid; a bare gold `$1,800` beside a photograph reads as any of the three. The word costs four
+ * characters and removes the guess.
+ */
 const formatBudget = (budget: number) =>
-  budget > 0 ? `$${Math.round(budget).toLocaleString('en-US')}` : '—';
+  budget > 0 ? `Budget · $${Math.round(budget).toLocaleString('en-US')}` : '—';
 
 const styles = StyleSheet.create({
   // 44pt is the platform's minimum touch target; a line of text is otherwise ~18pt tall.
