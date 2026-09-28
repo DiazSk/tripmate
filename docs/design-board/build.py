@@ -64,12 +64,15 @@ SECTIONS = [
     ("04b-destination-search.png","Finding the place","Live geocoding as you type, disambiguated by region — there is more than one Kyoto. A miss never blocks generating."),
     ("05-plan-group.png","Who is going","Party down to infants, because it changes the pace rather than just a headcount. Anything already booked is captured here too."),
     ("06-plan-preferences.png","What you're after","Interests tap once to pick, again to star. Dietary and access needs are hard constraints, not preferences — a stated step-free requirement outranks pace and interest."),
+    ("07-plan-review.png","The brief, before a word is written","Every answer back in one list, each with its own way in. The last two rows print even when they are empty: diet and access are the hard constraints, and a row that vanishes when unset is a row nobody can notice is missing. Generation is the expensive step — this is the cheap place to catch a misunderstanding."),
   ]),
   ("The trip", "One plan, two faces, and the checks that run over it.", [
     ("09-trip-day.png","A day","A day is a page, paged horizontally. Stops are rows against rules, never cards. Gold is money and only money."),
     ("11-trip-map.png","The same day, mapped","Numbered discs carry the day's own hue — the one sanctioned crossing between the interface palette and the map's, because the disc in the list and the disc on the map are the same mark."),
     ("12-trip-conflict.png","A conflict, where it happens","The leg does not fit, so the arriving stop takes a coral wash and says so in its own words. Coral is spent only on what cannot happen; a long day or a detour stays quiet."),
     ("13-trip-stop-detail.png","A stop, opened","Why it was chosen, one practical line, and the three things you can do — including marking it booked, which forbids the planner from ever moving it."),
+    ("10-plan-health.png","Plan health, opened","The figure decomposes. Seven dimensions, each with the findings that cost it its points, in the traveller’s own words. It is arithmetic rather than a judgement — a flat penalty per finding, averaged over what could be measured — and a dimension nothing could check says <b>Not checked</b> rather than claiming a pass nobody ran."),
+    ("10b-spend-breakdown.png","Where the day’s money went","Largest first, zero-value categories dropped rather than printed at zero. The shares are apportioned by largest remainder so the column sums to exactly 100 — three 33s that add to 99 would undo the one thing this surface is arguing."),
   ]),
   ("Changing it", "Two ways in, both conversational.", [
     ("14-trip-chat.png","Ask for a change","Plain language against the whole plan. It inherits the planner's own reasoning from generation rather than re-reading its output."),
@@ -186,9 +189,13 @@ The design system is <b>Kiln</b>, shipped 2026-09-08 and documented in DESIGN.md
 gold counts money and only money, coral is kept for something that cannot happen. Everything else
 is warm paper on a single near-black slate. If a screen here seems to break that, it is worth
 saying — that is exactly what this board is for.</p>
-<p><b>One thing already known.</b> Two screens are absent: the generation screen, because
-capturing it would have meant spending a real model run, and the wizard’s Review step,
-which only renders populated when the wizard is walked in sequence.</p>
+<p><b>One thing already known.</b> One screen is still absent — the generation screen, because
+capturing it means spending a real model run.</p>
+<p><b>Three screens here were added after the first round of feedback,</b> which read this board
+as the whole product and reasonably concluded that what it did not show did not exist. Plan
+health opened, the day’s spend breakdown and the wizard’s brief were all built and all
+unphotographed. Worth keeping in mind for anything below that looks missing: ask before
+assuming.</p>
 </footer></div></body></html>"""
 
 if __name__ == "__main__":
