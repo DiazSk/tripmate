@@ -109,6 +109,71 @@ test("the same place on two days is a finding; the lodging is not", () => {
   assert.equal(found[0].dayIndex, 1, "reported against the later day, which is the one to change");
 });
 
+test("a repeat under the same name says which day the other one is on", () => {
+  // The real shape from the Lisbon fixture: two distinct stops, identical names, different days.
+  // The finding is correct; the sentence used to be "Dinner in Bairro Alto is already in the trip
+  // as Dinner in Bairro Alto", which names the stop the reader is already looking at and locates
+  // nothing.
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      { date: "2026-09-19", weather: "Clear", stops: [] },
+      { date: "2026-09-20", weather: "Clear", stops: [{ name: "Dinner in Bairro Alto", lat: 38.7138, lng: -9.1458, cost: 30, note: "", time: "19:00", durationLabel: "1 hour", category: "food" }] },
+      { date: "2026-09-21", weather: "Clear", stops: [] },
+      { date: "2026-09-22", weather: "Clear", stops: [{ name: "Dinner in Bairro Alto", lat: 38.7145, lng: -9.1470, cost: 30, note: "", time: "19:00", durationLabel: "1 hour", category: "food" }] },
+    ],
+  };
+  const found = evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate");
+  assert.equal(found.length, 1);
+  assert.equal(found[0].dayIndex, 3, "reported against the later day, which is the one to change");
+  assert.equal(
+    found[0].message,
+    "Dinner in Bairro Alto is already in the trip, on day 2 — the same place twice.",
+    "names the other day, and does not print the same name twice"
+  );
+});
+
+test("a repeat under a different name says both the name and the day", () => {
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      { date: "2026-09-19", weather: "Clear", stops: [{ name: "Alfama neighborhood walk", lat: 38.7115, lng: -9.1301, cost: 0, note: "", time: "17:30", durationLabel: "1 hour", category: "other" }] },
+      { date: "2026-09-20", weather: "Clear", stops: [] },
+      { date: "2026-09-21", weather: "Clear", stops: [{ name: "Miradouro de Santa Luzia", lat: 38.7119, lng: -9.1310, cost: 0, note: "", time: "09:30", durationLabel: "1 hour", category: "other" }] },
+    ],
+  };
+  const found = evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate");
+  assert.equal(found.length, 1);
+  assert.equal(
+    found[0].message,
+    "Miradouro de Santa Luzia is already in the trip as Alfama neighborhood walk, on day 1 — the same place twice.",
+    "the proximity branch located the other stop too"
+  );
+});
+
+test("a repeat within one day does not name a day the finding already renders under", () => {
+  const itinerary = {
+    tier: "mid-range",
+    days: [
+      {
+        date: "2026-09-19",
+        weather: "Clear",
+        stops: [
+          { name: "Pike Place Market", lat: 47.6097, lng: -122.3422, cost: 0, note: "", time: "10:00", durationLabel: "1 hour", category: "other" },
+          { name: "Pike Place Market", lat: 47.6097, lng: -122.3422, cost: 0, note: "", time: "15:00", durationLabel: "1 hour", category: "other" },
+        ],
+      },
+    ],
+  };
+  const found = evaluateItinerary(itinerary).filter((g) => g.rule === "duplicate");
+  assert.equal(found.length, 1);
+  assert.equal(
+    found[0].message,
+    "Pike Place Market is already in the trip — the same place twice.",
+    "no ' as' clause and no day, because both would repeat what the reader has"
+  );
+});
+
 test("two different places close together are not duplicates", () => {
   const itinerary = {
     tier: "mid-range",

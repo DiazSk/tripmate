@@ -418,7 +418,14 @@ function located(lat: number, lng: number): boolean {
  */
 function checkDuplicates(itinerary: CheckableItinerary): Guardrail[] {
   const found: Guardrail[] = [];
-  const seen: { key: string; lat: number; lng: number; name: string; category: StopCategory }[] = [];
+  const seen: {
+    key: string;
+    lat: number;
+    lng: number;
+    name: string;
+    category: StopCategory;
+    dayIndex: number;
+  }[] = [];
 
   itinerary.days.forEach((day, dayIndex) => {
     for (const stop of day.stops ?? []) {
@@ -437,13 +444,32 @@ function checkDuplicates(itinerary: CheckableItinerary): Guardrail[] {
             Math.abs(s.lng - stop.lng) < DUPLICATE_DEGREES)
       );
       if (prior) {
+        // **Name the other one, and say where it is.** A finding reported against the later day
+        // is only actionable if the reader can find the earlier stop, and neither half of the old
+        // sentence located it: the proximity branch matches two *different* names and said which,
+        // but not which day, while the name branch matches two *identical* names and printed the
+        // same string on both sides — "Dinner in Bairro Alto is already in the trip as Dinner in
+        // Bairro Alto", a sentence with no information in it.
+        //
+        // Each clause earns its place by saying something the reader does not already have. The
+        // prior name is dropped when it is the same string, and the prior day when it is the day
+        // the finding already renders under.
+        const otherName = prior.name === stop.name ? "" : ` as ${prior.name}`;
+        const otherDay = prior.dayIndex === dayIndex ? "" : `, on day ${prior.dayIndex + 1}`;
         found.push({
           rule: "duplicate",
           dayIndex,
-          message: `${stop.name} is already in the trip as ${prior.name} — the same place twice.`,
+          message: `${stop.name} is already in the trip${otherName}${otherDay} — the same place twice.`,
         });
       } else {
-        seen.push({ key, lat: stop.lat, lng: stop.lng, name: stop.name, category: stop.category });
+        seen.push({
+          key,
+          lat: stop.lat,
+          lng: stop.lng,
+          name: stop.name,
+          category: stop.category,
+          dayIndex,
+        });
       }
     }
   });
