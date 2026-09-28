@@ -459,7 +459,10 @@ function useChat(
 
   async function send(text: string, dayIndex?: number): Promise<boolean> {
     if (!trip) return false;
-    setTurns((prior) => [...prior, { role: 'user', content: text }]);
+    // Stamped with the scope it goes out under, matching what `/api/trip-edit` writes to the
+    // transcript — so a live turn and a restored one carry the same label and the sheet never
+    // shows the stamp appearing on reload.
+    setTurns((prior) => [...prior, { role: 'user', content: text, scope: dayIndex ?? null }]);
     setReplying(true);
     setFailure(null);
     // Undoing the *previous* approval once a newer ask is in flight would restore a plan two
@@ -478,7 +481,10 @@ function useChat(
         itinerary: trip.itinerary,
         // The whole conversation, because a turn only makes sense after the one before it — and
         // the route falls back to rebuilding the full prompt from these when the session is gone.
-        messages: [...turns, { role: 'user' as const, content: text }],
+        messages: [
+          ...turns.map(({ role, content }) => ({ role, content })),
+          { role: 'user' as const, content: text },
+        ],
         tripId: trip.id,
         userAnswers: trip.userAnswers,
         sessionId: session.current.id,
