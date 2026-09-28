@@ -1,9 +1,11 @@
 import { travelLegBetween } from '@shared/travelTime';
-import { StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { Stop } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
+import { leaveBy } from '@/lib/dayTravel';
 
 /**
  * The hop between one stop and the next, in the gutter the discs run down.
@@ -23,6 +25,14 @@ import { Colors, Spacing } from '@/constants/theme';
  * No distance. Minutes are what somebody acts on, and printing kilometres next to them would
  * invite a units question the plan has no way to answer — a destination is free text, and nothing
  * here knows whether the traveler thinks in miles.
+ *
+ * **It opens to one more line: when to leave.** That is the other end of the sum this row
+ * already does one half of, and it was nowhere in the app — a traveler reading "about 24 min"
+ * still has to subtract it from the next stop's time themselves, standing in the place they are
+ * about to leave. Closed by default because most legs never need it and a day of six expanded
+ * rows is a day nobody can scan; the arrival is deliberately NOT restated, since a second
+ * opinion about when you get there would either repeat the plan or duplicate the conflict the
+ * guardrails already draw in coral.
  */
 export function TravelSegment({ from, to }: { from: Stop; to: Stop }) {
   // An unplaced stop sits at 0,0. A leg measured to one is a leg measured to the Gulf of Guinea,
@@ -33,16 +43,60 @@ export function TravelSegment({ from, to }: { from: Stop; to: Stop }) {
     { lat: from.lat, lon: from.lng },
     { lat: to.lat, lon: to.lng }
   );
+  // `leaveBy` works on a day's stop list; this row holds exactly the pair it needs.
+  const go = leaveBy([from, to], 1);
 
-  return (
-    <View style={styles.segment} accessibilityRole="text">
+  return <Segment mode={MODE[leg.mode]} minutes={leg.minutes} go={go} to={to.name} />;
+}
+
+function Segment({
+  mode,
+  minutes,
+  go,
+  to,
+}: {
+  mode: string;
+  minutes: number;
+  /** When to set off, or null when the sum cannot be done honestly. */
+  go: string | null;
+  to: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const line = (
+    <View style={styles.segment}>
       <View style={styles.gutter}>
         <View style={styles.rule} />
       </View>
-      <ThemedText type="micro" themeColor="muted">
-        {MODE[leg.mode]} · about {leg.minutes} min
-      </ThemedText>
+      <View>
+        <ThemedText type="micro" themeColor="muted">
+          {mode} · about {minutes} min
+        </ThemedText>
+        {open ? (
+          <ThemedText type="micro" themeColor="foreground" style={styles.leave}>
+            Leave by {go} to reach {to} on time
+          </ThemedText>
+        ) : null}
+      </View>
     </View>
+  );
+
+  // A leg with nothing more to say stays exactly what it was — text, not a control that
+  // rewards a press with nothing.
+  if (!go) {
+    return (
+      <View accessibilityRole="text">{line}</View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={() => setOpen((was) => !was)}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel={`${mode}, about ${minutes} minutes. Leave by ${go}.`}>
+      {line}
+    </Pressable>
   );
 }
 
@@ -69,5 +123,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   gutter: { width: DISC, alignItems: 'center' },
+  leave: { marginTop: 1 },
   rule: { width: StyleSheet.hairlineWidth, height: 18, backgroundColor: Colors.cardBorder },
 });
