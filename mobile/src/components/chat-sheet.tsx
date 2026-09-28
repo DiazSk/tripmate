@@ -16,6 +16,7 @@ import type { ChatTurn } from '@/api/types';
 import { ChangePreview } from '@/components/change-preview';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import { formatDayChip } from '@/lib/dayDisplay';
 import type { ItineraryDiff } from '@/lib/itineraryDiff';
 
 /**
@@ -39,6 +40,8 @@ export function ChatSheet({
   failure,
   onSend,
   initialDraft,
+  days,
+  initialScope,
   pending,
   applying,
   onApply,
@@ -51,13 +54,18 @@ export function ChatSheet({
   /** The last turn that did not happen, or null. Shown at the foot, where the reply would be. */
   failure: string | null;
   /** Resolves false when the turn failed, which is what keeps the draft. */
-  onSend: (text: string) => Promise<boolean>;
+  onSend: (text: string, dayIndex?: number) => Promise<boolean>;
   /** Seeds the composer on open — e.g. "Fit it anyway" from the anchor receipt. Never auto-sent:
    *  the traveler still has to press Send. **The caller must remount this component (a `key` that
    *  changes per open) for a new seed to take** — a plain `useState(initialDraft ?? '')` default
    *  only runs once, so without a remount a second "Fit it anyway" for a different place would
    *  leave the first place's text sitting in the composer. */
   initialDraft?: string;
+  /** The trip's dates, for naming a day in the scope control. */
+  days: { date: string }[];
+  /** The scope to open on: a day index, or null for the whole trip. Seeded openings that name a
+   *  day — a leg that does not fit, a stop somebody pressed "Fix this" on — arrive with theirs. */
+  initialScope?: number | null;
   /** What the last reply would do to the plan, or null when there is nothing to approve.
    *  The plan itself does not move until `onApply` — see `useChat.send`. */
   pending: ItineraryDiff | null;
@@ -66,6 +74,20 @@ export function ChatSheet({
   onDiscard: () => void;
 }) {
   const [draft, setDraft] = useState(initialDraft ?? '');
+  /**
+   * What this turn is allowed to change: one day, or the whole trip.
+   *
+   * **Whole trip is the default, and that is a decision rather than an omission.** The Swift app
+   * scope-locked every conversation to whatever day was on screen, so "move the market to day 3"
+   * came back refused with nothing having said it would be; this app then sent no scope at all
+   * for the same reason. What was missing was never the lock — it was saying which one you were
+   * getting. So the scope is stated before you ask, it starts wide, and narrowing it is a thing
+   * you do rather than a side effect of where you were standing.
+   *
+   * Per turn, not per conversation: the prompt carries the scope on every message, so widening
+   * it after a narrow answer costs nothing and needs no new session.
+   */
+  const [scope, setScope] = useState<number | null>(initialScope ?? null);
   const transcript = useRef<ScrollView>(null);
 
   /**
@@ -92,7 +114,7 @@ export function ChatSheet({
   async function send() {
     const body = draft.trim();
     if (!body || replying) return;
-    if (await onSend(body)) setDraft('');
+    if (await onSend(body, scope ?? undefined)) setDraft('');
   }
 
   return (
@@ -119,6 +141,20 @@ export function ChatSheet({
               Done
             </ThemedText>
           </Pressable>
+        </View>
+
+        <View style={styles.scopeRow}>
+          <ThemedText type="label" themeColor="muted">
+            Change
+          </ThemedText>
+          <View style={styles.toggle}>
+            <ScopeHalf
+              label={dayName(days, dayOf(initialScope, scope))}
+              on={scope !== null}
+              onPress={() => setScope(dayOf(initialScope, scope))}
+            />
+            <ScopeHalf label="Whole trip" on={scope === null} onPress={() => setScope(null)} />
+          </View>
         </View>
 
         <ScrollView
@@ -189,14 +225,41 @@ export function ChatSheet({
   );
 }
 
+/**
+ * Which day the narrow half means.
+ *
+ * The current scope while there is one, else the day the sheet was opened about, else the first
+ * — so the half always names a real day and pressing it never has to ask which.
+ */
+const dayOf = (initial: number | null | undefined, scope: number | null) => scope ?? initial ?? 0;
+
+const dayName = (days: { date: string }[], index: number) => {
+  const chip = formatDayChip(days[index]?.date ?? '');
+  return chip ? `Day ${index + 1} · ${chip.weekday} ${chip.dayOfMonth}` : `Day ${index + 1}`;
+};
+
+function ScopeHalf({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: on }}
+      style={[styles.toggleHalf, on && styles.toggleHalfActive]}>
+      <ThemedText type="label" themeColor={on ? 'foreground' : 'muted'}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 /** Says what this can do, since an empty chat box asks a question it does not answer. */
 function Invitation() {
   return (
     <View style={styles.invitation}>
       <ThemedText type="detail" themeColor="muted">
         Ask for as many changes as you like in one go — swap a stop, move one to another day, make
-        a day quieter, add a day. The whole plan is in scope, and nothing changes until you have
-        seen what would change and said yes.
+        a day quieter, add a day. Nothing changes until you have seen what would change and said
+        yes, and whatever is not in scope above cannot be touched at all.
       </ThemedText>
     </View>
   );
@@ -240,6 +303,30 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.tight,
   },
   grow: { flex: 1 },
+  scopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.rows,
+    paddingHorizontal: Spacing.read,
+    paddingBottom: Spacing.tight,
+  },
+  // The two-up pill the trip screen's List/Map toggle uses, so the two read as one control type.
+  toggle: {
+    flexDirection: 'row',
+    flex: 1,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.control,
+    padding: 3,
+    gap: 2,
+  },
+  toggleHalf: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: Spacing.tight,
+    borderRadius: Radius.pill,
+  },
+  toggleHalfActive: { backgroundColor: Colors.surfaceDeep },
 
   transcript: { padding: Spacing.read, gap: Spacing.rows },
   invitation: { paddingVertical: Spacing.compact },

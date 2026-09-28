@@ -249,3 +249,62 @@ test("an ordinary stop is moved and dropped exactly as before", () => {
   assert.deepEqual(rejected, []);
   assert.equal(itinerary.days[0].stops[0].time, "11:00 AM");
 });
+
+/* A scope the model is only ASKED to respect is not a scope. The chat prompt has always stated
+ * one and marked other days read-only; nothing contradicted a model that ignored it. */
+test("a day-scoped edit refuses ops that land on another day", () => {
+  const { itinerary, rejected } = applyPatch(
+    trip(),
+    [
+      { op: "remove_stop", dayIndex: 0, stopIndex: 1 },
+      { op: "remove_stop", dayIndex: 1, stopIndex: 0 },
+    ],
+    { dayIndex: 0 }
+  );
+  assert.deepEqual(
+    itinerary.days[0].stops.map((s) => s.name),
+    ["A", "C", "D"]
+  );
+  // Day 2 is untouched, and the traveller is told why rather than left to notice.
+  assert.deepEqual(
+    itinerary.days[1].stops.map((s) => s.name),
+    ["E"]
+  );
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].op.dayIndex, 1);
+  assert.match(rejected[0].reason, /only day 1 is in scope/);
+});
+
+test("a day-scoped edit allows every op shape within its own day", () => {
+  const { itinerary, rejected } = applyPatch(
+    trip(),
+    [
+      { op: "remove_stop", dayIndex: 0, stopIndex: 0 },
+      { op: "add_stop", dayIndex: 0, stopIndex: 4, stop: stop("New") },
+      { op: "replace_lodging", dayIndex: 0, lodging: { name: "Hotel", cost: 100, note: "" } },
+    ],
+    { dayIndex: 0 }
+  );
+  assert.deepEqual(rejected, []);
+  assert.deepEqual(
+    itinerary.days[0].stops.map((s) => s.name),
+    ["B", "C", "D", "New"]
+  );
+  assert.equal(itinerary.days[0].lodging.name, "Hotel");
+});
+
+/* `add_day`/`remove_day` re-flow every later date, which is the opposite of "only this day
+ * changes" — and they name a dayIndex, so an index check alone would wave them through. */
+test("a day-scoped edit refuses whole-day ops even on its own day", () => {
+  for (const op of ["add_day", "remove_day"]) {
+    const { itinerary, rejected } = applyPatch(trip(), [{ op, dayIndex: 0 }], { dayIndex: 0 });
+    assert.equal(itinerary.days.length, 2, `${op} changed the trip's length`);
+    assert.equal(rejected.length, 1);
+    assert.match(rejected[0].reason, /trip's length/);
+  }
+});
+
+test("no scope still means the whole trip", () => {
+  const { rejected } = applyPatch(trip(), [{ op: "remove_stop", dayIndex: 1, stopIndex: 0 }]);
+  assert.deepEqual(rejected, []);
+});

@@ -104,7 +104,19 @@ function refusesLock(op: PatchOp, target: Stop): string | null {
 export function applyPatch(
   itinerary: Itinerary,
   ops: PatchOp[],
-  scope?: { dayIndex: number; stopIndex: number }
+  /**
+   * What this edit is allowed to touch.
+   *
+   * With `stopIndex`, one element: exactly one `replace_stop` in that slot (Mode B).
+   * Without it, one day: any op naming that day, and no whole-day op, because `add_day` and
+   * `remove_day` change the trip's length and re-flow every later date — the furthest thing
+   * from "only this day changes" the vocabulary can express.
+   *
+   * Absent, the whole trip is fair game. **A scope the model is only asked to respect is not a
+   * scope**: the chat prompt has always stated one and marked other days read-only, and a model
+   * that ignored it was not contradicted anywhere. This is where the promise is kept.
+   */
+  scope?: { dayIndex: number; stopIndex?: number }
 ): PatchResult {
   const next: Itinerary = structuredClone(itinerary);
   const rejected: PatchResult["rejected"] = [];
@@ -130,13 +142,28 @@ export function applyPatch(
     // allowed exactly one shape of change, so it must be able to refuse whole-day ops too — they
     // are the furthest thing from "replace this one stop" the vocabulary can express.
     if (scope) {
-      const sameSlot =
-        op.op === "replace_stop" &&
-        op.dayIndex === scope.dayIndex &&
-        op.stopIndex === scope.stopIndex;
-      if (!sameSlot) {
-        rejected.push({ op, reason: "outside the edited element's scope" });
-        continue;
+      if (scope.stopIndex === undefined) {
+        // Day scope. Phrased for a traveler, because this reason reaches them as "Not applied:
+        // …" under the reply — the same rule `refusesLock` follows.
+        const wholeDay = op.op === "add_day" || op.op === "remove_day";
+        if (wholeDay || op.dayIndex !== scope.dayIndex) {
+          rejected.push({
+            op,
+            reason: wholeDay
+              ? `only day ${scope.dayIndex + 1} is in scope, and this would change the trip's length`
+              : `only day ${scope.dayIndex + 1} is in scope for this change`,
+          });
+          continue;
+        }
+      } else {
+        const sameSlot =
+          op.op === "replace_stop" &&
+          op.dayIndex === scope.dayIndex &&
+          op.stopIndex === scope.stopIndex;
+        if (!sameSlot) {
+          rejected.push({ op, reason: "outside the edited element's scope" });
+          continue;
+        }
       }
     }
 
