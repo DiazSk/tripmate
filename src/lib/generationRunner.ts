@@ -13,7 +13,7 @@ import {
   searchableCategories,
 } from "./dietaryVenues";
 import type { DietaryVenue } from "./dietaryVenues";
-import { type LegMinutesLookup, evaluateItinerary } from "./guardrails";
+import { type LegMinutesLookup, evaluateItinerary, revisionIsNoWorse } from "./guardrails";
 import { routeMinutes, routePairs } from "./osrmRoute";
 import type { PlaceFacts } from "./placeFacts";
 import {
@@ -672,6 +672,38 @@ export async function runGeneration(
       .concat(dietaryFindings);
   };
 
+  /**
+   * Did the review pass actually help?
+   *
+   * The comparison lives in `guardrails.ts` as `revisionIsNoWorse`, next to the checks it counts
+   * and with the reasoning for its yardstick; this is the wiring plus the one thing only the
+   * runner can do — say so in the log. Both counts are printed on every generation, accepted or
+   * not, because that is the only signal that says whether the ~150s review is earning its keep.
+   *
+   * Called after `applyResolvedCoords`, never before: the critique writes its own coordinates,
+   * which are the model's guesses again, and a leg measured against those is measured against a
+   * distance that is not real.
+   */
+  const revisionIsSafe = (days: Itinerary["days"]): boolean => {
+    const v = revisionIsNoWorse(
+      { days: itinerary.days, anchors: itinerary.anchors, unplaced: itinerary.unplaced },
+      { days, anchors: itinerary.anchors, unplaced: itinerary.unplaced },
+      { logistics, mustInclude: answers?.mustInclude, avoid: answers?.avoid }
+    );
+    console.log(
+      `[generation] critique blocking ${v.blockingBefore} -> ${v.blockingAfter}, ` +
+        `advisory ${v.totalBefore - v.blockingBefore} -> ${v.totalAfter - v.blockingAfter}`,
+      { runId }
+    );
+    if (!v.ok) {
+      console.warn(
+        `[generation] critique rejected: blocking findings rose ${v.blockingBefore} -> ${v.blockingAfter}`,
+        { runId }
+      );
+    }
+    return v.ok;
+  };
+
   // Best-effort QA pass: checks budget/timing/context usage and swaps in a corrected day set if
   // it finds issues. Never fails the request — a broken critique call just leaves whichever day
   // set it was handed in place.
@@ -729,7 +761,7 @@ export async function runGeneration(
     const revision = await runCritique();
     if (revision) {
       applyResolvedCoords(revision.days);
-      itinerary.days = revision.days;
+      if (revisionIsSafe(revision.days)) itinerary.days = revision.days;
     }
     finalizeDays(itinerary.days);
     return { itinerary, traceId, runId, sessionId };
@@ -745,9 +777,13 @@ export async function runGeneration(
   const revision = await runCritique();
   if (revision) {
     applyResolvedCoords(revision.days);
-    finalizeDays(revision.days);
-    live.onRevised({ days: revision.days, issues: revision.issues });
-    itinerary.days = revision.days;
+    if (revisionIsSafe(revision.days)) {
+      finalizeDays(revision.days);
+      live.onRevised({ days: revision.days, issues: revision.issues });
+      itinerary.days = revision.days;
+    }
+    // A rejected revision is not announced. Telling the traveller their plan was revised and then
+    // handing back the one they already have is worse than saying nothing.
   }
   return { itinerary, traceId, runId, sessionId };
 }

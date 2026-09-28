@@ -11,7 +11,7 @@ import { normalizeStopName } from "./placeConflicts";
 import { legMinutes } from "./schedule";
 import type {
   DayPlan,
-  Itinerary,
+  CheckableItinerary,
   Stop,
   StopCategory,
   TransportMode,
@@ -55,7 +55,9 @@ export type GuardrailRule =
   | "duplicate"
   | "commitment"
   | "required"
-  | "anchors";
+  | "anchors"
+  | "routing"
+  | "weather";
 
 /** Looked-up door-to-door minutes for one hop, or `null` when no route was found. */
 export type LegMinutesLookup = (from: Stop, to: Stop) => number | null;
@@ -66,12 +68,36 @@ export interface Guardrail {
   message: string;
   /** Day this concerns, 0-based; null for trip-wide findings (budget). */
   dayIndex: number | null;
+  /**
+   * The stop within `dayIndex` this is about, 0-based, where one stop is to blame.
+   *
+   * Absent on findings that are about the day itself — its pace, its ordering, its total — and on
+   * trip-wide ones. It exists so a client can draw the problem **on the row that causes it**
+   * rather than only in a summary panel: a conflict read next to the stop it concerns is a
+   * decision, and the same sentence in a list somewhere else is a chore.
+   *
+   * For a leg finding it is the **arriving** stop, not the one that overran. That is the stop
+   * whose plan is now wrong, and on a booked one it is the reservation about to be missed.
+   */
+  stopIndex?: number;
 }
 
 /** Travel estimates are straight-line distance times a circuity factor, so they carry minutes of
  *  error in either direction. Flagging a 2-minute shortfall on a 2-minute walk is noise that
  *  teaches the traveler to ignore the warnings that matter. */
 const TRAVEL_SLACK_MINUTES = 5;
+
+/**
+ * A day is only worth flagging as badly ordered when the detour is both large in absolute terms
+ * and large relative to the day — BOTH, because either alone produces noise. Ten minutes is
+ * nobody's problem however bad the ratio, and 25% of a long transit day can be a single
+ * unavoidable crossing.
+ */
+const BACKTRACK_MINUTES = 20;
+const BACKTRACK_FRACTION = 0.25;
+
+/** Rain likely enough that an outdoor stop is a real risk rather than a possibility. */
+const RAIN_RISK_PERCENT = 60;
 
 /** §12c: the point past which a day needs a real break in it, not just a note about one. */
 const LONG_DAY_MINUTES = 9 * 60;
@@ -86,7 +112,16 @@ function isBreak(stop: Stop): boolean {
   return stop.category === "food" || parseDuration(stop.durationLabel ?? "") >= BREAK_MINUTES;
 }
 
-/** §12a + §12b(timing): each consecutive hop must fit in the gap the schedule leaves for it. */
+/**
+ * §12a + §12b(timing): each consecutive hop must fit in the gap the schedule leaves for it.
+ *
+ * When the stop being arrived at is one the traveler **booked** (`timeFlexibility: "FIXED"`), the
+ * same arithmetic is reported as a `commitment` instead — §0 rank 1. That is a reclassification,
+ * not a second check, and deliberately so: a missed reservation and a tight walk are the same
+ * subtraction, and adding a separate booked-stop check would report one problem twice and dock two
+ * health dimensions for it. What changes is the rank it is judged at and the words it is given,
+ * since "only 12 min is left for it" does not tell somebody their table is gone.
+ */
 function checkLegs(
   day: DayPlan,
   dayIndex: number,
@@ -108,19 +143,35 @@ function checkLegs(
     // rather than being skipped, so a missing route never silently drops the check.
     const needed = realMinutes?.(from, to) ?? legMinutes(from, to, modes);
 
+    const booked = to.timeFlexibility === "FIXED";
+
     if (gap < 0) {
       found.push({
-        rule: "overlap",
+        rule: booked ? "commitment" : "overlap",
         dayIndex,
-        message: `${from.name} runs until ${fmt(end)} but ${to.name} starts at ${fmt(nextStart)} — they overlap.`,
+        stopIndex: i + 1,
+        message: booked
+          ? `${from.name} runs until ${fmt(end)}, past the ${fmt(nextStart)} booking at ${to.name}.`
+          : `${from.name} runs until ${fmt(end)} but ${to.name} starts at ${fmt(nextStart)} — they overlap.`,
       });
       continue;
     }
     if (needed - gap >= TRAVEL_SLACK_MINUTES) {
       found.push({
-        rule: "travel",
+        rule: booked ? "commitment" : "travel",
         dayIndex,
-        message: `${from.name} to ${to.name} takes about ${needed} min, but only ${gap} min is left for it.`,
+        stopIndex: i + 1,
+        // Names the arrival time rather than the shortfall, which is the figure somebody acts on:
+        // "arrives 6:23" is a decision, "11 min short" is a puzzle.
+        //
+        // "the 7:00 PM booking at Den" rather than "the dinner the traveler booked": these
+        // messages are read in two places — on the traveler's own screen, and by the critique
+        // pass — and the third person that reads naturally to the model ("the traveler only
+        // arrives at…", as `checkCommitments` writes it) reads oddly to the person it is about.
+        // Naming no one at all is correct in both.
+        message: booked
+          ? `Leaving ${from.name} at ${fmt(end)} arrives about ${fmt(end + needed)} — after the ${fmt(nextStart)} booking at ${to.name}.`
+          : `${from.name} to ${to.name} takes about ${needed} min, but only ${gap} min is left for it.`,
       });
     }
   }
@@ -164,6 +215,99 @@ function checkPace(day: DayPlan, dayIndex: number): Guardrail[] {
   ];
 }
 
+/** Minutes spent travelling along a list of stops in the order given. */
+function pathMinutes(stops: Stop[], modes?: TransportMode[]): number {
+  let total = 0;
+  for (let i = 1; i < stops.length; i++) total += legMinutes(stops[i - 1], stops[i], modes);
+  return total;
+}
+
+/**
+ * The same stops, greedily reordered nearest-first from wherever the day actually begins.
+ *
+ * **A yardstick, not a suggestion.** Greedy nearest-neighbour is not the optimal tour and is not
+ * meant to be: it is a cheap floor that a sanely-ordered day sits close to, and a day sitting far
+ * above it is one that doubles back. Offering it as *the* better route would be offering a route
+ * that ignores opening hours, meal times and daylight — which is why `checkRouting` reports the
+ * excess and names nothing.
+ */
+function nearestOrder(stops: Stop[], modes?: TransportMode[]): Stop[] {
+  const remaining = stops.slice(1);
+  const order = [stops[0]];
+  while (remaining.length > 0) {
+    const from = order[order.length - 1];
+    let best = 0;
+    for (let i = 1; i < remaining.length; i++) {
+      if (legMinutes(from, remaining[i], modes) < legMinutes(from, remaining[best], modes)) best = i;
+    }
+    order.push(remaining.splice(best, 1)[0]);
+  }
+  return order;
+}
+
+/**
+ * How much of the day's travel is the order rather than the distance.
+ *
+ * **Silent on a day holding a booked stop, deliberately.** A 7pm reservation fixes where the
+ * evening has to be, so the same places in "nearest order" is not an order the traveler could
+ * actually take — reporting a saving they cannot have is exactly the untrustworthy advice a
+ * decomposed, explainable health figure exists to avoid.
+ *
+ * Under four located stops there is no meaningful detour to find: three stops have one alternative
+ * ordering and the first is pinned.
+ */
+function checkRouting(day: DayPlan, dayIndex: number, modes?: TransportMode[]): Guardrail[] {
+  // Unplaced stops sit at 0,0; a leg measured to one is a leg measured to the Gulf of Guinea.
+  const stops = (day.stops ?? []).filter((stop) => located(stop.lat, stop.lng));
+  if (stops.length < 4) return [];
+  if (stops.some((stop) => stop.timeFlexibility === "FIXED")) return [];
+
+  const actual = pathMinutes(stops, modes);
+  const best = pathMinutes(nearestOrder(stops, modes), modes);
+  const excess = actual - best;
+  if (excess < BACKTRACK_MINUTES || excess < best * BACKTRACK_FRACTION) return [];
+
+  return [
+    {
+      rule: "routing",
+      dayIndex,
+      message: `This day spends about ${Math.round(excess)} min more travelling than the same places in a tighter order would.`,
+    },
+  ];
+}
+
+/**
+ * An outdoor stop on a day the forecast says will rain.
+ *
+ * **Silent where the weather is `historical` rather than forecast, and that needs no branch here.**
+ * `weather.ts` writes `precipitationProbability: null` on the typical-weather fallback, because
+ * last year's figure for the same date is not a claim about this trip. So a day beyond the
+ * forecast horizon simply has nothing to check — the house rule that an absent check beats a
+ * fabricated one, already enforced at the source.
+ *
+ * `outdoor` is likewise only read where the model wrote it. A plan generated before the field
+ * existed reports nothing rather than guessing from `category`, which cannot tell a covered market
+ * from an open one.
+ */
+function checkWeather(day: DayPlan, dayIndex: number): Guardrail[] {
+  const chance = day.weatherDetail?.precipitationProbability;
+  if (chance === null || chance === undefined || chance < RAIN_RISK_PERCENT) return [];
+  // `flatMap` over the indexed list rather than `filter().map()`: the index is the whole point,
+  // and filtering first is exactly how it gets lost.
+  return (day.stops ?? []).flatMap((stop, stopIndex) =>
+    stop.outdoor === true
+      ? [
+          {
+            rule: "weather" as const,
+            dayIndex,
+            stopIndex,
+            message: `${stop.name} is outdoors, and rain is about ${Math.round(chance)}% likely that day.`,
+          },
+        ]
+      : []
+  );
+}
+
 /** Every finding for one day. */
 export function evaluateDay(
   day: DayPlan,
@@ -171,7 +315,12 @@ export function evaluateDay(
   modes?: TransportMode[],
   realMinutes?: LegMinutesLookup
 ): Guardrail[] {
-  return [...checkLegs(day, dayIndex, modes, realMinutes), ...checkPace(day, dayIndex)];
+  return [
+    ...checkLegs(day, dayIndex, modes, realMinutes),
+    ...checkPace(day, dayIndex),
+    ...checkRouting(day, dayIndex, modes),
+    ...checkWeather(day, dayIndex),
+  ];
 }
 
 /**
@@ -181,7 +330,7 @@ export function evaluateDay(
  * whether you are over budget is exactly the drift the contract docblock in itinerary.ts was
  * written about.
  */
-export function evaluateBudget(itinerary: Itinerary, budget: number): Guardrail[] {
+export function evaluateBudget(itinerary: CheckableItinerary, budget: number): Guardrail[] {
   if (!budget || budget <= 0) return [];
   const total = tripSpend(itinerary.days);
   if (total <= budget) return [];
@@ -231,7 +380,7 @@ function located(lat: number, lng: number): boolean {
  *
  * An unlocated stop is skipped by the proximity branch too, for the reason `located` gives.
  */
-function checkDuplicates(itinerary: Itinerary): Guardrail[] {
+function checkDuplicates(itinerary: CheckableItinerary): Guardrail[] {
   const found: Guardrail[] = [];
   const seen: { key: string; lat: number; lng: number; name: string; category: StopCategory }[] = [];
 
@@ -277,7 +426,10 @@ function checkDuplicates(itinerary: Itinerary): Guardrail[] {
  * Every check is skipped when its field is absent — "not stated" is a real state and must not read
  * as a boundary of midnight.
  */
-function checkCommitments(itinerary: Itinerary, logistics: TripLogistics): Guardrail[] {
+function checkCommitments(
+  itinerary: CheckableItinerary,
+  logistics: Partial<TripLogistics>
+): Guardrail[] {
   const found: Guardrail[] = [];
   const lastIndex = itinerary.days.length - 1;
 
@@ -361,7 +513,7 @@ function checkCommitments(itinerary: Itinerary, logistics: TripLogistics): Guard
  * multi-word exclusion as a contiguous run of whole words.
  */
 function checkRequired(
-  itinerary: Itinerary,
+  itinerary: CheckableItinerary,
   mustInclude: string[],
   avoid: string[]
 ): Guardrail[] {
@@ -419,7 +571,7 @@ export interface AnchorCoverage {
  * Which of the traveler's `must` places made it into the plan. Checked here, in code, because the
  * receipt is a promise to the traveler — it must never take the model's word for it.
  */
-export function anchorCoverage(itinerary: Itinerary): AnchorCoverage | null {
+export function anchorCoverage(itinerary: CheckableItinerary): AnchorCoverage | null {
   const musts = (itinerary.anchors ?? []).filter((a) => a.priority === "must");
   if (musts.length === 0) return null;
   const explained = new Map((itinerary.unplaced ?? []).map((u) => [anchorKey(u.name), u]));
@@ -442,12 +594,80 @@ export function anchorCoverage(itinerary: Itinerary): AnchorCoverage | null {
   return cov;
 }
 
-export function evaluateAnchors(itinerary: Itinerary): Guardrail[] {
+export function evaluateAnchors(itinerary: CheckableItinerary): Guardrail[] {
   return (anchorCoverage(itinerary)?.missing ?? []).map((name) => ({
     rule: "anchors" as const,
     message: `${name} isn't in the plan, and the planner didn't say why.`,
     dayIndex: null,
   }));
+}
+
+/**
+ * Whether a finding means the day **cannot happen as written**, as opposed to being worth reading.
+ *
+ * A leg that does not fit, two stops booked over each other, a reservation that will be missed:
+ * those are consequences. A long day, a detour, rain over a garden, a must-see left out — all
+ * worth saying, none of them impossible. The split is what lets coral mean one thing in the UI
+ * (DESIGN.md's One Meaning Rule) and what lets `revisionIsNoWorse` tell a repair from a trade-off.
+ */
+export const isBlocking = (finding: Guardrail): boolean =>
+  finding.rule === "travel" || finding.rule === "overlap" || finding.rule === "commitment";
+
+/**
+ * Is a rewritten day set safe to accept in place of the one it would replace?
+ *
+ * **The review pass used to be believed.** It was handed the deterministic findings, returned a
+ * day set that replaced every day wholesale, and was trusted — so a model rewriting seven days to
+ * fix one leg could break three others and ship, with nothing logged and nobody told. Every saved
+ * trip in this app came out of its own review still carrying 3 to 16 findings.
+ *
+ * **Judged on blocking findings only, and that is a correction to this gate's first version.**
+ * Counting *all* findings looked obviously right and was wrong, caught on the first real
+ * generation it ran against: the review removed an impossible leg and shortened all three days
+ * from ~13 hours to 11.5, then added the dinner day 4 was missing — which put day 4 over the pace
+ * threshold as well. Total findings: 4 before, 4 after. A count cannot see that a day got ninety
+ * minutes shorter, so on that yardstick a plainly better plan scored level, and one more day
+ * tipping over would have had it **rejected**. Blocking findings went 1 to 0, which is the fact
+ * that mattered.
+ *
+ * So this refuses a revision that makes the trip impossible, and otherwise lets the review trade
+ * an advisory finding for a real repair — which is its job. The advisory totals come back too,
+ * for the caller to log: they are the measurement of whether the pass is earning its ~150s.
+ *
+ * **Budget is excluded**, the same exclusion `generationRunner` already makes when handing these
+ * to the critique: the budget is stated to that model separately, and cost-pinning runs on one
+ * side of this comparison before the other.
+ *
+ * **No `realMinutes`.** Routed durations only cover the pairs the original plan contained, so a
+ * revision that renames or reorders stops would fall back to estimates for its new legs and be
+ * judged against a rival measured a different way. Straight-line for both is less accurate and
+ * strictly fairer, and fairness is the only property this needs.
+ */
+export function revisionIsNoWorse(
+  before: CheckableItinerary,
+  after: CheckableItinerary,
+  options: Parameters<typeof evaluateItinerary>[1] = {}
+): {
+  ok: boolean;
+  blockingBefore: number;
+  blockingAfter: number;
+  totalBefore: number;
+  totalAfter: number;
+} {
+  const findings = (itinerary: CheckableItinerary) =>
+    evaluateItinerary(itinerary, { ...options, budget: undefined }).filter(
+      (g) => g.rule !== "budget"
+    );
+  const [b, a] = [findings(before), findings(after)];
+  const blockingBefore = b.filter(isBlocking).length;
+  const blockingAfter = a.filter(isBlocking).length;
+  return {
+    ok: blockingAfter <= blockingBefore,
+    blockingBefore,
+    blockingAfter,
+    totalBefore: b.length,
+    totalAfter: a.length,
+  };
 }
 
 /**
@@ -458,14 +678,22 @@ export function evaluateAnchors(itinerary: Itinerary): Guardrail[] {
  * problem would sit.
  */
 export function evaluateItinerary(
-  itinerary: Itinerary,
+  itinerary: CheckableItinerary,
   options: {
     budget?: number;
     modes?: TransportMode[];
     realMinutes?: LegMinutesLookup;
-    /** What the traveler already booked. Absent means not asked — every check inside is skipped
-     *  rather than defaulting to a boundary. */
-    logistics?: TripLogistics | null;
+    /**
+     * What the traveler already booked. Absent means not asked — every check inside is skipped
+     * rather than defaulting to a boundary.
+     *
+     * `Partial` rather than `TripLogistics`, because the two clients spell "not stated"
+     * differently and both are right about their own wire: this server normalizes every field to
+     * `null`, and the React Native wizard omits the key. Every read inside is `?? ""`, which
+     * already treats them identically — so the declaration is widened to match the code rather
+     * than either client made to lie.
+     */
+    logistics?: Partial<TripLogistics> | null;
     /** Places the traveler named outright. Absent means none were named, not none matter. */
     mustInclude?: string[];
     avoid?: string[];

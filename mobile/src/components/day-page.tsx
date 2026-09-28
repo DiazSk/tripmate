@@ -3,12 +3,14 @@ import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { DayPlan, Stop } from '@/api/types';
 import { PlacePhoto } from '@/components/place-photo';
+import { TravelSegment } from '@/components/travel-segment';
 import { SpendBreakdown } from '@/components/spend-breakdown';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
 import { formatDateline } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
+import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
 import { daySpend, formatMoney } from '@/lib/spend';
 
 /**
@@ -27,6 +29,9 @@ export function DayPage({
   emphasis,
   onEmphasise,
   onFindNearby,
+  findings,
+  onToggleLock,
+  onAsk,
 }: {
   day: DayPlan;
   dayIndex: number;
@@ -38,6 +43,20 @@ export function DayPage({
   onEmphasise: (index: number | null) => void;
   /** "What else is near this stop" — the anchored replacement for pressing open map. */
   onFindNearby: (stop: Stop) => void;
+  /**
+   * This day's guardrail findings, in `stops`-array indices.
+   *
+   * Passed in rather than computed here, and that is the point: the trip screen evaluates the
+   * whole plan once and hands each day its slice, so the coral line on a row and the figure in the
+   * health panel above it are literally the same object. Two surfaces computing the same verdict
+   * separately is how they start disagreeing.
+   */
+  findings: Guardrail[];
+  /** Flip a stop between booked and ordinary. Booked is §0 rank 1 — the plan is re-planned around
+   *  it and the server's applier refuses to move it. */
+  onToggleLock: (stopIndex: number) => void;
+  /** Opens the chat composer seeded with text. Never sends it. */
+  onAsk: (message: string) => void;
 }) {
   const stops = day.stops ?? [];
   /**
@@ -68,20 +87,30 @@ export function DayPage({
             </View>
           ) : null}
           {group.stops.map((entry, indexInGroup) => (
-            <StopRow
-              key={`${entry.stop.name}-${entry.index}`}
-              stop={entry.stop}
-              // The day's own numbering, not the group's — the stops stay 1..n down the page and
-              // keep agreeing with the numbered discs on the map.
-              ordinal={entry.index + 1}
-              dayIndex={dayIndex}
-              // First *in its group*, not in the day: `first` suppresses the row's top hairline,
-              // and without this every heading would be followed immediately by a second rule.
-              first={indexInGroup === 0}
-              expanded={emphasis === entry.index}
-              onPress={() => onEmphasise(emphasis === entry.index ? null : entry.index)}
-              onFindNearby={() => onFindNearby(entry.stop)}
-            />
+            <View key={`${entry.stop.name}-${entry.index}`}>
+              {/* Only WITHIN a group, never across a heading. A leg spanning Morning to Afternoon
+                  is the day's long gap, where the minutes say least, and a segment drawn under a
+                  fresh heading reads as belonging to the heading rather than to the two stops. */}
+              {indexInGroup > 0 ? (
+                <TravelSegment from={group.stops[indexInGroup - 1].stop} to={entry.stop} />
+              ) : null}
+              <StopRow
+                stop={entry.stop}
+                // The day's own numbering, not the group's — the stops stay 1..n down the page and
+                // keep agreeing with the numbered discs on the map.
+                ordinal={entry.index + 1}
+                dayIndex={dayIndex}
+                // First *in its group*, not in the day: `first` suppresses the row's top hairline,
+                // and without this every heading would be followed immediately by a second rule.
+                first={indexInGroup === 0}
+                expanded={emphasis === entry.index}
+                findings={findings.filter((f) => f.stopIndex === entry.index)}
+                onPress={() => onEmphasise(emphasis === entry.index ? null : entry.index)}
+                onFindNearby={() => onFindNearby(entry.stop)}
+                onToggleLock={() => onToggleLock(entry.index)}
+                onAsk={onAsk}
+              />
+            </View>
           ))}
         </View>
       ))}
@@ -194,26 +223,42 @@ function StopRow({
   dayIndex,
   first,
   expanded,
+  findings,
   onPress,
   onFindNearby,
+  onToggleLock,
+  onAsk,
 }: {
   stop: Stop;
   ordinal: number;
   dayIndex: number;
   first: boolean;
   expanded: boolean;
+  /** This stop's own findings — already filtered to `stopIndex`. */
+  findings: Guardrail[];
   onPress: () => void;
   onFindNearby: () => void;
+  onToggleLock: () => void;
+  onAsk: (message: string) => void;
 }) {
+  const booked = stop.timeFlexibility === 'FIXED';
   const particulars = [stop.time, stop.durationLabel, stop.category]
     .map((part) => part?.trim())
     .filter(Boolean)
     .join('  ·  ');
+  const blocked = findings.some(isBlocking);
 
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.stop, !first && styles.stopRuled, expanded && styles.stopExpanded]}
+      // Blocked last, so it wins over the emphasis wash. Expanding a row is something you did;
+      // the day not working is something that is true whether or not you are looking at it.
+      style={[
+        styles.stop,
+        !first && styles.stopRuled,
+        expanded && styles.stopExpanded,
+        blocked && styles.stopBlocked,
+      ]}
       android_ripple={{ color: Colors.pressed }}>
       <StopDisc ordinal={ordinal} color={dayCore(dayIndex)} />
 
@@ -225,11 +270,45 @@ function StopRow({
           <Cost amount={stop.cost} />
         </View>
 
-        {particulars ? (
-          <ThemedText type="label" themeColor="muted" style={styles.particulars}>
-            {particulars}
-          </ThemedText>
-        ) : null}
+        <View style={styles.particularsRow}>
+          {particulars ? (
+            <ThemedText type="label" themeColor="muted">
+              {particulars}
+            </ThemedText>
+          ) : null}
+          {/* A word, not a glyph. `plan/_layout.tsx` records that a bare SF symbol name renders
+              nothing at all on Android, and a padlock drawn two ways is a second thing to keep in
+              step for no gain — "Booked" also scales with Dynamic Type and reads to a screen
+              reader without a label of its own. */}
+          {booked ? (
+            <ThemedText type="label" themeColor="foreground">
+              Booked
+            </ThemedText>
+          ) : null}
+        </View>
+
+        {/* Where it occurs, not only in the panel above. A conflict read beside the stop it
+            concerns is a decision; the same sentence in a list elsewhere is a chore. Shown
+            collapsed as well as expanded — a problem nobody has tapped into is still a problem. */}
+        {findings.map((finding, i) => (
+          <View key={`${finding.message}-${i}`} style={styles.finding}>
+            <ThemedText
+              type="detail"
+              themeColor={isBlocking(finding) ? 'alert' : 'muted'}
+              style={styles.grow}>
+              {finding.message}
+            </ThemedText>
+            <Pressable
+              onPress={() => onAsk(fixMessage(finding))}
+              accessibilityRole="button"
+              accessibilityLabel={`Ask TripMate to fix: ${finding.message}`}
+              hitSlop={8}>
+              <ThemedText type="label" themeColor="accent">
+                Fix this
+              </ThemedText>
+            </Pressable>
+          </View>
+        ))}
 
         {expanded ? (
           <View style={styles.expanded}>
@@ -240,9 +319,9 @@ function StopRow({
               </ThemedText>
             ) : null}
 
-            {/* The two things you can do about a stop, on the stop. "Near here" lives here rather
-                than on the map because a tap on open map points at nothing — a stop is a referent
-                you chose, and it carries the day and the arrival time with it. */}
+            {/* What you can do about a stop, on the stop. "Near here" lives here rather than on
+                the map because a tap on open map points at nothing — a stop is a referent you
+                chose, and it carries the day and the arrival time with it. */}
             <View style={styles.actions}>
               <Pressable
                 onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})}
@@ -255,6 +334,15 @@ function StopRow({
               <Pressable onPress={onFindNearby} accessibilityRole="button" hitSlop={8}>
                 <ThemedText type="label" themeColor="accent">
                   Find nearby
+                </ThemedText>
+              </Pressable>
+              {/* The traveler's own §0 rank 1. Marking a stop booked is what stops the planner
+                  moving it on the next edit, and unlocking is deliberately only available here:
+                  a patch op that could clear the flag could clear it and move the stop in the
+                  same turn, which is the lock not existing. */}
+              <Pressable onPress={onToggleLock} accessibilityRole="button" hitSlop={8}>
+                <ThemedText type="label" themeColor="accent">
+                  {booked ? 'Unlock' : 'Mark booked'}
                 </ThemedText>
               </Pressable>
             </View>
@@ -377,9 +465,22 @@ const styles = StyleSheet.create({
   },
   stopRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
   stopExpanded: { backgroundColor: Colors.accentWash },
+  stopBlocked: { backgroundColor: Colors.alertSoft },
+  particularsRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: Spacing.tight,
+    marginTop: 3,
+  },
+  finding: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: Spacing.tight,
+    marginTop: Spacing.hair,
+  },
   stopHead: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
   grow: { flex: 1 },
-  particulars: { marginTop: 3 },
   expanded: { marginTop: Spacing.tight, gap: Spacing.hair },
   actions: { flexDirection: 'row', gap: Spacing.read, marginTop: Spacing.tight },
 

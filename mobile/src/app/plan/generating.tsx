@@ -2,8 +2,8 @@ import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { createTripDraft, generateTrip, saveProfile } from '@/api/tripMateApi';
-import type { GenerationStage, SketchEvent, StreamedStop } from '@/api/types';
+import { createTripDraft, generateTrip, getTrip, saveProfile, updateTripItinerary } from '@/api/tripMateApi';
+import type { GenerationStage, Itinerary, SketchEvent, StreamedStop } from '@/api/types';
 import { PrimaryButton } from '@/components/form';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
@@ -32,6 +32,14 @@ export default function Generating() {
   // A generation is 60-246 seconds of billed work. Under React 19's development double-invoke
   // this effect runs twice, which would start two of them; the ref makes it start exactly once.
   const started = useRef(false);
+  /**
+   * The row this screen wrote, so the reviewed plan arriving ~150s later knows what to correct.
+   *
+   * A ref rather than state, and read from a callback that fires *after* this screen has
+   * unmounted: by then the traveller is on the trip screen, and the only thing left to do is fix
+   * what is stored.
+   */
+  const written = useRef<{ id: string; itinerary: Itinerary } | null>(null);
 
   useEffect(() => {
     if (started.current) return;
@@ -87,8 +95,34 @@ export default function Generating() {
             setFailure('The plan was written, but saving it failed. Try generating again.');
             return;
           }
+          written.current = { id, itinerary: result.itinerary };
           // Replace, not push: the wait is not somewhere to come back to.
           router.replace(`/trip/${id}`);
+        },
+        /**
+         * The reviewed plan, landing after this screen is gone.
+         *
+         * **Deliberately not guarded by `cancelled`.** Every other callback here is, because they
+         * write component state; this one runs precisely *because* the screen was left, and
+         * dropping it would put us back to keeping the un-reviewed draft forever.
+         *
+         * **The traveller's own edits win.** They have had ~150s on the trip screen and may have
+         * added a stop, marked something booked, or asked for a change. So this re-reads what is
+         * actually stored and writes only if it still matches the draft we left — anything else
+         * and the review is dropped rather than allowed to overwrite a person's decision with a
+         * model's. Skipping is safe: it leaves exactly the plan they are already looking at.
+         *
+         * **It corrects storage, not the screen.** There is no attempt to swap the plan out from
+         * under someone mid-read, which would move stops under their eyes with no explanation;
+         * the corrected version is simply what they get from the next time they open the trip.
+         */
+        onFinal: async (result) => {
+          const row = written.current;
+          if (!row) return;
+          if (sameItinerary(row.itinerary, result.itinerary)) return;
+          const current = await getTrip(row.id);
+          if (!current || !sameItinerary(current.itinerary, row.itinerary)) return;
+          await updateTripItinerary(row.id, result.itinerary);
         },
       }
     ).then((error) => {
@@ -172,6 +206,39 @@ export default function Generating() {
       </ScrollView>
     </View>
   );
+}
+
+/**
+ * Has anything a traveller could have changed, changed?
+ *
+ * Compares the fields an edit actually touches rather than the whole object, because the two sides
+ * have taken different routes: one was held in memory, the other went to the server and back. A
+ * field-by-field deep compare would report normalisation as an edit.
+ *
+ * **Errs towards "changed", on purpose.** A false positive drops the review and leaves the plan
+ * exactly as the traveller sees it — the old behaviour, which was survivable for months. A false
+ * negative overwrites something they did. The two mistakes are not the same size.
+ */
+function sameItinerary(a: Itinerary, b: Itinerary): boolean {
+  const days = a.days ?? [];
+  const other = b.days ?? [];
+  if (days.length !== other.length) return false;
+  return days.every((day, i) => {
+    const stops = day.stops ?? [];
+    const otherStops = other[i].stops ?? [];
+    if (stops.length !== otherStops.length) return false;
+    return stops.every((stop, j) => {
+      const s = otherStops[j];
+      return (
+        stop.name === s.name &&
+        stop.time === s.time &&
+        stop.cost === s.cost &&
+        stop.note === s.note &&
+        stop.actualCost === s.actualCost &&
+        stop.timeFlexibility === s.timeFlexibility
+      );
+    });
+  });
 }
 
 function groupByDay(stops: StreamedStop[]) {

@@ -180,3 +180,72 @@ test("the itinerary handed in is never mutated", () => {
   ]);
   assert.deepEqual(names(original, 0), ["A", "B", "C", "D"]);
 });
+
+/* §0 rank 1: a stop the traveler booked is one the plan is built around.
+ *
+ * These matter for the same reason as everything above — the model is *also* told not to move a
+ * FIXED stop, so every case here is one where the only thing standing between a confident reply
+ * and a lost reservation is the applier refusing. The protection is deliberately narrow: the
+ * *when* and the *what*, not the whole object. */
+const booked = (name) => ({ ...stop(name), time: "7:00 PM", timeFlexibility: "FIXED" });
+
+const withBooking = () => ({
+  tier: "midrange",
+  days: [{ date: "2026-09-19", weather: "", stops: [stop("A"), booked("Dinner at Den")] }],
+});
+
+test("a booked stop cannot be dropped, and says why", () => {
+  const { itinerary, rejected } = applyPatch(withBooking(), [
+    { op: "remove_stop", dayIndex: 0, stopIndex: 1 },
+  ]);
+  assert.equal(rejected.length, 1);
+  assert.match(rejected[0].reason, /booked .* cannot be dropped/);
+  assert.deepEqual(names(itinerary, 0), ["A", "Dinner at Den"], "the stop survives the refusal");
+});
+
+test("a booked stop's time cannot be moved", () => {
+  const { itinerary, rejected } = applyPatch(withBooking(), [
+    { op: "replace_stop", dayIndex: 0, stopIndex: 1, stop: { time: "5:30 PM" } },
+  ]);
+  assert.equal(rejected.length, 1);
+  assert.match(rejected[0].reason, /booked for 7:00 PM/);
+  assert.equal(itinerary.days[0].stops[1].time, "7:00 PM");
+});
+
+test("a booked stop cannot be swapped for somewhere else", () => {
+  const { itinerary, rejected } = applyPatch(withBooking(), [
+    { op: "replace_stop", dayIndex: 0, stopIndex: 1, stop: { name: "Dinner at Narisawa" } },
+  ]);
+  assert.equal(rejected.length, 1);
+  assert.deepEqual(names(itinerary, 0), ["A", "Dinner at Den"]);
+});
+
+// The lock would not be a lock if the thing it constrains could clear it. Unlocking is the
+// traveler's, through the whole-itinerary write, never a patch op.
+test("a patch cannot unlock a booked stop", () => {
+  const { itinerary, rejected } = applyPatch(withBooking(), [
+    { op: "replace_stop", dayIndex: 0, stopIndex: 1, stop: { timeFlexibility: "PREFERRED" } },
+  ]);
+  assert.equal(rejected.length, 1);
+  assert.match(rejected[0].reason, /only the traveler can unlock it/);
+  assert.equal(itinerary.days[0].stops[1].timeFlexibility, "FIXED");
+});
+
+// The narrowness is the point: re-pricing a booked dinner or rewriting its note is ordinary
+// editing, and refusing that would make the lock an annoyance rather than a guarantee.
+test("a booked stop still takes an edit that leaves its time and name alone", () => {
+  const { itinerary, rejected } = applyPatch(withBooking(), [
+    { op: "replace_stop", dayIndex: 0, stopIndex: 1, stop: { cost: 180, note: "Counter seats" } },
+  ]);
+  assert.deepEqual(rejected, []);
+  assert.equal(itinerary.days[0].stops[1].cost, 180);
+  assert.equal(itinerary.days[0].stops[1].note, "Counter seats");
+});
+
+test("an ordinary stop is moved and dropped exactly as before", () => {
+  const { itinerary, rejected } = applyPatch(withBooking(), [
+    { op: "replace_stop", dayIndex: 0, stopIndex: 0, stop: { time: "11:00 AM" } },
+  ]);
+  assert.deepEqual(rejected, []);
+  assert.equal(itinerary.days[0].stops[0].time, "11:00 AM");
+});

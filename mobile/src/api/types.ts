@@ -1,4 +1,15 @@
 export type StopCategory = "food" | "entry" | "transit" | "other";
+
+/**
+ * How much the plan is allowed to move a stop. Mirrors `src/lib/types.ts` — keep the two in step.
+ *
+ * `FIXED` is something the traveler booked: a reservation, a train, a timed ticket. It draws a
+ * lock, it is exempt from the conflict treatment (it is the thing conflicts are measured
+ * *against*), and the server's patch applier refuses to move or drop one.
+ *
+ * Absent reads as `PREFERRED`, so every trip saved before this existed renders exactly as before.
+ */
+export type TimeFlexibility = "FIXED" | "PREFERRED";
 export type TierId = "budget" | "midrange" | "luxury";
 export type TripStatus = "draft" | "saved";
 
@@ -12,6 +23,12 @@ export interface Stop {
   time: string;
   durationLabel: string;
   tags?: string[];
+  /** Whether the plan may move this stop. Absent is `PREFERRED`. The traveler sets this by hand
+   *  from the stop row; the model only ever writes `FIXED` for something they said was booked. */
+  timeFlexibility?: TimeFlexibility;
+  /** Whether weather can spoil this stop. Absent means the model did not say — never inferred
+   *  from `category`, which cannot tell a covered market from an open one. */
+  outdoor?: boolean;
   category: StopCategory;
   actualCost?: number;
 }
@@ -375,14 +392,36 @@ export interface GenerationResult {
 /**
  * Handlers for a streamed generation.
  *
- * `onPlan` is terminal for the caller's purposes: critique still runs after it and takes ~150 s,
- * so the client stops reading there rather than waiting for `done`.
+ * **`onPlan` hands the traveller a plan; `onFinal` hands back the reviewed one.** The review pass
+ * runs for ~150s after the plan is written, and waiting for it before showing anything would put
+ * two and a half minutes of spinner between the traveller and a finished trip. So `onPlan` fires
+ * first and the wizard moves on.
+ *
+ * **This client used to stop reading right there, and that was a real loss rather than a saving.**
+ * The review's corrections arrived on the wire and were dropped on the floor: the plan kept on the
+ * phone was always the un-reviewed first draft, while the web client — which does read on — kept
+ * the corrected one. Measured across the saved trips that produced, every one still carried
+ * between 3 and 16 deterministic findings. The server has no cancellation token either
+ * (`/api/itinerary`'s `cancel()` says so), so hanging up never saved the work; it only discarded
+ * the result of work already paid for.
+ *
+ * `onFinal` receives the `done` frame, which carries the whole finished `GenerationResult` — the
+ * itinerary with the review's day set already swapped in, or the original where the server judged
+ * the revision no improvement. So there is nothing to merge here and no separate `revised` handler
+ * to keep in step: it is the same shape as `onPlan`, later and better.
  */
 export interface GenerateHandlers {
   onStage?: (event: StageEvent) => void;
   onStop?: (event: StreamedStop) => void;
   onSketch?: (event: SketchEvent) => void;
   onPlan: (result: GenerationResult) => void;
+  /**
+   * The reviewed plan, ~150s after `onPlan`.
+   *
+   * **Fires after the wizard has navigated away, deliberately**, so it must not touch component
+   * state or assume anything is still mounted. Its job is to correct what was stored.
+   */
+  onFinal?: (result: GenerationResult) => void;
 }
 
 /** Why a generation did not produce a plan. Each needs different words in front of a traveller. */

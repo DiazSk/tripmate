@@ -7,6 +7,25 @@ import type { BikeshareSystem } from "./bikeshare";
 
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
+/**
+ * How much the plan is allowed to move a stop.
+ *
+ * `FIXED` is something the traveler actually booked — a reservation, a train, a timed ticket. The
+ * plan is built *around* one rather than over it: `applyPatch` refuses to move or drop one, and a
+ * leg that cannot reach one in time is reported as a broken commitment rather than as a tight
+ * connection.
+ *
+ * **Absent reads as `PREFERRED`**, which is what every reader assumed before the field existed, so
+ * nothing already in `trips.itinerary_json` changes meaning.
+ *
+ * Deliberately two values and not the four a fuller flexibility model would want. `FLEXIBLE` and
+ * `UNSCHEDULED` — a coffee that fits anywhere, a souvenir run with no time at all — belong with
+ * the untimed-stop UI that would place them, and declaring them before anything can produce or
+ * read one would put a vocabulary in the prompt that the app cannot honour. Widening this union
+ * later is additive.
+ */
+export type TimeFlexibility = "FIXED" | "PREFERRED";
+
 export interface Stop {
   name: string;
   lat: number;
@@ -23,6 +42,23 @@ export interface Stop {
   /** @deprecated Replaced by the `why` + `note` pair — no longer requested from the model or
    *  rendered. Kept optional so previously saved itineraries still parse. */
   tags?: string[];
+  /**
+   * Whether the plan may move this stop. Absent is `PREFERRED` — see `TimeFlexibility`.
+   *
+   * **Only a stated commitment becomes `FIXED`.** The model is told to write it solely for
+   * something the traveler named as booked in `logistics` or `constraintsNote`; a model that
+   * invented reservations would be freezing its own guesses into a plan nobody may then edit.
+   * The traveler can also set it by hand on a saved trip.
+   */
+  timeFlexibility?: TimeFlexibility;
+  /**
+   * Whether weather can spoil this stop — the input the weather-resilience check needs.
+   *
+   * Never derived from `category`: a covered market and an open one are both "other", and a
+   * rooftop bar and a basement one are both "food". Absent means the model did not say, and an
+   * absent check is better than a fabricated one.
+   */
+  outdoor?: boolean;
   category: StopCategory;
   actualCost?: number;
 }
@@ -101,6 +137,23 @@ export interface Itinerary {
  * to `saved` rather than inserting a second one. The distinction is what keeps `/trips`' memories
  * wall showing only trips somebody chose, instead of every plan they ever glanced at.
  */
+/**
+ * The part of an `Itinerary` the plan checks actually read — the days, and the traveler's own
+ * places.
+ *
+ * Narrower than `Itinerary` on purpose, and the reason is a real disagreement between two true
+ * declarations. `tier` is required here and optional on the React Native client
+ * (`mobile/src/api/types.ts`), because a trip saved before tiers existed carries none and that
+ * client describes what actually comes back over the wire. Nothing in `guardrails.ts` or
+ * `planHealth.ts` reads `tier`, so asking for it would make the phone unable to call its own
+ * health module over a field neither side uses.
+ *
+ * Structural, so both clients' `Itinerary` satisfy it with no cast — which is the point.
+ * `mobile/src/api/types.ts` records what casting at this boundary costs: it has to be repeated per
+ * shared function, and each copy goes on claiming a shape the server does not send.
+ */
+export type CheckableItinerary = Pick<Itinerary, "days" | "anchors" | "unplaced">;
+
 export type TripStatus = "draft" | "saved";
 
 export interface TripSummary {

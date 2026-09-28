@@ -110,3 +110,43 @@ test("a day with no date reports an empty string, not undefined", () => {
   const { stops } = drain([`{"days":[{"weather":"clear","stops":[${STOP_A}]}]}`]);
   assert.equal(stops[0].date, "");
 });
+
+/* The invariant that lets `isRenderableStop` be cheap: `category` is the LAST field of the shape
+ * `itineraryPrompt.ts` asks for, so an object carrying one carries all of them.
+ *
+ * These guard the moment that stops being true. `timeFlexibility` and `outdoor` were added to the
+ * stop shape, and were put IN FRONT of `category` for exactly this reason — appended after it,
+ * every stop would reach the generation screen before its last two fields arrived, with nothing
+ * thrown and nothing logged. A test is the only thing that can notice. */
+const STOP_WITH_FLAGS =
+  '{"name":"Nijo Castle","lat":35.01,"lng":135.74,"cost":15,"why":"w3","note":"n3",' +
+  '"time":"10:00 AM","durationLabel":"90 minutes","outdoor":true,"timeFlexibility":"FIXED",' +
+  '"category":"entry"}';
+
+test("the new stop flags arrive with the stop rather than after it", () => {
+  const { stops } = drain([`{"days":[{"date":"2026-05-01","weather":"clear","stops":[${STOP_WITH_FLAGS}]}]}`]);
+  assert.equal(stops.length, 1);
+  assert.equal(stops[0].stop.outdoor, true);
+  assert.equal(stops[0].stop.timeFlexibility, "FIXED");
+});
+
+test("a stop is withheld until category arrives, flags included", () => {
+  const upTo = STOP_WITH_FLAGS.indexOf(',"category"');
+  const head = `{"days":[{"date":"2026-05-01","weather":"clear","stops":[${STOP_WITH_FLAGS.slice(0, upTo)}`;
+  const parser = new StreamingItineraryParser();
+  assert.deepEqual(parser.feed(head).stops, [], "everything but category is not yet a stop");
+  const { stops } = parser.feed(`${STOP_WITH_FLAGS.slice(upTo)}]}]}`);
+  assert.equal(stops.length, 1, "and it lands complete on the chunk that closes it");
+  assert.equal(stops[0].stop.outdoor, true);
+});
+
+// Every chunk boundary, the way the file's headline test does it: a split inside "timeFlexibility"
+// or its value must not produce a half-written stop either.
+test("no chunk boundary inside the new fields leaks a partial stop", () => {
+  const body = `{"days":[{"date":"2026-05-01","weather":"clear","stops":[${STOP_WITH_FLAGS}]}]}`;
+  for (let at = 1; at < body.length; at++) {
+    const { stops } = drain([body.slice(0, at), body.slice(at)]);
+    assert.equal(stops.length, 1, `split at ${at} yielded ${stops.length} stops`);
+    assert.equal(stops[0].stop.timeFlexibility, "FIXED", `split at ${at} lost timeFlexibility`);
+  }
+});

@@ -1,4 +1,4 @@
-import { evaluateItinerary } from "../guardrails";
+import { evaluateDay } from "../guardrails";
 import type { Itinerary, TransportMode } from "../types";
 import type { BenchCellScores } from "./types";
 
@@ -26,7 +26,7 @@ export type CriticalCode =
  * (§5 is a ceiling), starred-priority coverage, unacknowledged dietary stops.
  *
  * `travel_leg` needs typed stops, so it runs only for the legacy arm's JSON, through the same
- * `evaluateItinerary` rule the UI shows; staged markdown has no typed legs. `generation_failed`
+ * `evaluateDay` rules the UI shows; staged markdown has no typed legs. `generation_failed`
  * is never returned here — the sweep adds it for a run that produced no plan at all.
  */
 export function criticalFailures(
@@ -54,7 +54,18 @@ export function criticalFailures(
       ...opts.itinerary,
       days: opts.itinerary.days.map((d) => ({ ...d, stops: d.stops.filter((st) => !(st.lat === 0 && st.lng === 0)) })),
     };
-    const travel = evaluateItinerary(placed, { modes: opts.modes }).some((g) => g.rule === "travel");
+    // `evaluateDay`, not `evaluateItinerary`, and the narrowing is load-bearing. A leg that cannot
+    // reach a stop the traveller BOOKED is reported as a `commitment` (§0 rank 1) rather than as a
+    // tight connection — so matching `travel` alone would stop seeing exactly the worst legs. But
+    // `commitment` is also what the arrival/departure buffers and an already-paid stay report, and
+    // those are already counted by `commitments.breaches` above. `evaluateDay` is checkLegs +
+    // checkPace, so within it those two rules can only have come from a leg, and nothing is
+    // double-counted.
+    const travel = placed.days.some((day, dayIndex) =>
+      evaluateDay(day, dayIndex, opts.modes).some(
+        (g) => g.rule === "travel" || g.rule === "commitment"
+      )
+    );
     if (travel) codes.push("travel_leg");
   }
   return codes;

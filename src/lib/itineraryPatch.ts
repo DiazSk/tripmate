@@ -47,6 +47,38 @@ function insertionIndex(day: DayPlan, before: Stop[], stopIndex: number): number
 }
 
 /**
+ * Why a booked stop refuses this op, already phrased for the traveler — or null when it doesn't.
+ *
+ * §0 rank 1: a `FIXED` stop is something the traveler actually booked, and the plan is built
+ * around it. The prompt tells the model the same thing, and this is the half that does not depend
+ * on the model having listened — the reason reaches the chat sheet through the existing
+ * `rejected[]` channel, so a refused edit is stated rather than silently half-applied.
+ *
+ * **Only the *when* and the *what* are protected, not the whole object.** Re-costing a booked
+ * dinner or rewriting its note is ordinary editing; moving it, dropping it or swapping it for
+ * somewhere else is not. Unlocking is the traveler's alone — a model that could clear the flag
+ * could clear it and then move the stop in the same turn, which is the lock not existing.
+ */
+function refusesLock(op: PatchOp, target: Stop): string | null {
+  if (target.timeFlexibility !== "FIXED") return null;
+  if (op.op === "remove_stop") return `${target.name} is booked — it cannot be dropped.`;
+  if (op.op !== "replace_stop") return null;
+  // Declared `Stop`, but the merge below exists precisely because the model sends only the fields
+  // it changed, so every one of these is absent more often than not.
+  const patch = op.stop as Partial<Stop>;
+  if (patch.time !== undefined && patch.time !== target.time) {
+    return `${target.name} is booked for ${target.time} — that time cannot be moved.`;
+  }
+  if (patch.name !== undefined && patch.name !== target.name) {
+    return `${target.name} is booked — it cannot be swapped for ${patch.name}.`;
+  }
+  if (patch.timeFlexibility !== undefined && patch.timeFlexibility !== "FIXED") {
+    return `${target.name} is booked — only the traveler can unlock it.`;
+  }
+  return null;
+}
+
+/**
  * Applies ops to a deep clone. `allowedDayIndex`/`allowedStopIndex`, when given, scope-lock the
  * patch (Mode B): any op touching a different slot is rejected rather than applied, so a
  * single-element edit can never quietly reshuffle the rest of the day.
@@ -152,6 +184,11 @@ export function applyPatch(
           // Only reachable when an earlier op in this same patch removed it. Saying so is the
           // whole point: the alternative is applying the op to whichever stop took its place.
           rejected.push({ op, reason: `stop ${op.stopIndex} was already removed by an earlier op` });
+          break;
+        }
+        const locked = refusesLock(op, target);
+        if (locked) {
+          rejected.push({ op, reason: locked });
           break;
         }
         if (op.op === "remove_stop") {

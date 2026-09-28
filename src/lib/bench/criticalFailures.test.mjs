@@ -99,3 +99,57 @@ test("a stop at 0,0 does not make a travel leg infeasible", () => {
   };
   assert.deepEqual(criticalFailures(clean(), { itinerary: plan, modes: ["walk"] }), []);
 });
+
+/* The leg check reads `evaluateDay`, not `evaluateItinerary`, because a leg that cannot reach a
+ * BOOKED stop is reported as a `commitment` rather than a `travel` finding. Matching `travel`
+ * alone would have quietly stopped failing the gate on the worst legs there are. */
+test("a leg that cannot reach a booked stop still fails the gate", () => {
+  const stop = (over) => ({
+    name: "A",
+    lat: 35.0,
+    lng: 135.7,
+    cost: 0,
+    note: "",
+    time: "9:00 AM",
+    durationLabel: "1h",
+    category: "entry",
+    ...over,
+  });
+  const missed = {
+    tier: "comfort",
+    days: [
+      {
+        date: "2026-09-19",
+        weather: "",
+        stops: [
+          stop({}),
+          stop({ name: "Dinner", lat: 35.1, lng: 135.9, time: "10:05 AM", timeFlexibility: "FIXED" }),
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(criticalFailures(clean(), { itinerary: missed, modes: ["walk"] }), ["travel_leg"]);
+});
+
+// The other half: a commitment finding that did NOT come from a leg (an already-paid stay) must
+// not be read as one, or `commitment` and `travel_leg` would both fire for one problem.
+test("an already-paid stay is not mistaken for a broken leg", () => {
+  const paid = {
+    tier: "comfort",
+    days: [
+      {
+        date: "2026-09-19",
+        weather: "",
+        lodging: { name: "Hotel Ronda", cost: 200, note: "" },
+        stops: [
+          { name: "A", lat: 35.0, lng: 135.7, cost: 0, note: "", time: "9:00 AM", durationLabel: "1h", category: "entry" },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(
+    criticalFailures(clean(), { itinerary: paid, modes: ["walk"] }),
+    [],
+    "checkCommitments findings are counted by commitments.breaches, not by the leg check"
+  );
+});

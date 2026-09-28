@@ -25,7 +25,16 @@ import { formatPlaceConflicts } from "./placeConflicts";
 import type { PlaceConflict } from "./placeConflicts";
 import type { DietaryNeeds } from "./travelerProfile";
 
-const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one line: why this stop suits this traveler","note":"one line: practical detail","time":"9:00 AM","durationLabel":"1 hour","category":"food|entry|transit|other"}`;
+/**
+ * One stop's shape.
+ *
+ * **`category` must stay last, and that is load-bearing rather than tidy.**
+ * `streamingItinerary.ts`'s `isRenderableStop` gates emission on `category` being present,
+ * precisely because it is the final field here — so an object that has one has all of them. A
+ * field appended *after* `category` would start releasing half-written stops to the generation
+ * screen, with nothing thrown and nothing logged. New fields go in front of it.
+ */
+const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one line: why this stop suits this traveler","note":"one line: practical detail","time":"9:00 AM","durationLabel":"1 hour","outdoor":false,"timeFlexibility":"FIXED|PREFERRED","category":"food|entry|transit|other"}`;
 
 /**
  * One day's shape, shared by every prompt that asks for days back.
@@ -226,7 +235,7 @@ export function formatAnchors(anchors: Anchor[] | undefined): string {
 // (hostel, B&B, apartment, camp, houseboat, farmstay) and often the memorable part of
 // a trip — so pick the type from the traveler + destination first, and offer an
 // alternative rather than presenting one property as settled.
-const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD — what the WHOLE party pays there, never one person's share, so multiply a per-head price by the party size before writing it (0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM") — times across a day's stops must be sequential and non-overlapping; a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category" — "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs (including a bikeshare hop, when the destination has one), "other" for everything else.`;
+const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD — what the WHOLE party pays there, never one person's share, so multiply a per-head price by the party size before writing it (0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM") — times across a day's stops must be sequential and non-overlapping; a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category" — "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs (including a bikeshare hop, when the destination has one), "other" for everything else. Also two fields the checks read rather than the traveler: "outdoor" — true where weather can spoil the stop (a garden, a viewpoint, a walking route), false where it cannot (a museum, a restaurant, a covered market). Judge the place, never the category: a rooftop bar and a basement one are both food. And "timeFlexibility" — write "FIXED" ONLY for something the traveler has told you is already booked or ticketed for a specific time, quoting their own words back as the stop; everything you chose yourself is "PREFERRED". A FIXED stop is one the plan may not later move or drop, so inventing one takes a decision away from them permanently.`;
 
 export function buildGeneratePrompt(params: {
   destination: string;
