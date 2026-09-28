@@ -111,6 +111,9 @@ const CAPTIONS = {
 };
 
 export default function Profile() {
+  // The screen needs the account too, not just the section at its foot — the name belongs at the
+  // top. `useAccount` is cached per session read, so the second caller costs nothing.
+  const { account } = useAccount();
   const [profile, setProfile] = useState<Loaded>(undefined);
   const [stats, setStats] = useState<ProfileStats | undefined>(undefined);
   const [failed, setFailed] = useState(false);
@@ -223,7 +226,7 @@ export default function Profile() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Avatar profile={loadedProfile} />
+        <Avatar profile={loadedProfile} name={account?.name?.trim() || null} />
 
         {stats ? <Record stats={stats} /> : null}
 
@@ -449,7 +452,7 @@ function Figure({ label, value, money }: { label: string; value: string; money?:
  * Not tappable: this product has no accounts and no image storage, and a control that opens a
  * picker whose result cannot be saved is worse than a placeholder that admits what it is.
  */
-function Avatar({ profile }: { profile: TravelerProfile | null }) {
+function Avatar({ profile, name }: { profile: TravelerProfile | null; name: string | null }) {
   return (
     <View style={styles.avatarBlock}>
       <View style={styles.avatar}>
@@ -462,6 +465,14 @@ function Avatar({ profile }: { profile: TravelerProfile | null }) {
           fallback={<Text style={styles.avatarFallback}>—</Text>}
         />
       </View>
+      {/* The name when there is one, with the portrait sentence demoted beneath it. Signed out
+          the sentence stands alone exactly as before — this screen still has to work for somebody
+          who has never made an account, which is most first-time openers.
+
+          System text styles, no Melodrama: DESIGN.md's third boundary makes this a native settings
+          surface, and a display face at the top of a settings list is the landing-page move that
+          boundary exists to stop. It was tried twice. */}
+      {name ? <Text style={styles.name}>{name}</Text> : null}
       <Text style={styles.portrait}>{portraitSentence(profile)}</Text>
     </View>
   );
@@ -624,6 +635,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarFallback: { color: Colors.muted, fontSize: 32 },
+  name: {
+    color: Colors.foreground,
+    fontSize: 22,
+    // No `fontFamily`: the system face at a system weight is what carries Dynamic Type, and
+    // DESIGN.md's third boundary puts every settings row on it. A custom family here would also
+    // have to pick its own weight file — `Fonts` gives each weight its own family and warns
+    // against pairing one with `fontWeight`.
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   portrait: { color: Colors.muted, fontSize: 15, textAlign: 'center' },
 
   record: {
