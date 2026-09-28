@@ -238,7 +238,17 @@ export async function POST(req: NextRequest) {
         const turns = (body as { messages?: { role: string; content: string }[] }).messages ?? [];
         const latest = turns[turns.length - 1];
         if (latest?.role === "user") {
-          appendChatTurn({ tripId, role: "user", content: latest.content });
+          // **The scope goes on the turn, not just into the prompt.** A refusal reading "day 2 is
+          // outside my current scope" is a fact about the request it answered, and the control
+          // that set it is a live toggle — widen it afterwards and the transcript above reads as
+          // the assistant having ignored a scope that was never in force. Recording it here is
+          // what lets the sheet stamp each turn with the scope it actually went out under.
+          appendChatTurn({
+            tripId,
+            role: "user",
+            content: latest.content,
+            meta: { scope: scope?.dayIndex ?? null },
+          });
         }
         appendChatTurn({
           tripId,

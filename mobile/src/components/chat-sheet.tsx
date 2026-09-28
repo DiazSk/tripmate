@@ -167,7 +167,7 @@ export function ChatSheet({
           keyboardShouldPersistTaps="handled">
           {turns.length === 0 ? <Invitation /> : null}
           {turns.map((turn, i) => (
-            <Turn key={i} turn={turn} />
+            <Turn key={i} turn={turn} days={days} />
           ))}
           {/* Under the last turn, which is always the reply it belongs to: there is only
               ever one parked proposal, and a newer ask replaces it. */}
@@ -283,10 +283,25 @@ function Invitation() {
   );
 }
 
-function Turn({ turn }: { turn: ChatTurn }) {
+function Turn({ turn, days }: { turn: ChatTurn; days: { date: string }[] }) {
   const mine = turn.role === 'user';
   return (
     <View style={[styles.turn, mine ? styles.mine : styles.theirs]}>
+      {/* **The scope belongs to the turn, not to the control.** The toggle above says what the
+          *next* message will carry; it is live, and widening it after a narrow ask left the
+          refusal underneath reading as though the assistant had ignored a scope that was never
+          in force. Stamping the request it answered is what makes "day 2 is outside my current
+          scope" legible an hour later.
+
+          Only a narrowed turn is stamped. Wide is this sheet's default and the case that needs
+          no explanation, and a WHOLE TRIP label over every message is a line nobody reads twice.
+          `undefined` — a turn saved before the transcript carried this — prints nothing either,
+          because the honest thing to say about it is nothing. */}
+      {mine && typeof turn.scope === 'number' ? (
+        <ThemedText type="micro" themeColor="muted" style={styles.stamp}>
+          {dayName(days, turn.scope).toUpperCase()}
+        </ThemedText>
+      ) : null}
       <View style={[styles.bubble, mine && styles.bubbleMine]}>
         <ThemedText type="body" themeColor={mine ? 'accentForeground' : 'foreground'}>
           {turn.content}
@@ -311,6 +326,7 @@ function Turn({ turn }: { turn: ChatTurn }) {
 
 const styles = StyleSheet.create({
   sheet: { flex: 1, backgroundColor: Colors.canvas },
+  stamp: { marginBottom: Spacing.hair, marginRight: 2 },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

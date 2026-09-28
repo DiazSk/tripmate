@@ -517,6 +517,14 @@ export interface ChatTurn {
   warnings?: string[];
   /** Ops the applier refused. Rare, and silence here would read as "done" for a turn that partly wasn't. */
   rejected?: string[];
+  /**
+   * The scope a *user* turn went out under: a day index, or null for the whole trip.
+   *
+   * Undefined is a third answer and not the same as null — it is a turn written before the
+   * transcript recorded this, and the sheet has to say nothing about those rather than claim
+   * they were sent wide.
+   */
+  scope?: number | null;
 }
 
 /** What `POST /api/trip-edit` answers in chat mode. `itinerary` is the whole updated plan. */

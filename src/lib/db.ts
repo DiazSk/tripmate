@@ -497,9 +497,11 @@ export interface ChatTurnRow {
   trip_id: string;
   role: "user" | "assistant";
   content: string;
-  /** The assistant's structured extras (changes, warnings, daysModified, …) as JSON. Null on a
-   *  user turn. Stored whole rather than as columns because it is display material the panel
-   *  already knows how to render, and splitting it would freeze its shape into the schema. */
+  /** Structured extras as JSON: the assistant's `changes`, `warnings`, `daysModified`, …, and on
+   *  a user turn the `scope` that turn was sent under. Stored whole rather than as columns
+   *  because it is display material the panel already knows how to render, and splitting it
+   *  would freeze its shape into the schema — which is the reason the scope could be added here
+   *  without a migration. */
   meta_json: string | null;
   created_at: string;
 }
