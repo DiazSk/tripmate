@@ -144,8 +144,11 @@ export function ChatSheet({
         </View>
 
         <View style={styles.scopeRow}>
+          {/* "Change" read as a second imperative under a sheet already titled "Ask for a
+              change" — a button you had not pressed yet. The gerund names a state instead, so
+              the row reads as one sentence: changing → whole trip. */}
           <ThemedText type="label" themeColor="muted">
-            Change
+            Changing
           </ThemedText>
           <View style={styles.toggle}>
             <ScopeHalf
