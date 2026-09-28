@@ -972,7 +972,17 @@ const styles = StyleSheet.create({
   editBarPressed: { backgroundColor: Colors.pressed },
   grow: { flex: 1 },
   faces: { flex: 1 },
-  strip: { gap: Spacing.tight, paddingRight: Spacing.tight, alignItems: 'flex-end' },
+  // `flexGrow` + `space-between` is the whole alignment fix: seven fixed-width chips came to
+  // 356pt in a 370pt row, so the strip stopped 30pt short of a right margin every other row in
+  // the chrome runs flush to. Narrower than the row, the chips now share the slack and the last
+  // one lands on the margin; wider than it — a fortnight — neither rule has anything to give and
+  // it scrolls exactly as before.
+  strip: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    gap: Spacing.tight,
+    alignItems: 'flex-end',
+  },
   toggle: {
     flexDirection: 'row',
     borderRadius: Radius.pill,
