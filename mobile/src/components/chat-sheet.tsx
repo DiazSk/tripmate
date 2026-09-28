@@ -321,17 +321,19 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.tight,
   },
   grow: { flex: 1 },
+  // A column, not a row. Sharing a line with its label pushed the track to whatever x the
+  // word ended at, so the header had three left edges — title, label, control — and a right
+  // edge that nearly but never quite met Done. Stacked, every edge in this sheet is one inset.
   scopeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.rows,
+    gap: Spacing.hair,
     paddingHorizontal: Spacing.read,
     paddingBottom: Spacing.tight,
   },
   // The two-up pill the trip screen's List/Map toggle uses, so the two read as one control type.
+  // No `flex` — in a column that would stretch it vertically. A plain child of a stretching
+  // column is already full width, which is the point.
   toggle: {
     flexDirection: 'row',
-    flex: 1,
     borderRadius: Radius.pill,
     backgroundColor: Colors.control,
     padding: 3,
