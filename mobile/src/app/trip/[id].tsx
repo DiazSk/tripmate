@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -33,6 +33,8 @@ import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { fitMessage } from '@/lib/anchors';
+import { type Repair, repairsFor } from '@shared/guardrailFixes';
+
 import { formatDayChip, formatRange } from '@/lib/dayDisplay';
 import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/itineraryDiff';
 import { tripHealth, type Guardrail } from '@/lib/health';
@@ -127,6 +129,33 @@ export default function TripDetail() {
     setChatScope(scope);
     setChatOpenId((n) => n + 1);
     chat.open();
+  }
+
+  /**
+   * The computed ways out of one conflict, and applying one.
+   *
+   * Deterministic, so there is no model call and no preview step: `repairsFor` only offers a
+   * repair whose label says exactly what it does, that closes the leg it was raised for, that
+   * leaves every other leg of the day no tighter, and that moves nothing booked. What is left
+   * to decide is which of the two, and the bar above carries Undo if it was the wrong one.
+   */
+  const repairs = useCallback(
+    (finding: Guardrail): Repair[] => (trip ? repairsFor(trip.itinerary, finding) : []),
+    [trip]
+  );
+
+  async function applyRepair(days: DayPlan[], label: string) {
+    if (!trip) return;
+    const previous = trip.itinerary;
+    const next = { ...previous, days };
+    setTouched(true);
+    setTrip({ ...trip, itinerary: next });
+    chat.remember(previous, diffItineraries(previous, next).days);
+    const saved = await updateTripItinerary(trip.id, next);
+    if (!saved) {
+      setTrip({ ...trip, itinerary: previous });
+      console.warn(`"${label}" did not save`);
+    }
   }
 
   /**
@@ -306,6 +335,8 @@ export default function TripDetail() {
               findings={findings}
               onToggleLock={toggleLock}
               onAsk={(message: string) => askWith(message, day)}
+              repairs={repairs}
+              onRepair={applyRepair}
             />
 
             {mapBuilt ? (
@@ -599,6 +630,8 @@ function DayPager({
   findings,
   onToggleLock,
   onAsk,
+  repairs,
+  onRepair,
 }: {
   trip: Trip;
   day: number;
@@ -610,6 +643,8 @@ function DayPager({
   findings: Guardrail[];
   onToggleLock: (dayIndex: number, stopIndex: number) => void;
   onAsk: (message: string) => void;
+  repairs: (finding: Guardrail) => Repair[];
+  onRepair: (days: DayPlan[], label: string) => void;
 }) {
   // `useWindowDimensions`, not `Dimensions.get()` — this one re-renders on rotation, and a page
   // whose width disagrees with the pager's by even a point drifts out of alignment by day 8.
@@ -658,6 +693,8 @@ function DayPager({
             findings={findings.filter((f) => f.dayIndex === index)}
             onToggleLock={(stopIndex) => onToggleLock(index, stopIndex)}
             onAsk={onAsk}
+            repairs={repairs}
+            onRepair={onRepair}
           />
         </View>
       ))}

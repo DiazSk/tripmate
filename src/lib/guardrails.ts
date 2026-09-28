@@ -133,15 +133,9 @@ function checkLegs(
   for (let i = 0; i < day.stops.length - 1; i++) {
     const from = day.stops[i];
     const to = day.stops[i + 1];
-    const start = parseClock(from.time ?? "");
-    const nextStart = parseClock(to.time ?? "");
-    if (start === null || nextStart === null) continue;
-
-    const end = start + parseDuration(from.durationLabel ?? "");
-    const gap = nextStart - end;
-    // A real duration wins where one was found; an unroutable pair falls back to the estimate
-    // rather than being skipped, so a missing route never silently drops the check.
-    const needed = realMinutes?.(from, to) ?? legMinutes(from, to, modes);
+    const fit = legFit(from, to, modes, realMinutes);
+    if (!fit) continue;
+    const { end, nextStart, gap, needed } = fit;
 
     const booked = to.timeFlexibility === "FIXED";
 
@@ -179,8 +173,50 @@ function checkLegs(
   return found;
 }
 
+/** What one hop costs against the room the schedule leaves for it. */
+export interface LegFit {
+  /** Clock minutes since midnight. */
+  end: number;
+  nextStart: number;
+  /** Room between the two, negative when they overlap. */
+  gap: number;
+  /** What the hop actually takes. */
+  needed: number;
+  /** Minutes the gap is short by. Zero or less when the leg already fits. */
+  shortfall: number;
+}
+
+/**
+ * The one subtraction behind three findings — `travel`, `overlap` and `commitment` are all this
+ * arithmetic, differing only in rank and wording.
+ *
+ * **Exported so a repair cannot disagree with the check that raised it.** `guardrailFixes`
+ * offers to move a stop by exactly `shortfall`, and deriving that from the finding's prose, or
+ * recomputing it beside this, is how the fix and the conflict end up telling a traveler two
+ * different numbers.
+ *
+ * Null when either clock is unreadable, which is the same case the checks skip.
+ */
+export function legFit(
+  from: Stop,
+  to: Stop,
+  modes?: TransportMode[],
+  realMinutes?: LegMinutesLookup
+): LegFit | null {
+  const start = parseClock(from.time ?? "");
+  const nextStart = parseClock(to.time ?? "");
+  if (start === null || nextStart === null) return null;
+
+  const end = start + parseDuration(from.durationLabel ?? "");
+  const gap = nextStart - end;
+  // A real duration wins where one was found; an unroutable pair falls back to the estimate
+  // rather than being skipped, so a missing route never silently drops the check.
+  const needed = realMinutes?.(from, to) ?? legMinutes(from, to, modes);
+  return { end, nextStart, gap, needed, shortfall: needed - gap };
+}
+
 /** Local re-format so a message can print a computed minute count as a clock time. */
-function fmt(minutes: number): string {
+export function fmt(minutes: number): string {
   const total = ((minutes % 1440) + 1440) % 1440;
   const h24 = Math.floor(total / 60);
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;

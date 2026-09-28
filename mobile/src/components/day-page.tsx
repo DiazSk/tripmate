@@ -1,4 +1,6 @@
+import type { Repair } from '@shared/guardrailFixes';
 import { groupStopsByTimeOfDay } from '@shared/timeOfDay';
+import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { DayPlan, Stop } from '@/api/types';
@@ -32,6 +34,8 @@ export function DayPage({
   findings,
   onToggleLock,
   onAsk,
+  repairs,
+  onRepair,
 }: {
   day: DayPlan;
   dayIndex: number;
@@ -57,6 +61,10 @@ export function DayPage({
   onToggleLock: (stopIndex: number) => void;
   /** Opens the chat composer seeded with text. Never sends it. */
   onAsk: (message: string) => void;
+  /** The computed ways out of one finding — see `guardrailFixes`. Empty means Ask is the only
+   *  route, which is what the button then does. */
+  repairs: (finding: Guardrail) => Repair[];
+  onRepair: (days: DayPlan[], label: string) => void;
 }) {
   const stops = day.stops ?? [];
   /**
@@ -109,6 +117,8 @@ export function DayPage({
                 onFindNearby={() => onFindNearby(entry.stop)}
                 onToggleLock={() => onToggleLock(entry.index)}
                 onAsk={onAsk}
+                repairs={repairs}
+                onRepair={onRepair}
               />
             </View>
           ))}
@@ -228,6 +238,8 @@ function StopRow({
   onFindNearby,
   onToggleLock,
   onAsk,
+  repairs,
+  onRepair,
 }: {
   stop: Stop;
   ordinal: number;
@@ -236,6 +248,8 @@ function StopRow({
   expanded: boolean;
   /** This stop's own findings — already filtered to `stopIndex`. */
   findings: Guardrail[];
+  repairs: (finding: Guardrail) => Repair[];
+  onRepair: (days: DayPlan[], label: string) => void;
   onPress: () => void;
   onFindNearby: () => void;
   onToggleLock: () => void;
@@ -291,23 +305,13 @@ function StopRow({
             concerns is a decision; the same sentence in a list elsewhere is a chore. Shown
             collapsed as well as expanded — a problem nobody has tapped into is still a problem. */}
         {findings.map((finding, i) => (
-          <View key={`${finding.message}-${i}`} style={styles.finding}>
-            <ThemedText
-              type="detail"
-              themeColor={isBlocking(finding) ? 'alert' : 'muted'}
-              style={styles.grow}>
-              {finding.message}
-            </ThemedText>
-            <Pressable
-              onPress={() => onAsk(fixMessage(finding))}
-              accessibilityRole="button"
-              accessibilityLabel={`Ask TripMate to fix: ${finding.message}`}
-              hitSlop={8}>
-              <ThemedText type="label" themeColor="accent">
-                Fix this
-              </ThemedText>
-            </Pressable>
-          </View>
+          <Finding
+            key={`${finding.message}-${i}`}
+            finding={finding}
+            repairs={repairs(finding)}
+            onRepair={onRepair}
+            onAsk={onAsk}
+          />
         ))}
 
         {expanded ? (
@@ -354,6 +358,90 @@ function StopRow({
 }
 
 /** A label against a rule, which is how this system opens a section. */
+/**
+ * A conflict, and the ways out of it.
+ *
+ * **"Fix this" used to spend a model call on arithmetic.** It seeded the chat composer and
+ * waited a minute to be told what a subtraction already knew: the hop needs more minutes than
+ * the gap leaves it, and there are two places to find them. `repairsFor` computes those two,
+ * and a tap applies one.
+ *
+ * The label is the preview. "Push Castle back 10 min, to 2:15 PM" says exactly what happens,
+ * the change is one clock time, and Undo sits on the bar above — a confirmation step between
+ * those is the ceremony this app already declined for adding a stop.
+ *
+ * Where nothing can be computed — a weather risk, a leg booked at both ends — the button does
+ * what it always did and hands the problem to Ask, which is the right route for anything
+ * needing a judgement about places rather than about minutes.
+ */
+function Finding({
+  finding,
+  repairs,
+  onRepair,
+  onAsk,
+}: {
+  finding: Guardrail;
+  repairs: Repair[];
+  onRepair: (days: DayPlan[], label: string) => void;
+  onAsk: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <View>
+      <View style={styles.finding}>
+        <ThemedText
+          type="detail"
+          themeColor={isBlocking(finding) ? 'alert' : 'muted'}
+          style={styles.grow}>
+          {finding.message}
+        </ThemedText>
+        <Pressable
+          onPress={() => (repairs.length > 0 ? setOpen((was) => !was) : onAsk(fixMessage(finding)))}
+          accessibilityRole="button"
+          accessibilityState={repairs.length > 0 ? { expanded: open } : undefined}
+          accessibilityLabel={
+            repairs.length > 0
+              ? `Ways to fix: ${finding.message}`
+              : `Ask TripMate to fix: ${finding.message}`
+          }
+          hitSlop={8}>
+          <ThemedText type="label" themeColor="accent">
+            {open ? 'Close' : 'Fix this'}
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      {open ? (
+        <View style={styles.repairs}>
+          {repairs.map((repair) => (
+            <Pressable
+              key={repair.label}
+              onPress={() => {
+                setOpen(false);
+                onRepair(repair.next.days as DayPlan[], repair.label);
+              }}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.repair, pressed && styles.repairPressed]}>
+              <ThemedText type="detail">{repair.label}</ThemedText>
+            </Pressable>
+          ))}
+          {/* Stated rather than implied. The promise that marking something booked keeps it
+              still is worth restating at the moment somebody is choosing between two moves. */}
+          <ThemedText type="micro" themeColor="muted" style={styles.repairNote}>
+            Nothing booked will move.
+          </ThemedText>
+          <Pressable onPress={() => onAsk(fixMessage(finding))} hitSlop={8} accessibilityRole="button">
+            <ThemedText type="label" themeColor="accent">
+              Ask for something else
+            </ThemedText>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function SectionRule({ label, trailing }: { label: string; trailing?: string }) {
   return (
     <View style={styles.sectionRule}>
@@ -473,6 +561,21 @@ const styles = StyleSheet.create({
     gap: Spacing.tight,
     marginTop: 3,
   },
+  // No indent of its own: this sits inside the stop's content column, which is already inset,
+  // and the options belong under the sentence they answer rather than stepped away from it.
+  repairs: { marginTop: Spacing.tight, gap: Spacing.hair },
+  repair: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.rows,
+    paddingVertical: Spacing.hair,
+    borderRadius: Radius.read,
+    backgroundColor: Colors.surfaceDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
+  repairPressed: { backgroundColor: Colors.pressed },
+  repairNote: { paddingHorizontal: Spacing.rows, marginTop: Spacing.hair },
   finding: {
     flexDirection: 'row',
     alignItems: 'baseline',
