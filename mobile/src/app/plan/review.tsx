@@ -47,7 +47,7 @@ export default function ReviewStep() {
           />
           <SummaryRow
             label="Into"
-            value={draft.interests.length ? draft.interests.join(', ') : 'Anything'}
+            value={draft.interests.length ? draft.interests.join(', ') : 'No priorities'}
             onEdit={() => router.dismissTo('/plan/preferences')}
           />
           {/* Three answers on one row because they are one question about tempo, and because
