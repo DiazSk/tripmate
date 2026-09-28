@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -20,19 +20,21 @@ import {
   promoteTrip,
   updateTripItinerary,
 } from '@/api/tripMateApi';
-import type { ChatTurn, Stop, Trip } from '@/api/types';
+import type { ChatTurn, Itinerary, Stop, Trip } from '@/api/types';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { AnchorReceipt } from '@/components/anchor-receipt';
 import { BudgetBar } from '@/components/budget-bar';
 import { ChatSheet } from '@/components/chat-sheet';
 import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
+import { PlanHealth } from '@/components/plan-health';
 import { PrimaryButton } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { fitMessage } from '@/lib/anchors';
 import { formatRange } from '@/lib/dayDisplay';
+import { tripHealth, type Guardrail } from '@/lib/health';
 import { regionForStops } from '@/lib/mapRegion';
 
 export default function TripDetail() {
@@ -75,6 +77,86 @@ export default function TripDetail() {
    *  mount, so without this a second "Fit it anyway" for a different place would leave the first
    *  place's text sitting in the composer. */
   const [chatOpenId, setChatOpenId] = useState(0);
+  /**
+   * The whole plan checked once, above the early returns so the hook order never depends on
+   * whether the trip has loaded.
+   *
+   * One evaluation for the screen: the panel scores it, and the rows draw their own slice of the
+   * same findings. Two surfaces computing the same verdict separately is how a row ends up coral
+   * while the figure above it still reads 100.
+   */
+  const health = useMemo(() => (trip ? tripHealth(trip) : null), [trip]);
+  /**
+   * Whether the traveller has changed this plan — the thing that decides if the health panel is
+   * theirs to read or ours to fix.
+   *
+   * **A freshly generated plan's problems are not news the traveller wants.** Handing somebody a
+   * trip and a scorecard saying "84, eight things to look at" in the same breath is marking our
+   * own homework in public: if the plan we just wrote has eight problems, that is a bug report for
+   * us, not a disclosure for them. Those problems belong to generation, which now verifies its own
+   * review pass and carries its corrections all the way to this screen.
+   *
+   * Once they have moved something, it is a shared document and the panel earns its place — that
+   * is the moment "what did that do to the rest of the week?" is a question they are actually
+   * asking, and no model call runs on a drag to answer it.
+   *
+   * **The inline conflicts are deliberately not gated on this.** A panel is a verdict on the plan;
+   * a coral line on a stop is a fact about a specific afternoon, and the alternative to saying it
+   * is the traveller finding out at the tram stop.
+   */
+  const [touched, setTouched] = useState(false);
+  const findings = useMemo(
+    () => health?.dimensions.flatMap((dimension) => dimension.findings) ?? [],
+    [health]
+  );
+
+  /**
+   * Open the chat composer pre-filled. Never sends — every caller here is offering words, not
+   * taking an action, and the traveler still presses Send.
+   */
+  function askWith(message: string) {
+    setChatSeed(message);
+    setChatOpenId((n) => n + 1);
+    chat.open();
+  }
+
+  /**
+   * Mark a stop booked, or release it.
+   *
+   * Optimistic then rolled back, the same bargain `onAdd` strikes below and for the same reason:
+   * the write is a whole-itinerary overwrite with no server-side undo, so the only honest recovery
+   * is to put back the object we replaced. This is also the ONLY way the flag is ever cleared —
+   * `applyPatch` refuses an op that would, because a planner able to unlock a stop could unlock it
+   * and move it in one turn.
+   */
+  async function toggleLock(dayIndex: number, stopIndex: number) {
+    if (!trip) return;
+    const previous = trip;
+    const next: Itinerary = {
+      ...trip.itinerary,
+      days: trip.itinerary.days.map((plan, di) =>
+        di !== dayIndex
+          ? plan
+          : {
+              ...plan,
+              stops: plan.stops.map((stop, si) =>
+                si !== stopIndex
+                  ? stop
+                  : {
+                      ...stop,
+                      // Written out rather than deleted. Absent already reads as PREFERRED, but a
+                      // present value says somebody decided, which is what a later reader needs.
+                      timeFlexibility:
+                        stop.timeFlexibility === 'FIXED' ? ('PREFERRED' as const) : ('FIXED' as const),
+                    }
+              ),
+            }
+      ),
+    };
+    setTouched(true);
+    setTrip({ ...trip, itinerary: next });
+    if (!(await updateTripItinerary(trip.id, next))) setTrip(previous);
+  }
 
   function closeSheet() {
     setAdding(false);
@@ -175,14 +257,12 @@ export default function TripDetail() {
               not about the list, and hiding it there would make the face swap jump. */}
           <BudgetBar days={days} budget={trip.budget} activeDayIndex={day} />
 
+          {health && (touched || chat.turns.length > 0) ? <PlanHealth health={health} /> : null}
+
           <AnchorReceipt
             itinerary={trip.itinerary}
             kept={trip.status !== 'draft'}
-            onFitAnchor={(name) => {
-              setChatSeed(fitMessage(name));
-              setChatOpenId((n) => n + 1);
-              chat.open();
-            }}
+            onFitAnchor={(name) => askWith(fitMessage(name))}
           />
 
           <View style={styles.faces}>
@@ -193,6 +273,9 @@ export default function TripDetail() {
               emphasis={emphasis}
               onEmphasise={setEmphasis}
               onFindNearby={findNearby}
+              findings={findings}
+              onToggleLock={toggleLock}
+              onAsk={askWith}
             />
 
             {mapBuilt ? (
@@ -220,6 +303,7 @@ export default function TripDetail() {
         at={probe}
         onAdd={async (next, name) => {
           const previous = trip;
+          setTouched(true);
           // Optimistic, then rolled back on failure. The write is a whole-itinerary overwrite
           // with no server-side transaction to undo, so the only honest recovery is to put the
           // object we replaced back exactly as it was.
@@ -367,6 +451,9 @@ function DayPager({
   emphasis,
   onEmphasise,
   onFindNearby,
+  findings,
+  onToggleLock,
+  onAsk,
 }: {
   trip: Trip;
   day: number;
@@ -374,6 +461,10 @@ function DayPager({
   emphasis: string | null;
   onEmphasise: (key: string | null) => void;
   onFindNearby: (stop: Stop) => void;
+  /** Every finding for the whole trip; each day takes its own slice below. */
+  findings: Guardrail[];
+  onToggleLock: (dayIndex: number, stopIndex: number) => void;
+  onAsk: (message: string) => void;
 }) {
   // `useWindowDimensions`, not `Dimensions.get()` — this one re-renders on rotation, and a page
   // whose width disagrees with the pager's by even a point drifts out of alignment by day 8.
@@ -419,6 +510,9 @@ function DayPager({
             emphasis={stopIndexFor(emphasis, index)}
             onEmphasise={(stop) => onEmphasise(stop === null ? null : `${index}:${stop}`)}
             onFindNearby={onFindNearby}
+            findings={findings.filter((f) => f.dayIndex === index)}
+            onToggleLock={(stopIndex) => onToggleLock(index, stopIndex)}
+            onAsk={onAsk}
           />
         </View>
       ))}

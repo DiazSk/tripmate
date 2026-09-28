@@ -265,3 +265,25 @@ test("an anchor with no known hours prints its old line exactly", () => {
   const out = formatAnchors([{ name: "Yanaka Ginza", lat: 35.72, lng: 139.77, priority: "want" }]);
   assert.ok(out.includes("- WANT: Yanaka Ginza (35.72, 139.77)\n"));
 });
+
+/* `category` must be the LAST key of the stop shape, and that is a correctness constraint rather
+ * than a formatting one. `streamingItinerary.ts` gates a stop's emission on `category` being
+ * present *because* it is last, so an object that has one has all of them. Move it, or append a
+ * field after it, and every stop reaches the generation screen before its trailing fields arrive —
+ * nothing throws, nothing logs, and the reveal is silently wrong. This is the assert that fails. */
+test("category stays the last field of the stop shape", () => {
+  const prompt = buildGeneratePrompt({
+    destination: "Kyoto",
+    startDate: "2026-09-19",
+    endDate: "2026-09-22",
+    budget: 3000,
+    tier: "mid-range",
+    weather: [],
+  });
+  const shape = prompt.match(/\{"name":"stop name".*?\}/);
+  assert.ok(shape, "the stop shape must still be in the generate prompt");
+  const keys = [...shape[0].matchAll(/"([a-zA-Z]+)":/g)].map((m) => m[1]);
+  assert.equal(keys.at(-1), "category", `stop shape ends with ${keys.at(-1)}, not category`);
+  // The two fields the guardrails and the lock read. Present, and in front of category.
+  assert.ok(keys.includes("outdoor") && keys.includes("timeFlexibility"));
+});

@@ -533,7 +533,12 @@ The plan on the table is the traveler's. When you change it, preserve everything
 about unless feasibility forces otherwise:
 
 1. Change the smallest set of stops that satisfies the request.
-2. Keep every fixed commitment (§0 rank 1) and every previously accepted stop.
+2. Keep every fixed commitment (§0 rank 1) and every previously accepted stop. A stop carrying
+   `"timeFlexibility": "FIXED"` is one of these and is marked so you can see it: the traveler booked
+   that time, so never move it, never drop it, and never rename it — re-plan around it instead. If
+   what they asked for cannot be done without moving one, do nothing and say which commitment is in
+   the way; the applier will refuse the change regardless, and a reply claiming an edit that did not
+   happen is worse than a refusal.
 3. Re-check travel time immediately before and immediately after the edited stop.
 4. Adjust downstream times only where a check in §12 would otherwise fail.
 5. Never rewrite an unrelated day, change the lodging, or restyle a stop for taste alone.

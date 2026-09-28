@@ -12,6 +12,7 @@ import {
   evaluateBudget,
   evaluateDay,
   evaluateItinerary,
+  revisionIsNoWorse,
 } from "./guardrails.ts";
 
 /** One stop, one day, priced to whatever the case needs. */
@@ -452,4 +453,188 @@ test("an explained must is unplaced; an unexplained one is missing and warned", 
   assert.equal(warnings.length, 1);
   assert.equal(warnings[0].rule, "anchors");
   assert.match(warnings[0].message, /Ghibli Museum/);
+});
+
+/* A leg that cannot reach a stop the traveler BOOKED is the same subtraction as a tight
+ * connection, and a different fact about the trip. These assert the reclassification rather than
+ * a second check: one problem, one finding, reported at §0 rank 1 and worded so somebody knows
+ * their table is gone. */
+const legStop = (over) => ({
+  name: "A",
+  category: "entry",
+  cost: 0,
+  note: "",
+  time: "10:00 AM",
+  durationLabel: "1 hour",
+  lat: 35,
+  lng: 135,
+  ...over,
+});
+
+/** Two stops ~45km apart with five minutes between them — unreachable by any mode, so the
+ *  assertion never depends on the tuned speeds in travelTime.ts. */
+const unreachable = (toOver) => ({
+  date: "2026-09-14",
+  weather: "",
+  stops: [legStop({}), legStop({ name: "Dinner at Den", time: "11:05 AM", lng: 135.5, ...toOver })],
+});
+
+test("an unreachable leg to an ordinary stop is a travel finding", () => {
+  const [finding, ...rest] = evaluateDay(unreachable({}), 0);
+  assert.deepEqual(rest, [], "one leg, one finding");
+  assert.equal(finding.rule, "travel");
+});
+
+test("the same leg to a booked stop is a commitment, and names the arrival", () => {
+  const [finding, ...rest] = evaluateDay(unreachable({ timeFlexibility: "FIXED" }), 0);
+  assert.deepEqual(rest, [], "reclassified, never reported twice");
+  assert.equal(finding.rule, "commitment");
+  assert.match(finding.message, /arrives about/);
+  assert.match(finding.message, /booking at/);
+});
+
+test("an overlap onto a booked stop is a commitment too", () => {
+  const day = {
+    date: "2026-09-14",
+    weather: "",
+    stops: [
+      legStop({ durationLabel: "3 hours" }),
+      legStop({ name: "Dinner at Den", time: "12:00 PM", timeFlexibility: "FIXED" }),
+    ],
+  };
+  const [finding] = evaluateDay(day, 0);
+  assert.equal(finding.rule, "commitment");
+  assert.match(finding.message, /past the 12:00 PM booking at Dinner at Den/);
+});
+
+test("a booked stop the day comfortably reaches says nothing", () => {
+  const day = {
+    date: "2026-09-14",
+    weather: "",
+    stops: [
+      legStop({}),
+      legStop({ name: "Dinner at Den", time: "7:00 PM", timeFlexibility: "FIXED" }),
+    ],
+  };
+  assert.deepEqual(evaluateDay(day, 0), []);
+});
+
+/* `stopIndex` is what lets a client draw a conflict on the row that causes it rather than only in
+ * a panel. It names the ARRIVING stop — the one whose plan is now wrong — and getting that
+ * backwards would put every warning one row too high, which reads as plausible and is wrong. */
+test("a leg finding names the arriving stop, not the one that overran", () => {
+  const [finding] = evaluateDay(unreachable({}), 0);
+  assert.equal(finding.stopIndex, 1);
+});
+
+test("a weather finding names the outdoor stop, counted in the day's own order", () => {
+  const day = {
+    date: "2026-09-14",
+    weather: "",
+    weatherDetail: { date: "2026-09-14", tempMaxC: 20, tempMinC: 12, historical: false, precipitationProbability: 90, humidity: null, weatherCode: null, sunrise: null, sunset: null },
+    stops: [
+      legStop({ name: "Indoors", outdoor: false }),
+      legStop({ name: "Also indoors", time: "11:00 AM", outdoor: false }),
+      legStop({ name: "A garden", time: "1:00 PM", outdoor: true }),
+    ],
+  };
+  const weather = evaluateDay(day, 0).filter((g) => g.rule === "weather");
+  assert.equal(weather.length, 1);
+  assert.equal(weather[0].stopIndex, 2, "filtering before indexing is how this goes wrong");
+});
+
+test("a finding about the day itself carries no stop", () => {
+  // Every stop under 30 minutes and none of them food, so nothing in the day counts as a sit-down
+  // break — which is what `checkPace` requires before an over-long day is a finding at all.
+  const packed = {
+    date: "2026-09-14",
+    weather: "",
+    stops: [
+      legStop({ name: "First", time: "8:00 AM", durationLabel: "15 minutes" }),
+      legStop({ name: "Last", time: "7:00 PM", durationLabel: "15 minutes" }),
+    ],
+  };
+  const [pace] = evaluateDay(packed, 0);
+  assert.equal(pace.rule, "pace");
+  assert.equal(pace.stopIndex, undefined);
+});
+
+
+/* The gate that stopped the review pass being taken at its word.
+ *
+ * It was: the critique returned a day set, that set replaced every day, and nobody checked. So a
+ * model rewriting a whole week to fix one leg could break three others and ship silently — which
+ * is why every saved trip in this app came out of its own review with 3 to 16 findings still in
+ * it. These assert the three behaviours that matter: worse is refused, better is taken, and a tie
+ * is taken, because the review fixes plenty this cannot count. */
+const legDay = (stops) => ({ date: "2026-09-14", weather: "", stops });
+const at = (name, over = {}) => ({
+  name,
+  category: "entry",
+  cost: 0,
+  note: "",
+  time: "10:00 AM",
+  durationLabel: "1 hour",
+  lat: 35,
+  lng: 135,
+  ...over,
+});
+
+/** One unreachable leg: ~45km apart with five minutes between them. */
+const broken = { days: [legDay([at("A"), at("B", { time: "11:05 AM", lng: 135.5 })])] };
+/** The same two places, far enough apart in the clock to be reachable. */
+const fixed = { days: [legDay([at("A"), at("B", { time: "3:00 PM", lng: 135.5 })])] };
+
+test("a revision that repairs an impossible leg is accepted", () => {
+  const v = revisionIsNoWorse(broken, fixed);
+  assert.equal(v.ok, true);
+  assert.deepEqual([v.blockingBefore, v.blockingAfter], [1, 0]);
+});
+
+test("a revision that makes a leg impossible is refused", () => {
+  const v = revisionIsNoWorse(fixed, broken);
+  assert.equal(v.ok, false);
+  assert.deepEqual([v.blockingBefore, v.blockingAfter], [0, 1]);
+});
+
+/* The case that corrected this gate, taken from the first real generation it ran against.
+ *
+ * The review removed an impossible leg and shortened three 13-hour days to 11.5, then gave day 4
+ * the dinner it was missing — which put day 4 over the pace threshold too. Total findings: 4
+ * before, 4 after. Judged on totals that plainly-better plan scored level, and one more day
+ * tipping over would have had it thrown away. Blocking went 1 to 0, which is the fact that
+ * mattered. */
+test("trading an advisory finding for a real repair is accepted", () => {
+  const tiring = {
+    days: [
+      legDay([
+        at("A", { time: "9:00 AM" }),
+        at("B", { time: "3:00 PM", lng: 135.5, durationLabel: "8 hours" }),
+      ]),
+    ],
+  };
+  const v = revisionIsNoWorse(broken, tiring);
+  assert.equal(v.blockingBefore, 1, "the original could not be walked");
+  assert.equal(v.blockingAfter, 0, "the revision can be");
+  assert.ok(v.totalAfter >= v.totalBefore, "and it costs an advisory finding to get there");
+  assert.equal(v.ok, true, "which is a trade the review is allowed to make");
+});
+
+// The review fixes dietary fit, interest coverage and plain bad ideas — none of them countable
+// here. Demanding a countable improvement would throw all of that away.
+test("a revision that changes nothing countable is accepted", () => {
+  const reworded = { days: [legDay([at("A", { note: "go early" }), at("B", { time: "3:00 PM", lng: 135.5 })])] };
+  const v = revisionIsNoWorse(fixed, reworded);
+  assert.equal(v.ok, true);
+  assert.deepEqual([v.blockingBefore, v.blockingAfter], [0, 0]);
+});
+
+// Budget is stated to the critique separately, and `finalizeDays` pins admission costs on one
+// side of this comparison before the other. Counting it here would reject revisions over a
+// difference this gate did not measure fairly.
+test("the budget rule is excluded from the comparison", () => {
+  const pricey = { days: [legDay([at("A", { cost: 9000 }), at("B", { time: "3:00 PM", lng: 135.5 })])] };
+  const v = revisionIsNoWorse(fixed, pricey, { budget: 10 });
+  assert.equal(v.ok, true, "an over-budget revision is not refused by this gate");
+  assert.equal(v.totalAfter, 0);
 });

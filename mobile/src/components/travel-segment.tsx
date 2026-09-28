@@ -1,0 +1,73 @@
+import { travelLegBetween } from '@shared/travelTime';
+import { StyleSheet, View } from 'react-native';
+
+import type { Stop } from '@/api/types';
+import { ThemedText } from '@/components/themed-text';
+import { Colors, Spacing } from '@/constants/theme';
+
+/**
+ * The hop between one stop and the next, in the gutter the discs run down.
+ *
+ * **A day reads as an order; this is what makes it read as a journey.** Two stops an hour apart
+ * tell you nothing about whether the hour is generous or barely enough, and that is the single
+ * most common thing a plan gets wrong. The arithmetic is `travelLegBetween` — the same function
+ * the guardrails price a leg with, so a segment saying "about 24 min" can never disagree with a
+ * conflict two rows down saying the leg does not fit.
+ *
+ * **"about" rather than an ESTIMATED badge, and that is a deliberate reading of the confidence
+ * rule.** Every one of these is estimated — straight-line distance times a circuity factor, since
+ * there is no free transit router — so a badge would repeat the same word six times down one day
+ * until nobody reads any of them. The hedge belongs in the sentence, which is also the voice the
+ * rest of this app already uses for computed figures ("about 9 hours", "takes about 28 min").
+ *
+ * No distance. Minutes are what somebody acts on, and printing kilometres next to them would
+ * invite a units question the plan has no way to answer — a destination is free text, and nothing
+ * here knows whether the traveler thinks in miles.
+ */
+export function TravelSegment({ from, to }: { from: Stop; to: Stop }) {
+  // An unplaced stop sits at 0,0. A leg measured to one is a leg measured to the Gulf of Guinea,
+  // so the gutter simply stays empty rather than printing a four-hour flight across a city.
+  if (!located(from) || !located(to)) return null;
+
+  const leg = travelLegBetween(
+    { lat: from.lat, lon: from.lng },
+    { lat: to.lat, lon: to.lng }
+  );
+
+  return (
+    <View style={styles.segment} accessibilityRole="text">
+      <View style={styles.gutter}>
+        <View style={styles.rule} />
+      </View>
+      <ThemedText type="micro" themeColor="muted">
+        {MODE[leg.mode]} · about {leg.minutes} min
+      </ThemedText>
+    </View>
+  );
+}
+
+const located = (stop: Stop) => !(stop.lat === 0 && stop.lng === 0);
+
+/** `travelLegBetween` picks the mode; these are just its names in sentence case. */
+const MODE: Record<string, string> = {
+  walk: 'Walk',
+  bike: 'Bike',
+  transit: 'Transit',
+  drive: 'Drive',
+};
+
+/** The disc is 26 wide with a 13 gap; the rule runs down its centre so the segment reads as the
+ *  line between two numbered stops rather than as a row of its own. */
+const DISC = 26;
+
+const styles = StyleSheet.create({
+  segment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    paddingHorizontal: Spacing.read,
+    paddingVertical: 2,
+  },
+  gutter: { width: DISC, alignItems: 'center' },
+  rule: { width: StyleSheet.hairlineWidth, height: 18, backgroundColor: Colors.cardBorder },
+});

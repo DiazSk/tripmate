@@ -337,10 +337,17 @@ export async function generateTrip(
   }
 
   let planned = false;
+  /**
+   * Terminal, where `planned` once was.
+   *
+   * Reading used to stop at the `plan` frame, which threw the review pass's corrections away —
+   * see `GenerateHandlers`. It now runs to `done`, which is the frame that carries them.
+   */
+  let finished = false;
   let streamError: string | undefined;
 
   const parser = createSseParser((frame) => {
-    if (planned) return;
+    if (finished) return;
     let payload: unknown;
     try {
       payload = JSON.parse(frame.data);
@@ -348,28 +355,44 @@ export async function generateTrip(
       return; // A frame we cannot read is not a reason to fail a running generation.
     }
     switch (frame.event) {
+      // The progress frames stop mattering the moment a whole plan exists.
       case 'stage':
-        handlers.onStage?.(payload as StageEvent);
+        if (!planned) handlers.onStage?.(payload as StageEvent);
         break;
       case 'stop':
-        handlers.onStop?.(payload as StreamedStop);
+        if (!planned) handlers.onStop?.(payload as StreamedStop);
         break;
       case 'sketch':
-        handlers.onSketch?.(payload as SketchEvent);
+        if (!planned) handlers.onSketch?.(payload as SketchEvent);
         break;
       case 'plan':
-      case 'done':
+        if (planned) break;
         planned = true;
         handlers.onPlan(payload as GenerationResult);
         break;
+      case 'done':
+        // Terminal either way, and it carries the finished result — the review's day set already
+        // swapped in, or the original where the server judged the revision no improvement.
+        //
+        // The `!planned` arm is not dead code: `plan` is only emitted on the streaming path, so a
+        // generation that fails to emit one still delivers its result here. That is the behaviour
+        // this branch had when `plan` and `done` shared it, kept.
+        finished = true;
+        if (planned) handlers.onFinal?.(payload as GenerationResult);
+        else {
+          planned = true;
+          handlers.onPlan(payload as GenerationResult);
+        }
+        break;
       case 'error':
         streamError = (payload as { error?: string }).error || GENERIC_FAILURE;
+        finished = true;
         break;
     }
   });
 
   try {
-    await readBody(response, (chunk) => parser.feed(chunk), () => planned);
+    await readBody(response, (chunk) => parser.feed(chunk), () => finished);
     parser.end();
   } catch {
     if (!planned) return { kind: 'failed', message: GENERIC_FAILURE };
