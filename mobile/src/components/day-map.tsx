@@ -7,6 +7,7 @@ import { Invitation } from '@/components/states';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing, dayCore, dayGlow } from '@/constants/theme';
+import { travelSummary } from '@/lib/dayTravel';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
 
 /**
@@ -127,6 +128,16 @@ export function DayMap({
         ))}
       </MapView>
 
+      {/* What the map cannot draw. A route is visibly a shape and invisibly a cost, and the
+          cost is the half somebody is deciding on — "is this the day I do Belém" is a question
+          about how much of it is spent moving. Time rather than distance, for the reason
+          `TravelSegment` records: nothing here knows whether the reader thinks in miles. */}
+      <View style={styles.summary} pointerEvents="none">
+        <ThemedText type="label" themeColor="muted">
+          {travelSummary(stops)}
+        </ThemedText>
+      </View>
+
       {/* The name lives here rather than on the map. The Swift app reached the same conclusion:
           a pile of labelled chips is unreadable, so the bubble carries the order and something
           else carries the name. Here that something else is the list face — this pill is just
@@ -206,6 +217,31 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   empty: { flex: 1, paddingTop: Spacing.regular },
   target: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  /**
+   * The caption's twin at the other end of the map.
+   *
+   * Two differences from it, both earned. It is **content width and centred** rather than a
+   * full-width strip: the caption holds a stop's name and needs the room, while this is six
+   * words that read as a label rather than as a bar across the view. And it is the **opaque**
+   * slate rather than the bar's 72%, because a map crowds its labels at the top and an
+   * always-present panel with a café's name showing through it reads as a rendering fault —
+   * the caption gets away with translucency by appearing only when a stop is emphasised.
+   *
+   * `pointerEvents: none` because it is a label, and an overlay that swallowed a pan would be
+   * worse than no overlay.
+   */
+  summary: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: Spacing.read,
+    maxWidth: '90%',
+    backgroundColor: Colors.surfaceDeep,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+    paddingHorizontal: Spacing.regular,
+    paddingVertical: Spacing.tight,
+  },
   caption: {
     position: 'absolute',
     left: Spacing.read,
