@@ -193,7 +193,10 @@ function SheetBody({
 
   return (
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      <ScrollView
+        horizontal
+        indicatorStyle="white"
+        contentContainerStyle={styles.chips}>
         {PLACE_CATEGORIES.map((kind) => {
           const active = category === kind;
           return (
@@ -258,12 +261,35 @@ function SheetBody({
               <ThemedText type="label" themeColor="muted" style={styles.resultMeta}>
                 {describePlace(place)}
               </ThemedText>
+              {/* Where it would land and what it would cost, *before* the row is opened. The card
+                  behind this row opens on exactly these two defaults, and says the same sentence
+                  through the same function — so this is a preview of the answer rather than a
+                  second estimate of it. Paper rather than jade: it outranks the muted line above
+                  it because it is the only one about *this trip*, but it is a fact and not a
+                  control, and jade in this product means press me. */}
+              <ThemedText type="label" themeColor="foreground" style={styles.resultMeta}>
+                {landingLine(itinerary, dayIndex, place)}
+              </ThemedText>
             </Pressable>
           ))}
         </View>
       )}
     </ScrollView>
   );
+}
+
+/**
+ * What this place would do to the day, at the defaults the card will open on.
+ *
+ * The complaint this answers is that a list of cafes is a search engine, and the app had already
+ * worked out where each one goes and what it costs to put it there. `slotPreview` and
+ * `insertionDetour` are the same two the card calls; `suggestTimeOfDay` is the slot it opens on.
+ * Reading a different pair here would make the row a claim the next screen contradicts.
+ */
+function landingLine(itinerary: Itinerary, dayIndex: number, place: FoundPlace): string {
+  const slot = suggestTimeOfDay(place);
+  const preview = slotPreview(itinerary, dayIndex, slot);
+  return slotLine(preview.time, preview.tight, insertionDetour(itinerary, dayIndex, place, slot));
 }
 
 /**
@@ -325,7 +351,10 @@ function PlaceCard({
       <ThemedText type="label" themeColor="muted">
         Which day
       </ThemedText>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      <ScrollView
+        horizontal
+        indicatorStyle="white"
+        contentContainerStyle={styles.chips}>
         {itinerary.days.map((_, index) => {
           const active = index === day;
           return (
