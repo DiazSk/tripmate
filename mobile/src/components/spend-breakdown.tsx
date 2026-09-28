@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import type { DayPlan } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { daySpend, formatMoney, spendShares } from '@/lib/spend';
+import { anyActualSpend, daySpend, formatMoney, spendShares } from '@/lib/spend';
 
 /** The composition band's height — a shade taller than the budget bar's track, because this one
  *  is the subject of its own section rather than a rule under the chrome. */
@@ -41,11 +41,16 @@ export function SpendBreakdown({ day, dayIndex }: { day: DayPlan; dayIndex: numb
 
   const total = daySpend(day);
 
+  // The same branch `budget-bar.tsx` makes on the bar above this, and for the same reason:
+  // `daySpend` coalesces `actualCost ?? cost`, so the word has to follow the data. Two figures
+  // on one screen calling the same summation by two different names is how a projection gets
+  // read as a receipt.
+
   return (
     <View style={styles.wrap}>
       <View style={styles.sectionRule}>
         <ThemedText type="label" themeColor="muted">
-          {`Day ${dayIndex + 1} spend`}
+          {`Day ${dayIndex + 1} ${anyActualSpend([day]) ? 'spend' : 'projected'}`}
         </ThemedText>
         <View style={styles.rule} />
         <ThemedText type="money" themeColor="money">
