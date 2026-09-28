@@ -1,4 +1,7 @@
-/* Run: node --import ./scripts/ts-resolve.mjs --test src/lib/fetchCache.test.mjs
+/* Run: node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test src/lib/fetchCache.test.mjs
+ *
+ * Both `--import`s, and test-db.mjs is not optional here: this file opens a database, and
+ * without it `db.ts` falls back to the repo's own `tripmate.db` and the run leaves real rows in it.
  *
  * The read-through cache every third-party fetch now goes through. Worth testing carefully for
  * the same reason `overpass.ts` is: every path here is silent by design. A cache that quietly

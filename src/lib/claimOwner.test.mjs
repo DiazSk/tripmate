@@ -1,4 +1,7 @@
-/* Run: node --import ./scripts/ts-resolve.mjs --test src/lib/claimOwner.test.mjs */
+/* Run: node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test src/lib/claimOwner.test.mjs
+ *
+ * Both `--import`s, and test-db.mjs is not optional here: this file opens a database, and
+ * without it `db.ts` falls back to the repo's own `tripmate.db` and the run leaves real rows in it. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
