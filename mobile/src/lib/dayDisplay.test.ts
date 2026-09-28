@@ -1,4 +1,4 @@
-import { formatDate, formatDateline, formatRange } from './dayDisplay';
+import { formatDate, formatDateline, formatDayChip, formatRange } from './dayDisplay';
 
 // The whole reason this module exists: `new Date('2026-09-19')` is UTC midnight, so a local
 // formatter west of Greenwich prints the 18th. This process runs in UTC-5 to prove the port
@@ -54,4 +54,22 @@ test('an unparseable date falls through to the raw string rather than inventing 
   expect(formatDate('not-a-date', 2026)).toBe('not-a-date');
   expect(formatDateline('2026-13-01')).toBe('2026-13-01');
   expect(formatRange('nope', '2026-09-20', 2026)).toBe('nope – 2026-09-20');
+});
+
+describe('the day strip chip', () => {
+  test('names the weekday and the day of the month, and no month', () => {
+    expect(formatDayChip('2026-10-22')).toEqual({ dayOfMonth: '22', weekday: 'Thu' });
+    expect(formatDayChip('2026-10-25')).toEqual({ dayOfMonth: '25', weekday: 'Sun' });
+  });
+
+  // Zeller again, across the boundary it is easiest to get wrong.
+  test('gets January right, where the algorithm counts back a year', () => {
+    expect(formatDayChip('2027-01-01')?.weekday).toBe('Fri');
+  });
+
+  // A caller falls back to the ordinal rather than printing a wrong date beside real ones.
+  test('refuses an unparseable date instead of guessing', () => {
+    expect(formatDayChip('not-a-date')).toBeNull();
+    expect(formatDayChip('2026-13-01')).toBeNull();
+  });
 });

@@ -42,6 +42,22 @@ import type { DayPlan, StopCategory } from '@/api/types';
 export { budgetSegments, daySpend, daySpendByCategory, tripSpend, formatMoney };
 export type { BudgetSegment, DaySpend };
 
+/**
+ * Whether any real spend has been entered against this plan.
+ *
+ * `tripSpend` coalesces `actualCost ?? cost`, so one figure covers two meanings and the screen
+ * never said which it was showing. This is what lets the label say: a plan nobody has spent
+ * against yet is **projected**, and the moment a real figure arrives the total is no longer a
+ * forecast. This app has no actual-cost field of its own yet — the web app does, against the same
+ * trip — so the second state arrives from the other client rather than from here.
+ */
+export function anyActualSpend(days: DayPlan[]): boolean {
+  return days.some(
+    (day) =>
+      day.lodging?.actualCost != null || day.stops.some((stop) => stop.actualCost != null)
+  );
+}
+
 /** One category's slice of a day. `fraction` draws the band, `percent` is what gets printed. */
 export type SpendShare = {
   key: StopCategory | 'stay';

@@ -9,7 +9,8 @@ import { Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
-import { usePlanDraft } from '@/lib/planDraft';
+import { CROWDS, ENERGY, STYLES, labelOf, usePlanDraft } from '@/lib/planDraft';
+import { accessibilityValue, dietaryValue } from '@/lib/profileRows';
 import { closestTier, tierName, tripDays } from '@/lib/tiers';
 
 export default function ReviewStep() {
@@ -47,6 +48,32 @@ export default function ReviewStep() {
           <SummaryRow
             label="Into"
             value={draft.interests.length ? draft.interests.join(', ') : 'Anything'}
+            onEdit={() => router.dismissTo('/plan/preferences')}
+          />
+          {/* Three answers on one row because they are one question about tempo, and because
+              Edit can only land on the step that holds them all anyway. */}
+          <SummaryRow
+            label="Pace"
+            value={[
+              labelOf(STYLES, draft.explorerStyle),
+              labelOf(ENERGY, draft.energy),
+              labelOf(CROWDS, draft.crowds),
+            ].join(' · ')}
+            onEdit={() => router.dismissTo('/plan/preferences')}
+          />
+          {/* The last two rows print even when nothing is set, unlike everything above them.
+              These are the hard constraints — a stated step-free requirement outranks pace and
+              interest — and this screen exists so somebody catches a misunderstanding before a
+              minute of generation is spent on it. A row that vanishes when empty is a row
+              nobody can notice is empty. */}
+          <SummaryRow
+            label="Diet"
+            value={dietaryValue(draft)}
+            onEdit={() => router.dismissTo('/plan/preferences')}
+          />
+          <SummaryRow
+            label="Access"
+            value={accessibilityValue(draft.accessibility)}
             onEdit={() => router.dismissTo('/plan/preferences')}
           />
         </FieldTrough>

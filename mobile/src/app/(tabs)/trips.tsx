@@ -10,9 +10,10 @@ import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
+import { type WallItem, todayISO, wallItems } from '@/lib/tripsWall';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
 
-export default function Memories() {
+export default function Trips() {
   const router = useRouter();
   const { account } = useAccount();
   // undefined = still loading, null = the fetch failed, [] = fetched fine, no trips yet.
@@ -22,14 +23,14 @@ export default function Memories() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <FlatList
-        data={gridData(trips)}
-        keyExtractor={(trip) => trip.id}
+        data={wall(trips)}
+        keyExtractor={(item) => item.key}
         numColumns={2}
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.masthead}>
-            <ThemedText type="display">Memories</ThemedText>
+            <ThemedText type="display">Trips</ThemedText>
             <ThemedText type="detail" themeColor="muted">
               {countLine(trips)}
             </ThemedText>
@@ -62,10 +63,14 @@ export default function Memories() {
           )
         }
         renderItem={({ item }) =>
-          item.id === SPACER_ID ? (
+          item.kind === 'spacer' ? (
             <View style={styles.spacer} />
+          ) : item.kind === 'header' ? (
+            <ThemedText type="label" themeColor="muted" style={styles.sectionLabel}>
+              {item.label}
+            </ThemedText>
           ) : (
-            <MemoryTile trip={item} onPress={() => router.push(`/trip/${item.id}`)} />
+            <TripTile trip={item.trip} onPress={() => router.push(`/trip/${item.trip.id}`)} />
           )
         }
       />
@@ -73,18 +78,9 @@ export default function Memories() {
   );
 }
 
-/**
- * A two-column grid whose last row holds one tile would stretch it across the full width —
- * `flex: 1` has nothing to share the row with — and an `aspectRatio` photo then becomes enormous.
- * A phantom cell keeps every tile exactly the width it has in a full row, which `maxWidth: '50%'`
- * would only approximate once the column gap is counted.
- */
-const SPACER_ID = '__spacer__';
-
-function gridData(trips: TripSummary[] | null | undefined): TripSummary[] {
-  if (!trips || trips.length === 0) return [];
-  if (trips.length % 2 === 0) return trips;
-  return [...trips, { id: SPACER_ID } as TripSummary];
+/** The clock is read here rather than inside the rule, so the arrangement stays testable. */
+function wall(trips: TripSummary[] | null | undefined): WallItem[] {
+  return trips ? wallItems(trips, todayISO()) : [];
 }
 
 function countLine(trips: TripSummary[] | null | undefined): string {
@@ -98,11 +94,11 @@ function countLine(trips: TripSummary[] | null | undefined): string {
 }
 
 /**
- * A memory tile. Radius 8 rather than the Swift app's 16: DESIGN.md records those 16px panels as
+ * A trip tile. Radius 8 rather than the Swift app's 16: DESIGN.md records those 16px panels as
  * a "Radius Drift" — incumbents the web retokenization deliberately left alone — and says new
  * surfaces take 5–8px or tighter. This app is all new surface.
  */
-function MemoryTile({ trip, onPress }: { trip: TripSummary; onPress: () => void }) {
+function TripTile({ trip, onPress }: { trip: TripSummary; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
@@ -139,6 +135,8 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.read, gap: Spacing.rows },
   row: { gap: Spacing.rows },
   masthead: { gap: Spacing.hair, marginBottom: Spacing.tight },
+  // Sits in the leading half of its own row (see `wallItems`), aligned with the tile beneath it.
+  sectionLabel: { flex: 1, alignSelf: 'flex-end', paddingBottom: Spacing.hair },
   tile: {
     flex: 1,
     backgroundColor: Colors.panel,

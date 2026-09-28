@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 import { arrivalPoints } from '@/api/tripMateApi';
-import type { ArrivalPoint, GroupType } from '@/api/types';
+import type { ArrivalPoint } from '@/api/types';
 import {
   CountRow,
   FieldTrough,
@@ -23,14 +23,7 @@ import {
 } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
-import { usePlanDraft } from '@/lib/planDraft';
-
-const GROUPS: { value: GroupType; label: string }[] = [
-  { value: 'solo', label: 'Solo' },
-  { value: 'couple', label: 'Couple' },
-  { value: 'family_with_kids', label: 'Family with kids' },
-  { value: 'other', label: 'Something else' },
-];
+import { GROUPS, partyForGroup, usePlanDraft } from '@/lib/planDraft';
 
 export default function GroupStep() {
   const router = useRouter();
@@ -100,11 +93,17 @@ export default function GroupStep() {
           {draft.destination ? `Who's going to ${draft.destination.split(',')[0]}?` : "Who's going?"}
         </ThemedText>
 
+        {/* A shortcut into the counters below, not a second question about the same thing —
+            see `partyForGroup`. The counters stay editable, so a preset is a starting point
+            rather than an assertion. */}
         <Question title="Who's travelling">
           <ChoiceRow
             options={GROUPS}
             value={draft.group}
-            onChange={(group) => patch({ group })}
+            onChange={(group) => {
+              const seeded = partyForGroup(group);
+              patch(seeded ? { group, party: seeded } : { group });
+            }}
           />
         </Question>
 

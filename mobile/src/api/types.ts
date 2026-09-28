@@ -322,7 +322,7 @@ export interface CreateTripRequest {
   itinerary: Itinerary;
   /**
    * **Not optional in practice.** The route reads `status === "draft" ? "draft" : "saved"`, so
-   * omitting this creates a *kept* trip and puts an unsaved plan on the memories wall.
+   * omitting this creates a *kept* trip and puts an unsaved plan on the trips wall.
    */
   status: TripStatus;
   runId?: string;

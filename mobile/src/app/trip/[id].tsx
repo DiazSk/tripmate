@@ -20,7 +20,7 @@ import {
   promoteTrip,
   updateTripItinerary,
 } from '@/api/tripMateApi';
-import type { ChatTurn, Itinerary, Stop, Trip } from '@/api/types';
+import type { ChatTurn, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { AnchorReceipt } from '@/components/anchor-receipt';
 import { BudgetBar } from '@/components/budget-bar';
@@ -33,7 +33,7 @@ import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { fitMessage } from '@/lib/anchors';
-import { formatRange } from '@/lib/dayDisplay';
+import { formatDayChip, formatRange } from '@/lib/dayDisplay';
 import { tripHealth, type Guardrail } from '@/lib/health';
 import { regionForStops } from '@/lib/mapRegion';
 
@@ -198,7 +198,7 @@ export default function TripDetail() {
     <View style={styles.screen}>
       {/* Chevron only. The back label defaults to the previous screen's title, which for a route
           group is the literal string "(tabs)" — and naming one tab would be wrong anyway, since
-          a trip opens from both Home and Memories. The title stays the destination rather than
+          a trip opens from both Home and Trips. The title stays the destination rather than
           the day: a nav title that changes on every swipe is noise, and it re-renders the native
           header each time. */}
       <Stack.Screen
@@ -218,9 +218,15 @@ export default function TripDetail() {
             <ThemedText type="label" themeColor="muted">
               {formatRange(trip.startDate, trip.endDate)}
             </ThemedText>
+            {/* Two rows, because these are two kinds of thing. Which day you are reading is
+                navigation; List/Map and Ask/+ act on the day you landed on. Sharing one row made
+                them one group of controls of equal weight, and it also capped the strip at
+                whatever width the other three left — which is the wrong constraint on a
+                fourteen-day trip, where the strip is the control that needs the room. */}
+            <DayStrip days={days} current={day} onSelect={setDay} />
             <View style={styles.chromeRow}>
-              <DayStrip count={days.length} current={day} onSelect={setDay} />
               <FaceToggle face={face} onChange={setFace} />
+              <View style={styles.spacer} />
               {/* Beside + for the reason + is here: the trailing end of this row is the toolbar,
                   and both act on the plan below it — the same pairing `TripHeaderRow` makes in the
                   Swift app. Muted rather than jade, also copied from there: two filled jade
@@ -531,14 +537,15 @@ function DayPager({
  * Not jade. Jade means action, and where-you-are is not an action.
  */
 function DayStrip({
-  count,
+  days,
   current,
   onSelect,
 }: {
-  count: number;
+  days: DayPlan[];
   current: number;
   onSelect: (day: number) => void;
 }) {
+  const count = days.length;
   const strip = useRef<ScrollView>(null);
 
   // Keep the active chip on screen — a fourteen-day trip runs off the edge.
@@ -555,21 +562,28 @@ function DayStrip({
       // seven-day strip at the largest text size already bounded correctly without this, so it
       // fixes nothing observed — it states the constraint the layout is relying on instead of
       // depending on how a ScrollView happens to size itself inside a row.
-      style={styles.stripBox}
       contentContainerStyle={styles.strip}>
-      {Array.from({ length: count }, (_, index) => {
+      {days.map((plan, index) => {
         const active = index === current;
+        const chip = formatDayChip(plan.date);
         return (
           <Pressable
             key={index}
             onPress={() => onSelect(index)}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
+            // The chip shows a date; the label still says which day of how many, because that
+            // is the thing a screen-reader user cannot get from the strip's shape.
             accessibilityLabel={`Day ${index + 1} of ${count}`}
             style={[styles.chip, active && styles.chipActive]}>
             <ThemedText type="money" themeColor={active ? 'foreground' : 'muted'}>
-              {index + 1}
+              {chip?.dayOfMonth ?? index + 1}
             </ThemedText>
+            {chip ? (
+              <ThemedText type="micro" themeColor="muted" style={styles.chipWeekday}>
+                {chip.weekday.toUpperCase()}
+              </ThemedText>
+            ) : null}
           </Pressable>
         );
       })}
@@ -657,7 +671,7 @@ function stopIndexFor(emphasis: string | null, dayIndex: number): number | null 
  * An unkept plan's shelf.
  *
  * A generated trip is a `draft` row from the moment it exists, so nothing is lost on a back
- * press — but a draft is invisible on the memories wall (`listTrips` defaults to saved), so
+ * press — but a draft is invisible on the trips wall (`listTrips` defaults to saved), so
  * without this it could only be reached by going back through generation. Keeping promotes the
  * same row rather than inserting a second one, which is what keeps its `runId` link intact.
  */
@@ -681,7 +695,7 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
     setBusy('discard');
     setFailed(false);
     const ok = await discardTrip(trip.id);
-    if (ok) router.replace('/(tabs)/memories');
+    if (ok) router.replace('/(tabs)/trips');
     else {
       setBusy(null);
       setFailed(true);
@@ -696,7 +710,7 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
         </ThemedText>
       ) : (
         <ThemedText type="detail" themeColor="muted" style={styles.shelfError}>
-          Not kept yet — it won&rsquo;t appear under Memories until you do.
+          Not kept yet — it won&rsquo;t appear under Trips until you do.
         </ThemedText>
       )}
       <PrimaryButton title="Keep this trip" onPress={keep} busy={busy === 'keep'} disabled={!!busy} />
@@ -709,8 +723,10 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
   );
 }
 
-/** Chip width plus its gap — what one step along the strip measures. */
-const CHIP_STRIDE = 44;
+/** Chip width plus its gap — what one step along the strip measures. An estimate, and only
+ *  used to keep the active chip on screen: it drifts as the text scales, and landing a few
+ *  points out of centre is invisible where failing to scroll at all would not be. */
+const CHIP_STRIDE = 52;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.canvas },
@@ -722,9 +738,11 @@ const styles = StyleSheet.create({
     gap: Spacing.tight,
   },
   chromeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
+  // Pushes Ask and + to the trailing end, so the row reads as "view here, actions there"
+  // rather than as four controls in a queue.
+  spacer: { flex: 1 },
   faces: { flex: 1 },
-  stripBox: { flex: 1 },
-  strip: { gap: Spacing.tight, paddingRight: Spacing.tight, alignItems: 'center' },
+  strip: { gap: Spacing.tight, paddingRight: Spacing.tight, alignItems: 'flex-end' },
   toggle: {
     flexDirection: 'row',
     borderRadius: Radius.pill,
@@ -757,15 +775,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // No fixed height: two lines of text at the accessibility sizes need the room, and a chip
+  // that clips its weekday is worse than a taller strip. `read` rather than `pill`, because a
+  // two-line pill is a lozenge.
   chip: {
-    minWidth: 36,
-    height: 36,
+    minWidth: 44,
     paddingHorizontal: Spacing.tight,
-    borderRadius: Radius.pill,
+    paddingVertical: 5,
+    borderRadius: Radius.read,
     backgroundColor: Colors.control,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  chipWeekday: { marginTop: -1 },
   chipActive: {
     backgroundColor: Colors.surfaceDeep,
     borderWidth: StyleSheet.hairlineWidth,

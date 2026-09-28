@@ -34,7 +34,7 @@ export const unstable_settings = { anchor: '(tabs)' };
 // passes useOnlyUserDefinedScreens=true to withLayoutContext), so a non-tab route like
 // trip/[id] would have no screen slot anywhere in the tree if NativeTabs were the root layout —
 // router.push('/trip/...') would silently no-op. The (tabs) group keeps that filtering scoped to
-// just index/memories/profile, while trip/[id] mounts as an ordinary sibling Stack screen.
+// just index/trips/profile, while trip/[id] mounts as an ordinary sibling Stack screen.
 export default function RootLayout() {
   // Static cuts instanced from the Swift app's variable TTFs, each keyed by its own family name.
   // The keys here ARE the family names RN resolves, so they must match `Fonts` in constants/theme.

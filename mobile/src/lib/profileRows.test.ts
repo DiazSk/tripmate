@@ -1,6 +1,6 @@
 import type { TravelerProfile } from '@/api/types';
 
-import { dietaryValue, interestsValue } from './profileRows';
+import { accessibilityValue, dietaryValue, interestsValue } from './profileRows';
 
 const profile = (overrides: Partial<TravelerProfile> = {}): TravelerProfile => ({
   group: 'solo',
@@ -45,4 +45,32 @@ test('tags are what gets counted, even alongside a note', () => {
   expect(dietaryValue(profile({ dietary: { tags: ['Vegan', 'Kosher'], note: 'low salt' } }))).toBe(
     '2 noted'
   );
+});
+
+// Access needs outrank pace and interest when the plan is written, so the Review step has to
+// show them even when there are none — an empty row is what lets somebody notice one is missing.
+describe('access needs', () => {
+  test('names the toggles rather than counting them', () => {
+    expect(accessibilityValue({ stepFreeRequired: true, limitStairs: false, note: '' })).toBe(
+      'Step-free routes'
+    );
+    expect(accessibilityValue({ stepFreeRequired: true, limitStairs: true, note: '' })).toBe(
+      'Step-free routes, few stairs'
+    );
+    expect(accessibilityValue({ stepFreeRequired: false, limitStairs: true, note: '' })).toBe(
+      'few stairs'
+    );
+  });
+
+  test('a note with no toggles still says something is there', () => {
+    expect(accessibilityValue({ stepFreeRequired: false, limitStairs: false, note: '' })).toBe(
+      'No requirements'
+    );
+    expect(
+      accessibilityValue({ stepFreeRequired: false, limitStairs: false, note: 'uses a cane' })
+    ).toBe('A note');
+    expect(accessibilityValue({ stepFreeRequired: false, limitStairs: false, note: '  ' })).toBe(
+      'No requirements'
+    );
+  });
 });

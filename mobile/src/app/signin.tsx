@@ -109,7 +109,7 @@ const fade = new Keyframe({
  * Sign in, or make an account — and the screen the app opens on.
  *
  * **Nothing is gated by it, and that distinction is the whole design.** This used to say "nothing in
- * this app is behind it", which was true when it could only be reached from Memories or Profile and
+ * this app is behind it", which was true when it could only be reached from Trips or Profile and
  * is now false in the literal sense: `+native-intent.tsx` opens a signed-out launch here, and the
  * root layout anchors `(tabs)` so Home sits directly behind the sheet. What remains true is that it
  * demands nothing. Planning, generating and saving all work signed out under the anonymous owner,
@@ -197,7 +197,7 @@ export default function SignInScreen() {
    */
   function leave() {
     if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/memories');
+    else router.replace('/(tabs)/trips');
   }
 
   const ready = email.trim().length > 0 && password.length >= 8;

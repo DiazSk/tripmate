@@ -58,7 +58,7 @@ export default function Home() {
           <PrimaryButton title="Plan a trip" onPress={() => router.push('/plan/basics')} />
         </View>
 
-        {/* The only place Home spends a network call, and it reuses the Memories photo cache. */}
+        {/* The only place Home spends a network call, and it reuses the Trips photo cache. */}
         <View style={styles.band}>
           <BandOpener label={featured?.upcoming ? 'Up next' : 'Latest memory'} />
           {trips === undefined ? (
@@ -101,7 +101,10 @@ export default function Home() {
           </ThemedText>
           {METHOD.map((step, index) => (
             <View key={step.number} style={[styles.step, index > 0 && styles.stepRuled]}>
-              <ThemedText type="money" themeColor="money" style={styles.stepNumber}>
+              {/* Tabular figures, but not gold: gold counts money and only money, and these are
+                  ordinals. Colouring a step number with the palette's price colour spends the one
+                  piece of vocabulary that teaches a reader "this costs something". */}
+              <ThemedText type="money" themeColor="muted" style={styles.stepNumber}>
                 {step.number}
               </ThemedText>
               <View style={styles.grow}>
@@ -115,7 +118,7 @@ export default function Home() {
         </View>
 
         <ThemedText type="detail" themeColor="muted" style={styles.closing}>
-          Every plan you keep is collected under Memories.
+          Every plan you keep is collected under Trips.
         </ThemedText>
       </ScrollView>
     </SafeAreaView>

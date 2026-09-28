@@ -1,4 +1,4 @@
-import type { TravelerProfile } from '@/api/types';
+import type { AccessibilityNeeds, TravelerProfile } from '@/api/types';
 
 /**
  * What a profile row says about itself.
@@ -13,7 +13,7 @@ import type { TravelerProfile } from '@/api/types';
  */
 
 /** `None yet` · `3 chosen` · `3 chosen, 2 starred`. */
-export function interestsValue(profile: TravelerProfile): string {
+export function interestsValue(profile: Pick<TravelerProfile, 'priorities' | 'topPriorities'>): string {
   const chosen = profile.priorities.length;
   if (chosen === 0) return 'None yet';
   const starred = profile.topPriorities.length;
@@ -28,9 +28,26 @@ export function interestsValue(profile: TravelerProfile): string {
  * there is nothing to count, but there is something there, and saying "Nothing noted" would be
  * false about the one field where being wrong means a meal somebody cannot eat.
  */
-export function dietaryValue(profile: TravelerProfile): string {
+export function dietaryValue(profile: Pick<TravelerProfile, 'dietary'>): string {
   const { tags, note } = profile.dietary;
   if (tags.length === 0) return note.trim() ? 'A note' : 'Nothing noted';
   if (tags.length === 1) return tags[0];
   return `${tags.length} noted`;
+}
+
+/**
+ * `No requirements` · `Step-free routes` · `Step-free routes, few stairs` · `A note`.
+ *
+ * Named the way the two toggles are asked, not as "2 set": these are hard constraints that
+ * outrank pace and interest when the plan is written, and a Review step exists so somebody can
+ * see one is missing before the model spends a minute honouring the wrong thing. Same reason
+ * `dietaryValue` spells a lone tag out instead of counting it.
+ */
+export function accessibilityValue(needs: AccessibilityNeeds): string {
+  const set = [
+    needs.stepFreeRequired ? 'Step-free routes' : null,
+    needs.limitStairs ? 'few stairs' : null,
+  ].filter(Boolean);
+  if (set.length > 0) return set.join(', ');
+  return needs.note.trim() ? 'A note' : 'No requirements';
 }
