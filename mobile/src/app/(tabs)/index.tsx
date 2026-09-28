@@ -8,13 +8,20 @@ import { PrimaryButton } from '@/components/form';
 import { PlacePhoto } from '@/components/place-photo';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, PhotoScrim, Radius, Spacing } from '@/constants/theme';
+import { BarHeight, Colors, PhotoScrim, Radius, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
 
 /**
  * Transcribed from `ios/TripMate/TripMate/Home/LandingContent.swift`. Static, and true today —
  * this is what the backend actually does when a plan is generated.
+ *
+ * **Step 02 no longer matches the Swift original, deliberately.** It said "forecast for your
+ * actual dates" full stop, which for a trip a month out is a promise the product cannot keep:
+ * `fetchWeatherBundle` only reaches the forecast endpoint inside `FORECAST_HORIZON_DAYS` and
+ * falls back to the historical archive beyond it. This whole section is an argument about
+ * honesty, and the sign-in screen already states the 16 days plainly — a vaguer claim here was
+ * the section undercutting itself.
  */
 const METHOD = [
   {
@@ -25,7 +32,7 @@ const METHOD = [
   {
     number: '02',
     title: 'Real data goes in first',
-    prose: 'Forecast for your actual dates, public holidays, opening hours and travel times — fetched before a single word is written.',
+    prose: 'A real forecast for your dates inside the 16-day window and seasonal norms beyond it, plus public holidays, opening hours and travel times — fetched before a single word is written.',
   },
   {
     number: '03',
@@ -156,7 +163,10 @@ function pickFeatured(trips: TripSummary[]): { trip: TripSummary; upcoming: bool
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.canvas },
-  content: { padding: Spacing.read, paddingBottom: Spacing.regular * 2 },
+  /** The tab bar floats over the content and its safe-area inset does not reach this scroll
+   *  view — the same correction `profile.tsx` already carries. Without it the last Method card
+   *  ends underneath the bar. */
+  content: { padding: Spacing.read, paddingBottom: BarHeight + Spacing.regular },
   opener: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.cardBorder,
