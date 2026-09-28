@@ -547,6 +547,61 @@ every anchor inside its real hours. One run; and the no-hours run before it also
 anchors right from memory, so this shows the mechanism working end to end rather than proving the
 hours are what fixed it. Repeats would settle that.
 
+## The review pass was reaching nobody on the phone (2026-09-27, Claude)
+
+Not a rubric change. A measurement of the existing review pass, and the discovery that most of
+its output was being discarded before anyone read it.
+
+### What was wrong
+
+| Finding | Evidence |
+|---|---|
+| **The React Native client threw the review's corrections away.** The generation stream emits `plan` → `revised` → `done`; the web client reads all three, the phone treated `plan` as terminal and stopped. So the plan stored and kept on mobile was always the un-reviewed first draft | `mobile/src/api/tripMateApi.ts` had no `revised` case and `readBody`'s stop predicate was `() => planned`. `GenerateHandlers` documented it as deliberate, to avoid a ~150s wait |
+| Hanging up never saved the work either | `/api/itinerary`'s `cancel()`: *"runGeneration has no cancellation token, so an in-flight Claude call simply finishes and its result is discarded."* The review was billed in full and binned |
+| **Nothing verified the review.** It returned a day set that replaced every day wholesale and was believed, so a model rewriting a week to fix one leg could break three others silently | `generationRunner.ts` assigned `revision.days` unconditionally |
+| Every saved trip in the dev database still carried deterministic findings after its own review | Scored with `planHealth`: Paris 3, Lisbon 4, Kyoto 7, Porto 8, Seville 10, Jaipur 16 |
+
+### What the review pass actually does, measured
+
+One legacy streaming generation, Seville, 4 days, $1100 — the first run of the new gate. Findings
+from `evaluateItinerary`, budget excluded:
+
+| | Before review | After review |
+|---|---|---|
+| Blocking (a leg that cannot be walked) | **1** | **0** |
+| Advisory (day over the pace threshold) | 3 — 13h, 12.5h, 13h | 4 — all 11.5h |
+
+The pass is good. It removed the impossible leg, cut every day by about 90 minutes, and added the
+dinner day 4 was missing — which is what put day 4 over the threshold as well. The critique's own
+`issues` named all three correctly.
+
+**So the 3–16 findings above are largely explained by the client discarding this, not by the pass
+failing.** No retry loop was added; there was nothing to retry.
+
+### The gate's first yardstick was wrong, and this run caught it
+
+It counted *all* findings and refused any increase. On this generation: 4 before, 4 after. A
+plainly better plan scored level, and one more day tipping over the threshold would have had it
+**rejected**. A count cannot see that a day got ninety minutes shorter.
+
+`revisionIsNoWorse` now judges **blocking findings only** — travel, overlap, commitment — and lets
+the review trade an advisory finding for a real repair, which is its job. The advisory totals still
+reach the log, as the standing measurement of whether the pass earns its ~150s. The Seville case is
+a regression test in `guardrails.test.mjs`.
+
+### Why the benchmark was not run
+
+`docs/itinerary-quality.md`'s harness measures the **staged pipeline** — `runBenchCell` →
+`generateItinerary` → `buildItineraryGenerationPrompt` + the skill. Both generation changes here
+are in the **legacy** path (`itineraryPrompt.ts`'s stop shape, `generationRunner.ts`'s gate), and
+no code under `src/lib/bench/` references either. A benchmark run would have costed seven
+generations to report on code that did not change.
+
+What was checked instead, from three real legacy generations: every plan parsed, `outdoor` written
+on 26 of 26 stops with sensible calls, and `timeFlexibility` set to `FIXED` on exactly the one stop
+a traveller stated was booked. A collapse check, not a quality measurement, and it is not claimed
+as one.
+
 ## Still open
 
 **Not fixable by rules — no data behind them.** Adding skill rules for these would be instructions
