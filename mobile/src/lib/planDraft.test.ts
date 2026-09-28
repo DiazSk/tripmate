@@ -7,6 +7,7 @@ import {
   toTravelerProfile,
   toUserAnswers,
   cycleInterest,
+  partyForGroup,
   toggleTag,
 } from './planDraft';
 
@@ -162,4 +163,15 @@ test('the traveler profile excludes dates, budget and pinned places', () => {
   });
   expect(Object.keys(profile)).not.toContain('startDate');
   expect(Object.keys(profile)).not.toContain('budget');
+});
+
+// The defect this rule removes: the preset and the counters were two answers to one question, so
+// "Solo" could stand over three adults and "Family with kids" over none.
+test('a preset seeds the counters it names, and seeds nothing when it names no number', () => {
+  expect(partyForGroup('solo')).toEqual({ adults: 1, children: 0, infants: 0 });
+  expect(partyForGroup('couple')).toEqual({ adults: 2, children: 0, infants: 0 });
+  // The label asserts a child; a family over zero children is the contradiction being removed.
+  expect(partyForGroup('family_with_kids')?.children).toBeGreaterThan(0);
+  // "Friends / group" is the one option naming no headcount, which is why it asks in words.
+  expect(partyForGroup('other')).toBeNull();
 });

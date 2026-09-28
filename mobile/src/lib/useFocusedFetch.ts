@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * Server data for a tab screen, re-read every time that screen comes into focus.
  *
  * **`useEffect(…, [])` is the wrong shape here, and structurally so.** A tab navigator keeps
- * every screen mounted for the life of the app, so "on mount" means *once per launch*. Memories
+ * every screen mounted for the life of the app, so "on mount" means *once per launch*. Trips
  * read the trip list when the app opened and never again: keep a trip in the wizard, switch to
  * the tab, and it is not there — while the server had been returning it the whole time. That
  * read as a lost trip, which is the worst thing this screen could say.

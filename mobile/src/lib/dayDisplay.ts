@@ -21,6 +21,8 @@ const WEEKDAYS = [
   'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
 ];
 
+const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 type Parts = { year: number; month: number; day: number };
 
 /** The one parser every spelling shares, so they cannot disagree about what a date is. */
@@ -104,4 +106,20 @@ export function formatRange(start: string, end: string, currentYear?: number): s
   const head = `${MONTHS[from.month - 1]} ${from.day}`;
   const tail = from.year === current ? `${to.day}` : `${to.day}, '${suffix(from.year)}`;
   return `${head} – ${tail}`;
+}
+
+/**
+ * `2026-09-19` → `{ dayOfMonth: '19', weekday: 'Sat' }`, for the day strip's chips.
+ *
+ * The month is deliberately absent: the strip sits directly under the trip's own date range,
+ * which names it once. What a chip has to answer is "which day of the week am I about to land
+ * on", and a bare ordinal — `1 2 3` — could not.
+ *
+ * Returns `null` on an unparseable date rather than a placeholder, so the caller falls back to
+ * the ordinal instead of printing something wrong beside a real date.
+ */
+export function formatDayChip(iso: string): { dayOfMonth: string; weekday: string } | null {
+  const date = split(iso);
+  if (!date) return null;
+  return { dayOfMonth: String(date.day), weekday: SHORT_WEEKDAYS[weekdayIndex(date)] };
 }

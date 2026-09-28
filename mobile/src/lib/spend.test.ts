@@ -1,6 +1,6 @@
 import type { DayPlan, Stop, StopCategory } from '@/api/types';
 
-import { budgetSegments, daySpend, spendShares, tripSpend } from './spend';
+import { anyActualSpend, budgetSegments, daySpend, spendShares, tripSpend } from './spend';
 
 const stop = (name: string, cost: number, category: StopCategory, actualCost?: number): Stop => ({
   name,
@@ -131,4 +131,28 @@ test('the segments stop where the budget runs out, and never exceed the track', 
 
 test('no budget means no bar to draw', () => {
   expect(budgetSegments([day([stop('A', 100, 'food')])], 0)).toEqual([]);
+});
+
+// The budget bar's label turns on this: `tripSpend` coalesces `actualCost ?? cost`, so one
+// figure means "forecast" or "receipt" and only this can tell them apart.
+describe('whether any real spend has been entered', () => {
+  test('a plan nobody has spent against is still a projection', () => {
+    expect(anyActualSpend([day([stop('Lunch', 30, 'food')], { cost: 100 })])).toBe(false);
+  });
+
+  test('one actual figure on one stop is enough', () => {
+    expect(anyActualSpend([day([stop('Lunch', 30, 'food', 41)])])).toBe(true);
+  });
+
+  // Lodging is the easy one to forget: it is money, and it is not in `stops`.
+  test('an actual on the lodging counts too', () => {
+    expect(anyActualSpend([day([stop('Lunch', 30, 'food')], { cost: 100, actualCost: 120 })])).toBe(
+      true
+    );
+  });
+
+  // Zero is a real figure somebody entered — "it turned out to be free" is not "unknown".
+  test('an actual of zero is an answer, not an absence', () => {
+    expect(anyActualSpend([day([stop('Park', 10, 'entry', 0)])])).toBe(true);
+  });
 });

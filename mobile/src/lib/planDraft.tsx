@@ -6,6 +6,7 @@ import type {
   ExplorerStyle,
   GenerateRequest,
   GroupType,
+  PartyCounts,
   PlanDraft,
   TravelerProfile,
   TripLogistics,
@@ -24,8 +25,35 @@ export const GROUPS: { value: GroupType; label: string }[] = [
   { value: 'solo', label: 'Solo' },
   { value: 'couple', label: 'Couple' },
   { value: 'family_with_kids', label: 'Family with kids' },
-  { value: 'other', label: 'Something else' },
+  { value: 'other', label: 'Friends / group' },
 ];
+
+/**
+ * The counters a preset implies, or `null` where it implies none.
+ *
+ * "Who's travelling" and "Party" were two questions that happened to ask the same thing. Nothing
+ * reconciled them — *Solo* could stand over three adults, *Family with kids* over none — and the
+ * Review step then printed the counters and dropped the preset on the floor unless it was `other`.
+ * So the preset is a shortcut *into* the counters rather than a second answer: picking one fills
+ * them in, and they stay editable afterwards.
+ *
+ * `other` seeds nothing on purpose. It is the one option naming no number — "five college friends"
+ * is a headcount nobody can guess — which is exactly why it is the option that reveals the
+ * free-text field. `family_with_kids` seeds a child because the label asserts one, and a family
+ * preset standing over zero children is the contradiction this exists to remove.
+ */
+export function partyForGroup(group: GroupType): PartyCounts | null {
+  switch (group) {
+    case 'solo':
+      return { adults: 1, children: 0, infants: 0 };
+    case 'couple':
+      return { adults: 2, children: 0, infants: 0 };
+    case 'family_with_kids':
+      return { adults: 2, children: 1, infants: 0 };
+    case 'other':
+      return null;
+  }
+}
 
 export const STYLES: { value: ExplorerStyle; label: string }[] = [
   { value: 'packed', label: 'See as much as possible' },

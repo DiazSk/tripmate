@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import type { DayPlan } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { budgetSegments, formatMoney, tripSpend } from '@/lib/spend';
+import { anyActualSpend, budgetSegments, formatMoney, tripSpend } from '@/lib/spend';
 
 /** The track's own height. Thin enough to read as a rule rather than a widget — this sits under
  *  the chrome on every screen of a trip, and a chunky meter would outrank the plan below it. */
@@ -50,12 +50,17 @@ export function BudgetBar({
   const spent = tripSpend(days);
   const segments = budgetSegments(days, budget);
   const over = spent > budget;
+  // "Budget" named the denominator and left the figure beside it unexplained — a reader could
+  // not tell a forecast from a receipt, and those carry very different weight when the number
+  // is close to the ceiling. `tripSpend` coalesces `actualCost ?? cost`, so the honest label
+  // depends on whether any real figure has been entered.
+  const actual = anyActualSpend(days);
 
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
         <ThemedText type="label" themeColor="muted">
-          Budget
+          {actual ? 'Spent' : 'Projected'}
         </ThemedText>
         <View style={styles.figures}>
           <ThemedText type="money" themeColor={over ? 'alert' : 'money'}>
