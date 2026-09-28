@@ -69,3 +69,43 @@ Cheap to surface, already calculated:
 - `revisionIsNoWorse()` returns before/after blocking-finding counts, only `console.log`'d (`generationRunner.ts:691`).
 - `checkCommitments` knows the offending stop and omits `stopIndex` (`guardrails.ts:443,463,488`), so a missed reservation cannot render on its own row the way a weather finding can.
 - `planHealth` is never served over HTTP — the web app does not show it at all.
+
+---
+
+# Round two — the re-shot board, 2026-09-28
+
+The board was re-photographed on the current build and reviewed again. This round was
+**semantic**, not visual: the reviewer explicitly declined to reopen dark-only, time-not-distance,
+booked immutability, deterministic repair, diff/undo or the Swift decision, and said the product is
+past the point where another visual pass earns anything.
+
+## What the code said about each claim
+
+Nine claims turned on facts a screenshot cannot show. Verified before ranking:
+
+| Their claim | Verdict |
+|---|---|
+| Ask's scope control and its transcript contradict each other | **Representation, not logic.** Scope is sent per turn (`chat-sheet.tsx:117`) and enforced by `applyPatch`. The refusal was true under Day 1; the control was widened after. **Fixed** — the turn now carries its scope. |
+| Add a stop's caption over-claims | **True.** `slotLine` rendered only inside `PlaceCard`, one tap past the row. **Fixed** — `landingLine` puts it on the row. |
+| Profile's `SPENT` is unsupported | **True.** `profileStats` sums `tripSpend`, which coalesces `actualCost ?? cost`. **Fixed** — `PLANNED`. |
+| `Day 1 spend` has the same problem | **True, and inconsistent with a fix already shipped** — `budget-bar.tsx` already branched on `anyActualSpend`; the breakdown did not. **Fixed.** |
+| Plan Health needs severity and coverage | **True and free** — `isBlocking` already existed, findings already carried `rule`, unmeasured dimensions already scored `null`. **Fixed**, arithmetic untouched. |
+| Destination search mixes entity classes | **True, and worse than they knew** — `feature_code` was being discarded in `weather.ts`, so *neither* remedy they proposed was possible. **Fixed** at the source. |
+| The tab bar covers content | **Half true.** Profile already insets by `BarHeight`; Home did not. **Fixed** on Home. |
+| Saved places show other cities | **True, and mostly built** — `groupByCity` and `cityMatches` existed and already drove pre-selection. **Fixed** — only the labelling was missing. |
+| Review's `PACE` row compresses three answers | **Judgement call with a stated reason** (`review.tsx:56`): the three are one question about tempo and Edit can only land on the step holding all three. Splitting means four Edit links to one destination. **Left alone.** |
+
+## Open, and why
+
+- **Day-summary emojis.** Mandated by the prompt in three places (`itineraryPrompt.ts:49,274,310`) and twice in `SKILL.md`. Removing them changes only *future* plans and the web client renders the same field — a cross-client decision, not a mobile tweak.
+- **The category rail's fade at rest.** The platform indicator is now enabled (`indicatorStyle="white"`), which shows on scroll. A gradient mask would show at rest and costs `expo-linear-gradient`, a dependency nothing else here needs.
+- **Long-trip day strip** — auto-centre, position persistence across List↔Map, edge fade. Untested beyond seven days.
+
+## The reviewer's ranking of what is left
+
+Today / on-trip mode, with one acceptance criterion they were firm about: **today's itinerary,
+times, booked items and key addresses stay readable with no network.** Their argument is that the
+planning side is now complete enough that the largest hole is what happens after the trip starts,
+and that Today Mode is mostly a different projection of data this app already owns — ordered days,
+leave-by, travel time, fixed items, conflicts, weather, scoped Ask, deterministic fixes, budget.
+Per-stop provenance was their runner-up. That work is architectural and has not been specced.
