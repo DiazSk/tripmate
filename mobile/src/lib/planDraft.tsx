@@ -69,7 +69,10 @@ export function partyForGroup(group: GroupType): PartyCounts | null {
  */
 export const PACES: { value: PacePreference; label: string }[] = [
   { value: 'relaxed', label: 'A few things, done well' },
-  { value: 'balanced', label: 'A comfortable amount' },
+  // Not "a comfortable amount": that is already how ENERGY spells `moderate`, and the two
+  // sit side by side on the Review step's Pace row, which read "A comfortable amount · A
+  // comfortable amount".
+  { value: 'balanced', label: 'A balanced day' },
   { value: 'packed', label: 'See as much as possible' },
 ];
 
