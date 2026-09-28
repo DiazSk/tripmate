@@ -1,6 +1,11 @@
 import { suggestDayForPlace, type DayShape } from '@shared/dayFit';
 import { planSlot, suggestTimeOfDay } from '@shared/daySlotting';
 import type { TimeOfDay } from '@shared/timeOfDay';
+// The mode type lives with the rest of the wire shapes, not with the pricing function; this
+// app's own `api/types.ts` does not mirror it, there being nothing on a screen that took one
+// until now.
+import { travelLegBetween } from '@shared/travelTime';
+import type { TransportMode } from '@shared/types';
 
 import type { FoundPlace, Itinerary, Stop, StopCategory } from '@/api/types';
 
@@ -39,6 +44,108 @@ export function dayShapesOf(itinerary: Itinerary): DayShape[] {
  */
 export function suggestDay(itinerary: Itinerary, place: { lat: number; lng: number }): number | null {
   return suggestDayForPlace({ lat: place.lat, lng: place.lng }, dayShapesOf(itinerary))?.day ?? null;
+}
+
+/**
+ * A coordinate somebody could actually travel to.
+ *
+ * `0, 0` is in the Gulf of Guinea and is what an unresolved stop carries, so it has to be read
+ * as "no coordinate" rather than as a place — otherwise one unplaced stop makes every detour in
+ * its day a transatlantic one.
+ */
+const located = (p: { lat: number; lng: number }) =>
+  Number.isFinite(p.lat) && Number.isFinite(p.lng) && !(p.lat === 0 && p.lng === 0);
+
+const asPoint = (p: { lat: number; lng: number }) => ({ lat: p.lat, lon: p.lng });
+
+/** The nearest stop with a usable coordinate, walking outwards from `from`. */
+function neighbour(stops: Stop[], from: number, step: -1 | 1): Stop | null {
+  for (let i = from; i >= 0 && i < stops.length; i += step) {
+    if (located(stops[i])) return stops[i];
+  }
+  return null;
+}
+
+export interface Detour {
+  /** Extra travel this insert adds to the day, in minutes. */
+  minutes: number;
+  /** The mode both new legs agree on, or null when they differ and "travel" is the honest word. */
+  mode: TransportMode | null;
+}
+
+/**
+ * What adding this place here would cost in travel.
+ *
+ * The going rate between the two stops it would sit between, subtracted from the two legs it
+ * replaces them with — so the figure is the *extra* journey, not the journey. A place directly
+ * on the way costs nearly nothing and should say so; a place twenty minutes off the route should
+ * say that before it is added rather than after, which is the whole complaint this answers.
+ *
+ * **Null is a real answer.** A day with no located neighbour on either side has nothing to
+ * detour from, and an estimate with no basis is worse here than a blank: this is the number
+ * somebody would use to decide.
+ *
+ * Unlocated stops are stepped over rather than treated as the neighbour — the same treatment
+ * `planSlot` gives a stop whose time will not parse. `travelLegBetween` is the repo's one
+ * priced hop, so this cannot drift from the legs already drawn between stops in the day.
+ */
+export function insertionDetour(
+  itinerary: Itinerary,
+  dayIndex: number,
+  place: { lat: number; lng: number },
+  slot: TimeOfDay
+): Detour | null {
+  const stops = itinerary.days[dayIndex]?.stops ?? [];
+  if (!located(place)) return null;
+
+  const { index } = planSlot(stops, slot);
+  const before = neighbour(stops, index - 1, -1);
+  const after = neighbour(stops, index, 1);
+  if (!before && !after) return null;
+
+  const here = asPoint(place);
+  const modes: TransportMode[] = [];
+  let minutes = 0;
+
+  if (before) {
+    const leg = travelLegBetween(asPoint(before), here);
+    minutes += leg.minutes;
+    modes.push(leg.mode);
+  }
+  if (after) {
+    const leg = travelLegBetween(here, asPoint(after));
+    minutes += leg.minutes;
+    modes.push(leg.mode);
+  }
+  if (before && after) minutes -= travelLegBetween(asPoint(before), asPoint(after)).minutes;
+
+  return {
+    // Every leg is floored at one minute and rounded, so a place almost exactly on the way can
+    // come out a minute under the hop it replaces. Below zero is rounding, not a shortcut.
+    minutes: Math.max(0, minutes),
+    mode: modes.every((m) => m === modes[0]) ? modes[0] : null,
+  };
+}
+
+/** Walk and bike are what "walking" means to a reader; the rest are not worth naming apart. */
+const MODE_WORD: Partial<Record<TransportMode, string>> = { walk: 'walking' };
+
+/**
+ * The line under a slot's name: when it would land, and what it would cost.
+ *
+ * Three facts, and each earns its place only when it says something. A detour of zero is not
+ * "+0 min", it is silence — the place is on the way, and the absence is the message.
+ */
+export function slotLine(time: string, tight: boolean, detour: Detour | null): string {
+  return [
+    time,
+    tight ? 'tight fit' : '',
+    detour && detour.minutes > 0
+      ? `+${detour.minutes} min ${(detour.mode && MODE_WORD[detour.mode]) || 'travel'}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('  ·  ');
 }
 
 /** What the day slot would actually do — the clock time, and whether it had to squeeze. */

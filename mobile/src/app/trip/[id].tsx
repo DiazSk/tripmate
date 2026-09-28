@@ -328,7 +328,14 @@ export default function TripDetail() {
           // object we replaced back exactly as it was.
           setTrip({ ...trip, itinerary: next });
           const saved = await updateTripItinerary(trip.id, next);
-          if (saved) return true;
+          if (saved) {
+            // Nothing in this app removes a stop, so before this an add was permanent short of
+            // asking the planner to undo it in words. The day is read off the diff rather than
+            // passed down: the sheet may add to a day other than the one being read, and the
+            // comparison already knows which one it was.
+            chat.remember(previous.itinerary, diffItineraries(previous.itinerary, next).days);
+            return true;
+          }
           setTrip(previous);
           console.warn(`Adding ${name} did not save`);
           return false;
@@ -477,6 +484,18 @@ function useChat(
     }
   }
 
+  /**
+   * Record a plan as the one to go back to.
+   *
+   * Exported because an edit is not only ever a conversation: adding a stop changes the plan
+   * too, and the traveler wanting the previous one back is the same wish either way. The undo
+   * itself stays in here because putting a plan back is also a statement about the session —
+   * see `undo`.
+   */
+  function remember(previous: Itinerary, days: number[]) {
+    setUndoable({ itinerary: previous, days });
+  }
+
   async function apply() {
     const proposal = pending;
     if (!proposal || !trip) return;
@@ -526,6 +545,7 @@ function useChat(
     replying,
     failure,
     send,
+    remember,
     pending,
     applying,
     apply,
