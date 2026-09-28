@@ -20,10 +20,15 @@ import type { DayEditUpdates } from "@/components/DayHeader";
 import { fitMessage } from "@/components/AnchorReceipt";
 import FeedbackLoop, { type DraftState } from "@/components/FeedbackLoop";
 import InterestPicker from "@/components/InterestPicker";
-import ExplorerStylePicker from "@/components/ExplorerStylePicker";
+import { DiscoveryPicker, PacePicker } from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
 import PartyCounter, { DEFAULT_PARTY, PartyStepButton } from "@/components/PartyCounter";
-import { PARTY_MAX_PER_BAND, sanitizeNamedList } from "@/lib/userAnswers";
+import {
+  PARTY_MAX_PER_BAND,
+  legacyExplorerStyle,
+  sanitizeNamedList,
+  travelStyleOf,
+} from "@/lib/userAnswers";
 import DietaryPicker from "@/components/DietaryPicker";
 import SuggestInput, { TIME_OPTIONS, SuggestOption } from "@/components/SuggestInput";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
@@ -48,7 +53,9 @@ import {
   DayPlan,
   DestinationContext,
   EnergyLevel,
+  DiscoveryPreference,
   ExplorerStyle,
+  PacePreference,
   GroupType,
   Itinerary,
   PartyCounts,
@@ -461,9 +468,21 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // Step 2b — collected alongside the existing basics/interests/style answers, sent to
   // Step 3 as `userAnswers` once generation runs (see `generate()` below).
   const [purpose, setPurpose] = useState("");
-  const [explorerStyle, setExplorerStyle] = useState<ExplorerStyle>(
-    initialProfile?.explorerStyle ?? "mixed"
+  /**
+   * Two answers where the wizard used to take one.
+   *
+   * A stored profile carries only the legacy `explorerStyle`, so the initial values come
+   * through `travelStyleOf` — which is also what stops a returning "offbeat" traveler being
+   * shown a pace they never chose.
+   */
+  const [pace, setPace] = useState<PacePreference>(
+    () => travelStyleOf(initialProfile ?? {}).pace
   );
+  const [discovery, setDiscovery] = useState<DiscoveryPreference>(
+    () => travelStyleOf(initialProfile ?? {}).discovery
+  );
+  /** Derived, never held: what a reader that only knows the old field gets. */
+  const explorerStyle = legacyExplorerStyle({ pace, discovery });
   const [group, setGroup] = useState<GroupType>(initialProfile?.group ?? "solo");
   const [groupOther, setGroupOther] = useState("");
   const [party, setParty] = useState<PartyCounts>(
@@ -710,7 +729,14 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     setGroupOther(restore("groupOther", ""));
     setDietary(restore("dietary", { tags: [], note: "" } as DietaryNeeds));
     setPurpose(restore("purpose", ""));
-    setExplorerStyle(restore("explorerStyle", "mixed" as ExplorerStyle));
+    // A draft saved before the split has only the legacy field; one saved since has both.
+    setPace(restore("pace", travelStyleOf({ explorerStyle: restore("explorerStyle", "mixed" as ExplorerStyle) }).pace));
+    setDiscovery(
+      restore(
+        "discovery",
+        travelStyleOf({ explorerStyle: restore("explorerStyle", "mixed" as ExplorerStyle) }).discovery
+      )
+    );
     setEnergy(restore("energy", "moderate" as EnergyLevel));
     setCrowds(restore("crowds", "mixed" as CrowdPreference));
     setInterests(restore("interests", [] as string[]));
@@ -741,7 +767,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     if (step !== "plan") return;
     const draft = {
       destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
-      explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
+      pace, discovery, explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
       anchors,
       arrivalTime, arrivalPoint, departureTime, departurePoint,
       stayBooked, accessibility, mustInclude, avoid, constraintsNote, budgetBasis,
@@ -753,7 +779,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     }
   }, [
     step, destination, startDate, endDate, budget, party, group, groupOther, dietary, purpose,
-    explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
+    pace, discovery, explorerStyle, energy, crowds, interests, starredInterests, selectedPois, customPois,
     anchors,
     arrivalTime, arrivalPoint, departureTime, departurePoint,
     stayBooked, accessibility, mustInclude, avoid, constraintsNote, budgetBasis,
@@ -1087,6 +1113,9 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   function currentAnswers() {
     return {
       purpose,
+      // Both shapes: the pair is the answer, the legacy field is what older readers take.
+      pace,
+      discovery,
       explorerStyle,
       group,
       groupOther,
@@ -2346,8 +2375,12 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted">Explorer style</label>
-                      <ExplorerStylePicker selected={explorerStyle} onSelect={setExplorerStyle} />
+                      <label className="text-xs font-medium text-muted">How full a day</label>
+                      <PacePicker selected={pace} onSelect={setPace} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted">What to see</label>
+                      <DiscoveryPicker selected={discovery} onSelect={setDiscovery} />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-muted">How much walking suits you</label>
@@ -2723,6 +2756,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                 <OnboardingCard
                   answers={{
                     group,
+                    pace,
+                    discovery,
                     explorerStyle,
                     energy,
                     crowds,

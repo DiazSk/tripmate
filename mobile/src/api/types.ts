@@ -131,7 +131,15 @@ export interface Trip {
 }
 
 export type GroupType = "solo" | "couple" | "family_with_kids" | "other";
+/** Two answers in one field — superseded by `PacePreference` + `DiscoveryPreference`, and kept
+ *  because every stored row and the frozen Swift app carry it. See the server's own note. */
 export type ExplorerStyle = "packed" | "relaxed" | "offbeat" | "mixed";
+
+/** How full a day should be. The only thing that sets the pace ceiling. */
+export type PacePreference = "relaxed" | "balanced" | "packed";
+
+/** Which places fill it — a taste, and nothing to do with how many. */
+export type DiscoveryPreference = "iconic" | "local" | "mix";
 export type EnergyLevel = "high" | "moderate" | "low";
 export type CrowdPreference = "love" | "mixed" | "avoid";
 
@@ -156,7 +164,11 @@ export interface ProfileStats {
 
 export interface TravelerProfile {
   group: GroupType;
+  /** Legacy, still written beside the pair so older readers keep working — see
+   *  `legacyExplorerStyle` on the server. */
   explorerStyle: ExplorerStyle;
+  pace?: PacePreference;
+  discovery?: DiscoveryPreference;
   energy: EnergyLevel;
   crowds: CrowdPreference;
   priorities: string[];
@@ -248,7 +260,10 @@ export interface PlanDraft {
   logistics: TripLogistics;
 
   purpose: string;
-  explorerStyle: ExplorerStyle;
+  /** What the traveler answered. The legacy `explorerStyle` is **not** held here — it is derived
+   *  from these on submit, so the draft cannot drift from the answer it was derived from. */
+  pace: PacePreference;
+  discovery: DiscoveryPreference;
   energy: EnergyLevel;
   crowds: CrowdPreference;
   interests: string[];
@@ -273,6 +288,8 @@ export interface PlanDraft {
 export interface UserAnswers {
   purpose?: string;
   explorerStyle?: ExplorerStyle;
+  pace?: PacePreference;
+  discovery?: DiscoveryPreference;
   group?: GroupType;
   groupOther?: string;
   party?: PartyCounts;

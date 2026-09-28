@@ -2,9 +2,12 @@ import type {
   AccessibilityNeeds,
   CrowdPreference,
   EnergyLevel,
+  DiscoveryPreference,
   ExplorerStyle,
+  PacePreference,
   GroupType,
 } from "./types";
+import { DISCOVERIES, PACES } from "./userAnswers";
 
 /** The single implicit local user. Replaced by a real auth subject id if and when
  *  authentication lands — see FUTURE-INTEGRATION.md. */
@@ -30,7 +33,13 @@ export interface DietaryNeeds {
  */
 export interface TravelerProfile {
   group: GroupType;
+  /** Legacy, still required so a stored row and the frozen Swift app stay valid. New clients
+   *  write it beside the pair, derived by `legacyExplorerStyle`. */
   explorerStyle: ExplorerStyle;
+  /** Optional: no stored profile has them. Absence means "read `explorerStyle`", which is what
+   *  `travelStyleOf` does. */
+  pace?: PacePreference;
+  discovery?: DiscoveryPreference;
   energy: EnergyLevel;
   crowds: CrowdPreference;
   priorities: string[];
@@ -134,6 +143,12 @@ export function parseProfile(value: unknown): TravelerProfile | null {
   return {
     group: v.group as GroupType,
     explorerStyle: v.explorerStyle as ExplorerStyle,
+    // Validated by inclusion rather than rejected when absent or junk — an old row has neither,
+    // and `travelStyleOf` reads the legacy field for exactly that case.
+    ...(PACES.includes(v.pace as PacePreference) ? { pace: v.pace as PacePreference } : {}),
+    ...(DISCOVERIES.includes(v.discovery as DiscoveryPreference)
+      ? { discovery: v.discovery as DiscoveryPreference }
+      : {}),
     energy: v.energy as EnergyLevel,
     crowds: v.crowds as CrowdPreference,
     priorities,

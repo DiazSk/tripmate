@@ -15,7 +15,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { signOut, useAccount } from '@/api/auth';
 import { subscribeToSession } from '@/api/session';
 import { getProfile, getProfileStats, saveProfile } from '@/api/tripMateApi';
-import type { ProfileStats, TravelerProfile } from '@/api/types';
+import { legacyExplorerStyle, travelStyleOf } from '@shared/userAnswers';
+
+import type {
+  DiscoveryPreference,
+  PacePreference,
+  ProfileStats,
+  TravelerProfile,
+} from '@/api/types';
 import { FieldSheet } from '@/components/field-sheet';
 import { ChoiceRow, FieldTrough, PrimaryButton, TagGrid, TextField } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
@@ -28,7 +35,8 @@ import {
   GROUPS,
   INTERESTS,
   MAX_STARRED,
-  STYLES,
+  DISCOVERIES,
+  PACES,
   emptyDraft,
   labelOf,
   toTravelerProfile,
@@ -70,7 +78,22 @@ const SAVE_DEBOUNCE_MS = 600;
 type Loaded = TravelerProfile | null | 'none' | undefined;
 
 /** Which field's sheet is open. */
-type Field = 'group' | 'explorerStyle' | 'energy' | 'crowds' | 'interests' | 'dietary';
+/**
+ * One half of the pair, plus the legacy field both halves derive to.
+ *
+ * Written together rather than left to drift: `explorerStyle` is still what a stored row and
+ * the frozen Swift app read, and a profile that changed its pace without updating it would
+ * answer two different things to two readers.
+ */
+function withLegacy(
+  profile: TravelerProfile,
+  change: { pace?: PacePreference; discovery?: DiscoveryPreference }
+): Partial<TravelerProfile> {
+  const next = { ...travelStyleOf(profile), ...change };
+  return { ...change, explorerStyle: legacyExplorerStyle(next) };
+}
+
+type Field = 'group' | 'pace' | 'discovery' | 'energy' | 'crowds' | 'interests' | 'dietary';
 
 /**
  * iOS and Android want the same tree — rows, separators, section headers — with different numbers,
@@ -256,10 +279,18 @@ export default function Profile() {
                 onPress={() => setEditing('group')}
                 first
               />
+              {/* Two rows, because "Explores" was two answers. A stored profile has neither
+                  field, so `travelStyleOf` reads the legacy one — which is also what stops
+                  "off the beaten path" being shown back as a pace. */}
               <Row
-                label="Explores"
-                value={labelOf(STYLES, profile.explorerStyle)}
-                onPress={() => setEditing('explorerStyle')}
+                label="Pace"
+                value={labelOf(PACES, travelStyleOf(profile).pace)}
+                onPress={() => setEditing('pace')}
+              />
+              <Row
+                label="Seeing"
+                value={labelOf(DISCOVERIES, travelStyleOf(profile).discovery)}
+                onPress={() => setEditing('discovery')}
               />
               <Row
                 label="Walking"
@@ -352,11 +383,21 @@ function Sheets({
         <ChoiceRow options={GROUPS} value={profile.group} onChange={(group) => pick({ group })} />
       </FieldSheet>
 
-      <FieldSheet visible={editing === 'explorerStyle'} title="Explores" onClose={onClose}>
+      {/* Each picker writes its own half AND the legacy field the pair derives to, so a
+          profile saved here stays readable by anything that only knows `explorerStyle`. */}
+      <FieldSheet visible={editing === 'pace'} title="How full a day" onClose={onClose}>
         <ChoiceRow
-          options={STYLES}
-          value={profile.explorerStyle}
-          onChange={(explorerStyle) => pick({ explorerStyle })}
+          options={PACES}
+          value={travelStyleOf(profile).pace}
+          onChange={(pace) => pick(withLegacy(profile, { pace }))}
+        />
+      </FieldSheet>
+
+      <FieldSheet visible={editing === 'discovery'} title="What to see" onClose={onClose}>
+        <ChoiceRow
+          options={DISCOVERIES}
+          value={travelStyleOf(profile).discovery}
+          onChange={(discovery) => pick(withLegacy(profile, { discovery }))}
         />
       </FieldSheet>
 

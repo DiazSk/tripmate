@@ -18,7 +18,8 @@ import {
   ENERGY,
   INTERESTS,
   MAX_STARRED,
-  STYLES,
+  DISCOVERIES,
+  PACES,
   cycleInterest,
   toggleTag,
   usePlanDraft,
@@ -84,11 +85,18 @@ export default function PreferencesStep() {
           />
         </Question>
 
-        <Question title="How you like to explore">
+        {/* Two questions, because they were always two answers. A packed off-the-beaten-path
+            trip could not be asked for while these shared one picker, and picking "off the
+            beaten path" used to quietly set a three-stop day. */}
+        <Question title="How full a day">
+          <ChoiceRow options={PACES} value={draft.pace} onChange={(pace) => patch({ pace })} />
+        </Question>
+
+        <Question title="What to see">
           <ChoiceRow
-            options={STYLES}
-            value={draft.explorerStyle}
-            onChange={(explorerStyle) => patch({ explorerStyle })}
+            options={DISCOVERIES}
+            value={draft.discovery}
+            onChange={(discovery) => patch({ discovery })}
           />
         </Question>
 

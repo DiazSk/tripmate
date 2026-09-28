@@ -1,6 +1,6 @@
 import type { Itinerary, TripSummary, UserAnswers } from "./types";
 import { TIERS } from "./tiers";
-import { sanitizeAnswers } from "./userAnswers";
+import { sanitizeAnswers, travelStyleOf } from "./userAnswers";
 
 /**
  * The frozen anchor for an edit session.
@@ -65,7 +65,8 @@ group: ${answers.group ?? "unknown"}${answers.group === "other" && answers.group
           ? `\ndeparture (last day): ${answers.logistics.departureTime ?? "time unknown"}${answers.logistics.departurePoint ? ` from ${answers.logistics.departurePoint}` : ""}`
           : ""
       }
-explorer_style: ${answers.explorerStyle ?? "unknown"}${answers.purpose?.trim() ? `\npurpose: ${answers.purpose.trim()}` : ""}`
+pace: ${travelStyleOf(answers).pace}
+discovery: ${travelStyleOf(answers).discovery}${answers.purpose?.trim() ? `\npurpose: ${answers.purpose.trim()}` : ""}`
     : "";
 
   return `# Trip Context (frozen for this edit session)

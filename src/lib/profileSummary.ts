@@ -1,7 +1,17 @@
-import type { CrowdPreference, EnergyLevel, ExplorerStyle } from "./types";
+import type {
+  CrowdPreference,
+  DiscoveryPreference,
+  EnergyLevel,
+  ExplorerStyle,
+  PacePreference,
+} from "./types";
+import { travelStyleOf } from "./userAnswers";
 
 export interface DurableSummaryInput {
+  /** Legacy; still read when the pair below is absent, which is every stored row. */
   explorerStyle: ExplorerStyle;
+  pace?: PacePreference;
+  discovery?: DiscoveryPreference;
   energy: EnergyLevel;
   crowds: CrowdPreference;
   topPriorities: string[];
@@ -13,11 +23,17 @@ export interface DurableSummaryInput {
  * pickers' constants are value exports anyway, which would make this module unloadable from
  * a .test.mjs.
  */
-const STYLE_LABEL: Record<ExplorerStyle, string> = {
+/** Two segments where there was one, because there were always two answers in there. */
+const PACE_LABEL: Record<PacePreference, string> = {
   packed: "Packed pace",
+  balanced: "Balanced pace",
   relaxed: "Relaxed pace",
-  offbeat: "Offbeat",
-  mixed: "Mixed pace",
+};
+
+const DISCOVERY_LABEL: Record<DiscoveryPreference, string> = {
+  iconic: "Iconic highlights",
+  local: "Mostly local",
+  mix: "Iconic and local",
 };
 
 const ENERGY_LABEL: Record<EnergyLevel, string> = {
@@ -43,8 +59,11 @@ export function summarizeDurable(values: DurableSummaryInput): string {
       ? values.topPriorities.join(", ")
       : "No starred interests";
 
+  const style = travelStyleOf(values);
+
   return [
-    STYLE_LABEL[values.explorerStyle],
+    PACE_LABEL[style.pace],
+    DISCOVERY_LABEL[style.discovery],
     ENERGY_LABEL[values.energy],
     CROWDS_LABEL[values.crowds],
     priorities,

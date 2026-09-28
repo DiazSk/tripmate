@@ -1,9 +1,12 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 
+import { legacyExplorerStyle } from '@shared/userAnswers';
+
 import type {
   CrowdPreference,
+  DiscoveryPreference,
   EnergyLevel,
-  ExplorerStyle,
+  PacePreference,
   GenerateRequest,
   GroupType,
   PartyCounts,
@@ -55,11 +58,25 @@ export function partyForGroup(group: GroupType): PartyCounts | null {
   }
 }
 
-export const STYLES: { value: ExplorerStyle; label: string }[] = [
-  { value: 'packed', label: 'See as much as possible' },
+/**
+ * Two questions, where there was one.
+ *
+ * "How you like to explore" offered `packed`, `relaxed`, `offbeat` and `mixed` — the first two
+ * about how full a day is, the third about which places fill it, and the fourth silent on which
+ * it answered. A packed off-the-beaten-path trip was unsayable, and `offbeat` quietly set a
+ * ceiling of three stops a day on the strength of an answer about taste. The server keeps
+ * reading the old field for every stored row; see `travelStyleOf`.
+ */
+export const PACES: { value: PacePreference; label: string }[] = [
   { value: 'relaxed', label: 'A few things, done well' },
-  { value: 'offbeat', label: 'Off the beaten path' },
-  { value: 'mixed', label: 'A bit of both' },
+  { value: 'balanced', label: 'A comfortable amount' },
+  { value: 'packed', label: 'See as much as possible' },
+];
+
+export const DISCOVERIES: { value: DiscoveryPreference; label: string }[] = [
+  { value: 'iconic', label: 'The famous things' },
+  { value: 'local', label: 'Off the beaten path' },
+  { value: 'mix', label: 'A bit of both' },
 ];
 
 export const ENERGY: { value: EnergyLevel; label: string }[] = [
@@ -125,7 +142,8 @@ export function emptyDraft(): PlanDraft {
     party: { adults: 1, children: 0, infants: 0 },
     logistics: {},
     purpose: '',
-    explorerStyle: 'mixed',
+    pace: 'balanced',
+    discovery: 'mix',
     energy: 'moderate',
     crowds: 'mixed',
     interests: [],
@@ -262,7 +280,11 @@ export function toUserAnswers(draft: PlanDraft): UserAnswers {
     accessibility.stepFreeRequired || accessibility.limitStairs || hasText(accessibility.note);
   return {
     purpose: draft.purpose.trim() || undefined,
-    explorerStyle: draft.explorerStyle,
+    // The pair is the answer; the legacy field is written beside it so a reader that only
+    // knows the old shape — a stored row, the frozen Swift app — still gets something true.
+    pace: draft.pace,
+    discovery: draft.discovery,
+    explorerStyle: legacyExplorerStyle(draft),
     group: draft.group,
     groupOther: draft.groupOther.trim() || undefined,
     party: draft.party,
@@ -307,7 +329,9 @@ export function toGenerateRequest(draft: PlanDraft): GenerateRequest {
 export function toTravelerProfile(draft: PlanDraft): TravelerProfile {
   return {
     group: draft.group,
-    explorerStyle: draft.explorerStyle,
+    pace: draft.pace,
+    discovery: draft.discovery,
+    explorerStyle: legacyExplorerStyle(draft),
     energy: draft.energy,
     crowds: draft.crowds,
     priorities: draft.interests,
