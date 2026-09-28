@@ -176,3 +176,31 @@ test("signing out tells anything watching", async () => {
 
   expect(seen).toHaveLength(2);
 });
+
+/**
+ * The launch gate awaits `currentToken()` and branches the whole app on it
+ * (`src/app/+native-intent.tsx`), so its two contracts are worth pinning. Every other token test
+ * here reaches it as a side effect of `fetchWithSession`; these two call it directly.
+ */
+test("a stored token is read from the keychain once, and only when asked", async () => {
+  const { currentToken, store } = freshSession({ token: "tok_cold" });
+
+  // Importing the module must not touch the keychain — the read is lazy, which is what lets the
+  // gate decide when to pay for it.
+  expect(store.getItemAsync.mock.calls.filter(([key]) => key === TOKEN_KEY)).toHaveLength(0);
+
+  expect(await currentToken()).toBe("tok_cold");
+  expect(await currentToken()).toBe("tok_cold");
+
+  // Read through once and cached. On the request path this is a syscall per call otherwise.
+  expect(store.getItemAsync.mock.calls.filter(([key]) => key === TOKEN_KEY)).toHaveLength(1);
+});
+
+test("no stored token reads as signed out, and mints nothing", async () => {
+  const { currentToken, store } = freshSession();
+
+  expect(await currentToken()).toBeNull();
+  // An owner is minted by `fetchWithSession`, never by asking whether somebody is signed in — the
+  // gate runs before the first request and must not have identity side effects.
+  expect(store.setItemAsync).not.toHaveBeenCalled();
+});
