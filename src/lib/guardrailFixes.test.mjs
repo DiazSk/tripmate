@@ -60,7 +60,7 @@ test("the leg the check raised is actually closed", () => {
 test("both ways out are offered, and each names the clock it produces", () => {
   const repairs = repairsFor(tight(), findingFor(tight()));
   assert.equal(repairs.length, 2);
-  assert.match(repairs[0].label, /^Push Castle back \d+ min, to \d+:\d\d (AM|PM)$/);
+  assert.match(repairs[0].label, /^Push Castle \d+ min later, to \d+:\d\d (AM|PM)$/);
   assert.match(repairs[1].label, /^Start Lunch \d+ min earlier, at \d+:\d\d (AM|PM)$/);
 });
 

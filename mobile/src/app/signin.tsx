@@ -325,7 +325,7 @@ export default function SignInScreen() {
                 style={styles.toggle}>
                 <ThemedText type="detail" themeColor="muted">
                   {creating ? 'Already have an account? ' : 'New here? '}
-                  <ThemedText type="detail">{creating ? 'Sign in' : 'Make one'}</ThemedText>
+                  <ThemedText type="detail">{creating ? 'Sign in' : 'Create an account'}</ThemedText>
                 </ThemedText>
               </Pressable>
 

@@ -109,7 +109,10 @@ export function repairsFor(itinerary: CheckableItinerary, finding: Guardrail): R
     if (acceptable(before, shortfalls(next.days[finding.dayIndex].stops), leaving)) {
       const rest = slides.length > 1 ? " and the rest of the day" : "";
       repairs.push({
-        label: `Push ${day.stops[arriving].name}${rest} back ${by} min, to ${fmt(fit.nextStart + by)}`,
+        // Same shape as the "earlier" label below — verb, what moves, how far, which way, then
+        // the clock it lands on. The two are read side by side and compared, and a reader who has
+        // to re-parse the second sentence's grammar is spending that attention on the wrong thing.
+        label: `Push ${day.stops[arriving].name}${rest} ${by} min later, to ${fmt(fit.nextStart + by)}`,
         next,
       });
     }

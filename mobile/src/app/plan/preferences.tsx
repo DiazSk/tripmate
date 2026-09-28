@@ -88,7 +88,7 @@ export default function PreferencesStep() {
         {/* Two questions, because they were always two answers. A packed off-the-beaten-path
             trip could not be asked for while these shared one picker, and picking "off the
             beaten path" used to quietly set a three-stop day. */}
-        <Question title="How full a day">
+        <Question title="How full each day">
           <ChoiceRow options={PACES} value={draft.pace} onChange={(pace) => patch({ pace })} />
         </Question>
 
