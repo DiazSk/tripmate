@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { listTripItineraries } from "@/lib/db";
-import { normalizeDays, tripSpend } from "@/lib/itinerary";
+import { profileStats } from "@/lib/profileStats";
 import { currentOwner } from "@/lib/ownerRequest";
 
 /**
@@ -26,30 +25,5 @@ import { currentOwner } from "@/lib/ownerRequest";
  */
 export async function GET() {
   const { id: ownerId, signedIn } = await currentOwner();
-  const rows = listTripItineraries(ownerId, signedIn);
-
-  let spend = 0;
-  for (const row of rows) {
-    try {
-      // `String(...)` before parsing, and it is not ceremony. SQLite columns are typed per *value*,
-      // so `itinerary_json` holds TEXT for every row written through this app — but anything that
-      // writes it with the CLI's `readfile()` stores a BLOB instead, and libsql hands a BLOB back
-      // as a Buffer. `JSON.parse(buffer)` throws, which a `catch` here turns into a trip worth
-      // zero: a wrong lifetime total, reported confidently, with nothing on screen to say so. That
-      // happened for real on one row while this route was being written.
-      const parsed = JSON.parse(String(row.itinerary_json)) as { days?: unknown };
-      spend += tripSpend(normalizeDays(parsed?.days));
-    } catch (err) {
-      // Genuinely broken JSON. Still counted in `trips` — somebody kept it — but it adds nothing
-      // to the money, and it gets logged rather than vanishing, because a silently missing trip is
-      // indistinguishable from a cheap one.
-      console.error(`[profile/stats] unparseable itinerary for ${row.destination}`, err);
-    }
-  }
-
-  return NextResponse.json({
-    trips: rows.length,
-    places: new Set(rows.map((row) => row.destination)).size,
-    spend,
-  });
+  return NextResponse.json(profileStats(ownerId, signedIn));
 }

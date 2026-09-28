@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
-import { listTrips, readProfile } from "@/lib/db";
+import { listSavedPlaces, listTrips, readProfile } from "@/lib/db";
+import { profileStats } from "@/lib/profileStats";
 import { currentOwner } from "@/lib/ownerRequest";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
@@ -43,7 +44,10 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-const RECENT_TRIP_COUNT = 3;
+/** Five tiles and a "+n more" cell fill the grid's two rows without a ragged last row. */
+const RECENT_TRIP_COUNT = 5;
+/** Four is what fits beside the trips grid before the column starts scrolling on its own. */
+const SAVED_PLACE_COUNT = 4;
 
 export default async function ProfilePage() {
   // One resolve, two reads: the profile and the trips belong to the same caller, and awaiting
@@ -52,11 +56,20 @@ export default async function ProfilePage() {
   // The account's own details, for the row that offers the way out. Read here rather than in the
   // client so this page keeps its one promise: the first paint is already correct.
   const session = signedIn ? await auth.api.getSession({ headers: await headers() }) : null;
+  // Every read below is synchronous (`libsql`), so this whole page still resolves before it
+  // returns — the figures and the saved places cost a render, not a round trip.
+  const saved = listTrips("saved", ownerId, signedIn);
+  const places = listSavedPlaces(ownerId, signedIn);
   return (
     <ProfileForm
       initialProfile={readProfile(ownerId)}
-      recentTrips={listTrips("saved", ownerId, signedIn).slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
+      recentTrips={saved.slice(0, RECENT_TRIP_COUNT).map(toTripSummary)}
+      tripCount={saved.length}
+      stats={profileStats(ownerId, signedIn)}
+      savedPlaces={places.slice(0, SAVED_PLACE_COUNT).map((p) => ({ id: p.id, name: p.name, city: p.city }))}
+      savedPlaceCount={places.length}
       accountEmail={session?.user?.email ?? null}
+      accountName={session?.user?.name ?? null}
     />
   );
 }

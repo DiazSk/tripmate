@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { signIn, signUp } from "@/lib/authClient";
+import { useToast } from "@/lib/toast";
+import ErrorNote from "@/components/ErrorNote";
+import { ACCOUNT_CREATED_KEY } from "@/components/AccountReceipt";
 
 const FIELD =
   "w-full rounded-md border border-card-border bg-white/10 px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25";
@@ -24,6 +27,7 @@ const FIELD =
  */
 export default function SignInForm() {
   const router = useRouter();
+  const toast = useToast();
   const params = useSearchParams();
   // Where to land afterwards. `/trips` by default because the memories wall is the thing signing
   // in actually changes — arriving back at a page that looks identical is a poor confirmation.
@@ -53,6 +57,40 @@ export default function SignInForm() {
       setError(result.error.message ?? "That didn't work. Try again.");
       setBusy(false);
       return;
+    }
+
+    const who = result.data?.user?.name?.trim() || null;
+
+    if (creating) {
+      /**
+       * Hand the count to the receipt rather than announcing it here.
+       *
+       * The claim has already run server-side by this point (`session.create.after`), so this list
+       * *is* the post-claim set — for an account made seconds ago, every trip on it arrived that
+       * way. `sessionStorage` because the confirmation belongs on the page being navigated to, and
+       * survives exactly one client-side navigation and no reloads, which is the lifetime wanted.
+       *
+       * Best-effort: a failed count writes `0`, which the receipt still renders truthfully. Never
+       * block the redirect on it — the traveller has an account either way.
+       */
+      let claimed = 0;
+      try {
+        const res = await fetch("/api/trips?status=saved");
+        if (res.ok) {
+          const body = (await res.json()) as { trips?: unknown[] };
+          claimed = Array.isArray(body.trips) ? body.trips.length : 0;
+        }
+      } catch {
+        // Counted as none rather than not shown — see above.
+      }
+      sessionStorage.setItem(ACCOUNT_CREATED_KEY, String(claimed));
+    } else {
+      // Signing in is the ordinary act, and its only invisible result is that the trips on the
+      // destination page are now yours. That is exactly what `toast.tsx` reserves itself for.
+      toast.show(
+        who ? `Signed in as ${who}` : "Signed in",
+        "Your trips and travel profile are here."
+      );
     }
 
     // `refresh()` before navigating, and this is load-bearing rather than belt-and-braces.
@@ -130,11 +168,10 @@ export default function SignInForm() {
             {creating && <p className="pt-1.5 text-xs text-muted">At least 8 characters.</p>}
           </div>
 
-          {error && (
-            <p role="alert" className="text-sm text-[color:var(--danger,#f87171)]">
-              {error}
-            </p>
-          )}
+          {/* `ErrorNote` rather than a bare paragraph: this was the only use of `--danger` in the
+              app, a token nothing else defines, with a hard-coded hex fallback. Every other error
+              in this product is this component. */}
+          {error && <ErrorNote>{error}</ErrorNote>}
 
           <button
             type="submit"

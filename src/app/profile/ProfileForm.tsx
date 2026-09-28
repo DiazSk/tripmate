@@ -1,22 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import SiteFooter from "@/components/SiteFooter";
-import SectionOpener from "@/components/blue-hour/SectionOpener";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import ExplorerStylePicker from "@/components/ExplorerStylePicker";
 import GroupTypePicker from "@/components/GroupTypePicker";
 import InterestPicker from "@/components/InterestPicker";
 import DietaryPicker from "@/components/DietaryPicker";
 import ErrorNote from "@/components/ErrorNote";
-import AccountRow from "./AccountRow";
+import AccountReceipt from "@/components/AccountReceipt";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
+import { signOut } from "@/lib/authClient";
 import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile } from "@/lib/travelerProfile";
+import type { ProfileStats } from "@/lib/profileStats";
 import type {
   CrowdPreference,
   EnergyLevel,
@@ -154,7 +156,17 @@ function MemoryThumb({ trip }: { trip: TripSummary }) {
  * app's existing answer to a beat with no photograph to collage (`/trips`' own empty state) —
  * rather than an empty grey box pretending a picture failed to load.
  */
-function Memories({ trips }: { trips: TripSummary[] }) {
+function Memories({
+  trips,
+  tripCount,
+  savedPlaces,
+  savedPlaceCount,
+}: {
+  trips: TripSummary[];
+  tripCount: number;
+  savedPlaces: { id: string; name: string; city: string | null }[];
+  savedPlaceCount: number;
+}) {
   const [lead, ...rest] = trips;
 
   if (!lead) {
@@ -193,12 +205,195 @@ function Memories({ trips }: { trips: TripSummary[] }) {
         // is recorded in docs/frontend.md rather than fixed from here.
         className="group inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-foreground"
       >
-        See all in My memories
+        {tripCount > trips.length ? `See all ${tripCount} in My memories` : "See all in My memories"}
         <ArrowRight
           className="h-4 w-4 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5"
           strokeWidth={2}
         />
       </Link>
+
+      <SavedPlaces places={savedPlaces} total={savedPlaceCount} />
+    </div>
+  );
+}
+
+/**
+ * The places shared in before there was a trip for them.
+ *
+ * On this page rather than only in the wizard, because they are the other thing an account
+ * accumulates and the profile is where a traveller comes to find what is theirs. Absent entirely
+ * when there are none: an empty list here would be a header explaining a feature rather than a
+ * record of anything, and `Invitation`'s own rule is that a genuine empty state is an invitation,
+ * not an apology — the invitation for these belongs in the wizard that collects them.
+ */
+function SavedPlaces({
+  places,
+  total,
+}: {
+  places: { id: string; name: string; city: string | null }[];
+  total: number;
+}) {
+  if (places.length === 0) return null;
+  return (
+    <div className="border-t border-card-border pt-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-display text-base font-semibold text-foreground">Saved places</h2>
+        <span className="shrink-0 text-xs tabular-nums text-muted">{total}</span>
+      </div>
+      <ul className="pt-2">
+        {places.map((place) => (
+          <li
+            key={place.id}
+            className="flex items-baseline justify-between gap-3 border-b border-card-border py-2 text-sm last:border-b-0"
+          >
+            <span className="min-w-0 truncate text-foreground">{place.name}</span>
+            {place.city && <span className="shrink-0 text-xs text-muted">{place.city}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * The page's masthead: who this profile belongs to, and what it adds up to.
+ *
+ * **Full width, above the grid, rather than a row inside the form column — and the placement is
+ * the whole of it.** This page's subject is identity, and it opened with a settings form: the name
+ * was set into the form column's header well, at roughly half the page's width, on the line above
+ * "Who you usually travel with". A masthead sharing a column with a field label is not a masthead,
+ * and the page went on reading as the settings form it used to be. So identity spans the page, the
+ * figures rule a band under it, and the form begins below both.
+ *
+ * **The avatar is the most recent trip's photograph.** The mobile app's equivalent carries a
+ * placeholder glyph and a comment explaining why — "this product has no accounts and no image
+ * storage, and a control that opens a picker whose result cannot be saved is worse than a
+ * placeholder that admits what it is". Accounts exist now, and the second half never needed
+ * solving: a traveller who has kept a trip has already supplied a picture. Signed out, or with
+ * nothing kept, the circle stays the empty tile rather than inventing a face.
+ *
+ * **Sign out lives here, which retires `AccountRow` entirely.** That block sat beneath the Save
+ * button — the last thing on the page — and once a masthead states the account by name and offers
+ * the way out, everything left in it was said twice. Its signed-out branch comes along: this is
+ * still the one place in the app that asks for an account, and it still asks by naming what an
+ * account is for rather than by gating anything.
+ */
+function Masthead({
+  name,
+  email,
+  lead,
+  stats,
+}: {
+  name: string | null;
+  email: string | null;
+  lead: TripSummary | undefined;
+  stats: ProfileStats;
+}) {
+  const photo = usePlacePhoto(lead?.destination ?? "", "thumb");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <header>
+      <div className="flex min-w-0 items-center gap-5 sm:gap-7">
+        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-card-border bg-tile sm:h-28 sm:w-28">
+          {photo && (
+            <Image key={photo} src={photo} alt="" fill sizes="112px" className="value-in object-cover" />
+          )}
+        </div>
+        <div className="min-w-0">
+          {/* `.font-display-xl` — the display serif at a size this page picks. **Not**
+              `.font-scene-display`: the scene classes carry the landing's own fluid clamp and are
+              scoped to the Persuade surface, and this is an Operate one. **Not** `.font-display`
+              either, which since the Melodrama split is the *sans* heading step for panels and
+              cards, two registers below a page masthead. `/trips` sets its masthead the same way.
+
+              The clamp's ceiling rose from 2.75rem to 4rem when this left the form column: the old
+              one was sized to survive a half-width cell, and a name is the largest thing on this
+              page now rather than the widest thing in a sidebar.
+
+              Three classes with overlapping names is a real trap, so: if you change this line,
+              change this note. The last two people who touched it did not, and both times the
+              comment above ended up describing something the code was not doing. */}
+          <h1 className="font-display-xl truncate text-[clamp(2.25rem,5.4vw,4rem)] text-foreground">
+            {name ?? "Your travel profile"}
+          </h1>
+          <p className="max-w-lg truncate pt-2.5 text-sm text-muted">
+            {email ?? "Not signed in — this profile lives on this browser only."}
+          </p>
+        </div>
+      </div>
+
+      {/* The figures and the account action share the masthead's closing line, above the rule the
+          grid below draws.
+
+          The action used to sit opposite the name, which at 1440 left one small pill alone across
+          700px of nothing — a heading with a stray control beside it rather than a header. Here it
+          ends the line it belongs to, and the masthead reads as two rows instead of one wide one.
+
+          Tabular on the figures, because these three are read against their own past values every
+          visit and are set as aligned figures rather than prose. Gold on spend and nowhere else: a
+          figure is information, not an invitation.
+
+          **Content-sized and left-aligned, not a three-cell grid — and that is the whole of this
+          block.** It was `grid-cols-3` with a hairline between each cell and a rule above and
+          below, which at 1440 gave each figure a 460px cell to hold about 60px of content, and put
+          two vertical hairlines at the thirds while the grid below splits at 1fr/1.35fr. Rules that
+          align with nothing are worse than no rules — the system draws a *grid*, and two grids at
+          different divisions read as neither. So the cells went, the dividers went, and the figures
+          sit on the page's own left edge, which the memories column below shares.
+
+          The band's own rules went with them. The grid below carries `lg:border-y`, so its top rule
+          closes the masthead; a second hairline 40px above it was the same boundary drawn twice,
+          and it left that grid's column rule descending from a corner that was not there. */}
+      <div className="mt-10 flex flex-wrap items-end justify-between gap-x-12 gap-y-6">
+        <dl className="flex flex-wrap gap-x-12 gap-y-7 sm:gap-x-16">
+          <Figure k="Trips kept" v={String(stats.trips)} />
+          <Figure k="Places seen" v={String(stats.places)} />
+          <Figure k="Spent" v={formatMoney(stats.spend)} money />
+        </dl>
+
+        {email ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await signOut();
+              // `refresh()` rather than a reload: every owner-scoped server component on this route
+              // and the next one has to re-read, and leaving the router cache holding the signed-in
+              // render would show this traveller their trips after they asked to be signed out.
+              router.refresh();
+              router.push("/");
+            }}
+            className="min-h-11 shrink-0 rounded-full bg-[rgb(247_245_242/0.07)] px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-[rgb(247_245_242/0.12)] disabled:opacity-60"
+          >
+            {busy ? "Signing out…" : "Sign out"}
+          </button>
+        ) : (
+          <Link
+            href="/signin?next=/profile"
+            className="flex min-h-11 shrink-0 items-center rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
+          >
+            Sign in
+          </Link>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function Figure({ k, v, money = false }: { k: string; v: string; money?: boolean }) {
+  return (
+    <div>
+      <dd
+        className={`font-mono text-[clamp(1.75rem,4vw,2.75rem)] leading-none tabular-nums ${money ? "text-money" : "text-foreground"}`}
+      >
+        {v}
+      </dd>
+      <dt className="pt-2.5 text-[0.6875rem] font-semibold uppercase tracking-[0.18em] text-muted">
+        {k}
+      </dt>
     </div>
   );
 }
@@ -211,15 +406,29 @@ function Memories({ trips }: { trips: TripSummary[] }) {
 export default function ProfileForm({
   initialProfile,
   recentTrips,
+  tripCount,
+  stats,
+  savedPlaces,
+  savedPlaceCount,
   accountEmail,
+  accountName,
 }: {
   initialProfile: TravelerProfile | null;
   /** The signed-in account's email, or `null` when this is an anonymous browser. Resolved on the
-   *  server so the account row paints correct on the first frame, like the rest of this page. */
+   *  server so the account block paints correct on the first frame, like the rest of this page. */
   accountEmail: string | null;
-  /** Up to three most-recent saved trips, newest first, for the memories column. Empty is a real
-   *  state (nothing saved yet), not a loading one — the server read is synchronous. */
+  /** The account's display name. Never empty for a real account — both clients fall back to the
+   *  email's local part at sign-up — so the masthead does not need an empty case, only a
+   *  signed-out one. */
+  accountName: string | null;
+  /** Most-recent saved trips, newest first, for the memories column. Empty is a real state
+   *  (nothing saved yet), not a loading one — the server read is synchronous. */
   recentTrips: TripSummary[];
+  /** Every kept trip, not just the ones shown, so "All n" tells the truth. */
+  tripCount: number;
+  stats: ProfileStats;
+  savedPlaces: { id: string; name: string; city: string | null }[];
+  savedPlaceCount: number;
 }) {
   // Seeded from the server read rather than fetched on mount. There is no loading state left to
   // model: the page component reads SQLite synchronously, so by the time this renders the profile
@@ -320,56 +529,43 @@ export default function ProfileForm({
             as the form, and the `sticky` div inside it has that whole height to travel within.
             This page is far longer than the reference's short contact form, so without sticky the
             photography would scroll away in the first screenful. */}
+        {/* Above the identity it explains, and only ever on the one render after sign-up. */}
+        <div className="pb-6 empty:hidden">
+          <AccountReceipt />
+        </div>
+
+        <Masthead name={accountName} email={accountEmail} lead={recentTrips[0]} stats={stats} />
+
         <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:gap-0 lg:border-y lg:border-white/10">
           <div className="lg:pr-10 lg:pt-16 lg:pb-16">
             <div className="lg:sticky lg:top-[calc(var(--nav-h)+2rem)]">
-              <Memories trips={recentTrips} />
+              <Memories
+                trips={recentTrips}
+                tripCount={tripCount}
+                savedPlaces={savedPlaces}
+                savedPlaceCount={savedPlaceCount}
+              />
             </div>
           </div>
 
           <div className="min-w-0 divide-y divide-card-border lg:border-l lg:border-white/10 lg:pt-16 lg:pb-16 lg:pl-10">
-            {/* `SectionOpener` rather than a hand-rolled label: the label sits *beside* the
-                heading in its own column, which is the one exception DESIGN.md's No-Kicker Rule was
-                amended to allow. An eyebrow stacked *above* the heading — which is literally what
-                the reference's contact page does here — is still banned, and this is the
-                established way the rest of the app takes the same move. Kept beside rather than
-                stacked even inside this narrower cell: 11rem of label leaves the heading ~583px at
-                1440, which the `clamp(2rem,5vw,3.75rem)` step fits.
-                `rule={false}` because the grid above owns the top hairline now — see there. */}
-            {/* `pb-10`, and the number is the one asymmetry on this column that is deliberate.
-                Every `Section` is `py-5`, so each hairline sits in a symmetric 20px well; this
-                block had **no bottom padding at all**, which left the subline 1px off the rule
-                below it against 20px everywhere else — the paragraph read as if it had fallen
-                through the divider. It gets 40px rather than a matching 20 because it is the page's
-                header, not a peer field row: the boundary under it separates *groups*, and giving
-                it the same well as the gap between "Crowds" and "Budget" would flatten the header
-                into the eighth row of a list. 40px is `gap-10`, the step this grid already uses
-                between its columns, not a new number.
-                On the wrapper rather than inside `SectionOpener`, which the landing also renders —
-                the spacing belongs to this arrangement, not to the component. */}
+            {/* What this column is, now that the page's masthead is above the grid rather than
+                inside this cell. `SectionOpener` went with the page title it used to open: its
+                label sat beside a heading naming the *page*, and the page names itself at the top
+                now. What is left is a standfirst for the form — one paragraph, no heading, because
+                a second `<h1>`-scale line 40px under the real one is the kicker the No-Kicker Rule
+                bans, in the one arrangement it has no exception for.
+
+                `pb-10` rather than the `py-5` every `Section` below carries, and the asymmetry is
+                deliberate: this is the column's header, not its first field row, and the hairline
+                under it separates *groups*. Giving it the same 20px well as the gap between
+                "Crowds" and "Budget" flattens it into the eighth row of a list. 40px is `gap-10`,
+                the step this grid already uses between its columns, not a new number. */}
             <div className="pb-10">
-            <SectionOpener label="Profile" rule={false}>
-            {/* `.font-display-xl` — the display serif at a size this page picks. **Not**
-                `.font-scene-display`: the scene classes carry the landing's own fluid clamp and are
-                scoped to the Persuade surface, and this is an Operate one. **Not** `.font-display`
-                either, which since the Melodrama split is the *sans* heading step for panels and
-                cards, two registers below a page masthead. `/trips` sets its masthead the same way,
-                and these two account pages sitting in different faces was the tell.
-
-                Same reason the subline below does not take `.scene-prose`: that class reserves its
-                open leading for the landing and costs a screenful of scanning on a dense panel.
-
-                Three classes with overlapping names is a real trap, so: if you change this line,
-                change this note. The last two people who touched it did not, and both times the
-                comment above ended up describing something the code was not doing. */}
-            <h1 className="font-display-xl text-[clamp(2rem,4vw,3rem)] text-foreground">
-              Your travel profile
-            </h1>
-            <p className="max-w-md pt-4 text-sm leading-relaxed text-muted">
-              The things that stay true between trips. We apply these to every plan so the wizard
-              only has to ask what actually changes.
-            </p>
-            </SectionOpener>
+              <p className="max-w-md text-sm leading-relaxed text-muted">
+                The things that stay true between trips. We apply these to every plan so the wizard
+                only has to ask what actually changes.
+              </p>
             </div>
 
             <Section
@@ -422,8 +618,6 @@ export default function ProfileForm({
 
             <div className="space-y-3 pt-5">
               {error && <ErrorNote>{error}</ErrorNote>}
-
-              <AccountRow email={accountEmail} />
 
               <div className="flex items-center gap-3">
                 <button

@@ -8,6 +8,7 @@ import { TripSummary } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import SiteFooter from "@/components/SiteFooter";
 import ErrorNote from "@/components/ErrorNote";
+import AccountReceipt from "@/components/AccountReceipt";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { DRAFT_TTL_DAYS } from "@/lib/drafts";
@@ -503,6 +504,12 @@ export default function TripsView({
               than not claiming it, because it promises navigation that isn't there. These are two
               toggle buttons in a named group: `aria-pressed` states which collection is showing,
               and Tab reaches both, which is the behaviour the markup actually has. */}
+          {/* The one render after sign-up, above the tabs, because the trips it is talking about
+              are the ones directly below it. */}
+          <div className="mb-6 empty:hidden">
+            <AccountReceipt />
+          </div>
+
           {showTabs && (
             <div
               role="group"
