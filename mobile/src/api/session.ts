@@ -63,10 +63,13 @@ export async function currentToken(): Promise<string | null> {
   return cachedToken;
 }
 
-/** Whether a token is held, without waiting on the store. Drives the signed-in UI. */
-export function hasTokenSync(): boolean {
-  return Boolean(cachedToken);
-}
+// `hasTokenSync()` used to sit here — `Boolean(cachedToken)`, documented as "drives the signed-in
+// UI". It drove nothing: the only reference to it anywhere was its own definition. It is deleted
+// rather than kept because its one plausible use is the wrong one. `cachedToken` is tri-state, and
+// `Boolean(undefined)` is `false` — so on a cold start, before anything has awaited
+// `currentToken()`, it reports *signed out* for a traveller who is signed in. A launch gate reaching
+// for the synchronous answer would show an account holder the sign-in screen every single time.
+// The gate awaits `currentToken()` instead; see `src/app/+native-intent.tsx`.
 
 export function subscribeToSession(listener: () => void): () => void {
   listeners.add(listener);

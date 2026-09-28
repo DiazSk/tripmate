@@ -13,6 +13,22 @@ import { Colors } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync();
 
+/**
+ * `(tabs)` is the anchor, which is what puts Home *underneath* whatever a launch opens on.
+ *
+ * The root layout had none: `getRoutesCore` derives one from the first child group matching the
+ * layout's own route name, and the root's route is `''`, so nothing matched and every cold-start
+ * deep link landed as a single-entry stack with `canGoBack() === false`. That was survivable while
+ * the app always opened on Home. It is not now that `+native-intent` can open on `signin`: the
+ * escape out of that screen is a `back()`, and it needs somewhere to go.
+ *
+ * So the gated launch resolves to `[(tabs), signin]`. Home is mounted and visible behind the sheet,
+ * "Keep planning without an account" has a target, and the sheet's own swipe-down dismiss *becomes*
+ * that same escape for free. Cold-start `/trip/[id]` and `/share` get the same treatment, which is
+ * why `share.tsx` can now `back()` out of itself instead of replacing the route under it.
+ */
+export const unstable_settings = { anchor: '(tabs)' };
+
 // A Stack root, not the tab navigator directly: NativeTabs only ever mounts screens matching
 // one of its own <NativeTabs.Trigger> names (expo-router/build/native-tabs/NativeBottomTabsNavigator.js
 // passes useOnlyUserDefinedScreens=true to withLayoutContext), so a non-tab route like
@@ -56,8 +72,13 @@ export default function RootLayout() {
           <Stack.Screen name="plan" options={{ headerShown: false }} />
           {/* SPIKE ONLY — replaced in Task 5. */}
           <Stack.Screen name="share" options={{ presentation: 'modal', headerShown: false }} />
-          {/* A sheet rather than a push: signing in is something you step aside to do and come
-              back from, and nothing in this app sits behind it. */}
+          {/* A sheet, and now the screen a signed-out cold start opens on — see `+native-intent`.
+              Still a sheet rather than a push, for a better reason than before: `unstable_settings`
+              above puts `(tabs)` underneath it, so the sheet *reveals* Home, and dismissing it by
+              swipe is indistinguishable from choosing to keep planning without an account. The
+              comment this replaces said "nothing in this app sits behind it", which was true when
+              signin could only be reached from a tab and is now false twice over. What stays true
+              is the thing that matters: nothing is *gated* by it. */}
           <Stack.Screen name="signin" options={{ presentation: 'modal', headerShown: false }} />
         </Stack>
       </ThemeProvider>

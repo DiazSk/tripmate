@@ -97,6 +97,34 @@ export const BarHeight = 56;
 export const MaxContentWidth = 800;
 
 /**
+ * The house motion curve, and the first motion tokens on this platform.
+ *
+ * DESIGN.md has defined one curve and four durations for the web app all along; none of it had been
+ * ported, so every duration in `mobile/` is a literal at its call site — 160, 220, 300, 350, 420,
+ * 600 — and the only easing in the app is `Easing.elastic(0.7)`, inherited from the Expo template's
+ * splash animation. Elastic is wrong for anything but a splash: it overshoots, which reads as
+ * playful on a surface meant to feel considered.
+ *
+ * `Curve` is the web's `cubic-bezier(0.16, 1, 0.3, 1)` — a steep exponential settle. Feed it to
+ * Reanimated as `Easing.bezier(...Curve)`.
+ *
+ * Durations are named for what they carry rather than for their length, so a call site reads as an
+ * intention: `Motion.settle` for something arriving, `Motion.respond` for something reacting to a
+ * touch. The two match the durations already in evidence at `trip/[id].tsx` (220/160) and
+ * `day-map.tsx` (420) rather than introducing new numbers.
+ */
+export const Curve = [0.16, 1, 0.3, 1] as const;
+
+export const Motion = {
+  /** Something arriving, or the screen recomposing around the keyboard. */
+  settle: 420,
+  /** Something answering a touch. */
+  respond: 220,
+  /** Something leaving. Always shorter than its arrival. */
+  exit: 160,
+} as const;
+
+/**
  * The route's own colours, from `RouteGeometry.palette` — map-native, and deliberately outside
  * the interface palette. DESIGN.md: these must never appear in a panel, chip or button, because
  * the map gets its own colours on the grounds that it is photography rather than a surface.

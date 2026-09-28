@@ -21,8 +21,10 @@ function CloseButton() {
   const router = useRouter();
   return (
     <Pressable
-      // `canGoBack` is false when the flow was deep-linked into rather than entered from a tab,
-      // which is the same dead end this button exists to remove.
+      // `canGoBack` was false when the flow was deep-linked into rather than entered from a tab,
+      // which is the same dead end this button exists to remove. The root layout now anchors
+      // `(tabs)`, so a cold-start deep link gets Home prepended and the fallback no longer fires —
+      // kept because it is what makes this button correct independent of that anchor.
       onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
       accessibilityRole="button"
       accessibilityLabel="Close"
