@@ -16,7 +16,7 @@ import {
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
 
 import { geocode, importPlaces, listSavedPlaces } from '@/api/tripMateApi';
-import type { Anchor, ImportItem } from '@/api/types';
+import type { Anchor, ImportItem, SavedPlace } from '@/api/types';
 import { usePlanDraft } from '@/lib/planDraft';
 import { ChoiceRow, DateField, FieldTrough, PrimaryButton, TextField } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
@@ -313,33 +313,63 @@ function SavedPlacesSection({
   if (places.length === 0) return null;
   const chosen = new Set(anchors.map((a) => anchorKey(a.name)));
   const reminders = places.filter((p) => p.source === 'instagram');
+
+  /**
+   * Here, then everywhere else — because the two answer different questions.
+   *
+   * This library is global and the trip is not. Amber Fort sitting unlabelled under a Kyoto
+   * destination reads as a candidate for the Kyoto trip, and the reader has to work out that it
+   * is not — on the one screen whose whole job is establishing where the trip goes. The
+   * destination's own cities are already the ones pre-selected into `draft.anchors` above, so
+   * this only makes that split visible rather than inventing one.
+   *
+   * The rest stay on screen. They are still reachable by hand for a trip that really does pass
+   * through two cities, which is a thing the wizard permits and this section should not quietly
+   * take away.
+   */
+  const groups = groupByCity(places);
+  const here = groups.filter((g) => cityMatches(g.city, destination));
+  const elsewhere = groups.filter((g) => !cityMatches(g.city, destination));
+
+  const Group = ({ g }: { g: { city: string; places: SavedPlace[] } }) => (
+    <View style={styles.savedGroup}>
+      <ThemedText themeColor="muted">{g.city}</ThemedText>
+      <View style={styles.chips}>
+        {g.places.map((p) => {
+          const on = chosen.has(anchorKey(p.name));
+          return (
+            <Pressable
+              key={p.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`${on ? 'Remove' : 'Add'} ${p.name}`}
+              onPress={() =>
+                onAnchorsChange((prev) =>
+                  on ? prev.filter((a) => anchorKey(a.name) !== anchorKey(p.name)) : mergeAnchors(prev, [toAnchor(p)])
+                )
+              }
+              style={[styles.chip, on && styles.chipOn]}>
+              <ThemedText type="detail">{p.name}</ThemedText>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.saved}>
       <ThemedText type="label">Your saved places ({places.length - reminders.length})</ThemedText>
-      {groupByCity(places).map((g) => (
-        <View key={g.city} style={styles.savedGroup}>
-          <ThemedText themeColor="muted">{g.city}</ThemedText>
-          <View style={styles.chips}>
-            {g.places.map((p) => {
-              const on = chosen.has(anchorKey(p.name));
-              return (
-                <Pressable
-                  key={p.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                  accessibilityLabel={`${on ? 'Remove' : 'Add'} ${p.name}`}
-                  onPress={() =>
-                    onAnchorsChange((prev) =>
-                      on ? prev.filter((a) => anchorKey(a.name) !== anchorKey(p.name)) : mergeAnchors(prev, [toAnchor(p)])
-                    )
-                  }
-                  style={[styles.chip, on && styles.chipOn]}>
-                  <ThemedText type="detail">{p.name}</ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
+      {here.map((g) => (
+        <Group key={g.city} g={g} />
+      ))}
+      {elsewhere.length > 0 ? (
+        <ThemedText type="label" themeColor="muted">
+          Saved elsewhere
+        </ThemedText>
+      ) : null}
+      {elsewhere.map((g) => (
+        <Group key={g.city} g={g} />
       ))}
       {reminders.map((r) => (
         <Pressable key={r.id} accessibilityRole="link" onPress={() => r.url && Linking.openURL(r.url)}>
