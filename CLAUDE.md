@@ -40,9 +40,22 @@ touching `Hero`, `HeroFrames`, the `.hero-*` rules, or `scripts/build-frame-sequ
 **Node ≥ 22.** `.nvmrc` pins it — run `nvm use` if the shell drifts. This was once a hard requirement for a specific reason: `better-sqlite3`'s native binding silently killed the dev server on Node 20 the moment any DB-touching route was hit. That package is gone (see Storage below); `libsql` declares no `engines` floor and has not been tried lower, so treat 22 as the tested floor rather than a proven cliff.
 
 **The test suite is deliberately narrow, not small.** `npm test` runs
-`node --import ./scripts/ts-resolve.mjs --test "src/**/*.test.mjs"` — 17 files, ~220 tests, no
-framework and no build step. It covers only pure, deterministic logic, most of it logic that has
-already broken once. Nothing renders, no route is booted, no DB is opened.
+`node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test "src/**/*.test.mjs"` —
+90 files, ~1,240 tests, no framework and no build step. It covers mostly pure, deterministic logic,
+much of it logic that has already broken once. Nothing renders and no route is booted.
+
+**A few tests do open a database, and it is always an in-memory one.** `db.test.mjs`,
+`claimOwner.test.mjs`, `savedPlacesDb.test.mjs` and `fetchCache.test.mjs` exercise real SQL, and
+`bench.test.mjs` reaches `db` transitively through `runBenchmark.ts`. That is the coverage working
+as intended — what was wrong was *which* database they reached. `db.ts` resolves
+`DB_PATH ?? cwd/tripmate.db` **at import time**, so before `scripts/test-db.mjs` existed every
+`npm test` inserted four real trips into the developer's own `tripmate.db`: fixture destinations
+("Kyoto", "Legacy town") accumulating on the memories wall beside real ones, with nothing failing
+and nobody told. That module sets `DB_PATH` to `:memory:` before anything loads, and since
+`node --test` forks a process per file, each file gets its own empty database — more isolation
+than the shared file ever gave, which is why no test needed changing. `db.test.mjs` carries the
+assert that fails if the `--import` is ever dropped from the script. An explicit `DB_PATH` still
+wins, for a one-off run against a real file.
 
 So passing tests prove far less here than in a normally-covered repo. Verification still means: `npm test`, `tsc --noEmit`, `eslint`, **and** exercising routes against a running dev server with `curl`. Don't claim a change is verified on typecheck alone.
 
