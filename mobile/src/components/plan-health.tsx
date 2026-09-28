@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import type { HealthDimension, HealthKey, PlanHealth as PlanHealthReport } from '@/lib/health';
+import { isBlocking, type Guardrail, type HealthDimension, type HealthKey, type PlanHealth as PlanHealthReport } from '@/lib/health';
 
 /**
  * Whether this plan holds together, and where it doesn't.
@@ -27,8 +27,11 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
   // times. A panel reading "Not checked" seven times tells nobody anything.
   if (health.score === null) return null;
 
-  const findings = health.dimensions.reduce((n, d) => n + d.findings.length, 0);
+  const all = health.dimensions.flatMap((d) => d.findings);
+  const blockers = all.filter(isBlocking).length;
+  const ran = health.dimensions.filter((d) => d.score !== null).length;
   const severe = health.dimensions.some((d) => isSevere(d.key) && d.findings.length > 0);
+  const line = summary(all.length, blockers, ran, health.dimensions.length);
 
   return (
     <View style={styles.card}>
@@ -36,14 +39,14 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
         onPress={() => setOpen((was) => !was)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`Plan health ${health.score} out of 100, ${summary(findings)}`}
+        accessibilityLabel={`Plan health ${health.score} out of 100, ${line}`}
         style={styles.head}>
         <View style={styles.grow}>
           <ThemedText type="label" themeColor="muted">
             Plan health
           </ThemedText>
           <ThemedText type="detail" themeColor={severe ? 'alert' : 'muted'} style={styles.summary}>
-            {summary(findings)}
+            {line}
           </ThemedText>
         </View>
         <ThemedText type="title">{health.score}</ThemedText>
@@ -85,10 +88,15 @@ function Dimension({ dimension }: { dimension: HealthDimension }) {
       </View>
       {findings.map((finding, i) => (
         // Keyed by message: findings carry no id, and two on one day are two different sentences.
-        <ThemedText key={`${finding.message}-${i}`} type="detail" themeColor="muted" style={styles.finding}>
-          {finding.dayIndex === null ? '' : `Day ${finding.dayIndex + 1} — `}
-          {finding.message}
-        </ThemedText>
+        <View key={`${finding.message}-${i}`} style={styles.finding}>
+          <ThemedText type="micro" themeColor={isBlocking(finding) ? 'alert' : 'muted'}>
+            {classify(finding)}
+          </ThemedText>
+          <ThemedText type="detail" themeColor="muted">
+            {finding.dayIndex === null ? '' : `Day ${finding.dayIndex + 1} — `}
+            {finding.message}
+          </ThemedText>
+        </View>
       ))}
     </View>
   );
@@ -98,10 +106,36 @@ function Dimension({ dimension }: { dimension: HealthDimension }) {
 const SEVERE: HealthKey[] = ['schedule', 'reservations', 'budget'];
 const isSevere = (key: HealthKey) => SEVERE.includes(key);
 
-const summary = (findings: number) =>
-  findings === 0
-    ? 'Nothing to flag'
-    : `${findings} thing${findings === 1 ? '' : 's'} to look at`;
+/**
+ * What the figure beside it does not say: how bad, and over how much.
+ *
+ * **The arithmetic is untouched — this is the interpretation.** A flat penalty per finding is the
+ * right way to compute the number and the wrong way to read it: a duplicate museum and a train
+ * that cannot be caught both cost eight points, and three dimensions nobody could measure are
+ * simply absent from the average rather than counted against it. So 84 out of 100 can mean "two
+ * connections are impossible and we only checked four things" — a sentence the score alone is
+ * incapable of forming.
+ *
+ * Coverage prints even at full marks. "7 of 7 checks run" is a fact worth stating, and a line
+ * that appears only on bad news teaches a reader to skip it on good news.
+ */
+const summary = (findings: number, blockers: number, ran: number, of: number) => {
+  const coverage = `${ran} of ${of} checks run`;
+  if (blockers > 0) return `${blockers} blocker${blockers === 1 ? '' : 's'} · ${coverage}`;
+  if (findings > 0) return `${findings} thing${findings === 1 ? '' : 's'} to look at · ${coverage}`;
+  return `Nothing to flag · ${coverage}`;
+};
+
+/**
+ * One word above a finding, so the list stops reading as eight equal sentences.
+ *
+ * The rule is the classification — it is the field the check already set, and naming it is
+ * cheaper than any taxonomy laid over the top. Only the split that already governs coral gets a
+ * word of its own: the three blocking rules all say BLOCKER, because "travel" and "overlap" are
+ * how the checker spells it and "this cannot happen" is what the reader needs.
+ */
+const classify = (finding: Guardrail) =>
+  isBlocking(finding) ? 'BLOCKER' : finding.rule.toUpperCase();
 
 const styles = StyleSheet.create({
   card: {
@@ -121,5 +155,5 @@ const styles = StyleSheet.create({
   dimension: { gap: Spacing.hair },
   dimensionHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
   rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder },
-  finding: { paddingLeft: Spacing.rows },
+  finding: { paddingLeft: Spacing.rows, gap: Spacing.hair },
 });
