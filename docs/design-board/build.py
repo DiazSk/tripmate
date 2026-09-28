@@ -56,27 +56,27 @@ SECTIONS = [
   ("Arrival", "What somebody meets before they have a trip.", [
     ("00-signin.png","Sign in — the first screen","What the app opens on. Full-bleed scene photography with the serif carrying one claim at a time; the picture and the line rotate across four scenes. The gate is deliberately soft — “Keep planning without an account” leaves at no cost, because planning, generating and saving all work signed out and the work follows you onto an account later."),
     ("01-home.png","Home","A serif statement, one jade action, then the next trip as a photograph. The method section below is the honesty — it says what the planner actually does rather than promising magic."),
-    ("02-memories.png","Memories","Kept trips only. Unkept drafts are swept after a TTL so this wall never fills with plans nobody chose."),
+    ("02-trips.png","Trips","Not \u201cMemories\u201d: the wall held a trip that happened and a trip that has not, and a future trip is not a memory. Kept trips only, split Upcoming / Past \u2014 and a trip counts as upcoming until the day after it ends, because somebody standing there on the final afternoon has not acquired a memory yet."),
     ("03-profile.png","Profile","Deliberately native. The design system hands settings surfaces back to the platform — the one place Kiln steps aside, taking iOS list conventions with the palette unchanged."),
   ]),
   ("Planning", "Four steps. Only the first gates anything.", [
     ("04-plan-basics.png","Where and when","The only required step. Budget carries a per-person / whole-party basis, because the plan prices everything as a party total."),
     ("04b-destination-search.png","Finding the place","Live geocoding as you type, disambiguated by region — there is more than one Kyoto. A miss never blocks generating."),
-    ("05-plan-group.png","Who is going","Party down to infants, because it changes the pace rather than just a headcount. Anything already booked is captured here too."),
-    ("06-plan-preferences.png","What you're after","Interests tap once to pick, again to star. Dietary and access needs are hard constraints, not preferences — a stated step-free requirement outranks pace and interest."),
-    ("07-plan-review.png","The brief, before a word is written","Every answer back in one list, each with its own way in. The last two rows print even when they are empty: diet and access are the hard constraints, and a row that vanishes when unset is a row nobody can notice is missing. Generation is the expensive step — this is the cheap place to catch a misunderstanding."),
+    ("05-plan-group.png","Who is going","The preset is a shortcut into the counters below it, not a second question: picking one fills them in and they stay editable. They used to be unrelated, so nothing stopped \u201cSolo\u201d standing over three adults. Party down to infants, because it changes the pace rather than just a headcount."),
+    ("06-plan-preferences.png","What you're after","<b>How full a day</b> and <b>what to see</b> are two questions now. They were one \u2014 packed / relaxed / offbeat / mixed \u2014 which made a packed off-the-beaten-path trip unsayable, and quietly set a three-stop day for anyone who answered \u201coffbeat\u201d. Interests tap once to pick, again to star. Dietary and access needs are hard constraints, not preferences."),
+    ("07-plan-review.png","The brief, before a word is written","Every answer back in one list, each with its own way in. The last two rows print even when they are empty: diet and access are the hard constraints, and a row that vanishes when unset is a row nobody can notice is missing. Generation is the expensive step \u2014 this is the cheap place to catch a misunderstanding."),
   ]),
   ("The trip", "One plan, two faces, and the checks that run over it.", [
-    ("09-trip-day.png","A day","A day is a page, paged horizontally. Stops are rows against rules, never cards. Gold is money and only money."),
-    ("11-trip-map.png","The same day, mapped","Numbered discs carry the day's own hue — the one sanctioned crossing between the interface palette and the map's, because the disc in the list and the disc on the map are the same mark."),
-    ("12-trip-conflict.png","A conflict, where it happens","The leg does not fit, so the arriving stop takes a coral wash and says so in its own words. Coral is spent only on what cannot happen; a long day or a detour stays quiet."),
+    ("09-trip-day.png","A day","A day is a page, paged horizontally. Stops are rows against rules, never cards. The strip carries dates rather than bare ordinals \u2014 nobody remembers what Day 3 is while standing in it \u2014 and sits on its own row, because choosing a day is navigation while List/Map and Ask/+ act on the day you landed on. The budget figure says <b>Projected</b>, since it is a forecast until a real spend is entered."),
+    ("11-trip-map.png","The same day, mapped","Numbered discs carry the day's own hue \u2014 the one sanctioned crossing between the interface palette and the map's. The pill says what the map cannot draw: a route is visibly a shape and invisibly a cost, and how much of a day is spent moving is the half somebody is deciding on. Time, never distance \u2014 nothing here knows whether the reader thinks in miles."),
+    ("12-trip-conflict.png","A conflict, and the ways out","The leg does not fit, so the arriving stop takes a coral wash and says so in its own words. <b>Fix this</b> no longer spends a model call on arithmetic: a hop short of minutes has exactly two answers, and both are computed, named with the clock time they produce, and applied on one tap. Neither is offered if it would tighten another leg, and nothing booked ever moves."),
     ("13-trip-stop-detail.png","A stop, opened","Why it was chosen, one practical line, and the three things you can do — including marking it booked, which forbids the planner from ever moving it."),
     ("10-plan-health.png","Plan health, opened","The figure decomposes. Seven dimensions, each with the findings that cost it its points, in the traveller’s own words. It is arithmetic rather than a judgement — a flat penalty per finding, averaged over what could be measured — and a dimension nothing could check says <b>Not checked</b> rather than claiming a pass nobody ran."),
     ("10b-spend-breakdown.png","Where the day’s money went","Largest first, zero-value categories dropped rather than printed at zero. The shares are apportioned by largest remainder so the column sums to exactly 100 — three 33s that add to 99 would undo the one thing this surface is arguing."),
   ]),
   ("Changing it", "Two ways in, both conversational.", [
-    ("14-trip-chat.png","Ask for a change","Plain language against the whole plan. It inherits the planner's own reasoning from generation rather than re-reading its output."),
-    ("15-trip-add-place.png","Add a stop","Live search around the day you are reading. The app picks the day and the slot for you, and nothing already in the plan moves."),
+    ("14-trip-chat.png","Ask for a change","Plain language, and it inherits the planner's own reasoning from generation rather than re-reading its output. <b>Changing</b> states the scope before you ask \u2014 one day or the whole trip \u2014 and the applier enforces whichever you pick, so an edit that strays comes back refused rather than discovered later. Nothing lands until a computed diff of the two plans has been approved."),
+    ("15-trip-add-place.png","Add a stop","Live search around the day you are reading, and it now says where a result would land before you open it. Each slot carries what inserting there would cost in travel \u2014 the extra journey, not the journey \u2014 so the same caf\u00e9 reads differently on a morning than on an evening. Nothing already in the plan moves, and an add can be taken back."),
   ]),
 ]
 
@@ -191,10 +191,10 @@ is warm paper on a single near-black slate. If a screen here seems to break that
 saying — that is exactly what this board is for.</p>
 <p><b>One thing already known.</b> One screen is still absent — the generation screen, because
 capturing it means spending a real model run.</p>
-<p><b>Three screens here were added after the first round of feedback,</b> which read this board
-as the whole product and reasonably concluded that what it did not show did not exist. Plan
-health opened, the day’s spend breakdown and the wizard’s brief were all built and all
-unphotographed. Worth keeping in mind for anything below that looks missing: ask before
+<p><b>Every screen here was re-shot after a round of outside feedback,</b> which read an earlier
+version of this board as the whole product and reasonably concluded that what it did not show did
+not exist. Some of what it asked for already existed and was simply unphotographed; the rest was
+built, and is above. Worth keeping in mind for anything that still looks missing: ask before
 assuming.</p>
 </footer></div></body></html>"""
 
