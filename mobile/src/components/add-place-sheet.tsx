@@ -10,11 +10,14 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import {
   addPlaceToDay,
   describePlace,
+  insertionDetour,
+  slotLine,
   slotPreview,
   suggestDay,
   suggestTimeOfDay,
   type TimeOfDay,
 } from '@/lib/addPlace';
+import { formatDayChip } from '@/lib/dayDisplay';
 
 const SLOTS: TimeOfDay[] = ['Morning', 'Afternoon', 'Evening'];
 
@@ -219,6 +222,13 @@ function SheetBody({
         />
       </FieldTrough>
 
+      {/* Which day these results would join. The card that follows can move it, but a list of
+          places with no stated destination is the thing that made this screen read as ordinary
+          search: the app has already decided where a stop is going, and was not saying. */}
+      <ThemedText type="label" themeColor="muted">
+        Adding to {dayLabel(itinerary, dayIndex)}
+      </ThemedText>
+
       {!origin ? (
         <Notice>This day has nowhere to search around yet.</Notice>
       ) : searching ? (
@@ -340,6 +350,9 @@ function PlaceCard({
       <FieldTrough>
         {SLOTS.map((option) => {
           const preview = slotPreview(itinerary, day, option);
+          // Per slot, not per place: the same café costs a different detour depending on which
+          // two stops it would end up between.
+          const detour = insertionDetour(itinerary, day, place, option);
           const active = option === slot;
           return (
             <Pressable
@@ -352,7 +365,7 @@ function PlaceCard({
               <View style={styles.grow}>
                 <ThemedText type="heading">{option}</ThemedText>
                 <ThemedText type="label" themeColor="muted">
-                  {preview.tight ? `${preview.time}  ·  tight fit` : preview.time}
+                  {slotLine(preview.time, preview.tight, detour)}
                 </ThemedText>
               </View>
               {active ? (
@@ -372,10 +385,21 @@ function PlaceCard({
       ) : null}
 
       <View style={styles.action}>
-        <PrimaryButton title={`Add to day ${day + 1}`} onPress={add} busy={busy} disabled={busy} />
+        <PrimaryButton title={`Add to ${dayLabel(itinerary, day)}`} onPress={add} busy={busy} disabled={busy} />
       </View>
     </ScrollView>
   );
+}
+
+/**
+ * `Day 2 · Fri 23`, or just `Day 2` for a plan whose day carries no readable date.
+ *
+ * The ordinal alone is what a traveler has to hold in their head; the date is what they are
+ * actually thinking in when they decide a café belongs to this afternoon.
+ */
+function dayLabel(itinerary: Itinerary, dayIndex: number): string {
+  const chip = formatDayChip(itinerary.days[dayIndex]?.date ?? '');
+  return chip ? `Day ${dayIndex + 1} · ${chip.weekday} ${chip.dayOfMonth}` : `Day ${dayIndex + 1}`;
 }
 
 /** How OSM's `wheelchair` tag reads as a sentence. `no` is worth saying — somebody planning

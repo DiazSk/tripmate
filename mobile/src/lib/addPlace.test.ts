@@ -1,6 +1,14 @@
 import type { FoundPlace, Itinerary, Stop } from '@/api/types';
 
-import { addPlaceToDay, describePlace, slotPreview, suggestDay, suggestTimeOfDay } from './addPlace';
+import {
+  addPlaceToDay,
+  describePlace,
+  insertionDetour,
+  slotLine,
+  slotPreview,
+  suggestDay,
+  suggestTimeOfDay,
+} from './addPlace';
 
 const stop = (name: string, time: string, lat: number, lng: number): Stop => ({
   name,
@@ -138,4 +146,73 @@ test('the slot preview reports the time it would actually get', () => {
   const preview = slotPreview(trip, 0, 'Morning');
   expect(preview.time).toMatch(/AM|PM/);
   expect(typeof preview.tight).toBe('boolean');
+});
+
+// The figure this exists to produce: not "how far is it" but "how much further does the day get".
+describe('what inserting a place costs in travel', () => {
+  // Between Nijo Castle (9 AM) and Gion (6 PM), so both neighbours are real.
+  const between = { lat: 35.009, lng: 135.762 };
+
+  test('reports the extra journey, not the journey', () => {
+    const detour = insertionDetour(trip, 0, between, 'Afternoon');
+    expect(detour).not.toBeNull();
+    expect(detour!.minutes).toBeGreaterThanOrEqual(0);
+    // Two legs replacing one can never beat it by more than rounding.
+    expect(detour!.minutes).toBeLessThan(60);
+  });
+
+  test('a place far off the day costs more than one on the way', () => {
+    const onTheWay = insertionDetour(trip, 0, between, 'Afternoon')!.minutes;
+    // Arashiyama, ~11km west of both of day 0's stops.
+    const wayOut = insertionDetour(trip, 0, { lat: 35.017, lng: 135.6716 }, 'Afternoon')!.minutes;
+    expect(wayOut).toBeGreaterThan(onTheWay);
+  });
+
+  test('a day with one stop still measures against it', () => {
+    expect(insertionDetour(trip, 1, between, 'Afternoon')!.minutes).toBeGreaterThan(0);
+  });
+
+  // An estimate with no basis is worse than a blank: this is the number somebody decides on.
+  test('nothing to measure against is null, not zero', () => {
+    const empty: Itinerary = { days: [{ date: '2026-10-22', weather: '', stops: [] }] };
+    expect(insertionDetour(empty, 0, between, 'Afternoon')).toBeNull();
+    expect(insertionDetour(trip, 9, between, 'Afternoon')).toBeNull();
+  });
+
+  // 0,0 is the Gulf of Guinea. One unresolved stop must not make every detour transatlantic.
+  test('an unplaced stop is stepped over rather than travelled to', () => {
+    const withGhost: Itinerary = {
+      days: [
+        {
+          date: '2026-10-22',
+          weather: '',
+          stops: [stop('Nijo Castle', '9:00 AM', 35.0142, 135.7481), stop('Unresolved', '1:00 PM', 0, 0)],
+        },
+      ],
+    };
+    const detour = insertionDetour(withGhost, 0, between, 'Afternoon');
+    expect(detour!.minutes).toBeLessThan(60);
+  });
+
+  test('a place with no coordinate of its own cannot be priced', () => {
+    expect(insertionDetour(trip, 0, { lat: 0, lng: 0 }, 'Afternoon')).toBeNull();
+  });
+});
+
+describe('the line under a slot', () => {
+  test('says only what there is to say', () => {
+    expect(slotLine('2:30 PM', false, null)).toBe('2:30 PM');
+    expect(slotLine('2:30 PM', true, null)).toBe('2:30 PM  ·  tight fit');
+  });
+
+  test('names the mode when both new legs agree, and stays vague when they do not', () => {
+    expect(slotLine('2:30 PM', false, { minutes: 7, mode: 'walk' })).toBe('2:30 PM  ·  +7 min walking');
+    expect(slotLine('2:30 PM', false, { minutes: 7, mode: 'transit' })).toBe('2:30 PM  ·  +7 min travel');
+    expect(slotLine('2:30 PM', false, { minutes: 7, mode: null })).toBe('2:30 PM  ·  +7 min travel');
+  });
+
+  // A place on the way costs nothing, and the absence of a figure is the message.
+  test('no detour is silence, not "+0 min"', () => {
+    expect(slotLine('2:30 PM', false, { minutes: 0, mode: 'walk' })).toBe('2:30 PM');
+  });
 });
