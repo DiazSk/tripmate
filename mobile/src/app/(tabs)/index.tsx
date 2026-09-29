@@ -113,14 +113,21 @@ export default function Home() {
   const tripToday = (trip && todayInZone(trip.timezone)) ?? todayISO();
 
   /**
-   * The saved pile, only while a trip is running.
+   * The saved pile. Read on every focus, unconditionally.
    *
-   * Today is the only reader, and it only draws them in a free gap — so off-trip this is a
-   * request for something nothing on screen can use. `useFocusedFetch` re-reads on focus, which
-   * is what picks up a place shared into the app from somewhere else mid-trip; `loadSavedPlaces`
-   * falls back to disk so the gap still has an answer underground.
+   * **The obvious optimisation here is a bug, and it shipped in the first draft of this line.**
+   * Today is the only reader and only draws these in a free gap, so `trip ? load() : null` looks
+   * free — but `useFocusedFetch` runs its fetcher *on focus*, and Home is already the focused tab
+   * when the app launches, at which point `trip` is still undefined because the trips list has
+   * not landed. The guard therefore evaluated false exactly once and never ran again: on a cold
+   * launch straight into Home the list was permanently empty, and it only appeared after a tab
+   * switch away and back. Which is how it was tested, which is why it looked fine.
+   *
+   * So the read is unconditional. It costs one small request per focus beside the trips list
+   * Home already fetches, and `loadSavedPlaces` falls back to disk so a gap still has an answer
+   * underground.
    */
-  const savedHit = useFocusedFetch(async () => (trip ? ((await loadSavedPlaces()) ?? null) : null));
+  const savedHit = useFocusedFetch(loadSavedPlaces);
   const saved = savedHit?.value ?? undefined;
 
   const featured = trips ? pickFeatured(trips) : undefined;
