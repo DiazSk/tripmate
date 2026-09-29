@@ -1,4 +1,4 @@
-import { parseClock } from '@shared/itinerary';
+import { formatClock, parseClock } from '@shared/itinerary';
 
 import type { Stop } from '@/api/types';
 
@@ -48,11 +48,17 @@ export function todayInZone(timezone: string | null | undefined, at: Date = new 
   }
 }
 
-/** The clock in `timezone` as somebody would read it aloud — "10:38". */
+/**
+ * The clock in `timezone`, written the way every other time in this app is written.
+ *
+ * `formatClock` rather than a local template, for two reasons found on screen. A 24-hour header
+ * over a list of stops reading "11:00 AM" is two clocks on one screen, and the reader has to
+ * convert between them at the exact moment they are trying to catch a tram. And the display face
+ * cuts its zero with a slash, so a padded "05:22" renders as "Ø5:22".
+ */
 export function clockInZone(timezone: string | null | undefined, at: Date = new Date()): string | null {
   const minutes = nowInZone(timezone, at);
-  if (minutes === null) return null;
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  return minutes === null ? null : formatClock(minutes);
 }
 
 /**

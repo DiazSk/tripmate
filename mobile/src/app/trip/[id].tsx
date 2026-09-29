@@ -41,7 +41,23 @@ import { tripHealth, type Guardrail } from '@/lib/health';
 import { regionForStops } from '@/lib/mapRegion';
 
 export default function TripDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, ask } = useLocalSearchParams<{ id: string; ask?: string }>();
+
+  /**
+   * `?ask=<dayIndex>` arrives from Today's "Plans changed?" — the on-trip screen has no composer
+   * of its own and should not grow one.
+   *
+   * Read as the *initial* scope rather than reacted to in an effect. Today pushes this route, so
+   * the screen is a fresh mount whenever the param is present, and seeding state is both simpler
+   * and the only shape that does not call `setState` synchronously inside an effect — which
+   * cascades a render and which this project's lint rule rejects.
+   *
+   * No seed text: Today does not know what changed, and a composer pre-filled with a guess is
+   * worse than an empty one, being a sentence somebody has to delete before writing theirs.
+   */
+  const askedDay = Number(ask);
+  const opensOnAsk = ask !== undefined && Number.isInteger(askedDay) && askedDay >= 0;
+
   const [trip, setTrip] = useState<Trip | null | undefined>(undefined);
   /** `dayIndex:stopIndex` of the one expanded stop, or null. One at a time, like the Swift app. */
   const [emphasis, setEmphasis] = useState<string | null>(null);
@@ -72,12 +88,12 @@ export default function TripDetail() {
    * inherit the last stop asked about.
    */
   const [probe, setProbe] = useState<{ lat: number; lng: number; name: string } | null>(null);
-  const chat = useChat(id, trip, setTrip);
+  const chat = useChat(id, trip, setTrip, opensOnAsk);
   /** What "Fit it anyway" seeds the chat composer with, or undefined for a plain "Ask". Cleared on
    *  the plain path so an earlier fit request doesn't linger into an unrelated question. */
   const [chatSeed, setChatSeed] = useState<string | undefined>(undefined);
   /** The scope a seeded opening arrives with: a day index, or null for the whole trip. */
-  const [chatScope, setChatScope] = useState<number | null>(null);
+  const [chatScope, setChatScope] = useState<number | null>(opensOnAsk ? askedDay : null);
   /** Bumped on every open, and fed to `ChatSheet` as its `key` — `initialDraft` only seeds a fresh
    *  mount, so without this a second "Fit it anyway" for a different place would leave the first
    *  place's text sitting in the composer. */
@@ -130,6 +146,8 @@ export default function TripDetail() {
     setChatOpenId((n) => n + 1);
     chat.open();
   }
+
+
 
   /**
    * The computed ways out of one conflict, and applying one.
@@ -430,9 +448,11 @@ export default function TripDetail() {
 function useChat(
   id: string,
   trip: Trip | null | undefined,
-  setTrip: React.Dispatch<React.SetStateAction<Trip | null | undefined>>
+  setTrip: React.Dispatch<React.SetStateAction<Trip | null | undefined>>,
+  /** Open straight away — the screen was entered from Today's "Plans changed?". */
+  openOnMount = false
 ) {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(openOnMount);
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [replying, setReplying] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -446,15 +466,25 @@ function useChat(
   const session = useRef<{ id: string | null; hash: string | null }>({ id: null, hash: null });
   const restored = useRef(false);
 
-  function open() {
-    setVisible(true);
-    // The transcript lives on the server, so a reopened trip has a conversation this device has
-    // never seen. Once per mount: after that, `turns` is the live copy and re-reading would
-    // duplicate the turn that is still in flight.
-    if (restored.current || !trip) return;
+  /**
+   * The transcript lives on the server, so a reopened trip has a conversation this device has
+   * never seen. Once per mount: after that, `turns` is the live copy and re-reading would
+   * duplicate the turn that is still in flight.
+   *
+   * **An effect rather than a line inside `open`**, because the sheet can now be open before the
+   * trip has loaded — `openOnMount` is set from a route param that arrives well ahead of the
+   * fetch. Doing it here means the restore waits for the trip instead of being skipped by it,
+   * and the state lands in the promise callback where it belongs.
+   */
+  useEffect(() => {
+    if (!visible || restored.current || !trip) return;
     restored.current = true;
     session.current.id = trip.chatSessionId;
     chatTurns(id).then((saved) => saved.length && setTurns(saved));
+  }, [visible, trip, id]);
+
+  function open() {
+    setVisible(true);
   }
 
   async function send(text: string, dayIndex?: number): Promise<boolean> {

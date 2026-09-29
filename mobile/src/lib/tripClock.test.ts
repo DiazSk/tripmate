@@ -17,9 +17,16 @@ const day = [
 const AT = new Date('2026-09-28T21:07:00Z');
 
 test('the clock is the destination, not the device', () => {
-  expect(clockInZone('Europe/Lisbon', AT)).toBe('22:07');
-  expect(clockInZone('Asia/Tokyo', AT)).toBe('06:07');
-  expect(clockInZone('America/Los_Angeles', AT)).toBe('14:07');
+  expect(clockInZone('Europe/Lisbon', AT)).toBe('10:07 PM');
+  expect(clockInZone('Asia/Tokyo', AT)).toBe('6:07 AM');
+  expect(clockInZone('America/Los_Angeles', AT)).toBe('2:07 PM');
+});
+
+// Written like every other time in the app, and never zero-padded — the display face slashes its
+// zero, so "05:22" renders as "Ø5:22".
+test('the clock reads the way the stop times below it do', () => {
+  expect(clockInZone('Europe/Lisbon', new Date('2026-09-29T04:22:00Z'))).toBe('5:22 AM');
+  expect(clockInZone('Europe/Lisbon', new Date('2026-09-28T23:10:00Z'))).toBe('12:10 AM');
 });
 
 // The reason the timezone is stored at all: the day can differ, not just the hour.
