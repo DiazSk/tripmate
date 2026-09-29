@@ -79,7 +79,15 @@ export function dayPlanned(day: DayPlan): number {
 }
 
 /** A stop or lodging's real cost once one has been entered, its estimate until then. */
-function spendOf(item: Stop | Lodging | undefined): number {
+/**
+ * What one item actually costs the trip: the entered figure if there is one, else the estimate.
+ *
+ * Exported because a view needed it. `ArrangeBoard` and the lodging row were printing `cost`
+ * while every total here coalesced, so a row read $25 under a day total of $46 — the same split
+ * the mobile client had. A third hand-written `actualCost ?? cost` at the call site is how that
+ * drift starts; there is one coalesce and this is it.
+ */
+export function spendOf(item: Stop | Lodging | undefined): number {
   if (!item) return 0;
   return item.actualCost != null ? money(item.actualCost) : money(item.cost);
 }
@@ -115,6 +123,20 @@ export function tripSpend(days: DayPlan[]): number {
  *
  * So the figure is not relabelled, it is separated. Nothing here changes what anything costs.
  */
+/**
+ * Whether any real figure has been entered against this plan.
+ *
+ * Shared because both clients ask it and only one used to own it — mobile defined this
+ * privately while the web card hardcoded the word "spend", so the two said different things
+ * about the same trip. `spendSplit` answers the finer question; this is the cheap one, for a
+ * heading that only needs to know whether anything is settled at all.
+ */
+export function anyActualSpend(days: DayPlan[]): boolean {
+  return days.some(
+    (day) => day.lodging?.actualCost != null || day.stops.some((stop) => stop.actualCost != null)
+  );
+}
+
 export interface SpendSplit {
   /** Entered by the traveller — an `actualCost` exists. */
   settled: number;

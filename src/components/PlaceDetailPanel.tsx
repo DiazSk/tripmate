@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PlaceDetail, Stop } from "@/lib/types";
+import { locationNote } from "@/lib/evidence";
 import type { PlaceGallery } from "@/app/api/place-gallery/route";
 import BackButton from "@/components/BackButton";
 import { devLabel } from "@/lib/devInspector";
@@ -204,6 +205,15 @@ export default function PlaceDetailPanel({
           </p>
         )}
         {stop.note && <p className="mt-2 text-sm text-foreground/90">{stop.note}</p>}
+        {/* **What the pin is standing on**, in the same words the mobile client uses — both read
+            `locationNote`, so the two cannot drift into telling a traveller different things
+            about the same stop. That drift is the whole reason the vocabulary is shared rather
+            than written per client. Nothing at all on a plan saved before it was recorded. */}
+        {locationNote(stop.located) && (
+          <p className="mt-2 text-xs tracking-wide text-muted uppercase">
+            {locationNote(stop.located)!.value}
+          </p>
+        )}
 
         <PlaceMosaic gallery={gallery} name={stop.name} />
       </div>

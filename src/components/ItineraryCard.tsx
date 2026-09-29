@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Bike, Car, Footprints, Sparkles } from "lucide-react";
 import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
+import { EVIDENCE_FOOTNOTE } from "@/lib/evidence";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
 import { useMapCamera } from "@/lib/mapCamera";
 import { useStoryControls } from "@/lib/storyMode";
-import { daySpendByCategory } from "@/lib/itinerary";
+import { anyActualSpend, daySpendByCategory } from "@/lib/itinerary";
 import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
 import { formatMoney } from "@/lib/format";
 import {
@@ -1092,8 +1093,12 @@ export default function ItineraryCard({
                   keeps the cost on the first line's baseline either way. */}
               <div className="flex items-baseline justify-between gap-2">
                 <span className="line-clamp-2 font-medium text-foreground">{day.lodging.name}</span>
+                {/* The figure the totals are counting, not the estimate underneath it. The
+                    mobile client had the same split — a row showing $25 under a day total of
+                    $46 — and it is the three-summations-disagree defect `itinerary.ts`'s money
+                    section exists to prevent, resurfacing in a view. */}
                 <span className="shrink-0 font-mono text-sm tabular-nums text-money">
-                  {formatMoney(day.lodging.cost)}
+                  {formatMoney(day.lodging.actualCost ?? day.lodging.cost)}
                 </span>
               </div>
               {day.lodging.note && (
@@ -1224,7 +1229,11 @@ export default function ItineraryCard({
           />
         )}
         <div className="relative z-10">
-          <h3 className="mb-3 text-sm font-semibold text-on-deep">Day {dayIndex + 1} spend</h3>
+          <h3 className="mb-3 text-sm font-semibold text-on-deep">
+            {/* "confirmed", not "spend": a figure entered as booked is known and not yet paid.
+                The mobile breakdown makes the same call, from the same predicate. */}
+            Day {dayIndex + 1} {anyActualSpend([day]) ? "confirmed" : "projected"}
+          </h3>
           {/* flex-wrap rather than a fixed column count: the tile count is 0-5 depending on
               what the day actually cost money on, and wrap stretches whatever lands in the
               last row instead of orphaning it at half width. */}
@@ -1278,6 +1287,11 @@ export default function ItineraryCard({
         </div>
       </div>
 
+      {/* **Said once, at the foot of the day** — the same sentence and the same placement as the
+          mobile client, from the same constant. The prose on essentially every generated stop is
+          the planner's, and a disclaimer repeated per stop is read by nobody; what varies stop to
+          stop is the location, and `PlaceDetailPanel` marks that where it varies. */}
+      <p className="mt-4 text-xs leading-relaxed text-muted">{EVIDENCE_FOOTNOTE}</p>
 
       {/* Rendered from here so the card owns the state that opens it, but portalled to the body
           inside SplitEditor — a fixed panel cannot live inside a `backdrop-filter` ancestor,
