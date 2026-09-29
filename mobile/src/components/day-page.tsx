@@ -10,7 +10,7 @@ import { SpendBreakdown } from '@/components/spend-breakdown';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
-import { formatDateline } from '@/lib/dayDisplay';
+import { formatDateline, weatherLine } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
 import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
 import { daySpend, formatMoney } from '@/lib/spend';
@@ -513,25 +513,6 @@ function dayTotal(day: DayPlan): string | undefined {
   return total > 0 ? formatMoney(total) : undefined;
 }
 
-/**
- * The forecast, short enough to stay a badge.
- *
- * **`day.weather` is prose, not a label** — the model writes things like "Pleasant autumn day,
- * 18.9-23.5°C, mostly sunny", which wrapped to two lines and covered the photograph it sits on.
- * So the structured figures win whenever they exist, and the prose is used only as a fallback,
- * cut at its first clause. `historical` says the numbers are last year's same-date weather rather
- * than a forecast, which is cheap to say and worth saying.
- */
-function weatherLine(day: DayPlan): string | undefined {
-  const detail = day.weatherDetail;
-  if (detail) {
-    const temps = `${Math.round(detail.tempMaxC)}° / ${Math.round(detail.tempMinC)}°`;
-    return detail.historical ? `${temps}  ·  typical` : temps;
-  }
-  const prose = day.weather?.trim();
-  if (!prose) return undefined;
-  return prose.split(',')[0].trim();
-}
 
 const styles = StyleSheet.create({
   content: { paddingBottom: Spacing.regular * 2 },

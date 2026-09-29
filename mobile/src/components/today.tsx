@@ -4,11 +4,11 @@ import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import type { DayPlan, Trip } from '@/api/types';
-import { formatDayChip } from '@/lib/dayDisplay';
+import { clockAt, formatDayChip } from '@/lib/dayDisplay';
 import { dayLegs, leaveBy } from '@/lib/dayTravel';
 import { directionsUrl } from '@/lib/directions';
 import { isBlocking, tripHealth } from '@/lib/health';
-import { clockInZone, minutesUntil, nextStop, nowInZone } from '@/lib/tripClock';
+import { clockInZone, describeGap, nowInZone, todayState } from '@/lib/tripClock';
 import { dayIndexFor, tripPhase } from '@/lib/tripPhase';
 
 /**
@@ -81,7 +81,7 @@ export function Today({
       ) : (
         <NowAndAfter day={day} now={now} />
       )}
-      <Attention trip={trip} dayIndex={dayIndex} />
+      <Attention trip={trip} dayIndex={dayIndex} cachedAt={cachedAt} />
       <Pressable
         onPress={onAsk ? () => onAsk(dayIndex) : undefined}
         disabled={!onAsk}
@@ -136,10 +136,7 @@ function Header({
 
 /** Says which copy this is. A cached screen that does not admit it is worse than no cache. */
 function Stale({ at }: { at: string }) {
-  const when = new Date(at);
-  const time = Number.isNaN(when.getTime())
-    ? null
-    : new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(when);
+  const time = clockAt(at);
   return (
     <ThemedText type="detail" themeColor="muted">
       {time ? `Saved copy from ${time} — no connection` : 'Saved copy — no connection'}
@@ -147,42 +144,68 @@ function Stale({ at }: { at: string }) {
   );
 }
 
-/** The next thing, hoisted, and everything after it demoted. The whole point of the screen. */
+/**
+ * The next thing, hoisted, and everything after it demoted. The whole point of the screen.
+ *
+ * **What the hoisted thing says depends on how far away it is**, which is the difference between
+ * a screen that works at 10:15 and one that works at 6:27. `todayState` decides; this only
+ * draws. The departure leads wherever there is one, because on an execution surface the moment
+ * you have to go outranks the moment you are due — and where there is none, because the day's
+ * first stop has no origin to leave from, the wait is stated instead of a time being invented.
+ */
 function NowAndAfter({ day, now }: { day: DayPlan; now: number }) {
   const stops = day.stops ?? [];
-  const index = nextStop(stops, now);
+  const state = todayState(stops, now, (i) => leaveBy(stops, i));
 
-  if (index === null) {
+  if (state.kind === 'empty' || state.kind === 'done') {
     return (
       <View style={styles.block}>
         <ThemedText type="label" themeColor="muted">
           Nothing left today
         </ThemedText>
         <ThemedText type="detail" themeColor="muted">
-          {stops.length === 0 ? 'This day has no stops.' : 'The last stop has started.'}
+          {state.kind === 'empty' ? 'This day has no stops.' : 'The last stop has started.'}
         </ThemedText>
       </View>
     );
   }
 
+  const { index } = state;
   const stop = stops[index];
-  const leave = leaveBy(stops, index);
   const leg = dayLegs(stops).find((l) => l.toIndex === index);
-  const until = minutesUntil(stop, now);
   const after = stops.slice(index + 1);
 
   return (
     <>
+      {/* The silence before a distant stop is itself information, and the thing somebody reopening
+          the app at 6:27 actually wants. Not a filled-in mini-itinerary: an interval. */}
+      {state.kind === 'free' ? (
+        <View style={styles.block}>
+          <ThemedText type="label" themeColor="muted">
+            Until then
+          </ThemedText>
+          <ThemedText type="heading">{`Free for about ${describeGap(state.minutes)}`}</ThemedText>
+        </View>
+      ) : null}
+
       <View style={styles.block}>
         <ThemedText type="label" themeColor="muted">
           Next
         </ThemedText>
         <ThemedText type="heading">{stop.name}</ThemedText>
+        {/* The departure on its own line, above the appointment, wherever one exists. */}
+        {state.kind === 'imminent' ? (
+          <ThemedText type="heading" themeColor="alert">
+            {`Leave in ${describeGap(state.minutes)}`}
+          </ThemedText>
+        ) : state.kind === 'upcoming' && state.leaveBy ? (
+          <ThemedText type="heading">{`Leave by ${state.leaveBy}`}</ThemedText>
+        ) : null}
         <ThemedText type="detail" themeColor="muted">
           {[
             stop.time,
-            until !== null && until <= 90 ? `in ${until} min` : null,
-            leave ? `leave by ${leave}` : null,
+            state.kind === 'upcoming' && !state.leaveBy ? `in ${describeGap(state.minutes)}` : null,
+            state.kind === 'imminent' ? `leave by ${state.leaveBy}` : null,
             leg ? `${leg.minutes} min by ${leg.mode}` : null,
           ]
             .filter(Boolean)
@@ -270,7 +293,15 @@ function Row({ time, name, booked }: { time?: string; name: string; booked?: boo
  * act on this morning. Filtered to blocking findings on this day, so the section is empty far
  * more often than not — which is the point. A heading that is always there stops being read.
  */
-function Attention({ trip, dayIndex }: { trip: Trip; dayIndex: number }) {
+function Attention({
+  trip,
+  dayIndex,
+  cachedAt,
+}: {
+  trip: Trip;
+  dayIndex: number;
+  cachedAt: string | null;
+}) {
   const findings = tripHealth(trip)
     .dimensions.flatMap((d) => d.findings)
     .filter((f) => isBlocking(f) && f.dayIndex === dayIndex);
@@ -289,9 +320,16 @@ function Attention({ trip, dayIndex }: { trip: Trip; dayIndex: number }) {
           {f.message}
         </ThemedText>
       ))}
+      {/* **A cached forecast changes tense; a cached itinerary does not.** A 10:30 stop read
+          from disk is still a 10:30 stop, so those lines stand as written. A forecast read from
+          disk is a forecast that was true when it was taken, and weather is the one thing here
+          that ages inside an afternoon. The banner above says the screen is a copy; this says
+          what that means for the only claim on it that decays. */}
       {wet ? (
         <ThemedText type="detail" themeColor="muted">
-          {`Rain likely today — ${rain}% chance.`}
+          {cachedAt
+            ? `Rain was forecast today — ${rain}%${clockAt(cachedAt) ? `, as of ${clockAt(cachedAt)}` : ''}.`
+            : `Rain likely today — ${rain}% chance.`}
         </ThemedText>
       ) : null}
     </View>

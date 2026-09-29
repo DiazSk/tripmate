@@ -1,4 +1,5 @@
-import { formatDate, formatDateline, formatDayChip, formatRange } from './dayDisplay';
+import type { DayPlan } from '@/api/types';
+import { formatDate, formatDateline, formatDayChip, formatRange, weatherLine } from './dayDisplay';
 
 // The whole reason this module exists: `new Date('2026-09-19')` is UTC midnight, so a local
 // formatter west of Greenwich prints the 18th. This process runs in UTC-5 to prove the port
@@ -72,4 +73,47 @@ describe('the day strip chip', () => {
     expect(formatDayChip('not-a-date')).toBeNull();
     expect(formatDayChip('2026-13-01')).toBeNull();
   });
+});
+
+/* --- the weather badge, which must never carry a claim nobody made --- */
+
+const day = (over: Partial<DayPlan>): DayPlan =>
+  ({ date: '2026-10-22', weather: '', stops: [], ...over }) as DayPlan;
+
+const detail = (over: Partial<NonNullable<DayPlan['weatherDetail']>> = {}) => ({
+  date: '2026-10-22',
+  tempMaxC: 23.4,
+  tempMinC: 18.9,
+  historical: false,
+  precipitationProbability: null,
+  humidity: null,
+  weatherCode: null,
+  sunrise: null,
+  sunset: null,
+  ...over,
+});
+
+test('a real forecast is the figures it actually holds', () => {
+  expect(weatherLine(day({ weatherDetail: detail() }))).toBe('23° / 19°');
+});
+
+test("last year's numbers say so", () => {
+  expect(weatherLine(day({ weatherDetail: detail({ historical: true }) }))).toBe('23° / 19°  ·  typical');
+});
+
+// The defect this replaced: the stored string on a real Lisbon trip is
+// "Pleasant autumn day, 18.9-23.5°C, mostly sunny" — written by the planner with no forecast to
+// write it from. Cutting it at the comma hid the invented temperatures and kept the claim.
+test('planner prose never reaches the badge, however plausible it reads', () => {
+  expect(weatherLine(day({ weather: 'Pleasant autumn day, 18.9-23.5°C, mostly sunny' }))).toBeUndefined();
+});
+
+test("the day's own theme is allowed, because it claims nothing about the world", () => {
+  expect(weatherLine(day({ theme: 'Old town on foot' }))).toBe('Old town on foot');
+  expect(weatherLine(day({ theme: '   ' }))).toBeUndefined();
+});
+
+test('a forecast outranks a theme; neither means no badge', () => {
+  expect(weatherLine(day({ theme: 'Old town on foot', weatherDetail: detail() }))).toBe('23° / 19°');
+  expect(weatherLine(day({}))).toBeUndefined();
 });

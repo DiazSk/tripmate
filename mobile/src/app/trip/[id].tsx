@@ -34,7 +34,7 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { fitMessage } from '@/lib/anchors';
 import { type Repair, repairsFor } from '@shared/guardrailFixes';
 
-import { formatDayChip, formatRange } from '@/lib/dayDisplay';
+import { clockAt, formatDayChip, formatRange } from '@/lib/dayDisplay';
 import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/itineraryDiff';
 import { tripHealth, type Guardrail } from '@/lib/health';
 import { regionForStops } from '@/lib/mapRegion';
@@ -359,7 +359,7 @@ export default function TripDetail() {
           {offline ? (
             <View style={styles.stale}>
               <ThemedText type="detail" themeColor="muted">
-                {`Saved copy${staleTime(cachedAt)} — no connection. Nothing can be changed until you are back.`}
+                {`Saved copy${clockAt(cachedAt) ? ` from ${clockAt(cachedAt)}` : ''} — no connection. Nothing can be changed until you are back.`}
               </ThemedText>
             </View>
           ) : null}
@@ -699,14 +699,6 @@ interface Pending {
  * stops it looping: a programmatic `scrollTo` fires `onMomentumScrollEnd` too, and without the
  * guard that would set the state that caused the scroll.
  */
-/** " from 21:27", or nothing at all when the stamp will not parse — never a fabricated time. */
-function staleTime(at: string | null): string {
-  if (!at) return '';
-  const when = new Date(at);
-  if (Number.isNaN(when.getTime())) return '';
-  return ` from ${new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(when)}`;
-}
-
 function DayPager({
   trip,
   day,

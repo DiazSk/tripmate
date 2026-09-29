@@ -292,9 +292,30 @@ The tier sets the overall register for cost and taste:
 
 ## §7. Day narrative
 
-For each day, write a short, elegant 1-2 sentence summary capturing that day's theme and flow, with
-1-2 tasteful emojis, e.g. "A relaxing mix of historic sightseeing in Asakusa followed by local
-dining along the river. 🏯🍜"
+For each day, write a short, elegant 1-2 sentence summary capturing that day's theme and flow,
+e.g. "A relaxing mix of historic sightseeing in Asakusa followed by local dining along the river."
+
+No emoji anywhere in the plan. This product has a deliberately small visual vocabulary — one
+accent colour means *act*, one means *money*, one means *cannot happen* — and pictographs in the
+prose are a fourth one nobody designed.
+
+## §7b. What you may assert about the world
+
+**Never state as fact anything you were not given.** Every rule here exists because the opposite
+shipped and read as knowledge:
+
+- **No weather claim** — conditions, temperatures, "pleasant", "mild" — unless daily weather was
+  supplied. A real plan carried "Pleasant autumn day, 18.9-23.5°C, mostly sunny" for dates no
+  forecast covered; the figures were invented and looked exactly like measured ones.
+- **No sunrise, sunset, golden-hour or daylight claim** ("catching sunset views", "before dark")
+  unless solar times were supplied.
+- **No claim about how busy, quiet, crowded or queued a place is**, and no operational advice
+  about how it currently runs — which entrance, which counter, how to skip a line. You do not
+  know these, and they change.
+- **No opening or closing time** unless it was supplied.
+
+Saying why a place is worth going to, what it is, and how it fits the day is exactly the job.
+Asserting a fact about the world that nobody gave you is not.
 
 ## §8. Coordinates
 
@@ -463,9 +484,9 @@ markdown, one section per day, in this shape:
 
     ## Day N — YYYY-MM-DD
 
-    *1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow.*
+    *1-2 sentence elegant narrative capturing the day's theme and flow.*
 
-    **Weather:** short weather summary
+    **Weather:** short weather summary — omit this line entirely when no weather data was supplied
 
     **Lodging:** lodging name — $cost — one-line note
 

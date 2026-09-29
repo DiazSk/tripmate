@@ -49,7 +49,19 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
             {line}
           </ThemedText>
         </View>
-        <ThemedText type="title">{health.score}</ThemedText>
+        {/* **The figure says what it is a figure of.** A flat penalty averaged over the
+            dimensions that could be measured is the right arithmetic and the wrong thing to
+            print alone: 84 out of seven checks and 84 out of four are not the same claim, and
+            the larger type makes the second one look like the first. The qualifier appears only
+            when coverage is partial — at 7 of 7 the number needs no denominator. */}
+        <View style={styles.figure}>
+          <ThemedText type="title">{health.score}</ThemedText>
+          {ran < health.dimensions.length ? (
+            <ThemedText type="micro" themeColor="muted">
+              across checked
+            </ThemedText>
+          ) : null}
+        </View>
       </Pressable>
 
       {open ? (
@@ -121,9 +133,13 @@ const isSevere = (key: HealthKey) => SEVERE.includes(key);
  */
 const summary = (findings: number, blockers: number, ran: number, of: number) => {
   const coverage = `${ran} of ${of} checks run`;
-  if (blockers > 0) return `${blockers} blocker${blockers === 1 ? '' : 's'} · ${coverage}`;
+  // **"found", not a bare count.** "2 blockers" reads as *there are two blockers in this plan*.
+  // What is actually known is what the checks that ran turned up — and with three dimensions
+  // unmeasured those are different statements. One word is the whole difference.
+  if (blockers > 0) return `${blockers} blocker${blockers === 1 ? '' : 's'} found · ${coverage}`;
   if (findings > 0) return `${findings} thing${findings === 1 ? '' : 's'} to look at · ${coverage}`;
-  return `Nothing to flag · ${coverage}`;
+  // Not "nothing wrong": nothing was *flagged*, by the checks that could run.
+  return `Nothing flagged · ${coverage}`;
 };
 
 /**
@@ -151,6 +167,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows },
   summary: { marginTop: 2 },
   grow: { flex: 1 },
+  figure: { alignItems: 'flex-end' },
   list: { marginTop: Spacing.tight, gap: Spacing.tight },
   dimension: { gap: Spacing.hair },
   dimensionHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },

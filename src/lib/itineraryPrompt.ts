@@ -46,8 +46,34 @@ const STOP_SHAPE = `{"name":"stop name","lat":0.0,"lng":0.0,"cost":0,"why":"one 
  * the omission visible. One literal means a field added here reaches all three, and `carryOverDaySummaries`
  * in itinerary.ts covers the case where a model ignores the shape anyway.
  */
-const DAY_SHAPE = `{"date":"YYYY-MM-DD","weather":"short weather summary","theme":"2-5 word identity for the day","summary":"1-2 sentence elegant narrative with 1-2 tasteful emojis capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}`;
-const SHAPE_HINT = `{"days":[${DAY_SHAPE}],"unplaced":[{"name":"one of the traveler's MUST places","reason":"one concrete line"}]}`;
+/**
+ * **`weather` is conditional, and that is a correctness fix rather than tidying.**
+ *
+ * This shape used to require a `weather` string on every day. `formatWeather` truthfully reports
+ * "No weather data available." when the forecast lookup found nothing — and the model, handed no
+ * data and a mandatory field, complied: a real stored Lisbon day reads "Pleasant autumn day,
+ * 18.9-23.5°C, mostly sunny", temperatures and all, none of it observed. Asking for a field
+ * nobody can fill is how a planner is made to invent.
+ *
+ * `dayShape` therefore omits the field entirely when there is nothing to base it on, and
+ * `CLAIMS_POLICY` below says the same thing in prose so the two cannot be read apart.
+ */
+const dayShape = (hasWeather: boolean) =>
+  `{"date":"YYYY-MM-DD",${hasWeather ? `"weather":"short weather summary",` : ``}"theme":"2-5 word identity for the day","summary":"1-2 sentence elegant narrative capturing the day's theme and flow","lodging":{"name":"lodging name","cost":0,"note":"short note"},"stops":[${STOP_SHAPE}]}`;
+
+/**
+ * Whether these days carry weather at all.
+ *
+ * The critique and rebalance prompts hand the model days it must return in the same shape. If
+ * generation omitted `weather` because there was no forecast and *these* asked for it back, the
+ * revision would reintroduce exactly the invention the omission prevents — and it would arrive
+ * on the second pass, where nobody is looking. The three shapes move together or the fix leaks.
+ */
+const daysCarryWeather = (days: Itinerary["days"]) => days.some((d) => !!d.weather?.trim());
+const shapeHint = (hasWeather: boolean) =>
+  `{"days":[${dayShape(hasWeather)}],"unplaced":[{"name":"one of the traveler's MUST places","reason":"one concrete line"}]}`;
+
+
 
 // Concrete stop-selection guidance per interest tag — generic "weight toward
 // this interest" phrasing wasn't specific enough to reliably avoid the
@@ -189,7 +215,23 @@ function tierStyle(tierId: TierId): string {
 
 /** The two lines that replaced the old tag chips. Kept deliberately concrete: "one line" plus
  *  worked examples, because "short" alone produced a paragraph about half the time. */
-const STOP_LINES_INSTRUCTION = `Each stop also needs exactly two one-line fields. "why": why THIS stop suits THIS traveler given their stated interests and how they travel — the reason it was chosen over alternatives, e.g. "Quiet rock garden, no stairs — fits an easy-paced culture day". "note": one practical detail they'd act on, e.g. "10-minute walk from the last stop; go before 10am to beat the crowds". Both must be a single line, under about 90 characters, and must not repeat the stop's name.`;
+/** The policy restated where the lines it most often breaks are specified. */
+const CLAIMS_POLICY_REMINDER = `Neither line may claim anything you were not given: no weather, no light or time-of-day conditions, no claim about how busy or quiet a place is, no opening hours.`;
+
+/**
+ * **The examples here used to contradict the claims policy, and the examples won.**
+ *
+ * A measured run produced "arrive early to avoid crowds on the trails" — a claim about how busy
+ * a place is, which §CLAIMS_POLICY forbids in plain words. It came from this instruction's own
+ * model answer, which was "go before 10am to beat the crowds", and from "Quiet rock garden",
+ * which asserts the same thing about a place nobody has measured. An instruction that says one
+ * thing and demonstrates another teaches the demonstration; the emoji rule had the identical
+ * failure before it was removed from its example.
+ *
+ * So both examples now show what a grounded practical line looks like: distance, sequence, a
+ * physical property of the place. Nothing about conditions, crowds or times of day.
+ */
+const STOP_LINES_INSTRUCTION = `Each stop also needs exactly two one-line fields. "why": why THIS stop suits THIS traveler given their stated interests and how they travel — the reason it was chosen over alternatives, e.g. "Step-free rock garden — fits an easy-paced culture day". "note": one practical detail they'd act on, e.g. "10-minute walk from the last stop; tickets are sold at the north gate". Both must be a single line, under about 90 characters, and must not repeat the stop's name. ${CLAIMS_POLICY_REMINDER}`;
 
 // Meals were coming back as a single committed restaurant every time, which reads
 // like a booking and pins the day's route to one address. An area plus "what to look
@@ -235,6 +277,26 @@ export function formatAnchors(anchors: Anchor[] | undefined): string {
 // (hostel, B&B, apartment, camp, houseboat, farmstay) and often the memorable part of
 // a trip — so pick the type from the traveler + destination first, and offer an
 // alternative rather than presenting one property as settled.
+/**
+ * What the planner may assert about the world.
+ *
+ * Every item here is a real defect found on screen. The day badge carried an invented forecast;
+ * a day narrative promised "catching sunset views" on a day whose solar times nobody had looked
+ * up; a stop note explained how a café's queue currently works. Each reads as knowledge because
+ * it is written in the same voice as the facts around it, and a reader has no way to tell them
+ * apart.
+ *
+ * Stated as one rule rather than patched per string, because the failure is general: prose that
+ * sounds travel-like is not evidence. The client enforces the same boundary from its side —
+ * `weatherLine` will not render planner prose in the badge reserved for measured figures.
+ */
+const CLAIMS_POLICY = `Never state as fact anything you were not given. Specifically:
+- No weather claim of any kind — conditions, temperatures, "pleasant", "mild", "rainy" — unless daily weather was supplied above. If it was not, write nothing about weather anywhere, including in a day's summary or a stop's note.
+- No sunrise, sunset, golden-hour or daylight claim ("catching sunset views", "before dark") unless sunrise/sunset times were supplied.
+- No claim about how busy, quiet, crowded or queued a place is, and no operational advice about how it currently runs (which entrance, which counter, how to skip a line). You do not know these and they change.
+- No opening or closing time unless it was supplied.
+Describing why a place is worth going to, what it is, and how it fits the day is exactly what you are for. Asserting a fact about the world that nobody gave you is not.`;
+
 const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD — what the WHOLE party pays there, never one person's share, so multiply a per-head price by the party size before writing it (0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM") — times across a day's stops must be sequential and non-overlapping; a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category" — "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs (including a bikeshare hop, when the destination has one), "other" for everything else. Also two fields the checks read rather than the traveler: "outdoor" — true where weather can spoil the stop (a garden, a viewpoint, a walking route), false where it cannot (a museum, a restaurant, a covered market). Judge the place, never the category: a rooftop bar and a basement one are both food. And "timeFlexibility" — write "FIXED" ONLY for something the traveler has told you is already booked or ticketed for a specific time, quoting their own words back as the stop; everything you chose yourself is "PREFERRED". A FIXED stop is one the plan may not later move or drop, so inventing one takes a decision away from them permanently.`;
 
 export function buildGeneratePrompt(params: {
@@ -260,10 +322,9 @@ ${PRECEDENCE_INSTRUCTION}
 
 Style: ${tierStyle(params.tier)}
 
-Daily weather:
-${formatWeather(params.weather)}
+${params.weather.length > 0 ? `Daily weather:\n${formatWeather(params.weather)}` : `No weather data is available for these dates.`}
 ${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}${formatAnchors(params.anchors)}${params.sketch ?? ""}
-Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.
+${params.weather.length > 0 ? "Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.\n" : ""}${CLAIMS_POLICY}
 Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${lodgingInstruction()}
 ${STOP_FIELD_INSTRUCTION}
@@ -271,10 +332,10 @@ ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
 ${budgetInstruction()}
 Include real, well-known places (or real, well-known areas, per the food-stop rule) for the destination with their real approximate latitude/longitude.
-For each day, also write a short, elegant 1-2 sentence "summary" capturing that day's theme and flow, with 1-2 tasteful emojis, e.g. "A relaxing mix of historic sightseeing in Asakusa followed by local dining along the river. 🏯🍜"
+For each day, also write a short, elegant 1-2 sentence "summary" capturing that day's theme and flow, e.g. "A relaxing mix of historic sightseeing in Asakusa followed by local dining along the river." No emoji anywhere in the plan. The summary is prose about the shape of the day and may not smuggle in a claim either: no "dawn-lit", "sunset", "golden hour", "quiet" or "uncrowded" unless the data for it was supplied.
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
-${SHAPE_HINT}`;
+${shapeHint(params.weather.length > 0)}`;
 }
 
 export function buildRefinePrompt(params: {
@@ -307,10 +368,10 @@ ${STOP_LINES_INSTRUCTION}
 ${FOOD_STOP_INSTRUCTION}
 ${lodgingInstruction()}
 ${budgetInstruction()}
-For each day, also write (or rewrite, if the feedback changes its theme) a short, elegant 1-2 sentence "summary" with 1-2 tasteful emojis capturing that day's theme and flow.
+For each day, also write (or rewrite, if the feedback changes its theme) a short, elegant 1-2 sentence "summary" capturing that day's theme and flow. No emoji anywhere in the plan.
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
-${SHAPE_HINT}`;
+${shapeHint(daysCarryWeather(params.previousItinerary.days))}`;
 }
 
 /**
@@ -364,7 +425,7 @@ ${FOOD_STOP_INSTRUCTION}
 ${lodgingInstruction()}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, as a JSON array of day objects in this shape:
-[${DAY_SHAPE}]`;
+[${dayShape(daysCarryWeather(params.remainingDays))}]`;
 }
 
 /**
@@ -413,5 +474,5 @@ If it already looks good, respond with exactly: {"issues":[],"revisedDays":null}
 Otherwise, respond with the specific issues found and a corrected "days" array in the same shape as the input, fixing those issues.
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
-{"issues":["short issue description"],"revisedDays":[${DAY_SHAPE}]}`;
+{"issues":["short issue description"],"revisedDays":[${dayShape(daysCarryWeather(params.itinerary.days))}]}`;
 }

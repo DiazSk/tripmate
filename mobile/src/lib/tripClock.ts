@@ -96,3 +96,63 @@ export function minutesUntil(stop: Stop | undefined, nowMinutes: number): number
   const at = parseClock(stop.time);
   return at === null ? null : Math.max(0, at - nowMinutes);
 }
+
+/**
+ * What Today should be saying right now.
+ *
+ * The screen had one rendering — the next stop and its time — which is right at 10:15 and
+ * useless at 6:27, when the next thing is four hours away and the screen amounts to "see you at
+ * half ten". The answer is not to show the whole day; that is the Day screen's job and Today is
+ * an execution surface. The answer is that the *interval* is itself information.
+ *
+ * **`leaveBy` is the headline wherever it exists**, because on an execution surface the moment
+ * you have to go outranks the moment you are due. It does not always exist: it is computed from
+ * the previous stop, and the first stop of a day has no origin — `Lodging` carries a name, a
+ * cost and a note, no coordinates. So the first stop of the day reports its start time and the
+ * wait, and never a departure time, because there is nothing honest to derive one from.
+ */
+export type TodayState =
+  | { kind: 'imminent'; index: number; leaveBy: string; minutes: number }
+  | { kind: 'upcoming'; index: number; leaveBy: string | null; minutes: number }
+  | { kind: 'free'; index: number; minutes: number }
+  | { kind: 'done' }
+  | { kind: 'empty' };
+
+/** Inside this, the countdown leads: you are about to have to move. */
+export const IMMINENT_MINUTES = 30;
+/** Past this, the wait is the story rather than the stop. Below it, the stop still is. */
+export const FREE_MINUTES = 90;
+
+export function todayState(
+  stops: Stop[],
+  nowMinutes: number,
+  leaveByFor: (index: number) => string | null
+): TodayState {
+  if (stops.length === 0) return { kind: 'empty' };
+
+  const index = nextStop(stops, nowMinutes);
+  if (index === null) return { kind: 'done' };
+
+  const until = minutesUntil(stops[index], nowMinutes);
+  if (until === null) return { kind: 'done' };
+
+  const leaveBy = leaveByFor(index);
+
+  // Measured from the departure where there is one, and from the stop itself otherwise — the
+  // question "how long have I got" means until I must leave, not until I am expected.
+  const slack = leaveBy === null ? until : Math.max(0, (parseClock(leaveBy) ?? 0) - nowMinutes);
+
+  if (leaveBy !== null && slack <= IMMINENT_MINUTES) {
+    return { kind: 'imminent', index, leaveBy, minutes: slack };
+  }
+  if (slack >= FREE_MINUTES) return { kind: 'free', index, minutes: slack };
+  return { kind: 'upcoming', index, leaveBy, minutes: until };
+}
+
+/** "3 hr 30 min", "45 min" — the wait as somebody would say it, never "0 hr". */
+export function describeGap(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
