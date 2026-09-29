@@ -122,13 +122,15 @@ export default function Home() {
           Days worth keeping, written for where you are going.
         </ThemedText>
 
-        <View style={styles.cta}>
-          <PrimaryButton title="Plan a trip" onPress={() => router.push('/plan/basics')} />
-        </View>
-
         {/* **While a trip is running, Home is about that trip.** Everything below — the wall's
             one featured card, the Method section — is for somebody who is not travelling. The
-            Method in particular is marketing copy, and the reader is standing in Lisbon. */}
+            Method in particular is marketing copy, and the reader is standing in Lisbon.
+
+            The same argument reaches this button, which was the last thing on the screen still
+            addressing the wrong reader: a full-width jade bar above Today, inviting somebody
+            mid-trip to start a *different* trip, drawn louder than the stop they have to leave
+            for. On a trip it moves below Today and becomes a line of text; off one it stays
+            exactly as it was, because then it is genuinely what the screen is for. */}
         {trip ? (
           <View style={styles.band}>
             <Today
@@ -140,8 +142,20 @@ export default function Home() {
                 offline ? undefined : (dayIndex) => router.push(`/trip/${trip.id}?ask=${dayIndex}`)
               }
             />
+            <Pressable
+              onPress={() => router.push('/plan/basics')}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.quietCta, pressed && styles.pressed]}>
+              <ThemedText type="label" themeColor="accent">
+                Plan another trip
+              </ThemedText>
+            </Pressable>
           </View>
-        ) : null}
+        ) : (
+          <View style={styles.cta}>
+            <PrimaryButton title="Plan a trip" onPress={() => router.push('/plan/basics')} />
+          </View>
+        )}
 
         {/* The only place Home spends a network call, and it reuses the Trips photo cache. */}
         {trip ? null : (
@@ -257,6 +271,8 @@ const styles = StyleSheet.create({
   },
   headline: { marginTop: Spacing.read },
   cta: { marginTop: Spacing.read },
+  // Same 44pt target as Today's own actions, and no wider than its words.
+  quietCta: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   band: { marginTop: Spacing.regular * 1.5 },
   bandHeading: { marginTop: Spacing.rows, marginBottom: Spacing.hair },
   featured: { marginTop: Spacing.rows, justifyContent: 'flex-end' },
