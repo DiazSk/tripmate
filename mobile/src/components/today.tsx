@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import type { DayPlan, SavedPlace, Stop, Trip } from '@/api/types';
 import { clockAt, formatDayChip } from '@/lib/dayDisplay';
 import { dayLegs, leaveBy } from '@/lib/dayTravel';
@@ -51,6 +51,7 @@ export function Today({
   cachedAt,
   onAsk,
   onOpenTrip,
+  onPlanAnother,
   saved,
 }: {
   trip: Trip;
@@ -61,6 +62,9 @@ export function Today({
   /** Opens Ask already scoped to the day on screen. Absent while offline. */
   onAsk?: (dayIndex: number) => void;
   onOpenTrip: () => void;
+  /** Starts the wizard. Rendered beside Ask so the two screen-level actions share one row
+   *  rather than stacking into the reading order; Home passes it only while a trip is running. */
+  onPlanAnother?: () => void;
   /**
    * Everything this traveller has ever saved, unfiltered — the screen narrows it.
    *
@@ -97,17 +101,31 @@ export function Today({
           thing somebody standing in a street actually presses — was a line of text. Replanning
           is the rare case on an execution surface; it needs to be findable, not shouted. So it
           takes the same idiom Directions already uses, and the 44pt target is kept on the
-          pressable rather than drawn. */}
-      <Pressable
-        onPress={onAsk ? () => onAsk(dayIndex) : undefined}
-        disabled={!onAsk}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: !onAsk }}
-        style={({ pressed }) => [styles.ask, pressed && styles.pressed]}>
-        <ThemedText type="label" themeColor={onAsk ? 'accent' : 'muted'}>
-          {onAsk ? 'Plans changed?' : 'Plans changed? — needs a connection'}
-        </ThemedText>
-      </Pressable>
+          pressable rather than drawn.
+          **On a row, not stacked**: two full-width actions one above the other were simply two
+          more rows in the reading order, which is most of why this screen scanned as a list. */}
+      <View style={styles.actions}>
+        <Pressable
+          onPress={onAsk ? () => onAsk(dayIndex) : undefined}
+          disabled={!onAsk}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !onAsk }}
+          style={({ pressed }) => [styles.ask, pressed && styles.pressed]}>
+          <ThemedText type="label" themeColor={onAsk ? 'accent' : 'muted'}>
+            {onAsk ? 'Plans changed?' : 'Plans changed? — offline'}
+          </ThemedText>
+        </Pressable>
+        {onPlanAnother ? (
+          <Pressable
+            onPress={onPlanAnother}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.ask, pressed && styles.pressed]}>
+            <ThemedText type="label" themeColor="accent">
+              Plan another trip
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -185,12 +203,9 @@ function NowAndAfter({
 
   if (state.kind === 'empty' || state.kind === 'done') {
     return (
-      <View style={styles.block}>
-        <ThemedText type="label" themeColor="muted">
-          Nothing left today
-        </ThemedText>
-        <ThemedText type="detail" themeColor="muted">
-          {state.kind === 'empty' ? 'This day has no stops.' : 'The last stop has started.'}
+      <View style={styles.subject}>
+        <ThemedText type="title" themeColor="muted">
+          {state.kind === 'empty' ? 'Nothing planned today' : 'Nothing left today'}
         </ThemedText>
       </View>
     );
@@ -201,50 +216,73 @@ function NowAndAfter({
   const leg = dayLegs(stops).find((l) => l.toIndex === index);
   const after = stops.slice(index + 1);
 
+  // The facts under the lead, in the order somebody asks for them: when it starts, how far off
+  // that is, how long the hop takes. One line, never a stack — two muted 13pt lines under each
+  // other is the list shape this whole pass removes, and the first-stop branch had exactly that
+  // ("in 45 min" over "8:11 AM") until it was looked at on the device.
+  //
+  // `leaveBy` is deliberately absent: it is the lead in every state that has one, and repeating
+  // it here is what made the old block read as four near-identical rows.
+  const beneath = [
+    stop.time,
+    // Only where the lead is the place itself; every other lead already carries the wait.
+    state.kind === 'upcoming' && !state.leaveBy ? `in ${describeGap(state.minutes)}` : null,
+    leg ? `${leg.minutes} min by ${leg.mode}` : null,
+  ]
+    .filter(Boolean)
+    .join('  ·  ');
+
   return (
     <>
-      {/* The silence before a distant stop is itself information, and the thing somebody reopening
-          the app at 6:27 actually wants. Not a filled-in mini-itinerary: an interval. */}
-      {state.kind === 'free' ? (
-        <>
-          <View style={styles.block}>
-            <ThemedText type="label" themeColor="muted">
-              Until then
+      <View style={styles.subject}>
+        {/* **One subject, stated as a sentence.** This block used to be an uppercase opener above a
+            place, a departure and a detail line — four rows of near-equal weight, which is the
+            "reads like a list" the redesign was asked to fix. The lead is now a single phrase
+            with its figure set in the tabular face, and the opener is gone: the screen's entire
+            job is that this is the next thing, so a word saying so is furniture. */}
+        {state.kind === 'free' ? (
+          <>
+            <Lead tone="foreground" text={`Free for about ${describeGap(state.minutes)}`} />
+            <ThemedText type="detail" themeColor="muted">
+              {`then ${stop.name}${stop.time ? ` at ${stop.time}` : ''}`}
             </ThemedText>
-            <ThemedText type="heading">{`Free for about ${describeGap(state.minutes)}`}</ThemedText>
-          </View>
-          <SavedNearby saved={saved} planned={stops} destination={destination} from={stops[index]} />
-        </>
-      ) : null}
-
-      <View style={styles.block}>
-        <ThemedText type="label" themeColor="muted">
-          Next
-        </ThemedText>
-        <ThemedText type="heading">{stop.name}</ThemedText>
-        {/* The departure on its own line, above the appointment, wherever one exists. */}
-        {state.kind === 'imminent' ? (
-          <ThemedText type="heading" themeColor="alert">
-            {`Leave in ${describeGap(state.minutes)}`}
+          </>
+        ) : state.kind === 'imminent' ? (
+          <>
+            <Lead tone="alert" text={`Leave in ${describeGap(state.minutes)}`} />
+            <ThemedText type="heading" style={styles.place} numberOfLines={2}>
+              {stop.name}
+            </ThemedText>
+          </>
+        ) : state.leaveBy ? (
+          <>
+            <Lead tone="foreground" text={`Leave by ${state.leaveBy}`} />
+            <ThemedText type="heading" style={styles.place} numberOfLines={2}>
+              {stop.name}
+            </ThemedText>
+          </>
+        ) : (
+          // The day's first stop has no origin, so there is no departure to lead with and the
+          // place itself is the subject — at the lead size, because this state otherwise had no
+          // glance-distance line at all. See `todayState` for why a departure is never invented.
+          <ThemedText type="title" style={styles.lead} numberOfLines={2}>
+            {stop.name}
           </ThemedText>
-        ) : state.kind === 'upcoming' && state.leaveBy ? (
-          <ThemedText type="heading">{`Leave by ${state.leaveBy}`}</ThemedText>
+        )}
+
+        {state.kind !== 'free' && beneath ? (
+          <ThemedText type="detail" themeColor="muted" style={styles.beneath}>
+            {beneath}
+          </ThemedText>
         ) : null}
-        <ThemedText type="detail" themeColor="muted">
-          {[
-            stop.time,
-            state.kind === 'upcoming' && !state.leaveBy ? `in ${describeGap(state.minutes)}` : null,
-            state.kind === 'imminent' ? `leave by ${state.leaveBy}` : null,
-            leg ? `${leg.minutes} min by ${leg.mode}` : null,
-          ]
-            .filter(Boolean)
-            .join('  ·  ')}
-        </ThemedText>
-        {stop.lat !== 0 || stop.lng !== 0 ? (
+
+        {state.kind !== 'free' && (stop.lat !== 0 || stop.lng !== 0) ? (
           <Pressable
             onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})}
             accessibilityRole="link"
-            style={({ pressed }) => pressed && styles.pressed}>
+            accessibilityLabel={`Directions to ${stop.name}`}
+            hitSlop={8}
+            style={({ pressed }) => [styles.leadAction, pressed && styles.pressed]}>
             <ThemedText type="label" themeColor="accent">
               Directions
             </ThemedText>
@@ -252,9 +290,13 @@ function NowAndAfter({
         ) : null}
       </View>
 
+      {state.kind === 'free' ? (
+        <SavedNearby saved={saved} planned={stops} destination={destination} from={stops[index]} />
+      ) : null}
+
       {after.length > 0 ? (
         <View style={styles.block}>
-          <ThemedText type="label" themeColor="muted">
+          <ThemedText type="label" themeColor="muted" style={styles.sectionLabel}>
             After
           </ThemedText>
           {after.map((s, i) => (
@@ -268,6 +310,31 @@ function NowAndAfter({
         </View>
       ) : null}
     </>
+  );
+}
+
+/**
+ * The screen's lead line — one phrase, one face, at glance distance.
+ *
+ * **A sentence, not a labelled metric.** "LEAVE IN" over a big "10 min" is the hero-metric
+ * template, and it needs an uppercase opener to work: two things this system does not do.
+ *
+ * **And not a mixed-face one either, which is what this tried first.** Setting the figure in
+ * Tabular a size up looked right in the editor and was wrong on the device twice over. It breaks
+ * the Figure Rule — that face is for values compared *in a column*, and DESIGN.md names this
+ * exact shape as the counter-example ("a stamp is not a column; `DAY 2 OF 5` has two numerals and
+ * nothing to align them against"). And it shows: mono advances put a visible gap between "10" and
+ * "min", so the phrase read as two fragments rather than one sentence.
+ *
+ * So the emphasis is size, which is what the craft floor asks for anyway. Switzer rather than the
+ * display serif because every one of these lines carries digits, and Melodrama bars its zero —
+ * "10:30" renders as "1Ø:3Ø", the same defect that moved the header clock off the serif.
+ */
+function Lead({ text, tone }: { text: string; tone: 'foreground' | 'alert' }) {
+  return (
+    <ThemedText type="title" themeColor={tone} style={styles.lead} numberOfLines={2}>
+      {text}
+    </ThemedText>
   );
 }
 
@@ -320,7 +387,7 @@ function SavedNearby({
 
   return (
     <View style={styles.block}>
-      <View style={styles.row}>
+      <View style={[styles.row, styles.sectionLabel]}>
         <ThemedText type="label" themeColor="muted" style={styles.grow}>
           {here ? 'You saved these — near you' : 'You saved these'}
         </ThemedText>
@@ -459,7 +526,7 @@ function Attention({
 
   return (
     <View style={styles.block}>
-      <ThemedText type="label" themeColor="alert">
+      <ThemedText type="label" themeColor="alert" style={styles.sectionLabel}>
         Needs attention
       </ThemedText>
       {findings.map((f, i) => (
@@ -484,7 +551,50 @@ function Attention({
 }
 
 const styles = StyleSheet.create({
+  /**
+   * **Cadence, not one interval repeated.** Every block on this screen used to be separated by
+   * `Spacing.rows` and joined internally by `Spacing.hair` — 12 against 4, a ratio too shallow to
+   * group anything, so five blocks read as five equal rows. The satellites keep 12; the subject
+   * is set apart by `Spacing.regular` and a rule, which is what makes the squint test resolve.
+   */
   wrap: { gap: Spacing.rows },
+  /** The one thing this screen exists to answer. Its own air, and a rule under it. */
+  subject: {
+    gap: Spacing.hair,
+    // `Spacing.tight`, not `regular`: the Directions target below is 44pt tall against ~19pt of
+    // text, so it contributes its own trailing air. Measured on the device, 24 on top of that
+    // opened a void between the subject and its rule.
+    paddingBottom: Spacing.tight,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.cardBorder,
+  },
+  // A rule and space, never a card: "round what you touch, square what you read", and this is
+  // read. A filled panel here would also be the second surface on a screen that has one.
+  /**
+   * A size the shared ramp does not carry, declared here on purpose.
+   *
+   * `title` (22) is the step below and does not read at arm's length in a street; `display` (28)
+   * is the step above and is Melodrama, which bars its zero — every line this style sets contains
+   * digits. So: the text face at 26, which puts a 1.5x step over the place name under it instead
+   * of `title`'s 1.29x. `fontWeight` is safe here because Switzer ships real cuts; the comment on
+   * `display` in themed-text.tsx applies only to the bundled single-cut families.
+   */
+  lead: { fontSize: 26, lineHeight: 30, letterSpacing: -0.4, fontWeight: '600' },
+  place: { marginTop: 2 },
+  /**
+   * More room above a section opener than below it.
+   *
+   * Every group here sat 12 below the previous one and 4 above its own first row, which is the
+   * ratio inverted — so two muted lists running back to back ("and 1 more saved for Kyoto"
+   * directly over "AFTER") read as one continuous column. 20 above against 4 below is what tells
+   * the eye a new group started.
+   */
+  sectionLabel: { marginTop: Spacing.tight },
+  beneath: { marginTop: Spacing.hair },
+  leadAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  /** The two screen-level actions, on one row at the foot instead of stacked into the reading
+   *  order as two more list items. Separated generously so neither catches the other's press. */
+  actions: { flexDirection: 'row', gap: Spacing.regular, marginTop: Spacing.tight, flexWrap: 'wrap' },
   headRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
   grow: { flex: 1 },
   block: { gap: Spacing.hair },

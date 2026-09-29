@@ -160,15 +160,10 @@ export default function Home() {
                 offline ? undefined : (dayIndex) => router.push(`/trip/${trip.id}?ask=${dayIndex}`)
               }
               saved={saved ?? undefined}
+              // Handed to Today rather than drawn under it: stacked beneath, this was a third
+              // full-width action in the reading order, and Today owns its own action row now.
+              onPlanAnother={() => router.push('/plan/basics')}
             />
-            <Pressable
-              onPress={() => router.push('/plan/basics')}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.quietCta, pressed && styles.pressed]}>
-              <ThemedText type="label" themeColor="accent">
-                Plan another trip
-              </ThemedText>
-            </Pressable>
           </View>
         ) : (
           <View style={styles.cta}>
