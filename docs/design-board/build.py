@@ -29,8 +29,8 @@ FONTS = {"Melodrama": ROOT/"mobile/assets/fonts/Melodrama-Regular.ttf",
 # mobile/package.json, and mobile/src/constants/theme.ts. A spec block that drifts from the app
 # is worse than no spec block.
 FACTS = [
-    ("Screens", "14"),
-    ("Captured", "27 Sep 2026"),
+    ("Screens", "22"),
+    ("Captured", "29 Sep 2026"),
     ("Device", "iPhone 17 \u00b7 iOS 27"),
     ("Viewport", "402 \u00d7 874 pt"),
     ("Capture", "1206 \u00d7 2622 px @3\u00d7"),
@@ -54,29 +54,34 @@ TYPE = [
 
 SECTIONS = [
   ("Arrival", "What somebody meets before they have a trip.", [
-    ("00-signin.png","Sign in — the first screen","What the app opens on. Full-bleed scene photography with the serif carrying one claim at a time; the picture and the line rotate across four scenes. The gate is deliberately soft — “Keep planning without an account” leaves at no cost, because planning, generating and saving all work signed out and the work follows you onto an account later."),
-    ("01-home.png","Home","A serif statement, one jade action, then the next trip as a photograph. The method section below is the honesty — it says what the planner actually does rather than promising magic."),
-    ("02-trips.png","Trips","Not \u201cMemories\u201d: the wall held a trip that happened and a trip that has not, and a future trip is not a memory. Kept trips only, split Upcoming / Past \u2014 and a trip counts as upcoming until the day after it ends, because somebody standing there on the final afternoon has not acquired a memory yet."),
-    ("03-profile.png","Profile","Deliberately native. The design system hands settings surfaces back to the platform — the one place Kiln steps aside, taking iOS list conventions with the palette unchanged."),
+    ("00-signin.png","Sign in \u2014 the first screen","What the app opens on. Full-bleed scene photography with the serif carrying one claim at a time; the picture and the line rotate across four scenes. The gate is deliberately soft \u2014 \u201cKeep planning without an account\u201d leaves at no cost, because planning, generating and saving all work signed out and the work follows you onto an account later."),
+    ("01-home.png","Home, between trips","A serif statement, one jade action, then the next trip as a photograph. The method section is the honesty: it says what the planner actually does. Step 02 now names the <b>16-day forecast window</b> and what happens outside it \u2014 it used to promise \u201cforecast for your actual dates\u201d, which for a trip a month out is not something the backend can do."),
+    ("01-home-today.png","Home, while the trip is running","<b>The same screen, three weeks later.</b> Home already chose between \u201cUp next\u201d and \u201cLatest memory\u201d off the dates; this is the third branch, and the method section steps aside because the reader is standing in Lisbon. One next thing, when to leave for it, what follows, and only what needs attention <i>today</i>. <b>The clock is the destination\u2019s.</b> The device read 21:27 on the 28th when this was taken \u2014 Lisbon was already on Tue 29, so a device clock would have opened the wrong <i>day</i> of the itinerary, not merely the wrong hour."),
+    ("01b-today-offline.png","The same screen with no network","The one thing an on-trip screen must not do is go blank underground. The trip is read from disk, and the copy says so rather than passing itself off as current. Every control that needs the network is greyed with the reason stated once, at the top \u2014 not eight times, once per button. Directions stays live: it is a URL, and a map app is what still works in a tunnel."),
+    ("02-trips.png","Trips","Not \u201cMemories\u201d: the wall held a trip that happened and a trip that has not, and a future trip is not a memory. Kept trips only, split Upcoming / Past \u2014 and a trip counts as upcoming until the day after it ends, because somebody standing there on the final afternoon has not acquired a memory yet. The figures carry the noun now: gold says <i>money</i> and cannot say <i>which</i> money."),
+    ("03-profile.png","Profile","Deliberately native. The design system hands settings surfaces back to the platform \u2014 the one place Kiln steps aside, taking iOS list conventions with the palette unchanged. The lifetime figure reads <b>Planned</b>, not <i>Spent</i>: it sums what kept trips were planned to cost, and this product collects no transactions."),
   ]),
   ("Planning", "Four steps. Only the first gates anything.", [
     ("04-plan-basics.png","Where and when","The only required step. Budget carries a per-person / whole-party basis, because the plan prices everything as a party total."),
-    ("04b-destination-search.png","Finding the place","Live geocoding as you type, disambiguated by region — there is more than one Kyoto. A miss never blocks generating."),
+    ("04b-destination-search.png","Finding the place","Live geocoding as you type, disambiguated by region \u2014 there is more than one Kyoto. <b>And only places.</b> The same query used to offer <i>Kyoto Heliport</i> and <i>Kyoto Imperial Palace</i>; this field sets the coordinate every later distance, forecast and travel time is measured from, so picking the heliport would anchor a week to a landing pad with nothing downstream able to tell."),
+    ("04c-saved-places.png","What you already saved","Places imported before planning, and <b>the ones in this destination come first and arrive already chosen</b>. The rest sit under <i>Saved elsewhere</i> rather than unlabelled beside them \u2014 an Amber Fort listed plainly under a Kyoto trip reads as a candidate for it. The heading only appears when there is a \u201chere\u201d to be elsewhere from."),
     ("05-plan-group.png","Who is going","The preset is a shortcut into the counters below it, not a second question: picking one fills them in and they stay editable. They used to be unrelated, so nothing stopped \u201cSolo\u201d standing over three adults. Party down to infants, because it changes the pace rather than just a headcount."),
-    ("06-plan-preferences.png","What you're after","<b>How full a day</b> and <b>what to see</b> are two questions now. They were one \u2014 packed / relaxed / offbeat / mixed \u2014 which made a packed off-the-beaten-path trip unsayable, and quietly set a three-stop day for anyone who answered \u201coffbeat\u201d. Interests tap once to pick, again to star. Dietary and access needs are hard constraints, not preferences."),
-    ("07-plan-review.png","The brief, before a word is written","Every answer back in one list, each with its own way in. The last two rows print even when they are empty: diet and access are the hard constraints, and a row that vanishes when unset is a row nobody can notice is missing. Generation is the expensive step \u2014 this is the cheap place to catch a misunderstanding."),
+    ("06-plan-preferences.png","What you're after","<b>How full each day</b> and <b>what to see</b> are two questions. They were one \u2014 packed / relaxed / offbeat / mixed \u2014 which made a packed off-the-beaten-path trip unsayable, and quietly set a three-stop day for anyone who answered \u201coffbeat\u201d. All three chip states are visible here: chosen, <b>\u2605 starred</b>, untouched, with the caption naming the next tap."),
+    ("07-plan-review.png","The brief, before a word is written","Every answer back in one list, each with its own way in. Diet and access print even when empty: they are the hard constraints, and a row that vanishes when unset is a row nobody can notice is missing. Generation is the expensive step \u2014 this is the cheap place to catch a misunderstanding. <b>Pace still carries three answers on one row</b>; see the note below the board."),
   ]),
   ("The trip", "One plan, two faces, and the checks that run over it.", [
-    ("09-trip-day.png","A day","A day is a page, paged horizontally. Stops are rows against rules, never cards. The strip carries dates rather than bare ordinals \u2014 nobody remembers what Day 3 is while standing in it \u2014 and sits on its own row, because choosing a day is navigation while List/Map and Ask/+ act on the day you landed on. The budget figure says <b>Projected</b>, since it is a forecast until a real spend is entered."),
+    ("09-trip-day.png","A day","A day is a page, paged horizontally. Stops are rows against rules, never cards. The strip carries dates rather than bare ordinals \u2014 nobody remembers what Day 3 is while standing in it \u2014 and sits on its own row, because choosing a day is navigation while List/Map and Ask/+ act on the day you landed on."),
     ("11-trip-map.png","The same day, mapped","Numbered discs carry the day's own hue \u2014 the one sanctioned crossing between the interface palette and the map's. The pill says what the map cannot draw: a route is visibly a shape and invisibly a cost, and how much of a day is spent moving is the half somebody is deciding on. Time, never distance \u2014 nothing here knows whether the reader thinks in miles."),
-    ("12-trip-conflict.png","A conflict, and the ways out","The leg does not fit, so the arriving stop takes a coral wash and says so in its own words. <b>Fix this</b> no longer spends a model call on arithmetic: a hop short of minutes has exactly two answers, and both are computed, named with the clock time they produce, and applied on one tap. Neither is offered if it would tighten another leg, and nothing booked ever moves."),
-    ("13-trip-stop-detail.png","A stop, opened","Why it was chosen, one practical line, and the three things you can do — including marking it booked, which forbids the planner from ever moving it."),
-    ("10-plan-health.png","Plan health, opened","The figure decomposes. Seven dimensions, each with the findings that cost it its points, in the traveller’s own words. It is arithmetic rather than a judgement — a flat penalty per finding, averaged over what could be measured — and a dimension nothing could check says <b>Not checked</b> rather than claiming a pass nobody ran."),
-    ("10b-spend-breakdown.png","Where the day’s money went","Largest first, zero-value categories dropped rather than printed at zero. The shares are apportioned by largest remainder so the column sums to exactly 100 — three 33s that add to 99 would undo the one thing this surface is arguing."),
+    ("12-trip-conflict.png","A conflict","The leg does not fit, so the arriving stop takes a coral wash and says so in its own words, with the arithmetic shown rather than asserted."),
+    ("12b-trip-repairs.png","\u2026and the ways out","<b>Fix this</b> spends no model call on arithmetic: a hop short of minutes has exactly two answers, both computed. They share one sentence shape \u2014 verb, what moves, how far, which way, then the clock it lands on \u2014 so comparing them is reading rather than parsing. Neither is offered if it would tighten another leg, and the line under them states the rule that governs everything here: nothing booked will move."),
+    ("13-trip-stop-detail.png","A stop, opened","Why it was chosen, one practical line, and the three things you can do \u2014 including marking it booked, which forbids the planner from ever moving it."),
+    ("10-plan-health.png","Plan health, opened","The figure decomposes into seven dimensions, each with the findings that cost it its points. It is arithmetic rather than judgement \u2014 a flat penalty per finding, averaged over what could be measured \u2014 and a dimension nothing could check says <b>Not checked</b> rather than claiming a pass nobody ran. <b>The number no longer carries readiness alone:</b> <i>2 blockers \u00b7 4 of 7 checks run</i> sits under it, and each finding is classified, because a duplicate museum and a train that cannot be caught both cost eight points and are not the same kind of problem."),
+    ("10b-spend-breakdown.png","Where the day\u2019s money went","Largest first, zero-value categories dropped rather than printed at zero. The heading says <b>projected</b> until a real spend is entered \u2014 the bar above it already made that distinction and this did not, so one screen called one summation by two names."),
   ]),
   ("Changing it", "Two ways in, both conversational.", [
-    ("14-trip-chat.png","Ask for a change","Plain language, and it inherits the planner's own reasoning from generation rather than re-reading its output. <b>Changing</b> states the scope before you ask \u2014 one day or the whole trip \u2014 and the applier enforces whichever you pick, so an edit that strays comes back refused rather than discovered later. Nothing lands until a computed diff of the two plans has been approved."),
-    ("15-trip-add-place.png","Add a stop","Live search around the day you are reading, and it now says where a result would land before you open it. Each slot carries what inserting there would cost in travel \u2014 the extra journey, not the journey \u2014 so the same caf\u00e9 reads differently on a morning than on an evening. Nothing already in the plan moves, and an add can be taken back."),
+    ("14-trip-chat.png","Ask for a change","Scope is stated before you ask, starts wide, and is enforced by the applier rather than requested of the model. <b>And it is now recorded on the turn.</b> Read the two older exchanges: a refusal sits under a control saying <i>Whole trip</i>, because the scope moved afterwards and nothing said so. The newest request carries the scope it went out under, so its refusal explains itself. Unstamped turns stay unstamped \u2014 saying nothing about what was never recorded."),
+    ("15-trip-add-place.png","Add a stop","Live search around the day you are reading. <b>Every row says where it would land and what it would cost</b> \u2014 the clock time, whether it squeezes, and the extra travel \u2014 before you open anything. That answer existed one tap later, on the card, which is what made this read as ordinary search with a destination bolted on."),
+    ("09b-trip-offline.png","The plan, with no network","Today is the screen you open standing in a street, and it links straight here \u2014 so this one is cached too, or the on-trip mode is a dead end one tap in. Ask, Add, Find nearby and Mark booked all go grey. The two writes refuse <i>before</i> their optimistic update rather than after: both already rolled a failed save back, but a control that flips and reverts with no reason reads as a broken app instead of a stated limit."),
   ]),
 ]
 
@@ -191,11 +196,20 @@ is warm paper on a single near-black slate. If a screen here seems to break that
 saying — that is exactly what this board is for.</p>
 <p><b>One thing already known.</b> One screen is still absent — the generation screen, because
 capturing it means spending a real model run.</p>
-<p><b>Every screen here was re-shot after a round of outside feedback,</b> which read an earlier
-version of this board as the whole product and reasonably concluded that what it did not show did
-not exist. Some of what it asked for already existed and was simply unphotographed; the rest was
-built, and is above. Worth keeping in mind for anything that still looks missing: ask before
-assuming.</p>
+<p><b>Every screen here was re-shot for this round.</b> Five are new: Home while a trip is
+running, the same screen with no network, the saved-places split, the computed repairs on their
+own, and the plan offline. Two previous rounds of outside feedback read earlier versions of this
+board as the whole product and reasonably concluded that what it did not show did not exist —
+a third of the first round asked for things that were already built and merely unphotographed. So
+for anything that still looks missing: name the screen you would expect it on, and ask, rather
+than inferring absence from a picture.</p>
+<p><b>Three things asked for last round are deliberately still open.</b> <i>Pace</i> on the
+Review screen still prints three answers on one line — they are one question about tempo, and
+Edit can only land on the single step that holds all three, so splitting them means four links to
+one destination. The day summaries still carry emoji, which is a generation-prompt decision shared
+with the web client rather than a mobile one. And the category rail on Add a stop has the
+platform's scroll indicator rather than a fade at rest, which would cost a dependency nothing else
+here needs. Each is a judgement rather than an oversight, and each is still arguable.</p>
 </footer></div></body></html>"""
 
 if __name__ == "__main__":

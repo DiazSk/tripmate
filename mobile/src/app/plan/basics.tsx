@@ -363,7 +363,12 @@ function SavedPlacesSection({
       {here.map((g) => (
         <Group key={g.city} g={g} />
       ))}
-      {elsewhere.length > 0 ? (
+      {/* **Only when there is a "here" to be elsewhere from.** Before a destination is typed
+          nothing can match, so every group falls into `elsewhere` and the heading ends up over
+          the whole library — labelling it elsewhere than nowhere. The trips wall already makes
+          this call the same way: a section heading that distinguishes nothing is worse than
+          none. */}
+      {here.length > 0 && elsewhere.length > 0 ? (
         <ThemedText type="label" themeColor="muted">
           Saved elsewhere
         </ThemedText>

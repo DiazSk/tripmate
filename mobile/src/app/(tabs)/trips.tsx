@@ -8,7 +8,7 @@ import type { TripSummary } from '@/api/types';
 import { PlacePhoto } from '@/components/place-photo';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { BarHeight, Colors, Radius, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
 import { type WallItem, todayISO, wallItems } from '@/lib/tripsWall';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
@@ -87,10 +87,14 @@ function countLine(trips: TripSummary[] | null | undefined): string {
   if (trips === undefined) return 'Gathering your plans';
   if (trips === null) return 'Not loaded';
   if (trips.length === 0) return 'Nothing kept yet';
-  const countries = new Set(trips.map((t) => t.destination.split(',').pop()?.trim()).filter(Boolean));
+  // **Distinct destinations, not distinct countries.** This counted the last comma-separated
+  // segment — the country — while calling the result "places", so a Lisbon trip and a Porto trip
+  // read as "1 place". Two cities is two places to anybody who went to both, and the word on
+  // screen should be the thing being counted.
+  const places = new Set(trips.map((t) => t.destination.trim()).filter(Boolean));
   const trip = trips.length === 1 ? 'trip' : 'trips';
-  const place = countries.size === 1 ? 'place' : 'places';
-  return `${trips.length} ${trip} · ${countries.size} ${place}`;
+  const place = places.size === 1 ? 'place' : 'places';
+  return `${trips.length} ${trip} · ${places.size} ${place}`;
 }
 
 /**
@@ -139,7 +143,9 @@ const styles = StyleSheet.create({
   // 44pt is the platform's minimum touch target; a line of text is otherwise ~18pt tall.
   signIn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.read },
   screen: { flex: 1, backgroundColor: Colors.canvas },
-  content: { padding: Spacing.read, gap: Spacing.rows },
+  /** The tab bar floats over the wall and its safe-area inset does not reach this list, so the
+   *  last row's budget line ended up underneath it — the same correction Home and Profile carry. */
+  content: { padding: Spacing.read, gap: Spacing.rows, paddingBottom: BarHeight + Spacing.regular },
   row: { gap: Spacing.rows },
   masthead: { gap: Spacing.hair, marginBottom: Spacing.tight },
   // Sits in the leading half of its own row (see `wallItems`), aligned with the tile beneath it.
