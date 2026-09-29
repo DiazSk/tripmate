@@ -466,6 +466,15 @@ export default function TripView({
                   onFitAnchor={(name) => focus.open(activeDayIndex, "trip", fitMessage(name))}
                   onItineraryChange={handleRearrange}
                   trip={trip}
+                  // Re-read the row rather than toggling a local copy of `shared`: the control
+                  // already knows what it did, and a second source of that truth is how the
+                  // button ends up disagreeing with the database after a failed request.
+                  onShareChange={() => {
+                    fetch(`/api/trips/${id}`)
+                      .then((r) => (r.ok ? r.json() : null))
+                      .then((next) => next && setTrip(next))
+                      .catch(() => {});
+                  }}
                   panelCollapsed={planCollapsed}
                   onMinimize={() => setPlanCollapsed(true)}
                 />

@@ -287,6 +287,35 @@ export async function searchPlaces(params: {
   }
 }
 
+/**
+ * Publish this trip and get the link, or withdraw it.
+ *
+ * Idempotent in both directions, which is what lets the caller treat a second press as a retry:
+ * sharing an already-shared trip returns the same link rather than breaking the one already
+ * sent, and un-sharing an unshared one succeeds.
+ *
+ * Undefined is "the request did not land" — the same shape every mutation here uses, so an
+ * offline press says nothing rather than claiming a link exists.
+ */
+export async function shareTrip(id: string): Promise<{ url: string } | undefined> {
+  try {
+    const res = await fetchWithSession(`/api/trips/${id}/share`, { method: 'POST' });
+    if (!res.ok) return undefined;
+    return (await res.json()) as { url: string };
+  } catch {
+    return undefined;
+  }
+}
+
+export async function unshareTrip(id: string): Promise<boolean> {
+  try {
+    const res = await fetchWithSession(`/api/trips/${id}/share`, { method: 'DELETE' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function discardTrip(id: string): Promise<boolean> {
   try {
     const res = await fetchWithSession(`/api/trips/${id}`, { method: 'DELETE' });

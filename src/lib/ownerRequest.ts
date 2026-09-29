@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { auth } from "./auth";
-import { OWNER_COOKIE, resolveOwnerId } from "./owner";
+import { getTrip, type TripRow } from "./db";
+import { OWNER_COOKIE, readableOwners, resolveOwnerId } from "./owner";
 
 /**
  * Who this request belongs to: a signed-in account if there is one, else the anonymous cookie.
@@ -48,4 +49,27 @@ export async function currentOwner(): Promise<RequestOwner> {
 /** The id alone, for the callers that never widen a read. */
 export async function currentOwnerId(): Promise<string> {
   return (await currentOwner()).id;
+}
+
+/**
+ * One trip, but only for the person it belongs to.
+ *
+ * **Every whole-trip read goes through this, and that is the point.** Reading a trip by id was
+ * left unscoped on purpose while the id doubled as the share link, and four separate routes grew
+ * up around that: the page, its print view, `GET /api/trips/[id]` and the HTML export. Gating
+ * three of them and missing the fourth would have left the trip readable and the fix invisible,
+ * so the check lives in one function rather than four copies of a condition.
+ *
+ * Undefined means "no such trip" *and* "not yours", collapsed deliberately. Every caller turns it
+ * into the same 404, so a stranger cannot learn that an id is real — a 403 beside a 404 is an
+ * existence oracle for anybody willing to try ids.
+ *
+ * A trip its owner has chosen to publish is read by token instead, through
+ * `getTripByShareToken` — never through here.
+ */
+export async function readOwnTrip(id: string): Promise<TripRow | undefined> {
+  const row = getTrip(id);
+  if (!row) return undefined;
+  const { id: ownerId, signedIn } = await currentOwner();
+  return readableOwners(ownerId, signedIn).includes(row.owner_id) ? row : undefined;
 }

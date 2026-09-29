@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { getTrip } from "@/lib/db";
-import { loadExportFont } from "@/lib/export/exportFont";
-import { collectExportMap } from "@/lib/export/exportMapData";
-import { exportFilename, renderItineraryHtml } from "@/lib/export/itineraryHtml";
+import { exportFilename } from "@/lib/export/itineraryHtml";
+import { renderTripDocument } from "@/lib/export/tripDocument";
+import { readOwnTrip } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
 
 /**
@@ -20,20 +19,14 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const row = getTrip(id);
+  // Owner-only. This hands back the entire trip as a document, so leaving it open while the page
+  // beside it was gated would have made the gate decorative.
+  const row = await readOwnTrip(id);
   if (!row) return NextResponse.json({ error: "Trip not found" }, { status: 404 });
 
   const trip = toTripDetail(row);
-
-  // Map geometry is the only failure surface here and it swallows its own — an export with no map
-  // is a complete document, so there is no error path to add.
-  const [fonts, map] = await Promise.all([loadExportFont(), collectExportMap(trip)]);
-
-  const html = renderItineraryHtml(trip, {
-    fontDataUri: fonts.text,
-    displayFontDataUri: fonts.display,
-    map,
-  });
+  // Shared with `/s/[token]`, which serves these same bytes as a page rather than a download.
+  const html = await renderTripDocument(trip);
 
   return new NextResponse(html, {
     headers: {

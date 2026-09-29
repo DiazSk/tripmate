@@ -1,8 +1,10 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -17,6 +19,8 @@ import {
   discardTrip,
   editTrip,
   promoteTrip,
+  shareTrip,
+  unshareTrip,
   updateTripItinerary,
 } from '@/api/tripMateApi';
 import type { ChatTurn, CostState, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
@@ -504,7 +508,102 @@ export default function TripDetail() {
           trip={trip}
           onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })}
         />
-      ) : null}
+      ) : (
+        // The same slot as KeepShelf and mutually exclusive with it, which is the honest shape:
+        // a draft is not a thing to send anybody, and a trip stops being a draft precisely when
+        // its planner decides it is worth keeping.
+        <ShareShelf
+          trip={trip}
+          offline={offline}
+          onShared={(shared) => setTrip({ ...trip, shared })}
+        />
+      )}
+    </View>
+  );
+}
+
+/**
+ * Sending the plan to somebody, and taking it back.
+ *
+ * **Publishing is an act, and this is the only thing that performs it.** A trip is readable by
+ * its owner and nobody else until this is pressed; the link it produces is a token the server
+ * mints, not the trip's own id, so withdrawing it later actually withdraws it.
+ *
+ * The native sheet rather than a copy button: on a phone the next step after "share" is always a
+ * particular person in a particular app, and the platform already knows which ones. `Share.share`
+ * resolves either way — `dismissedAction` when they back out — so there is nothing to report
+ * about the outcome and nothing is claimed about it.
+ *
+ * Disabled offline rather than hidden, matching every other control on this screen: the banner
+ * above says why once, and eight controls each repeating it is a screen shouting.
+ */
+function ShareShelf({
+  trip,
+  offline,
+  onShared,
+}: {
+  trip: Trip;
+  offline: boolean;
+  onShared: (shared: boolean) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function share() {
+    setBusy(true);
+    setFailed(false);
+    const result = await shareTrip(trip.id);
+    setBusy(false);
+    if (!result) {
+      setFailed(true);
+      return;
+    }
+    onShared(true);
+    // **One field, chosen by platform — not both.** Sending `message` and `url` together is the
+    // obvious-looking call and it is wrong: iOS treats them as two separate items and the sheet
+    // offers "2 Links" for what is one link. Observed on the simulator. Android has no `url` at
+    // all and drops it silently, so it has to take `message`.
+    await Share.share(
+      Platform.OS === 'ios' ? { url: result.url } : { message: result.url }
+    ).catch(() => {});
+  }
+
+  async function stop() {
+    setBusy(true);
+    setFailed(false);
+    const ok = await unshareTrip(trip.id);
+    setBusy(false);
+    if (ok) onShared(false);
+    else setFailed(true);
+  }
+
+  return (
+    <View style={styles.shareShelf}>
+      {failed ? (
+        <ThemedText type="detail" themeColor="alert">
+          That didn&rsquo;t go through. Try again.
+        </ThemedText>
+      ) : (
+        <ThemedText type="detail" themeColor="muted">
+          {trip.shared
+            ? 'Anyone with the link can read this plan. They cannot change it.'
+            : 'Send this plan as a link. Nobody can see it until you do.'}
+        </ThemedText>
+      )}
+      <Pressable
+        onPress={trip.shared ? stop : share}
+        disabled={busy || offline}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: busy || offline }}
+        style={({ pressed }) => [styles.shareAction, pressed && styles.pressedRow]}>
+        <ThemedText type="label" themeColor={busy || offline ? 'muted' : 'accent'}>
+          {busy
+            ? 'Working\u2026'
+            : trip.shared
+              ? 'Stop sharing'
+              : 'Share a link'}
+        </ThemedText>
+      </Pressable>
     </View>
   );
 }
@@ -1179,4 +1278,19 @@ const styles = StyleSheet.create({
   },
   shelfError: { textAlign: 'center' },
   discard: { alignItems: 'center', paddingVertical: Spacing.tight },
+  // The keep shelf's material, but left-aligned and without its centred, decision-shaped
+  // emphasis: keeping a plan is the step that gates the trip, and sharing one is a thing you may
+  // never do. Same gutters so the two occupy the same slot without the page shifting.
+  shareShelf: {
+    backgroundColor: Colors.bar,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.cardBorder,
+    paddingHorizontal: Spacing.read,
+    paddingTop: Spacing.rows,
+    paddingBottom: Spacing.regular,
+    gap: Spacing.hair,
+  },
+  // 44pt, and only as wide as its words — the same target Today's own actions use.
+  shareAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  pressedRow: { opacity: 0.6 },
 });

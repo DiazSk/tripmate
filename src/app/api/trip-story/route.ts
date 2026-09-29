@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseJsonResponse, runClaude } from "@/lib/claude";
 import { isThrottled } from "@/lib/ipThrottle";
 import { isOverDailyCap } from "@/lib/spendCap";
-import { getStoryScript, getTrip, insertRun, saveStoryScript } from "@/lib/db";
+import { getStoryScript, insertRun, saveStoryScript } from "@/lib/db";
+import { readOwnTrip } from "@/lib/ownerRequest";
 import {
   buildStoryPrompt,
   compactDay,
@@ -97,7 +98,10 @@ export async function POST(req: NextRequest) {
   // `"preview"` is the placeholder the pre-save result view passes as a trip id — it is not a row,
   // and a cache keyed on it would serve one trip's narration for the next one planned in the same
   // session.
-  const cacheable = !!tripId && tripId !== "preview" && !!getTrip(tripId);
+  // Owner-scoped, because the cache is a read of someone's trip: a stored script narrates their
+  // stops by name. A trip that is not the caller's reads as uncacheable, so the story is written
+  // fresh from what they sent rather than served from a row they may not see.
+  const cacheable = !!tripId && tripId !== "preview" && !!(await readOwnTrip(tripId));
   if (cacheable) {
     const cached = getStoryScript(tripId!, dayIndex, fingerprint);
     if (cached) {

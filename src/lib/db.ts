@@ -3,7 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { parseProfile, type TravelerProfile } from "./travelerProfile";
 import { staleDraftCutoff } from "./drafts";
-import { LEGACY_OWNER, isValidOwnerId, readableOwners } from "./owner";
+import { LEGACY_OWNER, isValidOwnerId, readableOwners, writableOwners } from "./owner";
 import { anchorKey } from "./anchors";
 import type { TripStatus } from "./types";
 
@@ -424,6 +424,21 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_trips_owner_status ON trips (owner_id, s
 // nothing rather than guess an hour. **No backfill**, unlike `status` and `owner_id`: those could
 // be inferred from the rows' own existence, and this cannot be inferred from anything.
 addColumnIfMissing("trips", "timezone", "TEXT");
+// The record of a decision to publish, and nothing else.
+//
+// Null on every row until its owner chooses to share, and back to null when they revoke — which
+// is what makes an already-sent link stop resolving. **Deliberately not derived from `id`.** The
+// id is already in the owner's address bar, their browser history, their device's offline cache
+// and this app's own logs; a token computed from it would be exposed the moment any of those
+// were, and could never be withdrawn without changing the trip's own identity. A separate value
+// can be minted late, handed out narrowly and thrown away.
+addColumnIfMissing("trips", "share_token", "TEXT");
+// Partial, because the column is null far more often than not and SQLite counts each null as
+// distinct in a plain unique index anyway — stating the predicate says which rows the constraint
+// is actually about.
+db.exec(
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_trips_share_token ON trips (share_token) WHERE share_token IS NOT NULL`
+);
 addColumnIfMissing("llm_traces", "cost_usd", "REAL");
 
 export interface TripRow {
@@ -445,6 +460,9 @@ export interface TripRow {
   /** IANA zone of the destination, e.g. "Europe/Lisbon". Null is a real answer and is not
    *  backfilled — see the column's note above. */
   timezone: string | null;
+  /** The trip's share link, or null when it has never been shared or has been revoked. See the
+   *  column's note above for why this is not derived from `id`. */
+  share_token: string | null;
   created_at: string;
 }
 
@@ -458,6 +476,7 @@ export function insertTrip(
     | "status"
     | "owner_id"
     | "timezone"
+    | "share_token"
   > & {
     run_id?: string | null;
     user_answers_json?: string | null;
@@ -486,7 +505,9 @@ export function insertTrip(
     `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, status, owner_id, timezone, created_at)
      VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @status, @owner_id, @timezone, @created_at)`
   ).run({ ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, timezone, created_at });
-  return { ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, timezone, created_at };
+  // `share_token` is not in the INSERT and is null here for the same reason: a trip has not been
+  // shared at the moment it is written, and publishing is a later, separate decision.
+  return { ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, timezone, share_token: null, created_at };
 }
 
 /**
@@ -842,6 +863,45 @@ export function getTrip(id: string): TripRow | undefined {
 }
 
 /**
+ * The trip a share link points at, or undefined when the token is unknown or revoked.
+ *
+ * The only unauthenticated read of a whole trip in this file, and the only one there should be —
+ * `getTrip` is now owner-gated at every caller. A revoked token lands here as "not found" rather
+ * than as a distinct state, deliberately: telling a holder that their link *used* to work says
+ * the trip exists and that they once had it, which is more than a withdrawn link should confirm.
+ */
+export function getTripByShareToken(token: string): TripRow | undefined {
+  if (!token) return undefined;
+  return db.prepare(`SELECT * FROM trips WHERE share_token = ?`).get(token) as
+    | TripRow
+    | undefined;
+}
+
+/**
+ * Publish a trip under `token`, or withdraw it with null.
+ *
+ * Owner-scoped through `writableOwners`, because publishing somebody's trip is a write in the
+ * only sense that matters. Returns whether a row moved, so a caller can tell "not yours" from
+ * "done" instead of reporting success either way — same contract as `deleteTrip`.
+ */
+export function setTripShareToken(
+  id: string,
+  token: string | null,
+  ownerId: string = LEGACY_OWNER
+): boolean {
+  const owners = writableOwners(ownerId);
+  return (
+    db
+      .prepare(
+        `UPDATE trips SET share_token = ? WHERE id = ? AND owner_id IN (${owners
+          .map(() => "?")
+          .join(",")})`
+      )
+      .run(token, id, ...owners).changes > 0
+  );
+}
+
+/**
  * Writes the itinerary, and the trip's end date with it when the edit changed the trip's length.
  *
  * The two have to move together: `trips.end_date` is what the trip list and every date range in the
@@ -888,8 +948,13 @@ export function updateTripItinerary(
  * so it is the one that checks. Returns whether a row actually went, so a caller can tell "deleted"
  * from "not yours" instead of reporting success either way.
  */
-export function deleteTrip(id: string, ownerId: string = LEGACY_OWNER, signedIn = false): boolean {
-  const owners = readableOwners(ownerId, signedIn);
+export function deleteTrip(id: string, ownerId: string = LEGACY_OWNER): boolean {
+  // `writableOwners`, not `readableOwners` — destroying a row is the operation where being wrong
+  // cannot be undone, and widening a *write* to the shared legacy bucket meant any caller holding
+  // an id could delete a legacy-owned trip. `signedIn` is gone from the signature rather than
+  // ignored: an exact match cannot be widened, so a parameter that looked like it affected the
+  // decision would be a lie.
+  const owners = writableOwners(ownerId);
   const result = db
     .prepare(
       `DELETE FROM trips WHERE id = ? AND owner_id IN (${owners.map(() => "?").join(",")})`
@@ -1571,8 +1636,9 @@ export function listSavedPlaces(ownerId: string, signedIn = false): SavedPlaceRo
     .all(...owners) as SavedPlaceRow[];
 }
 
-export function deleteSavedPlace(ownerId: string, id: string, signedIn = false): boolean {
-  const owners = readableOwners(ownerId, signedIn);
+export function deleteSavedPlace(ownerId: string, id: string): boolean {
+  // A write, so exact — same rule and same reason as `deleteTrip` above.
+  const owners = writableOwners(ownerId);
   return (
     db
       .prepare(`DELETE FROM saved_places WHERE id = ? AND owner_id IN (${owners.map(() => "?").join(",")})`)

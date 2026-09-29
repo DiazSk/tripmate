@@ -7,7 +7,8 @@ import {
   runClaude,
   type SessionOption,
 } from "@/lib/claude";
-import { appendChatTurn, getTrip, insertRun, setTripChatSession } from "@/lib/db";
+import { appendChatTurn, insertRun, setTripChatSession } from "@/lib/db";
+import { readOwnTrip } from "@/lib/ownerRequest";
 import { buildEditContext } from "@/lib/editContext";
 import {
   buildChatEditPrompt,
@@ -93,7 +94,12 @@ export async function POST(req: NextRequest) {
 
     // Prefer what the caller sent (the pre-save page has answers in memory but no trip row yet),
     // falling back to what was stored when the trip was saved.
-    const stored = tripId ? getTrip(tripId) : undefined;
+    // `readOwnTrip`, not `getTrip`: this only reaches the row for the traveller's stored answers
+    // and its run id, but both belong to whoever owns it — borrowing another person's answers
+    // into a prompt, and filing this edit under their run, are not things a trip id should buy.
+    // Not yours reads as absent, which is a path this already has: the pre-save page has answers
+    // in memory and no row at all.
+    const stored = tripId ? await readOwnTrip(tripId) : undefined;
     const answers =
       userAnswers ??
       (stored?.user_answers_json ? (JSON.parse(stored.user_answers_json) as UserAnswers) : null);
