@@ -30,6 +30,21 @@ import { TTL, cached } from "./fetchCache";
  */
 
 /**
+ * **Bump this whenever a field is added to `GeoResult`.**
+ *
+ * `fetch_cache` is a durable SQLite table holding *typed payloads*, and `TTL.STATIC` is 90 days.
+ * So adding a field does not merely miss the cache — every destination already cached keeps
+ * answering with the old shape, and the new field reads `undefined` for three months. Nothing
+ * fails: the value is simply absent, for exactly the destinations somebody has already used.
+ *
+ * This was found the hard way. `timezone` was added to `GeoResult`, and a Lisbon entry written
+ * weeks earlier kept serving `{lat, lon, name, admin1, country, countryCode}` — so the trips that
+ * most needed a clock, the ones for places already visited, were the ones that would never get
+ * one. A version in the key is the whole fix, and it costs one refetch per destination.
+ */
+const GEO_KEY = "geo2";
+
+/**
  * Where a named place is. Cities do not move, so this is as static as anything here.
  *
  * The key is the trimmed, lowercased query, because it *is* a text lookup — two travellers typing
@@ -38,7 +53,7 @@ import { TTL, cached } from "./fetchCache";
  * for either; the negative is cheap to re-ask and conflating it with an outage is not worth it.
  */
 export function geocodeDestinationCached(name: string) {
-  const key = `geo:${name.trim().toLowerCase()}`;
+  const key = `${GEO_KEY}:${name.trim().toLowerCase()}`;
   return cached(key, TTL.STATIC, () => geocodeDestination(name));
 }
 
