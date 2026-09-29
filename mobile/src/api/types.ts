@@ -166,6 +166,14 @@ export interface Trip {
    * itinerary, not merely the wrong hour.
    */
   timezone?: string | null;
+  /**
+   * Whether this trip is currently published under a share link.
+   *
+   * A boolean, never the token — the screen only needs to know which label to draw, and the
+   * token is a capability this app writes to disk in its offline cache. Minting returns the URL
+   * to hand straight to the share sheet; asking again is another idempotent POST.
+   */
+  shared?: boolean;
 }
 
 export type GroupType = "solo" | "couple" | "family_with_kids" | "other";

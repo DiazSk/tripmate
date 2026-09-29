@@ -41,5 +41,9 @@ export function toTripDetail(row: TripRow): Trip {
     // Only on the detail payload, not the summary: the wall and the profile never need to know
     // what time it is somewhere, and the one screen that does already fetches the whole trip.
     timezone: row.timezone,
+    // Coerced to a boolean here rather than passed through. The token is a capability and this
+    // payload is read by both clients, cached to disk by one of them and logged by the server —
+    // see `Trip.shared`.
+    shared: row.share_token !== null,
   };
 }

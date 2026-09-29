@@ -112,3 +112,27 @@ export function readableOwners(ownerId: string, signedIn = false): string[] {
   if (signedIn) return [ownerId];
   return ownerId === LEGACY_OWNER ? [LEGACY_OWNER] : [ownerId, LEGACY_OWNER];
 }
+
+/**
+ * Which owners a *write* may match: exactly one, ever.
+ *
+ * The counterpart to `readableOwners`, and the rule that function's own docblock already states —
+ * "reads are widened, writes are not". Both `PATCH` and `DELETE` on `/api/trips/[id]` called
+ * `readableOwners` instead, which handed every caller the legacy bucket along with their own id.
+ * Measured against a running server: a request carrying nothing but a trip id overwrote a
+ * legacy-owned itinerary to zero days, then deleted the row, both 200. The comment above that
+ * PATCH said it existed to stop precisely that.
+ *
+ * Returned as a list rather than a boolean so the call sites keep the shape they already had
+ * (`owners.includes(trip.owner_id)`) and the two rules read as a pair.
+ *
+ * **What this cannot fix, because nothing at this layer can.** A caller with no cookie resolves to
+ * LEGACY_OWNER and so still matches a legacy row exactly. Those rows are unattributable by
+ * definition — that is what the bucket means — and no check here can tell the person who wrote one
+ * from a stranger who sent no cookie. What changed is that their ids are no longer handed out: a
+ * trip is read by id only by its owner, and sharing mints a separate revocable token instead
+ * (`trips.share_token`). The bucket is a dev-migration affordance and stays one.
+ */
+export function writableOwners(ownerId: string): string[] {
+  return [ownerId];
+}

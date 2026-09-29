@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getTrip } from "@/lib/db";
+import { readOwnTrip } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
 import TripView from "./TripView";
 
 /**
  * Server half of `/trip/[id]`: reads the trip and renders the view with it already in hand.
+ *
+ * **This is the owner's editor, and it is owner-only.** It used to render for anyone holding the
+ * id, on the reasoning that an unguessable id was how a shared link worked. It was also the full
+ * editing surface — chat, Keep, Delete, cost entry — so a recipient got controls whose writes the
+ * API then refused, which is the same over-claiming this app spent three review rounds removing,
+ * in interaction form. A shared trip is now served read-only at `/s/[token]` from a token its
+ * owner chose to mint.
  *
  * This file used to exist only to carry metadata, because the App Router has no `head()`
  * convention — that was the Pages Router, and `next/head` still lives under `docs/02-pages/`.
@@ -34,7 +41,7 @@ export async function generateMetadata({
   // The title used to stay generic on the grounds that naming the destination would mean reading
   // the row twice. It no longer would — the page component below reads it either way — so a
   // shared link can finally say where it goes.
-  const destination = id === PREVIEW_ID ? null : getTrip(id)?.destination;
+  const destination = id === PREVIEW_ID ? null : (await readOwnTrip(id))?.destination;
   const title = destination
     ? `${destination} · TripMate`
     : id === PREVIEW_ID
@@ -61,10 +68,11 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
 
   if (id === PREVIEW_ID) return <TripView id={id} initialTrip={null} />;
 
-  const row = getTrip(id);
+  const row = await readOwnTrip(id);
   // `notFound()` rather than a rendered message: an unknown id is a genuinely missing resource,
   // and routing it through not-found.tsx also gets the 404 status the old client-side error
-  // state could never set.
+  // state could never set. A trip that exists but is not yours takes the same path, so the page
+  // never confirms that an id is real to somebody who may not read it.
   if (!row) notFound();
 
   return <TripView id={id} initialTrip={toTripDetail(row)} />;

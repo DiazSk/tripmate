@@ -28,8 +28,8 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
-  const { id: ownerId, signedIn } = await currentOwner();
-  if (!id || !deleteSavedPlace(ownerId, id, signedIn)) {
+  const { id: ownerId } = await currentOwner();
+  if (!id || !deleteSavedPlace(ownerId, id)) {
     return NextResponse.json({ error: "That place isn't saved here." }, { status: 404 });
   }
   return NextResponse.json({ ok: true });

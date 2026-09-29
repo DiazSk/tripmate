@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getTrip } from "@/lib/db";
+import { readOwnTrip } from "@/lib/ownerRequest";
 import { formatDateRange, formatDateWithWeekday, formatMoney } from "@/lib/format";
 import { dayPlanned } from "@/lib/itinerary";
 import { TIERS } from "@/lib/tiers";
@@ -40,7 +40,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const destination = getTrip(id)?.destination;
+  const destination = (await readOwnTrip(id))?.destination;
   // Names the saved PDF, which is the only reason this route carries metadata at all.
   return { title: destination ? `${destination} — itinerary for review` : "Itinerary for review" };
 }
@@ -49,7 +49,9 @@ export default async function TripPrintPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
 
   // No `preview` branch, unlike the sibling route: a hardcoded fixture has nothing to review.
-  const row = getTrip(id);
+  // Owner-only, like the sibling route: this is the *more* revealing of the two, since it prints
+  // every stop with its day and index for bug reports.
+  const row = await readOwnTrip(id);
   if (!row) notFound();
 
   const trip = toTripDetail(row);

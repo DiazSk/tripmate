@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Bike, Car, Footprints, Sparkles } from "lucide-react";
-import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
+import { DayPlan, Itinerary, Stop, Trip, TripSummary } from "@/lib/types";
 import { EVIDENCE_FOOTNOTE } from "@/lib/evidence";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { TIERS } from "@/lib/tiers";
@@ -200,6 +200,7 @@ export default function ItineraryCard({
   onChatDay,
   onItineraryChange,
   trip,
+  onShareChange,
   activeDayIndex: controlledDayIndex,
   onActiveDayChange,
   animateReveal,
@@ -226,7 +227,10 @@ export default function ItineraryCard({
    *  either) needn't supply it — the Download control stays absent whenever it's missing, since
    *  that means either the pre-save result view or the "preview" fixture, neither of which has a
    *  real `/api/trips/:id/export` to link to. */
-  trip?: TripSummary;
+  trip?: TripSummary & Pick<Trip, "shared">;
+  /** Fired after the Share control publishes or withdraws, so the host can re-read the row and
+   *  the control's resting label flips. Absent on the read-only callers, which draw no control. */
+  onShareChange?: () => void;
   /** Optional controlled day selection. The host owns it when this page unmounts the card to
    *  show something else (a stop's detail panel) — otherwise the day would reset to 1 on the
    *  way back, since remounting reinitialises local state. Uncontrolled when omitted. */
@@ -395,6 +399,15 @@ export default function ItineraryCard({
   /** Open when the full editor is up. Editing is one surface — `SplitEditor` — rather than a
    *  second mode inside this card; see the note on the Edit control at the foot of the card. */
   const [boardOpen, setBoardOpen] = useState(false);
+  /**
+   * What the Share control is saying right now.
+   *
+   * Null is the resting state and reads from `trip.shared`; anything else is a transient reply to
+   * a press. Kept here rather than in a toast because the answer belongs to the control that was
+   * pressed — a link that failed to copy is useless information three inches away from the button
+   * that would copy it.
+   */
+  const [shareSaid, setShareSaid] = useState<string | null>(null);
   /** Whether this card is an editing surface at all (the host gave us a way to commit changes). */
   const canRearrange = !!onItineraryChange;
 
@@ -853,6 +866,62 @@ export default function ItineraryCard({
                   }}
                 >
                   <PlayIcon className="h-4 w-4" />
+                </HeroAction>
+              )}
+              {trip?.id && trip.id !== "preview" && (
+                <HeroAction
+                  label={shareSaid ?? (trip.shared ? "Stop sharing" : "Share a link")}
+                  tone="glass"
+                  onClick={async () => {
+                    // Publishing and withdrawing are one control because they are one decision
+                    // seen from two sides, and the label says which side you are on. A separate
+                    // "unshare" button would sit inert on every trip that was never shared.
+                    const stop = trip.shared;
+                    setShareSaid(stop ? "Stopping…" : "Making a link…");
+                    try {
+                      const res = await fetch(`/api/trips/${trip.id}/share`, {
+                        method: stop ? "DELETE" : "POST",
+                      });
+                      if (!res.ok) throw new Error(String(res.status));
+                      if (stop) {
+                        setShareSaid("Link turned off");
+                      } else {
+                        const { url } = (await res.json()) as { url: string };
+                        // The clipboard is the whole point of the press, so its failure is worth
+                        // handling rather than swallowing: it throws in an insecure context and
+                        // wherever the permission is refused. Opening the link puts it in the
+                        // address bar, which is somewhere they can still copy it from.
+                        try {
+                          await navigator.clipboard.writeText(url);
+                          setShareSaid("Link copied");
+                        } catch {
+                          window.open(url, "_blank", "noopener");
+                          setShareSaid("Opened in a new tab");
+                        }
+                      }
+                      // The label is local; `trip.shared` is the host's. Ask for the row again so
+                      // the resting label flips, instead of tracking a second copy of the truth.
+                      onShareChange?.();
+                    } catch {
+                      setShareSaid(stop ? "Couldn't stop sharing" : "Couldn't make a link");
+                    }
+                    setTimeout(() => setShareSaid(null), 2600);
+                  }}
+                >
+                  {trip.shared ? (
+                    // Struck through: the same link, withdrawn. A distinct icon would make
+                    // turning sharing off look like a different feature from turning it on.
+                    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.9}>
+                      <path d="M9.5 13.5a4 4 0 0 0 5.66 0l2.3-2.3a4 4 0 0 0-5.66-5.66l-1 1" />
+                      <path d="M14.5 10.5a4 4 0 0 0-5.66 0l-2.3 2.3a4 4 0 0 0 5.66 5.66l1-1" />
+                      <path d="M3 3l18 18" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.9}>
+                      <path d="M9.5 13.5a4 4 0 0 0 5.66 0l2.3-2.3a4 4 0 0 0-5.66-5.66l-1 1" />
+                      <path d="M14.5 10.5a4 4 0 0 0-5.66 0l-2.3 2.3a4 4 0 0 0 5.66 5.66l1-1" />
+                    </svg>
+                  )}
                 </HeroAction>
               )}
               {trip?.id && trip.id !== "preview" && (

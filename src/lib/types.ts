@@ -214,6 +214,18 @@ export interface Trip extends TripSummary {
    * itinerary, not merely the wrong hour.
    */
   timezone?: string | null;
+  /**
+   * Whether this trip is currently published under a share link.
+   *
+   * **A boolean, never the token.** The client needs to know which control to draw — Share or
+   * Stop sharing — and it never needs the value: minting returns the URL, and copying it again
+   * is another idempotent `POST`. Sending the token in every trip payload would put a live
+   * capability into any log, cache or screenshot of an ordinary read, which is the opposite of
+   * what minting it separately was for.
+   *
+   * Optional because the pre-save result view and the `preview` fixture have no row behind them.
+   */
+  shared?: boolean;
 }
 
 export interface PlaceDetail {

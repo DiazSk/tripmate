@@ -8,6 +8,7 @@ import {
   newOwnerId,
   readableOwners,
   resolveOwnerId,
+  writableOwners,
 } from "./owner.ts";
 import { DRAFT_TTL_DAYS } from "./drafts.ts";
 
@@ -104,5 +105,35 @@ describe("cookie lifetime", () => {
 
   it("names the cookie something scoped to this app", () => {
     assert.match(OWNER_COOKIE, /^tripmate_/);
+  });
+});
+
+describe("writes are never widened", () => {
+  const someone = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+
+  // The regression this function exists for. `readableOwners` returns the caller *plus* the
+  // legacy bucket, and both PATCH and DELETE on /api/trips/[id] used it — so a caller with any
+  // valid cookie could write any row that predates ownership. Measured against a running server
+  // before the fix: PATCH emptied a legacy-owned itinerary to zero days, DELETE removed it.
+  it("does not hand a caller the legacy bucket", () => {
+    assert.deepEqual(writableOwners(someone), [someone]);
+    assert.ok(!writableOwners(someone).includes(LEGACY_OWNER));
+    // The read rule is unchanged and still widens — the two must not converge by accident.
+    assert.ok(readableOwners(someone).includes(LEGACY_OWNER));
+  });
+
+  it("is exactly one owner, for every caller", () => {
+    for (const id of [someone, LEGACY_OWNER, newOwnerId()]) {
+      assert.equal(writableOwners(id).length, 1);
+      assert.equal(writableOwners(id)[0], id);
+    }
+  });
+
+  // Stated as a test because it is the limit of what this layer can do, and a future reader
+  // should meet it here rather than conclude the bucket is protected. A cookieless caller
+  // resolves to LEGACY_OWNER and so matches a legacy row exactly; what protects those rows is
+  // that their ids are no longer handed out, not this function.
+  it("still matches a legacy row for a cookieless caller, which is inherent", () => {
+    assert.ok(writableOwners(resolveOwnerId(undefined)).includes(LEGACY_OWNER));
   });
 });

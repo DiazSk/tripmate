@@ -4,9 +4,14 @@ import test from "node:test";
 import {
   appendLlmSessionTurns,
   createLlmSession,
+  deleteTrip,
   getLlmSession,
   getSpendSince,
+  getTrip,
+  getTripByShareToken,
   insertTrace,
+  insertTrip,
+  setTripShareToken,
   updateTrace,
 } from "./db.ts";
 
@@ -55,4 +60,71 @@ test("the suite never opens the developer's own database", () => {
     ownDatabase,
     "tests are writing to the real tripmate.db — is scripts/test-db.mjs still --imported by the test script?"
   );
+});
+
+
+/* --- publishing a trip, and taking it back --- */
+
+let seq = 0;
+const aTrip = (owner) =>
+  insertTrip({
+    id: `share-test-${++seq}`,
+    destination: "Lisbon",
+    start_date: "2026-10-22",
+    end_date: "2026-10-22",
+    budget: 100,
+    itinerary_json: JSON.stringify({ days: [] }),
+    owner_id: owner,
+  });
+
+test("a trip is not shared until somebody shares it", () => {
+  const owner = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+  const trip = aTrip(owner);
+  assert.equal(trip.share_token, null);
+  assert.equal(getTrip(trip.id).share_token, null);
+});
+
+test("a minted token resolves to its trip, and a revoked one resolves to nothing", () => {
+  const owner = "3f2504e0-4f89-41d3-9a0c-0305e82c3302";
+  const trip = aTrip(owner);
+
+  assert.ok(setTripShareToken(trip.id, "tok-live", owner));
+  assert.equal(getTripByShareToken("tok-live").id, trip.id);
+
+  // Revoking is what makes an already-sent link stop working, so it is the half worth asserting.
+  assert.ok(setTripShareToken(trip.id, null, owner));
+  assert.equal(getTripByShareToken("tok-live"), undefined);
+});
+
+test("an unknown token is not found, and neither is an empty one", () => {
+  assert.equal(getTripByShareToken("never-minted"), undefined);
+  // Guarded explicitly: without it a caller reaching this with "" would match every unshared
+  // row's NULL under some comparison rules, which is the whole table.
+  assert.equal(getTripByShareToken(""), undefined);
+});
+
+test("only the owner can publish a trip, or withdraw it", () => {
+  const owner = "3f2504e0-4f89-41d3-9a0c-0305e82c3303";
+  const stranger = "3f2504e0-4f89-41d3-9a0c-0305e82c3304";
+  const trip = aTrip(owner);
+
+  assert.equal(setTripShareToken(trip.id, "tok-stranger", stranger), false);
+  assert.equal(getTripByShareToken("tok-stranger"), undefined);
+
+  assert.ok(setTripShareToken(trip.id, "tok-owner", owner));
+  // And a stranger cannot un-share what they could not share.
+  assert.equal(setTripShareToken(trip.id, null, stranger), false);
+  assert.equal(getTripByShareToken("tok-owner").id, trip.id);
+});
+
+test("a write is never widened to the legacy bucket", () => {
+  // The regression that motivated `writableOwners`, asserted against real SQL rather than only
+  // against the pure helper: before the fix a caller holding any valid id could delete a
+  // legacy-owned row, because the DELETE widened to include it.
+  const legacy = aTrip("local");
+  const stranger = "3f2504e0-4f89-41d3-9a0c-0305e82c3305";
+
+  assert.equal(deleteTrip(legacy.id, stranger), false);
+  assert.ok(getTrip(legacy.id), "a legacy row must survive a stranger's delete");
+  assert.equal(setTripShareToken(legacy.id, "tok-legacy", stranger), false);
 });

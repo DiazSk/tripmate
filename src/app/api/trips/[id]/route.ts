@@ -7,7 +7,7 @@ import {
   updateTripItinerary,
 } from "@/lib/db";
 import { itineraryRejection } from "@/lib/itinerary";
-import { readableOwners } from "@/lib/owner";
+import { readableOwners, writableOwners } from "@/lib/owner";
 import { currentOwner } from "@/lib/ownerRequest";
 import { toTripDetail } from "@/lib/tripPayload";
 // Still needed by PATCH below, which derives the end date from the saved itinerary — GET's own
@@ -21,6 +21,20 @@ export async function GET(
   const { id } = await params;
   const trip = getTrip(id);
   if (!trip) {
+    return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
+  }
+
+  // **Scoped now, where it deliberately was not.** This read was left open because an unguessable
+  // id *was* the sharing mechanism — the comment on PATCH below still described it that way. That
+  // conflated two things: a trip's identity and a decision to publish it. An id is in the owner's
+  // address bar, their history and their device's cache, it is never withdrawn, and it is the
+  // same value that reaches every other route here. Sharing is now an explicit act that mints a
+  // separate revocable token, so identity can go back to being private.
+  //
+  // Same 404-not-403 copy as everywhere else in this file: a trip somebody may not read should
+  // not be distinguishable from one that does not exist.
+  const { id: ownerId, signedIn } = await currentOwner();
+  if (!readableOwners(ownerId, signedIn).includes(trip.owner_id)) {
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
@@ -40,13 +54,13 @@ export async function PATCH(
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
-  // Scoped, unlike the GET above, and for the same reason DELETE is: reading a trip by an
-  // unguessable id is how a shared link works, but *writing* one is not something a link should
-  // confer. Without this, anyone holding an id could overwrite another traveller's itinerary and
-  // promote their draft. `readableOwners` rather than a bare equality so the pre-ownership rows
-  // stay editable by the person who made them — see LEGACY_OWNER.
-  const { id: ownerId, signedIn } = await currentOwner();
-  const owners = readableOwners(ownerId, signedIn);
+  // Scoped, like the GET above now is. It always intended to be — the note here used to say that
+  // widening to the legacy bucket kept pre-ownership rows editable by whoever made them, which is
+  // not what it did: measured against a running server, a request carrying nothing but a trip id
+  // overwrote a legacy-owned itinerary to zero days and got a 200. `writableOwners` is exact, and
+  // its docblock records what that still cannot fix.
+  const { id: ownerId } = await currentOwner();
+  const owners = writableOwners(ownerId);
   if (!owners.includes(trip.owner_id)) {
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
@@ -107,10 +121,11 @@ export async function DELETE(
     return NextResponse.json({ error: "That trip isn't saved here." }, { status: 404 });
   }
 
-  // Scoped, unlike the GET beside it: reading a trip by an unguessable id is how a shared link
-  // works, but destroying one is the operation where being wrong cannot be undone.
-  const { id: deleterId, signedIn: deleterSignedIn } = await currentOwner();
-  if (!deleteTrip(id, deleterId, deleterSignedIn)) {
+  // Scoped, like every other handler on this path now is, and exactly: destroying a row is the
+  // operation where being wrong cannot be undone. `deleteTrip` takes no `signedIn` any more —
+  // an exact owner match has nothing to widen.
+  const { id: deleterId } = await currentOwner();
+  if (!deleteTrip(id, deleterId)) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
   return NextResponse.json({ ok: true });
