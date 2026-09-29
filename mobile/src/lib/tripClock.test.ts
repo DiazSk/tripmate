@@ -1,6 +1,6 @@
 import type { Stop } from '@/api/types';
 
-import { clockInZone, minutesUntil, nextStop, nowInZone, todayInZone } from './tripClock';
+import { clockInZone, describeGap, minutesUntil, nextStop, nowInZone, todayInZone, todayState } from './tripClock';
 
 const stop = (name: string, time: string): Stop =>
   ({ name, time, lat: 38.7, lng: -9.1, cost: 0, note: '', durationLabel: '1 hour', category: 'other' }) as Stop;
@@ -86,4 +86,75 @@ test('the countdown never runs backwards', () => {
   expect(minutesUntil(day[0], 11 * 60)).toBe(0);
   expect(minutesUntil(undefined, 600)).toBeNull();
   expect(minutesUntil(stop('Mystery', 'sometime'), 600)).toBeNull();
+});
+
+/* --- what Today should be saying, at each boundary --- */
+
+// The real shape of the Belém day: a 10:30 first stop with no origin, then stops that have one.
+const belem = [
+  stop('Jerónimos Monastery', '10:30 AM'),
+  stop('Pastéis de Belém', '12:30 PM'),
+  stop('Belém Tower', '2:00 PM'),
+];
+// Stand-in for `leaveBy`: null for the first stop, which is the real constraint — the day's
+// first stop has no previous stop to depart from and lodging carries no coordinates.
+const leaveByFor = (i: number) => (i === 0 ? null : ['', '12:10 PM', '1:45 PM'][i]);
+
+const at = (h: number, m = 0) => h * 60 + m;
+
+test('an empty day and a finished day are different answers', () => {
+  expect(todayState([], at(9), leaveByFor)).toEqual({ kind: 'empty' });
+  expect(todayState(belem, at(22), leaveByFor).kind).toBe('done');
+});
+
+test('a long wait is the story, not the stop', () => {
+  const s = todayState(belem, at(6, 27), leaveByFor);
+  expect(s.kind).toBe('free');
+  if (s.kind === 'free') {
+    expect(s.index).toBe(0);
+    expect(describeGap(s.minutes)).toBe('4 hr 3 min');
+  }
+});
+
+// The reviewer asked for "Leave by 10:03" here. It is not computable: there is no origin.
+test('the first stop of a day never reports a departure time', () => {
+  const s = todayState(belem, at(10), leaveByFor);
+  expect(s.kind).toBe('upcoming');
+  if (s.kind === 'upcoming') {
+    expect(s.leaveBy).toBeNull();
+    expect(s.minutes).toBe(30); // until the stop, since there is no departure to count to
+  }
+});
+
+test('once there is a previous stop, the departure leads', () => {
+  const s = todayState(belem, at(11, 55), leaveByFor);
+  expect(s.kind).toBe('imminent');
+  if (s.kind === 'imminent') {
+    expect(s.leaveBy).toBe('12:10 PM');
+    expect(s.minutes).toBe(15);
+  }
+});
+
+test('imminent is measured to the departure, not to the stop', () => {
+  // 11:35 is 55 min from the 12:30 stop but only 35 from the 12:10 departure — still upcoming.
+  expect(todayState(belem, at(11, 35), leaveByFor).kind).toBe('upcoming');
+  // 11:41 crosses the 30-minute departure boundary.
+  expect(todayState(belem, at(11, 41), leaveByFor).kind).toBe('imminent');
+});
+
+test('the boundaries themselves', () => {
+  expect(todayState(belem, at(11, 40), leaveByFor).kind).toBe('imminent'); // exactly 30
+  expect(todayState(belem, at(10, 40), leaveByFor).kind).toBe('free'); // exactly 90 to 12:10
+  expect(todayState(belem, at(10, 41), leaveByFor).kind).toBe('upcoming'); // 89
+});
+
+test('a stop with an unreadable time does not strand the screen', () => {
+  expect(todayState([stop('Mystery', 'sometime')], at(9), leaveByFor).kind).toBe('done');
+});
+
+test('the gap reads the way somebody would say it', () => {
+  expect(describeGap(45)).toBe('45 min');
+  expect(describeGap(60)).toBe('1 hr');
+  expect(describeGap(210)).toBe('3 hr 30 min');
+  expect(describeGap(0)).toBe('0 min');
 });

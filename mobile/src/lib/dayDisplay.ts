@@ -1,3 +1,4 @@
+import type { DayPlan } from '@/api/types';
 /**
  * How a day states itself. Ported from `ios/TripMateKit/Sources/TripMateKit/DayDisplay.swift`.
  *
@@ -123,3 +124,52 @@ export function formatDayChip(iso: string): { dayOfMonth: string; weekday: strin
   if (!date) return null;
   return { dayOfMonth: String(date.day), weekday: SHORT_WEEKDAYS[weekdayIndex(date)] };
 }
+
+/**
+ * The badge over the photograph — and **only ever something we were told, never something the
+ * model wrote.**
+ *
+ * This used to fall back to `day.weather` when no forecast was attached, cut at its first
+ * clause so it would fit. That fallback was the bug. `day.weather` is written by the planner,
+ * and when no forecast exists the planner has nothing to write it from — the stored value on a
+ * real Lisbon trip is `"Pleasant autumn day, 18.9-23.5°C, mostly sunny"`, temperatures included,
+ * none of it observed. Truncating at the comma dropped the invented figures and kept the
+ * invented claim, in the one position on the screen that means "this is the weather".
+ *
+ * So: structured figures or nothing. `theme` is the planner's own label for the day's shape
+ * ("Old town on foot") and makes no claim about the world, so it is a safe second choice. A day
+ * with neither renders no badge, which is what most stored trips will now do — the masthead
+ * loses nothing it was entitled to.
+ *
+ * `historical` says the numbers are last year's same-date weather rather than a forecast, which
+ * is cheap to say and worth saying. The prompt is fixed in the same change, so new plans stop
+ * producing the prose at all; this guards the ones already on disk.
+ */
+export function weatherLine(day: DayPlan): string | undefined {
+  const detail = day.weatherDetail;
+  if (detail) {
+    const temps = `${Math.round(detail.tempMaxC)}° / ${Math.round(detail.tempMinC)}°`;
+    return detail.historical ? `${temps}  ·  typical` : temps;
+  }
+  return day.theme?.trim() || undefined;
+}
+
+/**
+ * A stored timestamp as a wall clock — "21:27" — or null when it will not parse.
+ *
+ * Three surfaces say when a cached copy was taken: the trip screen's banner, Today's banner, and
+ * Today's forecast line, which has to change tense offline. Null rather than a fallback string,
+ * because a fabricated time on a line whose entire job is to date the data would be the exact
+ * failure these lines exist to prevent.
+ */
+export function clockAt(iso: string | null): string | null {
+  if (!iso) return null;
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return null;
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(when);
+}
+

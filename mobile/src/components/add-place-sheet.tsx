@@ -459,7 +459,12 @@ function tidyUrl(url: string): string {
  */
 function PlaceFacts({ place }: { place: FoundPlace }) {
   const rows: { label: string; value: string; href?: string }[] = [];
-  if (place.openingHours) rows.push({ label: 'Hours', value: place.openingHours });
+  // **"listed", not "Hours".** This is an OSM `opening_hours` tag with no freshness metadata
+  // attached — it may have been edited last week or in 2016, and the UI has no way to tell. A
+  // bare "Hours" promotes a database row into a guarantee about a door somebody is walking to.
+  // One word states the basis instead. The search rows stay unqualified: a caveat on every
+  // result is noise, and the card is where the decision is actually made.
+  if (place.openingHours) rows.push({ label: 'Hours listed', value: place.openingHours });
   if (place.phone) rows.push({ label: 'Phone', value: place.phone, href: `tel:${place.phone}` });
   if (place.website) {
     rows.push({ label: 'Website', value: tidyUrl(place.website), href: place.website });

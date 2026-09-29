@@ -39,6 +39,18 @@ const DAYS = [
 /** Every field a day-returning prompt must name in its response shape. */
 const DAY_FIELDS = ["date", "weather", "theme", "summary", "lodging", "stops"];
 
+/**
+ * A forecast, because `weather` is now a *conditional* field and this suite is about the shape
+ * staying identical across the three prompts — which is only meaningful with the field in play.
+ * Its absence has its own coverage in `itineraryPromptClaims.test.mjs`: with no forecast the
+ * field is asked for by none of the three, which is the same invariant from the other side.
+ */
+const WEATHER = [{
+  date: "2026-05-01", tempMaxC: 21, tempMinC: 12, historical: false,
+  precipitationProbability: 10, humidity: 50, weatherCode: 1,
+  sunrise: "2026-05-01T06:00", sunset: "2026-05-01T19:00",
+}];
+
 const PROMPTS = {
   generate: () =>
     buildGeneratePrompt({
@@ -47,7 +59,7 @@ const PROMPTS = {
       endDate: "2026-05-03",
       budget: 1500,
       tier: "comfort",
-      weather: [],
+      weather: WEATHER,
     }),
   critique: () =>
     buildCritiquePrompt({ itinerary: { tier: "comfort", days: DAYS }, budget: 1500 }),

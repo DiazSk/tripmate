@@ -50,17 +50,17 @@ export default function ReviewStep() {
             value={draft.interests.length ? draft.interests.join(', ') : 'No priorities'}
             onEdit={() => router.dismissTo('/plan/preferences')}
           />
-          {/* Three answers on one row because they are one question about tempo, and because
-              Edit can only land on the step that holds them all anyway. Discovery gets its own
-              row rather than joining them: it is a taste, not a tempo, and the two sharing one
-              line is the exact conflation this wizard just stopped making. */}
-          <SummaryRow
+          {/* One question about tempo, so one row and one Edit — but each answer says which
+              question it answers. Discovery stays a row of its own: it is a taste, not a tempo,
+              and the two sharing a line is the exact conflation this wizard just stopped
+              making. */}
+          <SummaryGroup
             label="Pace"
-            value={[
-              labelOf(PACES, draft.pace),
-              labelOf(ENERGY, draft.energy),
-              labelOf(CROWDS, draft.crowds),
-            ].join(' · ')}
+            parts={[
+              { name: 'Each day', value: labelOf(PACES, draft.pace) },
+              { name: 'Walking', value: labelOf(ENERGY, draft.energy) },
+              { name: 'Crowds', value: labelOf(CROWDS, draft.crowds) },
+            ]}
             onEdit={() => router.dismissTo('/plan/preferences')}
           />
           <SummaryRow
@@ -116,6 +116,54 @@ function SummaryRow({
         {value}
       </ThemedText>
       <Pressable onPress={onEdit} accessibilityRole="button" hitSlop={8}>
+        <ThemedText type="detail" themeColor="accent">
+          Edit
+        </ThemedText>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * One question answered in several parts: one container, one Edit, and each part labelled.
+ *
+ * Pace used to print as `A balanced day · A comfortable amount · Some of each` on a single row,
+ * which made the reader reverse-engineer which phrase answered which question — and two of the
+ * three phrases are near-synonyms out of context. The instinct to split it into three rows was
+ * wrong for a different reason: they *are* one question about tempo, and Edit can only land on
+ * the one wizard step that holds all three, so three rows would mean three links to one place.
+ *
+ * Both were right about different things. One row's worth of navigation, three rows' worth of
+ * legibility. This is the screen where explicitness beats compactness — it exists to catch a
+ * misunderstanding before the expensive step.
+ */
+function SummaryGroup({
+  label,
+  parts,
+  onEdit,
+}: {
+  label: string;
+  parts: { name: string; value: string }[];
+  onEdit: () => void;
+}) {
+  return (
+    <View style={styles.summaryRow}>
+      <ThemedText type="label" themeColor="muted" style={styles.summaryLabel}>
+        {label}
+      </ThemedText>
+      <View style={styles.groupValues}>
+        {parts.map((part) => (
+          <View key={part.name} style={styles.groupPart}>
+            <ThemedText type="micro" themeColor="muted" style={styles.groupPartName}>
+              {part.name}
+            </ThemedText>
+            <ThemedText type="body" style={styles.summaryValue} numberOfLines={2}>
+              {part.value}
+            </ThemedText>
+          </View>
+        ))}
+      </View>
+      <Pressable onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Edit ${label}`} hitSlop={8}>
         <ThemedText type="detail" themeColor="accent">
           Edit
         </ThemedText>
@@ -232,5 +280,10 @@ const styles = StyleSheet.create({
   // Natural width: a fixed 48 wrapped "BUDGET" mid-word at tracked caps.
   summaryLabel: { flexShrink: 0 },
   summaryValue: { flex: 1 },
+  groupValues: { flex: 1, gap: Spacing.hair },
+  // Column, not a row: at the accessibility sizes a name and its value side by side wrap into
+  // each other, and the pairing is what the whole change is for.
+  groupPart: {},
+  groupPartName: { marginBottom: 1 },
   action: { marginTop: Spacing.tight },
 });
