@@ -21,7 +21,9 @@ export function anchorKey(name: string): string {
 /** How close a stop must be to an anchor's coordinates to count as that place, whatever it's called. */
 const ANCHOR_MATCH_METRES = 150;
 
-function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+/** Great-circle metres. Exported because `savedPlaces` needs the same arithmetic, and a second
+ *  copy of a haversine is how two screens start reporting different distances for one pair. */
+export function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const p = Math.PI / 180;
   const h =
     Math.sin(((b.lat - a.lat) * p) / 2) ** 2 +

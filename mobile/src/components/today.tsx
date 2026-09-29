@@ -3,11 +3,12 @@ import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import type { DayPlan, Trip } from '@/api/types';
+import type { DayPlan, SavedPlace, Stop, Trip } from '@/api/types';
 import { clockAt, formatDayChip } from '@/lib/dayDisplay';
 import { dayLegs, leaveBy } from '@/lib/dayTravel';
 import { directionsUrl } from '@/lib/directions';
 import { isBlocking, tripHealth } from '@/lib/health';
+import { describeDistance, savedNearby, savedNotInPlan } from '@/lib/savedPlaces';
 import { clockInZone, describeGap, nowInZone, todayState } from '@/lib/tripClock';
 import { dayIndexFor, tripPhase } from '@/lib/tripPhase';
 
@@ -49,6 +50,7 @@ export function Today({
   cachedAt,
   onAsk,
   onOpenTrip,
+  saved,
 }: {
   trip: Trip;
   /** Today where the *trip* is when a zone is known, else the device's — see `Home`. */
@@ -58,6 +60,13 @@ export function Today({
   /** Opens Ask already scoped to the day on screen. Absent while offline. */
   onAsk?: (dayIndex: number) => void;
   onOpenTrip: () => void;
+  /**
+   * Everything this traveller has ever saved, unfiltered — the screen narrows it.
+   *
+   * Passed in rather than fetched here so Today stays a pure projection of data the host already
+   * holds, which is what lets it render identically from the network and from disk.
+   */
+  saved?: SavedPlace[];
 }) {
   useMinuteTick();
 
@@ -79,7 +88,7 @@ export function Today({
       {now === null ? (
         <WholeDay day={day} eve={phase === 'eve'} />
       ) : (
-        <NowAndAfter day={day} now={now} />
+        <NowAndAfter day={day} now={now} saved={saved ?? []} destination={trip.destination} />
       )}
       <Attention trip={trip} dayIndex={dayIndex} cachedAt={cachedAt} />
       {/* **A jade label, not a jade pill, because the hierarchy was inverted.** A full-width
@@ -159,7 +168,17 @@ function Stale({ at }: { at: string }) {
  * you have to go outranks the moment you are due — and where there is none, because the day's
  * first stop has no origin to leave from, the wait is stated instead of a time being invented.
  */
-function NowAndAfter({ day, now }: { day: DayPlan; now: number }) {
+function NowAndAfter({
+  day,
+  now,
+  saved,
+  destination,
+}: {
+  day: DayPlan;
+  now: number;
+  saved: SavedPlace[];
+  destination: string;
+}) {
   const stops = day.stops ?? [];
   const state = todayState(stops, now, (i) => leaveBy(stops, i));
 
@@ -186,12 +205,15 @@ function NowAndAfter({ day, now }: { day: DayPlan; now: number }) {
       {/* The silence before a distant stop is itself information, and the thing somebody reopening
           the app at 6:27 actually wants. Not a filled-in mini-itinerary: an interval. */}
       {state.kind === 'free' ? (
-        <View style={styles.block}>
-          <ThemedText type="label" themeColor="muted">
-            Until then
-          </ThemedText>
-          <ThemedText type="heading">{`Free for about ${describeGap(state.minutes)}`}</ThemedText>
-        </View>
+        <>
+          <View style={styles.block}>
+            <ThemedText type="label" themeColor="muted">
+              Until then
+            </ThemedText>
+            <ThemedText type="heading">{`Free for about ${describeGap(state.minutes)}`}</ThemedText>
+          </View>
+          <SavedNearby saved={saved} planned={stops} destination={destination} from={stops[index]} />
+        </>
       ) : null}
 
       <View style={styles.block}>
@@ -245,6 +267,92 @@ function NowAndAfter({ day, now }: { day: DayPlan; now: number }) {
         </View>
       ) : null}
     </>
+  );
+}
+
+/**
+ * The places this traveller saved for this city that the plan never used.
+ *
+ * **Only in the free state, and only their own list.** The reviewer's rule for the silence
+ * between stops was that the answer is temporal context, not content — and a feed of
+ * recommendations is exactly the content they meant. This is not that: every row is somewhere
+ * this person deliberately saved, for this city, which the planner left out. The app already
+ * offers these once in the wizard and then never mentions them again, so a place someone
+ * screenshotted for Lisbon is invisible on the Lisbon trip it was saved for.
+ *
+ * Ranked from the **next stop** rather than from the device, because there is no device
+ * location in this app and asking for one would be the wrong trade on a screen built to work in
+ * a tunnel. It is also the better anchor: in a three-hour gap before Belém Tower, what is near
+ * Belém Tower is more use than what is near the café you are sitting in.
+ *
+ * Three rows. The list is a nudge toward something already on their own list, and a fourth row
+ * turns that into a feed to scroll — which is the thing this is deliberately not.
+ */
+const SAVED_SHOWN = 3;
+
+function SavedNearby({
+  saved,
+  planned,
+  destination,
+  from,
+}: {
+  saved: SavedPlace[];
+  planned: { name: string }[];
+  destination: string;
+  from: Stop | undefined;
+}) {
+  const unused = savedNotInPlan(saved, planned, destination);
+  if (unused.length === 0) return null;
+
+  // A stop at 0,0 is the app's "nowhere known" and must not anchor a distance — every saved
+  // place would read as ~5,000 km from the Gulf of Guinea.
+  const anchor = from && (from.lat !== 0 || from.lng !== 0) ? { lat: from.lat, lng: from.lng } : null;
+  const near = savedNearby(unused, anchor).slice(0, SAVED_SHOWN);
+
+  return (
+    <View style={styles.block}>
+      <ThemedText type="label" themeColor="muted">
+        You saved these
+      </ThemedText>
+      {near.map(({ place, metres }) => {
+        const away = describeDistance(metres);
+        return (
+          <View key={place.id} style={styles.row}>
+            <ThemedText type="detail" style={styles.grow} numberOfLines={1}>
+              {place.name}
+            </ThemedText>
+            {/* The distance is stated where it is known and simply absent where it is not — a
+                saved place with no coordinates is still theirs, and "—" would read as zero. */}
+            {away ? (
+              <ThemedText type="micro" themeColor="muted" style={styles.firm}>
+                {away}
+              </ThemedText>
+            ) : null}
+            {typeof place.lat === 'number' && typeof place.lng === 'number' ? (
+              <Pressable
+                onPress={() =>
+                  Linking.openURL(directionsUrl({ lat: place.lat!, lng: place.lng! })).catch(() => {})
+                }
+                accessibilityRole="link"
+                accessibilityLabel={`Directions to ${place.name}`}
+                hitSlop={8}
+                style={({ pressed }) => [styles.firm, pressed && styles.pressed]}>
+                <ThemedText type="label" themeColor="accent">
+                  Go
+                </ThemedText>
+              </Pressable>
+            ) : null}
+          </View>
+        );
+      })}
+      {/* Said once, because the count is the part that makes the three rows honest: this is a
+          sample of their pile, not the whole of it. */}
+      {unused.length > SAVED_SHOWN ? (
+        <ThemedText type="detail" themeColor="muted">
+          {`and ${unused.length - SAVED_SHOWN} more saved for ${destination.split(',')[0].trim()}`}
+        </ThemedText>
+      ) : null}
+    </View>
   );
 }
 
