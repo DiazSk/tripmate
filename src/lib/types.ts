@@ -176,6 +176,16 @@ export interface Trip extends TripSummary {
    *  conversation. Null for trips saved before sessions existed, or whose session has been
    *  replaced — the chat then rebuilds a full prompt instead. */
   chatSessionId?: string | null;
+  /**
+   * The destination's IANA zone, e.g. "Europe/Lisbon".
+   *
+   * Null is a real answer, not a default: a trip saved before this existed, or one whose
+   * destination never geocoded, has none. A client must then say nothing about the current time
+   * rather than fall back to the device's — measured on the simulator, a device reading 21:07 on
+   * Sep 28 is Lisbon 05:07 on Sep **29**, so the device clock gets the wrong *day* of the
+   * itinerary, not merely the wrong hour.
+   */
+  timezone?: string | null;
 }
 
 export interface PlaceDetail {

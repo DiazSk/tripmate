@@ -418,6 +418,12 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_trips_owner_status ON trips (owner_id, s
 // computed from its usage block via modelPricing.ts at write time. NULL forever on
 // LLM_TRANSPORT=cli traces, which keep deriving cost from the CLI envelope on read instead
 // (see runs.ts/perfAggregate.ts) — both are permanent, not a migration in progress.
+// The destination's IANA zone, so the phone can tell the time where the trip is rather than
+// where the phone is. Nullable and left that way — a trip generated before this column existed,
+// or one whose destination never geocoded, genuinely has no zone, and the client is built to say
+// nothing rather than guess an hour. **No backfill**, unlike `status` and `owner_id`: those could
+// be inferred from the rows' own existence, and this cannot be inferred from anything.
+addColumnIfMissing("trips", "timezone", "TEXT");
 addColumnIfMissing("llm_traces", "cost_usd", "REAL");
 
 export interface TripRow {
@@ -436,17 +442,30 @@ export interface TripRow {
   /** The browser that wrote it, or `LEGACY_OWNER` for rows that predate ownership. Non-null for
    *  the same reason as `status` — backfilled at import, written on every insert. */
   owner_id: string;
+  /** IANA zone of the destination, e.g. "Europe/Lisbon". Null is a real answer and is not
+   *  backfilled — see the column's note above. */
+  timezone: string | null;
   created_at: string;
 }
 
 export function insertTrip(
   trip: Omit<
     TripRow,
-    "created_at" | "run_id" | "user_answers_json" | "chat_session_id" | "status" | "owner_id"
+    | "created_at"
+    | "run_id"
+    | "user_answers_json"
+    | "chat_session_id"
+    | "status"
+    | "owner_id"
+    | "timezone"
   > & {
     run_id?: string | null;
     user_answers_json?: string | null;
     chat_session_id?: string | null;
+    /** Optional so every existing caller — the bench harness, the perf scripts, anything with
+     *  no geocode in hand — keeps compiling and writes null, which the client already treats as
+     *  "no clock for this trip" rather than as an error. */
+    timezone?: string | null;
     /** Defaults to `"saved"`, so a caller that predates drafts keeps inserting kept trips. The
      *  auto-draft written after a generation is the one caller that passes `"draft"`. */
     status?: TripStatus;
@@ -462,11 +481,12 @@ export function insertTrip(
   const chat_session_id = trip.chat_session_id ?? null;
   const status: TripStatus = trip.status ?? "saved";
   const owner_id = trip.owner_id ?? LEGACY_OWNER;
+  const timezone = trip.timezone ?? null;
   db.prepare(
-    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, status, owner_id, created_at)
-     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @status, @owner_id, @created_at)`
-  ).run({ ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, created_at });
-  return { ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, created_at };
+    `INSERT INTO trips (id, destination, start_date, end_date, budget, itinerary_json, run_id, user_answers_json, chat_session_id, status, owner_id, timezone, created_at)
+     VALUES (@id, @destination, @start_date, @end_date, @budget, @itinerary_json, @run_id, @user_answers_json, @chat_session_id, @status, @owner_id, @timezone, @created_at)`
+  ).run({ ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, timezone, created_at });
+  return { ...trip, run_id, user_answers_json, chat_session_id, status, owner_id, timezone, created_at };
 }
 
 /**

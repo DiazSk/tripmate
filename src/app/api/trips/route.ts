@@ -4,6 +4,7 @@ import { insertTrip, linkGenerationToTrip, listTrips, purgeStaleDrafts } from "@
 import { toTripSummary } from "@/lib/tripPayload";
 import { itineraryRejection } from "@/lib/itinerary";
 import { currentOwner, currentOwnerId } from "@/lib/ownerRequest";
+import { geocodeDestinationCached } from "@/lib/serverFetchCached";
 import type { TripStatus } from "@/lib/types";
 
 /** `?status=draft` for the unsaved plans, anything else for the kept ones. Narrowed rather than
@@ -44,6 +45,24 @@ export async function POST(req: NextRequest) {
   const rejection = itineraryRejection(itinerary);
   if (rejection) return NextResponse.json({ error: rejection }, { status: 400 });
 
+  // **The destination's own clock, resolved once and stored.** Without it the phone can only use
+  // its own, and that is wrong in a way nobody would catch: measured on the simulator, a device
+  // reading 21:07 on Sep 28 is Lisbon 05:07 on Sep *29* — so an on-trip screen would open the
+  // wrong day of the itinerary, not merely show the wrong hour.
+  //
+  // Free in the normal path: the generation that produced the plan being saved geocoded this same
+  // destination moments ago, and `geocodeDestinationCached` is that cache. Open-Meteo returns the
+  // IANA zone on every geocode result and this app was already discarding it.
+  //
+  // Fail-soft, like every other geocode here (see the note in `src/app/page.tsx`): a miss stores
+  // null, the client shows the plan with no clock, and nothing about saving a trip depends on it.
+  let timezone: string | null = null;
+  try {
+    timezone = (await geocodeDestinationCached(destination))?.timezone ?? null;
+  } catch {
+    timezone = null;
+  }
+
   const trip = insertTrip({
     id: randomUUID(),
     // Stamped from the cookie so this plan comes back to the browser that made it, and to no
@@ -61,6 +80,7 @@ export async function POST(req: NextRequest) {
     // and sends no status at all — inserts a kept trip, so the Save button's own POST fallback
     // behaves exactly as it did before this field existed.
     status: status === "draft" ? "draft" : "saved",
+    timezone,
   });
 
   // Back-fill the generation that produced this plan. The run still exists before the trip does —

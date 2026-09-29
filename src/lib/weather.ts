@@ -21,6 +21,15 @@ export interface GeoResult {
   /** ISO 3166-1 alpha-2, e.g. "FR" — same field `GeoSuggestion` already carries, added here too
    *  since Step 2a's holidays lookup needs a country code to query by. */
   countryCode: string | null;
+  /**
+   * IANA zone, e.g. "Europe/Lisbon". The geocoder returns it on every result and this was
+   * discarding it — the same omission as `feature_code`, at the same endpoint.
+   *
+   * It is what lets the phone tell the time *where the trip is*. Measured on the simulator:
+   * a device at 21:07 on Sep 28 is Lisbon 05:07 on Sep **29**, so a client using its own clock
+   * gets the wrong day of the itinerary, not merely the wrong hour.
+   */
+  timezone: string | null;
 }
 
 export interface GeoSuggestion {
@@ -58,6 +67,7 @@ export async function geocodeDestination(name: string): Promise<GeoResult | null
     admin1: first.admin1 ?? null,
     country: first.country ?? null,
     countryCode: first.country_code ?? null,
+    timezone: first.timezone ?? null,
   };
 }
 

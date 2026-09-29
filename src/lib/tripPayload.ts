@@ -38,5 +38,8 @@ export function toTripDetail(row: TripRow): Trip {
     itinerary: { ...stored, days: normalizeDays(stored.days) },
     userAnswers: row.user_answers_json ? JSON.parse(row.user_answers_json) : null,
     chatSessionId: row.chat_session_id,
+    // Only on the detail payload, not the summary: the wall and the profile never need to know
+    // what time it is somewhere, and the one screen that does already fetches the whole trip.
+    timezone: row.timezone,
   };
 }
