@@ -271,6 +271,11 @@ export function addPlaceToDay(
     time: plan.time,
     durationLabel: '',
     category: stopCategoryFor(place.category),
+    // Everything above except the time came off a real listing — the name, the coordinate, the
+    // category, and the note, which `describePlace` composes from OSM's own tags rather than
+    // writing. That makes this the one stop whose `note` is sourced rather than planner prose,
+    // and `stopEvidence` reads this field to tell the two apart.
+    located: 'search',
   };
 
   const stops = [...(day.stops ?? [])];
