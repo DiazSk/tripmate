@@ -1,15 +1,20 @@
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { listTrips } from '@/api/tripMateApi';
-import type { TripSummary } from '@/api/types';
+import type { Trip, TripSummary } from '@/api/types';
+import { Today } from '@/components/today';
 import { PrimaryButton } from '@/components/form';
 import { PlacePhoto } from '@/components/place-photo';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { BarHeight, Colors, PhotoScrim, Radius, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
+import { loadTrip, loadTrips, type Cached } from '@/lib/tripCache';
+import { todayInZone } from '@/lib/tripClock';
+import { pickCurrent } from '@/lib/tripPhase';
+import { todayISO } from '@/lib/tripsWall';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
 
 /**
@@ -48,8 +53,55 @@ const METHOD = [
 
 export default function Home() {
   const router = useRouter();
-  // On focus, not on mount — "Up next" has to notice a trip kept a moment ago in the wizard.
-  const trips = useFocusedFetch<TripSummary[] | null>(async () => (await listTrips()) ?? null);
+  /**
+   * On focus, not on mount — "Up next" has to notice a trip kept a moment ago in the wizard.
+   *
+   * Through `loadTrips`, so a failed request falls back to whatever is cached rather than
+   * showing a notice. Offline is the case this screen most has to survive: it is the one you
+   * open standing in a street somewhere.
+   */
+  const listed = useFocusedFetch(async () => (await loadTrips()) ?? null);
+  const trips = listed === undefined ? undefined : (listed?.value ?? null);
+  const offline = listed?.cachedAt != null;
+
+  /**
+   * The trip you are on, if you are on one.
+   *
+   * Two reads rather than one, and only ever when a trip is actually running: the wall's
+   * summaries carry no itinerary, and Today is entirely about the stops inside one day.
+   */
+  const current = trips ? pickCurrent(trips, todayISO()) : null;
+  /**
+   * Stamped with the id it was fetched for, and matched at render.
+   *
+   * The obvious shape — clear the state when there is no current trip — is a synchronous
+   * `setState` inside an effect, which cascades a render and which this project's lint rule
+   * rejects on sight. Comparing ids instead means a result for a trip you have moved away from
+   * is simply not used, and nothing has to be cleared at all.
+   */
+  const [loaded, setLoaded] = useState<{ id: string; hit: Cached<Trip> | null } | null>(null);
+  useEffect(() => {
+    const id = current?.id;
+    if (!id) return;
+    let alive = true;
+    loadTrip(id).then((hit) => alive && setLoaded({ id, hit: hit ?? null }));
+    return () => {
+      alive = false;
+    };
+  }, [current?.id]);
+  const onTrip = current && loaded?.id === current.id ? loaded.hit : null;
+
+  /**
+   * Today where the *trip* is, which is not the same day as here.
+   *
+   * Measured: a device reading 21:07 on Sep 28 is Lisbon 05:07 on Sep 29. `pickCurrent` above
+   * has to use the device's date — it runs before any trip is chosen, so there is no zone to ask
+   * about yet — but once a trip is in hand its own day is the one that decides what `Today`
+   * draws. A trip with no zone on record falls back to the device date, which is also the only
+   * thing that let it be picked in the first place.
+   */
+  const trip = onTrip?.value;
+  const tripToday = (trip && todayInZone(trip.timezone)) ?? todayISO();
 
   const featured = trips ? pickFeatured(trips) : undefined;
 
@@ -65,7 +117,25 @@ export default function Home() {
           <PrimaryButton title="Plan a trip" onPress={() => router.push('/plan/basics')} />
         </View>
 
+        {/* **While a trip is running, Home is about that trip.** Everything below — the wall's
+            one featured card, the Method section — is for somebody who is not travelling. The
+            Method in particular is marketing copy, and the reader is standing in Lisbon. */}
+        {trip ? (
+          <View style={styles.band}>
+            <Today
+              trip={trip}
+              today={tripToday}
+              cachedAt={onTrip?.cachedAt ?? null}
+              onOpenTrip={() => router.push(`/trip/${trip.id}`)}
+              onAsk={
+                offline ? undefined : (dayIndex) => router.push(`/trip/${trip.id}?ask=${dayIndex}`)
+              }
+            />
+          </View>
+        ) : null}
+
         {/* The only place Home spends a network call, and it reuses the Trips photo cache. */}
+        {trip ? null : (
         <View style={styles.band}>
           <BandOpener label={featured?.upcoming ? 'Up next' : 'Latest memory'} />
           {trips === undefined ? (
@@ -100,7 +170,9 @@ export default function Home() {
             />
           )}
         </View>
+        )}
 
+        {trip ? null : (
         <View style={styles.band}>
           <BandOpener label="Method" />
           <ThemedText type="title" style={styles.bandHeading}>
@@ -123,6 +195,7 @@ export default function Home() {
             </View>
           ))}
         </View>
+        )}
 
         <ThemedText type="detail" themeColor="muted" style={styles.closing}>
           Every plan you keep is collected under Trips.
