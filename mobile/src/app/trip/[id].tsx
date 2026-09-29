@@ -1060,9 +1060,11 @@ const styles = StyleSheet.create({
   // the chrome runs flush to. Narrower than the row, the chips now share the slack and the last
   // one lands on the margin; wider than it — a fortnight — neither rule has anything to give and
   // it scrolls exactly as before.
+  // No `flexGrow` and no `space-between`: together they shared the leftover width out between
+  // the chips, which is invisible on a seven-day trip that already fills the row and spreads a
+  // three-day trip across the whole screen. The gap is the spacing; the row is only as wide as
+  // its chips.
   strip: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
     gap: Spacing.tight,
     alignItems: 'flex-end',
   },
