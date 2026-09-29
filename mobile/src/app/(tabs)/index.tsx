@@ -80,6 +80,15 @@ export default function Home() {
    * is simply not used, and nothing has to be cleared at all.
    */
   const [loaded, setLoaded] = useState<{ id: string; hit: Cached<Trip> | null } | null>(null);
+  /**
+   * Re-read whenever the list is re-read, not only when the trip changes.
+   *
+   * Keying on the id alone left a reconnection half-applied: the list refetched and came back
+   * live, so the composer re-enabled, while the trip beneath it was still the copy from disk and
+   * went on saying "saved copy" indefinitely — the id had not changed, so nothing refetched it.
+   * `listed` is a fresh object per focus, so depending on it ties the two reads together and the
+   * screen recovers as one thing.
+   */
   useEffect(() => {
     const id = current?.id;
     if (!id) return;
@@ -88,7 +97,7 @@ export default function Home() {
     return () => {
       alive = false;
     };
-  }, [current?.id]);
+  }, [current?.id, listed]);
   const onTrip = current && loaded?.id === current.id ? loaded.hit : null;
 
   /**

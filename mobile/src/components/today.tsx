@@ -119,9 +119,11 @@ function Header({
         <ThemedText type="display" style={styles.grow}>
           {phase === 'eve' ? 'Tomorrow' : 'Today'}
         </ThemedText>
-        {/* The clock is paper, not jade: it is the single most factual thing on the screen and
-            jade in this product means press me. */}
-        {clock ? <ThemedText type="display">{clock}</ThemedText> : null}
+        {/* Tabular figures, not the display face. The serif display cuts its zero with a bar, so
+            "5:30 AM" renders as "5:3Ø AM" — fine in a headline, wrong in a clock, and wrong
+            beside stop times set in this same tabular face. Paper rather than jade: it is the
+            most factual thing on the screen, and jade in this product means press me. */}
+        {clock ? <ThemedText type="moneyLarge">{clock}</ThemedText> : null}
       </View>
       {chip ? (
         <ThemedText type="label" themeColor="muted">

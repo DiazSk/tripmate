@@ -52,6 +52,9 @@ jest.mock('@/api/tripMateApi', () => ({
   listTrips: (...a: unknown[]) => mockListTrips(...a),
 }));
 
+// Must follow the mocks. `jest.mock` is hoisted, but its factory runs on *this* import, and it
+// closes over `mockDisk` — which is in its temporal dead zone until the declaration above has run.
+// eslint-disable-next-line import/first
 import { cacheTrip, loadTrip, loadTrips, readCachedTrip, readCachedTrips } from './tripCache';
 
 const trip = (id: string, startDate = '2026-09-27', endDate = '2026-09-29'): Trip => ({
