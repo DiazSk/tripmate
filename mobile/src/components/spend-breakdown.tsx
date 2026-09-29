@@ -41,6 +41,11 @@ export function SpendBreakdown({ day, dayIndex }: { day: DayPlan; dayIndex: numb
 
   const total = daySpend(day);
 
+  // **"confirmed", not "spend".** A figure entered as *booked* is known and not yet paid, so
+  // "spend" overclaims it — the same word-for-a-mixture problem the bar above just stopped
+  // making. "Confirmed" is true of booked and paid money alike, which is the distinction this
+  // heading can actually support.
+  //
   // The same branch `budget-bar.tsx` makes on the bar above this, and for the same reason:
   // `daySpend` coalesces `actualCost ?? cost`, so the word has to follow the data. Two figures
   // on one screen calling the same summation by two different names is how a projection gets
@@ -50,7 +55,7 @@ export function SpendBreakdown({ day, dayIndex }: { day: DayPlan; dayIndex: numb
     <View style={styles.wrap}>
       <View style={styles.sectionRule}>
         <ThemedText type="label" themeColor="muted">
-          {`Day ${dayIndex + 1} ${anyActualSpend([day]) ? 'spend' : 'projected'}`}
+          {`Day ${dayIndex + 1} ${anyActualSpend([day]) ? 'confirmed' : 'projected'}`}
         </ThemedText>
         <View style={styles.rule} />
         <ThemedText type="money" themeColor="money">

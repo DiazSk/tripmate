@@ -104,6 +104,57 @@ export function tripSpend(days: DayPlan[]): number {
   return days.reduce((sum, day) => sum + daySpend(day), 0);
 }
 
+/**
+ * The same total, split by how much of it is actually known.
+ *
+ * `spendOf` coalesces `actualCost ?? cost`, so `tripSpend` is one number covering two very
+ * different things — a price somebody paid and a price the planner guessed — and every label
+ * above it has had to pick a single word for a mixture. "Projected $1,551" on a trip where three
+ * stops are real and twenty are estimates is wrong about the three; "Spent" would be wrong about
+ * the twenty.
+ *
+ * So the figure is not relabelled, it is separated. Nothing here changes what anything costs.
+ */
+export interface SpendSplit {
+  /** Entered by the traveller — an `actualCost` exists. */
+  settled: number;
+  /** Still the planner's estimate. */
+  projected: number;
+  /** `settled + projected`, identical to `tripSpend`. */
+  total: number;
+  /** Of the settled money, what is committed but not yet gone. */
+  booked: number;
+  /** Of the settled money, what has actually been paid. */
+  spent: number;
+}
+
+/**
+ * **`booked + spent` can be less than `settled`, deliberately.** A figure entered before
+ * `costState` existed — every one the web client has ever written — is a real number whose kind
+ * was never stated. Counting it as either would invent a fact; it stays in `settled` and in
+ * neither of the two below, which is the same treatment `located` gives a plan that predates it.
+ */
+export function spendSplit(days: DayPlan[]): SpendSplit {
+  const out: SpendSplit = { settled: 0, projected: 0, total: 0, booked: 0, spent: 0 };
+  const add = (item: Stop | Lodging | undefined) => {
+    if (!item) return;
+    const value = spendOf(item);
+    out.total += value;
+    if (item.actualCost == null) {
+      out.projected += value;
+      return;
+    }
+    out.settled += value;
+    if (item.costState === "booked") out.booked += value;
+    if (item.costState === "spent") out.spent += value;
+  };
+  for (const day of days) {
+    for (const stop of day.stops) add(stop);
+    add(day.lodging);
+  }
+  return out;
+}
+
 export type BudgetSegment = {
   dayIndex: number;
   /** This day's spend — the figure the tip prints, always the true total even where the span

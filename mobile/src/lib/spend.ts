@@ -2,8 +2,10 @@ import {
   budgetSegments,
   daySpend,
   daySpendByCategory,
+  spendSplit,
   tripSpend,
   type BudgetSegment,
+  type SpendSplit,
   type DaySpend,
 } from '@shared/itinerary';
 import { formatMoney } from '@shared/format';
@@ -39,8 +41,8 @@ import type { DayPlan, StopCategory } from '@/api/types';
  * takes one, so it has not mattered yet — it is the first thing to check if something here does.
  */
 
-export { budgetSegments, daySpend, daySpendByCategory, tripSpend, formatMoney };
-export type { BudgetSegment, DaySpend };
+export { budgetSegments, daySpend, daySpendByCategory, spendSplit, tripSpend, formatMoney };
+export type { BudgetSegment, DaySpend, SpendSplit };
 
 /**
  * Whether any real spend has been entered against this plan.

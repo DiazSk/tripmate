@@ -14,6 +14,15 @@ export type TimeFlexibility = "FIXED" | "PREFERRED";
 export type TierId = "budget" | "midrange" | "luxury";
 export type TripStatus = "draft" | "saved";
 
+/**
+ * Whether a real cost is a commitment or a payment.
+ *
+ * A booked table at a set price and a ticket already paid for are both *known*, which is what
+ * separates them from the planner's estimate — but only one of them has left the account, and a
+ * budget that cannot tell them apart cannot answer "how much have I actually spent".
+ */
+export type CostState = "booked" | "spent";
+
 export interface Stop {
   name: string;
   lat: number;
@@ -40,6 +49,14 @@ export interface Stop {
    * writes `"model"`.
    */
   located?: Located;
+  /**
+   * What `actualCost` is — money committed, or money gone.
+   *
+   * Absent is a real third answer, not a default. Every figure the web client has ever written
+   * carries no kind, and guessing one would invent a fact about somebody's money; such a figure
+   * counts as settled and as neither booked nor spent. See `spendSplit`.
+   */
+  costState?: CostState;
 }
 
 export interface Lodging {
@@ -47,6 +64,8 @@ export interface Lodging {
   cost: number;
   note: string;
   actualCost?: number;
+  /** See `Stop.costState`. A night's stay is the likeliest thing to be booked. */
+  costState?: CostState;
 }
 
 /**

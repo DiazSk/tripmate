@@ -19,7 +19,7 @@ import {
   promoteTrip,
   updateTripItinerary,
 } from '@/api/tripMateApi';
-import type { ChatTurn, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
+import type { ChatTurn, CostState, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { AnchorReceipt } from '@/components/anchor-receipt';
 import { BudgetBar } from '@/components/budget-bar';
@@ -189,6 +189,42 @@ export default function TripDetail() {
    * `applyPatch` refuses an op that would, because a planner able to unlock a stop could unlock it
    * and move it in one turn.
    */
+  /**
+   * What a stop really cost, and which kind of real that is.
+   *
+   * The same shape as `toggleLock` below, deliberately: optimistic write, one persist, roll back
+   * the whole itinerary if the save fails. A second pattern for editing a stop is how two edits
+   * start disagreeing about what "saved" means.
+   *
+   * `undefined` for both clears the figure and returns the stop to the planner's estimate —
+   * which is different from `0`, a real answer meaning it turned out to be free.
+   */
+  async function setCost(
+    dayIndex: number,
+    stopIndex: number,
+    cost: number | undefined,
+    costState: CostState | undefined
+  ) {
+    if (!trip || offline) return;
+    const previous = trip;
+    const next: Itinerary = {
+      ...trip.itinerary,
+      days: trip.itinerary.days.map((plan, di) =>
+        di !== dayIndex
+          ? plan
+          : {
+              ...plan,
+              stops: plan.stops.map((stop, si) =>
+                si !== stopIndex ? stop : { ...stop, actualCost: cost, costState }
+              ),
+            }
+      ),
+    };
+    setTouched(true);
+    setTrip({ ...trip, itinerary: next });
+    if (!(await updateTripItinerary(trip.id, next))) setTrip(previous);
+  }
+
   async function toggleLock(dayIndex: number, stopIndex: number) {
     if (!trip || offline) return;
     const previous = trip;
@@ -394,6 +430,7 @@ export default function TripDetail() {
               onFindNearby={findNearby}
               findings={findings}
               onToggleLock={toggleLock}
+              onSetCost={setCost}
               onAsk={(message: string) => askWith(message, day)}
               repairs={repairs}
               onRepair={applyRepair}
@@ -708,6 +745,7 @@ function DayPager({
   onFindNearby,
   findings,
   onToggleLock,
+  onSetCost,
   onAsk,
   repairs,
   onRepair,
@@ -722,6 +760,12 @@ function DayPager({
   /** Every finding for the whole trip; each day takes its own slice below. */
   findings: Guardrail[];
   onToggleLock: (dayIndex: number, stopIndex: number) => void;
+  onSetCost: (
+    dayIndex: number,
+    stopIndex: number,
+    cost: number | undefined,
+    state: CostState | undefined
+  ) => void;
   onAsk: (message: string) => void;
   repairs: (finding: Guardrail) => Repair[];
   onRepair: (days: DayPlan[], label: string) => void;
@@ -774,6 +818,7 @@ function DayPager({
             onFindNearby={onFindNearby}
             findings={findings.filter((f) => f.dayIndex === index)}
             onToggleLock={(stopIndex) => onToggleLock(index, stopIndex)}
+            onSetCost={(stopIndex, cost, state) => onSetCost(index, stopIndex, cost, state)}
             offline={offline}
             onAsk={onAsk}
             repairs={repairs}
