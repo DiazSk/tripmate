@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { getTrip, listTrips } from '@/api/tripMateApi';
-import type { Trip, TripSummary } from '@/api/types';
+import { getTrip, listSavedPlaces, listTrips } from '@/api/tripMateApi';
+import type { SavedPlace, Trip, TripSummary } from '@/api/types';
 
 /**
  * The trip you are on, readable with no network.
@@ -152,4 +152,68 @@ export async function loadTrips(): Promise<Cached<TripSummary[]> | undefined> {
     // The oldest copy in the set, because that is the honest claim about the whole list.
     cachedAt: cached[cached.length - 1].cachedAt,
   };
+}
+
+
+/* --- the saved pile, cached for the same reason the trip is --- */
+
+/**
+ * One file, not one per place.
+ *
+ * Trips are cached individually because `readCachedTrips` has to scan them to work out which is
+ * running with no network to ask. The saved pile is never searched that way — it is read whole,
+ * filtered to a city in memory, and it is small. A directory of hundreds of one-line files would
+ * buy nothing and cost a scan.
+ */
+const SAVED_FILE = 'saved-places.json';
+
+interface SavedEnvelope {
+  places: SavedPlace[];
+  cachedAt: string;
+}
+
+/**
+ * The saved pile as it was last read online.
+ *
+ * This is the piece the Today spec deferred, and the reason it deferred it: Today has to work in
+ * a tunnel, and `listSavedPlaces` is a network call. Without a copy on disk the one suggestion
+ * the screen can make in a three-hour gap would be the one thing on it that disappears
+ * underground.
+ */
+export function cacheSavedPlaces(places: SavedPlace[]): void {
+  try {
+    const envelope: SavedEnvelope = { places, cachedAt: new Date().toISOString() };
+    new File(dir(), SAVED_FILE).write(JSON.stringify(envelope));
+  } catch {
+    // Same bargain as `cacheTrip`: a cache that throws is worse than no cache.
+  }
+}
+
+export function readCachedSavedPlaces(): Cached<SavedPlace[]> | null {
+  try {
+    const file = new File(dir(), SAVED_FILE);
+    if (!file.exists) return null;
+    const envelope = JSON.parse(file.textSync()) as SavedEnvelope;
+    // An older build, or a write interrupted by the app being killed.
+    if (!Array.isArray(envelope?.places)) return null;
+    return { value: envelope.places, cachedAt: envelope.cachedAt };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The saved pile: live if the network answers, the copy on disk if it does not.
+ *
+ * **An empty live answer is cached, and that matters.** Deleting every saved place has to reach
+ * disk, or the last non-empty copy would outlive it and Today would go on suggesting somewhere
+ * the traveller removed — the same staleness `prune` exists to stop for trips.
+ */
+export async function loadSavedPlaces(): Promise<Cached<SavedPlace[]> | undefined> {
+  const live = await listSavedPlaces();
+  if (live) {
+    cacheSavedPlaces(live);
+    return { value: live, cachedAt: null };
+  }
+  return readCachedSavedPlaces() ?? undefined;
 }

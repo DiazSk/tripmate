@@ -11,7 +11,7 @@ import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { BarHeight, Colors, PhotoScrim, Radius, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
-import { loadTrip, loadTrips, type Cached } from '@/lib/tripCache';
+import { loadSavedPlaces, loadTrip, loadTrips, type Cached } from '@/lib/tripCache';
 import { todayInZone } from '@/lib/tripClock';
 import { pickCurrent } from '@/lib/tripPhase';
 import { todayISO } from '@/lib/tripsWall';
@@ -112,6 +112,17 @@ export default function Home() {
   const trip = onTrip?.value;
   const tripToday = (trip && todayInZone(trip.timezone)) ?? todayISO();
 
+  /**
+   * The saved pile, only while a trip is running.
+   *
+   * Today is the only reader, and it only draws them in a free gap — so off-trip this is a
+   * request for something nothing on screen can use. `useFocusedFetch` re-reads on focus, which
+   * is what picks up a place shared into the app from somewhere else mid-trip; `loadSavedPlaces`
+   * falls back to disk so the gap still has an answer underground.
+   */
+  const savedHit = useFocusedFetch(async () => (trip ? ((await loadSavedPlaces()) ?? null) : null));
+  const saved = savedHit?.value ?? undefined;
+
   const featured = trips ? pickFeatured(trips) : undefined;
 
   return (
@@ -141,6 +152,7 @@ export default function Home() {
               onAsk={
                 offline ? undefined : (dayIndex) => router.push(`/trip/${trip.id}?ask=${dayIndex}`)
               }
+              saved={saved ?? undefined}
             />
             <Pressable
               onPress={() => router.push('/plan/basics')}

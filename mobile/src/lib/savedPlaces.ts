@@ -1,5 +1,5 @@
 import type { Anchor, SavedPlace } from '@/api/types';
-import { anchorKey } from './anchors';
+import { anchorKey, metresBetween } from './anchors';
 
 const cityPart = (s: string) => s.split(',')[0].trim().toLowerCase();
 
@@ -37,4 +37,78 @@ export function toAnchor(p: SavedPlace): Anchor {
  */
 export function shouldPreselect(destination: string, last: string | null): boolean {
   return anchorKey(destination) !== last;
+}
+
+/**
+ * A saved place the plan never used, and how far it is from where you will be.
+ *
+ * `metres` is null when the place has no coordinates — an Instagram reminder or a hand-typed
+ * name that never geocoded. Those are real saved places and they still belong on the list; what
+ * they cannot claim is a distance.
+ */
+export interface SavedNearby {
+  place: SavedPlace;
+  metres: number | null;
+}
+
+/**
+ * The places this traveller saved for this city that did not make it into the plan.
+ *
+ * **The whole point is the ones that did *not* make it.** Places imported from a share or a
+ * screenshot are offered once, at plan time, by the wizard — and then they are gone from the
+ * app, whether the planner picked them or not. `AnchorReceipt` covers the named must-sees and
+ * says nothing about this pile. So a place somebody deliberately saved for Lisbon, which the
+ * planner left out, is invisible on the trip it was saved for.
+ *
+ * Matched by `anchorKey` rather than raw string, so "Pastéis de Belém" in the plan cancels
+ * "Pasteis de Belem" in the pile — the same normalisation `anchorCoverage` uses to decide
+ * whether an anchor was placed, and for the same reason.
+ *
+ * Instagram reminders are dropped by `groupByCity` and are dropped here too: they carry a URL
+ * and usually no place at all, so they are something to open later rather than somewhere to go.
+ */
+export function savedNotInPlan(
+  places: SavedPlace[],
+  planned: { name: string }[],
+  destination: string
+): SavedPlace[] {
+  const inPlan = new Set(planned.map((s) => anchorKey(s.name)));
+  return places.filter(
+    (p) =>
+      p.source !== 'instagram' &&
+      cityMatches(p.city, destination) &&
+      !inPlan.has(anchorKey(p.name))
+  );
+}
+
+/**
+ * Those places ordered by how far they are from a point, nearest first.
+ *
+ * **Placeless ones sort last rather than being dropped.** A saved place with no coordinates is
+ * still a thing the traveller chose; it simply cannot be ranked, and putting it at the end says
+ * that without throwing it away. `Infinity` rather than a sentinel so the comparison is the
+ * ordinary one.
+ *
+ * `from` is null on a day whose next stop has no coordinates, in which case nothing can be
+ * ranked and the saved order stands.
+ */
+export function savedNearby(
+  places: SavedPlace[],
+  from: { lat: number; lng: number } | null
+): SavedNearby[] {
+  const withDistance = places.map((place) => ({
+    place,
+    metres:
+      from && typeof place.lat === 'number' && typeof place.lng === 'number'
+        ? Math.round(metresBetween(from, { lat: place.lat, lng: place.lng }))
+        : null,
+  }));
+  return withDistance.sort((a, b) => (a.metres ?? Infinity) - (b.metres ?? Infinity));
+}
+
+/** "400 m" / "2.4 km" — near enough to decide whether to walk, and never false precision. */
+export function describeDistance(metres: number | null): string | null {
+  if (metres === null) return null;
+  if (metres < 1000) return `${Math.round(metres / 50) * 50} m`;
+  return `${(metres / 1000).toFixed(1)} km`;
 }
