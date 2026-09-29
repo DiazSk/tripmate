@@ -16,7 +16,6 @@ import {
   chatTurns,
   discardTrip,
   editTrip,
-  getTrip,
   promoteTrip,
   updateTripItinerary,
 } from '@/api/tripMateApi';
@@ -39,6 +38,7 @@ import { formatDayChip, formatRange } from '@/lib/dayDisplay';
 import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/itineraryDiff';
 import { tripHealth, type Guardrail } from '@/lib/health';
 import { regionForStops } from '@/lib/mapRegion';
+import { loadTrip } from '@/lib/tripCache';
 
 export default function TripDetail() {
   const { id, ask } = useLocalSearchParams<{ id: string; ask?: string }>();
@@ -163,7 +163,11 @@ export default function TripDetail() {
   );
 
   async function applyRepair(days: DayPlan[], label: string) {
-    if (!trip) return;
+    // Both writers below already roll back a failed save, so nothing is ever lied about. What
+    // they cannot do is explain themselves: offline the change flashes and reverts, which reads
+    // as the app being broken. Refusing before the optimistic update, with the banner above
+    // saying why, is the difference between a stated limit and a glitch.
+    if (!trip || offline) return;
     const previous = trip.itinerary;
     const next = { ...previous, days };
     setTouched(true);
@@ -186,7 +190,7 @@ export default function TripDetail() {
    * and move it in one turn.
    */
   async function toggleLock(dayIndex: number, stopIndex: number) {
-    if (!trip) return;
+    if (!trip || offline) return;
     const previous = trip;
     const next: Itinerary = {
       ...trip.itinerary,
@@ -224,9 +228,29 @@ export default function TripDetail() {
     setAdding(true);
   }
 
+  /**
+   * Live if the network answers, the copy on disk if it does not.
+   *
+   * Today is the screen somebody opens standing in a street, and its header is a link straight
+   * here — a trip screen that went blank underground would make the on-trip mode a dead end one
+   * tap in. `loadTrip` also writes the copy this reads back, so simply opening a trip while
+   * connected is what arms it.
+   */
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
   useEffect(() => {
-    getTrip(id).then((result) => setTrip(result ?? null));
+    let alive = true;
+    loadTrip(id).then((hit) => {
+      if (!alive) return;
+      setTrip(hit?.value ?? null);
+      setCachedAt(hit?.cachedAt ?? null);
+    });
+    return () => {
+      alive = false;
+    };
   }, [id]);
+
+  /** Nothing may be written against a copy from disk. */
+  const offline = cachedAt !== null;
 
   if (trip === undefined) {
     return (
@@ -298,19 +322,25 @@ export default function TripDetail() {
                   setChatOpenId((n) => n + 1);
                   chat.open();
                 }}
+                disabled={offline}
                 accessibilityRole="button"
                 accessibilityLabel="Ask for a change"
+                accessibilityState={{ disabled: offline }}
                 style={({ pressed }) => [styles.ask, pressed && styles.askPressed]}>
-                <ThemedText type="label" themeColor="foreground">
+                <ThemedText type="label" themeColor={offline ? 'muted' : 'foreground'}>
                   Ask
                 </ThemedText>
               </Pressable>
               <Pressable
                 onPress={() => setAdding(true)}
+                disabled={offline}
                 accessibilityRole="button"
                 accessibilityLabel="Add a stop"
-                style={styles.add}>
-                <ThemedText type="heading" themeColor="accentForeground">
+                accessibilityState={{ disabled: offline }}
+                style={[styles.add, offline && styles.addOff]}>
+                <ThemedText
+                  type="heading"
+                  themeColor={offline ? 'muted' : 'accentForeground'}>
                   +
                 </ThemedText>
               </Pressable>
@@ -322,6 +352,18 @@ export default function TripDetail() {
               because they are the same question — "something just happened to this plan, and
               here is the way back" — and two bars competing for the same slot would be a state
               machine nobody asked for. */}
+          {/* Says which copy this is, once, above everything it explains. Each disabled control
+              below goes grey without repeating the reason — eight copies of "no connection" is
+              a screen shouting, and the state is a property of the screen rather than of any
+              one button. */}
+          {offline ? (
+            <View style={styles.stale}>
+              <ThemedText type="detail" themeColor="muted">
+                {`Saved copy${staleTime(cachedAt)} — no connection. Nothing can be changed until you are back.`}
+              </ThemedText>
+            </View>
+          ) : null}
+
           <EditBar
             pending={chat.pending !== null && !chat.visible}
             onReview={chat.open}
@@ -355,6 +397,7 @@ export default function TripDetail() {
               onAsk={(message: string) => askWith(message, day)}
               repairs={repairs}
               onRepair={applyRepair}
+              offline={offline}
             />
 
             {mapBuilt ? (
@@ -656,6 +699,14 @@ interface Pending {
  * stops it looping: a programmatic `scrollTo` fires `onMomentumScrollEnd` too, and without the
  * guard that would set the state that caused the scroll.
  */
+/** " from 21:27", or nothing at all when the stamp will not parse — never a fabricated time. */
+function staleTime(at: string | null): string {
+  if (!at) return '';
+  const when = new Date(at);
+  if (Number.isNaN(when.getTime())) return '';
+  return ` from ${new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(when)}`;
+}
+
 function DayPager({
   trip,
   day,
@@ -668,6 +719,7 @@ function DayPager({
   onAsk,
   repairs,
   onRepair,
+  offline,
 }: {
   trip: Trip;
   day: number;
@@ -681,6 +733,8 @@ function DayPager({
   onAsk: (message: string) => void;
   repairs: (finding: Guardrail) => Repair[];
   onRepair: (days: DayPlan[], label: string) => void;
+  /** Serving a copy from disk, so nothing below may write — see `DayPage`. */
+  offline: boolean;
 }) {
   // `useWindowDimensions`, not `Dimensions.get()` — this one re-renders on rotation, and a page
   // whose width disagrees with the pager's by even a point drifts out of alignment by day 8.
@@ -728,6 +782,7 @@ function DayPager({
             onFindNearby={onFindNearby}
             findings={findings.filter((f) => f.dayIndex === index)}
             onToggleLock={(stopIndex) => onToggleLock(index, stopIndex)}
+            offline={offline}
             onAsk={onAsk}
             repairs={repairs}
             onRepair={onRepair}
@@ -1051,6 +1106,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Jade is the colour of a thing you can press. A control that cannot be pressed must not wear
+  // it, or the palette stops meaning anything.
+  addOff: { backgroundColor: Colors.control },
+  stale: { paddingHorizontal: Spacing.read, paddingBottom: Spacing.tight },
   // No fixed height: two lines of text at the accessibility sizes need the room, and a chip
   // that clips its weekday is worse than a taller strip. `read` rather than `pill`, because a
   // two-line pill is a lozenge.

@@ -74,6 +74,29 @@ export function readCachedTrip(id: string): Cached<Trip> | null {
   }
 }
 
+/**
+ * Forget every cached trip that is no longer in the live list.
+ *
+ * Without this the cache only ever grows, and it grows *wrong*: a trip deleted on the server
+ * stays on disk, and since `loadTrips` falls back to disk, the next time the network drops it
+ * reappears on Home as though it were still a trip. Observed exactly that way — a trip removed
+ * from the database was still being offered as the one in progress.
+ *
+ * A live list is authoritative and is the only moment this is knowable, so the prune rides
+ * along with it. Best effort, like every other write here.
+ */
+function prune(live: TripSummary[]): void {
+  const keep = new Set(live.map((trip) => trip.id));
+  for (const cached of readCachedTrips()) {
+    if (keep.has(cached.value.id)) continue;
+    try {
+      new File(dir(), `${cached.value.id}.json`).delete();
+    } catch {
+      // A file that will not delete is a file that will be filtered out next time anyway.
+    }
+  }
+}
+
 /** Every trip on disk, newest copy first. The offline answer to "which trip am I on". */
 export function readCachedTrips(): Cached<Trip>[] {
   try {
@@ -117,7 +140,10 @@ export async function loadTrip(id: string): Promise<Cached<Trip> | undefined> {
  */
 export async function loadTrips(): Promise<Cached<TripSummary[]> | undefined> {
   const live = await listTrips();
-  if (live) return { value: live, cachedAt: null };
+  if (live) {
+    prune(live);
+    return { value: live, cachedAt: null };
+  }
 
   const cached = readCachedTrips();
   if (cached.length === 0) return undefined;
