@@ -577,6 +577,15 @@ export async function runGeneration(
           if (fixed) {
             stop.lat = fixed.lat;
             stop.lng = fixed.lon;
+            stop.located = "osm";
+          } else {
+            // **The miss is recorded, not left blank.** This sweep is the only moment anything
+            // knows whether a stop's coordinate is a listing's or the model's, and it was
+            // discarding that the instant it had it. `"model"` rather than absence, because
+            // absence has to keep meaning "this plan predates the field" — every itinerary
+            // already on disk is in that state, and an old plan is not the same claim as a name
+            // nothing could find.
+            stop.located = "model";
           }
         }
       } catch {
@@ -605,6 +614,14 @@ export async function runGeneration(
         if (fixed) {
           stop.lat = fixed.lat;
           stop.lng = fixed.lon;
+          stop.located = "osm";
+        } else {
+          // The revision's own stops arrive with no provenance — the model does not write this
+          // field — so a stop critique renamed or invented would otherwise inherit whatever the
+          // spread left behind, or nothing. Stating the miss here keeps the second pass as
+          // honest as the first, which is the leak the weather field had before it was threaded
+          // through these same three prompts.
+          stop.located = "model";
         }
       }
     }

@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
 import { formatDateline, weatherLine } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
+import { EVIDENCE_FOOTNOTE, locationNote } from '@shared/evidence';
 import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
 import { daySpend, formatMoney } from '@/lib/spend';
 
@@ -157,6 +158,15 @@ export function DayPage({
       ) : null}
 
       <SpendBreakdown day={day} dayIndex={dayIndex} />
+
+      {/* **Said once, at the foot, rather than on every stop.** The prose is the planner's on
+          essentially every generated stop, so a per-stop disclaimer is a sentence repeated forty
+          times and read none — the reason Plan Health's coverage line sits above its findings
+          rather than beside each one. What varies stop to stop is the location, and that is
+          marked where it varies. */}
+      <ThemedText type="micro" themeColor="muted" style={styles.footnote}>
+        {EVIDENCE_FOOTNOTE}
+      </ThemedText>
     </ScrollView>
   );
 }
@@ -273,6 +283,7 @@ function StopRow({
   offline: boolean;
 }) {
   const booked = stop.timeFlexibility === 'FIXED';
+  const where = locationNote(stop.located);
   const particulars = [stop.time, stop.durationLabel, stop.category]
     .map((part) => part?.trim())
     .filter(Boolean)
@@ -337,6 +348,18 @@ function StopRow({
             {stop.note ? (
               <ThemedText type="detail" themeColor="muted">
                 {stop.note}
+              </ThemedText>
+            ) : null}
+
+            {/* **What the pin is standing on.** The rest of this row is prose either way; the
+                coordinate is the one thing that was sometimes checked against a real listing and
+                sometimes not, and the reader cannot tell by looking. Only on the expanded stop —
+                a badge per row would put a caveat on a list somebody is scanning. Nothing at all
+                on a plan saved before this was recorded, because "estimated" would claim a check
+                failed when none ran. */}
+            {where ? (
+              <ThemedText type="micro" themeColor="muted">
+                {where.value.toUpperCase()}
               </ThemedText>
             ) : null}
 
@@ -516,6 +539,7 @@ function dayTotal(day: DayPlan): string | undefined {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: Spacing.regular * 2 },
+  footnote: { paddingHorizontal: Spacing.read, paddingTop: Spacing.rows },
 
   masthead: { paddingHorizontal: Spacing.read, paddingTop: Spacing.tight },
   mastheadPhoto: { justifyContent: 'flex-end' },

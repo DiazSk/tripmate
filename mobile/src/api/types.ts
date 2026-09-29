@@ -1,3 +1,4 @@
+import type { Located } from '@shared/evidence';
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
 /**
@@ -31,6 +32,14 @@ export interface Stop {
   outdoor?: boolean;
   category: StopCategory;
   actualCost?: number;
+  /**
+   * How this stop's position came to be what it is — see `Located` in `@shared/evidence`.
+   *
+   * Absent on every itinerary saved before this existed, and that absence is load-bearing: it
+   * means nothing was recorded, which is not the same as a check that ran and missed. The miss
+   * writes `"model"`.
+   */
+  located?: Located;
 }
 
 export interface Lodging {
