@@ -27,7 +27,7 @@ import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
 import { dayDropId, dropCollision, parseDragId, stopDragId } from "@/lib/dragDrop";
 import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
 import { insertionIndexByTime, moveStop } from "@/lib/schedule";
-import { dayPlanned } from "@/lib/itinerary";
+import { dayPlanned, spendOf } from "@/lib/itinerary";
 import { formatItineraryDate } from "@/lib/itinerary";
 import { formatMoney } from "@/lib/format";
 import { DayEditUpdates } from "./DayHeader";
@@ -85,7 +85,7 @@ function StopCard({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-foreground">{stop.name}</div>
           <div className="mt-0.5 text-xs text-muted">
-            {[stop.time, stop.durationLabel, stop.cost ? formatMoney(stop.cost) : null]
+            {[stop.time, stop.durationLabel, spendOf(stop) ? formatMoney(spendOf(stop)) : null]
               .filter(Boolean)
               .join(" · ")}
           </div>
