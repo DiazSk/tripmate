@@ -36,6 +36,7 @@ export function DayPage({
   onAsk,
   repairs,
   onRepair,
+  offline,
 }: {
   day: DayPlan;
   dayIndex: number;
@@ -59,6 +60,18 @@ export function DayPage({
   /** Flip a stop between booked and ordinary. Booked is §0 rank 1 — the plan is re-planned around
    *  it and the server's applier refuses to move it. */
   onToggleLock: (stopIndex: number) => void;
+  /**
+   * Serving a copy from disk, so nothing here may be written.
+   *
+   * Two of the three row actions need the network — "Find nearby" searches Overpass and "Mark
+   * booked" writes the plan — and both already fail safely: the search returns nothing and the
+   * lock flips and reverts. Safe is not the same as honest, and a control that flips back with
+   * no explanation is the failure this states instead.
+   *
+   * Directions stays live. It is a URL, and a map app is the one thing that still works
+   * underground.
+   */
+  offline: boolean;
   /** Opens the chat composer seeded with text. Never sends it. */
   onAsk: (message: string) => void;
   /** The computed ways out of one finding — see `guardrailFixes`. Empty means Ask is the only
@@ -119,6 +132,7 @@ export function DayPage({
                 onAsk={onAsk}
                 repairs={repairs}
                 onRepair={onRepair}
+                offline={offline}
               />
             </View>
           ))}
@@ -240,6 +254,7 @@ function StopRow({
   onAsk,
   repairs,
   onRepair,
+  offline,
 }: {
   stop: Stop;
   ordinal: number;
@@ -254,6 +269,8 @@ function StopRow({
   onFindNearby: () => void;
   onToggleLock: () => void;
   onAsk: (message: string) => void;
+  /** Serving a copy from disk — see the outer prop. */
+  offline: boolean;
 }) {
   const booked = stop.timeFlexibility === 'FIXED';
   const particulars = [stop.time, stop.durationLabel, stop.category]
@@ -335,8 +352,13 @@ function StopRow({
                   Directions
                 </ThemedText>
               </Pressable>
-              <Pressable onPress={onFindNearby} accessibilityRole="button" hitSlop={8}>
-                <ThemedText type="label" themeColor="accent">
+              <Pressable
+                onPress={onFindNearby}
+                disabled={offline}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: offline }}
+                hitSlop={8}>
+                <ThemedText type="label" themeColor={offline ? 'muted' : 'accent'}>
                   Find nearby
                 </ThemedText>
               </Pressable>
@@ -344,8 +366,13 @@ function StopRow({
                   moving it on the next edit, and unlocking is deliberately only available here:
                   a patch op that could clear the flag could clear it and move the stop in the
                   same turn, which is the lock not existing. */}
-              <Pressable onPress={onToggleLock} accessibilityRole="button" hitSlop={8}>
-                <ThemedText type="label" themeColor="accent">
+              <Pressable
+                onPress={onToggleLock}
+                disabled={offline}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: offline }}
+                hitSlop={8}>
+                <ThemedText type="label" themeColor={offline ? 'muted' : 'accent'}>
                   {booked ? 'Unlock' : 'Mark booked'}
                 </ThemedText>
               </Pressable>

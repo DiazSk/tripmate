@@ -42,6 +42,9 @@ jest.mock('expo-file-system', () => ({
       if (mockThrowOn === 'read') throw new Error('unreadable');
       return mockDisk.get(this.name) ?? '';
     }
+    delete() {
+      mockDisk.delete(this.name);
+    }
   },
 }));
 
@@ -125,6 +128,24 @@ test('a live list is not replaced by the cache', async () => {
   const hit = await loadTrips();
   expect(hit?.value.map((t) => t.id)).toEqual(['fresh']);
   expect(hit?.cachedAt).toBeNull();
+});
+
+// A trip deleted on the server used to live on in the cache and reappear on Home the next time
+// the network dropped — offered as the trip in progress, which it no longer was.
+test('a live list forgets cached trips that no longer exist', async () => {
+  mockGetTrip.mockResolvedValue(trip('gone'));
+  await loadTrip('gone');
+  mockGetTrip.mockResolvedValue(trip('kept'));
+  await loadTrip('kept');
+  expect(readCachedTrips().map((c) => c.value.id).sort()).toEqual(['gone', 'kept']);
+
+  mockListTrips.mockResolvedValue([trip('kept')]);
+  await loadTrips();
+  expect(readCachedTrips().map((c) => c.value.id)).toEqual(['kept']);
+
+  // And the pruned one no longer comes back when the network next drops.
+  mockListTrips.mockResolvedValue(undefined);
+  expect((await loadTrips())?.value.map((t) => t.id)).toEqual(['kept']);
 });
 
 test('an empty cache and a failed list is undefined, which Home already draws', async () => {
