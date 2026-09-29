@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import type { DayPlan, Trip } from '@/api/types';
 import { clockAt, formatDayChip } from '@/lib/dayDisplay';
 import { dayLegs, leaveBy } from '@/lib/dayTravel';
@@ -82,13 +82,19 @@ export function Today({
         <NowAndAfter day={day} now={now} />
       )}
       <Attention trip={trip} dayIndex={dayIndex} cachedAt={cachedAt} />
+      {/* **A jade label, not a jade pill, because the hierarchy was inverted.** A full-width
+          filled bar made replanning the loudest thing on the screen, while Directions — the
+          thing somebody standing in a street actually presses — was a line of text. Replanning
+          is the rare case on an execution surface; it needs to be findable, not shouted. So it
+          takes the same idiom Directions already uses, and the 44pt target is kept on the
+          pressable rather than drawn. */}
       <Pressable
         onPress={onAsk ? () => onAsk(dayIndex) : undefined}
         disabled={!onAsk}
         accessibilityRole="button"
         accessibilityState={{ disabled: !onAsk }}
-        style={({ pressed }) => [styles.ask, !onAsk && styles.askOff, pressed && styles.pressed]}>
-        <ThemedText type="label" themeColor={onAsk ? 'accentForeground' : 'muted'}>
+        style={({ pressed }) => [styles.ask, pressed && styles.pressed]}>
+        <ThemedText type="label" themeColor={onAsk ? 'accent' : 'muted'}>
           {onAsk ? 'Plans changed?' : 'Plans changed? — needs a connection'}
         </ThemedText>
       </Pressable>
@@ -272,16 +278,22 @@ function Row({ time, name, booked }: { time?: string; name: string; booked?: boo
       <ThemedText type="money" themeColor="muted" style={styles.time}>
         {time ?? ''}
       </ThemedText>
-      <ThemedText type="detail" style={styles.grow} numberOfLines={1}>
-        {name}
-      </ThemedText>
       {/* Booked is stated rather than implied: it is the one thing on this screen nothing may
-          move, and on the eve it is the reason to read the row at all. */}
-      {booked ? (
-        <ThemedText type="micro" themeColor="muted">
-          BOOKED
+          move, and on the eve it is the reason to read the row at all.
+          **It sits against the name, not at the far margin.** Right-aligned, it drifted a whole
+          phone-width away from the thing it qualifies, and on a list where only some rows carry
+          it the reader had to track back across empty space to find out which. The name shrinks
+          to make room, so a long one truncates rather than pushing the badge off the row. */}
+      <View style={styles.named}>
+        <ThemedText type="detail" numberOfLines={1} style={styles.shrink}>
+          {name}
         </ThemedText>
-      ) : null}
+        {booked ? (
+          <ThemedText type="micro" themeColor="muted" style={styles.firm}>
+            BOOKED
+          </ThemedText>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -344,14 +356,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows, minHeight: 28 },
   // A fixed column so the names line up into something scannable rather than ragged.
   time: { width: 76 },
-  ask: {
-    minHeight: 44,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.tight,
-  },
-  askOff: { backgroundColor: Colors.control },
+  named: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
+  shrink: { flexShrink: 1 },
+  // The name yields, never the badge. Both default to shrinking, and a six-letter label clipped
+  // to "BOOK" at an accessibility size says nothing — where a truncated place name still does.
+  firm: { flexShrink: 0 },
+  // The target is 44pt tall and only as wide as the words — a full-width tap zone on a screen
+  // this dense catches presses meant for the day beneath it.
+  ask: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   pressed: { opacity: 0.6 },
 });
