@@ -8,6 +8,7 @@ import { clockAt, formatDayChip } from '@/lib/dayDisplay';
 import { dayLegs, leaveBy } from '@/lib/dayTravel';
 import { directionsUrl } from '@/lib/directions';
 import { isBlocking, tripHealth } from '@/lib/health';
+import { useHere } from '@/lib/here';
 import { describeDistance, savedNearby, savedNotInPlan } from '@/lib/savedPlaces';
 import { clockInZone, describeGap, nowInZone, todayState } from '@/lib/tripClock';
 import { dayIndexFor, tripPhase } from '@/lib/tripPhase';
@@ -301,19 +302,45 @@ function SavedNearby({
   destination: string;
   from: Stop | undefined;
 }) {
+  const { here, canAsk, busy, ask } = useHere();
   const unused = savedNotInPlan(saved, planned, destination);
   if (unused.length === 0) return null;
 
   // A stop at 0,0 is the app's "nowhere known" and must not anchor a distance — every saved
   // place would read as ~5,000 km from the Gulf of Guinea.
-  const anchor = from && (from.lat !== 0 || from.lng !== 0) ? { lat: from.lat, lng: from.lng } : null;
+  const stopAnchor = from && (from.lat !== 0 || from.lng !== 0) ? { lat: from.lat, lng: from.lng } : null;
+  // **Where you are beats where you are going, and only when it is actually known.** The next
+  // stop was never the ideal anchor — it was the honest one while this app could not ask. With a
+  // fix in hand the question becomes the one somebody standing in a street is really asking, and
+  // without one nothing changes: `here` is null for a denial, a refusal, a timeout, a simulator
+  // with no location set, and a build with no native module, and every one of those keeps the
+  // ranking this screen already shipped with.
+  const anchor = here ?? stopAnchor;
   const near = savedNearby(unused, anchor).slice(0, SAVED_SHOWN);
 
   return (
     <View style={styles.block}>
-      <ThemedText type="label" themeColor="muted">
-        You saved these
-      </ThemedText>
+      <View style={styles.row}>
+        <ThemedText type="label" themeColor="muted" style={styles.grow}>
+          {here ? 'You saved these — near you' : 'You saved these'}
+        </ThemedText>
+        {/* Offered rather than demanded, and only where a prompt would really appear. The system
+            dialog is answered once and for all, so asking before the list it improves is on
+            screen would spend that one answer on a screen nobody had read yet. */}
+        {canAsk ? (
+          <Pressable
+            onPress={ask}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Sort these by how near you are"
+            hitSlop={8}
+            style={({ pressed }) => [styles.firm, pressed && styles.pressed]}>
+            <ThemedText type="label" themeColor={busy ? 'muted' : 'accent'}>
+              {busy ? 'Locating…' : 'Near me'}
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
       {near.map(({ place, metres }) => {
         const away = describeDistance(metres);
         return (

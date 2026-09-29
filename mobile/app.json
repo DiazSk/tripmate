@@ -40,6 +40,12 @@
       ],
       "expo-secure-store",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TripMate uses your location to show how far your saved places are while a trip is running. It is never sent anywhere."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "TripMate reads the places in screenshots you pick. They are never stored."
