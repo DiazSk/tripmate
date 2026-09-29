@@ -1,9 +1,9 @@
 import type { Repair } from '@shared/guardrailFixes';
 import { groupStopsByTimeOfDay } from '@shared/timeOfDay';
 import { useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import type { DayPlan, Stop } from '@/api/types';
+import type { CostState, DayPlan, Stop } from '@/api/types';
 import { PlacePhoto } from '@/components/place-photo';
 import { TravelSegment } from '@/components/travel-segment';
 import { SpendBreakdown } from '@/components/spend-breakdown';
@@ -34,6 +34,7 @@ export function DayPage({
   onFindNearby,
   findings,
   onToggleLock,
+  onSetCost,
   onAsk,
   repairs,
   onRepair,
@@ -61,6 +62,8 @@ export function DayPage({
   /** Flip a stop between booked and ordinary. Booked is §0 rank 1 — the plan is re-planned around
    *  it and the server's applier refuses to move it. */
   onToggleLock: (stopIndex: number) => void;
+  /** What a stop really cost, and whether that money is committed or gone. */
+  onSetCost: (stopIndex: number, cost: number | undefined, state: CostState | undefined) => void;
   /**
    * Serving a copy from disk, so nothing here may be written.
    *
@@ -130,6 +133,7 @@ export function DayPage({
                 onPress={() => onEmphasise(emphasis === entry.index ? null : entry.index)}
                 onFindNearby={() => onFindNearby(entry.stop)}
                 onToggleLock={() => onToggleLock(entry.index)}
+                onSetCost={(cost, state) => onSetCost(entry.index, cost, state)}
                 onAsk={onAsk}
                 repairs={repairs}
                 onRepair={onRepair}
@@ -152,7 +156,7 @@ export function DayPage({
                 </ThemedText>
               ) : null}
             </View>
-            <Cost amount={day.lodging.cost} />
+            <Cost amount={day.lodging.actualCost ?? day.lodging.cost} />
           </View>
         </View>
       ) : null}
@@ -261,6 +265,7 @@ function StopRow({
   onPress,
   onFindNearby,
   onToggleLock,
+  onSetCost,
   onAsk,
   repairs,
   onRepair,
@@ -278,6 +283,7 @@ function StopRow({
   onPress: () => void;
   onFindNearby: () => void;
   onToggleLock: () => void;
+  onSetCost: (cost: number | undefined, state: CostState | undefined) => void;
   onAsk: (message: string) => void;
   /** Serving a copy from disk — see the outer prop. */
   offline: boolean;
@@ -309,7 +315,7 @@ function StopRow({
           <ThemedText type="heading" style={styles.grow}>
             {stop.name}
           </ThemedText>
-          <Cost amount={stop.cost} />
+          <Cost amount={stop.actualCost ?? stop.cost} />
         </View>
 
         <View style={styles.particularsRow}>
@@ -400,10 +406,102 @@ function StopRow({
                 </ThemedText>
               </Pressable>
             </View>
+
+            {/* **The second money state was unreachable from the phone.** `actualCost` has existed
+                on the type and in the web client for as long as the budget bar has coalesced it,
+                and nothing here could write one — so every figure on every mobile screen was the
+                planner's estimate wearing whichever label the code guessed. This is the field
+                that makes the distinction real. The kind is optional: an amount with no kind is
+                already a state the model supports, and demanding a classification before
+                accepting a number would stop people entering the number. */}
+            <CostEntry
+              cost={stop.actualCost}
+              state={stop.costState}
+              disabled={offline}
+              onChange={onSetCost}
+            />
           </View>
         ) : null}
       </View>
     </Pressable>
+  );
+}
+
+/**
+ * What a stop really cost, and which kind of real that is.
+ *
+ * Committed on blur rather than per keystroke: every change is a write to the server through
+ * `updateTripItinerary`, and a request per digit would be four requests to enter "35".
+ *
+ * **Clearing the field is a real action**, distinct from typing zero. Empty removes the figure
+ * and puts the stop back to the planner's estimate; `0` says it turned out to be free, and
+ * `spendSplit` counts it as settled money of zero. Both are answers somebody means.
+ */
+function CostEntry({
+  cost,
+  state,
+  disabled,
+  onChange,
+}: {
+  cost?: number;
+  state?: CostState;
+  disabled: boolean;
+  onChange: (cost: number | undefined, state: CostState | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(cost == null ? '' : String(cost));
+
+  function commit(text: string) {
+    const trimmed = text.trim();
+    if (trimmed === '') return onChange(undefined, undefined);
+    const value = Number(trimmed);
+    if (!Number.isFinite(value) || value < 0) return setDraft(cost == null ? '' : String(cost));
+    onChange(value, state);
+  }
+
+  return (
+    <View style={styles.costRow}>
+      <ThemedText type="label" themeColor="muted">
+        What it cost
+      </ThemedText>
+      <View style={styles.costField}>
+        <ThemedText type="money" themeColor="muted">
+          $
+        </ThemedText>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          onBlur={() => commit(draft)}
+          editable={!disabled}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          placeholder="—"
+          placeholderTextColor={Colors.muted}
+          selectionColor={Colors.accent}
+          maxFontSizeMultiplier={1.6}
+          accessibilityLabel="What this stop actually cost"
+          style={styles.costInput}
+        />
+      </View>
+      {/* Only once there is a figure to describe. An empty row offering to classify nothing is a
+          question about a number nobody has entered. */}
+      {cost != null ? (
+        <View style={styles.costKinds}>
+          {(['booked', 'spent'] as const).map((kind) => (
+            <Pressable
+              key={kind}
+              onPress={() => onChange(cost, state === kind ? undefined : kind)}
+              disabled={disabled}
+              accessibilityRole="button"
+              accessibilityState={{ selected: state === kind, disabled }}
+              style={[styles.costKind, state === kind && styles.costKindOn]}>
+              <ThemedText type="micro" themeColor={state === kind ? 'accent' : 'muted'}>
+                {kind === 'booked' ? 'Booked' : 'Paid'}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -509,6 +607,14 @@ function SectionRule({ label, trailing }: { label: string; trailing?: string }) 
 }
 
 /** Gold counts. A zero is not a money fact, so it goes muted rather than borrowing the colour. */
+/**
+ * A figure on a row, which must be the figure the totals are counting.
+ *
+ * Both call sites pass `actualCost ?? cost`, the same coalesce `spendOf` makes in the shared
+ * money module. They passed `cost` until entering a real one became possible on this client —
+ * at which point the row said $25 while the day above it said $31, which is the three-summations
+ * disagreement `spend.ts` was written to end, resurfacing one layer up.
+ */
 function Cost({ amount }: { amount: number }) {
   if (!amount) return null;
   return (
@@ -618,6 +724,18 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   expanded: { marginTop: Spacing.tight, gap: Spacing.hair },
   actions: { flexDirection: 'row', gap: Spacing.read, marginTop: Spacing.tight },
+  costRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight, marginTop: Spacing.tight },
+  costField: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  costInput: { color: Colors.foreground, minWidth: 56, paddingVertical: 4, fontSize: 15 },
+  costKinds: { flexDirection: 'row', gap: Spacing.hair },
+  costKind: {
+    paddingHorizontal: Spacing.tight,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.control,
+  },
+  // Jade at 9% plus the jade word, which is how selection reads everywhere else here.
+  costKindOn: { backgroundColor: Colors.accentWash },
 
   lodging: { paddingHorizontal: Spacing.read },
   lodgingRow: {
