@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
+import { PillButton } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
 import type { DayPlan, SavedPlace, Stop, Trip } from '@/api/types';
 import { clockAt, formatDayChip } from '@/lib/dayDisplay';
 import { dayLegs, leaveBy } from '@/lib/dayTravel';
@@ -105,26 +113,12 @@ export function Today({
           **On a row, not stacked**: two full-width actions one above the other were simply two
           more rows in the reading order, which is most of why this screen scanned as a list. */}
       <View style={styles.actions}>
-        <Pressable
+        <PillButton
+          title={onAsk ? 'Plans changed?' : 'Needs a connection'}
           onPress={onAsk ? () => onAsk(dayIndex) : undefined}
           disabled={!onAsk}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !onAsk }}
-          style={({ pressed }) => [styles.ask, pressed && styles.pressed]}>
-          <ThemedText type="label" themeColor={onAsk ? 'accent' : 'muted'}>
-            {onAsk ? 'Plans changed?' : 'Plans changed? — offline'}
-          </ThemedText>
-        </Pressable>
-        {onPlanAnother ? (
-          <Pressable
-            onPress={onPlanAnother}
-            accessibilityRole="button"
-            style={({ pressed }) => [styles.ask, pressed && styles.pressed]}>
-            <ThemedText type="label" themeColor="accent">
-              Plan another trip
-            </ThemedText>
-          </Pressable>
-        ) : null}
+        />
+        {onPlanAnother ? <PillButton title="Plan another trip" onPress={onPlanAnother} /> : null}
       </View>
     </View>
   );
@@ -144,26 +138,39 @@ function Header({
   onOpenTrip: () => void;
 }) {
   const chip = formatDayChip(day.date);
+  const date = chip ? `${chip.weekday} ${chip.dayOfMonth}` : null;
   return (
     <Pressable onPress={onOpenTrip} style={({ pressed }) => pressed && styles.pressed}>
       <ThemedText type="label" themeColor="muted">
         {trip.destination.toUpperCase()}
       </ThemedText>
-      <View style={styles.headRow}>
-        <ThemedText type="display" style={styles.grow}>
-          {phase === 'eve' ? 'Tomorrow' : 'Today'}
-        </ThemedText>
-        {/* Tabular figures, not the display face. The serif display cuts its zero with a bar, so
-            "5:30 AM" renders as "5:3Ø AM" — fine in a headline, wrong in a clock, and wrong
-            beside stop times set in this same tabular face. Paper rather than jade: it is the
-            most factual thing on the screen, and jade in this product means press me. */}
-        {clock ? <ThemedText type="moneyLarge">{clock}</ThemedText> : null}
+      <ThemedText type="display">{phase === 'eve' ? 'Tomorrow' : 'Today'}</ThemedText>
+
+      {/* **The clock reads down the left edge now, paired with the date.**
+          
+          It used to sit baseline-locked to the 28pt serif at the far right — the only
+          right-aligned element on an otherwise entirely left-aligned screen, which is exactly
+          why it read as detached: there was nothing for it to belong to, and the column under it
+          was empty. It also had no way of saying *what* it was. A bare time in a corner could be
+          a departure, a duration, or the device's own clock.
+          
+          Beside the date it is unambiguous without needing a label to say so — "Wed 30, 8:26 AM"
+          is one fact, and the destination sits directly above it, which is what makes it read as
+          *Kyoto's* time rather than the phone's. That distinction is the whole reason
+          `tripClock` exists: measured, a device on 21:07 Sep 28 is Lisbon 05:07 Sep **29**.
+
+          Tabular, not the display face: the serif cuts its zero with a bar, so "8:30" renders as
+          "8:3Ø" — fine in a headline, wrong in a clock, and wrong beside the stop times set in
+          this same face below. Paper rather than jade: it is the most factual thing on the
+          screen, and jade here means press me. */}
+      <View style={styles.whenRow}>
+        {clock ? <ThemedText type="moneyLarge" style={styles.clock}>{clock}</ThemedText> : null}
+        {date ? (
+          <ThemedText type="label" themeColor="muted">
+            {date}
+          </ThemedText>
+        ) : null}
       </View>
-      {chip ? (
-        <ThemedText type="label" themeColor="muted">
-          {`${chip.weekday} ${chip.dayOfMonth}`}
-        </ThemedText>
-      ) : null}
     </Pressable>
   );
 }
@@ -203,11 +210,9 @@ function NowAndAfter({
 
   if (state.kind === 'empty' || state.kind === 'done') {
     return (
-      <View style={styles.subject}>
-        <ThemedText type="title" themeColor="muted">
-          {state.kind === 'empty' ? 'Nothing planned today' : 'Nothing left today'}
-        </ThemedText>
-      </View>
+      <ThemedText type="title" themeColor="muted">
+        {state.kind === 'empty' ? 'Nothing planned today' : 'Nothing left today'}
+      </ThemedText>
     );
   }
 
@@ -217,126 +222,291 @@ function NowAndAfter({
   const after = stops.slice(index + 1);
 
   // The facts under the lead, in the order somebody asks for them: when it starts, how far off
-  // that is, how long the hop takes. One line, never a stack — two muted 13pt lines under each
-  // other is the list shape this whole pass removes, and the first-stop branch had exactly that
-  // ("in 45 min" over "8:11 AM") until it was looked at on the device.
-  //
-  // `leaveBy` is deliberately absent: it is the lead in every state that has one, and repeating
-  // it here is what made the old block read as four near-identical rows.
+  // that is, how long the hop takes. One line, never a stack.
   const beneath = [
     stop.time,
-    // Only where the lead is the place itself; every other lead already carries the wait.
     state.kind === 'upcoming' && !state.leaveBy ? `in ${describeGap(state.minutes)}` : null,
     leg ? `${leg.minutes} min by ${leg.mode}` : null,
   ]
     .filter(Boolean)
     .join('  ·  ');
 
-  return (
-    <>
-      <View style={styles.subject}>
-        {/* **One subject, stated as a sentence.** This block used to be an uppercase opener above a
-            place, a departure and a detail line — four rows of near-equal weight, which is the
-            "reads like a list" the redesign was asked to fix. The lead is now a single phrase
-            with its figure set in the tabular face, and the opener is gone: the screen's entire
-            job is that this is the next thing, so a word saying so is furniture. */}
-        {state.kind === 'free' ? (
-          <>
-            <Lead tone="foreground" text={`Free for about ${describeGap(state.minutes)}`} />
-            <ThemedText type="detail" themeColor="muted">
-              {`then ${stop.name}${stop.time ? ` at ${stop.time}` : ''}`}
-            </ThemedText>
-          </>
-        ) : state.kind === 'imminent' ? (
-          <>
-            <Lead tone="alert" text={`Leave in ${describeGap(state.minutes)}`} />
-            <ThemedText type="heading" style={styles.place} numberOfLines={2}>
-              {stop.name}
-            </ThemedText>
-          </>
-        ) : state.leaveBy ? (
-          <>
-            <Lead tone="foreground" text={`Leave by ${state.leaveBy}`} />
-            <ThemedText type="heading" style={styles.place} numberOfLines={2}>
-              {stop.name}
-            </ThemedText>
-          </>
-        ) : (
-          // The day's first stop has no origin, so there is no departure to lead with and the
-          // place itself is the subject — at the lead size, because this state otherwise had no
-          // glance-distance line at all. See `todayState` for why a departure is never invented.
-          <ThemedText type="title" style={styles.lead} numberOfLines={2}>
-            {stop.name}
-          </ThemedText>
-        )}
+  /**
+   * The lead as a phrase with stress on it.
+   *
+   * **Speech, not a label and a value.** Said aloud, "leave in" is unstressed and "11 min" is
+   * the word that carries — so the verb is set at `muted` and the figure at full tone in the
+   * same face and size. That is emphasis by contrast rather than by a second typeface, which is
+   * the lesson from the Tabular attempt: the Figure Rule reserves that face for columns, and
+   * mixing it mid-sentence broke the phrase into two fragments.
+   *
+   * `verb` is null where the place itself is the lead and there is nothing to stress against.
+   */
+  const lead: { verb: string | null; figure: string; tone: 'foreground' | 'alert' } =
+    state.kind === 'free'
+      ? { verb: 'Free for about', figure: describeGap(state.minutes), tone: 'foreground' }
+      : state.kind === 'imminent'
+        ? // **"Leave in 0 min" is not a thing anyone says.** `describeGap` is right to return it —
+          // it formats a duration and zero is a duration — but at the moment the departure lands
+          // the sentence stops being about how long is left and becomes an instruction. Verb
+          // only, so the whole phrase carries the alert rather than a nothing-figure beside it.
+          state.minutes === 0
+          ? { verb: null, figure: 'Leave now', tone: 'alert' as const }
+          : { verb: 'Leave in', figure: describeGap(state.minutes), tone: 'alert' as const }
+        : state.leaveBy
+          ? { verb: 'Leave by', figure: state.leaveBy, tone: 'foreground' }
+          : { verb: null, figure: stop.name, tone: 'foreground' };
 
-        {state.kind !== 'free' && beneath ? (
-          <ThemedText type="detail" themeColor="muted" style={styles.beneath}>
-            {beneath}
-          </ThemedText>
-        ) : null}
+  return (
+    <View style={styles.spine}>
+
+      {/* **One stop back, and only one.**
+          
+          A day you are halfway through looks identical to one that has not started unless
+          something marks the ground covered — but the ground covered is *orientation*, not
+          content, and this screen answers "what now". Two past rows pushed the subject down far
+          enough that the thing you opened the app for was no longer the thing you saw first.
+          
+          The one kept is the place you have just come from, which is the only past stop that is
+          still context rather than history. The rest of the day — including everything done —
+          is the day screen's job. */}
+      {index > 0 ? (
+        <Node state="past">
+          <Row
+            time={stops[index - 1].time}
+            name={stops[index - 1].name}
+            booked={stops[index - 1].timeFlexibility === 'FIXED'}
+            dim
+          />
+        </Node>
+      ) : null}
+
+      <Node
+        state="now"
+        tone={state.kind === 'imminent' ? 'alert' : 'accent'}
+        last={after.length === 0}>
+        <View style={styles.subjectRow}>
+          <View style={styles.subjectText}>
+            <Lead verb={lead.verb} figure={lead.figure} tone={lead.tone} />
+
+            {state.kind === 'free' ? (
+              <ThemedText type="detail" themeColor="muted">
+                {`then ${stop.name}${stop.time ? ` at ${stop.time}` : ''}`}
+              </ThemedText>
+            ) : // The place, unless the lead already *is* the place. Keyed on the figure, not on
+            // the verb: "Leave now" has no verb either, and keying on that hid the destination at
+            // the one moment the screen is shouting that you have to go somewhere.
+            lead.figure !== stop.name ? (
+              <ThemedText type="heading" style={styles.place} numberOfLines={2}>
+                {stop.name}
+              </ThemedText>
+            ) : null}
+
+            {state.kind !== 'free' && beneath ? (
+              <ThemedText type="detail" themeColor="muted" style={styles.beneath}>
+                {beneath}
+              </ThemedText>
+            ) : null}
+          </View>
+
+        </View>
 
         {state.kind !== 'free' && (stop.lat !== 0 || stop.lng !== 0) ? (
-          <Pressable
-            onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})}
-            accessibilityRole="link"
-            accessibilityLabel={`Directions to ${stop.name}`}
-            hitSlop={8}
-            style={({ pressed }) => [styles.leadAction, pressed && styles.pressed]}>
-            <ThemedText type="label" themeColor="accent">
-              Directions
-            </ThemedText>
-          </Pressable>
+          <OpenIn label="Directions" to={stop} name={stop.name} />
         ) : null}
-      </View>
 
-      {state.kind === 'free' ? (
-        <SavedNearby saved={saved} planned={stops} destination={destination} from={stops[index]} />
-      ) : null}
+        {state.kind === 'free' ? (
+          <SavedNearby saved={saved} planned={stops} destination={destination} from={stops[index]} />
+        ) : null}
+      </Node>
 
-      {after.length > 0 ? (
-        <View style={styles.block}>
-          <ThemedText type="label" themeColor="muted" style={styles.sectionLabel}>
-            After
-          </ThemedText>
-          {after.map((s, i) => (
-            <Row
-              key={`${s.name}-${i}`}
-              time={s.time}
-              name={s.name}
-              booked={s.timeFlexibility === 'FIXED'}
-            />
-          ))}
-        </View>
-      ) : null}
-    </>
+      {/* No "After" opener: the rail already says these come next, and an uppercase word saying
+          so on top of a geometry that says it is the furniture this pass exists to remove. */}
+      {after.map((s, i) => (
+        <Node
+          key={`${s.name}-${i}`}
+          state="ahead"
+          last={i === after.length - 1}>
+          <Row time={s.time} name={s.name} booked={s.timeFlexibility === 'FIXED'} />
+        </Node>
+      ))}
+    </View>
   );
 }
 
 /**
- * The screen's lead line — one phrase, one face, at glance distance.
+ * A control that hands off to the maps app, and says so.
  *
- * **A sentence, not a labelled metric.** "LEAVE IN" over a big "10 min" is the hero-metric
- * template, and it needs an uppercase opener to work: two things this system does not do.
+ * **A tap that does nothing used to look exactly like a tap that worked.** Both of this screen's
+ * hand-offs were `Linking.openURL(...).catch(() => {})` — the swallow is correct in that a
+ * missing maps app must not throw, but it left the one case worth reporting silent: press
+ * Directions on a device where nothing handles the URL and the screen simply does not react.
  *
- * **And not a mixed-face one either, which is what this tried first.** Setting the figure in
- * Tabular a size up looked right in the editor and was wrong on the device twice over. It breaks
- * the Figure Rule — that face is for values compared *in a column*, and DESIGN.md names this
- * exact shape as the counter-example ("a stamp is not a column; `DAY 2 OF 5` has two numerals and
- * nothing to align them against"). And it shows: mono advances put a visible gap between "10" and
- * "min", so the phrase read as two fragments rather than one sentence.
+ * So the press has three states and each is legible. Working: the label dims and the app
+ * leaves, which is the platform's own confirmation and needs nothing added. Slow: `Opening…`
+ * after the press, so the gap between tap and hand-off is accounted for. Failed: `Can't open
+ * Maps`, in the colour this system reserves for *cannot happen*, held briefly and then gone —
+ * an error you cannot dismiss on a screen you are reading in a street is worse than the failure.
  *
- * So the emphasis is size, which is what the craft floor asks for anyway. Switzer rather than the
- * display serif because every one of these lines carries digits, and Melodrama bars its zero —
- * "10:30" renders as "1Ø:3Ø", the same defect that moved the header clock off the serif.
+ * The label reverts on its own rather than latching, because by the time it has failed the
+ * traveller has usually already pressed again.
  */
-function Lead({ text, tone }: { text: string; tone: 'foreground' | 'alert' }) {
+function OpenIn({
+  label,
+  to,
+  name,
+  inline,
+  style,
+}: {
+  label: string;
+  to: { lat: number; lng: number };
+  name: string;
+  /** A row action, which stays text. Standalone actions get the capsule instead. */
+  inline?: boolean;
+  style?: object;
+}) {
+  const [said, setSaid] = useState<'idle' | 'opening' | 'failed'>('idle');
+
+  async function open() {
+    setSaid('opening');
+    try {
+      await Linking.openURL(directionsUrl(to));
+      setSaid('idle');
+    } catch {
+      setSaid('failed');
+      setTimeout(() => setSaid('idle'), 2600);
+    }
+  }
+
   return (
-    <ThemedText type="title" themeColor={tone} style={styles.lead} numberOfLines={2}>
-      {text}
-    </ThemedText>
+    <Pressable
+      onPress={open}
+      disabled={said === 'opening'}
+      accessibilityRole="link"
+      accessibilityLabel={`Directions to ${name}`}
+      hitSlop={8}
+      style={({ pressed }) => [inline ? styles.inlineAction : styles.leadAction, style, pressed && styles.pressed]}>
+      {/* **Sentence case, never tracked caps.** The uppercase, letter-spaced treatment these
+          actions shipped with is a web link wearing a label's clothes: on iOS a fluent reader
+          takes tracked caps for a heading and does not know it is pressable. A tinted text button
+          *is* native — it is what a nav bar's Edit and Done are — so what had to go was the
+          casing and the 0.18em, not the control. A standalone action goes further and takes a
+          capsule; see `PillButton`. */}
+      <ThemedText
+        type={inline ? 'detail' : 'headingSmall'}
+        themeColor={said === 'failed' ? 'alert' : said === 'opening' ? 'muted' : 'accent'}>
+        {said === 'failed' ? "Can't open Maps" : said === 'opening' ? 'Opening…' : label}
+      </ThemedText>
+    </Pressable>
   );
 }
+
+/**
+ * The lead line, and the screen's one authored moment.
+ *
+ * **Today is the only surface here that changes while you watch it**, and it used to change by
+ * snapping: "Leave in 11 min" became "Leave in 10 min" between one frame and the next, and the
+ * flip from `upcoming` to `imminent` repainted the whole phrase coral with no acknowledgement
+ * that anything had happened. Both are the screen's most important events and both were silent.
+ *
+ * So the figure re-settles whenever its value changes — keyed on the text, so the entrance plays
+ * on the tick and on the state flip alike, and on nothing else. One moment, not an effect per
+ * element: the verb beside it never moves, which is what makes the figure look like the thing
+ * that changed.
+ *
+ * `Motion.respond` and the house curve, because this is the screen answering time passing rather
+ * than something arriving. **Reduced Motion drops the travel and keeps the fade** — the event is
+ * still worth marking for somebody who has asked for less movement, and a crossfade marks it.
+ *
+ * **The text is always mounted and the animation only decorates it**, which is the second
+ * version of this. The first keyed an `Animated.View` on the figure and let `entering` play on
+ * the remount — shorter, and it deletes the number when the animation does not run. Caught in
+ * the browser: reanimated's web path left the wrapper at `visibility: hidden; position:
+ * absolute` with the keyframes never starting, so the screen said "Leave in" and nothing else.
+ * Web is not the target and that exact failure will not happen on the device — but a countdown
+ * that can render blank is the worst failure this screen has, and a design where the motion is
+ * additive cannot produce it on any platform.
+ */
+function Lead({
+  verb,
+  figure,
+  tone,
+}: {
+  verb: string | null;
+  figure: string;
+  tone: 'foreground' | 'alert';
+}) {
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(1);
+  const shift = useSharedValue(0);
+
+  useEffect(() => {
+    const easing = Easing.bezier(...Curve);
+    opacity.value = 0.25;
+    opacity.value = withTiming(1, { duration: Motion.respond, easing });
+    if (!reduceMotion) {
+      shift.value = -5;
+      shift.value = withTiming(0, { duration: Motion.respond, easing });
+    }
+    // `figure` only: the verb does not move, which is what makes the number look like the thing
+    // that changed rather than the whole line repainting.
+  }, [figure, reduceMotion, opacity, shift]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: shift.value }],
+  }));
+
+  return (
+    <View style={styles.leadLine}>
+      {verb ? (
+        <ThemedText type="title" style={styles.lead} themeColor="muted">
+          {verb}
+        </ThemedText>
+      ) : null}
+      <Animated.View style={style}>
+        <ThemedText type="title" style={styles.lead} themeColor={tone} numberOfLines={2}>
+          {figure}
+        </ThemedText>
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
+ * One position on the day's rail.
+ *
+ * The dot carries its own canvas-coloured ring so the rule passes behind it rather than through
+ * it, which is what makes the line read as continuous and the node as sitting *on* it.
+ */
+function Node({
+  state,
+  tone = 'accent',
+  last,
+  children,
+}: {
+  state: 'past' | 'now' | 'ahead';
+  tone?: 'accent' | 'alert';
+  last?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.node, last && styles.nodeLast]}>
+      <View style={styles.gutter}>
+        <View
+          style={[
+            styles.dot,
+            state === 'now' && styles.dotNow,
+            state === 'now' && tone === 'alert' && styles.dotAlert,
+            state === 'past' && styles.dotPast,
+          ]}
+        />
+      </View>
+      <View style={styles.nodeBody}>{children}</View>
+    </View>
+  );
+}
+
 
 /**
  * The places this traveller saved for this city that the plan never used.
@@ -423,18 +593,13 @@ function SavedNearby({
               </ThemedText>
             ) : null}
             {typeof place.lat === 'number' && typeof place.lng === 'number' ? (
-              <Pressable
-                onPress={() =>
-                  Linking.openURL(directionsUrl({ lat: place.lat!, lng: place.lng! })).catch(() => {})
-                }
-                accessibilityRole="link"
-                accessibilityLabel={`Directions to ${place.name}`}
-                hitSlop={8}
-                style={({ pressed }) => [styles.firm, pressed && styles.pressed]}>
-                <ThemedText type="label" themeColor="accent">
-                  Go
-                </ThemedText>
-              </Pressable>
+              <OpenIn
+                label="Go"
+                to={{ lat: place.lat, lng: place.lng }}
+                name={place.name}
+                inline
+                style={styles.firm}
+              />
             ) : null}
           </View>
         );
@@ -474,9 +639,20 @@ function WholeDay({ day, eve }: { day: DayPlan; eve: boolean }) {
   );
 }
 
-function Row({ time, name, booked }: { time?: string; name: string; booked?: boolean }) {
+function Row({
+  time,
+  name,
+  booked,
+  dim,
+}: {
+  time?: string;
+  name: string;
+  booked?: boolean;
+  /** Behind you. Stated at a lower contrast rather than removed — it is orientation, not noise. */
+  dim?: boolean;
+}) {
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, dim && styles.rowDim]}>
       <ThemedText type="money" themeColor="muted" style={styles.time}>
         {time ?? ''}
       </ThemedText>
@@ -550,6 +726,25 @@ function Attention({
   );
 }
 
+/** The marker column. Wide enough for the dot and the air it needs, and nothing more. */
+const RAIL_GUTTER = 22;
+/**
+ * Dot geometry, and the one offset that centres both sizes on the text beside them.
+ *
+ * **9.5 for each, and the arithmetic is why.** A past or future dot sits against a `Row`, whose
+ * `minHeight` of 28 puts its text's optical centre at 14: `14 - 9/2 = 9.5`. The current dot sits
+ * against the lead, a 30pt line whose centre is 15: `15 - 11/2 = 9.5`. The two dots are
+ * different sizes against different type and land on the same number, so there is one constant
+ * rather than a pair to keep in step.
+ *
+ * It is a marker, not a glyph, so it does not scale with Dynamic Type — at the accessibility
+ * sizes the text grows past it and the dot rides high. Acceptable for a mark whose only job is
+ * to say which of three states a row is in.
+ */
+const DOT = 9;
+const DOT_NOW = 11;
+const DOT_TOP = 9.5;
+
 const styles = StyleSheet.create({
   /**
    * **Cadence, not one interval repeated.** Every block on this screen used to be separated by
@@ -558,18 +753,58 @@ const styles = StyleSheet.create({
    * is set apart by `Spacing.regular` and a rule, which is what makes the squint test resolve.
    */
   wrap: { gap: Spacing.rows },
-  /** The one thing this screen exists to answer. Its own air, and a rule under it. */
-  subject: {
-    gap: Spacing.hair,
-    // `Spacing.tight`, not `regular`: the Directions target below is 44pt tall against ~19pt of
-    // text, so it contributes its own trailing air. Measured on the device, 24 on top of that
-    // opened a void between the subject and its rule.
-    paddingBottom: Spacing.tight,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.cardBorder,
+  /**
+   * The day as one line with positions on it.
+   *
+   * The screen's three groups — what is behind, what is now, what is next — used to be three
+   * unrelated stacks, and nothing said they were one day. The rail is what says it, and it lets
+   * the "After" opener go: a geometry that already means "these come next" does not need an
+   * uppercase word repeating it.
+   */
+  spine: { position: 'relative' },
+  /** Drawn once behind every node; see the note at its use for why not per row. */
+  node: { flexDirection: 'row', paddingBottom: Spacing.regular },
+  subjectRow: { flexDirection: 'row', gap: Spacing.rows, alignItems: 'flex-start' },
+  subjectText: { flex: 1, gap: Spacing.hair },
+  /** The verb and the figure on one line, wrapping together at accessibility sizes. */
+  leadLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8 },
+  nodeLast: { paddingBottom: 0 },
+  gutter: { width: RAIL_GUTTER, alignItems: 'center' },
+  nodeBody: { flex: 1, gap: Spacing.hair },
+  /**
+   * The ring is the canvas, not a colour of its own, so the rail passes *behind* the dot instead
+   * of through it. Without it the hairline cuts every node in half and the column reads as a
+   * dotted line rather than as positions on a continuous one.
+   */
+  dot: {
+    width: DOT,
+    height: DOT,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.canvas,
+    borderWidth: 1.5,
+    borderColor: Colors.cardBorder,
+    marginTop: DOT_TOP,
   },
-  // A rule and space, never a card: "round what you touch, square what you read", and this is
-  // read. A filled panel here would also be the second surface on a screen that has one.
+  dotNow: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+    width: DOT_NOW,
+    height: DOT_NOW,
+  },
+  dotAlert: { backgroundColor: Colors.alert, borderColor: Colors.alert },
+  /**
+   * **Opaque, and that is the whole point.**
+   *
+   * This was filled with `cardBorder` — `#FFFFFF1F`, 12% white, the same token the rail uses.
+   * A translucent fill does not occlude: the rail passed *through* it and the two alphas
+   * composited, so the line read as a bright streak across the one dot it crossed. Every other
+   * dot hid the rail correctly because `canvas`, `accent` and `alert` are all solid.
+   *
+   * `surfaceDeep` is the One Slate one step up from the ground, so a completed stop reads as a
+   * filled node against the hollow ring of one still ahead, and the rail stops at its edge.
+   */
+  dotPast: { backgroundColor: Colors.surfaceDeep, borderColor: Colors.cardBorder },
+  rowDim: { opacity: 0.55 },
   /**
    * A size the shared ramp does not carry, declared here on purpose.
    *
@@ -591,11 +826,36 @@ const styles = StyleSheet.create({
    */
   sectionLabel: { marginTop: Spacing.tight },
   beneath: { marginTop: Spacing.hair },
-  leadAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  /** The two screen-level actions, on one row at the foot instead of stacked into the reading
-   *  order as two more list items. Separated generously so neither catches the other's press. */
-  actions: { flexDirection: 'row', gap: Spacing.regular, marginTop: Spacing.tight, flexWrap: 'wrap' },
-  headRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
+  leadAction: {
+    minHeight: 44,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.compact,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surfaceDeep,
+    marginTop: Spacing.hair,
+  },
+  /** A row's own action. Text, because three capsules down a list is heavier than the list. */
+  inlineAction: { minHeight: 28, justifyContent: 'center' },
+  /**
+   * The two screen-level actions, on one row at the foot rather than stacked into the reading
+   * order as two more list items.
+   *
+   * `Spacing.tight` between them, not `regular`: they are capsules now, and a filled shape
+   * carries its own separation — the generous gap was holding apart two lines of text that had
+   * no edges of their own. `Spacing.read` above, so the row sits clear of the attention block
+   * without the void that opened up when two text links floated in it.
+   */
+  actions: { flexDirection: 'row', gap: Spacing.tight, marginTop: Spacing.read, flexWrap: 'wrap' },
+  /** Time and date on one baseline, the pair reading as a single "when it is now, there". */
+  whenRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.rows, marginTop: 2 },
+  /**
+   * 22, against `moneyLarge`'s 15.
+   *
+   * The second most useful fact on an execution surface was set two steps below the place names
+   * under it. It does not go higher: at 26 it would tie the lead, and the countdown has to win.
+   */
+  clock: { fontSize: 22, lineHeight: 26 },
   grow: { flex: 1 },
   block: { gap: Spacing.hair },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows, minHeight: 28 },
@@ -606,8 +866,5 @@ const styles = StyleSheet.create({
   // The name yields, never the badge. Both default to shrinking, and a six-letter label clipped
   // to "BOOK" at an accessibility size says nothing — where a truncated place name still does.
   firm: { flexShrink: 0 },
-  // The target is 44pt tall and only as wide as the words — a full-width tap zone on a screen
-  // this dense catches presses meant for the day beneath it.
-  ask: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   pressed: { opacity: 0.6 },
 });
