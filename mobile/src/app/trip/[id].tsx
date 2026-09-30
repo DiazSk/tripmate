@@ -43,6 +43,9 @@ import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/iti
 import { tripHealth, type Guardrail } from '@/lib/health';
 import { regionForStops } from '@/lib/mapRegion';
 import { loadTrip } from '@/lib/tripCache';
+import { todayInZone } from '@/lib/tripClock';
+import { openingDay } from '@/lib/tripPhase';
+import { todayISO } from '@/lib/tripsWall';
 
 export default function TripDetail() {
   const { id, ask } = useLocalSearchParams<{ id: string; ask?: string }>();
@@ -65,7 +68,30 @@ export default function TripDetail() {
   const [trip, setTrip] = useState<Trip | null | undefined>(undefined);
   /** `dayIndex:stopIndex` of the one expanded stop, or null. One at a time, like the Swift app. */
   const [emphasis, setEmphasis] = useState<string | null>(null);
-  const [day, setDay] = useState(0);
+  /**
+   * Which day is open — the one that is running, until the traveller says otherwise.
+   *
+   * **This opened on day 1 regardless, and that was wrong in the one case it matters.** Today's
+   * masthead is a link here, so on day 5 of a trip the way to "what have I already done" landed
+   * on the first day and asked for four taps forward. The same is true arriving from the Trips
+   * wall: a trip you are *on* should open where you are.
+   *
+   * Derived at render rather than stamped in an effect. `trip` arrives asynchronously, so the
+   * running day is not knowable at mount, and `setState` inside an effect is both a cascading
+   * render and the thing this project's lint rule rejects on sight — the same correction Home's
+   * `loaded` state records. `chosen` is null until the traveller picks a day, and from then on
+   * it wins: a screen that yanked itself back to today while you were reading Thursday would be
+   * a worse bug than the one this fixes.
+   *
+   * `?ask=` still outranks both. It is an explicit instruction from Today's "Plans changed?".
+   */
+  const [chosen, setChosen] = useState<number | null>(null);
+  const runningDay = useMemo(
+    () => (trip ? openingDay(trip, todayInZone(trip.timezone) ?? todayISO()) : 0),
+    [trip]
+  );
+  const day = chosen ?? (opensOnAsk ? askedDay : runningDay);
+  const setDay = setChosen;
   /**
    * Which face you are reading, for the whole trip rather than per day.
    *

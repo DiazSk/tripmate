@@ -1,6 +1,6 @@
 import type { TripSummary } from '@/api/types';
 
-import { dayIndexFor, pickCurrent, tripPhase } from './tripPhase';
+import { dayIndexFor, openingDay, pickCurrent, tripPhase } from './tripPhase';
 import { isUpcoming } from './tripsWall';
 
 const trip = (id: string, startDate: string, endDate: string): TripSummary => ({
@@ -89,4 +89,24 @@ test('an eve is picked when nothing is running', () => {
 test('nothing running and nothing tomorrow is null, not a guess', () => {
   expect(pickCurrent([lisbon, jaipur, zurich], '2026-09-28')).toBeNull();
   expect(pickCurrent([], '2026-10-23')).toBeNull();
+});
+
+describe('openingDay', () => {
+  const trip = { startDate: '2026-09-28', endDate: '2026-10-02' };
+
+  // The defect this replaces: `trip/[id]` hardcoded 0, so Today's masthead — the route to "what
+  // have I already done" — landed four days behind on day 5.
+  it('opens on the day that is running, not the first one', () => {
+    expect(openingDay(trip, '2026-09-28')).toBe(0);
+    expect(openingDay(trip, '2026-09-30')).toBe(2);
+    expect(openingDay(trip, '2026-10-02')).toBe(4);
+  });
+
+  // Every other phase genuinely wants day one: before departure it is what you are about to do,
+  // afterwards it is where a reread starts, and on the eve the day that matters *is* day 0.
+  it('opens on the first day whenever the trip is not running', () => {
+    expect(openingDay(trip, '2026-09-27')).toBe(0); // eve
+    expect(openingDay(trip, '2026-09-01')).toBe(0); // upcoming
+    expect(openingDay(trip, '2026-12-25')).toBe(0); // past
+  });
 });
