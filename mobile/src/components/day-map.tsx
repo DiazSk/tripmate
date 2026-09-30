@@ -12,6 +12,9 @@ import { useHere } from '@/lib/here';
 import { travelSummary } from '@/lib/dayTravel';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
 
+/** Clear of the summary pill — see `mapPadding` below. */
+const MAP_INSET = { top: 72, right: 0, bottom: 0, left: 0 };
+
 /**
  * A day's stops, on a map.
  *
@@ -26,6 +29,22 @@ import { drawableStops, regionForStops } from '@/lib/mapRegion';
  * at no other time — **emphasis must never move it**, which is the specific bug the Swift app's
  * route overlay records avoiding: a map that jumps when you point at something makes it hard to
  * compare two stops.
+ *
+ * **Rotate and tilt are the reader's, and the compass comes with them.** They were disabled on
+ * the grounds that "the reference map is flat" and that keeping it flat is what let the Swift
+ * original's pitch-corrected distance calculations stay deleted. The first half is a preference
+ * and the second is not true here: nothing in `mobile/` reads the camera at all — `mapRegion.ts`
+ * is lat/lng arithmetic over the stops and never asks where the camera is standing. So flatness
+ * was protecting nothing, while costing the map every native control it has. `showsCompass`
+ * defaults true and is *adaptive* on iOS: hidden while the map points north, which is why
+ * turning it on was never the missing piece. Rotation is. It also brings this client into line
+ * with the web, which has carried a reset-north compass and a tilt slider all along.
+ *
+ * A day change undoes both on its own: `animateToRegion` takes a *region*, and a region has
+ * neither a heading nor a pitch, so the camera lands north-up and flat. Verified on the device —
+ * rotate and tilt day 1, tap day 2, and it is a plan view again with the compass gone. So a
+ * rotation is a look at one day rather than a state the reader has to undo, and no explicit
+ * `animateCamera` is needed.
  */
 export function DayMap({
   stops,
@@ -94,12 +113,30 @@ export function DayMap({
         // map mounts — a prompt asked before the reason for it is on screen, which is answered
         // "no" once and then forever. See `lib/here.ts`.
         showsUserLocation={here !== null}
+        // Android-only in effect — on iOS this is a Google Maps prop and Apple Maps ignores it,
+        // which is also why there is no locate button on iPhone to turn on. Gated identically:
+        // a button that raises the permission dialog is the same prompt by another route.
+        showsMyLocationButton={here !== null}
+        // Apple Maps only, and it appears during a zoom gesture rather than standing there. The
+        // cheapest answer to "is that walk actually ten minutes" that does not cost a tap.
+        showsScale
+        // **The compass lands where the summary already is.** Both platforms put their native
+        // controls in the top corners, and the pill above is centred at 90% width and wraps to
+        // two lines on a day like "8 stops · about 57 min transit · about 45 min walking" — so
+        // on a rotated day the compass would sit on top of it. `mapPadding` moves every native
+        // control inside the inset on both platforms, which is one prop rather than an
+        // Apple-only `compassOffset` plus an Android answer.
+        //
+        // It insets the *camera* too, and that is the better behaviour rather than a side
+        // effect: the pill has always been able to cover a stop, and framing the day below it
+        // means it no longer can.
+        //
+        // ponytail: a fixed 72 sized to a two-line pill at Default. A three-line summary at an
+        // accessibility size grows past it; give the pill an `onLayout` and feed its height back
+        // if that turns up on a real trip.
+        mapPadding={MAP_INSET}
         // Defaults to white, and would flash against the near-black canvas on every first draw.
         loadingBackgroundColor={Colors.canvas}
-        // The reference map is flat. Keeping it flat is also what lets every pitch-corrected
-        // distance calculation in the Swift original stay deleted.
-        rotateEnabled={false}
-        pitchEnabled={false}
         // Android otherwise puts Google's own directions buttons over the map on a marker press.
         toolbarEnabled={false}>
         {/* No `onPress` on the map, and that is deliberate twice over. A marker press bubbles to
