@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { locationNote } from '@shared/evidence';
 import { aboutDuration } from '@shared/travelTime';
 
 import { PillButton } from '@/components/form';
@@ -225,6 +226,7 @@ function NowAndAfter({
   const stop = stops[index];
   const leg = dayLegs(stops).find((l) => l.toIndex === index);
   const after = stops.slice(index + 1);
+  const where = locationNote(stop.located);
 
   // The facts under the lead, in the order somebody asks for them: when it starts, how far off
   // that is, how long the hop takes. One line, never a stack.
@@ -344,7 +346,25 @@ function NowAndAfter({
         </View>
 
         {state.kind !== 'free' && (stop.lat !== 0 || stop.lng !== 0) ? (
-          <OpenIn label="Directions" to={stop} name={stop.name} />
+          <>
+            <OpenIn label="Directions" to={stop} name={stop.name} />
+            {/* **Said only when the pin is a guess, and said here because this is where it is
+                acted on.** The day page prints `locationNote` on every expanded stop, including
+                the confirmed ones; on an execution surface a confirmation is not actionable and
+                its absence is. What changes what somebody does is being told, before they press
+                the jade button, that the coordinate it is about to hand to Maps is the
+                planner's estimate rather than a listing's — which for an area stop ("Lunch
+                around Alfama") it always is, and correctly so.
+
+                The sentence is the module's own. Rewording it here would be this screen
+                deciding what the evidence means, which is the second opinion `evidence.ts`
+                exists to prevent. */}
+            {where?.evidence === 'planner' ? (
+              <ThemedText type="caption" themeColor="muted" style={styles.beneath}>
+                {where.value}
+              </ThemedText>
+            ) : null}
+          </>
         ) : null}
 
         {state.kind === 'free' ? (

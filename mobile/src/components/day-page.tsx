@@ -13,7 +13,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
 import { formatDateline, weatherLine } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
-import { EVIDENCE_FOOTNOTE, locationNote } from '@shared/evidence';
+import { evidenceTags } from '@/lib/provenance';
+import { locationNote } from '@shared/evidence';
 import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
 import { formatMoney } from '@/lib/spend';
 
@@ -171,14 +172,6 @@ export function DayPage({
 
       <SpendBreakdown day={day} dayIndex={dayIndex} />
 
-      {/* **Said once, at the foot, rather than on every stop.** The prose is the planner's on
-          essentially every generated stop, so a per-stop disclaimer is a sentence repeated forty
-          times and read none — the reason Plan Health's coverage line sits above its findings
-          rather than beside each one. What varies stop to stop is the location, and that is
-          marked where it varies. */}
-      <ThemedText type="micro" themeColor="muted" style={styles.footnote}>
-        {EVIDENCE_FOOTNOTE}
-      </ThemedText>
     </ScrollView>
   );
 }
@@ -309,6 +302,14 @@ function StopRow({
 }) {
   const booked = stop.timeFlexibility === 'FIXED';
   const where = locationNote(stop.located);
+  // `Description:` rather than the field's own name, because the reader has just read a
+  // sentence, not a `note`. Joined on one line: two grey qualifiers stacked read as a block of
+  // caveats, and side by side they read as a footer.
+  const tags = evidenceTags(stop);
+  const provenance = [
+    tags.detail ? `Description: ${tags.detail}` : null,
+    tags.cost ? `Cost: ${tags.cost}` : null,
+  ].filter(Boolean);
   // `category` is stored lowercase ('food', 'entry') and was capitalised by the label step's
   // `textTransform`. Sentence case has to do it in the string, or the row reads "· food".
   const particulars = [stop.time, stop.durationLabel, sentence(stop.category)]
@@ -377,15 +378,26 @@ function StopRow({
               </ThemedText>
             ) : null}
 
-            {/* **What the pin is standing on.** The rest of this row is prose either way; the
-                coordinate is the one thing that was sometimes checked against a real listing and
-                sometimes not, and the reader cannot tell by looking. Only on the expanded stop —
-                a badge per row would put a caveat on a list somebody is scanning. Nothing at all
-                on a plan saved before this was recorded, because "estimated" would claim a check
-                failed when none ran. */}
+            {/* **What this stop is standing on, as a footer rather than a badge per line.**
+                Every fact here was in the same voice: a coordinate sometimes checked against a
+                real listing and sometimes not, a sentence that is the planner's on a generated
+                stop and the listing's own on a searched one, and a figure that is either an
+                estimate or a receipt. The reader could not tell by looking.
+
+                Only on the expanded stop — a caveat per row would put one on a list somebody is
+                scanning. Nothing at all where a plan predates the recording, because
+                "estimated" would claim a check failed when none ran.
+
+                `stopEvidence` decides all of it; this renders. It is the module's whole reason
+                for existing, and until now nothing called it. */}
             {where ? (
               <ThemedText type="caption" themeColor="muted">
                 {where.value}
+              </ThemedText>
+            ) : null}
+            {provenance.length > 0 ? (
+              <ThemedText type="caption" themeColor="muted">
+                {provenance.join('  ·  ')}
               </ThemedText>
             ) : null}
 
@@ -651,7 +663,6 @@ function sentence(word: string | undefined): string | undefined {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: Spacing.regular * 2 },
-  footnote: { paddingHorizontal: Spacing.read, paddingTop: Spacing.rows },
 
   head: { paddingHorizontal: Spacing.read, paddingTop: Spacing.read, gap: Spacing.hair },
   // The overline and the weather share a line: they are the two facts you check before leaving,

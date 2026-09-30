@@ -128,9 +128,13 @@ const SCENARIOS: { id: ScenarioId; label: string; stops: () => Stop[] }[] = [
   {
     id: 'upcoming',
     label: 'Upcoming',
+    // **The next stop is `located: 'model'` here, and that is the point of this arm now.** It is
+    // the only scenario whose subject carries an unverified coordinate, so it is the only one
+    // that prints the provenance line under Directions — every other stop defaults to `'osm'`
+    // and correctly says nothing.
     stops: () => [
       stop('Fushimi Inari Shrine', -90, { lat: 34.9671, lng: 135.7727 }),
-      stop('Kiyomizu-dera Temple', 70, KYOTO.kiyomizu),
+      stop('Lunch around Gion', 70, KYOTO.higashiyama, { located: 'model' }),
       stop('Nishiki Market', 180, KYOTO.nishiki),
     ],
   },
