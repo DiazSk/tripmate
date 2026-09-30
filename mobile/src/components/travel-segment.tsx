@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { Stop } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { leaveBy } from '@/lib/dayTravel';
 
 /**
@@ -65,9 +65,7 @@ function Segment({
 
   const line = (
     <View style={styles.segment}>
-      <View style={styles.gutter}>
-        <View style={styles.rule} />
-      </View>
+      <View style={styles.gutter} />
       <View>
         <ThemedText type="micro" themeColor="muted">
           {mode} · about {minutes} min
@@ -110,8 +108,17 @@ const MODE: Record<string, string> = {
   drive: 'Drive',
 };
 
-/** The disc is 26 wide with a 13 gap; the rule runs down its centre so the segment reads as the
- *  line between two numbered stops rather than as a row of its own. */
+/**
+ * The disc is 26 wide with a 13 gap. The gutter is an empty spacer of that width, so the leg's
+ * text starts on the same column as the stop names it sits between.
+ *
+ * **It held a vertical rule, and the rule could not do its job.** A connector has to reach the
+ * disc above and the disc below, and both of those live in `StopRow`, outside this component and
+ * behind its `paddingVertical` — so the line stopped 11pt short at the top and 22pt short at the
+ * bottom and read as a stray fragment rather than a thread. Drawing it properly means the two
+ * stop rows rendering their own half, which is three components to say what the indent already
+ * says. Same conclusion, and for the same reason, as the spine dropped from Today.
+ */
 const DISC = 26;
 
 const styles = StyleSheet.create({
@@ -124,5 +131,4 @@ const styles = StyleSheet.create({
   },
   gutter: { width: DISC, alignItems: 'center' },
   leave: { marginTop: 1 },
-  rule: { width: StyleSheet.hairlineWidth, height: 18, backgroundColor: Colors.cardBorder },
 });
