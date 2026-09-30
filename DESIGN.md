@@ -331,6 +331,55 @@ rationed rather than decorative.
   the positive chip gets its green back — under the previous single-accent rule it had to give it up,
   and a positive chip and a neutral chip were indistinguishable.
 
+### The light appearance (mobile, 2026-09-30)
+
+A **token-level prototype behind a flag**, defaulting to dark, in `mobile/src/constants/palette.ts`.
+It exists because "no light mode" was never a rule here: it appeared only in
+`docs/design-board/REVIEW-PROMPT.md`, written for outside reviewers, and a comment in `theme.ts`
+cited this document for it — which this document did not say.
+
+**It is total or it is nothing.** `--postcard-paper` was an opaque cream surface backing My
+Memories, and it was deleted because a visitor crossing from dark translucent slate to tilted cream
+stationery in one click read it as a different application. That is the strongest evidence here on
+the subject, and it argues against a *partial* light appearance rather than against a light one.
+
+**It is the same two anchors swapped, not a second design.** Paper is dark's `{colors.foreground}`;
+ink is dark's `{colors.canvas}`. Ink on paper therefore measures 17.33:1, the identical figure
+dark ships, and no grey is sampled anywhere. Muted Paper becomes the ink at 62%, for its own stated
+reason.
+
+**One Slate survives literally.** Every light panel, pill and bar is still the one slate, at a ramp
+mirrored by **perceptual step** rather than by alpha — 2.7% / 3.5% / 3.9% / 4.7% over paper against
+0.55 / 0.62 / 0.72 / 0.82 over the ground, which lands within 0.4 ΔL\* of dark's own ladder at every
+rung. Mirroring the alpha instead would put 62% slate over paper, which is a dark grey card rather
+than a surface one step in. Effectively opaque at those alphas, which is the "warm opaque surfaces"
+a fourth reviewer asked for, arrived at without leaving the rule.
+
+**Only the three roles move, and only in lightness.** Jade, gold and coral as shipped measure 2.15,
+1.62 and 3.17 as ink on paper. The darkened cuts are `#245E48` (6.97), `#886019` (5.17) and
+`#AE3F2C` (5.44) — hues at 157.2° / 38.4° / 8.8° against the originals' 156.8° / 39.7° / 8.0°, so
+jade stays inside `ACCENT_HUE_BAND` and nothing the map does is affected. The soft tints keep their
+**shipped hex** at a new alpha, so "no new accent colours" holds literally for tints too.
+
+**Two Foregrounds survives by inverting, and its reasoning gets sharper.** A paper-coloured ink on a
+jade fill standing on a paper canvas is letters the colour of the page behind them, so the light
+`{colors.accent-foreground}` is a jade-tinted near-white (`#EAFAF4`): the fill's own hue carried
+into its ink. **The rule is the relationship, not the polarity** — and `{colors.on-deep}` is the one
+that does not move.
+
+**What does not change, and why.** The photograph stays dark in both appearances; the map is
+map-native and already outside this palette; `RouteDayCore`, `RouteDayGlow` and `DiscInk` are
+untouched. That makes `--on-deep` load-bearing for the first time rather than a synonym — anything
+standing on a photograph or on the map keeps paper ink and a dark material in both appearances.
+**The emphasised stop disc belongs to that group too**, and did not until it was measured: it is the
+one mark that borrows the action colour, so under paper it became `DiscInk` on `#245E48` at 2.49:1
+against 7.50 in dark. A map mark standing beside four day cores that do not move must not move.
+
+**Named gaps, not bugs.** `app.json` still pins `userInterfaceStyle: "dark"` so the flag ships
+inert, which leaves the keyboard, the native date picker, the tab bar's system materials and the
+splash dark under the light appearance. Closing that costs a prebuild and belongs to a commitment
+rather than to a look.
+
 ### Tertiary (map-native, outside the interface palette)
 These are the route's own colours. They are **not** part of the interface palette and must never
 appear in a panel, chip or button — the globe gets its own colours because it is photography, not a
