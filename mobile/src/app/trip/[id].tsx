@@ -159,6 +159,7 @@ export default function TripDetail() {
    * is the traveller finding out at the tram stop.
    */
   const [touched, setTouched] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const findings = useMemo(
     () => health?.dimensions.flatMap((dimension) => dimension.findings) ?? [],
     [health]
@@ -195,22 +196,47 @@ export default function TripDetail() {
     [trip]
   );
 
+  /**
+   * An optimistic write, rolled back **and explained** when the server refuses it.
+   *
+   * Every writer here already put the old object back, so nothing was ever lied about. What they
+   * could not do is say so: a control that flips and reverts with no reason reads as a broken app
+   * rather than a stated limit. That argument was already written down one function below, about
+   * the offline case — this is the same argument, and it was never extended to the case where the
+   * request actually goes out and comes back a no.
+   *
+   * **A refusal is ordinary, not exotic.** `PATCH /api/trips/[id]` is scoped to `writableOwners`,
+   * and answers 404 — deliberately not 403, so an unreadable trip is indistinguishable from one
+   * that is not there — for anyone else. A trip reached on a device that does not own it therefore
+   * fails *every* write, and before this the traveller saw a value snap back and nothing at all.
+   * Measured against the running dev server: a PATCH carrying a foreign owner header is a 404.
+   *
+   * `console.warn` was not a substitute. It reaches a developer with a debugger open, which is the
+   * one reader who did not need telling.
+   */
+  async function commit(next: Itinerary, what: string): Promise<boolean> {
+    if (!trip) return false;
+    const previous = trip;
+    setTouched(true);
+    setTrip({ ...trip, itinerary: next });
+    if (await updateTripItinerary(trip.id, next)) {
+      setSaveError(null);
+      return true;
+    }
+    setTrip(previous);
+    setSaveError(`${what} did not save — the change has been put back.`);
+    return false;
+  }
+
   async function applyRepair(days: DayPlan[], label: string) {
-    // Both writers below already roll back a failed save, so nothing is ever lied about. What
-    // they cannot do is explain themselves: offline the change flashes and reverts, which reads
-    // as the app being broken. Refusing before the optimistic update, with the banner above
-    // saying why, is the difference between a stated limit and a glitch.
+    // Refusing before the optimistic update, with the offline banner saying why, is the
+    // difference between a stated limit and a glitch. `commit` covers the other direction:
+    // online, but turned down.
     if (!trip || offline) return;
     const previous = trip.itinerary;
     const next = { ...previous, days };
-    setTouched(true);
-    setTrip({ ...trip, itinerary: next });
     chat.remember(previous, diffItineraries(previous, next).days);
-    const saved = await updateTripItinerary(trip.id, next);
-    if (!saved) {
-      setTrip({ ...trip, itinerary: previous });
-      console.warn(`"${label}" did not save`);
-    }
+    await commit(next, `"${label}"`);
   }
 
   /**
@@ -239,7 +265,6 @@ export default function TripDetail() {
     costState: CostState | undefined
   ) {
     if (!trip || offline) return;
-    const previous = trip;
     const next: Itinerary = {
       ...trip.itinerary,
       days: trip.itinerary.days.map((plan, di) =>
@@ -253,14 +278,14 @@ export default function TripDetail() {
             }
       ),
     };
-    setTouched(true);
-    setTrip({ ...trip, itinerary: next });
-    if (!(await updateTripItinerary(trip.id, next))) setTrip(previous);
+    await commit(next, 'That cost');
   }
 
   async function toggleLock(dayIndex: number, stopIndex: number) {
     if (!trip || offline) return;
-    const previous = trip;
+    // Read before the map below flips it, so the message names what was asked for rather than
+    // what the rolled-back plan ended up holding.
+    const wasBooked = trip.itinerary.days[dayIndex]?.stops[stopIndex]?.timeFlexibility === 'FIXED';
     const next: Itinerary = {
       ...trip.itinerary,
       days: trip.itinerary.days.map((plan, di) =>
@@ -282,9 +307,7 @@ export default function TripDetail() {
             }
       ),
     };
-    setTouched(true);
-    setTrip({ ...trip, itinerary: next });
-    if (!(await updateTripItinerary(trip.id, next))) setTrip(previous);
+    await commit(next, wasBooked ? 'Unlocking that stop' : 'Marking that stop booked');
   }
 
   function closeSheet() {
@@ -462,6 +485,28 @@ export default function TripDetail() {
             </View>
           ) : null}
 
+          {/* **A refused write, said out loud.** Coral, because this is the alert sense the One
+              Meaning Rule reserves it for: something the traveller asked for cannot happen. It
+              sits in the same slot as the offline line above and never both at once — offline is
+              refused before the optimistic update, so a failure here is always the online kind.
+
+              An event rather than a state, so it does not linger like the banner above it: the
+              next write that succeeds clears it, and a tap dismisses it in the meantime. The live
+              region is what makes it reach a screen reader at all — the value the traveller just
+              typed snaps back somewhere further down the page, and nothing else announces. */}
+          {saveError ? (
+            <Pressable
+              style={styles.stale}
+              onPress={() => setSaveError(null)}
+              accessibilityRole="button"
+              accessibilityLiveRegion="polite"
+              accessibilityHint="Dismisses this message">
+              <ThemedText type="detail" themeColor="alert">
+                {saveError}
+              </ThemedText>
+            </Pressable>
+          ) : null}
+
           <EditBar
             pending={chat.pending !== null && !chat.visible}
             onReview={chat.open}
@@ -523,24 +568,17 @@ export default function TripDetail() {
         centre={centreOf(days[day]?.stops ?? [])}
         at={probe}
         onAdd={async (next, name) => {
-          const previous = trip;
-          setTouched(true);
-          // Optimistic, then rolled back on failure. The write is a whole-itinerary overwrite
-          // with no server-side transaction to undo, so the only honest recovery is to put the
-          // object we replaced back exactly as it was.
-          setTrip({ ...trip, itinerary: next });
-          const saved = await updateTripItinerary(trip.id, next);
-          if (saved) {
-            // Nothing in this app removes a stop, so before this an add was permanent short of
-            // asking the planner to undo it in words. The day is read off the diff rather than
-            // passed down: the sheet may add to a day other than the one being read, and the
-            // comparison already knows which one it was.
-            chat.remember(previous.itinerary, diffItineraries(previous.itinerary, next).days);
-            return true;
-          }
-          setTrip(previous);
-          console.warn(`Adding ${name} did not save`);
-          return false;
+          // The write is a whole-itinerary overwrite with no server-side transaction to undo, so
+          // the only honest recovery is to put the object we replaced back exactly as it was —
+          // which `commit` does, and now says out loud.
+          const previous = trip.itinerary;
+          if (!(await commit(next, `Adding ${name}`))) return false;
+          // Nothing in this app removes a stop, so before this an add was permanent short of
+          // asking the planner to undo it in words. The day is read off the diff rather than
+          // passed down: the sheet may add to a day other than the one being read, and the
+          // comparison already knows which one it was.
+          chat.remember(previous, diffItineraries(previous, next).days);
+          return true;
         }}
       />
 
