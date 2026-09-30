@@ -4,7 +4,7 @@ import MapView, { Marker, Polyline, type MapType } from 'react-native-maps';
 
 import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
-import { MapControls, PITCH_3D } from '@/components/map-controls';
+import { DIVE_ALTITUDE_M, MapControls, PITCH_3D } from '@/components/map-controls';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
@@ -69,13 +69,17 @@ export function DayMap({
    * two fingers, and a day change flies back to a region — which has no pitch — so a boolean
    * kept here would disagree with the map within two gestures. One `await` per press settles it.
    *
-   * **The altitude is computed, not read back.** `animateCamera({ pitch })` alone lets the
-   * altitude fall to a default; spreading `getCamera()` does not help either, because the
-   * altitude a region-framed map reports does not describe that framing — both were measured on
-   * the device, and both zoomed a four-stop Alfama day out to most of Lisbon. Pitch and
-   * region-framing are simply two different models in this library. So the button builds its own
-   * camera from the region it already has (`altitudeForRegion`), which is the only one of the
-   * three that keeps the day on screen.
+   * **The altitude is computed and then clamped, and the clamp is the load-bearing half.**
+   * `animateCamera({ pitch })` alone lets the altitude fall to a default; spreading
+   * `getCamera()` does not help either, because the altitude a region-framed map reports does
+   * not describe that framing. Both were measured, and both zoomed a four-stop Alfama day out
+   * to most of Lisbon. So the camera is built from the region this component already owns.
+   *
+   * That was still wrong on a *wide* day, and the report for it was exact: "it performs an
+   * upward vanishing animation and then shows 2D". **MapKit refuses pitch above roughly a
+   * kilometre and a half** and returns a plan view without saying so — so a day spanning
+   * kilometres computed a high altitude, the camera rose to it, and the tilt was silently
+   * declined. `DIVE_ALTITUDE_M` is the ceiling; a day already closer keeps its own altitude.
    */
   async function toggle3D() {
     const camera = await map.current?.getCamera();
@@ -97,7 +101,7 @@ export function DayMap({
         center: camera.center,
         heading: camera.heading,
         pitch: PITCH_3D,
-        altitude: altitudeForRegion(region),
+        altitude: Math.min(altitudeForRegion(region), DIVE_ALTITUDE_M),
       },
       { duration: Motion.settle },
     );
@@ -113,7 +117,7 @@ export function DayMap({
         center: { latitude: here.lat, longitude: here.lng },
         heading: camera.heading,
         pitch: camera.pitch,
-        altitude: altitudeForRegion(region),
+        altitude: Math.min(altitudeForRegion(region), DIVE_ALTITUDE_M),
       },
       { duration: Motion.settle },
     );

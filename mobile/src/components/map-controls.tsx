@@ -7,7 +7,17 @@ import type { MapType } from 'react-native-maps';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Motion, Radius, Spacing } from '@/constants/theme';
 
-/** The pitch a 3D press flies to. Apple's own button lands near here. */
+/**
+ * The altitude a 3D press dives to, and the pitch it lands at.
+ *
+ * **1200m is not a taste, it is a ceiling MapKit enforces.** Above roughly a kilometre and a
+ * half MapKit refuses pitch outright and quietly returns a plan view — which is what "it flies
+ * up and then shows 2D" was: a wide day computed a high altitude, the camera rose to it, and the
+ * tilt was declined with no error. The same 1200m appears in this repo's web client for the same
+ * job (`flyToStoryStop`), chosen there because it wants facades and a horizon rather than a plan
+ * view. A day already closer than this keeps its own altitude; the clamp only stops it rising.
+ */
+export const DIVE_ALTITUDE_M = 1200;
 export const PITCH_3D = 55;
 
 /**
@@ -18,29 +28,29 @@ export const PITCH_3D = 55;
  * `mutedStandard`. `terrain` is Android-only, and the two `*Flyover` types are `satellite` and
  * `hybrid` with 3D scenery — which the 3D button reaches anyway, without a second row.
  */
-const MODES: { type: MapType; label: string }[] = [
-  { type: 'mutedStandard', label: 'Map' },
-  { type: 'satellite', label: 'Satellite' },
-  { type: 'hybrid', label: 'Hybrid' },
+const MODES: { type: MapType; label: string; hint: string }[] = [
+  { type: 'mutedStandard', label: 'Map', hint: 'Streets and places' },
+  { type: 'satellite', label: 'Satellite', hint: 'Photography, no labels' },
+  { type: 'hybrid', label: 'Hybrid', hint: 'Photography with names' },
 ];
 
 /**
  * The map's own controls, in Apple Maps' arrangement and this app's material.
  *
- * **Placement is Apple's; the material is not, and that is the deliberate half.** Apple stacks a
- * 3D toggle bottom-left and a mode picker over a locate arrow on the right edge, and a reader who
- * uses Maps reaches for them there — copying the *position* is what makes them findable. Copying
- * the *look* would put white circles with iOS-blue glyphs on a screen whose whole argument is
- * that it was composed, so these are the one slate at `surfaceDeep` with jade ink: opaque like
- * the summary pill above them and for the same reason, because a translucent control with a
- * street name showing through it reads as a rendering fault.
+ * **Placement is Apple's; the material is not, and that is the deliberate half.** Apple stacks
+ * its 3D toggle at the bottom-left and puts the mode picker over the locate arrow as a single
+ * capsule on the right, both sitting low and roughly level with each other — a reader who uses
+ * Maps reaches there. Copying the *look* would put white circles with iOS-blue glyphs on a
+ * screen whose whole argument is that it was composed, so these are the one slate at
+ * `surfaceDeep` with jade ink, opaque like the summary pill for the same reason.
+ *
+ * **One capsule, no divider.** Apple draws the mode and locate buttons as one continuous pill,
+ * and the rule this shipped with was mine rather than theirs.
  *
  * **There is no Look Around button, and it is not an omission.** Apple's binoculars open
  * `MKLookAroundViewController`, which `react-native-maps` does not expose at any version — no
  * prop, no method, nothing. Reaching it means a native module and a config plugin, which means
- * leaving Expo Go, and `day-map.tsx` records Expo Go compatibility as load-bearing: it is what
- * lets this map work with no key and no development build. That is a platform decision, not a
- * map control.
+ * leaving Expo Go, and `day-map.tsx` records Expo Go compatibility as load-bearing.
  */
 export function MapControls({
   pitched,
@@ -56,35 +66,28 @@ export function MapControls({
   /** Absent until the location permission is already granted — see `lib/here.ts`. */
   onLocate?: () => void;
 }) {
-  const [menu, setMenu] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   return (
     <>
-      {/* Bottom-left, where Apple puts it. Text rather than a glyph, also Apple's call: "3D" is
-          shorter than any icon of it and needs no legend. */}
+      {/* **Labelled with the mode you will get, not the one you are in** — DESIGN.md:1323 says
+          so for the web's own toggle, and Apple's button agrees: it reads "3D" while the map is
+          flat. That also retires the jade edge this shipped with, because the word now carries
+          the state on its own. */}
       <Pressable
         onPress={onToggle3D}
         accessibilityRole="button"
-        accessibilityState={{ selected: pitched }}
         accessibilityLabel={pitched ? 'Switch to a flat map' : 'Tilt the map'}
-        style={({ pressed }) => [
-          styles.button,
-          styles.left,
-          pitched && styles.buttonOn,
-          pressed && styles.pressed,
-        ]}>
+        style={({ pressed }) => [styles.round, styles.left, pressed && styles.pressed]}>
         <ThemedText type="label" themeColor="accent">
-          3D
+          {pitched ? '2D' : '3D'}
         </ThemedText>
       </Pressable>
 
-      {/* Right edge: modes over locate, joined as one capsule with a rule between — Apple draws
-          them as a single object rather than two floating circles, and so does this. */}
       <View style={styles.right}>
         <Pressable
-          onPress={() => setMenu((was) => !was)}
+          onPress={() => setPicking(true)}
           accessibilityRole="button"
-          accessibilityState={{ expanded: menu }}
           accessibilityLabel="Choose a map style"
           style={({ pressed }) => [styles.stacked, pressed && styles.pressed]}>
           <SymbolView
@@ -102,7 +105,7 @@ export function MapControls({
             onPress={onLocate}
             accessibilityRole="button"
             accessibilityLabel="Centre on where you are"
-            style={({ pressed }) => [styles.stacked, styles.ruled, pressed && styles.pressed]}>
+            style={({ pressed }) => [styles.stacked, pressed && styles.pressed]}>
             <SymbolView
               name={{ ios: 'location.fill', android: 'my_location' }}
               tintColor={Colors.accent}
@@ -113,42 +116,85 @@ export function MapControls({
         ) : null}
       </View>
 
-      {menu ? (
+      {/* **A centred card, not a dropdown beside the button.** Apple presents map modes as a
+          titled sheet with a close control, and the reason holds here: choosing a style changes
+          the whole surface behind it, so the choice belongs in front of the map rather than
+          hanging off one corner of it. */}
+      {picking ? (
         <Animated.View
           entering={FadeIn.duration(Motion.respond)}
           exiting={FadeOut.duration(Motion.exit)}
-          style={styles.menu}>
-          {MODES.map((mode, index) => (
-            <Pressable
-              key={mode.type}
-              onPress={() => {
-                onMapType(mode.type);
-                setMenu(false);
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: mode.type === mapType }}
-              style={({ pressed }) => [
-                styles.mode,
-                index > 0 && styles.ruled,
-                mode.type === mapType && styles.buttonOn,
-                pressed && styles.pressed,
-              ]}>
-              <ThemedText type="detail" themeColor={mode.type === mapType ? 'accent' : 'foreground'}>
-                {mode.label}
+          style={styles.scrim}>
+          {/* The scrim dismisses, which is what a reader tries first. */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            accessibilityRole="button"
+            accessibilityLabel="Close map styles"
+            onPress={() => setPicking(false)}
+          />
+          <View style={styles.card}>
+            <View style={styles.cardHead}>
+              <ThemedText type="headingSmall" style={styles.cardTitle}>
+                Map style
               </ThemedText>
-            </Pressable>
-          ))}
+              <Pressable
+                onPress={() => setPicking(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close' }}
+                  tintColor={Colors.foreground}
+                  size={14}
+                  fallback={<Text style={styles.glyphFallback}>Close</Text>}
+                />
+              </Pressable>
+            </View>
+
+            {MODES.map((mode, index) => (
+              <Pressable
+                key={mode.type}
+                onPress={() => {
+                  onMapType(mode.type);
+                  setPicking(false);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mode.type === mapType }}
+                style={({ pressed }) => [
+                  styles.mode,
+                  index > 0 && styles.ruled,
+                  pressed && styles.pressed,
+                ]}>
+                <View style={styles.grow}>
+                  <ThemedText type="body">{mode.label}</ThemedText>
+                  <ThemedText type="detail" themeColor="muted">
+                    {mode.hint}
+                  </ThemedText>
+                </View>
+                {mode.type === mapType ? (
+                  <SymbolView
+                    name={{ ios: 'checkmark', android: 'check' }}
+                    tintColor={Colors.accent}
+                    size={16}
+                    fallback={<Text style={styles.glyphFallback}>✓</Text>}
+                  />
+                ) : null}
+              </Pressable>
+            ))}
+          </View>
         </Animated.View>
       ) : null}
     </>
   );
 }
 
-/** 44, the HIG minimum, and what Apple's own circles measure. */
+/** 44, the HIG minimum, and what Apple's own controls measure. */
 const SIZE = 44;
+/** Clear of the caption, which takes the bottom edge when a stop is emphasised. */
+const FLOOR = 76;
 
 const styles = StyleSheet.create({
-  button: {
+  round: {
     position: 'absolute',
     width: SIZE,
     height: SIZE,
@@ -160,42 +206,66 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
     overflow: 'hidden',
   },
-  // Clear of the caption, which takes the bottom edge when a stop is emphasised.
-  left: { left: Spacing.read, bottom: 76 },
+  left: { left: Spacing.read, bottom: FLOOR },
+  // **Bottom, level with the 3D button** — it sat at 46% of the height, which is nowhere Apple
+  // puts anything and left the two groups unrelated. A pill, not a rounded box: Apple's is
+  // fully round at both ends and this was `Radius.surface` by inattention.
   right: {
     position: 'absolute',
     right: Spacing.read,
-    // Apple sits this group above the midpoint rather than centred; measured off the reference.
-    top: '46%',
-    borderRadius: Radius.surface,
+    bottom: FLOOR,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.surfaceDeep,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
     overflow: 'hidden',
   },
   stacked: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
-  ruled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
-  /**
-   * **A jade edge, not a jade wash.** `accentWash` is an alpha, and setting it as
-   * `backgroundColor` *replaces* the opaque base rather than layering over it — so the chosen
-   * state became a translucent pane, which is invisible the moment the mode picker puts
-   * satellite imagery underneath. Seen on the device, not reasoned about: the 3D button
-   * disappeared into a photograph of Lisbon. The border keeps the fill opaque and says the same
-   * thing.
-   */
-  buttonOn: { borderColor: Colors.accent },
   pressed: { opacity: 0.7 },
-  menu: {
+
+  scrim: {
     position: 'absolute',
-    right: Spacing.read + SIZE + Spacing.tight,
-    top: '46%',
-    minWidth: 128,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${Colors.canvas}B8`,
+  },
+  card: {
+    width: '84%',
+    maxWidth: 360,
     borderRadius: Radius.surface,
     backgroundColor: Colors.surfaceDeep,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
     overflow: 'hidden',
   },
-  mode: { minHeight: SIZE, justifyContent: 'center', paddingHorizontal: Spacing.read },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: Spacing.read,
+    paddingRight: Spacing.tight,
+    paddingVertical: Spacing.tight,
+  },
+  cardTitle: { flex: 1 },
+  close: {
+    width: SIZE,
+    height: SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.pill,
+  },
+  mode: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.tight,
+    minHeight: 56,
+    paddingHorizontal: Spacing.read,
+    paddingVertical: Spacing.tight,
+  },
+  ruled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
+  grow: { flex: 1 },
   glyphFallback: { color: Colors.accent, fontSize: 11 },
 });
