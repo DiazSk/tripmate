@@ -43,7 +43,11 @@ describe('the summary over the map', () => {
   test('leads with the count, then the travel the map cannot draw', () => {
     const line = travelSummary(near);
     expect(line.startsWith('3 stops  ·  ')).toBe(true);
-    expect(line).toMatch(/min walking$/);
+    expect(line).toMatch(/about \d+ min walking$/);
+  });
+
+  test('gives a single stop no travel clause', () => {
+    expect(travelSummary([stop('Only', '1:00 PM', 38.7106, -9.1327)])).toBe('1 stop');
   });
 
   test('splits by mode, biggest first', () => {

@@ -1,4 +1,4 @@
-import { travelLegBetween } from '@shared/travelTime';
+import { aboutDuration, travelLegBetween } from '@shared/travelTime';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -21,6 +21,8 @@ import { leaveBy } from '@/lib/dayTravel';
  * there is no free transit router — so a badge would repeat the same word six times down one day
  * until nobody reads any of them. The hedge belongs in the sentence, which is also the voice the
  * rest of this app already uses for computed figures ("about 9 hours", "takes about 28 min").
+ * Since three other surfaces render the same arithmetic, the word is spelled once, in
+ * `aboutDuration`.
  *
  * No distance. Minutes are what somebody acts on, and printing kilometres next to them would
  * invite a units question the plan has no way to answer — a destination is free text, and nothing
@@ -68,7 +70,7 @@ function Segment({
       <View style={styles.gutter} />
       <View>
         <ThemedText type="micro" themeColor="muted">
-          {mode} · about {minutes} min
+          {mode} · {aboutDuration(`${minutes} min`)}
         </ThemedText>
         {open ? (
           <ThemedText type="micro" themeColor="foreground" style={styles.leave}>
