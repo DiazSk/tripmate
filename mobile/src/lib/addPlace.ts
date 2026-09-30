@@ -4,7 +4,7 @@ import type { TimeOfDay } from '@shared/timeOfDay';
 // The mode type lives with the rest of the wire shapes, not with the pricing function; this
 // app's own `api/types.ts` does not mirror it, there being nothing on a screen that took one
 // until now.
-import { travelLegBetween } from '@shared/travelTime';
+import { aboutDuration, travelLegBetween } from '@shared/travelTime';
 import type { TransportMode } from '@shared/types';
 
 import type { FoundPlace, Itinerary, Stop, StopCategory } from '@/api/types';
@@ -134,14 +134,18 @@ const MODE_WORD: Partial<Record<TransportMode, string>> = { walk: 'walking' };
  * The line under a slot's name: when it would land, and what it would cost.
  *
  * Three facts, and each earns its place only when it says something. A detour of zero is not
- * "+0 min", it is silence — the place is on the way, and the absence is the message.
+ * a figure at all, it is silence — the place is on the way, and the absence is the message.
+ *
+ * **"adds", not "+".** `+7 min` can be read three ways — seven minutes from some anchor, seven
+ * more than the current route, or seven added to total travel. The verb says which without
+ * needing the caption that used to carry it.
  */
 export function slotLine(time: string, tight: boolean, detour: Detour | null): string {
   return [
     time,
     tight ? 'tight fit' : '',
     detour && detour.minutes > 0
-      ? `+${detour.minutes} min ${(detour.mode && MODE_WORD[detour.mode]) || 'travel'}`
+      ? `adds ${aboutDuration(`${detour.minutes} min`)} ${(detour.mode && MODE_WORD[detour.mode]) || 'travel'}`
       : '',
   ]
     .filter(Boolean)

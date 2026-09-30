@@ -1,6 +1,6 @@
 import { formatDuration } from '@shared/format';
 import { formatClock, parseClock } from '@shared/itinerary';
-import { travelLegBetween } from '@shared/travelTime';
+import { aboutDuration, travelLegBetween } from '@shared/travelTime';
 import type { TransportMode } from '@shared/types';
 
 import type { Stop } from '@/api/types';
@@ -81,7 +81,7 @@ export function travelSummary(stops: Stop[]): string {
   const parts = [...byMode.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, MAX_MODES)
-    .map(([mode, minutes]) => `${formatDuration(minutes * 60)} ${MOVING[mode]}`);
+    .map(([mode, minutes]) => `${aboutDuration(formatDuration(minutes * 60))} ${MOVING[mode]}`);
 
   return [count, ...parts].join('  ·  ');
 }

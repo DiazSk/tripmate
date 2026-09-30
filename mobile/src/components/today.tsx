@@ -8,6 +8,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { aboutDuration } from '@shared/travelTime';
+
 import { PillButton } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
@@ -226,7 +228,7 @@ function NowAndAfter({
   const beneath = [
     stop.time,
     state.kind === 'upcoming' && !state.leaveBy ? `in ${describeGap(state.minutes)}` : null,
-    leg ? `${leg.minutes} min by ${leg.mode}` : null,
+    leg ? `${aboutDuration(`${leg.minutes} min`)} by ${leg.mode}` : null,
   ]
     .filter(Boolean)
     .join('  ·  ');

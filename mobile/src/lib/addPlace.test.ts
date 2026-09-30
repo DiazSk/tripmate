@@ -206,13 +206,19 @@ describe('the line under a slot', () => {
   });
 
   test('names the mode when both new legs agree, and stays vague when they do not', () => {
-    expect(slotLine('2:30 PM', false, { minutes: 7, mode: 'walk' })).toBe('2:30 PM  ·  +7 min walking');
-    expect(slotLine('2:30 PM', false, { minutes: 7, mode: 'transit' })).toBe('2:30 PM  ·  +7 min travel');
-    expect(slotLine('2:30 PM', false, { minutes: 7, mode: null })).toBe('2:30 PM  ·  +7 min travel');
+    expect(slotLine('2:30 PM', false, { minutes: 7, mode: 'walk' })).toBe(
+      '2:30 PM  ·  adds about 7 min walking'
+    );
+    expect(slotLine('2:30 PM', false, { minutes: 7, mode: 'transit' })).toBe(
+      '2:30 PM  ·  adds about 7 min travel'
+    );
+    expect(slotLine('2:30 PM', false, { minutes: 7, mode: null })).toBe(
+      '2:30 PM  ·  adds about 7 min travel'
+    );
   });
 
   // A place on the way costs nothing, and the absence of a figure is the message.
-  test('no detour is silence, not "+0 min"', () => {
+  test('no detour is silence, not "adds about 0 min"', () => {
     expect(slotLine('2:30 PM', false, { minutes: 0, mode: 'walk' })).toBe('2:30 PM');
   });
 });
