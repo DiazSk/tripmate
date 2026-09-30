@@ -103,8 +103,11 @@ prevent, one screen over.
 
 It becomes `Nothing noted` — the exact wording `dietaryValue` already returns in its
 equivalent branch, so the two hard-constraint rows finally agree. The docblock above it lists
-`No requirements` as an example and is updated with it. One helper, two surfaces (Review and
-Profile).
+`No requirements` as an example and is updated with it.
+
+*Corrected during execution:* one helper, **one** surface. `accessibilityValue` has a single
+caller, `plan/review.tsx:83`. The Profile tab imports `dietaryValue` and `interestsValue` only and
+never renders accessibility needs, so the "Review and Profile" written here was wrong.
 
 ## 3. DESIGN.md admits two things the app already does
 
@@ -139,11 +142,17 @@ risk in this item**: two capsules of equal shape can read as two actions of equa
 one is a mode toggle and the other is the way out. It is verified on device, and reported
 honestly if it reads wrong rather than being declared fixed.
 
-## 5. The address the app already has
+## 5. The address the app already has — WITHDRAWN, the premise was false
 
-`types.ts:524` declares `address?: string` and nothing renders it. A destination name is not
-enough when a traveller has to show a location to a taxi driver or a hotel desk, offline. It
-goes in the expanded stop, below the note, only when present.
+*Corrected during execution, 2026-09-29.* This section claimed `types.ts:524` declares
+`address?: string` and nothing renders it. The field is real but it is on **`FoundPlace`**, the
+add-place search result — not on `Stop` — and `add-place-sheet.tsx:345` already renders it. `Stop`
+has no address and never had one; `tsc` proved it (TS2339) the moment the task was attempted.
+
+The underlying want stands: a name is enough to read and not enough to hand a taxi driver, and
+that happens offline and under time pressure. But it needs the field added to `Stop` and populated
+at generation or by a POI lookup, which is data-model work belonging to the provenance/POI cycle
+below rather than a display fix. **The task was dropped rather than a field invented.**
 
 ## 6. Plan Health leads with the diagnosis
 

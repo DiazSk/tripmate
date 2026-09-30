@@ -141,7 +141,6 @@ function Dimension({ dimension }: { dimension: HealthDimension }) {
 const SEVERE: HealthKey[] = ['schedule', 'reservations', 'budget'];
 const isSevere = (key: HealthKey) => SEVERE.includes(key);
 
-
 /**
  * One word above a finding, so the list stops reading as eight equal sentences.
  *

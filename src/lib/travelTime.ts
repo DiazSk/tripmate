@@ -100,10 +100,16 @@ export function buildTravelLegs(
 /**
  * The one place the hedge on a travel figure is spelled.
  *
- * **Unconditional, and that is not an oversight.** `TravelLeg.estimated` is `true` on every leg
- * this module can produce — there is no router and no second path — so a helper that branched on
- * that flag would be machinery pretending to vary. The day a real router lands, this is where the
- * branch goes and `estimated` is what it reads.
+ * **Unconditional, because no caller has a flag to read.** All four call sites price their hop
+ * with `travelLegBetween`, which returns `{ mode, distanceKm, minutes }` and no `estimated` field
+ * — branching here is not pointless, it is impossible without changing that signature.
+ *
+ * It would be wrong to write that nothing is ever measured: `osrmRoute.ts` returns legs with
+ * `estimated: false`, `applyRealRoutes` is wired into the enrichment pipeline, and `TravelLeg`'s
+ * own docblock says a typical city day arrives with its short hops measured and its long ones
+ * estimated. **Those legs do not reach this helper.** The day a surface renders a real
+ * `TravelLeg`, this is where the branch goes and `estimated` is what it reads — and until then,
+ * hedging a measured OSRM figure would be the mistake this note exists to prevent.
  *
  * It takes an already-formatted duration rather than minutes because `travelSummary` renders long
  * totals through `formatDuration` as "1 hr 20 min"; a minutes-only helper would quietly regress

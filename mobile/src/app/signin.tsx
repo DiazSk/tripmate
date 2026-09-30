@@ -320,9 +320,16 @@ export default function SignInScreen() {
               {/* **A capsule, because it is an action sitting in content.** It was the second
                   half of a sentence — "New here? Create an account" — and half a sentence cannot
                   be a capsule, so the sentence goes. DESIGN.md's nav-bar exemption does not reach
-                  here: this is not a bar item or a row accessory, it is a control in prose. */}
+                  here: this is not a bar item or a row accessory, it is a control in prose.
+     
+                  **"instead", because the bare label collided with the button above it.** The
+                  deleted prefix ("Already have an account? ") was the only thing marking this as a
+                  mode switch. Without it, create mode showed `Create account` over `Sign in` —
+                  somebody who had filled in all three fields and pressed the lower one would
+                  silently flip the form rather than submit it. Both directions collide, so both
+                  carry the word. */}
               <PillButton
-                title={creating ? 'Sign in' : 'Create an account'}
+                title={creating ? 'Sign in instead' : 'Create an account instead'}
                 onPress={() => {
                   setCreating((v) => !v);
                   setError(null);
@@ -382,6 +389,7 @@ const styles = StyleSheet.create({
   blurb: { paddingTop: Spacing.tight },
   form: { paddingTop: Spacing.regular, gap: Spacing.read },
   hint: { paddingHorizontal: Spacing.hair },
-  // 44pt is the platform's minimum touch target; a text link is otherwise ~18pt tall.
-  secondary: { gap: Spacing.hair, alignItems: 'flex-start' },
+  // Both children are capsules that size to their own words — `PillButton` sets its own
+  // `alignSelf`, so this box only has to keep them a pair.
+  secondary: { gap: Spacing.hair },
 });
