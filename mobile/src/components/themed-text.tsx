@@ -85,12 +85,24 @@ const styles = StyleSheet.create({
   detail: { fontFamily: Fonts.sans, fontSize: 13, lineHeight: 19 },
   caption: { fontFamily: Fonts.sans, fontSize: 12, lineHeight: 17 },
   micro: { fontFamily: Fonts.sans, fontSize: 11, lineHeight: 15 },
+  /**
+   * 11, which is what DESIGN.md has said all along.
+   *
+   * The ratified label step is `0.6875rem` — 11px — and this shipped at 10, a drift nobody
+   * chose. At that size the tracked caps were the least legible thing in the app on the one
+   * screen read outdoors at arm's length, and they head every section on it.
+   *
+   * **Tracking moves with the size, because the token is an em.** `--tracking-label` is 0.18em:
+   * 1.8 was exactly that at 10px and would be 0.164em at 11, so it goes to 2. Getting this wrong
+   * is the mistake DESIGN.md's Tracking-Is-A-Token rule exists to stop — tracking belongs to the
+   * face and the size, so a size change invalidates the literal beside it.
+   */
   label: {
     fontFamily: Fonts.sans,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 1.8,
-    lineHeight: 12,
+    letterSpacing: 2,
+    lineHeight: 13,
     textTransform: 'uppercase',
   },
 
