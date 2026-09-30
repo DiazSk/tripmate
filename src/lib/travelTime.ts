@@ -96,3 +96,19 @@ export function buildTravelLegs(
   }
   return legs;
 }
+
+/**
+ * The one place the hedge on a travel figure is spelled.
+ *
+ * **Unconditional, and that is not an oversight.** `TravelLeg.estimated` is `true` on every leg
+ * this module can produce — there is no router and no second path — so a helper that branched on
+ * that flag would be machinery pretending to vary. The day a real router lands, this is where the
+ * branch goes and `estimated` is what it reads.
+ *
+ * It takes an already-formatted duration rather than minutes because `travelSummary` renders long
+ * totals through `formatDuration` as "1 hr 20 min"; a minutes-only helper would quietly regress
+ * that to "80 min".
+ */
+export function aboutDuration(duration: string): string {
+  return `about ${duration}`;
+}
