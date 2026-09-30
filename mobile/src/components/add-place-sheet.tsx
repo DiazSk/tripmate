@@ -256,19 +256,26 @@ function SheetBody({
               style={[styles.result, index > 0 && styles.resultRuled]}
               android_ripple={{ color: Colors.pressed }}>
               <ThemedText type="heading">{place.name}</ThemedText>
+              {/* Where it would land and what it would cost, *before* the row is opened. The card
+                  behind this row opens on exactly these two defaults, and says the same sentence
+                  through the same function — so this is a preview of the answer rather than a
+                  second estimate of it. Paper rather than jade: it outranks the muted line below
+                  it because it is the only one about *this trip*, but it is a fact and not a
+                  control, and jade in this product means press me.
+
+                  **It goes directly under the name, above the map's own facts about the place.**
+                  A review read these rows as one texture: category, opening-hours grammar and
+                  street came first and were the least decidable thing on them, while the two
+                  figures that answer "where would this go and what does it cost me" sat beneath.
+                  The weights were already right — paper over muted — and the order was not, which
+                  is a cheaper fix than any change of type. */}
+              <ThemedText type="label" themeColor="foreground" style={styles.resultMeta}>
+                {landingLine(itinerary, dayIndex, place)}
+              </ThemedText>
               {/* The same line the stop will carry once it is added, rather than a second summary
                   written to a different rule — so what you read here is what lands in the day. */}
               <ThemedText type="label" themeColor="muted" style={styles.resultMeta}>
                 {describePlace(place)}
-              </ThemedText>
-              {/* Where it would land and what it would cost, *before* the row is opened. The card
-                  behind this row opens on exactly these two defaults, and says the same sentence
-                  through the same function — so this is a preview of the answer rather than a
-                  second estimate of it. Paper rather than jade: it outranks the muted line above
-                  it because it is the only one about *this trip*, but it is a fact and not a
-                  control, and jade in this product means press me. */}
-              <ThemedText type="label" themeColor="foreground" style={styles.resultMeta}>
-                {landingLine(itinerary, dayIndex, place)}
               </ThemedText>
             </Pressable>
           ))}
