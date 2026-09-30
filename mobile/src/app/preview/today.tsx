@@ -97,7 +97,7 @@ const stop = (
     ...extra,
   }) as Stop;
 
-type ScenarioId = 'imminent' | 'upcoming' | 'free' | 'first' | 'done';
+type ScenarioId = 'late' | 'imminent' | 'upcoming' | 'free' | 'first' | 'done';
 
 const SCENARIOS: { id: ScenarioId; label: string; stops: () => Stop[] }[] = [
   {
@@ -109,6 +109,19 @@ const SCENARIOS: { id: ScenarioId; label: string; stops: () => Stop[] }[] = [
       stop('Fushimi Inari Shrine', -70, { lat: 34.9671, lng: 135.7727 }),
       stop('Kiyomizu-dera Temple', 25, KYOTO.kiyomizu),
       stop('Lunch in Higashiyama', 110, KYOTO.higashiyama, { timeFlexibility: 'FIXED', located: 'model' }),
+      stop('Nishiki Market', 200, KYOTO.nishiki),
+    ],
+  },
+  {
+    id: 'late',
+    label: 'Late',
+    // **The only state that draws coral.** The stop is still ahead — `nextStop` keys on start
+    // time — but it is nearer in the clock than the leg is long, so its departure is already
+    // behind us, and it is booked. A flexible stop in the same position stays `imminent` in
+    // paper; the gate is the commitment, not the lateness.
+    stops: () => [
+      stop('Fushimi Inari Shrine', -70, { lat: 34.9671, lng: 135.7727 }),
+      stop('Kiyomizu-dera Temple', 5, KYOTO.kiyomizu, { timeFlexibility: 'FIXED' }),
       stop('Nishiki Market', 200, KYOTO.nishiki),
     ],
   },

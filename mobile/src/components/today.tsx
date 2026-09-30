@@ -244,20 +244,35 @@ function NowAndAfter({
    *
    * `verb` is null where the place itself is the lead and there is nothing to stress against.
    */
+  //
+  // **`late` is first, and that ordering is load-bearing.** It carries `leaveBy: string` like
+  // `upcoming` does, so a `late` state placed anywhere after the `state.leaveBy` arm falls
+  // silently into "Leave by" — with no type error, because the field genuinely is there, and no
+  // exhaustiveness check to catch it. Verified: `tsc` passed on the commit that added the arm
+  // and left this ternary untouched.
   const lead: { verb: string | null; figure: string; tone: 'foreground' | 'alert' } =
-    state.kind === 'free'
-      ? { verb: 'Free for about', figure: describeGap(state.minutes), tone: 'foreground' }
-      : state.kind === 'imminent'
-        ? // **"Leave in 0 min" is not a thing anyone says.** `describeGap` is right to return it —
-          // it formats a duration and zero is a duration — but at the moment the departure lands
-          // the sentence stops being about how long is left and becomes an instruction. Verb
-          // only, so the whole phrase carries the alert rather than a nothing-figure beside it.
-          state.minutes === 0
-          ? { verb: null, figure: 'Leave now', tone: 'alert' as const }
-          : { verb: 'Leave in', figure: describeGap(state.minutes), tone: 'alert' as const }
-        : state.leaveBy
-          ? { verb: 'Leave by', figure: state.leaveBy, tone: 'foreground' }
-          : { verb: null, figure: stop.name, tone: 'foreground' };
+    state.kind === 'late'
+      ? // The one arm that is genuinely coral. Verb only: at this point the sentence is an
+        // instruction, and the figure below says how far past the moment you are.
+        { verb: null, figure: 'Leave now', tone: 'alert' as const }
+      : state.kind === 'free'
+        ? { verb: 'Free for about', figure: describeGap(state.minutes), tone: 'foreground' }
+        : state.kind === 'imminent'
+          ? // **"Leave in 0 min" is not a thing anyone says.** `describeGap` is right to return
+            // it — it formats a duration and zero is a duration — but at the moment the
+            // departure lands the sentence stops being about how long is left and becomes an
+            // instruction. Verb only, so the whole phrase carries the lead rather than a
+            // nothing-figure beside it.
+            //
+            // **Paper, not coral.** A departure that is merely due is not a failure, and One
+            // Meaning reserves coral for what cannot happen. This fired every single day, which
+            // is how a colour stops being read.
+            state.minutes === 0
+            ? { verb: null, figure: 'Leave now', tone: 'foreground' as const }
+            : { verb: 'Leave in', figure: describeGap(state.minutes), tone: 'foreground' as const }
+          : state.leaveBy
+            ? { verb: 'Leave by', figure: state.leaveBy, tone: 'foreground' }
+            : { verb: null, figure: stop.name, tone: 'foreground' };
 
   return (
     <View style={styles.spine}>
@@ -285,7 +300,7 @@ function NowAndAfter({
 
       <Node
         state="now"
-        tone={state.kind === 'imminent' ? 'alert' : 'accent'}
+        tone={state.kind === 'late' ? 'alert' : 'accent'}
         last={after.length === 0}>
         <View style={styles.subjectRow}>
           <View style={styles.subjectText}>
@@ -307,6 +322,18 @@ function NowAndAfter({
             {state.kind !== 'free' && beneath ? (
               <ThemedText type="detail" themeColor="muted" style={styles.beneath}>
                 {beneath}
+              </ThemedText>
+            ) : null}
+
+            {/* **The only coral sentence on this screen, and it says what cannot happen.**
+                "Leave now" above is an instruction; this is the reason it is urgent, and it is
+                the half a reader needs to decide what to do about it. Stated rather than
+                implied, because the whole difference between this state and an ordinary
+                departure is that a commitment is involved — and the commitment is the
+                traveller's own, which is why it outranks the plan's estimate of the hop. */}
+            {state.kind === 'late' ? (
+              <ThemedText type="detail" themeColor="alert" style={styles.beneath}>
+                {`Booked for ${stop.time} — ${describeGap(state.minutes)} past the departure`}
               </ThemedText>
             ) : null}
           </View>
