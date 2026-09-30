@@ -103,7 +103,15 @@ export function DayPage({
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <DayMasthead day={day} dayIndex={dayIndex} dayCount={dayCount} destination={destination} />
+      <DayHead day={day} dayIndex={dayIndex} dayCount={dayCount} />
+
+      {/* **No trailing total.** `spend-breakdown` prints `daySpend(day)` at the foot of this
+          same screen, and its own note has the argument: a day's total "is a summary of what you
+          have just read, so it cannot come before it." That copy also sat directly above the
+          first stop, which made it the gold mark competing hardest with the content. */}
+      <View style={styles.slot}>
+        <SectionRule label="The day" />
+      </View>
 
       {groups.map((group, groupIndex) => (
         <View key={group.label ?? `group-${groupIndex}`}>
@@ -159,6 +167,8 @@ export function DayPage({
         </View>
       ) : null}
 
+      <DayPlate day={day} destination={destination} />
+
       <SpendBreakdown day={day} dayIndex={dayIndex} />
 
       {/* **Said once, at the foot, rather than on every stop.** The prose is the planner's on
@@ -174,89 +184,94 @@ export function DayPage({
 }
 
 /**
- * The day's masthead: a photograph with the measured scrim, the dateline set into it.
+ * What the day is, in as little height as it can be said in.
  *
- * Only large type and tracked caps ride the picture — the Photograph-Is-Not-A-Surface rule. The
- * weather badge is a slate pill rather than bare text for the same reason: small type over a
- * photograph is only apparently safe.
+ * **The photograph used to be here, and the first stop was the sixth thing on the screen.** The
+ * trip chrome above this — title, date range, day chips, List/Map, the budget bar — already
+ * runs to about 264pt on a 402pt device. A 16:9 full-bleed picture adds 226 more, and the
+ * introduction another 70, so on the screen this app is read on in a street the first stop
+ * arrived at roughly 600pt of an 874pt display: visible, barely, and only if nothing above it
+ * wrapped. Three separate reviewers reported the day screen as chrome-first. It was.
  *
- * **The photograph is the destination's, and a per-day one was tried and measured away.** Paging
- * days made the repeated picture look inert — swipe, and the largest thing on screen does not
- * move — so the masthead was switched to the day's first stop. Then the hit rate was measured
- * across every saved trip: **2 of 14 days**. Not close, and not random. The model names stops the
- * way a person would say them rather than the way an encyclopaedia titles them ("Fushimi Inari"
- * against "Fushimi Inari-taisha"), and a day's first stop is very often transit or a meal — "Tram
- * 15E to Belém", "Breakfast at Manteigaria" — which will never have an article. Widening to *any*
- * stop in the day scored identically: 12 of 14 days have no photograph for any stop they name.
+ * So the picture goes to the foot (`DayPlate`) and what stays is the part that is *operational*:
+ * which day of how many, what the day is for, and the weather, which decides what you put on
+ * before you leave. The date itself does not stay — the day chips directly above this carry it,
+ * and `22 THU` under `OCT 22 – 28` is the same fact twice. That is the argument `Today`'s header
+ * already makes about the clock.
  *
- * So the destination photograph stays, because it is the one that actually resolves. What changes
- * on a swipe is the dateline, the overline, the day chip, the summary and every row beneath.
+ * The weather comes out of its slate badge and becomes ordinary muted text, because the badge
+ * existed to survive a photograph and there is no longer one under it.
  */
-function DayMasthead({
-  day,
-  dayIndex,
-  dayCount,
-  destination,
-}: {
-  day: DayPlan;
-  dayIndex: number;
-  dayCount: number;
-  destination: string;
-}) {
+function DayHead({ day, dayIndex, dayCount }: { day: DayPlan; dayIndex: number; dayCount: number }) {
   const weather = weatherLine(day);
   return (
-    <View style={styles.masthead}>
-      <PlacePhoto
-        name={destination}
-        aspectRatio={16 / 9}
-        // Square, because it now touches both screen edges — a radius only reads as a corner
-        // when there is page beside it to be a corner against.
-        radius={0}
-        scrim={PhotoScrim}
-        style={styles.mastheadPhoto}>
-        {weather ? (
-          <View style={styles.weatherBadge}>
-            <ThemedText type="label" themeColor="foreground" numberOfLines={1}>
-              {weather}
-            </ThemedText>
-          </View>
-        ) : null}
-
-        <View style={styles.dateline}>
-          <ThemedText type="label" themeColor="foreground" style={styles.datelineOverline}>
-            {`Day ${dayIndex + 1} of ${dayCount}`}
-          </ThemedText>
-          <ThemedText type="display" numberOfLines={2}>
-            {formatDateline(day.date)}
-          </ThemedText>
-          {day.title ? (
-            <ThemedText type="detail" style={styles.datelineTitle}>
-              {day.title}
-            </ThemedText>
-          ) : null}
-        </View>
-      </PlacePhoto>
-
-      {day.theme ? (
-        <ThemedText type="heading" style={styles.theme}>
-          {day.theme}
+    <View style={styles.head}>
+      <View style={styles.headLine}>
+        <ThemedText type="label" themeColor="muted">
+          {`Day ${dayIndex + 1} of ${dayCount}`}
         </ThemedText>
-      ) : null}
+        {weather ? (
+          <ThemedText type="detail" themeColor="muted" numberOfLines={1} style={styles.headWeather}>
+            {weather}
+          </ThemedText>
+        ) : null}
+      </View>
+
+      {day.theme ? <ThemedText type="title">{day.theme}</ThemedText> : null}
 
       {day.summary ? (
-        <ThemedText type="detail" themeColor="muted" style={styles.summary}>
+        <ThemedText type="detail" themeColor="muted">
           {day.summary}
         </ThemedText>
       ) : null}
-
-      <View style={styles.slot}>
-        {/* **No trailing total.** `spend-breakdown` prints `daySpend(day)` at the foot of this
-            same screen, and its own note has the argument: a day's total "is a summary of what
-            you have just read, so it cannot come before it." This copy also sat directly above
-            the first stop, which made it the gold mark competing hardest with the content. */}
-        <SectionRule label="The day" />
-      </View>
     </View>
+  );
+}
+
+/**
+ * The day's photograph, as a closing plate rather than a masthead.
+ *
+ * Only large type and tracked caps ride the picture — the Photograph-Is-Not-A-Surface rule, and
+ * the dateline it carries is exactly that. It sits after the last thing you *do* with the day
+ * and before the money, which is where atmosphere can be spent without costing anything: the
+ * reader who came here to find their next stop has already found it.
+ *
+ * A band, not a frame: 21:9 rather than 16:9, so it closes the day rather than restating it at
+ * the weight a masthead has.
+ *
+ * **The photograph is the destination's, and a per-day one was tried and measured away.** Paging
+ * days made the repeated picture look inert — swipe, and the largest thing on screen does not
+ * move — so it was switched to the day's first stop. Then the hit rate was measured across every
+ * saved trip: **2 of 14 days**. Not close, and not random. The model names stops the way a person
+ * would say them rather than the way an encyclopaedia titles them ("Fushimi Inari" against
+ * "Fushimi Inari-taisha"), and a day's first stop is very often transit or a meal — "Tram 15E to
+ * Belém", "Breakfast at Manteigaria" — which will never have an article. Widening to *any* stop
+ * in the day scored identically: 12 of 14 days have no photograph for any stop they name.
+ *
+ * So the destination photograph stays, because it is the one that actually resolves. What changes
+ * on a swipe is the dateline, and every row above it.
+ */
+function DayPlate({ day, destination }: { day: DayPlan; destination: string }) {
+  return (
+    <PlacePhoto
+      name={destination}
+      aspectRatio={21 / 9}
+      // Square, because it touches both screen edges — a radius only reads as a corner when
+      // there is page beside it to be a corner against.
+      radius={0}
+      scrim={PhotoScrim}
+      style={styles.plate}>
+      <View style={styles.dateline}>
+        <ThemedText type="display" numberOfLines={2}>
+          {formatDateline(day.date)}
+        </ThemedText>
+        {day.title ? (
+          <ThemedText type="detail" style={styles.datelineTitle}>
+            {day.title}
+          </ThemedText>
+        ) : null}
+      </View>
+    </PlacePhoto>
   );
 }
 
@@ -638,30 +653,19 @@ const styles = StyleSheet.create({
   content: { paddingBottom: Spacing.regular * 2 },
   footnote: { paddingHorizontal: Spacing.read, paddingTop: Spacing.rows },
 
+  head: { paddingHorizontal: Spacing.read, paddingTop: Spacing.read, gap: Spacing.hair },
+  // The overline and the weather share a line: they are the two facts you check before leaving,
+  // and stacked they were two more rows above the list this pass exists to raise.
+  headLine: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
+  // Truncates rather than wrapping — a long fallback must not push the day's name down.
+  headWeather: { flex: 1, textAlign: 'right' },
   /**
    * **No gutter of its own — the photograph is the one thing here that spans the device.**
-   * A 16:9 frame inset 16pt each side and rounded is a picture *on* a page; edge to edge it is
-   * the page, which is the whole reason this screen opens on an image. The prose under it keeps
-   * the gutter, so the inset still exists where it does work: holding a measure for reading.
-   *
-   * The top padding goes with it. A gap above a full-bleed image is a stripe of canvas doing
-   * nothing, and the block above already carries its own bottom spacing.
+   * A frame inset 16pt each side and rounded is a picture *on* a page; edge to edge it is the
+   * page. Everything else on this screen keeps the gutter, so the inset still exists where it
+   * does work: holding a measure for reading.
    */
-  masthead: { paddingTop: 0 },
-  mastheadPhoto: { justifyContent: 'flex-end' },
-  weatherBadge: {
-    position: 'absolute',
-    top: Spacing.read,
-    right: Spacing.read,
-    backgroundColor: Colors.bar,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    // The badge stays a badge: a long fallback truncates rather than wrapping across the photo.
-    maxWidth: '60%',
-  },
+  plate: { justifyContent: 'flex-end', marginTop: Spacing.compact },
   /**
    * The page's gutter, not the picture's.
    *
@@ -672,10 +676,7 @@ const styles = StyleSheet.create({
    * reason.
    */
   dateline: { padding: Spacing.read, gap: Spacing.hair },
-  datelineOverline: { opacity: 0.72 },
   datelineTitle: { opacity: 0.8 },
-  theme: { marginTop: Spacing.rows, paddingHorizontal: Spacing.read },
-  summary: { marginTop: Spacing.rows, paddingHorizontal: Spacing.read },
 
   sectionRule: {
     flexDirection: 'row',
