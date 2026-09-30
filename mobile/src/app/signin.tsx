@@ -15,7 +15,7 @@ import Animated, { Easing, Keyframe, useAnimatedStyle, useReducedMotion, withTim
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { signIn, signUp } from '@/api/auth';
-import { FieldTrough, PrimaryButton, TextField } from '@/components/form';
+import { FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Curve, MaxContentWidth, Motion, PhotoScrim, Spacing } from '@/constants/theme';
@@ -325,15 +325,21 @@ export default function SignInScreen() {
                 style={styles.toggle}>
                 <ThemedText type="detail" themeColor="muted">
                   {creating ? 'Already have an account? ' : 'New here? '}
-                  <ThemedText type="detail">{creating ? 'Sign in' : 'Create an account'}</ThemedText>
+                  {/* Jade on the half that acts. The emphasis was `foreground`, which on a screen
+                      of white headings is not a signal that this half is the pressable one. */}
+                  <ThemedText type="detail" themeColor="accent">
+                    {creating ? 'Sign in' : 'Create an account'}
+                  </ThemedText>
                 </ThemedText>
               </Pressable>
 
-              <Pressable onPress={leave} style={styles.toggle}>
-                <ThemedText type="detail" themeColor="muted">
-                  Keep planning without an account
-                </ThemedText>
-              </Pressable>
+              {/* **A capsule, because this is the way out and it was reading as a caption.**
+                  Muted `detail` is the same face and colour as the blurb under the title, so the
+                  one control that leaves this screen was typographically identical to a sentence
+                  describing it — reported as not knowing it was a button at all. It matters more
+                  now than it did: this screen is a full-screen modal, so the swipe-down that used
+                  to share the job is gone and this is the only way out. */}
+              <PillButton title="Keep planning without an account" onPress={leave} />
             </View>
           </View>
         </ScrollView>

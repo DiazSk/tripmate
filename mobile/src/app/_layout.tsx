@@ -72,14 +72,23 @@ export default function RootLayout() {
           <Stack.Screen name="plan" options={{ headerShown: false }} />
           {/* SPIKE ONLY — replaced in Task 5. */}
           <Stack.Screen name="share" options={{ presentation: 'modal', headerShown: false }} />
-          {/* A sheet, and now the screen a signed-out cold start opens on — see `+native-intent`.
-              Still a sheet rather than a push, for a better reason than before: `unstable_settings`
-              above puts `(tabs)` underneath it, so the sheet *reveals* Home, and dismissing it by
-              swipe is indistinguishable from choosing to keep planning without an account. The
-              comment this replaces said "nothing in this app sits behind it", which was true when
-              signin could only be reached from a tab and is now false twice over. What stays true
-              is the thing that matters: nothing is *gated* by it. */}
-          <Stack.Screen name="signin" options={{ presentation: 'modal', headerShown: false }} />
+          {/* **Full screen, not a sheet — the screen was drawn for the whole device.** `signin`'s
+              band is explicitly full-bleed so the photograph runs under the status bar, and in a
+              sheet it cannot: the card is inset from the top and rounded, so the one screen that
+              has to look expensive was showing a picture with the device's own canvas above it.
+
+              The sheet was chosen because `unstable_settings` puts `(tabs)` underneath, making the
+              swipe-down dismiss indistinguishable from choosing to keep planning without an
+              account. That reasoning was sound and it cost more than it bought: a swipe nobody is
+              told about was carrying half the escape, and the other half was muted grey body text
+              that read as a caption. The escape is now a capsule that says what it does, so the
+              gesture is not load-bearing and the screen can have the device.
+
+              `leave()` already covers the cold-start case this raises — `canGoBack()` is false when
+              `+native-intent` opens here directly, and it replaces to the tabs rather than trying
+              to pop. Nothing is *gated* by this screen, which is the part that has always
+              mattered. */}
+          <Stack.Screen name="signin" options={{ presentation: 'fullScreenModal', headerShown: false }} />
         </Stack>
       </ThemeProvider>
     </ShareIntentProvider>
