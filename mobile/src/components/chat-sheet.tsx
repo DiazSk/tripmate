@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -74,6 +74,16 @@ export function ChatSheet({
   onDiscard: () => void;
 }) {
   const [draft, setDraft] = useState(initialDraft ?? '');
+  const [hint, setHint] = useState(0);
+
+  // Only while the field is empty — a placeholder under text nobody can see is a timer running
+  // for nothing, and the swap must never happen under a cursor mid-sentence.
+  const idle = draft.length === 0;
+  useEffect(() => {
+    if (!idle) return;
+    const timer = setInterval(() => setHint((i) => (i + 1) % HINTS.length), HINT_MS);
+    return () => clearInterval(timer);
+  }, [idle]);
   /**
    * What this turn is allowed to change: one day, or the whole trip.
    *
@@ -195,7 +205,7 @@ export function ChatSheet({
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder="Move the market to day 3, and drop the museum"
+            placeholder={HINTS[hint]}
             placeholderTextColor={Colors.muted}
             selectionColor={Colors.accent}
             // The cap every `ThemedText` gets, which a bare TextInput does not inherit.
@@ -217,7 +227,7 @@ export function ChatSheet({
               (!draft.trim() || replying) && styles.sendOff,
               pressed && styles.sendPressed,
             ]}>
-            <ThemedText type="label" themeColor="accentForeground">
+            <ThemedText type="headingSmall" themeColor="accentForeground">
               Send
             </ThemedText>
           </Pressable>
@@ -227,6 +237,40 @@ export function ChatSheet({
     </Modal>
   );
 }
+
+/**
+ * What this box is for, said by example rather than by instruction.
+ *
+ * **One placeholder taught one trick.** "Move the market to day 3, and drop the museum" is a good
+ * sentence and it was the only one anybody ever saw, so the box read as being about reordering —
+ * nothing said it also takes a constraint, a question about a single stop, or a whole reshoot of
+ * the pace. These rotate because the range *is* the thing being communicated, and a list of
+ * suggestions above the field would cost a row of chrome on the screen with the least room.
+ *
+ * Written as things somebody would actually type, not feature names, and each one exercises a
+ * different capability the chat already has.
+ *
+ * **Every one fits on a single line, and that is a constraint rather than a style.** The field is
+ * `multiline` and sizes itself to its content, placeholder included — a hint that wraps makes the
+ * composer 66pt where a short one makes it 44, so a rotation between the two lengths would resize
+ * the whole row every few seconds with nobody having touched it. Roughly 30 characters is the
+ * ceiling at the default text size. Above about 150% Dynamic Type the longer ones wrap anyway and
+ * the row does move; that is the known corner, and the fix if it ever matters is to measure the
+ * field and pick from the hints that fit rather than to shorten the list further.
+ */
+const HINTS = [
+  'Move the market to day 3',
+  'Day 2 has too much walking',
+  'Find dinner near the last stop',
+  'What if it rains on Thursday?',
+  'Push everything an hour later',
+  'Swap the temple for a garden',
+  'We are travelling with kids',
+  'Anything nearby we missed?',
+];
+
+/** Long enough to read one and glance away, short enough that a pause shows a second. */
+const HINT_MS = 4200;
 
 /**
  * Which day the narrow half means.
@@ -387,7 +431,10 @@ const styles = StyleSheet.create({
 
   composer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    // Centred, not `flex-end`. Bottom-aligned is right while both are 44pt and wrong the moment
+    // the field grows: at five lines Send sat at the foot of a 116pt box, level with the last
+    // line of a sentence rather than with the control it belongs to.
+    alignItems: 'center',
     gap: Spacing.tight,
     padding: Spacing.read,
     borderTopColor: Colors.cardBorder,
@@ -401,9 +448,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceDeep,
     borderColor: Colors.cardBorder,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.surface,
-    paddingHorizontal: Spacing.rows,
-    paddingVertical: Spacing.tight,
+    // **22, a constant — not `Radius.pill`.** A stadium is the right shape here and `Radius.pill`
+    // draws one only by accident: it is 9999, which the platform clamps to half the box's height,
+    // so it is 22 at one line and 58 at five. At 58 the left and right ends are an ellipse, and
+    // text inset a flat 16 from the edge sits *outside* that curve — the overflow at the corners
+    // of a grown field. 22 is the same shape at one line and holds it as the field grows, which
+    // is what iMessage actually does: a fixed corner radius, not a pill.
+    //
+    // The squared box this replaced was worse for a different reason — it disagreed with a fully
+    // rounded Send about what shape a thing you touch is, against DESIGN.md's round what you
+    // touch, square what you read. Both of these are touched.
+    borderRadius: 22,
+    paddingHorizontal: Spacing.read,
+    // 11, so one line of 22 comes to exactly 44 — the height Send is pinned to, and the HIG
+    // minimum neither of them met. They were 38 and 44 and bottom-aligned, so the field sat six
+    // points short of the button beside it.
+    paddingVertical: 11,
     // A composer that grows to about four lines and then scrolls, rather than one that eats the
     // transcript on a long request.
     maxHeight: 120,
@@ -411,8 +471,9 @@ const styles = StyleSheet.create({
   send: {
     backgroundColor: Colors.accent,
     borderRadius: Radius.pill,
-    paddingHorizontal: Spacing.read,
-    paddingVertical: Spacing.rows,
+    paddingHorizontal: Spacing.compact,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   sendOff: { opacity: 0.4 },
   sendPressed: { opacity: 0.8 },
