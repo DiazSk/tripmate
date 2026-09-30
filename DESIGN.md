@@ -401,9 +401,24 @@ rule was silent, not the product wrong.
 carry a tint of jade or coral to signal *state* or *alert*. Exactly two signals are licensed:
 a selected row (`accentWash`, `#28B98117` in `mobile/src/constants/theme.ts`) and a row something
 cannot happen in (`alertSoft`, `#E4553F29` there; `--alert-soft`, the same colour, in the web's
-`globals.css`). No tint may be heavier than `29` hex, which is
-the darker of the two shipping today. A tint never signals *action* — jade's One Meaning holds
-wherever jade is ink rather than wash.
+`globals.css`). A tint never signals *action* — jade's One Meaning holds wherever jade is ink
+rather than wash.
+
+**The ceiling is a perceptual step, not a hex.** No tint may exceed **ΔL\* 8.3** from its ground,
+which is the step `alertSoft` ships today. On the near-black ground that lands at `29` hex, which is
+how this clause was first written — but the hex was always a proxy, and the proxy does not survive a
+change of ground: the same alpha over paper is a far weaker signal, so a light appearance needs
+`2D`–`2F` to carry the same step. State the step and both appearances are covered by one number.
+
+**And never print a role's ink on that role's own soft tint.** Coral on `alertSoft` measures 4.28:1
+today and fails AA; paper on it measures 14.56:1. The wash carries the signal, `foreground` carries
+the words. This is what the app already does, and it holds in either appearance for the same reason.
+
+**`money-soft` is a fill, not a state tint, so this clause never governed it.** It ships at 18%
+(`2E`), heavier than the ceiling above and gold rather than jade or coral, which reads as a third
+licensed signal and is not one. The Colors section already says it: gold "never borrows the action
+colour, and `money-soft` is its only fill." Two signals are licensed *as state*; a fill is a
+different thing.
 
 One Slate as first written forbade a coral alert panel, and the product shipped one on every
 conflict row anyway; a rule the product knowingly breaks stops being a rule. The clause is narrow
@@ -417,9 +432,24 @@ are the mobile spelling of it. There is **no jade wash on the web**: the only ac
 a radial at 10% behind the hero, which is decoration rather than state. A selected-row wash on the
 web would be a new signal and needs its own argument.
 
-**The Two Foregrounds Rule.** `--accent-foreground` means "text on jade" and is dark. `--on-deep`
-means "text on something dark" and is light. They are not interchangeable, and conflating them is the
-specific bug this palette was rebuilt to fix.
+**The Two Foregrounds Rule.** `--accent-foreground` means "text on jade". `--on-deep` means "text
+on something dark". They are not interchangeable, and conflating them is the specific bug this
+palette was rebuilt to fix.
+
+**The rule is the relationship, not the polarity.** Today they happen to be dark and light
+respectively, and it is tempting to name them that way — but under a light appearance
+`--accent-foreground` becomes *light* and the ground's own foreground becomes *dark*, and they
+remain as non-interchangeable as before. `--accent-foreground`'s stated reason survives the
+inversion and gets sharper: it is drawn from the accent's own hue rather than from the canvas, so a
+filled control reads as a solid object rather than a hole punched through to the page. Invert it and
+the failure is worse, because a paper-coloured ink on a jade fill standing on a paper canvas is
+letters the exact colour of the page behind them — which is why the light cut is a jade-tinted
+near-white rather than plain white.
+
+**`--on-deep` is the one that does not move.** Text over photography, a scrim or the map stays paper
+in both appearances, because the thing underneath it stays dark. `mobile/src/constants/theme.ts`
+collapsed these two into one token, since they are the same hex today; that collapse is a latent bug
+even in the dark app, and `OverPhotograph` there is the mobile spelling of this half.
 
 **The Darken-Never-Lighten Rule.** Anything layered over photography or terrain is tinted toward the
 one slate or toward black, never toward white. `.glass-control` darkens on hover (0.55 → 0.72 → 0.82)
@@ -431,6 +461,17 @@ safe and small type only apparently safe. Measured across eight cities, mean lum
 to 0.348 and Kyoto peaks at 0.947 — near-white sky, where white body text is 2.41:1 under a 60% scrim
 and 3.56:1 under 75%. So: **large type on the photograph, everything small or dense in a darkened
 band.** The generation screen and the itinerary header are both built on that split.
+
+**The scrim's direction is a function of the ink, not of the appearance.** A scrim moves the
+photograph *away from the ink* — toward black under paper ink, toward white under dark ink — and the
+rule above is that statement for the one ink this product has shipped. Darken-Never-Lighten is the
+same rule stated for the same ink: its own reason, that "a white wash would cut contrast exactly
+where the terrain is brightest", is an argument about *white type*, not about white. Photography
+stays dark in both appearances — it is the atmosphere, and inverting it is what would make a light
+appearance read as a second product — so `PhotoScrim` does not fork. The light derivation exists
+and is parked unused in `palette.ts`: dark ink under a 34% white scrim clears 7.01:1 against the
+worst pixel a photograph can produce, where the shipped 0.58 reaches only 2.05:1 for paper against
+its worst. The easier derivation is the one we are not taking, deliberately.
 
 **The Contrast Floor.** Every role is measured against the composited card ground `rgb(26,24,22)`:
 body 16.27:1, descriptions 8.41:1, times and micro-labels 4.84:1, money 9.36:1, alert 4.78:1, accent
@@ -724,11 +765,24 @@ not free here the way it is in a document.
 menu rows. Anything you read is near-square: the map labels at 4–6px, the marker card at 5px, small
 surfaces at 8px.
 
-**The rule governs in-content controls.** Nav-bar items and row accessories follow the platform
-instead, which on iOS means text: `Done`, `Close` and a row's trailing `Edit` are what the system
-itself puts there, and a capsuled `Done` would read as a foreign object in an app that otherwise
-hands settings surfaces back to the platform. The rule still binds anything sitting in the content
-— a standalone action in prose takes a capsule, which is why sign-in's "Create an account" is one.
+**The exemption is a slot, not a style.** The platform owns a nav bar's leading and trailing slots,
+a sheet's title bar, and a list row's trailing accessory column. A control sitting in one of those
+follows the platform, which on iOS means text, and the licensed cases are exactly three: `Done`,
+`Close`, and a row's trailing `Edit`. A capsuled `Done` would read as a foreign object in an app
+that otherwise hands settings surfaces back to the platform.
+
+What makes `Done` legible is the *slot* — a place the system has taught readers that only controls
+appear — and a tint sitting in prose has no slot to borrow that from. So **a control anywhere else
+in the content takes a shape and a 44pt / 48dp target, whatever its tint.** An earlier wording said
+the exemption "means text", and that is exactly how a tinted text button in a page body came to
+cite the nav-bar precedent from outside a nav bar. It is a closed list of three, not an example.
+
+**A pressable that is a full-width row or card takes the surface radius, not the pill.** The pill is
+for a control that sizes to its own words; a row spanning the column is read as much as it is
+pressed. This is already what the app does in five places — the repair options, the edit bar, Plan
+Health's disclosure card, the destination suggestions, the group rows — and writing it down retires
+them as exceptions. The reason is the one the entry capsule gives two sections down: a full pill on
+a tall stacked box renders as a lozenge.
 
 Borders are hairlines — one pixel of `--card-border`, or of white at 0.08–0.16 over photography. The
 system draws *rules* rather than boxing things: the navbar is a ruled grid (a bottom hairline across
