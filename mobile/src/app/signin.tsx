@@ -5,7 +5,6 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -312,26 +311,23 @@ export default function SignInScreen() {
               busy={busy}
             />
 
-            {/* The two text links share one box so the form's `gap` falls outside the pair rather
-                than between them. Each is a 44pt touch target around ~18pt of text, so the gap was
-                adding 16pt to 26pt of slack the targets already carry — 42pt, which read as two
-                unrelated rows instead of two secondary links under the button. */}
-            <View>
-              <Pressable
+            {/* The two share one box so the form's `gap` falls outside the pair rather than
+                between them — otherwise 16pt lands on top of the 26pt of slack two 44pt targets
+                already carry, and 42pt reads as two unrelated rows instead of two secondary
+                actions under the button. `gap: Spacing.hair` keeps them a pair now that both are
+                capsules and their edges, not their text, set the rhythm. */}
+            <View style={styles.secondary}>
+              {/* **A capsule, because it is an action sitting in content.** It was the second
+                  half of a sentence — "New here? Create an account" — and half a sentence cannot
+                  be a capsule, so the sentence goes. DESIGN.md's nav-bar exemption does not reach
+                  here: this is not a bar item or a row accessory, it is a control in prose. */}
+              <PillButton
+                title={creating ? 'Sign in' : 'Create an account'}
                 onPress={() => {
                   setCreating((v) => !v);
                   setError(null);
                 }}
-                style={styles.toggle}>
-                <ThemedText type="detail" themeColor="muted">
-                  {creating ? 'Already have an account? ' : 'New here? '}
-                  {/* Jade on the half that acts. The emphasis was `foreground`, which on a screen
-                      of white headings is not a signal that this half is the pressable one. */}
-                  <ThemedText type="detail" themeColor="accent">
-                    {creating ? 'Sign in' : 'Create an account'}
-                  </ThemedText>
-                </ThemedText>
-              </Pressable>
+              />
 
               {/* **A capsule, because this is the way out and it was reading as a caption.**
                   Muted `detail` is the same face and colour as the blurb under the title, so the
@@ -387,5 +383,5 @@ const styles = StyleSheet.create({
   form: { paddingTop: Spacing.regular, gap: Spacing.read },
   hint: { paddingHorizontal: Spacing.hair },
   // 44pt is the platform's minimum touch target; a text link is otherwise ~18pt tall.
-  toggle: { minHeight: 44, justifyContent: 'center' },
+  secondary: { gap: Spacing.hair, alignItems: 'flex-start' },
 });
