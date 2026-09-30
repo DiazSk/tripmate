@@ -1,6 +1,9 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SymbolView } from 'expo-symbols';
 import {
+  ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -318,6 +321,25 @@ export default function TripDetail() {
   /** Nothing may be written against a copy from disk. */
   const offline = cachedAt !== null;
 
+  /**
+   * **Memoised because `headerRight` is a native header, not a view in the page.** Every day swipe
+   * re-renders this screen, and an inline closure would hand react-navigation a new element each
+   * time — the same cost the note above the title records for a title that changes per day. This
+   * identity turns over only when the trip itself does, which is when the icon's own state can
+   * actually have changed.
+   */
+  const shareRight = useCallback(
+    () =>
+      trip ? (
+        <ShareButton
+          trip={trip}
+          offline={offline}
+          onShared={(shared) => setTrip({ ...trip, shared })}
+        />
+      ) : null,
+    [trip, offline]
+  );
+
   if (trip === undefined) {
     return (
       <View style={styles.screen}>
@@ -348,7 +370,13 @@ export default function TripDetail() {
           the day: a nav title that changes on every swipe is noise, and it re-renders the native
           header each time. */}
       <Stack.Screen
-        options={{ title: trip.destination, headerBackButtonDisplayMode: 'minimal' }}
+        options={{
+          title: trip.destination,
+          headerBackButtonDisplayMode: 'minimal',
+          // A draft is not a thing to send anybody, so the slot is simply empty until Keep — the
+          // same mutual exclusion `KeepShelf` and the old shelf had, expressed as presence.
+          headerRight: trip.status === 'draft' ? undefined : shareRight,
+        }}
       />
 
       {days.length === 0 ? (
@@ -377,8 +405,12 @@ export default function TripDetail() {
                   and both act on the plan below it — the same pairing `TripHeaderRow` makes in the
                   Swift app. Muted rather than jade, also copied from there: two filled jade
                   targets side by side read as two primary actions, and adding one stop is the
-                  ordinary one. Not the nav bar's `headerRight`, which is where this started: Expo
-                  Go parks its own floating dev button exactly there and swallows every tap. */}
+                  ordinary one. These two stay out of the nav bar's `headerRight` because they act
+                  on the day below them rather than on the trip — `headerRight` now carries Share,
+                  which does act on the whole trip. (The original reason was Expo Go's floating dev
+                  button parking on that slot and swallowing every tap. It no longer binds:
+                  `expo-share-intent` is not one of Expo Go's bundled modules, so this app has
+                  required a development build since it was added and can no longer run there.) */}
               <Pressable
                 onPress={() => {
                   setChatSeed(undefined);
@@ -534,16 +566,7 @@ export default function TripDetail() {
           trip={trip}
           onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })}
         />
-      ) : (
-        // The same slot as KeepShelf and mutually exclusive with it, which is the honest shape:
-        // a draft is not a thing to send anybody, and a trip stops being a draft precisely when
-        // its planner decides it is worth keeping.
-        <ShareShelf
-          trip={trip}
-          offline={offline}
-          onShared={(shared) => setTrip({ ...trip, shared })}
-        />
-      )}
+      ) : null}
     </View>
   );
 }
@@ -560,10 +583,25 @@ export default function TripDetail() {
  * resolves either way — `dismissedAction` when they back out — so there is nothing to report
  * about the outcome and nothing is claimed about it.
  *
+ * **It was a shelf across the foot of the screen, and the shelf outweighed the act.** Two lines
+ * of chrome — a sentence and a pill — permanently occupying the bottom of every saved trip, for
+ * something most readers do once or never, while the nav bar's trailing slot sat empty opposite
+ * the back chevron. As an icon it costs one glyph, it balances the chevron, and it sits where
+ * iOS has put share since the first iPhone, so it needs no label to be found.
+ *
+ * **The two sentences the shelf carried are not dropped, they move into the confirm.** An icon
+ * cannot say "stop sharing" and must not silently perform it, so a trip that is already shared
+ * opens the platform's own alert: the promise ("they cannot change it") is its message, and
+ * withdrawing is a destructive button there rather than a pill somebody can hit by accident.
+ * An unshared trip skips the alert entirely — pressing share to share is not a question.
+ *
+ * `POST /api/trips/[id]/share` is idempotent and hands back the link a shared trip already has
+ * (see that route), so "Send the link" and the first press are the same call.
+ *
  * Disabled offline rather than hidden, matching every other control on this screen: the banner
  * above says why once, and eight controls each repeating it is a screen shouting.
  */
-function ShareShelf({
+function ShareButton({
   trip,
   offline,
   onShared,
@@ -573,15 +611,13 @@ function ShareShelf({
   onShared: (shared: boolean) => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
 
-  async function share() {
+  async function send() {
     setBusy(true);
-    setFailed(false);
     const result = await shareTrip(trip.id);
     setBusy(false);
     if (!result) {
-      setFailed(true);
+      Alert.alert('That didn\u2019t go through', 'Try again.');
       return;
     }
     onShared(true);
@@ -596,41 +632,59 @@ function ShareShelf({
 
   async function stop() {
     setBusy(true);
-    setFailed(false);
     const ok = await unshareTrip(trip.id);
     setBusy(false);
     if (ok) onShared(false);
-    else setFailed(true);
+    else Alert.alert('That didn\u2019t go through', 'Try again.');
+  }
+
+  function press() {
+    if (!trip.shared) {
+      void send();
+      return;
+    }
+    Alert.alert(
+      'This plan is shared',
+      'Anyone with the link can read it. They cannot change it.',
+      [
+        { text: 'Send the link', onPress: () => void send() },
+        { text: 'Stop sharing', style: 'destructive', onPress: () => void stop() },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   }
 
   return (
-    <View style={styles.shareShelf}>
-      {failed ? (
-        <ThemedText type="detail" themeColor="alert">
-          That didn&rsquo;t go through. Try again.
-        </ThemedText>
+    <Pressable
+      onPress={press}
+      disabled={busy || offline}
+      accessibilityRole="button"
+      // The icon alone is the label for sighted readers; this is the whole sentence for everyone
+      // else, and it has to carry the state because the tint that carries it visually does not
+      // reach VoiceOver.
+      accessibilityLabel={trip.shared ? 'Shared. Send the link or stop sharing' : 'Share a link'}
+      accessibilityState={{ disabled: busy || offline }}
+      hitSlop={12}>
+      {busy ? (
+        <ActivityIndicator size="small" color={Colors.muted} />
       ) : (
-        <ThemedText type="detail" themeColor="muted">
-          {trip.shared
-            ? 'Anyone with the link can read this plan. They cannot change it.'
-            : 'Send this plan as a link. Nobody can see it until you do.'}
-        </ThemedText>
+        <SymbolView
+          // Object form, never a bare SF string: given one, the Android path renders nothing at
+          // all, silently. Same trap as `plan/_layout`'s close button.
+          name={{ ios: 'square.and.arrow.up', android: 'share' }}
+          // Jade only while the plan is actually out there. This is the one place the accent
+          // reports a state rather than inviting a press, and it is still an action colour on an
+          // action — the trip being shared is what the press is about.
+          tintColor={offline ? Colors.muted : trip.shared ? Colors.accent : Colors.foreground}
+          size={20}
+          fallback={
+            <ThemedText type="label" themeColor={offline ? 'muted' : 'foreground'}>
+              Share
+            </ThemedText>
+          }
+        />
       )}
-      <Pressable
-        onPress={trip.shared ? stop : share}
-        disabled={busy || offline}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: busy || offline }}
-        style={({ pressed }) => [styles.shareAction, pressed && styles.pressedRow]}>
-        <ThemedText type="label" themeColor={busy || offline ? 'muted' : 'accent'}>
-          {busy
-            ? 'Working\u2026'
-            : trip.shared
-              ? 'Stop sharing'
-              : 'Share a link'}
-        </ThemedText>
-      </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -1307,16 +1361,5 @@ const styles = StyleSheet.create({
   // The keep shelf's material, but left-aligned and without its centred, decision-shaped
   // emphasis: keeping a plan is the step that gates the trip, and sharing one is a thing you may
   // never do. Same gutters so the two occupy the same slot without the page shifting.
-  shareShelf: {
-    backgroundColor: Colors.bar,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.cardBorder,
-    paddingHorizontal: Spacing.read,
-    paddingTop: Spacing.rows,
-    paddingBottom: Spacing.regular,
-    gap: Spacing.hair,
-  },
-  // 44pt, and only as wide as its words — the same target Today's own actions use.
-  shareAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   pressedRow: { opacity: 0.6 },
 });
