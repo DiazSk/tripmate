@@ -85,7 +85,6 @@ export function SpendBreakdown({ day, dayIndex }: { day: DayPlan; dayIndex: numb
       <View style={styles.rows}>
         {shares.map((share, rank) => (
           <View key={share.key} style={[styles.row, rank > 0 && styles.rowRuled]}>
-            <View style={[styles.swatch, { backgroundColor: goldAtRank(rank) }]} />
             <ThemedText type="body" style={styles.grow}>
               {share.label}
             </ThemedText>
@@ -135,7 +134,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.tight,
   },
   rowRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
-  swatch: { width: 8, height: 8, borderRadius: Radius.pill },
   grow: { flex: 1 },
   // A fixed column so the percentages line up under each other rather than floating against
   // labels of different lengths.

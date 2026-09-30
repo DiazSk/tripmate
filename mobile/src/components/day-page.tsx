@@ -14,7 +14,7 @@ import { formatDateline, weatherLine } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
 import { EVIDENCE_FOOTNOTE, locationNote } from '@shared/evidence';
 import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
-import { daySpend, formatMoney } from '@/lib/spend';
+import { formatMoney } from '@/lib/spend';
 
 /**
  * One day of a trip, read as a page.
@@ -249,7 +249,11 @@ function DayMasthead({
       ) : null}
 
       <View style={styles.slot}>
-        <SectionRule label="The day" trailing={dayTotal(day)} />
+        {/* **No trailing total.** `spend-breakdown` prints `daySpend(day)` at the foot of this
+            same screen, and its own note has the argument: a day's total "is a summary of what
+            you have just read, so it cannot come before it." This copy also sat directly above
+            the first stop, which made it the gold mark competing hardest with the content. */}
+        <SectionRule label="The day" />
       </View>
     </View>
   );
@@ -616,30 +620,11 @@ function SectionRule({ label, trailing }: { label: string; trailing?: string }) 
 function Cost({ amount }: { amount: number }) {
   if (!amount) return null;
   return (
-    <ThemedText type="moneyLarge" themeColor="money">
+    <ThemedText type="money" themeColor="money">
       {formatMoney(amount)}
     </ThemedText>
   );
 }
-
-/**
- * The day's figure for the section rule.
- *
- * **The summation is `daySpend`, not a local reduce, and that is a fix rather than tidying.** This
- * used to add up `stop.cost` and `lodging.cost` itself and never look at `actualCost` — so a real
- * spend entered on the web moved that app's totals and left this one quietly showing the estimate.
- * Nothing noticed while this was the only money on the page; the budget bar and the breakdown now
- * beside it are both drawn from `daySpend`, and three figures disagreeing on one screen is exactly
- * what the shared money module was written to stop.
- *
- * Still a string-or-`undefined`, because `SectionRule` omits its trailing figure on `undefined`
- * and a day nobody has priced should carry no figure rather than a `$0`.
- */
-function dayTotal(day: DayPlan): string | undefined {
-  const total = daySpend(day);
-  return total > 0 ? formatMoney(total) : undefined;
-}
-
 
 const styles = StyleSheet.create({
   content: { paddingBottom: Spacing.regular * 2 },
