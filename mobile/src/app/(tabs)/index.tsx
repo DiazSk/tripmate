@@ -135,10 +135,23 @@ export default function Home() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <BandOpener label="TripMate" />
-        <ThemedText type="display" style={styles.headline}>
-          Days worth keeping, written for where you are going.
-        </ThemedText>
+        {/* **The masthead addresses the wrong reader on a running trip, and it is the first
+            thing on the screen.** The guard below already makes this argument about the Method
+            band and the plan button — "the reader is standing in Lisbon" — and it simply never
+            reached the two lines above it. Measured, the reading order on a trip was: TRIPMATE,
+            a 28pt serif marketing headline, the destination, "Today" in 28pt serif, the clock,
+            and only sixth the thing the app was opened for. Three independent reviews reported
+            the symptom; this is where it lives.
+
+            Off a trip it stays exactly as it was, because then it is what the screen is for. */}
+        {trip ? null : (
+          <>
+            <BandOpener label="TripMate" />
+            <ThemedText type="display" style={styles.headline}>
+              Days worth keeping, written for where you are going.
+            </ThemedText>
+          </>
+        )}
 
         {/* **While a trip is running, Home is about that trip.** Everything below — the wall's
             one featured card, the Method section — is for somebody who is not travelling. The

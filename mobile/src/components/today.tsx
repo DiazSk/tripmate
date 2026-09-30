@@ -98,7 +98,7 @@ export function Today({
 
   return (
     <View style={styles.wrap}>
-      <Header trip={trip} day={day} phase={phase} clock={clock} onOpenTrip={onOpenTrip} />
+      <Header trip={trip} day={day} clock={clock} onOpenTrip={onOpenTrip} />
       {cachedAt ? <Stale at={cachedAt} /> : null}
       {now === null ? (
         <WholeDay day={day} eve={phase === 'eve'} />
@@ -129,13 +129,11 @@ export function Today({
 function Header({
   trip,
   day,
-  phase,
   clock,
   onOpenTrip,
 }: {
   trip: Trip;
   day: DayPlan;
-  phase: 'today' | 'eve';
   clock: string | null;
   onOpenTrip: () => void;
 }) {
@@ -143,32 +141,30 @@ function Header({
   const date = chip ? `${chip.weekday} ${chip.dayOfMonth}` : null;
   return (
     <Pressable onPress={onOpenTrip} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedText type="label" themeColor="muted">
-        {trip.destination.toUpperCase()}
-      </ThemedText>
-      <ThemedText type="display">{phase === 'eve' ? 'Tomorrow' : 'Today'}</ThemedText>
+      {/* **One orientation row, and it is an eyebrow rather than a masthead.**
 
-      {/* **The clock reads down the left edge now, paired with the date.**
-          
-          It used to sit baseline-locked to the 28pt serif at the far right — the only
-          right-aligned element on an otherwise entirely left-aligned screen, which is exactly
-          why it read as detached: there was nothing for it to belong to, and the column under it
-          was empty. It also had no way of saying *what* it was. A bare time in a corner could be
-          a departure, a duration, or the device's own clock.
-          
-          Beside the date it is unambiguous without needing a label to say so — "Wed 30, 8:26 AM"
-          is one fact, and the destination sits directly above it, which is what makes it read as
-          *Kyoto's* time rather than the phone's. That distinction is the whole reason
-          `tripClock` exists: measured, a device on 21:07 Sep 28 is Lisbon 05:07 Sep **29**.
+          This was three stacked elements — the destination in tracked caps, "Today" at 28pt
+          Melodrama, then a 22pt clock beside the date — and together they pushed the first
+          operational fact to sixth on a screen read while walking. Three reviews reported it.
+          The serif and the word "Today" leave: the screen's entire content *is* now, and the
+          date below says which day it is.
 
-          Tabular, not the display face: the serif cuts its zero with a bar, so "8:30" renders as
-          "8:3Ø" — fine in a headline, wrong in a clock, and wrong beside the stop times set in
-          this same face below. Paper rather than jade: it is the most factual thing on the
-          screen, and jade here means press me. */}
+          It stays at the top of the layout and leaves the hierarchy, which keeps the
+          Pressable-opens-trip affordance where a header belongs and keeps `spine` unbroken.
+
+          **The clock's adjacency to the destination gets stronger, not weaker.** The old note
+          here argued the destination sitting above the clock is what makes it read as Kyoto's
+          time rather than the phone's — measured, a device on 21:07 Sep 28 is Lisbon 05:07 Sep
+          29. Same row, same subject, one line does that better than a stack did. Tabular and
+          not the display face, because the serif bars its zero: "8:30" renders "8:3Ø". Paper
+          rather than jade: it is the most factual thing here, and jade means press me. */}
       <View style={styles.whenRow}>
-        {clock ? <ThemedText type="moneyLarge" style={styles.clock}>{clock}</ThemedText> : null}
+        <ThemedText type="detail" themeColor="muted">
+          {trip.destination}
+        </ThemedText>
+        {clock ? <ThemedText type="moneyLarge">{clock}</ThemedText> : null}
         {date ? (
-          <ThemedText type="label" themeColor="muted">
+          <ThemedText type="detail" themeColor="muted">
             {date}
           </ThemedText>
         ) : null}
@@ -654,9 +650,19 @@ function WholeDay({ day, eve }: { day: DayPlan; eve: boolean }) {
   const stops = day.stops ?? [];
   return (
     <View style={styles.block}>
-      <ThemedText type="label" themeColor="muted">
-        {eve ? 'Starts with' : 'The day'}
-      </ThemedText>
+      {/* **On the eve, "Tomorrow" is the lead, because without it the screen lies.** It used to
+          sit in the masthead at 28pt serif; the masthead is now an eyebrow and the word would be
+          lost in it. Here it is the thing the list is *of*, which is what it always meant — and
+          it is sans at `title`, not the display face, because it is a heading rather than a
+          flourish. On the day itself the date in the row above carries it and a screen whose
+          whole content is now needs no word for "now". */}
+      {eve ? (
+        <ThemedText type="title">Tomorrow</ThemedText>
+      ) : (
+        <ThemedText type="label" themeColor="muted">
+          The day
+        </ThemedText>
+      )}
       {stops.length === 0 ? (
         <ThemedText type="detail" themeColor="muted">
           This day has no stops.
@@ -877,14 +883,13 @@ const styles = StyleSheet.create({
    */
   actions: { flexDirection: 'row', gap: Spacing.tight, marginTop: Spacing.read, flexWrap: 'wrap' },
   /** Time and date on one baseline, the pair reading as a single "when it is now, there". */
-  whenRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.rows, marginTop: 2 },
+  whenRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: Spacing.tight },
   /**
    * 22, against `moneyLarge`'s 15.
    *
    * The second most useful fact on an execution surface was set two steps below the place names
    * under it. It does not go higher: at 26 it would tie the lead, and the countdown has to win.
    */
-  clock: { fontSize: 22, lineHeight: 26 },
   grow: { flex: 1 },
   block: { gap: Spacing.hair },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows, minHeight: 28 },
