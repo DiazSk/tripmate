@@ -1288,9 +1288,26 @@ const styles = StyleSheet.create({
   // the chips, which is invisible on a seven-day trip that already fills the row and spreads a
   // three-day trip across the whole screen. The gap is the spacing; the row is only as wide as
   // its chips.
+  /**
+   * **`flexGrow` so a strip that fits ends where the row beneath it ends.**
+   *
+   * The chips were always evenly spaced — measured, seven of them at exactly 44.00pt with six
+   * 8.00pt gaps. What was uneven was the row: left-aligned content in a padded box leaves its
+   * remainder on the right, so a seven-day strip ran 16pt→371.67pt while the List/Map · Ask · +
+   * row directly below runs 16pt→386pt. Two stacked rows disagreeing about their right edge by
+   * 14pt is what the eye calls "not evenly spaced", and it is why this kept getting reported
+   * against chips that were already identical.
+   *
+   * It is a function of the day count, which is why it comes and goes: three days is obviously a
+   * short list and nobody reads the gap as an error, fourteen days overflows and scrolls flush,
+   * and seven — the common trip — lands 14pt short, near enough to fill that the shortfall reads
+   * as a mistake. Growing the chips into the remainder fixes every count that fits, and on a
+   * count that does not there is no remainder to share, so the scroller behaves exactly as before.
+   */
   strip: {
     gap: Spacing.tight,
     alignItems: 'flex-end',
+    flexGrow: 1,
   },
   toggle: {
     flexDirection: 'row',
@@ -1332,6 +1349,11 @@ const styles = StyleSheet.create({
   // that clips its weekday is worse than a taller strip. `read` rather than `pill`, because a
   // two-line pill is a lozenge.
   chip: {
+    // Share whatever the row has left over, never give any back: `flexShrink: 0` is what keeps a
+    // fourteen-day strip at its natural width so it scrolls rather than squashing to fit. Basis
+    // stays auto so a chip still sizes to its own text at the accessibility sizes.
+    flexGrow: 1,
+    flexShrink: 0,
     minWidth: 44,
     paddingHorizontal: Spacing.tight,
     paddingVertical: 5,
