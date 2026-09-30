@@ -376,6 +376,19 @@ alpha. If a new surface needs a background it takes this token at a new alpha �
 new grey, and it does not leave the material for `--canvas`. Full opacity is where that step ends
 (`.glass-nav-menu`, `.glass-itinerary.is-opaque`).
 
+**The Semantic Tint Exception, written down because the app already does it.** A surface may
+carry a tint of jade or coral to signal *state* or *alert*. Exactly two tokens are licensed, both
+in `mobile/src/constants/theme.ts`: `accentWash` (`#28B98117`, a selected row) and `alertSoft`
+(`#E4553F29`, a row something cannot happen in). No tint may be heavier than `29` hex, which is
+the darker of the two shipping today. A tint never signals *action* — jade's One Meaning holds
+wherever jade is ink rather than wash.
+
+One Slate as first written forbade a coral alert panel, and the product shipped one on every
+conflict row anyway; a rule the product knowingly breaks stops being a rule. The clause is narrow
+on purpose — two named tokens and a ceiling — so "at some alpha" cannot become a third tint next
+cycle. **The web client has no equivalent today**, and this is not a licence to add one: these are
+RN screens, and the same signal on the web would need its own argument.
+
 **The Two Foregrounds Rule.** `--accent-foreground` means "text on jade" and is dark. `--on-deep`
 means "text on something dark" and is light. They are not interchangeable, and conflating them is the
 specific bug this palette was rebuilt to fix.
@@ -682,6 +695,12 @@ not free here the way it is in a document.
 (`9999px`): buttons, the entry capsule and its go button, day tabs, chips, control pills, the nav's
 menu rows. Anything you read is near-square: the map labels at 4–6px, the marker card at 5px, small
 surfaces at 8px.
+
+**The rule governs in-content controls.** Nav-bar items and row accessories follow the platform
+instead, which on iOS means text: `Done`, `Close` and a row's trailing `Edit` are what the system
+itself puts there, and a capsuled `Done` would read as a foreign object in an app that otherwise
+hands settings surfaces back to the platform. The rule still binds anything sitting in the content
+— a standalone action in prose takes a capsule, which is why sign-in's "Create an account" is one.
 
 Borders are hairlines — one pixel of `--card-border`, or of white at 0.08–0.16 over photography. The
 system draws *rules* rather than boxing things: the navbar is a ruled grid (a bottom hairline across
