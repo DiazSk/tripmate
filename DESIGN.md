@@ -691,9 +691,10 @@ Where a rule spans a cell, the cell must be `items-stretch` and re-centre its ow
 only span the full height if the box carrying it is that tall.
 
 No clip-path silhouettes, no angled cuts, no decorative geometry. The one drawn mark in the system is
-the asterisk family: `LogoMark`'s four arms radiating from a pinched centre, the same shape at
-smaller scale as `SectionOpener`'s section rule. Every icon in the product is inline SVG, sized in
-`em` so it tracks its type step.
+`LogoMark`: a glass globe, a route lifting off it, and the jade stop it lands on (the one-colour glyph
+of the Meridian app icon, masters in `mobile/assets/brand/`). `SectionOpener`'s six-stroke rule and the
+four-point `ButtonMark` are the landing's own punctuation and are deliberately not the logo. Every
+icon in the product is inline SVG, sized in `em` so it tracks its type step.
 
 **The Radius Drift, recorded honestly.** The Kiln edge rule is 5–8px on surfaces, and the surfaces
 built under it hold that. The incumbent panels — `.glass-itinerary`, the memory cards, the confirm
