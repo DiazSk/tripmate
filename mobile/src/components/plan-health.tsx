@@ -30,8 +30,12 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
   const all = health.dimensions.flatMap((d) => d.findings);
   const blockers = all.filter(isBlocking).length;
   const ran = health.dimensions.filter((d) => d.score !== null).length;
+  // At 7 of 7 the number needs no denominator; below that it does, or a flat penalty averaged
+  // over the dimensions that ran looks identical to the same penalty over all of them.
+  const partial = ran < health.dimensions.length;
   const severe = health.dimensions.some((d) => isSevere(d.key) && d.findings.length > 0);
   const { verdict, coverage } = healthSummary(all.length, blockers, ran, health.dimensions.length);
+  const scoreLine = `Scores ${health.score} ${partial ? 'across the checked dimensions' : 'out of 100'}`;
 
   return (
     <View style={styles.card}>
@@ -41,16 +45,28 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
         accessibilityState={{ expanded: open }}
         accessibilityLabel={
           blockers > 0
-            ? `${verdict}. ${coverage}. Plan health ${health.score} out of 100`
+            ? `${verdict}. ${coverage}. ${scoreLine}`
             : `Plan health ${health.score} out of 100, ${verdict} · ${coverage}`
         }
-        style={styles.head}>
+        style={[styles.head, blockers > 0 && styles.headStacked]}>
         {/* **A blocker outranks the score, and the type has to say so.** The figure was the most
             immediate conclusion on a screen whose whole purpose is diagnostic: a reader could
             glance at 84, decide "good enough", and never read the two findings that make the plan
             impossible. Severity leads when there is any; otherwise the figure does, because then
-            nothing outranks it. Colour is untouched — the summary already went coral when severe. */}
-        <View style={styles.grow}>
+            nothing outranks it. Colour is untouched — the summary already went coral when severe.
+
+            **Stepping the figure down a type size was not enough, and the review said so.** It
+            still sat in its own right-hand column on the diagnosis's own baseline, so the head
+            read as two answers at once — the coral one and the clean numeral. Demoting the size
+            while leaving the position is the half-fix. With blockers the head becomes a single
+            column and the score follows the coverage line as prose, where it cannot be read
+            before the thing it is subordinate to. With none it keeps the two-column row, because
+            then it *is* the answer. */}
+        {/* **`grow` only in the row.** `flex: 1` is `flexBasis: 0%` on the *main* axis, so the
+            same style that makes this column take the row's leftover width collapses it to zero
+            height once the head becomes a column — an empty slate card that typechecks, lints
+            and passes every test. Stacked, `alignItems: 'stretch'` already gives it the width. */}
+        <View style={blockers > 0 ? undefined : styles.grow}>
           <ThemedText type="label" themeColor="muted">
             Plan health
           </ThemedText>
@@ -61,6 +77,9 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
               </ThemedText>
               <ThemedText type="detail" themeColor="muted">
                 {coverage}
+              </ThemedText>
+              <ThemedText type="detail" themeColor="muted">
+                {scoreLine}
               </ThemedText>
             </>
           ) : (
@@ -77,14 +96,16 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
             print alone: 84 out of seven checks and 84 out of four are not the same claim, and
             the larger type makes the second one look like the first. The qualifier appears only
             when coverage is partial — at 7 of 7 the number needs no denominator. */}
-        <View style={styles.figure}>
-          <ThemedText type={blockers > 0 ? 'heading' : 'title'}>{health.score}</ThemedText>
-          {ran < health.dimensions.length ? (
-            <ThemedText type="micro" themeColor="muted">
-              across checked
-            </ThemedText>
-          ) : null}
-        </View>
+        {blockers > 0 ? null : (
+          <View style={styles.figure}>
+            <ThemedText type="title">{health.score}</ThemedText>
+            {partial ? (
+              <ThemedText type="micro" themeColor="muted">
+                across checked
+              </ThemedText>
+            ) : null}
+          </View>
+        )}
       </Pressable>
 
       {open ? (
@@ -164,6 +185,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.tight,
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows },
+  // One column when a blocker leads, so the score cannot sit on the diagnosis's baseline.
+  headStacked: { flexDirection: 'column', alignItems: 'stretch' },
   summary: { marginTop: 2 },
   grow: { flex: 1 },
   figure: { alignItems: 'flex-end' },
