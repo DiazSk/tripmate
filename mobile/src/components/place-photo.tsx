@@ -74,5 +74,21 @@ const styles = StyleSheet.create({
   ground: {
     backgroundColor: Colors.surfaceDeep,
     overflow: 'hidden',
+    /**
+     * **`aspectRatio` alone does not fill the parent, and which caller notices is luck.**
+     *
+     * With a ratio and no width, Yoga is free to resolve this box from its height rather than
+     * from the row it sits in. Home's "Up next" photograph came out 350.33pt wide in a 370pt
+     * column — measured 16.00–366.33pt against the Plan a trip button directly above it at
+     * 16.00–385.67pt, so the two stacked elements disagreed by 19.33pt on the right and matched
+     * exactly on the left. The day masthead never showed it, because its parent is a plain View
+     * that stretched the box before the ratio was applied; the difference is the wrapping
+     * `Pressable`, not anything either caller does wrong.
+     *
+     * So the width is stated here rather than at a call site. All three callers want the same
+     * thing — as wide as whatever holds me, then as tall as the ratio says — and a caller that
+     * genuinely wants a different width still wins, since `style` is spread after this.
+     */
+    width: '100%',
   },
 });
