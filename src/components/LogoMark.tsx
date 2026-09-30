@@ -12,7 +12,7 @@
  * 2. **The file bakes `opacity="0.4"` onto its group.** Right for a watermark, wrong for an identity
  *    mark on frosted glass over photography, where it disappears. Dropped deliberately; if the mark
  *    should ever be quiet, that is the caller's `text-*` opacity to choose.
- * 3. Five shapes cost less than a request, and this renders in the root layout on every route — so
+ * 3. A handful of shapes cost less than a request, and this renders in the root layout on every route — so
  *    as a file it would be fetched before almost anything else on a cold load.
  *
  * `public/scenes/image-logo.svg` stays as the master. These shapes are a copy of it, which is the
@@ -29,10 +29,11 @@ export default function LogoMark({ className = "h-[1em] w-[1em]" }: { className?
   return (
     <svg aria-hidden viewBox="0 0 18 18" fill="none" stroke="currentColor" className={`${className} shrink-0`}>
       <circle cx="9" cy="9" r="7.6" strokeWidth="1.3" />
-      <ellipse cx="9" cy="9" rx="3" ry="7.6" strokeWidth="0.9" opacity="0.45" transform="rotate(-16 9 9)" />
-      <path d="M5.2 12.6Q7.6 2.2 12.8 8" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="5.2" cy="12.6" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="12.8" cy="8" r="1.7" fill="currentColor" stroke="none" />
+      <ellipse cx="9" cy="9" rx="3.13" ry="6.80" strokeWidth="0.9" opacity="0.55" transform="rotate(-16 9 9)" />
+      <circle cx="13.30" cy="8.14" r="2.03" strokeWidth="0.9" />
+      <path d="M5.42 11.87Q7.85 -0.31 13.30 8.14" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="5.42" cy="11.87" r="0.78" fill="currentColor" stroke="none" />
+      <circle cx="13.30" cy="8.14" r="1.07" fill="currentColor" stroke="none" />
     </svg>
   );
 }
