@@ -1,4 +1,4 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, type TextProps } from 'react-native';
 
 import { Colors, Fonts, type ThemeColor } from '@/constants/theme';
 
@@ -52,10 +52,31 @@ export function ThemedText({
   maxFontSizeMultiplier,
   ...rest
 }: ThemedTextProps) {
+  const cap = maxFontSizeMultiplier ?? MAX_SCALE[type] ?? 1.6;
+
+  /**
+   * **`lineHeight` does not scale with Dynamic Type, and `fontSize` does.**
+   *
+   * React Native applies the system font scale to `fontSize` (capped by
+   * `maxFontSizeMultiplier`) and leaves an explicit `lineHeight` in unscaled units. So at the
+   * accessibility sizes every step in this ramp became larger type inside the same line box, and
+   * the glyphs were clipped by their own leading — measured on the trip screen at AX5, where
+   * `OCT 22 - 28`, the day chips, LIST/MAP, ASK and every section opener were all cut off. It
+   * looked like a dozen separate layout bugs and it is one.
+   *
+   * Scaling the leading by the same factor keeps every step's own multiple intact, which is what
+   * the ramp is built on. Capped identically, so `display` still reflows at 1.3 rather than
+   * running away.
+   *
+   * The leading has to be read from `TYPE` rather than from `styles[type]`: `StyleSheet.create`
+   * is effectively identity today, but the registered type does not promise a readable object.
+   */
+  const leading = TYPE[type].lineHeight * Math.min(useWindowDimensions().fontScale, cap);
+
   return (
     <Text
-      maxFontSizeMultiplier={maxFontSizeMultiplier ?? MAX_SCALE[type] ?? 1.6}
-      style={[base, { color: Colors[themeColor] }, styles[type], style]}
+      maxFontSizeMultiplier={cap}
+      style={[base, { color: Colors[themeColor] }, styles[type], { lineHeight: leading }, style]}
       {...rest}
     />
   );
@@ -70,7 +91,7 @@ export function ThemedText({
  */
 const base = { includeFontPadding: false } as const;
 
-const styles = StyleSheet.create({
+const TYPE = {
   // Melodrama and Tabular carry NO fontWeight — each bundled cut is its own family, and asking
   // for a weight within it is exactly the Android lookup that silently falls back to Roboto.
   display: { fontFamily: Fonts.display, fontSize: 28, letterSpacing: -0.5, lineHeight: 30 },
@@ -107,4 +128,6 @@ const styles = StyleSheet.create({
 
   money: { fontFamily: Fonts.money, fontSize: 14, lineHeight: 18 },
   moneyLarge: { fontFamily: Fonts.moneyBold, fontSize: 16, lineHeight: 21 },
-});
+} as const;
+
+const styles = StyleSheet.create(TYPE);
