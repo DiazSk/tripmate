@@ -354,6 +354,13 @@ surface. They live in `:root` only so there is one place to change them; JS read
   hover tint to white; that mitigation has one fallback colour and no more. Not needing it is
   strictly better than spending it. `src/lib/mapRoute.test.mjs` guards this — it asserts every
   shipped palette clears the band, *and* that the guard still fires for a colour inside it.
+  **The numbered stop disc is the one licensed crossing.** A day's list draws each stop's disc in
+  that day's core hue — a route colour on a surface, which reads as a contradiction of the rule
+  above. It is deliberate: the disc in the list is the same mark as the disc on the map, and
+  carrying the hue across is what makes the two agree about which stop is which. Identity rather
+  than chrome. The numeral on it is a near-black ink, never the hue, and no other interface element
+  may take a route colour. `mobile/src/constants/theme.ts` holds the mobile spelling.
+
 - **Route Casing** (`{colors.route-casing}`): the dark stroke down both ribbon edges. Near-black
   rather than pure black — a true black edge reads as a hole punched in the photography, a warm
   near-black reads as depth. **The casing, not the hue, is what makes a route legible over
@@ -375,6 +382,20 @@ which of the three verbs it is doing; if the answer is "none", it is the one sla
 alpha. If a new surface needs a background it takes this token at a new alpha — it does not take a
 new grey, and it does not leave the material for `--canvas`. Full opacity is where that step ends
 (`.glass-nav-menu`, `.glass-itinerary.is-opaque`).
+
+**The Primary Action Surface.** One control per screen may be a solid jade fill: that screen's
+primary action, with `--accent-foreground` ink on it (`PrimaryButton` in
+`mobile/src/components/form.tsx`). Every other action is the one slate with jade ink — `PillButton`
+is that shape, and its own note records why filling it would make a second primary.
+
+The limit is a count, not a style. Two jade fills on one screen is the defect this licenses
+against: it makes the thing you must do indistinguishable from the thing you might, which is
+exactly why sign-in's mode toggle is a slate capsule rather than a second green one. One Meaning is
+untouched — jade is still only ever action, whether it is the ink or the ground.
+
+An outside review read One Slate together with the tint clause below and concluded that the app's
+most prominent controls broke its own system. It was right that nothing written licensed them: the
+rule was silent, not the product wrong.
 
 **The Semantic Tint Exception, written down because the app already does it.** A surface may
 carry a tint of jade or coral to signal *state* or *alert*. Exactly two signals are licensed:
