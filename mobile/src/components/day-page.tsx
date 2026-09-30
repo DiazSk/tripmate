@@ -121,9 +121,6 @@ export function DayPage({
               ) : null}
               <StopRow
                 stop={entry.stop}
-                // First *in its group*, not in the day: `first` suppresses the row's top hairline,
-                // and without this every heading would be followed immediately by a second rule.
-                first={indexInGroup === 0}
                 // The day's own numbering, not the group's — the stops stay 1..n down the page and
                 // keep agreeing with the numbered discs on the map.
                 ordinal={entry.index + 1}
@@ -261,7 +258,6 @@ function DayMasthead({
 /** A stop is a row, never a card. The system draws rules rather than boxing things. */
 function StopRow({
   stop,
-  first,
   ordinal,
   dayIndex,
   expanded,
@@ -276,7 +272,6 @@ function StopRow({
   offline,
 }: {
   stop: Stop;
-  first: boolean;
   ordinal: number;
   dayIndex: number;
   expanded: boolean;
@@ -307,7 +302,6 @@ function StopRow({
       // the day not working is something that is true whether or not you are looking at it.
       style={[
         styles.stop,
-        !first && styles.stopRuled,
         expanded && styles.stopExpanded,
         blocked && styles.stopBlocked,
       ]}
@@ -704,6 +698,22 @@ const styles = StyleSheet.create({
    *  its own. */
   slot: { paddingHorizontal: Spacing.read },
 
+  /**
+   * **No divider between rows, and this is the third hairline on this screen to go.**
+   *
+   * It was a `borderTopWidth` on this padded box, so it drew from 0.00pt to 401.67pt — the full
+   * device — while the `SectionRule` headings beside it run 17.67–385.67 and every word it
+   * separated is inset 16. A rule spanning more than the content it divides reads as a seam in
+   * the page rather than a break in a list, which is what kept getting reported.
+   *
+   * Insetting it to 16 was the other option and it is the wrong one here: a stop is already a
+   * numbered disc, a bold name and a muted meta line, with the leg between it and the last one
+   * saying "walk, about 7 min". The order is legible four ways over; a line is a fifth that only
+   * adds weight. The group headings stay, because those mark a real division — morning from
+   * afternoon — rather than repeating one the list already shows.
+   *
+   * Vertical space does the separating: 12pt below one row, the leg, 12pt above the next.
+   */
   stop: {
     flexDirection: 'row',
     gap: 13,
@@ -711,7 +721,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.read,
     alignItems: 'flex-start',
   },
-  stopRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
   stopExpanded: { backgroundColor: Colors.accentWash },
   stopBlocked: { backgroundColor: Colors.alertSoft },
   particularsRow: {
