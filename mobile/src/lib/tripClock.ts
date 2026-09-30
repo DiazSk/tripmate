@@ -112,6 +112,18 @@ export function minutesUntil(stop: Stop | undefined, nowMinutes: number): number
  * wait, and never a departure time, because there is nothing honest to derive one from.
  */
 export type TodayState =
+  /**
+   * The departure is behind you and the stop is booked.
+   *
+   * **Gated on booked, not on lateness alone.** A flexible stop reached late is a day that
+   * slipped, which is worth saying quietly; a reservation you can no longer reach under the
+   * current estimate is the one thing on this screen coral is actually for. Without the gate the
+   * alert colour would fire on an ordinary slow morning, which is how a colour stops meaning
+   * anything.
+   *
+   * `minutes` counts *past* the departure, where every other arm counts down to something.
+   */
+  | { kind: 'late'; index: number; leaveBy: string; minutes: number }
   | { kind: 'imminent'; index: number; leaveBy: string; minutes: number }
   | { kind: 'upcoming'; index: number; leaveBy: string | null; minutes: number }
   | { kind: 'free'; index: number; minutes: number }
@@ -140,7 +152,21 @@ export function todayState(
 
   // Measured from the departure where there is one, and from the stop itself otherwise — the
   // question "how long have I got" means until I must leave, not until I am expected.
-  const slack = leaveBy === null ? until : Math.max(0, (parseClock(leaveBy) ?? 0) - nowMinutes);
+  //
+  // **`raw` before the clamp, because the clamp is what erases the answer.** `Math.max(0, …)`
+  // below makes a departure ten minutes gone indistinguishable from one due this second, and
+  // those are the two states the alert colour has to tell apart. The window is real: `nextStop`
+  // keys on `at > now`, so at 12:20 a 12:30 stop is still next while its 12:10 departure has
+  // passed — the window is as wide as the leg is long.
+  const raw = leaveBy === null ? until : (parseClock(leaveBy) ?? 0) - nowMinutes;
+
+  // Strictly `< 0`: standing at the departure minute is the last honest moment to go, not a
+  // missed one.
+  if (leaveBy !== null && raw < 0 && stops[index]?.timeFlexibility === 'FIXED') {
+    return { kind: 'late', index, leaveBy, minutes: -raw };
+  }
+
+  const slack = leaveBy === null ? until : Math.max(0, raw);
 
   if (leaveBy !== null && slack <= IMMINENT_MINUTES) {
     return { kind: 'imminent', index, leaveBy, minutes: slack };

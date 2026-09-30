@@ -148,6 +148,40 @@ test('the boundaries themselves', () => {
   expect(todayState(belem, at(10, 41), leaveByFor).kind).toBe('upcoming'); // 89
 });
 
+// **Late is gated on booked, not on lateness alone.** A flexible stop reached late is a day that
+// slipped; a reservation you can no longer reach is the impossibility coral exists for. The window
+// is real: `nextStop` keys on `at > now`, so at 12:20 the 12:30 stop is still next while its 12:10
+// departure is ten minutes gone.
+const booked = (name: string, time: string): Stop =>
+  ({ ...stop(name, time), timeFlexibility: 'FIXED' }) as Stop;
+const belemBooked = [belem[0], booked('Pastéis de Belém', '12:30 PM'), belem[2]];
+
+test('a booked stop whose departure has passed is late, not imminent', () => {
+  const s = todayState(belemBooked, at(12, 20), leaveByFor);
+  expect(s.kind).toBe('late');
+  if (s.kind === 'late') {
+    expect(s.leaveBy).toBe('12:10 PM');
+    expect(s.minutes).toBe(10); // minutes *past* the departure
+  }
+});
+
+// The clamp this arm exists to see past is `Math.max(0, …)`, and everything else still needs it.
+test('the same day unbooked, at the same minute, is still imminent at zero', () => {
+  const s = todayState(belem, at(12, 20), leaveByFor);
+  expect(s.kind).toBe('imminent');
+  if (s.kind === 'imminent') expect(s.minutes).toBe(0);
+});
+
+test('a booked first stop is not late, because there is no departure to be late for', () => {
+  const s = todayState([booked('Jerónimos Monastery', '10:30 AM'), belem[1]], at(10), leaveByFor);
+  expect(s.kind).toBe('upcoming');
+  if (s.kind === 'upcoming') expect(s.leaveBy).toBeNull();
+});
+
+test('exactly at the departure minute is imminent, not late', () => {
+  expect(todayState(belemBooked, at(12, 10), leaveByFor).kind).toBe('imminent');
+});
+
 test('a stop with an unreadable time does not strand the screen', () => {
   expect(todayState([stop('Mystery', 'sometime')], at(9), leaveByFor).kind).toBe('done');
 });
