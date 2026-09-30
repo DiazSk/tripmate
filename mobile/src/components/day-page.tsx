@@ -121,13 +121,13 @@ export function DayPage({
               ) : null}
               <StopRow
                 stop={entry.stop}
+                // First *in its group*, not in the day: `first` suppresses the row's top hairline,
+                // and without this every heading would be followed immediately by a second rule.
+                first={indexInGroup === 0}
                 // The day's own numbering, not the group's — the stops stay 1..n down the page and
                 // keep agreeing with the numbered discs on the map.
                 ordinal={entry.index + 1}
                 dayIndex={dayIndex}
-                // First *in its group*, not in the day: `first` suppresses the row's top hairline,
-                // and without this every heading would be followed immediately by a second rule.
-                first={indexInGroup === 0}
                 expanded={emphasis === entry.index}
                 findings={findings.filter((f) => f.stopIndex === entry.index)}
                 onPress={() => onEmphasise(emphasis === entry.index ? null : entry.index)}
@@ -211,7 +211,9 @@ function DayMasthead({
       <PlacePhoto
         name={destination}
         aspectRatio={16 / 9}
-        radius={Radius.read}
+        // Square, because it now touches both screen edges — a radius only reads as a corner
+        // when there is page beside it to be a corner against.
+        radius={0}
         scrim={PhotoScrim}
         style={styles.mastheadPhoto}>
         {weather ? (
@@ -249,7 +251,9 @@ function DayMasthead({
         </ThemedText>
       ) : null}
 
-      <SectionRule label="The day" trailing={dayTotal(day)} />
+      <View style={styles.slot}>
+        <SectionRule label="The day" trailing={dayTotal(day)} />
+      </View>
     </View>
   );
 }
@@ -257,9 +261,9 @@ function DayMasthead({
 /** A stop is a row, never a card. The system draws rules rather than boxing things. */
 function StopRow({
   stop,
+  first,
   ordinal,
   dayIndex,
-  first,
   expanded,
   findings,
   onPress,
@@ -272,9 +276,9 @@ function StopRow({
   offline,
 }: {
   stop: Stop;
+  first: boolean;
   ordinal: number;
   dayIndex: number;
-  first: boolean;
   expanded: boolean;
   /** This stop's own findings — already filtered to `stopIndex`. */
   findings: Guardrail[];
@@ -647,12 +651,21 @@ const styles = StyleSheet.create({
   content: { paddingBottom: Spacing.regular * 2 },
   footnote: { paddingHorizontal: Spacing.read, paddingTop: Spacing.rows },
 
-  masthead: { paddingHorizontal: Spacing.read, paddingTop: Spacing.tight },
+  /**
+   * **No gutter of its own — the photograph is the one thing here that spans the device.**
+   * A 16:9 frame inset 16pt each side and rounded is a picture *on* a page; edge to edge it is
+   * the page, which is the whole reason this screen opens on an image. The prose under it keeps
+   * the gutter, so the inset still exists where it does work: holding a measure for reading.
+   *
+   * The top padding goes with it. A gap above a full-bleed image is a stripe of canvas doing
+   * nothing, and the block above already carries its own bottom spacing.
+   */
+  masthead: { paddingTop: 0 },
   mastheadPhoto: { justifyContent: 'flex-end' },
   weatherBadge: {
     position: 'absolute',
-    top: Spacing.rows,
-    right: Spacing.rows,
+    top: Spacing.read,
+    right: Spacing.read,
     backgroundColor: Colors.bar,
     borderRadius: Radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
@@ -662,11 +675,20 @@ const styles = StyleSheet.create({
     // The badge stays a badge: a long fallback truncates rather than wrapping across the photo.
     maxWidth: '60%',
   },
-  dateline: { padding: Spacing.rows, gap: Spacing.hair },
+  /**
+   * The page's gutter, not the picture's.
+   *
+   * This was `Spacing.rows` (12) while the photograph was inset 16 — so the dateline sat 28pt
+   * from the screen and read as type inside a frame. Full-bleed there is no frame, and 12 against
+   * the 16 the prose directly below uses is a four-point stagger on the same edge. Everything on
+   * this screen now starts on one line; the weather badge takes the same value for the same
+   * reason.
+   */
+  dateline: { padding: Spacing.read, gap: Spacing.hair },
   datelineOverline: { opacity: 0.72 },
   datelineTitle: { opacity: 0.8 },
-  theme: { marginTop: Spacing.rows },
-  summary: { marginTop: Spacing.rows },
+  theme: { marginTop: Spacing.rows, paddingHorizontal: Spacing.read },
+  summary: { marginTop: Spacing.rows, paddingHorizontal: Spacing.read },
 
   sectionRule: {
     flexDirection: 'row',
