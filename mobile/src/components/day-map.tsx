@@ -6,7 +6,7 @@ import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Radius, Spacing, dayCore, dayGlow } from '@/constants/theme';
+import { Colors, OverPhotograph, Radius, Spacing, dayCore, dayGlow } from '@/constants/theme';
 import { travelSummary } from '@/lib/dayTravel';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
 
@@ -133,7 +133,7 @@ export function DayMap({
           about how much of it is spent moving. Time rather than distance, for the reason
           `TravelSegment` records: nothing here knows whether the reader thinks in miles. */}
       <View style={styles.summary} pointerEvents="none">
-        <ThemedText type="detail" themeColor="muted">
+        <ThemedText type="detail" themeColor="onDeepMuted">
           {travelSummary(stops)}
         </ThemedText>
       </View>
@@ -144,7 +144,7 @@ export function DayMap({
           the bridge while you are looking at the map. */}
       {named ? (
         <Pressable style={styles.caption} onPress={() => onEmphasise(null)}>
-          <ThemedText type="headingSmall" numberOfLines={2}>
+          <ThemedText type="headingSmall" themeColor="onDeep" numberOfLines={2}>
             {named}
           </ThemedText>
         </Pressable>
@@ -175,7 +175,10 @@ function StopMarker({
   emphasised: boolean;
   onPress: () => void;
 }) {
-  const color = emphasised ? Colors.accent : dayCore(dayIndex);
+  // `OverPhotograph.accentDisc`, not `Colors.accent` — see its docblock. The disc is a map mark
+  // standing beside four day cores that do not move with the appearance, and `DiscInk` is
+  // measured against that lightness.
+  const color = emphasised ? OverPhotograph.accentDisc : dayCore(dayIndex);
   const [tracking, setTracking] = useState(true);
   // Re-arm during render rather than from an effect. React supports adjusting state when a prop
   // changes this way, and it is the same shape as the map's build latch; setting state
@@ -235,10 +238,13 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     top: Spacing.read,
     maxWidth: '90%',
-    backgroundColor: Colors.surfaceDeep,
+    // `OverPhotograph`, not `Colors`: what is under this is the map, which DESIGN.md already
+    // puts outside the interface palette, and it stays dark in both appearances. A light panel
+    // here would be a pane of near-nothing over a dark map.
+    backgroundColor: OverPhotograph.surface,
     borderRadius: Radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
+    borderColor: Colors.photoBorder,
     paddingHorizontal: Spacing.regular,
     paddingVertical: Spacing.tight,
   },
@@ -247,10 +253,10 @@ const styles = StyleSheet.create({
     left: Spacing.read,
     right: Spacing.read,
     bottom: Spacing.read,
-    backgroundColor: Colors.bar,
+    backgroundColor: OverPhotograph.bar,
     borderRadius: Radius.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
+    borderColor: Colors.photoBorder,
     paddingHorizontal: Spacing.rows,
     paddingVertical: Spacing.tight,
   },

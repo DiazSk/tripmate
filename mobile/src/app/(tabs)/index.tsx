@@ -203,11 +203,14 @@ export default function Home() {
                 radius={Radius.read}
                 scrim={PhotoScrim}
                 style={styles.featured}>
+                {/* `onDeep`, not `foreground`. They are the same hex in dark and they are not
+                    the same token: this ink stands on a photograph, so it does not move when the
+                    appearance does. */}
                 <View style={styles.featuredCaption}>
-                  <ThemedText type="display" numberOfLines={2}>
+                  <ThemedText type="display" themeColor="onDeep" numberOfLines={2}>
                     {featured.trip.destination}
                   </ThemedText>
-                  <ThemedText type="money" themeColor="foreground">
+                  <ThemedText type="money" themeColor="onDeep">
                     {formatRange(featured.trip.startDate, featured.trip.endDate)}
                   </ThemedText>
                 </View>

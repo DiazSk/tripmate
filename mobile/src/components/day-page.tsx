@@ -255,11 +255,11 @@ function DayPlate({ day, destination }: { day: DayPlan; destination: string }) {
       scrim={PhotoScrim}
       style={styles.plate}>
       <View style={styles.dateline}>
-        <ThemedText type="display" numberOfLines={2}>
+        <ThemedText type="display" themeColor="onDeep" numberOfLines={2}>
           {formatDateline(day.date)}
         </ThemedText>
         {day.title ? (
-          <ThemedText type="detail" style={styles.datelineTitle}>
+          <ThemedText type="detail" themeColor="onDeep" style={styles.datelineTitle}>
             {day.title}
           </ThemedText>
         ) : null}

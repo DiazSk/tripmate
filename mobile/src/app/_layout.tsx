@@ -1,5 +1,5 @@
 import { useFonts } from 'expo-font';
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ShareIntentProvider } from 'expo-share-intent';
@@ -9,6 +9,7 @@ import TabularMedium from '../../assets/fonts/Tabular-Medium.ttf';
 import TabularSemiBold from '../../assets/fonts/Tabular-SemiBold.ttf';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { APPEARANCE } from '@/constants/appearance';
 import { Colors } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -50,14 +51,17 @@ export default function RootLayout() {
   // plain sans. The splash is still up at this point, so holding here costs nothing visible.
   if (!fontsLoaded) return null;
 
-  // Unconditionally dark. Kiln has one ground and no light variant, so reading the system scheme
-  // could only ever produce a surface the design system does not define.
+  // **The app's own preference, never the system scheme.** Kiln is one system with two
+  // appearances and the reader picks; following the OS would hand somebody a light app the
+  // moment their phone dimmed at dusk, on a surface whose whole argument is that it was
+  // composed. `APPEARANCE` is resolved once at module load — see `constants/appearance.ts`.
+  const light = APPEARANCE === 'light';
   return (
     <ShareIntentProvider>
-      <ThemeProvider value={DarkTheme}>
+      <ThemeProvider value={light ? DefaultTheme : DarkTheme}>
         {/* Without this, Android's forced edge-to-edge draws dark system icons over the near-black
-            canvas and the clock and battery disappear into it. */}
-        <StatusBar style="light" />
+            canvas and the clock and battery disappear into it — and the inverse under paper. */}
+        <StatusBar style={light ? 'dark' : 'light'} />
         <AnimatedSplashOverlay />
         <Stack
           screenOptions={{

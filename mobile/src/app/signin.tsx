@@ -232,11 +232,11 @@ export default function SignInScreen() {
           entering={rise.duration(Motion.settle)}
           exiting={fade.duration(Motion.settle)}
           style={styles.caption}>
-          <ThemedText type="label" themeColor="foreground" style={styles.captionLabel}>
+          <ThemedText type="label" themeColor="onDeep" style={styles.captionLabel}>
             {current.label}
           </ThemedText>
           {bandHeight > BAND_COLLAPSED ? (
-            <ThemedText type="display" numberOfLines={2}>
+            <ThemedText type="display" themeColor="onDeep" numberOfLines={2}>
               {current.stat}
             </ThemedText>
           ) : null}

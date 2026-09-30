@@ -27,6 +27,7 @@ import { FieldSheet } from '@/components/field-sheet';
 import { ChoiceRow, FieldTrough, PrimaryButton, TagGrid, TextField } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
+import { APPEARANCE, setAppearance } from '@/constants/appearance';
 import { BarHeight, Colors, Radius, Spacing } from '@/constants/theme';
 import {
   CROWDS,
@@ -326,6 +327,8 @@ export default function Profile() {
 
         <AccountSection />
 
+        <AppearanceSection />
+
         {/* One line, at the foot, rather than Swift's per-section footer: a single PUT writes all
             seven fields, so blaming the section you last touched would be a guess. */}
         {failed ? (
@@ -569,6 +572,33 @@ function AccountSection() {
           await signOut();
           setBusy(false);
         }}
+      />
+    </Section>
+  );
+}
+
+/**
+ * The light appearance, behind its flag.
+ *
+ * **A reload, not a re-render, and the row says so.** `Colors` is resolved once at module load
+ * so that no call site knows an appearance exists (see `constants/appearance.ts`); the price is
+ * that switching restarts the JS bundle. Hiding that behind a Switch that appears to do nothing
+ * for a second would be worse than a row that states it.
+ *
+ * Lives under Account rather than at the top because it is a prototype, and because nothing on
+ * this screen should outrank the profile the screen is for.
+ */
+function AppearanceSection() {
+  const light = APPEARANCE === 'light';
+  return (
+    <Section
+      title="Appearance"
+      footer="Kiln is drawn for the dark ground. The light appearance is a prototype — switching restarts the app, and the keyboard, date picker and tab bar stay dark until it ships for real.">
+      <Row
+        label="Appearance"
+        value={light ? 'Light' : 'Dark'}
+        onPress={() => setAppearance(light ? 'dark' : 'light')}
+        first
       />
     </Section>
   );

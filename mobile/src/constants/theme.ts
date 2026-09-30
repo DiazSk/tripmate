@@ -5,64 +5,51 @@
  * which is the same system's proven port to a native mobile platform. When this file disagrees
  * with DESIGN.md, this file is the bug.
  *
- * **There is no light theme, and that is the design rather than an omission.** Kiln is a single
- * warm near-black ground; DESIGN.md describes no light variant, and the Darken-Never-Lighten rule
- * assumes there is only one. `app.json` pins `userInterfaceStyle: "dark"` so the platform chrome
- * agrees with it.
+ * **This file used to assert that there is no light theme and cite DESIGN.md for it.** DESIGN.md
+ * did not contain that. "No light mode" existed in exactly one place — a line written into
+ * `docs/design-board/REVIEW-PROMPT.md` for outside reviewers — so a code comment was the most
+ * authoritative statement of a rule nobody had ratified, and it fenced three reviewers off a
+ * live question. The same failure as last cycle's stop-disc comment.
+ *
+ * So there is a light appearance now, as a **token-level prototype behind a flag**, defaulting
+ * to dark. It is total or it is nothing: `globals.css`'s `--postcard-paper` was an opaque cream
+ * surface backing one route, and it was deleted because "a visitor crossed from dark translucent
+ * slate to tilted cream stationery in a single click, and read it as a different application."
+ * That is the strongest evidence in this repo on the subject and it argues against a *partial*
+ * light appearance, not against a light one.
+ *
+ * `app.json` still pins `userInterfaceStyle: "dark"`, deliberately. Changing it would alter the
+ * dark app's behaviour when the flag must ship inert, so under the light appearance the
+ * keyboard, the native date picker, the tab bar's system materials and the splash stay dark.
+ * **A named gap in a prototype, not a bug** — closing it costs a prebuild and belongs to a
+ * commitment rather than to a look.
  */
 
 import '@/global.css';
 
 import { Platform } from 'react-native';
 
+import { APPEARANCE } from '@/constants/appearance';
+import { Dark, DiscInk, Light, OverPhotograph, type Palette } from '@/constants/palette';
+
 /**
  * Alpha slates are precomputed 8-digit hex rather than a `withAlpha()` helper.
  *
  * RN parses `#RRGGBBAA` natively, and the whole system uses five alphas — a runtime call per
  * style to avoid five string constants is a worse trade. The One Slate Rule says every panel,
- * pill, badge and scrim is this one colour at some alpha; it never becomes a second grey.
+ * pill, badge and scrim is this one colour at some alpha; it never becomes a second grey, and
+ * that survives the light appearance literally: the same `#1C1A18`, at a ramp mirrored by
+ * perceptual step.
+ *
+ * **Selected once, at module load.** `Colors` stays a plain object, so none of the 184 call
+ * sites and none of the 34 `StyleSheet.create` blocks know an appearance exists. See
+ * `appearance.ts` for what that costs.
  */
-export const Colors = {
-  canvas: '#121110',
-  /** The one slate, opaque. rgb(28,26,24). */
-  surfaceDeep: '#1C1A18',
-  /** 0.62 — panels, cards, sheets. The Swift app's `panelOpacity`. */
-  panel: '#1C1A189E',
-  /** 0.55 — control pills floating over photography. */
-  control: '#1C1A188C',
-  /** 0.72 — nav and tab bars. */
-  bar: '#1C1A18B8',
-  /** 0.82 — the darken-on-press step. Never lighten; see the Darken-Never-Lighten rule. */
-  pressed: '#1C1A18D1',
+export const Colors: Palette = APPEARANCE === 'light' ? Light : Dark;
 
-  /** Warm paper. Body text everywhere, and text over any dark surface. */
-  foreground: '#F7F5F2',
-  /** Paper at 62%, built as an alpha rather than a sampled grey so it stays correct on every
-   *  surface alpha instead of being tuned for one. */
-  muted: '#F7F5F29E',
-  /** White at 12%. Every divider, panel edge and drawn rule. */
-  cardBorder: '#FFFFFF1F',
-  /** White at 14%, for a border inset over photography, where 12% disappears. */
-  photoBorder: '#FFFFFF24',
+export type ThemeColor = keyof Palette;
 
-  /** Kiln Jade — action, and only action. Never a label, never a figure. */
-  accent: '#28B981',
-  /** Dark ink drawn ON jade. Not interchangeable with `foreground`; conflating the two
-   *  foregrounds is the specific bug this palette was rebuilt to fix. */
-  accentForeground: '#06241A',
-  /** Jade at 9%, the emphasised-row wash. */
-  accentWash: '#28B98117',
-
-  /** Kiln Gold — money, and only money. A figure is information, not an invitation. */
-  money: '#E9B44C',
-  moneySoft: '#E9B44C2E',
-
-  /** Ember Coral — over-plan and failure. */
-  alert: '#E4553F',
-  alertSoft: '#E4553F29',
-} as const;
-
-export type ThemeColor = keyof typeof Colors;
+export { DiscInk, OverPhotograph };
 
 /**
  * Round what you touch, square what you read.
@@ -157,12 +144,20 @@ export const RouteDayGlow = ['#7FB3BD', '#C596B6', '#DFA079', '#A6BF89', '#A6A2D
 export const dayGlow = (dayIndex: number) =>
   RouteDayGlow[((dayIndex % RouteDayGlow.length) + RouteDayGlow.length) % RouteDayGlow.length];
 
-/** Ink drawn on a day disc. Near-black at 92%, from the Swift app's `discInk`. */
-export const DiscInk = '#12110FEB';
 
-/** The scrim over a day masthead. Measured, not picked — see the Photograph-Is-Not-A-Surface
- *  rule: destination photography ranges to 0.947 mean luminance, where white body text is
- *  2.41:1 under a 60% scrim. Large type only above this. */
+
+/**
+ * The scrim over a day masthead. Measured, not picked — see the Photograph-Is-Not-A-Surface
+ * rule: destination photography ranges to 0.947 mean luminance, where white body text is 2.41:1
+ * under a 60% scrim. Large type only above this.
+ *
+ * **It does not move with the appearance, and the rule generalises rather than forking.** A
+ * scrim moves the photograph away from the ink — toward black under paper ink, toward white
+ * under dark ink; which direction is a function of the ink, not of the appearance, which
+ * subsumes Darken-Never-Lighten as the same rule stated for one ink. Here the photograph stays
+ * dark in both, so the ink over it stays paper (`Colors.onDeep`) and this number stays 0.58.
+ * `PhotoScrimLight` in `palette.ts` is the parked alternative.
+ */
 export const PhotoScrim = 0.58;
 
 export const Fonts = {
