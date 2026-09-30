@@ -71,8 +71,8 @@ export default function SectionOpener({
 /**
  * Drawn, not typed — a Unicode `❋` renders in whatever the fallback font decides and cannot be
  * given a stroke weight, so this is an authored six-point asterisk at the same 1.5 stroke the
- * app's lucide icons use. It is the project's own mark and stays; it belongs to the same asterisk
- * family as `LogoMark` and the four-point `ButtonMark`.
+ * app's lucide icons use. It is the landing's own punctuation and stays, alongside the four-point
+ * `ButtonMark`. It is not the logo: `LogoMark` is a globe and a route.
  */
 function SectionMark() {
   return (
