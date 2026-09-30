@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, type MapType } from 'react-native-maps';
 
 import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
+import { MapControls, PITCH_3D } from '@/components/map-controls';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
-import { Colors, OverPhotograph, Radius, Spacing, dayCore, dayGlow } from '@/constants/theme';
+import { Colors, Motion, OverPhotograph, Radius, Spacing, dayCore, dayGlow } from '@/constants/theme';
 import { useHere } from '@/lib/here';
 import { travelSummary } from '@/lib/dayTravel';
-import { drawableStops, regionForStops } from '@/lib/mapRegion';
+import { altitudeForRegion, drawableStops, regionForStops } from '@/lib/mapRegion';
 
 /** Clear of the summary pill — see `mapPadding` below. */
 const MAP_INSET = { top: 72, right: 0, bottom: 0, left: 0 };
@@ -60,6 +61,63 @@ export function DayMap({
 }) {
   const map = useRef<MapView>(null);
   const { here } = useHere();
+  const [mapType, setMapType] = useState<MapType>('mutedStandard');
+  const [pitched, setPitched] = useState(false);
+
+  /**
+   * **Reads the camera rather than trusting the toggle's own state.** The reader can tilt with
+   * two fingers, and a day change flies back to a region — which has no pitch — so a boolean
+   * kept here would disagree with the map within two gestures. One `await` per press settles it.
+   *
+   * **The altitude is computed, not read back.** `animateCamera({ pitch })` alone lets the
+   * altitude fall to a default; spreading `getCamera()` does not help either, because the
+   * altitude a region-framed map reports does not describe that framing — both were measured on
+   * the device, and both zoomed a four-stop Alfama day out to most of Lisbon. Pitch and
+   * region-framing are simply two different models in this library. So the button builds its own
+   * camera from the region it already has (`altitudeForRegion`), which is the only one of the
+   * three that keeps the day on screen.
+   */
+  async function toggle3D() {
+    const camera = await map.current?.getCamera();
+    if (!camera || !region) return;
+
+    // **Flat is `animateToRegion`, not a camera.** It is the exact call that framed this day in
+    // the first place, so returning to 2D lands on the framing the reader started from rather
+    // than on whatever a computed altitude approximates — and a region carries no pitch, so it
+    // flattens as a side effect of doing the right thing. Only the tilted direction needs an
+    // altitude guess, and there a slightly tight frame is the point: you tilted in to look at
+    // the buildings.
+    if (camera.pitch > 1) {
+      map.current?.animateToRegion(region, Motion.settle);
+      setPitched(false);
+      return;
+    }
+    map.current?.animateCamera(
+      {
+        center: camera.center,
+        heading: camera.heading,
+        pitch: PITCH_3D,
+        altitude: altitudeForRegion(region),
+      },
+      { duration: Motion.settle },
+    );
+    setPitched(true);
+  }
+
+  /** Same camera model as the 3D button, for the same reason — a partial one drifts the zoom. */
+  async function locate() {
+    const camera = await map.current?.getCamera();
+    if (!camera || !region || !here) return;
+    map.current?.animateCamera(
+      {
+        center: { latitude: here.lat, longitude: here.lng },
+        heading: camera.heading,
+        pitch: camera.pitch,
+        altitude: altitudeForRegion(region),
+      },
+      { duration: Motion.settle },
+    );
+  }
   const drawn = drawableStops(stops);
   const region = regionForStops(stops);
 
@@ -96,12 +154,11 @@ export function DayMap({
         // the system**, for the same reason `_layout.tsx` does: a dark map inside a paper app is
         // the `--postcard-paper` failure with the polarity swapped.
         userInterfaceStyle={APPEARANCE}
-        // Dark alone is not enough. Apple's dark standard map still paints landcover in saturated
-        // greens and purples, which on this canvas reads as a different application's map and
-        // competes with the day's own hue for attention. `mutedStandard` is Apple's own answer —
-        // the type they provide for maps carrying overlays. iOS-only; Android gets the same
-        // restraint from Google's dark colour scheme above.
-        mapType="mutedStandard"
+        // Opens on `mutedStandard` and the reader can change it — see `MODES` in `map-controls`
+        // for why that list is three long and why Apple's plain `standard` is not on it. The
+        // muted type is Apple's own answer for a map carrying overlays; iOS-only, and Android
+        // gets the same restraint from Google's colour scheme above.
+        mapType={mapType}
         // **Apple's own POI labels are the densest thing on this screen and none of them are
         // ours.** Counted on the Lisbon fixture: 23 restaurant, café and museum labels against
         // 4 numbered stops, several of them overlapping a disc. They also make a promise the app
@@ -180,6 +237,16 @@ export function DayMap({
           />
         ))}
       </MapView>
+
+      <MapControls
+        pitched={pitched}
+        onToggle3D={toggle3D}
+        mapType={mapType}
+        onMapType={setMapType}
+        // Absent rather than disabled when there is no fix: a locate button that cannot locate
+        // is the permission prompt by another route, which `here.ts` exists to avoid.
+        onLocate={here ? locate : undefined}
+      />
 
       {/* What the map cannot draw. A route is visibly a shape and invisibly a cost, and the
           cost is the half somebody is deciding on — "is this the day I do Belém" is a question

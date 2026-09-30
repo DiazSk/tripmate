@@ -1,4 +1,4 @@
-import { drawableStops, regionForStops } from './mapRegion';
+import { drawableStops, regionForStops, altitudeForRegion } from './mapRegion';
 
 const KYOTO = { lat: 34.9671, lng: 135.7727 };
 
@@ -44,4 +44,20 @@ test('a day of only unplaceable stops frames nothing', () => {
 test('dropping an unplaceable stop keeps the others on their own ordinals', () => {
   const drawn = drawableStops([KYOTO, { lat: 0, lng: 0 }, { lat: 35, lng: 135 }]);
   expect(drawn.map((entry) => entry.index)).toEqual([0, 2]);
+});
+
+describe('altitudeForRegion', () => {
+  it('rises with the span it has to show', () => {
+    const near = altitudeForRegion({ latitude: 0, longitude: 0, latitudeDelta: 0.004, longitudeDelta: 0.004 });
+    const far = altitudeForRegion({ latitude: 0, longitude: 0, latitudeDelta: 0.04, longitudeDelta: 0.04 });
+    expect(far).toBeCloseTo(near * 10, 0);
+  });
+
+  it('puts a minimum-span day at street altitude rather than in orbit', () => {
+    // The 400m floor `MIN_SPAN_M` enforces. A camera that answered tens of kilometres here would
+    // make the 3D button read as a zoom-out button, which is the defect this exists to fix.
+    const alt = altitudeForRegion({ latitude: 38.71, longitude: -9.13, latitudeDelta: 400 / 111_320, longitudeDelta: 400 / 111_320 });
+    expect(alt).toBeGreaterThan(300);
+    expect(alt).toBeLessThan(1200);
+  });
 });

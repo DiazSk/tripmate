@@ -77,3 +77,25 @@ export function regionForStops(stops: Placeable[]): Region | null {
     longitudeDelta: Math.max((Math.max(...lngs) - Math.min(...lngs)) * PAD, minLngDelta),
   };
 }
+
+/**
+ * The camera altitude that frames roughly the same ground a region does.
+ *
+ * **Needed because pitch and region-framing are mutually exclusive in this library.**
+ * `animateToRegion` takes a region, which has no pitch — a day change flies flat, which is
+ * correct. `animateCamera` takes an `MKMapCamera`, which has pitch but no span. Round-tripping
+ * `getCamera()` and putting the pitch back does *not* preserve the view: measured on the device,
+ * a 3D press on four stops in Alfama zoomed out to most of Lisbon, because the altitude that
+ * comes back from a region-framed map does not describe that framing. So the 3D button computes
+ * its own altitude from the region it already owns instead of asking the map.
+ *
+ * MapKit's vertical field of view is not published; 30° is the figure that matches what the map
+ * actually draws, and it is a **calibration knob** rather than a derivation — if a tilted day
+ * frames tighter or looser than the flat one, this angle is the number to turn.
+ */
+const CAMERA_FOV_DEGREES = 30;
+
+export function altitudeForRegion(region: Region): number {
+  const metres = region.latitudeDelta * METRES_PER_DEGREE;
+  return metres / (2 * Math.tan((CAMERA_FOV_DEGREES / 2) * (Math.PI / 180)));
+}
