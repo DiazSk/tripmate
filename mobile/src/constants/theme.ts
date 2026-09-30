@@ -129,9 +129,11 @@ export const Motion = {
  * the interface palette. DESIGN.md: these must never appear in a panel, chip or button, because
  * the map gets its own colours on the grounds that it is photography rather than a surface.
  *
- * **The numbered stop disc is the one documented crossing, and it is not a violation.** The disc
- * in a day's list is the same mark as the disc on the map; carrying the day's own hue across is
- * what makes the two agree about which stop is which. It is identity, not chrome.
+ * **The numbered stop disc is the one licensed crossing**, written down in DESIGN.md's tertiary
+ * section beside the rule it bends. The disc in a day's list is the same mark as the disc on the
+ * map; carrying the day's own hue across is what makes the two agree about which stop is which.
+ * It is identity, not chrome — and it was an undocumented exception until an outside review asked
+ * what the colours meant and the clause this comment claimed to cite turned out not to exist.
  *
  * `core` only — `glow` is too pale to carry ink.
  */
