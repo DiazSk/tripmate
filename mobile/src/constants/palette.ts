@@ -123,35 +123,26 @@ export const Light: Palette = {
 };
 
 /**
- * The materials that stand on a photograph or on the map, in either appearance.
+ * The one mark whose colour is fixed against the map rather than against the page.
  *
- * The ink halves of this live in the palette as `onDeep` / `onDeepMuted`, because `ThemedText`
- * takes a `ThemeColor` and a text colour has to be one. The surfaces cannot be — a stylesheet
- * names them directly — so they are here, and they are dark's own values verbatim.
+ * **The group started larger and most of it turned out to be wrong.** It also held an opaque
+ * surface and a bar, on the reasoning that the map does not change appearance — which was a
+ * confusion of two different things DESIGN.md says. The *route palette* is outside the interface
+ * palette, because those hues were chosen against terrain; the *basemap* is not, and a dark map
+ * inside a paper app is the `--postcard-paper` failure with the polarity swapped. `day-map.tsx`
+ * follows the appearance now, so its two overlays are ordinary surfaces again and those two
+ * tokens are deleted.
  *
- * **They do not move with the appearance because what is under them does not.** The map is
- * map-native and DESIGN.md already puts it outside the interface palette; the photograph stays
- * dark by choice. A light panel at 3.9% slate over a dark map is a pane of near-nothing with
- * near-black ink on it, which is the failure this group exists to prevent — and it is a failure
- * that only appears once the flag flips, which is why the group lands and is verified first.
+ * What survives is the thing that is genuinely map-native: the emphasised stop disc. It is the
+ * one mark that borrows the action colour, and `DiscInk` is measured against the lightness of
+ * the four day cores it stands beside — which do not move. Under the light appearance
+ * `Colors.accent` darkens to `#245E48` and near-black ink on it measures **2.49:1**, against
+ * 7.50 in dark: a number on a pin nobody can read.
+ *
+ * The ink half of "over a photograph" lives in the palette as `onDeep` / `onDeepMuted`, because
+ * `ThemedText` takes a `ThemeColor` and a text colour has to be one.
  */
 export const OverPhotograph = {
-  /** Opaque, for a label that must stay readable over whatever the map is drawing. */
-  surface: '#1C1A18',
-  /** 0.72, where the view behind it should still read through. */
-  bar: '#1C1A18B8',
-  /**
-   * **Jade, on the map, at the one lightness `DiscInk` was measured against.**
-   *
-   * The emphasised stop disc borrows the action colour, and it is the only mark that does — so
-   * it is the one place the licensed interface/map crossing runs in the *other* direction, and
-   * DESIGN.md's note that `DiscInk` sits on a day core rather than on the ground does not cover
-   * it. Under the light appearance `Colors.accent` darkens to `#245E48` and near-black ink on it
-   * measures **2.49:1**, against 7.50 in dark — a number on a pin nobody can read.
-   *
-   * The five day cores do not move, so neither does this: the emphasised disc has to stay a peer
-   * of the four beside it, not a darker object in a lighter app.
-   */
   accentDisc: '#28B981',
 } as const;
 

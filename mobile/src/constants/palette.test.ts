@@ -111,8 +111,8 @@ describe('the soft tints', () => {
 });
 
 /**
- * The marks that stand on the map, which does not change appearance because `app.json` pins it
- * dark and because DESIGN.md puts the map outside the interface palette entirely.
+ * The basemap follows the appearance; the day cores and the disc ink do not. That split is the
+ * whole reason one token survives here.
  */
 describe('over the map', () => {
   it('keeps the emphasised disc readable, which the action colour would not', () => {
@@ -124,10 +124,11 @@ describe('over the map', () => {
     expect(contrast(ink(Light.accent), Light.accent)).toBeLessThan(3);
   });
 
-  it('keeps paper ink on its panels in both appearances', () => {
+  it('keeps one ink over a photograph in both appearances', () => {
+    // The photograph is dark whatever the page is, so this token is the one that must not move.
     for (const palette of [Dark, Light]) {
-      expect(contrast(palette.onDeep, OverPhotograph.surface)).toBeGreaterThanOrEqual(4.5);
       expect(palette.onDeep).toBe(Dark.foreground);
+      expect(contrast(palette.onDeep, Dark.canvas)).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

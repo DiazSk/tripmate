@@ -6,7 +6,9 @@ import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
+import { APPEARANCE } from '@/constants/appearance';
 import { Colors, OverPhotograph, Radius, Spacing, dayCore, dayGlow } from '@/constants/theme';
+import { useHere } from '@/lib/here';
 import { travelSummary } from '@/lib/dayTravel';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
 
@@ -38,6 +40,7 @@ export function DayMap({
   onEmphasise: (index: number | null) => void;
 }) {
   const map = useRef<MapView>(null);
+  const { here } = useHere();
   const drawn = drawableStops(stops);
   const region = regionForStops(stops);
 
@@ -70,14 +73,27 @@ export function DayMap({
         style={styles.fill}
         initialRegion={region}
         // Both platforms, one prop: `overrideUserInterfaceStyle` on Apple Maps and Google's own
-        // dark map colour scheme on Android — so no hand-written style JSON.
-        userInterfaceStyle="dark"
+        // colour scheme on Android — so no hand-written style JSON. **It follows the app, not
+        // the system**, for the same reason `_layout.tsx` does: a dark map inside a paper app is
+        // the `--postcard-paper` failure with the polarity swapped.
+        userInterfaceStyle={APPEARANCE}
         // Dark alone is not enough. Apple's dark standard map still paints landcover in saturated
         // greens and purples, which on this canvas reads as a different application's map and
         // competes with the day's own hue for attention. `mutedStandard` is Apple's own answer —
         // the type they provide for maps carrying overlays. iOS-only; Android gets the same
         // restraint from Google's dark colour scheme above.
         mapType="mutedStandard"
+        // **Apple's own POI labels are the densest thing on this screen and none of them are
+        // ours.** Counted on the Lisbon fixture: 23 restaurant, café and museum labels against
+        // 4 numbered stops, several of them overlapping a disc. They also make a promise the app
+        // cannot keep — a tap on one does nothing, because `onPress` is deliberately absent (see
+        // the note below). The day's own stops are what this map is for.
+        showsPointsOfInterests={false}
+        // **Only when the permission is already granted.** `useHere` reports that without ever
+        // prompting; left unguarded, `react-native-maps` raises the system dialog the moment the
+        // map mounts — a prompt asked before the reason for it is on screen, which is answered
+        // "no" once and then forever. See `lib/here.ts`.
+        showsUserLocation={here !== null}
         // Defaults to white, and would flash against the near-black canvas on every first draw.
         loadingBackgroundColor={Colors.canvas}
         // The reference map is flat. Keeping it flat is also what lets every pitch-corrected
@@ -133,7 +149,7 @@ export function DayMap({
           about how much of it is spent moving. Time rather than distance, for the reason
           `TravelSegment` records: nothing here knows whether the reader thinks in miles. */}
       <View style={styles.summary} pointerEvents="none">
-        <ThemedText type="detail" themeColor="onDeepMuted">
+        <ThemedText type="detail" themeColor="muted">
           {travelSummary(stops)}
         </ThemedText>
       </View>
@@ -144,7 +160,7 @@ export function DayMap({
           the bridge while you are looking at the map. */}
       {named ? (
         <Pressable style={styles.caption} onPress={() => onEmphasise(null)}>
-          <ThemedText type="headingSmall" themeColor="onDeep" numberOfLines={2}>
+          <ThemedText type="headingSmall" numberOfLines={2}>
             {named}
           </ThemedText>
         </Pressable>
@@ -238,13 +254,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     top: Spacing.read,
     maxWidth: '90%',
-    // `OverPhotograph`, not `Colors`: what is under this is the map, which DESIGN.md already
-    // puts outside the interface palette, and it stays dark in both appearances. A light panel
-    // here would be a pane of near-nothing over a dark map.
-    backgroundColor: OverPhotograph.surface,
+    backgroundColor: Colors.surfaceDeep,
     borderRadius: Radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.photoBorder,
+    borderColor: Colors.cardBorder,
     paddingHorizontal: Spacing.regular,
     paddingVertical: Spacing.tight,
   },
@@ -253,10 +266,10 @@ const styles = StyleSheet.create({
     left: Spacing.read,
     right: Spacing.read,
     bottom: Spacing.read,
-    backgroundColor: OverPhotograph.bar,
+    backgroundColor: Colors.bar,
     borderRadius: Radius.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.photoBorder,
+    borderColor: Colors.cardBorder,
     paddingHorizontal: Spacing.rows,
     paddingVertical: Spacing.tight,
   },
