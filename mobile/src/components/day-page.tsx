@@ -293,7 +293,9 @@ function StopRow({
 }) {
   const booked = stop.timeFlexibility === 'FIXED';
   const where = locationNote(stop.located);
-  const particulars = [stop.time, stop.durationLabel, stop.category]
+  // `category` is stored lowercase ('food', 'entry') and was capitalised by the label step's
+  // `textTransform`. Sentence case has to do it in the string, or the row reads "· food".
+  const particulars = [stop.time, stop.durationLabel, sentence(stop.category)]
     .map((part) => part?.trim())
     .filter(Boolean)
     .join('  ·  ');
@@ -624,6 +626,11 @@ function Cost({ amount }: { amount: number }) {
       {formatMoney(amount)}
     </ThemedText>
   );
+}
+
+/** First letter up, rest untouched — the categories are single lowercase words. */
+function sentence(word: string | undefined): string | undefined {
+  return word ? word[0].toUpperCase() + word.slice(1) : word;
 }
 
 const styles = StyleSheet.create({
