@@ -66,3 +66,43 @@ export const fixMessage = (finding: Guardrail): string => {
   const where = finding.dayIndex === null ? '' : `On day ${finding.dayIndex + 1}: `;
   return `${where}${finding.message} Please fix that, and tell me what you changed.`;
 };
+
+/**
+ * What the figure beside it does not say: how bad, and over how much — as two clauses, not one
+ * string.
+ *
+ * **The arithmetic is untouched — this is the interpretation.** A flat penalty per finding is the
+ * right way to compute the number and the wrong way to read it: a duplicate museum and a train
+ * that cannot be caught both cost eight points, and three dimensions nobody could measure are
+ * simply absent from the average rather than counted against it. So 84 out of 100 can mean "two
+ * connections are impossible and we only checked four things" — a sentence the score alone is
+ * incapable of forming.
+ *
+ * **Two clauses because severity decides the layout.** A blocker outranks the score and leads the
+ * card; a clean result lets the figure lead. The caller stacks or joins them, and splitting here
+ * rather than at the call site keeps one copy of the wording. It lives in this module rather than
+ * in the component so it can be asserted without rendering anything — nothing in this suite
+ * renders, and phrasing this careful should not be the part that goes untested.
+ *
+ * Coverage prints even at full marks. "7 of 7 checks run" is a fact worth stating, and a line
+ * that appears only on bad news teaches a reader to skip it on good news.
+ */
+export function healthSummary(
+  findings: number,
+  blockers: number,
+  ran: number,
+  of: number
+): { verdict: string; coverage: string } {
+  const coverage = `${ran} of ${of} checks run`;
+  // **"found", not a bare count.** "2 blockers" reads as *there are two blockers in this plan*.
+  // What is actually known is what the checks that ran turned up — and with three dimensions
+  // unmeasured those are different statements. One word is the whole difference.
+  if (blockers > 0) {
+    return { verdict: `${blockers} blocker${blockers === 1 ? '' : 's'} found`, coverage };
+  }
+  if (findings > 0) {
+    return { verdict: `${findings} thing${findings === 1 ? '' : 's'} to look at`, coverage };
+  }
+  // Not "nothing wrong": nothing was *flagged*, by the checks that could run.
+  return { verdict: 'Nothing flagged', coverage };
+}
