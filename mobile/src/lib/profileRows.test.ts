@@ -64,13 +64,13 @@ describe('access needs', () => {
 
   test('a note with no toggles still says something is there', () => {
     expect(accessibilityValue({ stepFreeRequired: false, limitStairs: false, note: '' })).toBe(
-      'No requirements'
+      'Nothing noted'
     );
     expect(
       accessibilityValue({ stepFreeRequired: false, limitStairs: false, note: 'uses a cane' })
     ).toBe('A note');
     expect(accessibilityValue({ stepFreeRequired: false, limitStairs: false, note: '  ' })).toBe(
-      'No requirements'
+      'Nothing noted'
     );
   });
 });

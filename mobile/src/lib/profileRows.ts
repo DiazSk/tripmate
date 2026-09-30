@@ -36,12 +36,17 @@ export function dietaryValue(profile: Pick<TravelerProfile, 'dietary'>): string 
 }
 
 /**
- * `No requirements` · `Step-free routes` · `Step-free routes, few stairs` · `A note`.
+ * `Nothing noted` · `Step-free routes` · `Step-free routes, few stairs` · `A note`.
  *
  * Named the way the two toggles are asked, not as "2 set": these are hard constraints that
  * outrank pace and interest when the plan is written, and a Review step exists so somebody can
  * see one is missing before the model spends a minute honouring the wrong thing. Same reason
  * `dietaryValue` spells a lone tag out instead of counting it.
+ *
+ * **`Nothing noted`, not `No requirements`.** What is known is that none were provided; whether
+ * this traveller has accessibility requirements is not known, and the old wording answered for
+ * them. It is the same error `Not checked` exists to prevent one screen over, and it is now the
+ * same word `dietaryValue` already returns in its equivalent branch.
  */
 export function accessibilityValue(needs: AccessibilityNeeds): string {
   const set = [
@@ -49,5 +54,5 @@ export function accessibilityValue(needs: AccessibilityNeeds): string {
     needs.limitStairs ? 'few stairs' : null,
   ].filter(Boolean);
   if (set.length > 0) return set.join(', ');
-  return needs.note.trim() ? 'A note' : 'No requirements';
+  return needs.note.trim() ? 'A note' : 'Nothing noted';
 }
