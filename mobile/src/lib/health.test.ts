@@ -1,6 +1,6 @@
 import type { Trip } from '@/api/types';
 
-import { tripHealth } from './health';
+import { healthSummary, tripHealth } from './health';
 
 /**
  * The point of this file is the import at the top.
@@ -64,4 +64,25 @@ test('stated must-sees are read out of userAnswers and scored', () => {
   const requests = health.dimensions.find((d) => d.key === 'requests');
   expect(requests?.score).toBe(92);
   expect(requests?.findings[0].message).toMatch(/Fushimi Inari/);
+});
+
+describe('healthSummary', () => {
+  test('splits the verdict from the coverage', () => {
+    expect(healthSummary(4, 2, 4, 7)).toEqual({
+      verdict: '2 blockers found',
+      coverage: '4 of 7 checks run',
+    });
+  });
+
+  test('makes one blocker singular', () => {
+    expect(healthSummary(1, 1, 4, 7).verdict).toBe('1 blocker found');
+  });
+
+  test('calls findings without blockers things to look at', () => {
+    expect(healthSummary(3, 0, 7, 7).verdict).toBe('3 things to look at');
+  });
+
+  test('says nothing was flagged rather than nothing is wrong', () => {
+    expect(healthSummary(0, 0, 7, 7).verdict).toBe('Nothing flagged');
+  });
 });

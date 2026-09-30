@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { isBlocking, type Guardrail, type HealthDimension, type HealthKey, type PlanHealth as PlanHealthReport } from '@/lib/health';
+import { healthSummary, isBlocking, type Guardrail, type HealthDimension, type HealthKey, type PlanHealth as PlanHealthReport } from '@/lib/health';
 
 /**
  * Whether this plan holds together, and where it doesn't.
@@ -31,7 +31,7 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
   const blockers = all.filter(isBlocking).length;
   const ran = health.dimensions.filter((d) => d.score !== null).length;
   const severe = health.dimensions.some((d) => isSevere(d.key) && d.findings.length > 0);
-  const line = summary(all.length, blockers, ran, health.dimensions.length);
+  const { verdict, coverage } = healthSummary(all.length, blockers, ran, health.dimensions.length);
 
   return (
     <View style={styles.card}>
@@ -39,15 +39,38 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
         onPress={() => setOpen((was) => !was)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`Plan health ${health.score} out of 100, ${line}`}
+        accessibilityLabel={
+          blockers > 0
+            ? `${verdict}. ${coverage}. Plan health ${health.score} out of 100`
+            : `Plan health ${health.score} out of 100, ${verdict} · ${coverage}`
+        }
         style={styles.head}>
+        {/* **A blocker outranks the score, and the type has to say so.** The figure was the most
+            immediate conclusion on a screen whose whole purpose is diagnostic: a reader could
+            glance at 84, decide "good enough", and never read the two findings that make the plan
+            impossible. Severity leads when there is any; otherwise the figure does, because then
+            nothing outranks it. Colour is untouched — the summary already went coral when severe. */}
         <View style={styles.grow}>
           <ThemedText type="label" themeColor="muted">
             Plan health
           </ThemedText>
-          <ThemedText type="detail" themeColor={severe ? 'alert' : 'muted'} style={styles.summary}>
-            {line}
-          </ThemedText>
+          {blockers > 0 ? (
+            <>
+              <ThemedText type="title" themeColor="alert" style={styles.summary}>
+                {verdict}
+              </ThemedText>
+              <ThemedText type="detail" themeColor="muted">
+                {coverage}
+              </ThemedText>
+            </>
+          ) : (
+            <ThemedText
+              type="detail"
+              themeColor={severe ? 'alert' : 'muted'}
+              style={styles.summary}>
+              {`${verdict} · ${coverage}`}
+            </ThemedText>
+          )}
         </View>
         {/* **The figure says what it is a figure of.** A flat penalty averaged over the
             dimensions that could be measured is the right arithmetic and the wrong thing to
@@ -55,7 +78,7 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
             the larger type makes the second one look like the first. The qualifier appears only
             when coverage is partial — at 7 of 7 the number needs no denominator. */}
         <View style={styles.figure}>
-          <ThemedText type="title">{health.score}</ThemedText>
+          <ThemedText type={blockers > 0 ? 'heading' : 'title'}>{health.score}</ThemedText>
           {ran < health.dimensions.length ? (
             <ThemedText type="micro" themeColor="muted">
               across checked
@@ -118,29 +141,6 @@ function Dimension({ dimension }: { dimension: HealthDimension }) {
 const SEVERE: HealthKey[] = ['schedule', 'reservations', 'budget'];
 const isSevere = (key: HealthKey) => SEVERE.includes(key);
 
-/**
- * What the figure beside it does not say: how bad, and over how much.
- *
- * **The arithmetic is untouched — this is the interpretation.** A flat penalty per finding is the
- * right way to compute the number and the wrong way to read it: a duplicate museum and a train
- * that cannot be caught both cost eight points, and three dimensions nobody could measure are
- * simply absent from the average rather than counted against it. So 84 out of 100 can mean "two
- * connections are impossible and we only checked four things" — a sentence the score alone is
- * incapable of forming.
- *
- * Coverage prints even at full marks. "7 of 7 checks run" is a fact worth stating, and a line
- * that appears only on bad news teaches a reader to skip it on good news.
- */
-const summary = (findings: number, blockers: number, ran: number, of: number) => {
-  const coverage = `${ran} of ${of} checks run`;
-  // **"found", not a bare count.** "2 blockers" reads as *there are two blockers in this plan*.
-  // What is actually known is what the checks that ran turned up — and with three dimensions
-  // unmeasured those are different statements. One word is the whole difference.
-  if (blockers > 0) return `${blockers} blocker${blockers === 1 ? '' : 's'} found · ${coverage}`;
-  if (findings > 0) return `${findings} thing${findings === 1 ? '' : 's'} to look at · ${coverage}`;
-  // Not "nothing wrong": nothing was *flagged*, by the checks that could run.
-  return `Nothing flagged · ${coverage}`;
-};
 
 /**
  * One word above a finding, so the list stops reading as eight equal sentences.
