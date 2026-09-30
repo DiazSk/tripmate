@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Linking,
+  Pressable,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -106,12 +113,12 @@ export function Today({
         <NowAndAfter day={day} now={now} saved={saved ?? []} destination={trip.destination} />
       )}
       <Attention trip={trip} dayIndex={dayIndex} cachedAt={cachedAt} />
-      {/* **A jade label, not a jade pill, because the hierarchy was inverted.** A full-width
+      {/* **Slate capsules, not a jade bar, because the hierarchy was inverted.** A full-width
           filled bar made replanning the loudest thing on the screen, while Directions — the
           thing somebody standing in a street actually presses — was a line of text. Replanning
-          is the rare case on an execution surface; it needs to be findable, not shouted. So it
-          takes the same idiom Directions already uses, and the 44pt target is kept on the
-          pressable rather than drawn.
+          is the rare case on an execution surface; it needs to be findable, not shouted. The
+          fill went to Directions, which is where it belongs; these keep the shape and the jade
+          ink without it.
           **On a row, not stacked**: two full-width actions one above the other were simply two
           more rows in the reading order, which is most of why this screen scanned as a list. */}
       <View style={styles.actions}>
@@ -386,9 +393,9 @@ function OpenIn({
   label: string;
   to: { lat: number; lng: number };
   name: string;
-  /** A row action, which stays text. Standalone actions get the capsule instead. */
+  /** A row action: the compact capsule. The standalone one takes the jade fill. */
   inline?: boolean;
-  style?: object;
+  style?: StyleProp<ViewStyle>;
 }) {
   const [said, setSaid] = useState<'idle' | 'opening' | 'failed'>('idle');
 
@@ -403,26 +410,30 @@ function OpenIn({
     }
   }
 
+  /**
+   * **Both shapes are capsules now, and the lead one is the screen's jade fill.**
+   *
+   * This file used to argue that a row's action stays text because three capsules down a list
+   * are heavier than the list. The weight was real; the conclusion was not. `detail` in a 20pt
+   * line box with `hitSlop={8}` is a 36pt target — under the HIG's 44 — and `Go` was about 34pt
+   * *wide*, in a list read one-handed while walking. `compact` answers the weight: tighter
+   * sides and `detail` ink, with the 44pt floor kept because that is a floor, not a size.
+   *
+   * The lead takes `primary`, which is Today's one licensed jade fill. Navigating to the next
+   * stop is what somebody standing in a street opens this screen to do, so it is the Primary
+   * Action Surface here — and `leadAction`, a hand-rolled copy of `styles.pill`, goes with it.
+   */
   return (
-    <Pressable
-      onPress={open}
+    <PillButton
+      role="link"
+      compact={inline}
+      tone={said === 'failed' ? 'alert' : inline ? 'accent' : 'primary'}
       disabled={said === 'opening'}
-      accessibilityRole="link"
+      onPress={open}
       accessibilityLabel={`Directions to ${name}`}
-      hitSlop={8}
-      style={({ pressed }) => [inline ? styles.inlineAction : styles.leadAction, style, pressed && styles.pressed]}>
-      {/* **Sentence case, never tracked caps.** The uppercase, letter-spaced treatment these
-          actions shipped with is a web link wearing a label's clothes: on iOS a fluent reader
-          takes tracked caps for a heading and does not know it is pressable. A tinted text button
-          *is* native — it is what a nav bar's Edit and Done are — so what had to go was the
-          casing and the 0.18em, not the control. A standalone action goes further and takes a
-          capsule; see `PillButton`. */}
-      <ThemedText
-        type={inline ? 'detail' : 'headingSmall'}
-        themeColor={said === 'failed' ? 'alert' : said === 'opening' ? 'muted' : 'accent'}>
-        {said === 'failed' ? "Can't open Maps" : said === 'opening' ? 'Opening…' : label}
-      </ThemedText>
-    </Pressable>
+      title={said === 'failed' ? "Can't open Maps" : said === 'opening' ? 'Opening…' : label}
+      style={[inline ? undefined : styles.leadAction, style]}
+    />
   );
 }
 
@@ -590,17 +601,14 @@ function SavedNearby({
             dialog is answered once and for all, so asking before the list it improves is on
             screen would spend that one answer on a screen nobody had read yet. */}
         {canAsk ? (
-          <Pressable
-            onPress={ask}
+          <PillButton
+            compact
             disabled={busy}
-            accessibilityRole="button"
+            onPress={ask}
             accessibilityLabel="Sort these by how near you are"
-            hitSlop={8}
-            style={({ pressed }) => [styles.firm, pressed && styles.pressed]}>
-            <ThemedText type="label" themeColor={busy ? 'muted' : 'accent'}>
-              {busy ? 'Locating…' : 'Near me'}
-            </ThemedText>
-          </Pressable>
+            title={busy ? 'Locating…' : 'Near me'}
+            style={styles.firm}
+          />
         ) : null}
       </View>
       {near.map(({ place, metres }) => {
@@ -863,17 +871,8 @@ const styles = StyleSheet.create({
    */
   sectionLabel: { marginTop: Spacing.tight },
   beneath: { marginTop: Spacing.hair },
-  leadAction: {
-    minHeight: 44,
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.compact,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.surfaceDeep,
-    marginTop: Spacing.hair,
-  },
-  /** A row's own action. Text, because three capsules down a list is heavier than the list. */
-  inlineAction: { minHeight: 28, justifyContent: 'center' },
+  /** All that is left of a hand-rolled duplicate of `styles.pill`: the gap above it. */
+  leadAction: { marginTop: Spacing.hair },
   /**
    * The two screen-level actions, on one row at the foot rather than stacked into the reading
    * order as two more list items.

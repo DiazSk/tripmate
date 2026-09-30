@@ -9,7 +9,9 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type StyleProp,
   type TextInputProps,
+  type ViewStyle,
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -232,15 +234,12 @@ export function TimeField({
             one stray tap turns "they didn't say" into "they land at 23:00", which the planning
             rules then build a day around. The free-text field this replaced could always be
             emptied; losing that would be a worse trade than the native picker is worth. */}
-        <Pressable
-          onPress={() => onChange('')}
-          accessibilityRole="button"
+        <PillButton
+          compact
+          title="Clear"
           accessibilityLabel={`Clear ${label.toLowerCase()} time`}
-          hitSlop={8}>
-          <ThemedText type="detail" themeColor="muted">
-            Clear
-          </ThemedText>
-        </Pressable>
+          onPress={() => onChange('')}
+        />
         <View style={[styles.dateWrap, wide && styles.dateWrapWide]}>
           <NativeDatePicker
             style={
@@ -383,22 +382,49 @@ export function PillButton({
   onPress,
   disabled,
   tone = 'accent',
+  compact,
+  role = 'button',
+  accessibilityLabel,
+  style,
 }: {
   title: string;
   onPress?: () => void;
   disabled?: boolean;
-  /** `muted` for an action the screen cannot currently perform — offline, mostly. */
-  tone?: 'accent' | 'muted';
+  /**
+   * `muted` for an action the screen cannot currently perform — offline, mostly. `primary` is
+   * the jade fill, and a screen gets **one** (DESIGN.md's Primary Action Surface): it is the
+   * thing the screen exists to do. Everything else is a slate capsule with jade ink.
+   */
+  tone?: 'accent' | 'muted' | 'alert' | 'primary';
+  /**
+   * For a capsule standing *in* content rather than under a block: `detail` ink and tighter
+   * sides, so three of them fit across a phone. The 44pt target does not move — that is the
+   * floor, not a size.
+   */
+  compact?: boolean;
+  /** `link` where the press leaves the app, so VoiceOver says so. */
+  role?: 'button' | 'link';
+  accessibilityLabel?: string;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={role}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.pill, pressed && !disabled && styles.pillPressed]}
+      style={({ pressed }) => [
+        styles.pill,
+        compact && styles.pillCompact,
+        tone === 'primary' && !disabled && styles.pillPrimary,
+        style,
+        pressed && !disabled && styles.pillPressed,
+      ]}
       android_ripple={disabled ? undefined : { color: Colors.pressed }}>
-      <ThemedText type="headingSmall" themeColor={disabled ? 'muted' : tone}>
+      <ThemedText
+        type={compact ? 'detail' : 'headingSmall'}
+        themeColor={disabled ? 'muted' : tone === 'primary' ? 'accentForeground' : tone}>
         {title}
       </ThemedText>
     </Pressable>
@@ -479,7 +505,16 @@ const styles = StyleSheet.create({
   // Matches the text rows' own inset so an unanswered time sits in the same column as an answered
   // one, and gives the placeholder a real target rather than a word to hit.
   timeEmpty: { paddingRight: 12, paddingVertical: Spacing.tight },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows },
+  // Wraps, because above `STACK_ABOVE_SCALE` the picker beside it takes `dateWrapWide` and asks
+  // for the full row — without this the two overlap rather than stacking, which the text `Clear`
+  // hid by being narrow enough to survive the squeeze.
+  timeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: Spacing.rows,
+  },
   button: {
     backgroundColor: Colors.accent,
     borderRadius: Radius.pill,
@@ -496,10 +531,24 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: Colors.surfaceDeep,
     borderRadius: Radius.pill,
+    // **One Slate means a fill alone is not a shape.** Every surface here is the same slate at
+    // some alpha, so `surfaceDeep` on a `surfaceDeep` card composites to one colour and the
+    // capsule disappears — `anchor-receipt`'s card is exactly that, and on the expanded stop's
+    // `accentWash` row it measures ~1.1:1. This was the only shaped surface in the app without a
+    // hairline; `repair`, `editBar`, `weatherBadge` and `chip` all carry one.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+    // A capsule in a wrapping row is squeezed narrower than its own words otherwise.
+    flexShrink: 0,
+    // Android's ripple is unclipped by default, which squares off the corners mid-press.
+    overflow: 'hidden',
     minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: Spacing.compact,
   },
+  pillCompact: { paddingHorizontal: Spacing.tight },
+  // The border goes jade too, or the hairline reads as a slate outline drawn around the fill.
+  pillPrimary: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   pillPressed: { opacity: 0.7 },
   buttonPressed: { opacity: 0.85 },
 

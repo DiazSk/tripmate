@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import type { Itinerary } from '@/api/types';
 import { anchorCoverage } from '@/lib/anchors';
+import { PillButton } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 
@@ -43,14 +44,12 @@ export function AnchorReceipt({
                 <ThemedText type="detail">{u.name}</ThemedText>: {u.reason}
               </ThemedText>
               {onFitAnchor ? (
-                <Pressable
+                <PillButton
+                  compact
+                  title="Fit it anyway"
+                  accessibilityLabel={`Fit ${u.name} anyway`}
                   onPress={() => onFitAnchor(u.name)}
-                  accessibilityRole="button"
-                  hitSlop={8}>
-                  <ThemedText type="detail" themeColor="accent">
-                    Fit it anyway
-                  </ThemedText>
-                </Pressable>
+                />
               ) : null}
             </View>
           ))}
@@ -73,6 +72,15 @@ const styles = StyleSheet.create({
     gap: Spacing.tight,
   },
   list: { gap: Spacing.hair },
-  row: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: Spacing.rows },
+  // `flex-start`, not `baseline`: a 44pt capsule has no text baseline to share with a sentence
+  // that may run to three lines, and baseline-aligning it dropped the whole row by its height.
+  // Wraps rather than squeezing, since the reason is long and the capsule is not.
+  row: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.rows,
+  },
   grow: { flex: 1 },
 });

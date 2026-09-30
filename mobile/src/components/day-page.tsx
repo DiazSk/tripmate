@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import type { CostState, DayPlan, Stop } from '@/api/types';
+import { PillButton } from '@/components/form';
 import { PlacePhoto } from '@/components/place-photo';
 import { TravelSegment } from '@/components/travel-segment';
 import { SpendBreakdown } from '@/components/spend-breakdown';
@@ -377,38 +378,30 @@ function StopRow({
                 the map because a tap on open map points at nothing — a stop is a referent you
                 chose, and it carries the day and the arrival time with it. */}
             <View style={styles.actions}>
-              <Pressable
+              <PillButton
+                compact
+                role="link"
+                title="Directions"
+                accessibilityLabel={`Directions to ${stop.name}`}
                 onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})}
-                accessibilityRole="link"
-                hitSlop={8}>
-                <ThemedText type="detail" themeColor="accent">
-                  Directions
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={onFindNearby}
-                disabled={offline}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: offline }}
-                hitSlop={8}>
-                <ThemedText type="detail" themeColor={offline ? 'muted' : 'accent'}>
-                  Find nearby
-                </ThemedText>
-              </Pressable>
+              />
+              <PillButton compact title="Find nearby" disabled={offline} onPress={onFindNearby} />
               {/* The traveler's own §0 rank 1. Marking a stop booked is what stops the planner
                   moving it on the next edit, and unlocking is deliberately only available here:
                   a patch op that could clear the flag could clear it and move the stop in the
-                  same turn, which is the lock not existing. */}
-              <Pressable
-                onPress={onToggleLock}
+                  same turn, which is the lock not existing.
+
+                  **Booked tints the capsule.** The only thing separating the two states was the
+                  verb, so the lock a traveller set read at a glance as another thing to press.
+                  `accentWash` is the same jade-at-9% this file already uses for the expanded
+                  row and the selected cost kind — a state, not a new colour. */}
+              <PillButton
+                compact
+                title={booked ? 'Unlock' : 'Mark booked'}
                 disabled={offline}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: offline }}
-                hitSlop={8}>
-                <ThemedText type="detail" themeColor={offline ? 'muted' : 'accent'}>
-                  {booked ? 'Unlock' : 'Mark booked'}
-                </ThemedText>
-              </Pressable>
+                onPress={onToggleLock}
+                style={booked ? styles.bookedPill : undefined}
+              />
             </View>
 
             {/* **The second money state was unreachable from the phone.** `actualCost` has existed
@@ -541,28 +534,31 @@ function Finding({
 
   return (
     <View>
-      <View style={styles.finding}>
+      {/* **The whole row is the target, not the verb at the end of it.** A capsule here would
+          be a third shape in a column that already has the stop row and the repair options, and
+          `Fix this` on its own was a 36pt target at the right margin. The finding and the way
+          out of it are one thing to press — the same treatment `styles.repair` gives the
+          options this opens, so pressing a finding and pressing a fix feel like one gesture. */}
+      <Pressable
+        onPress={() => (repairs.length > 0 ? setOpen((was) => !was) : onAsk(fixMessage(finding)))}
+        accessibilityRole="button"
+        accessibilityState={repairs.length > 0 ? { expanded: open } : undefined}
+        accessibilityLabel={
+          repairs.length > 0
+            ? `Ways to fix: ${finding.message}`
+            : `Ask TripMate to fix: ${finding.message}`
+        }
+        style={({ pressed }) => [styles.finding, pressed && styles.repairPressed]}>
         <ThemedText
           type="detail"
           themeColor={isBlocking(finding) ? 'alert' : 'muted'}
           style={styles.grow}>
           {finding.message}
         </ThemedText>
-        <Pressable
-          onPress={() => (repairs.length > 0 ? setOpen((was) => !was) : onAsk(fixMessage(finding)))}
-          accessibilityRole="button"
-          accessibilityState={repairs.length > 0 ? { expanded: open } : undefined}
-          accessibilityLabel={
-            repairs.length > 0
-              ? `Ways to fix: ${finding.message}`
-              : `Ask TripMate to fix: ${finding.message}`
-          }
-          hitSlop={8}>
-          <ThemedText type="detail" themeColor="accent">
-            {open ? 'Close' : 'Fix this'}
-          </ThemedText>
-        </Pressable>
-      </View>
+        <ThemedText type="detail" themeColor="accent" style={styles.firm}>
+          {open ? 'Close' : 'Fix this'}
+        </ThemedText>
+      </Pressable>
 
       {open ? (
         <View style={styles.repairs}>
@@ -583,7 +579,12 @@ function Finding({
           <ThemedText type="micro" themeColor="muted" style={styles.repairNote}>
             Nothing booked will move.
           </ThemedText>
-          <Pressable onPress={() => onAsk(fixMessage(finding))} hitSlop={8} accessibilityRole="button">
+          {/* One more option in the same shape, because that is what it is: the way out when
+              none of the computed moves is the one you wanted. */}
+          <Pressable
+            onPress={() => onAsk(fixMessage(finding))}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.repair, pressed && styles.repairPressed]}>
             <ThemedText type="detail" themeColor="accent">
               Ask for something else
             </ThemedText>
@@ -726,7 +727,8 @@ const styles = StyleSheet.create({
   // and the options belong under the sentence they answer rather than stepped away from it.
   repairs: { marginTop: Spacing.tight, gap: Spacing.hair },
   repair: {
-    minHeight: 40,
+    // 44, the HIG minimum. It shipped at 40 — close enough to look right and not to be one.
+    minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: Spacing.rows,
     paddingVertical: Spacing.hair,
@@ -737,16 +739,34 @@ const styles = StyleSheet.create({
   },
   repairPressed: { backgroundColor: Colors.pressed },
   repairNote: { paddingHorizontal: Spacing.rows, marginTop: Spacing.hair },
+  // A row-shaped pressable, so it takes the surface radius rather than the pill: a full pill on
+  // a box this wide renders as a lozenge. Same material as the repair options it opens.
   finding: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     gap: Spacing.tight,
     marginTop: Spacing.hair,
+    minHeight: 44,
+    paddingHorizontal: Spacing.rows,
+    paddingVertical: Spacing.hair,
+    borderRadius: Radius.read,
+    backgroundColor: Colors.surfaceDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
   },
+  firm: { flexShrink: 0 },
+  bookedPill: { backgroundColor: Colors.accentWash },
   stopHead: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
   grow: { flex: 1 },
   expanded: { marginTop: Spacing.tight, gap: Spacing.hair },
-  actions: { flexDirection: 'row', gap: Spacing.read, marginTop: Spacing.tight },
+  // Wraps: three capsules fit across at Default and go 2+1 by the 1.6x cap rather than
+  // truncating. `tight` between them, since a capsule carries its own edge.
+  actions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.tight,
+    marginTop: Spacing.tight,
+  },
   costRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight, marginTop: Spacing.tight },
   costField: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   costInput: { color: Colors.foreground, minWidth: 56, paddingVertical: 4, fontSize: 15 },

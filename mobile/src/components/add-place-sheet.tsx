@@ -3,7 +3,7 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-n
 
 import { searchPlaces } from '@/api/tripMateApi';
 import { PLACE_CATEGORIES, type FoundPlace, type Itinerary, type PlaceCategory } from '@/api/types';
-import { FieldTrough, PrimaryButton, TextField } from '@/components/form';
+import { FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
 import { Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
@@ -340,11 +340,10 @@ function PlaceCard({
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button">
-        <ThemedText type="detail" themeColor="accent">
-          ‹ Results
-        </ThemedText>
-      </Pressable>
+      {/* Moving this into the sheet's own title bar — where the positional exemption would
+          licence bare text — is the better structure and is a sheet-navigation refactor. Until
+          then it is a control standing in content, so it takes a shape and a 44pt target. */}
+      <PillButton compact title="‹ Results" accessibilityLabel="Back to results" onPress={onBack} />
 
       <View style={styles.cardHead}>
         <ThemedText type="display">{place.name}</ThemedText>

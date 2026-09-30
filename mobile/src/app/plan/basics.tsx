@@ -18,7 +18,7 @@ import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@share
 import { geocode, importPlaces, listSavedPlaces } from '@/api/tripMateApi';
 import type { Anchor, ImportItem, SavedPlace } from '@/api/types';
 import { usePlanDraft } from '@/lib/planDraft';
-import { ChoiceRow, DateField, FieldTrough, PrimaryButton, TextField } from '@/components/form';
+import { ChoiceRow, DateField, FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { anchorKey, mergeAnchors } from '@/lib/anchors';
@@ -268,14 +268,17 @@ export default function Basics() {
             onPress={() => router.push('/plan/group')}
             disabled={!complete}
           />
-          <Pressable
-            onPress={() => router.replace('/plan/generating')}
+          {/* **It differs from the button above it by fill, not by shape.** Both are ways on,
+              and the fast path was the only one drawn as a caption. `compact` is load-bearing
+              rather than taste: at `headingSmall` x 1.6 this label wraps inside its own
+              capsule. */}
+          <PillButton
+            compact
+            title="Skip the questions and generate"
             disabled={!complete}
-            style={[styles.skip, !complete && styles.skipInert]}>
-            <ThemedText type="detail" themeColor="muted">
-              Skip the questions and generate
-            </ThemedText>
-          </Pressable>
+            onPress={() => router.replace('/plan/generating')}
+            style={styles.skip}
+          />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -376,13 +379,24 @@ function SavedPlacesSection({
       {elsewhere.map((g) => (
         <Group key={g.city} g={g} />
       ))}
-      {reminders.map((r) => (
-        <Pressable key={r.id} accessibilityRole="link" onPress={() => r.url && Linking.openURL(r.url)}>
-          <ThemedText type="detail" themeColor="muted">
+      {/* **Shaped only where there is somewhere to go.** `SavedPlace.url` is nullable, so this
+          was a control that sometimes did nothing — and a capsule promising a press that no-ops
+          is worse than a sentence. With a URL it is a link and looks like one. */}
+      {reminders.map((r) =>
+        r.url ? (
+          <PillButton
+            key={r.id}
+            compact
+            role="link"
+            title="Instagram post: screenshot it to add places"
+            onPress={() => Linking.openURL(r.url!)}
+          />
+        ) : (
+          <ThemedText key={r.id} type="detail" themeColor="muted">
             Instagram post: screenshot it to add places
           </ThemedText>
-        </Pressable>
-      ))}
+        ),
+      )}
     </View>
   );
 }
@@ -626,6 +640,7 @@ const styles = StyleSheet.create({
   note: { marginTop: -Spacing.tight },
   readout: { marginTop: -Spacing.tight },
   action: { marginTop: Spacing.tight, gap: Spacing.rows },
-  skip: { alignItems: 'center', paddingVertical: Spacing.tight },
-  skipInert: { opacity: 0.4 },
+  // Centred under the primary button rather than left-aligned, which is where `PillButton`'s
+  // own `alignSelf` would put it. The disabled state is the component's now, not an opacity.
+  skip: { alignSelf: 'center' },
 });

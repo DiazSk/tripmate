@@ -198,7 +198,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: Spacing.tight,
   },
-  actionQuiet: { backgroundColor: Colors.control },
+  // `Colors.control` is the same slate at 55% as the card it stands on, so composited it is the
+  // same colour and the shape was invisible — the radius and the target were there all along.
+  // The hairline is what makes it a control you can see, the same fix `styles.pill` took.
+  actionQuiet: {
+    backgroundColor: Colors.control,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
   actionPrimary: { backgroundColor: Colors.accent },
   actionInert: { opacity: 0.4 },
   actionPressed: { opacity: 0.85 },
