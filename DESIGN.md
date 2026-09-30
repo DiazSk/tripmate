@@ -377,17 +377,24 @@ new grey, and it does not leave the material for `--canvas`. Full opacity is whe
 (`.glass-nav-menu`, `.glass-itinerary.is-opaque`).
 
 **The Semantic Tint Exception, written down because the app already does it.** A surface may
-carry a tint of jade or coral to signal *state* or *alert*. Exactly two tokens are licensed, both
-in `mobile/src/constants/theme.ts`: `accentWash` (`#28B98117`, a selected row) and `alertSoft`
-(`#E4553F29`, a row something cannot happen in). No tint may be heavier than `29` hex, which is
+carry a tint of jade or coral to signal *state* or *alert*. Exactly two signals are licensed:
+a selected row (`accentWash`, `#28B98117` in `mobile/src/constants/theme.ts`) and a row something
+cannot happen in (`alertSoft`, `#E4553F29` there; `--alert-soft`, the same colour, in the web's
+`globals.css`). No tint may be heavier than `29` hex, which is
 the darker of the two shipping today. A tint never signals *action* — jade's One Meaning holds
 wherever jade is ink rather than wash.
 
 One Slate as first written forbade a coral alert panel, and the product shipped one on every
 conflict row anyway; a rule the product knowingly breaks stops being a rule. The clause is narrow
 on purpose — two named tokens and a ceiling — so "at some alpha" cannot become a third tint next
-cycle. **The web client has no equivalent today**, and this is not a licence to add one: these are
-RN screens, and the same signal on the web would need its own argument.
+cycle.
+
+**The web spells the coral half of this already**, as `--alert-soft` in `globals.css` — the same
+coral at the same 16%, reached through `bg-alert-soft` by nine components including `ErrorNote`,
+`ItineraryCard` and `FocusEditMode`. So the clause licenses both clients, and the two tokens above
+are the mobile spelling of it. There is **no jade wash on the web**: the only accent tint there is
+a radial at 10% behind the hero, which is decoration rather than state. A selected-row wash on the
+web would be a new signal and needs its own argument.
 
 **The Two Foregrounds Rule.** `--accent-foreground` means "text on jade" and is dark. `--on-deep`
 means "text on something dark" and is light. They are not interchangeable, and conflating them is the
