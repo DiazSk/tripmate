@@ -104,7 +104,7 @@ export function TextField({
     <FieldRow label={label}>
       <View style={styles.textWrap}>
         {prefix ? (
-          <ThemedText type="bodyLarge" themeColor="muted">
+          <ThemedText type="body" themeColor="muted">
             {prefix}
           </ThemedText>
         ) : null}
@@ -216,7 +216,7 @@ export function TimeField({
           accessibilityRole="button"
           accessibilityLabel={`Set ${label.toLowerCase()} time`}
           style={styles.timeEmpty}>
-          <ThemedText type="bodyLarge" themeColor="muted">
+          <ThemedText type="body" themeColor="muted">
             {placeholder}
           </ThemedText>
         </Pressable>
@@ -586,7 +586,7 @@ export function ChoiceRow<T extends string>({
             onPress={() => onChange(option.value)}
             style={[styles.choice, i > 0 && styles.ruled, selected && styles.choiceSelected]}
             android_ripple={{ color: Colors.pressed }}>
-            <ThemedText type="bodyLarge" themeColor={selected ? 'foreground' : 'muted'}>
+            <ThemedText type="body" themeColor={selected ? 'foreground' : 'muted'}>
               {option.label}
             </ThemedText>
             {selected ? (
@@ -712,7 +712,7 @@ export function ToggleRow({
 }) {
   return (
     <View style={styles.row}>
-      <ThemedText type="bodyLarge" style={styles.toggleLabel}>
+      <ThemedText type="body" style={styles.toggleLabel}>
         {label}
       </ThemedText>
       <Switch

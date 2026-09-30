@@ -139,5 +139,6 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   // A fixed column so the percentages line up under each other rather than floating against
   // labels of different lengths.
-  percent: { width: 34, textAlign: 'right' },
+  // Was sized for `label` at 11; the figure is `detail` now, so it grows rather than clips.
+  percent: { minWidth: 40, textAlign: 'right' },
 });

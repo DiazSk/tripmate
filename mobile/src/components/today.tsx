@@ -845,7 +845,7 @@ const styles = StyleSheet.create({
    *
    * `title` (22) is the step below and does not read at arm's length in a street; `display` (28)
    * is the step above and is Melodrama, which bars its zero — every line this style sets contains
-   * digits. So: the text face at 26, which puts a 1.5x step over the place name under it instead
+   * digits. So: the text face at 26, which puts a 1.44x step over the place name under it instead
    * of `title`'s 1.29x. `fontWeight` is safe here because Switzer ships real cuts; the comment on
    * `display` in themed-text.tsx applies only to the bundled single-cut families.
    */
@@ -894,7 +894,8 @@ const styles = StyleSheet.create({
   block: { gap: Spacing.hair },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows, minHeight: 28 },
   // A fixed column so the names line up into something scannable rather than ragged.
-  time: { width: 76 },
+  // `minWidth`, not `width`: "12:30 PM" at 14 x 1.6 needs ~110pt and clipped even at 13.
+  time: { minWidth: 76 },
   named: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
   shrink: { flexShrink: 1 },
   // The name yields, never the badge. Both default to shrinking, and a six-letter label clipped

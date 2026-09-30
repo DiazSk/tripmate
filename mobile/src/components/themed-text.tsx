@@ -20,7 +20,6 @@ export type KilnTextType =
   | 'title'
   | 'heading'
   | 'headingSmall'
-  | 'bodyLarge'
   | 'body'
   | 'detail'
   | 'caption'
@@ -78,13 +77,13 @@ const styles = StyleSheet.create({
   price: { fontFamily: Fonts.display, fontSize: 30, letterSpacing: -0.15, lineHeight: 32 },
 
   title: { fontFamily: Fonts.sans, fontSize: 22, fontWeight: '600', letterSpacing: -0.26, lineHeight: 25 },
-  heading: { fontFamily: Fonts.sans, fontSize: 17, fontWeight: '600', letterSpacing: -0.2, lineHeight: 20 },
-  headingSmall: { fontFamily: Fonts.sans, fontSize: 15, fontWeight: '600', letterSpacing: -0.18, lineHeight: 19 },
-  bodyLarge: { fontFamily: Fonts.sans, fontSize: 16, lineHeight: 23 },
-  body: { fontFamily: Fonts.sans, fontSize: 14, lineHeight: 20 },
-  detail: { fontFamily: Fonts.sans, fontSize: 13, lineHeight: 19 },
-  caption: { fontFamily: Fonts.sans, fontSize: 12, lineHeight: 17 },
-  micro: { fontFamily: Fonts.sans, fontSize: 11, lineHeight: 15 },
+  heading: { fontFamily: Fonts.sans, fontSize: 18, fontWeight: '600', letterSpacing: -0.22, lineHeight: 21 },
+  headingSmall: { fontFamily: Fonts.sans, fontSize: 16, fontWeight: '600', letterSpacing: -0.19, lineHeight: 20 },
+  // `bodyLarge` is gone: at a 16 floor it was byte-identical to `body`.
+  body: { fontFamily: Fonts.sans, fontSize: 16, lineHeight: 23 },
+  detail: { fontFamily: Fonts.sans, fontSize: 14, lineHeight: 20 },
+  caption: { fontFamily: Fonts.sans, fontSize: 13, lineHeight: 18 },
+  micro: { fontFamily: Fonts.sans, fontSize: 12, lineHeight: 16 },
   /**
    * 11, which is what DESIGN.md has said all along.
    *
@@ -106,6 +105,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  money: { fontFamily: Fonts.money, fontSize: 13, lineHeight: 17 },
-  moneyLarge: { fontFamily: Fonts.moneyBold, fontSize: 15, lineHeight: 20 },
+  money: { fontFamily: Fonts.money, fontSize: 14, lineHeight: 18 },
+  moneyLarge: { fontFamily: Fonts.moneyBold, fontSize: 16, lineHeight: 21 },
 });
