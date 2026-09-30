@@ -377,7 +377,7 @@ function StopRow({
                 onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})}
                 accessibilityRole="link"
                 hitSlop={8}>
-                <ThemedText type="label" themeColor="accent">
+                <ThemedText type="detail" themeColor="accent">
                   Directions
                 </ThemedText>
               </Pressable>
@@ -387,7 +387,7 @@ function StopRow({
                 accessibilityRole="button"
                 accessibilityState={{ disabled: offline }}
                 hitSlop={8}>
-                <ThemedText type="label" themeColor={offline ? 'muted' : 'accent'}>
+                <ThemedText type="detail" themeColor={offline ? 'muted' : 'accent'}>
                   Find nearby
                 </ThemedText>
               </Pressable>
@@ -401,7 +401,7 @@ function StopRow({
                 accessibilityRole="button"
                 accessibilityState={{ disabled: offline }}
                 hitSlop={8}>
-                <ThemedText type="label" themeColor={offline ? 'muted' : 'accent'}>
+                <ThemedText type="detail" themeColor={offline ? 'muted' : 'accent'}>
                   {booked ? 'Unlock' : 'Mark booked'}
                 </ThemedText>
               </Pressable>
@@ -554,7 +554,7 @@ function Finding({
               : `Ask TripMate to fix: ${finding.message}`
           }
           hitSlop={8}>
-          <ThemedText type="label" themeColor="accent">
+          <ThemedText type="detail" themeColor="accent">
             {open ? 'Close' : 'Fix this'}
           </ThemedText>
         </Pressable>
@@ -580,7 +580,7 @@ function Finding({
             Nothing booked will move.
           </ThemedText>
           <Pressable onPress={() => onAsk(fixMessage(finding))} hitSlop={8} accessibilityRole="button">
-            <ThemedText type="label" themeColor="accent">
+            <ThemedText type="detail" themeColor="accent">
               Ask for something else
             </ThemedText>
           </Pressable>

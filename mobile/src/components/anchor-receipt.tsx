@@ -47,7 +47,7 @@ export function AnchorReceipt({
                   onPress={() => onFitAnchor(u.name)}
                   accessibilityRole="button"
                   hitSlop={8}>
-                  <ThemedText type="label" themeColor="accent">
+                  <ThemedText type="detail" themeColor="accent">
                     Fit it anyway
                   </ThemedText>
                 </Pressable>
