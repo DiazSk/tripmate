@@ -3,6 +3,10 @@
 Upload the 22 PNGs from `docs/design-board/shots/web/` (they are named in reading
 order), then paste everything below.
 
+**This is round two.** The prompt tells the reviewer what its last pass changed, what
+was refuted, and what was deliberately left — so it spends its attention on what is
+new rather than re-reporting what has already been argued.
+
 ---
 
 You are reviewing the mobile client of **TripMate**, a travel planner. I am the
@@ -19,61 +23,86 @@ There are 22 screens attached, in order: arrival, planning, the trip, changing i
 
 Judge the screens against these rules, and tell me where they break them.
 
-- **One Meaning Rule.** Jade `#28B981` means *action* and only action — never a label,
-  never a figure. Gold `#E9B44C` means *money* and only money. Coral `#E4553F` means
-  *alert / cannot happen*. A colour doing a second job is a defect.
+- **One Meaning Rule.** Jade `#28B981` means *action* and only action. Gold `#E9B44C`
+  means *money* and only money. Coral `#E4553F` means *alert / cannot happen*.
 - **One Slate Rule.** Every panel, pill, badge and sheet is `#1C1A18` at some alpha,
-  on a single warm near-black ground `#121110`.
-- **Round what you touch, square what you read.** Controls are pills; reading
-  surfaces are square or lightly rounded.
-- **A photograph is not a surface.** Only large type and tracked caps may sit on an
-  image, and only over a measured scrim.
-- **Type:** Melodrama (display serif) for mastheads and statements; the platform's own
-  sans for all body and UI text (so Dynamic Type works); a tabular face for money,
-  counts and dates.
-- **Say only what is known.** This is the rule I care most about. The app must not
-  assert what it has not checked — "Not checked" rather than a silent pass,
-  "2 blockers *found*" rather than "2 blockers", "about 24 min" for an estimate,
-  and no weather claim when there is no forecast.
+  on a single warm near-black ground `#121110`. **One stated exception:** a surface may
+  carry a jade or coral tint to signal *state* or *alert* — exactly two tokens, capped
+  at 16% alpha. A tint never signals action.
+- **Round what you touch, square what you read** — for controls **in content**.
+  Nav-bar items and row accessories follow the platform, which on iOS means text, so
+  `Done`, `Close` and a row's trailing `Edit` are deliberately not capsules.
+- **A photograph is not a surface.** Only large type and tracked caps over a measured scrim.
+- **Type:** Melodrama (display serif) for mastheads; the platform's own sans for all
+  body and UI text, so Dynamic Type works; a tabular face for money, counts and dates.
+- **Say only what is known.** The one I care most about. No claim beyond the evidence:
+  "Not checked" rather than a silent pass, "2 blockers *found*", "about 22 min" for
+  anything computed, no weather claim without a forecast.
 
-## What changed in this cycle — aim here first
+## What your last review changed
 
-1. **Today** (screens `01-home-today`, `01b-today-offline`) was five rows of equal
-   weight with no subject. It now leads with one spoken line — *Leave in 18 min* /
-   *Leave by 8:25 AM* / *Free for about 3 hr* / *Leave now* — with the verb quiet and
-   the figure loud. A vertical rail once joined the stop dots and was removed.
-2. **The day list** (`09-trip-day`) lost the rules between stops, and the day's
-   photograph now spans the full device width.
-3. **Secondary actions** that were uppercase, letter-spaced jade text — a web link
-   wearing a label's clothes — became slate capsules in sentence case.
-4. **Share** moved from a shelf across the foot of the screen to an icon in the nav
-   bar, opposite the back chevron; withdrawing a link is now a destructive button in
-   a native alert.
-5. **Sign-in** (`00-signin`) became a full-screen modal, and "Keep planning without an
-   account" — previously grey body text — became a capsule.
+Every falsifiable claim you made was checked against the source. Most held and shipped:
+
+1. **Estimates now say they are estimates.** `about 22 min by transit`, `about 16 min
+   walking`, `adds about 3 min walking`. One helper owns the word and four surfaces
+   read it from there. The `+3 min` → `adds` change also settles the ambiguity you named.
+2. **`No requirements` → `Nothing noted`** on the review step, so it describes the
+   record rather than answering for the traveller.
+3. **Plan Health leads with the diagnosis.** `2 blockers found` takes the headline in
+   coral; the score steps down beside it. With nothing blocking, the figure leads again.
+4. **Sign-in's mode toggle is a capsule** — and reads `Create an account instead`,
+   because a bare `Sign in` under a `Create account` primary was two plausible submits.
+5. **The two tint exceptions are now written into the design system** rather than being
+   rules the product quietly broke.
+
+**Three of your findings were wrong, and you should know why before this pass:**
+
+- *"The clock merely repeats the phone's."* It does not — it is destination-local. The
+  board's throwaway fixture used the host timezone, so they agreed in that one frame.
+- *"Today does not distinguish a booked next stop."* It does.
+- *"The offline travel estimate is stale routing output."* There is no router. It is
+  haversine distance times a circuity factor, recomputed every render, so it does not
+  age and needs no offline caveat. Your underlying point — that it is an estimate —
+  was right, which is why #1 shipped.
+
+**Deliberately not done**, so do not re-report them as new: demoting Today's masthead
+on an active trip, reducing gold's salience, muting the Review screen's `Edit` column.
+Those are judgements about how a screen feels in the hand and are waiting on device
+testing. Per-stop provenance, `Hours not verified` and `Actual spend not tracked` are
+each their own cycle.
+
+## Two things about the fixtures, so you critique the product and not my test data
+
+- **`01-home-today` and `01b-today-offline` were captured just after midnight**, so the
+  day's stops read 12:01 AM, 12:23 AM, 1:38 AM. That is the fixture's clock, not a design
+  intent. Judge the hierarchy and the wording; ignore the hour.
+- **`04c-saved-places` shows one saved place, in a different city from the trip.** That is
+  real current data, and it happens to demonstrate the "Saved elsewhere" rule from the
+  side where the heading correctly does not appear.
 
 ## What I want back
 
 For each point, cite the screen filename. Be concrete; "feels cluttered" is useless.
 
-1. **Rule violations.** Every place a colour, shape or face breaks the system above.
+1. **Rule violations** — including against the two new exceptions above. If an exception
+   is being stretched past what it licenses, say so.
 2. **Over-claims.** Anywhere a screen states something more confidently than it could
-   know. This is the highest-value finding you can give me.
-3. **The first three seconds.** For `01-home-today` and `09-trip-day`: what does the
-   eye land on, and is that the thing that matters? These are read one-handed, outdoors,
-   while walking.
-4. **Hierarchy failures.** Where two things compete, or where the most important thing
-   is not the loudest.
-5. **What is missing.** A question a traveller would obviously ask that no screen answers.
-6. **The weakest screen**, named, with why.
+   know. Still the highest-value finding you can give me. Now that the obvious travel
+   figures are hedged, look for the subtler ones.
+3. **Did the hedging go too far?** `about` now appears several times on one screen in
+   places. Is there a screen where it has become noise rather than honesty?
+4. **The first three seconds** for `01-home-today` and `09-trip-day`: what does the eye
+   land on, and is that the thing that matters? Read one-handed, outdoors, walking.
+5. **Hierarchy failures** — where two things compete, or the most consequential fact is
+   not the loudest. Check whether Plan Health's restack actually fixed that, or moved it.
+6. **What is missing** — a question a traveller would obviously ask that no screen answers.
+7. **The weakest screen**, named, with why.
 
 ## Constraints — do not suggest these
 
-- No light mode. There is one ground and no light variant.
-- No new accent colours; the palette above is the whole vocabulary.
-- No custom font for body text — that would break Dynamic Type and Android scaling.
+- No light mode. No new accent colours. No custom font for body text.
 - No emoji or pictographs as interface elements.
 - It must work offline from a cached copy, so nothing may depend on a live fetch.
+- Do not suggest capsules for nav-bar items or row accessories; that is now a stated rule.
 
-Finish with the **three changes you would make first**, in order, and say what each
-one costs.
+Finish with the **three changes you would make first**, in order, and what each costs.
