@@ -95,3 +95,23 @@ export function pickCurrent<T extends TripSummary>(trips: T[], today: string): T
 
   return byPhase('today')[0] ?? byPhase('eve')[0] ?? null;
 }
+
+/**
+ * Which day a trip should open on.
+ *
+ * **The running day, not the first one.** `trip/[id]` opened on index 0 regardless, so the route
+ * from Today's masthead — the way to "what have I already done" — landed on day 1 of the trip
+ * and asked for four taps forward on day 5. Arriving from the Trips wall had the same problem:
+ * a trip you are *on* should open where you are.
+ *
+ * Zero for every other phase, and deliberately so. Before departure the first day is what you
+ * are about to do; after the trip the first day is where a reread starts; and on the eve, the
+ * day that matters *is* day 0. Only a running trip has a different answer.
+ *
+ * Extracted rather than left inline in the screen so the rule can be asserted without booting a
+ * navigator — the component's own copy was unreachable from a test, which is why the defect it
+ * replaces survived this long.
+ */
+export function openingDay(trip: { startDate: string; endDate: string }, today: string): number {
+  return tripPhase(trip, today) === 'today' ? (dayIndexFor(trip, today) ?? 0) : 0;
+}
