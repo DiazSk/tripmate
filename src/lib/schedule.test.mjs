@@ -171,7 +171,10 @@ test("evaluateDay flags a long day with no break, and stays quieter when there i
   // grace a day with breaks gets.
   const withBreaks = evaluateDay(day(stops), 0).filter((f) => f.rule === "pace");
   assert.equal(withBreaks.length, 1);
-  assert.match(withBreaks[0].message, /about 12 hours/);
+  // **Exact, not hedged.** A day's length is a subtraction over two clock times already in the
+  // plan, so "about" would say a calculation happened rather than that the figure could be wrong.
+  assert.match(withBreaks[0].message, /runs 7:00 AM to 7:00 PM — 12 hr, even with breaks in it\./);
+  assert.doesNotMatch(withBreaks[0].message, /about/);
 
   // 10h with breaks sits inside the grace and stays silent.
   const tolerable = day([
@@ -191,6 +194,7 @@ test("evaluateDay flags a long day with no break, and stays quieter when there i
   const found = evaluateDay(relentless, 0).filter((f) => f.rule === "pace");
   assert.equal(found.length, 1);
   assert.match(found[0].message, /no meal or rest stop/);
+  assert.doesNotMatch(found[0].message, /about/);
 });
 
 test("evaluateBudget reports the overshoot only when there is one", () => {

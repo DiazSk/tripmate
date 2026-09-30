@@ -8,6 +8,7 @@ import {
   tripSpend,
 } from "./itinerary";
 import { normalizeStopName } from "./placeConflicts";
+import { formatDuration } from "./format";
 import { legMinutes } from "./schedule";
 import type {
   DayPlan,
@@ -228,7 +229,13 @@ function checkPace(day: DayPlan, dayIndex: number): Guardrail[] {
   const span = dayActiveSpan(day);
   if (!span || span.minutes <= LONG_DAY_MINUTES) return [];
 
-  const hours = (span.minutes / 60).toFixed(1).replace(/\.0$/, "");
+  // **Exact, and said exactly.** This is a subtraction over two clock times already in the plan,
+  // not an estimate, so it takes no hedge — an outside review read "about 11.5 hours" beside
+  // "about 27 min transit" and correctly said the word had stopped meaning "this could be wrong"
+  // and started meaning "a calculation happened". `formatDuration` also retires the `toFixed(1)`
+  // that made the old figure genuinely approximate: 11h32m printed as "11.5", which was the one
+  // reading under which the hedge was honest.
+  const length = formatDuration(span.minutes * 60);
   if (day.stops.some(isBreak)) {
     // Long, but it has somewhere to sit — worth saying once, not worth flagging as a problem.
     return span.minutes > LONG_DAY_MINUTES + PACE_GRACE_WITH_BREAKS
@@ -236,7 +243,7 @@ function checkPace(day: DayPlan, dayIndex: number): Guardrail[] {
           {
             rule: "pace",
             dayIndex,
-            message: `This day runs ${span.start} to ${span.end} — about ${hours} hours, even with breaks in it.`,
+            message: `This day runs ${span.start} to ${span.end} — ${length}, even with breaks in it.`,
           },
         ]
       : [];
@@ -246,7 +253,7 @@ function checkPace(day: DayPlan, dayIndex: number): Guardrail[] {
     {
       rule: "pace",
       dayIndex,
-      message: `This day runs ${span.start} to ${span.end} — about ${hours} hours with no meal or rest stop in it.`,
+      message: `This day runs ${span.start} to ${span.end} — ${length} with no meal or rest stop in it.`,
     },
   ];
 }
