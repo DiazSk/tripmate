@@ -356,6 +356,55 @@ export function PrimaryButton({
   );
 }
 
+/**
+ * A secondary action, shaped like the platform draws its own.
+ *
+ * **The thing this replaces is the tell.** Secondary actions shipped as uppercase, letter-spaced
+ * jade text — `PLANS CHANGED?`, `PLAN ANOTHER TRIP` — which is a web link wearing a label's
+ * clothes. iOS does not have that control: a fluent iPhone user reads tracked caps as a heading
+ * and does not know it is pressable, and the HIG's own slop test names "web-shaped buttons" as
+ * the first sign of an app ported from a site.
+ *
+ * So it takes the shape the system already puts on screen: a fully-rounded capsule in the one
+ * slate, the same material the native tab bar's own indicator uses. Sentence case, because
+ * native buttons are — dropping the uppercase and the 0.18em tracking is most of what makes it
+ * stop reading as a link.
+ *
+ * **Slate, not jade.** Jade stays on the *label*, where the One Meaning Rule wants it: this is an
+ * action and says so. Filling the capsule would make it a second primary button on a screen that
+ * already has one, and the whole reason these were demoted from a jade bar was that replanning
+ * outranked the thing you actually had to do.
+ *
+ * `Radius.pill` is the system's own rule for this — "anything pressed or dragged" — and 44pt is
+ * the HIG minimum, which the tracked-caps version only ever met through `hitSlop`.
+ */
+export function PillButton({
+  title,
+  onPress,
+  disabled,
+  tone = 'accent',
+}: {
+  title: string;
+  onPress?: () => void;
+  disabled?: boolean;
+  /** `muted` for an action the screen cannot currently perform — offline, mostly. */
+  tone?: 'accent' | 'muted';
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.pill, pressed && !disabled && styles.pillPressed]}
+      android_ripple={disabled ? undefined : { color: Colors.pressed }}>
+      <ThemedText type="headingSmall" themeColor={disabled ? 'muted' : tone}>
+        {title}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   trough: {
     backgroundColor: Colors.panel,
@@ -441,6 +490,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   buttonInert: { opacity: 0.4 },
+  pill: {
+    // Never stretches. In a row it sizes to its words; standing alone under a block it must not
+    // become a full-width bar, which is the treatment `PrimaryButton` owns.
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.surfaceDeep,
+    borderRadius: Radius.pill,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.compact,
+  },
+  pillPressed: { opacity: 0.7 },
   buttonPressed: { opacity: 0.85 },
 
   question: { gap: Spacing.hair },

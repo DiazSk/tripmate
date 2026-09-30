@@ -961,7 +961,7 @@ function EditBar({
       <ThemedText type="detail" themeColor="muted" style={styles.grow}>
         {waiting ? 'A change is waiting' : daysUpdatedLabel(undoable?.days ?? [])}
       </ThemedText>
-      <ThemedText type="label" themeColor="accent">
+      <ThemedText type="detail" themeColor="accent">
         {waiting ? 'Review' : 'Undo'}
       </ThemedText>
     </Pressable>

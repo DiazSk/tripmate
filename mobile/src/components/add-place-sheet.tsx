@@ -334,7 +334,7 @@ function PlaceCard({
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button">
-        <ThemedText type="label" themeColor="accent">
+        <ThemedText type="detail" themeColor="accent">
           ‹ Results
         </ThemedText>
       </Pressable>
