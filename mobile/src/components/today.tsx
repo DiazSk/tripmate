@@ -613,7 +613,7 @@ function SavedNearby({
             {/* The distance is stated where it is known and simply absent where it is not — a
                 saved place with no coordinates is still theirs, and "—" would read as zero. */}
             {away ? (
-              <ThemedText type="micro" themeColor="muted" style={styles.firm}>
+              <ThemedText type="detail" themeColor="muted" style={styles.firm}>
                 {away}
               </ThemedText>
             ) : null}
@@ -702,8 +702,10 @@ function Row({
           {name}
         </ThemedText>
         {booked ? (
-          <ThemedText type="micro" themeColor="muted" style={styles.firm}>
-            BOOKED
+          // Sentence case: it is a fact about the stop, not a section heading, and the row it
+          // sits on is read rather than scanned.
+          <ThemedText type="detail" themeColor="muted" style={styles.firm}>
+            Booked
           </ThemedText>
         ) : null}
       </View>

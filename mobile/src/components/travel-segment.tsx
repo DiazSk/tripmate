@@ -69,11 +69,11 @@ function Segment({
     <View style={styles.segment}>
       <View style={styles.gutter} />
       <View>
-        <ThemedText type="micro" themeColor="muted">
+        <ThemedText type="detail" themeColor="muted">
           {mode} · {aboutDuration(`${minutes} min`)}
         </ThemedText>
         {open ? (
-          <ThemedText type="micro" themeColor="foreground" style={styles.leave}>
+          <ThemedText type="detail" themeColor="foreground" style={styles.leave}>
             Leave by {go} to reach {to} on time
           </ThemedText>
         ) : null}

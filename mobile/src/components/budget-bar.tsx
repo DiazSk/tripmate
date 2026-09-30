@@ -61,7 +61,7 @@ export function BudgetBar({
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <ThemedText type="label" themeColor="muted">
+        <ThemedText type="detail" themeColor="muted">
           {mixed
             ? `${formatMoney(split.settled)} confirmed`
             : split.settled > 0

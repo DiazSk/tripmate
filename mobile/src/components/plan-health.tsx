@@ -100,7 +100,7 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
           <View style={styles.figure}>
             <ThemedText type="title">{health.score}</ThemedText>
             {partial ? (
-              <ThemedText type="micro" themeColor="muted">
+              <ThemedText type="caption" themeColor="muted">
                 across checked
               </ThemedText>
             ) : null}
@@ -131,7 +131,7 @@ function Dimension({ dimension }: { dimension: HealthDimension }) {
         {/* A dimension nothing could check says so in words. Printing 100 there would be the one
             thing a diagnostic must never do: claim a check passed that nobody ran. */}
         {score === null ? (
-          <ThemedText type="micro" themeColor="muted">
+          <ThemedText type="caption" themeColor="muted">
             Not checked
           </ThemedText>
         ) : (
@@ -145,7 +145,7 @@ function Dimension({ dimension }: { dimension: HealthDimension }) {
       {findings.map((finding, i) => (
         // Keyed by message: findings carry no id, and two on one day are two different sentences.
         <View key={`${finding.message}-${i}`} style={styles.finding}>
-          <ThemedText type="micro" themeColor={isBlocking(finding) ? 'alert' : 'muted'}>
+          <ThemedText type="caption" themeColor={isBlocking(finding) ? 'alert' : 'muted'}>
             {classify(finding)}
           </ThemedText>
           <ThemedText type="detail" themeColor="muted">

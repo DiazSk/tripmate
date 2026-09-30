@@ -228,7 +228,7 @@ function SheetBody({
       {/* Which day these results would join. The card that follows can move it, but a list of
           places with no stated destination is the thing that made this screen read as ordinary
           search: the app has already decided where a stop is going, and was not saying. */}
-      <ThemedText type="label" themeColor="muted">
+      <ThemedText type="detail" themeColor="muted">
         Adding to {dayLabel(itinerary, dayIndex)}
       </ThemedText>
 
@@ -269,12 +269,12 @@ function SheetBody({
                   figures that answer "where would this go and what does it cost me" sat beneath.
                   The weights were already right — paper over muted — and the order was not, which
                   is a cheaper fix than any change of type. */}
-              <ThemedText type="label" themeColor="foreground" style={styles.resultMeta}>
+              <ThemedText type="detail" themeColor="foreground" style={styles.resultMeta}>
                 {landingLine(itinerary, dayIndex, place)}
               </ThemedText>
               {/* The same line the stop will carry once it is added, rather than a second summary
                   written to a different rule — so what you read here is what lands in the day. */}
-              <ThemedText type="label" themeColor="muted" style={styles.resultMeta}>
+              <ThemedText type="detail" themeColor="muted" style={styles.resultMeta}>
                 {describePlace(place)}
               </ThemedText>
             </Pressable>
@@ -400,7 +400,7 @@ function PlaceCard({
               android_ripple={{ color: Colors.pressed }}>
               <View style={styles.grow}>
                 <ThemedText type="heading">{option}</ThemedText>
-                <ThemedText type="label" themeColor="muted">
+                <ThemedText type="detail" themeColor="muted">
                   {slotLine(preview.time, preview.tight, detour)}
                 </ThemedText>
               </View>

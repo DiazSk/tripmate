@@ -133,7 +133,7 @@ export function DayMap({
           about how much of it is spent moving. Time rather than distance, for the reason
           `TravelSegment` records: nothing here knows whether the reader thinks in miles. */}
       <View style={styles.summary} pointerEvents="none">
-        <ThemedText type="label" themeColor="muted">
+        <ThemedText type="detail" themeColor="muted">
           {travelSummary(stops)}
         </ThemedText>
       </View>

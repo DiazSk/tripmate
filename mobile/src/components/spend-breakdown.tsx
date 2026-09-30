@@ -89,7 +89,7 @@ export function SpendBreakdown({ day, dayIndex }: { day: DayPlan; dayIndex: numb
             <ThemedText type="body" style={styles.grow}>
               {share.label}
             </ThemedText>
-            <ThemedText type="label" themeColor="muted" style={styles.percent}>
+            <ThemedText type="detail" themeColor="muted" style={styles.percent}>
               {`${share.percent}%`}
             </ThemedText>
             <ThemedText type="money" themeColor="money">

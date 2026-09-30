@@ -318,7 +318,7 @@ function StopRow({
 
         <View style={styles.particularsRow}>
           {particulars ? (
-            <ThemedText type="label" themeColor="muted">
+            <ThemedText type="detail" themeColor="muted">
               {particulars}
             </ThemedText>
           ) : null}
@@ -327,7 +327,7 @@ function StopRow({
               step for no gain — "Booked" also scales with Dynamic Type and reads to a screen
               reader without a label of its own. */}
           {booked ? (
-            <ThemedText type="label" themeColor="foreground">
+            <ThemedText type="detail" themeColor="foreground">
               Booked
             </ThemedText>
           ) : null}
@@ -362,8 +362,8 @@ function StopRow({
                 on a plan saved before this was recorded, because "estimated" would claim a check
                 failed when none ran. */}
             {where ? (
-              <ThemedText type="micro" themeColor="muted">
-                {where.value.toUpperCase()}
+              <ThemedText type="caption" themeColor="muted">
+                {where.value}
               </ThemedText>
             ) : null}
 
@@ -492,7 +492,7 @@ function CostEntry({
               accessibilityRole="button"
               accessibilityState={{ selected: state === kind, disabled }}
               style={[styles.costKind, state === kind && styles.costKindOn]}>
-              <ThemedText type="micro" themeColor={state === kind ? 'accent' : 'muted'}>
+              <ThemedText type="caption" themeColor={state === kind ? 'accent' : 'muted'}>
                 {kind === 'booked' ? 'Booked' : 'Paid'}
               </ThemedText>
             </Pressable>
