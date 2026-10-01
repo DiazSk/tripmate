@@ -12,6 +12,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, {
+  Easing,
   FadeIn,
   FadeOut,
   useAnimatedStyle,
@@ -24,7 +25,15 @@ import MapView, { type MapType, type Region } from 'react-native-maps';
 import { ToggleRow } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
-import { Colors, ControlShadow, Motion, OverPhotograph, Radius, Spacing } from '@/constants/theme';
+import {
+  Colors,
+  ControlShadow,
+  Curve,
+  Motion,
+  OverPhotograph,
+  Radius,
+  Spacing,
+} from '@/constants/theme';
 import { angleBetween } from '@/lib/here';
 
 /**
@@ -106,7 +115,7 @@ export const MODES: MapMode[] = [
 
 // Every type that draws photography, including the two no mode selects — `chrome()` is asked
 // about whatever the map is showing, and the Flyover pair is reachable by pitching.
-const IMAGERY: MapType[] = ['satellite', 'hybrid', 'satelliteFlyover', 'hybridFlyover'];
+export const IMAGERY: MapType[] = ['satellite', 'hybrid', 'satelliteFlyover', 'hybridFlyover'];
 
 /**
  * The glass and the ink it carries, which are one decision rather than two.
@@ -173,7 +182,7 @@ export function MapControls({
   onTraffic,
   poi,
   onPoi,
-  floor = FLOOR,
+  floor = MAP_FLOOR,
   region,
 }: {
   pitched: boolean;
@@ -208,12 +217,20 @@ export function MapControls({
   /**
    * The lift, as a transform rather than as `bottom`.
    *
-   * Animating `bottom` would re-run layout on every frame of a 220ms move for no gain; a
-   * `translateY` of the same distance is the compositor's own job and lands in the same place.
+   * Animating `bottom` would re-run layout on every frame for no gain; a `translateY` of the
+   * same distance is the compositor's own job and lands in the same place.
+   *
+   * `Motion.settle` and the house curve, not `Motion.respond` and Reanimated's default easing.
+   * This is not a control answering a touch — it is the chrome getting out of the way of a card
+   * arriving, so it takes the arrival's own duration, and `Easing.bezier(...Curve)` is how the
+   * rest of this client spends it (`signin.tsx`, `today.tsx`).
    */
   const lift = useSharedValue(0);
   useEffect(() => {
-    lift.value = withTiming(floor - FLOOR, { duration: Motion.respond });
+    lift.value = withTiming(floor - MAP_FLOOR, {
+      duration: Motion.settle,
+      easing: Easing.bezier(...Curve),
+    });
   }, [floor, lift]);
   const rise = useAnimatedStyle(() => ({ transform: [{ translateY: -lift.value }] }));
 
@@ -421,11 +438,18 @@ export function MapControls({
 
                 `ToggleRow` straight from `form.tsx`, with no material question to answer — the
                 sheet is `surfaceDeep`, an ordinary page surface, unlike everything else this
-                file draws over the map. */}
-            <View style={styles.switches}>
-              <ToggleRow label="Traffic" value={traffic} onChange={onTraffic} />
-              <ToggleRow label="Points of interest" value={poi} onChange={onPoi} />
-            </View>
+                file draws over the map.
+
+                **Only over imagery, and that is not a cosmetic scoping.** Built global, they
+                left a state that could be set and not unset: traffic on over Satellite, move to
+                Explore, and the switch is still on with no switch left to reach it. `day-map`
+                applies them over imagery only for the same reason. */}
+            {IMAGERY.includes(current.type) ? (
+              <View style={styles.switches}>
+                <ToggleRow label="Traffic" value={traffic} onChange={onTraffic} />
+                <ToggleRow label="Points of interest" value={poi} onChange={onPoi} />
+              </View>
+            ) : null}
           </View>
         </Animated.View>
       ) : null}
@@ -446,6 +470,8 @@ export function Group({
   style,
   radius = Radius.pill,
   onLayout,
+  entering,
+  exiting,
   children,
 }: {
   tint: 'systemChromeMaterialLight' | 'systemChromeMaterialDark';
@@ -455,10 +481,18 @@ export function Group({
   radius?: number;
   /** On the shadow box, which is the one that has the group's real height. */
   onLayout?: (event: LayoutChangeEvent) => void;
+  /** Reanimated layout animations, for the groups that arrive and leave rather than just sit
+   *  there — the stop card is the only one so far. */
+  entering?: React.ComponentProps<typeof Animated.View>['entering'];
+  exiting?: React.ComponentProps<typeof Animated.View>['exiting'];
   children: React.ReactNode;
 }) {
   return (
-    <Animated.View onLayout={onLayout} style={[styles.lift, { borderRadius: radius }, style]}>
+    <Animated.View
+      onLayout={onLayout}
+      entering={entering}
+      exiting={exiting}
+      style={[styles.lift, { borderRadius: radius }, style]}>
       <BlurView tint={tint} intensity={70} style={[styles.glass, { borderRadius: radius }]}>
         {children}
       </BlurView>
@@ -499,6 +533,18 @@ function Needle({ heading, ink, inkMuted }: { heading: number; ink: string; inkM
  */
 const SIZE = 48;
 /**
+ * Where the bottom of the map's chrome rests — the controls *and* the stop card, which used to
+ * carry a second constant of their own for the same fact.
+ *
+ * **It is a floor rather than a preference.** Apple's logo and `Legal` link are a licence
+ * condition, and read off the device at 3x they occupy **42.3pt to 56.7pt** up from the bottom
+ * edge, in the left region where the 3D button stands. 62 clears them by 5.3. Going lower means
+ * moving Apple's marks — `legalLabelInsets` and `appleLogoInsets` do that, Apple-only, by
+ * rewriting a private subview's frame, and `mapPadding` would do it on both platforms at the
+ * cost of the camera's height. Both were considered and neither was wanted.
+ */
+export const MAP_FLOOR = 62;
+/**
  * The needle, as three numbers.
  *
  * It shipped as one — a half-length equal to the half-width — and that draws a rhombus, which on
@@ -510,8 +556,7 @@ const SIZE = 48;
 const NEEDLE_WIDTH = 5;
 const NEEDLE_NORTH = 13;
 const NEEDLE_SOUTH = 9;
-/** Where the stack rests with nothing else on the map. `floor` raises it from here. */
-export const FLOOR = 76;
+
 
 const styles = StyleSheet.create({
   // The shadow box. It must not clip, or the shadow is clipped with its children.
@@ -529,10 +574,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
   },
-  left: { left: Spacing.read, bottom: FLOOR },
+  left: { left: Spacing.read, bottom: MAP_FLOOR },
   // The column, not a group: `position` and the inset live here and the two groups inside it
   // stack normally, so the compass never has to know how tall the pill is.
-  right: { position: 'absolute', right: Spacing.read, bottom: FLOOR, alignItems: 'flex-end', gap: Spacing.tight },
+  right: { position: 'absolute', right: Spacing.read, bottom: MAP_FLOOR, alignItems: 'flex-end', gap: Spacing.tight },
   // A group inside that column has already been positioned by it.
   loose: { position: 'relative' },
   half: {

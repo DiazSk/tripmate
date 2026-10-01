@@ -1383,13 +1383,30 @@ that the view moved and nothing about its bearing. **The needle carries no colou
 half is red; here coral is an alert and jade is "act on this", so the two tones of the chrome's own
 ink and a tail shorter than the point do the work instead.
 
+**The chrome rests 62pt up, and that is a floor rather than a taste.** Apple's logo and `Legal`
+link are a licence condition and, read off the device at 3x, they occupy **42.3pt to 56.7pt** from
+the bottom edge in the left region where the 2D/3D button stands; 62 clears them by 5.3. The stop
+card takes the same number, because it is the same fact — one `MAP_FLOOR` rather than a constant
+each. Lower means moving Apple's marks, which `legalLabelInsets` and `appleLogoInsets` do on the
+Apple path by rewriting a private subview's frame, and which `mapPadding` would do on both
+platforms at the cost of the camera's height. Both were offered and neither was wanted.
+
+**When a stop card arrives the chrome steps aside, on the card's clock.** The lift is a
+`translateY` at `Motion.settle` under `Easing.bezier(...Curve)` — the arrival's duration and the
+house curve, not a control's `respond` — and the card rises from below the edge with
+`SlideInDown`. Checked against Reanimated's source rather than its names, which are ambiguous:
+`SlideInDown` starts a window height *below* its resting place and travels up, while
+`SlideOutDown` travels down off the edge.
+
 **Two switches sit under the thumbnails, and Apple has neither.** Its own Map Modes sheet in
 iOS 26 is four tiles and an attribution line — checked, not recalled. Traffic and Points of
 interest are ours because they *compose* with the modes in a way no mode can: traffic over
 satellite is a pairing a single basemap cannot express, and the labels are worth dropping exactly
-where imagery is already dense. A mode is a **preset, not a lock** — picking Driving turns Traffic
-on and the switch owns it from there, while Explore and Satellite leave it alone, since clearing
-it would put that pairing back out of reach.
+where imagery is already dense. **They belong to Satellite and are hidden everywhere else.** Built
+global, with a mode acting as a preset, they left a state that could be set and not unset: traffic
+on over imagery, move to Explore, and the switch is still on with nothing left to reach it. Off
+imagery the answer comes from the mode instead, which is what a Driving mode is for, and the
+preset goes with it.
 
 **Their three native writes arrive in the wrong order, and the fix is to sequence them.**
 `showsTraffic` is written at `RNMapsMapView.mm:570`, `showsPointsOfInterests` at `:574` and

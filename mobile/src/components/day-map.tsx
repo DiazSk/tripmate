@@ -6,15 +6,16 @@ import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
 import {
   DIVE_ALTITUDE_M,
-  FLOOR,
   Group,
+  IMAGERY,
+  MAP_FLOOR,
   MODES,
   MapControls,
   PITCH_3D,
   chrome,
   type MapMode,
 } from '@/components/map-controls';
-import { CARD_FLOOR, StopCard } from '@/components/stop-card';
+import { StopCard } from '@/components/stop-card';
 import { HereMarker } from '@/components/here-marker';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
@@ -193,13 +194,25 @@ export function DayMap({
    */
   const shownType = pitched && mode.flyover ? mode.flyover : mode.type;
 
+  /**
+   * **The two switches are Satellite's, so they are applied over imagery and nowhere else.**
+   *
+   * Built global, they left a state that could be set and not unset — traffic on over Satellite,
+   * move to Explore, and the switch is still on with nothing left to reach it. Off imagery the
+   * answer comes from the mode instead, which is what `MapMode.traffic` meant before a preset
+   * was invented to resolve an overlap that scoping removes.
+   */
+  const overImagery = IMAGERY.includes(shownType);
+  const wantTraffic = overImagery ? trafficWanted : !!mode.traffic;
+  const wantPoi = overImagery ? poiWanted : true;
+
   useEffect(() => {
     let frame = requestAnimationFrame(() => {
-      setApplied({ poi: poiWanted, traffic: false });
-      frame = requestAnimationFrame(() => setApplied({ poi: poiWanted, traffic: trafficWanted }));
+      setApplied({ poi: wantPoi, traffic: false });
+      frame = requestAnimationFrame(() => setApplied({ poi: wantPoi, traffic: wantTraffic }));
     });
     return () => cancelAnimationFrame(frame);
-  }, [shownType, trafficWanted, poiWanted]);
+  }, [shownType, wantTraffic, wantPoi]);
   // Jade on the locate glyph while the camera is actually flying to the reader, and only then —
   // see `MapControls`. The map holds no continuous tracking mode, so this is the honest span.
   const [locating, setLocating] = useState(false);
@@ -500,11 +513,7 @@ export function DayMap({
         pitched={pitched}
         onToggle3D={toggle3D}
         mode={mode}
-        onMode={(next) => {
-          setMode(next);
-          // The preset, and only in the on direction — see `MapMode.traffic`.
-          if (next.traffic) setTrafficWanted(true);
-        }}
+        onMode={setMode}
         traffic={trafficWanted}
         onTraffic={setTrafficWanted}
         poi={poiWanted}
@@ -513,7 +522,7 @@ export function DayMap({
         onResetNorth={resetNorth}
         // Apple's own controls step aside for its place card; ours do the same, and the height
         // is measured rather than guessed so Dynamic Type cannot push the card under them.
-        floor={shown ? CARD_FLOOR + cardHeight + Spacing.tight : FLOOR}
+        floor={shown ? MAP_FLOOR + cardHeight + Spacing.tight : MAP_FLOOR}
         // Absent rather than disabled when there is no fix: a locate button that cannot locate
         // is the permission prompt by another route, which `here.ts` exists to avoid.
         onLocate={here ? locate : undefined}

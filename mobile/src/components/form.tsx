@@ -749,7 +749,26 @@ function Step({ sign, disabled, onPress, label }: { sign: string; disabled: bool
   );
 }
 
-/** A switch, drawn by the platform. */
+/**
+ * A switch, drawn by the platform — with the two colour props it had wrong.
+ *
+ * **The grip was `Colors.foreground`, which is near-black under the light appearance.** On a
+ * track that the light palette darkens to `#245E48` that is a dark blob on dark green, and it
+ * was reported as exactly that. `accentForeground` is the token defined for this job — "the ink
+ * drawn ON a jade fill" — and it is the one that does not invert wrongly: near-white on dark
+ * jade in light, near-black on bright jade in dark. It has to read on the *off* track too,
+ * because `thumbColor` is a single colour for both states.
+ *
+ * **The off track had never been coloured at all.** `trackColor.false` looks like the prop for
+ * it and is not: React Native routes it to `UISwitch.tintColor`, which is the border the track
+ * shrinks into when off, and its own doc says so — "if you want to change the color of the
+ * background exposed by the shrunken track, use `ios_backgroundColor`". That one is a JS-side
+ * style composition and reaches no native prop at all. Both are set: `ios_backgroundColor` is
+ * what paints iOS, `trackColor.false` is what Android reads.
+ *
+ * Setting `thumbColor` on iOS costs the grip its drop shadow, which React Native documents and
+ * which was already true here.
+ */
 export function ToggleRow({
   label,
   value,
@@ -767,8 +786,9 @@ export function ToggleRow({
       <Switch
         value={value}
         onValueChange={onChange}
-        trackColor={{ true: Colors.accent, false: Colors.surfaceDeep }}
-        thumbColor={Colors.foreground}
+        trackColor={{ true: Colors.accent, false: Colors.cardBorder }}
+        ios_backgroundColor={Colors.cardBorder}
+        thumbColor={Colors.accentForeground}
       />
     </View>
   );

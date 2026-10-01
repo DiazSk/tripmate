@@ -1,12 +1,13 @@
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { MapType } from 'react-native-maps';
+import { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
 import type { Stop } from '@/api/types';
-import { Group, chrome } from '@/components/map-controls';
+import { Group, MAP_FLOOR, chrome } from '@/components/map-controls';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
-import { OverPhotograph, Radius, Spacing } from '@/constants/theme';
+import { Motion, OverPhotograph, Radius, Spacing } from '@/constants/theme';
 import { stopParticulars } from '@/lib/dayDisplay';
 import { formatMoney } from '@/lib/spend';
 
@@ -57,7 +58,18 @@ export function StopCard({
   const spend = stop.actualCost ?? stop.cost;
 
   return (
-    <Group tint={tint} radius={Radius.surface} style={styles.card} onLayout={onLayout}>
+    <Group
+      tint={tint}
+      radius={Radius.surface}
+      style={styles.card}
+      onLayout={onLayout}
+      /* **Up from below, and down again.** It used to appear with no animation at all. Checked
+         against Reanimated's own source rather than the names, which are ambiguous:
+         `SlideInDown` starts a window height *below* its resting place and travels up, while
+         `SlideOutDown` travels down off the edge — so the pair is symmetric in effect while
+         "Down" means the origin in one and the direction in the other. */
+      entering={SlideInDown.duration(Motion.settle)}
+      exiting={SlideOutDown.duration(Motion.exit)}>
       <View style={styles.row}>
         {/* The emphasised disc, repeated at the size the map draws it. `OverPhotograph.accentDisc`
             rather than `Colors.accent` for the reason its docblock gives: under the light
@@ -105,25 +117,14 @@ export function StopCard({
   );
 }
 
-/**
- * **Where the card sits, and it is measured rather than chosen.**
- *
- * Apple's logo and `Legal` link are a licence condition, not decoration, and the caption this
- * replaces lay across both. Read off the device at 3x, they occupy roughly 44pt to 54pt up from
- * the bottom edge; 62 clears that with air. `legalLabelInsets` and `appleLogoInsets` would move
- * them instead and are genuinely implemented on the Apple path, but they are Apple-only and
- * sitting above the marks needs no platform fork at all.
- *
- * `day-map.tsx` reads this to work out how far to lift the controls.
- */
-export const CARD_FLOOR = 62;
-
 const styles = StyleSheet.create({
   card: {
     position: 'absolute',
     left: Spacing.read,
     right: Spacing.read,
-    bottom: CARD_FLOOR,
+    // The same floor the controls rest on — Apple's marks are the reason for both, so there is
+    // one number for it. See `MAP_FLOOR`.
+    bottom: MAP_FLOOR,
   },
   row: {
     flexDirection: 'row',
