@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import MapView, { Marker, Polyline, type MapType } from 'react-native-maps';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 
 import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
-import { DIVE_ALTITUDE_M, MapControls, PITCH_3D } from '@/components/map-controls';
+import { DIVE_ALTITUDE_M, MODES, MapControls, PITCH_3D, type MapMode } from '@/components/map-controls';
 import { HereMarker } from '@/components/here-marker';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
@@ -70,7 +70,31 @@ export function DayMap({
   const map = useRef<MapView>(null);
   const { here } = useHere();
   const heading = useHeading();
-  const [mapType, setMapType] = useState<MapType>('mutedStandard');
+  // The whole mode rather than its `MapType`. The three types do happen to differ today, so the
+  // type alone would identify the mode — but it would also mean spelling "Driving" as
+  // `type === 'standard'` at the one place that turns traffic on, which is a coupling the next
+  // mode breaks. The mode carries its own flag and its own name.
+  const [mode, setMode] = useState<MapMode>(MODES[0]);
+  /**
+   * **Traffic has to be applied a render *after* the map type, or it never appears.**
+   *
+   * `RNMapsMapView.mm` writes `showsTraffic` onto the `MKMapView` at line 570 and `mapType` at
+   * 598 — in that order, in one pass — and assigning `mapType` installs a fresh
+   * `MKMapConfiguration`, whose own `showsTraffic` is off. So any update that changes both drops
+   * the traffic it just set, silently. Measured: `showsTraffic` alone over a mode change drew
+   * nothing in a frame where Apple Maps drew a red segment on the same stretch of the A5, and
+   * pinning the type to the native default so that branch never fired drew it immediately.
+   *
+   * Lagging it by a frame means the second pass changes only `showsTraffic`, with the type
+   * already on the native view. A frame rather than a plain re-render, because what has to have
+   * happened is the *native* assignment, not React's commit — and `requestAnimationFrame` is the
+   * cheapest thing that waits for it.
+   */
+  const [traffic, setTraffic] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setTraffic(!!mode.traffic));
+    return () => cancelAnimationFrame(frame);
+  }, [mode]);
   const [pitched, setPitched] = useState(false);
   // Jade on the locate glyph while the camera is actually flying to the reader, and only then —
   // see `MapControls`. The map holds no continuous tracking mode, so this is the honest span.
@@ -172,11 +196,14 @@ export function DayMap({
         // the system**, for the same reason `_layout.tsx` does: a dark map inside a paper app is
         // the `--postcard-paper` failure with the polarity swapped.
         userInterfaceStyle={APPEARANCE}
-        // Opens on `mutedStandard` and the reader can change it — see `MODES` in `map-controls`
-        // for why that list is three long and why Apple's plain `standard` is not on it. The
-        // muted type is Apple's own answer for a map carrying overlays; iOS-only, and Android
-        // gets the same restraint from Google's colour scheme above.
-        mapType={mapType}
+        // Opens on Explore and the reader can change it — see `MODES` in `map-controls` for why
+        // that list is three long, and why label-free `satellite` is not one of them. The muted
+        // type Explore uses is Apple's own answer for a map carrying overlays; iOS-only, and
+        // Android gets the same restraint from Google's colour scheme above.
+        mapType={mode.type}
+        // Driving, and the whole of it — Apple's own mode is the standard map plus traffic.
+        // **A frame behind `mapType`, deliberately — see `traffic` above.**
+        showsTraffic={traffic}
         // **The base map's own places stay on, and turning them off was my mistake.** I removed
         // them on a density count — 23 restaurant, café and museum labels against 4 numbered
         // stops on the Lisbon fixture, several overlapping a disc — and that count is real but
@@ -295,8 +322,8 @@ export function DayMap({
       <MapControls
         pitched={pitched}
         onToggle3D={toggle3D}
-        mapType={mapType}
-        onMapType={setMapType}
+        mode={mode}
+        onMode={setMode}
         // Absent rather than disabled when there is no fix: a locate button that cannot locate
         // is the permission prompt by another route, which `here.ts` exists to avoid.
         onLocate={here ? locate : undefined}

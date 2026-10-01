@@ -30,19 +30,55 @@ export const DIVE_ALTITUDE_M = 1200;
 export const PITCH_3D = 55;
 
 /**
- * The modes worth offering, of the eight `MapType` carries.
+ * The three modes, named for Apple's own and checked against MapKit's documentation rather than
+ * against the list of `MapType` strings — which is what the previous three were.
  *
- * `standard` is deliberately absent: Apple's standard map paints landcover in saturated greens
- * and purples that compete with the day's own hue, which is the whole reason this app opens on
- * `mutedStandard`. `terrain` is Android-only, and the two `*Flyover` types are `satellite` and
- * `hybrid` with 3D scenery — which the 3D button reaches anyway, without a second row.
+ * **`satellite` is gone, and `hybrid` is what "Satellite" means.** MapKit defines
+ * `MKImageryMapConfiguration` as "an imagery-based map presentation" and
+ * `MKHybridMapConfiguration` as "a satellite image of the area *with road and road name
+ * information layers on top*" — so `satellite` carries no label layer at all: no roads, no
+ * names, no POIs, and no prop adds them, because their absence *is* the mode. Apple Maps has
+ * never offered it; its own Satellite button is hybrid. Offering both cost this map its POIs on
+ * imagery and put two tiles in the sheet that differ only by the one layer a 100pt thumbnail
+ * cannot draw.
+ *
+ * **Driving is `standard` plus traffic, and `standard` rather than muted is not a preference.**
+ * Apple Maps' own Driving mode was driven on the same simulator: it drops to the unmuted
+ * emphasis, thickens the road network and sheds its POI pins, because the roads *are* the
+ * content there. `showsTraffic` is also one of the few props on this view that is not "iOS:
+ * Google Maps only" — `ios/AirMaps/RNMapsMapView.mm` remaps it onto `MKMapView.showsTraffic`.
+ * It still needs the one-render lag `day-map.tsx` applies; the comment on `traffic` there has
+ * the measurement.
+ *
+ * **There is no Transit mode, and no amount of native work would add one.** `MKMapConfiguration`
+ * has exactly three subclasses — Standard, Hybrid, Imagery — and `MKStandardMapConfiguration`
+ * exposes `emphasisStyle`, `pointOfInterestFilter` and `showsTraffic` and nothing else. There is
+ * no transit configuration, overlay or filter at any version; Apple Maps' transit mode is
+ * first-party rather than API. Unlike Look Around, this one is not waiting on a native module.
+ *
+ * Explore stays muted: `standard`'s landcover greens and purples compete with the day's own hue,
+ * which is why the map opens on the muted type and why Driving is the only mode that spends it.
+ * `terrain` is Android-only, and the `*Flyover` pair is imagery with 3D scenery, which the 3D
+ * button reaches anyway.
  */
-const MODES: { type: MapType; label: string }[] = [
-  { type: 'mutedStandard', label: 'Map' },
-  { type: 'satellite', label: 'Satellite' },
-  { type: 'hybrid', label: 'Hybrid' },
+export interface MapMode {
+  type: MapType;
+  label: string;
+  /** Apple's Driving mode, and the whole of it. */
+  traffic?: true;
+}
+
+export const MODES: MapMode[] = [
+  // "Explore", not "Map": the trip screen's LIST/MAP toggle already owns that word for the
+  // surface, and One Meaning Rule says a mode of the map cannot also be called the map. Apple
+  // calls it Explore for the same reason.
+  { type: 'mutedStandard', label: 'Explore' },
+  { type: 'standard', label: 'Driving', traffic: true },
+  { type: 'hybrid', label: 'Satellite' },
 ];
 
+// Every type that draws photography, including the two no mode selects — `chrome()` is asked
+// about whatever the map is showing, and the Flyover pair is reachable by pitching.
 const IMAGERY: MapType[] = ['satellite', 'hybrid', 'satelliteFlyover', 'hybridFlyover'];
 
 /**
@@ -97,16 +133,18 @@ function chrome(mapType: MapType) {
 export function MapControls({
   pitched,
   onToggle3D,
-  mapType,
-  onMapType,
+  mode: current,
+  onMode,
   onLocate,
   locating,
   region,
 }: {
   pitched: boolean;
   onToggle3D: () => void;
-  mapType: MapType;
-  onMapType: (type: MapType) => void;
+  /** The whole mode, not its `MapType` — Explore and Driving share one, so the type alone
+   *  cannot say which tile is chosen. */
+  mode: MapMode;
+  onMode: (mode: MapMode) => void;
   /** Absent until the location permission is already granted — see `lib/here.ts`. */
   onLocate?: () => void;
   /** True while the map is centred on the reader, which is the one place jade belongs here. */
@@ -115,7 +153,7 @@ export function MapControls({
   region: Region;
 }) {
   const [picking, setPicking] = useState(false);
-  const { tint, ink } = chrome(mapType);
+  const { tint, ink } = chrome(current.type);
 
   /**
    * The tile's size, computed rather than left to flex.
@@ -196,9 +234,10 @@ export function MapControls({
       {/* **A sheet at the bottom, and each style shown rather than described.** Apple presents
           map modes as a titled sheet of thumbnails, and both halves of that are right: choosing a
           style changes the whole surface behind it, so the choice belongs in front of the map and
-          not hanging off one corner — and a picture of satellite imagery says "photography"
-          better than the words "photography, no labels" did. The sheet leaves the map readable
-          above it, which is what makes comparing a thumbnail to the real thing possible. */}
+          not hanging off one corner — and a picture of the thing is what separates Explore from
+          Driving, which are the same basemap and differ only by the traffic drawn on it. The
+          sheet leaves the map readable above it, which is what makes comparing a thumbnail to
+          the real thing possible. */}
       {picking ? (
         <Animated.View
           entering={FadeIn.duration(Motion.respond)}
@@ -232,12 +271,13 @@ export function MapControls({
 
             <View style={styles.tiles}>
               {MODES.map((mode) => {
-                const chosen = mode.type === mapType;
+                const chosen = mode === current;
                 return (
                   <Pressable
-                    key={mode.type}
+                    // The label, not the type: two modes share `mutedStandard`.
+                    key={mode.label}
                     onPress={() => {
-                      onMapType(mode.type);
+                      onMode(mode);
                       setPicking(false);
                     }}
                     accessibilityRole="button"
@@ -259,6 +299,11 @@ export function MapControls({
                         style={{ width: tile, height: tile }}
                         region={region}
                         mapType={mode.type}
+                        // Survives here where the main map needed a lag, because `standard` is
+                        // the native default, so the `mapType` assignment that wipes traffic
+                        // never fires on this tile. Worth having: a tile that is only a lighter
+                        // basemap would not say what Driving is for.
+                        showsTraffic={!!mode.traffic}
                         // Same as the real map. Without it the thumbnail follows `app.json`'s
                         // pinned dark style and the "Map" tile renders a dark map inside the
                         // light appearance — a preview of a thing the app will not show you.

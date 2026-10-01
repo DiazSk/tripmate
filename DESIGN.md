@@ -1343,6 +1343,26 @@ is that entry ported. The explicit `…Light`/`…Dark` variants rather than the
 the app. Glyphs are neutral ink; the accent appears only while the locate button is actually
 moving the camera, which is Apple's own rule for its blue arrow and the One Meaning Rule's for jade.
 
+**Three modes, named for MapKit's own and not for its `MapType` strings: Explore, Driving,
+Satellite.** The sheet shipped with a fourth, `satellite`, which was a mistake made by reading the
+list of available types rather than what they mean. MapKit defines imagery as photography *without*
+a label layer and hybrid as the same photography "with road and road name information layers on
+top", so plain satellite carries no roads, no names and no points of interest, and no prop adds
+them — their absence is the mode. Apple Maps has never offered it; its own Satellite button is
+hybrid, which is why ours is too. Offering both cost the map its POIs on imagery and put two tiles
+in the sheet that differ only by the one layer a 100pt thumbnail cannot render. Driving is the
+unmuted basemap plus `showsTraffic` — Apple's own Driving mode, driven on the simulator, drops the
+muted emphasis, thickens the roads and sheds its POI pins, because the roads are the content there.
+**That traffic has to be applied a render after the map type**, or it never draws at all: the view
+writes `showsTraffic` onto the `MKMapView` before it writes `mapType`, and assigning `mapType`
+installs a fresh configuration with traffic off. It looked exactly like an unsupported prop, and was
+caught by comparing against Apple Maps on the same stretch of the A5 in the same minute. **There is
+no Transit mode and
+none can be built** — `MKMapConfiguration` has exactly three subclasses, and the standard one
+exposes emphasis, a POI filter and traffic and nothing else. Apple Maps' transit is first-party
+rather than API, so unlike Look Around this is not waiting on a native module. "Explore" rather
+than "Map" because the trip screen's LIST/MAP toggle already owns that word for the surface.
+
 The web's stack, unchanged:
 
 Apple-Maps-grade chrome, and the only place `.glass-control` is used: a vertical stack of 44px targets
