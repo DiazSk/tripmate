@@ -1363,6 +1363,35 @@ exposes emphasis, a POI filter and traffic and nothing else. Apple Maps' transit
 rather than API, so unlike Look Around this is not waiting on a native module. "Explore" rather
 than "Map" because the trip screen's LIST/MAP toggle already owns that word for the surface.
 
+**3D over imagery is a different map type, not a different camera.** `satellite` and `hybrid` are
+MapKit's flat imagery types and refuse pitch outright — pressing 3D over Satellite dived, flipped
+the button to "2D" and left a plan view, which is exactly what an unsupported feature looks like.
+The 3D pair is `satelliteFlyover` / `hybridFlyover`, so a mode carries its tilted type beside its
+flat one and the button swaps between them. **The swap has to land before the camera is asked to
+tilt**, a frame apart, for the same reason traffic does: asking in the same commit asks the flat
+type. Nothing in the library conditions pitch on the map type; the refusal is MapKit's.
+
+**The compass is drawn rather than placed, because `compassOffset` is a dead prop.**
+`react-native-maps` 1.27.2 declares it "Apple Maps only", bridges it on both architectures and
+stores it on the view — and nothing reads it; there is no `MKCompassButton` in the package at all,
+though it does implement exactly this for the legal label and the Apple logo. The only native lever
+is `mapPadding`, and reaching the bottom-right with it costs the camera most of its height. So the
+phone grows its own: a round glass button above the mode pill, present only while the map is turned
+the way MapKit's own is, pressing to north, its heading read off `getCamera()` throttled to roughly
+every fourth frame while a gesture runs — there is no heading event, and `onRegionChange` reports
+that the view moved and nothing about its bearing. **The needle carries no colour.** Apple's north
+half is red; here coral is an alert and jade is "act on this", so the two tones of the chrome's own
+ink and a tail shorter than the point do the work instead.
+
+**The map's own overlays take the ground's material, not the appearance's.** The stop card and the
+travel summary are `chrome()`'s material, like the buttons — not `Colors.bar` and `Colors.surfaceDeep`,
+which are measured against a page. The caption that preceded the card proved why: in the light
+appearance `bar` is the one slate at 4%, which over paper is "effectively opaque" and over satellite
+imagery is nothing at all, so a stop's name rendered as bare near-black letters across Apple's
+attribution. Anything the card puts on that material follows it, including the cost — `Colors.money`
+darkens to `#886019` under the light appearance and is an olive smudge on dark glass, so
+`OverPhotograph.money` joined the disc for the same reason the disc is there.
+
 The web's stack, unchanged:
 
 Apple-Maps-grade chrome, and the only place `.glass-control` is used: a vertical stack of 44px targets

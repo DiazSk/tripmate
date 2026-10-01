@@ -11,7 +11,7 @@ import { SpendBreakdown } from '@/components/spend-breakdown';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
-import { formatDateline, weatherLine } from '@/lib/dayDisplay';
+import { formatDateline, stopParticulars, weatherLine } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
 import { evidenceTags } from '@/lib/provenance';
 import { locationNote } from '@shared/evidence';
@@ -310,12 +310,8 @@ function StopRow({
     tags.detail ? `Description: ${tags.detail}` : null,
     tags.cost ? `Cost: ${tags.cost}` : null,
   ].filter(Boolean);
-  // `category` is stored lowercase ('food', 'entry') and was capitalised by the label step's
-  // `textTransform`. Sentence case has to do it in the string, or the row reads "· food".
-  const particulars = [stop.time, stop.durationLabel, sentence(stop.category)]
-    .map((part) => part?.trim())
-    .filter(Boolean)
-    .join('  ·  ');
+  // Shared with the map's stop card — see `stopParticulars`.
+  const particulars = stopParticulars(stop);
   const blocked = findings.some(isBlocking);
 
   return (
@@ -654,11 +650,6 @@ function Cost({ amount }: { amount: number }) {
       {formatMoney(amount)}
     </ThemedText>
   );
-}
-
-/** First letter up, rest untouched — the categories are single lowercase words. */
-function sentence(word: string | undefined): string | undefined {
-  return word ? word[0].toUpperCase() + word.slice(1) : word;
 }
 
 const styles = StyleSheet.create({

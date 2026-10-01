@@ -1,20 +1,30 @@
 import { BlurView } from 'expo-blur';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
+  type LayoutChangeEvent,
+  type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  type AnimatedStyle,
+} from 'react-native-reanimated';
 import MapView, { type MapType, type Region } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
-import { Colors, ControlShadow, Motion, Radius, Spacing } from '@/constants/theme';
+import { Colors, ControlShadow, Motion, OverPhotograph, Radius, Spacing } from '@/constants/theme';
+import { angleBetween } from '@/lib/here';
 
 /**
  * The altitude a 3D press dives to, and the pitch it lands at.
@@ -58,14 +68,24 @@ export const PITCH_3D = 55;
  *
  * Explore stays muted: `standard`'s landcover greens and purples compete with the day's own hue,
  * which is why the map opens on the muted type and why Driving is the only mode that spends it.
- * `terrain` is Android-only, and the `*Flyover` pair is imagery with 3D scenery, which the 3D
- * button reaches anyway.
+ * `terrain` is Android-only.
+ *
+ * **`flyover` is the 3D half of a mode, and it is a separate type rather than a camera.** This
+ * docblock used to say the `*Flyover` pair was "imagery with 3D scenery, which the 3D button
+ * reaches anyway". It does not: `satellite` and `hybrid` are MapKit's *flat* imagery types and
+ * refuse pitch outright, so pressing 3D over Satellite dived, flipped the button to "2D" and
+ * left a plan view — reported, then reproduced, then fixed by swapping the type. Measured both
+ * ways on the simulator: `hybrid` stays flat under a 55° camera, `hybridFlyover` tilts into
+ * photorealistic relief with the route drawn over it.
  */
 export interface MapMode {
   type: MapType;
   label: string;
   /** Apple's Driving mode, and the whole of it. */
   traffic?: true;
+  /** The type to swap to while the camera is tilted. Absent on the vector modes, which pitch
+   *  perfectly well as they are. */
+  flyover?: MapType;
 }
 
 export const MODES: MapMode[] = [
@@ -74,7 +94,7 @@ export const MODES: MapMode[] = [
   // calls it Explore for the same reason.
   { type: 'mutedStandard', label: 'Explore' },
   { type: 'standard', label: 'Driving', traffic: true },
-  { type: 'hybrid', label: 'Satellite' },
+  { type: 'hybrid', label: 'Satellite', flyover: 'hybridFlyover' },
 ];
 
 // Every type that draws photography, including the two no mode selects — `chrome()` is asked
@@ -100,13 +120,16 @@ const IMAGERY: MapType[] = ['satellite', 'hybrid', 'satelliteFlyover', 'hybridFl
  * material minus the blur, which is what this screen already shipped — acceptable until somebody
  * is looking at an Android build.
  */
-function chrome(mapType: MapType) {
+export function chrome(mapType: MapType) {
   const overImagery = IMAGERY.includes(mapType);
   const dark = overImagery || APPEARANCE === 'dark';
   return {
     tint: dark ? ('systemChromeMaterialDark' as const) : ('systemChromeMaterialLight' as const),
     // `onDeep` is the token that does not move between appearances — paper over anything dark.
     ink: dark ? Colors.onDeep : Colors.foreground,
+    inkMuted: dark ? Colors.onDeepMuted : Colors.muted,
+    // A figure on this material is standing on the ground too — see `OverPhotograph.money`.
+    money: dark ? OverPhotograph.money : Colors.money,
   };
 }
 
@@ -137,6 +160,9 @@ export function MapControls({
   onMode,
   onLocate,
   locating,
+  heading,
+  onResetNorth,
+  floor = FLOOR,
   region,
 }: {
   pitched: boolean;
@@ -149,11 +175,34 @@ export function MapControls({
   onLocate?: () => void;
   /** True while the map is centred on the reader, which is the one place jade belongs here. */
   locating?: boolean;
+  /** The camera's bearing in degrees. The *map's*, not the phone's — `useHeading` is the other
+   *  one, and they are never the same number. */
+  heading: number;
+  onResetNorth: () => void;
+  /** Where the bottom of the stack sits. Raised while the stop card is up, the way Apple's own
+   *  controls step aside for its place card. */
+  floor?: number;
   /** The day's own framing, so each thumbnail previews this trip rather than a stock junction. */
   region: Region;
 }) {
   const [picking, setPicking] = useState(false);
-  const { tint, ink } = chrome(current.type);
+  const { tint, ink, inkMuted } = chrome(current.type);
+
+  /**
+   * The lift, as a transform rather than as `bottom`.
+   *
+   * Animating `bottom` would re-run layout on every frame of a 220ms move for no gain; a
+   * `translateY` of the same distance is the compositor's own job and lands in the same place.
+   */
+  const lift = useSharedValue(0);
+  useEffect(() => {
+    lift.value = withTiming(floor - FLOOR, { duration: Motion.respond });
+  }, [floor, lift]);
+  const rise = useAnimatedStyle(() => ({ transform: [{ translateY: -lift.value }] }));
+
+  // Apple's compass is adaptive — present only while the map is turned. One degree rather than
+  // zero because a float heading rarely lands on it exactly.
+  const turned = angleBetween(heading, 0) >= 1;
 
   /**
    * The tile's size, computed rather than left to flex.
@@ -179,7 +228,7 @@ export function MapControls({
           `heading` rather than `label`, because this is a word on a button and not a tracked-caps
           section opener; Apple's is plain ~17pt system text and 11pt at 2pt tracking read as a
           caption somebody had shrunk. */}
-      <Group tint={tint} style={styles.left}>
+      <Group tint={tint} style={[styles.left, rise]}>
         <Pressable
           onPress={onToggle3D}
           accessibilityRole="button"
@@ -191,7 +240,25 @@ export function MapControls({
         </Pressable>
       </Group>
 
-      <Group tint={tint} style={styles.right}>
+      {/* **One column, so the compass needs no arithmetic.** It has to sit directly above a pill
+          whose height depends on whether there is a locate button, and stacking them in a
+          flex column is the way not to encode that twice. */}
+      <Animated.View style={[styles.right, rise]}>
+        {turned ? (
+          <Animated.View entering={FadeIn.duration(Motion.respond)} exiting={FadeOut.duration(Motion.exit)}>
+            <Group tint={tint} style={styles.loose}>
+              <Pressable
+                onPress={onResetNorth}
+                accessibilityRole="button"
+                accessibilityLabel="Point the map north"
+                style={({ pressed }) => [styles.cell, pressed && styles.pressed]}>
+                <Needle heading={heading} ink={ink} inkMuted={inkMuted} />
+              </Pressable>
+            </Group>
+          </Animated.View>
+        ) : null}
+
+      <Group tint={tint} style={styles.loose}>
         <Pressable
           onPress={() => setPicking(true)}
           accessibilityRole="button"
@@ -230,6 +297,7 @@ export function MapControls({
           </Pressable>
         ) : null}
       </Group>
+      </Animated.View>
 
       {/* **A sheet at the bottom, and each style shown rather than described.** Apple presents
           map modes as a titled sheet of thumbnails, and both halves of that are right: choosing a
@@ -342,20 +410,53 @@ export function MapControls({
  * `ControlShadow` and nothing else, and the `BlurView` inside it carries the radius, the clip and
  * the hairline.
  */
-function Group({
+export function Group({
   tint,
   style,
+  radius = Radius.pill,
+  onLayout,
   children,
 }: {
   tint: 'systemChromeMaterialLight' | 'systemChromeMaterialDark';
-  style: ViewStyle;
+  /** Animated, because the stack slides up for the stop card. */
+  style?: StyleProp<AnimatedStyle<ViewStyle>>;
+  /** `Radius.pill` for the control stacks, a card radius for the stop card. */
+  radius?: number;
+  /** On the shadow box, which is the one that has the group's real height. */
+  onLayout?: (event: LayoutChangeEvent) => void;
   children: React.ReactNode;
 }) {
   return (
-    <View style={[styles.lift, style]}>
-      <BlurView tint={tint} intensity={70} style={styles.glass}>
+    <Animated.View onLayout={onLayout} style={[styles.lift, { borderRadius: radius }, style]}>
+      <BlurView tint={tint} intensity={70} style={[styles.glass, { borderRadius: radius }]}>
         {children}
       </BlurView>
+    </Animated.View>
+  );
+}
+
+/**
+ * The compass needle: two triangles meeting at the centre, north filled, south faded.
+ *
+ * **Drawn, because `compassOffset` is a dead prop.** `react-native-maps` 1.27.2 declares it
+ * "@platform iOS: Apple Maps only", bridges it on both architectures and stores it on the view —
+ * and nothing ever reads it; there is no `MKCompassButton` in the package at all. (It does
+ * implement exactly this for `legalLabelInsets` and `appleLogoInsets`, so the gap is an
+ * omission rather than an indirection.) The only native lever is `mapPadding`, and reaching the
+ * bottom-right with it needs a top inset that leaves the camera a strip.
+ *
+ * **No colour.** Apple's north needle is red; here coral means an alert and jade means "act on
+ * this", and a third meaning for a hue that already has one is what the One Meaning Rule is
+ * for. The two tones of the chrome's own ink carry it instead.
+ *
+ * Border triangles rather than an SVG, the same technique `here-marker.tsx` uses for the
+ * vision cone — this app ships no vector library and does not need one for two triangles.
+ */
+function Needle({ heading, ink, inkMuted }: { heading: number; ink: string; inkMuted: string }) {
+  return (
+    <View style={{ transform: [{ rotate: `${-heading}deg` }] }}>
+      <View style={[styles.half, { borderBottomWidth: NEEDLE_NORTH, borderBottomColor: ink }]} />
+      <View style={[styles.half, { borderTopWidth: NEEDLE_SOUTH, borderTopColor: inkMuted }]} />
     </View>
   );
 }
@@ -366,8 +467,20 @@ function Group({
  * floor rather than the size, and this one is sized to its reference.
  */
 const SIZE = 48;
-/** Clear of the caption, which takes the bottom edge when a stop is emphasised. */
-const FLOOR = 76;
+/**
+ * The needle, as three numbers.
+ *
+ * It shipped as one — a half-length equal to the half-width — and that draws a rhombus, which on
+ * the device read as a kite rather than as an instrument. A needle is long and thin and its tail
+ * is shorter than its point: `5` of width against `13` forward and `9` back is roughly the
+ * proportion Apple's own needle carries, and the asymmetry is what says which end is north
+ * before the two tones do.
+ */
+const NEEDLE_WIDTH = 5;
+const NEEDLE_NORTH = 13;
+const NEEDLE_SOUTH = 9;
+/** Where the stack rests with nothing else on the map. `floor` raises it from here. */
+export const FLOOR = 76;
 
 const styles = StyleSheet.create({
   // The shadow box. It must not clip, or the shadow is clipped with its children.
@@ -386,7 +499,17 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
   },
   left: { left: Spacing.read, bottom: FLOOR },
-  right: { right: Spacing.read, bottom: FLOOR },
+  // The column, not a group: `position` and the inset live here and the two groups inside it
+  // stack normally, so the compass never has to know how tall the pill is.
+  right: { position: 'absolute', right: Spacing.read, bottom: FLOOR, alignItems: 'flex-end', gap: Spacing.tight },
+  // A group inside that column has already been positioned by it.
+  loose: { position: 'relative' },
+  half: {
+    borderLeftWidth: NEEDLE_WIDTH,
+    borderRightWidth: NEEDLE_WIDTH,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
   cell: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
   // **Darken on press, never fade.** DESIGN.md's control ramp is 0.55 → 0.72 → 0.82 of the one
   // slate and the rest of this app presses to `Colors.pressed`; the `opacity: 0.7` this shipped

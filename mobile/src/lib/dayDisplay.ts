@@ -173,3 +173,32 @@ export function clockAt(iso: string | null): string | null {
   }).format(when);
 }
 
+
+/**
+ * `1:00 PM  ·  1.5 hours  ·  Food` — what a stop is, under its name.
+ *
+ * Two surfaces say this now: the list row and the map's stop card. It is here rather than in
+ * either of them because the thing that would drift is the *set* — add `timeFlexibility` to one
+ * and the two faces of the same stop start disagreeing about what a stop is.
+ *
+ * Empty whenever nothing can be said, which is a real case: a stop added by hand carries no
+ * time and no duration until the plan is regenerated.
+ *
+ * `category` is stored lowercase (`'food'`, `'entry'`) and used to be capitalised by the label
+ * step's `textTransform`. Sentence case has to happen in the string, or the line reads "· food".
+ */
+export function stopParticulars(stop: {
+  time?: string;
+  durationLabel?: string;
+  category?: string;
+}): string {
+  return [stop.time, stop.durationLabel, sentence(stop.category)]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join('  ·  ');
+}
+
+/** First letter up, rest untouched — the categories are single lowercase words. */
+function sentence(word: string | undefined): string | undefined {
+  return word ? word[0].toUpperCase() + word.slice(1) : word;
+}

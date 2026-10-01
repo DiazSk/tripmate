@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
-import { DIVE_ALTITUDE_M, MODES, MapControls, PITCH_3D, type MapMode } from '@/components/map-controls';
+import {
+  DIVE_ALTITUDE_M,
+  FLOOR,
+  Group,
+  MODES,
+  MapControls,
+  PITCH_3D,
+  chrome,
+  type MapMode,
+} from '@/components/map-controls';
+import { CARD_FLOOR, StopCard } from '@/components/stop-card';
 import { HereMarker } from '@/components/here-marker';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
@@ -23,6 +33,14 @@ const MAP_INSET = { top: 72, right: 0, bottom: 0, left: 0 };
  * this job on iOS. Ignored on Android, where `anchor` is the working prop.
  */
 const MARKER_SKEW_PT = 12;
+
+/** Roughly every fourth frame. The compass needle is read at a glance, not to the degree, and
+ *  each reading is a bridge round-trip. */
+const CAMERA_POLL_MS = 66;
+
+/** How long after a press the camera is treated as in flight, and its pitch therefore as not
+ *  yet meaning anything. `Motion.settle` plus the slack a native flight does not promise. */
+const FLIGHT_GRACE_MS = Motion.settle + 200;
 
 /**
  * A day's stops, on a map.
@@ -89,13 +107,74 @@ export function DayMap({
    * already on the native view. A frame rather than a plain re-render, because what has to have
    * happened is the *native* assignment, not React's commit — and `requestAnimationFrame` is the
    * cheapest thing that waits for it.
+   *
+   * Keyed on the type actually shown rather than on the mode, because a Flyover swap is a
+   * `mapType` assignment too. No mode pairs traffic with a flyover today; the coupling is the
+   * bug, not the pairing.
    */
   const [traffic, setTraffic] = useState(false);
+  const [pitched, setPitched] = useState(false);
+  /**
+   * The camera's bearing, for a compass this client has to draw itself.
+   *
+   * **Not `heading` above, which is the phone's.** The magnetometer says which way the reader is
+   * facing and feeds the vision cone; this says which way the *map* is turned. Two numbers, one
+   * word, never equal — hence the two names.
+   *
+   * **`compassOffset` is a dead prop** — see `Needle` in `map-controls.tsx` for the citation.
+   * So the heading has to come from JS, and `getCamera()` is the only way to ask. There is no
+   * heading event: `onRegionChange` says the view moved and nothing about which way it faces.
+   *
+   * Throttled to one reading per `CAMERA_POLL_MS` while a gesture is running, which is roughly
+   * every fourth frame — enough for a needle nobody is reading to the degree, and far short of
+   * a bridge round-trip per frame. `onRegionChangeComplete` takes one more, unthrottled, so the
+   * last reading is always the true one.
+   */
+  const [mapHeading, setMapHeading] = useState(0);
+  const lastRead = useRef(0);
+  /** True while a press's own flight is still landing — a flag rather than a deadline, because
+   *  a clock read in the component body is an impurity the lint is right to refuse. */
+  const inFlight = useRef(false);
+  /** Measured, not assumed: the card is one or two lines depending on the name and the font
+   *  scale, and the controls have to clear whichever it turns out to be. */
+  const [cardHeight, setCardHeight] = useState(0);
+
+  async function readCamera() {
+    try {
+      const camera = await map.current?.getCamera();
+      if (!camera) return;
+      setMapHeading(camera.heading ?? 0);
+      /**
+       * **And reconcile the 3D label with what the camera actually did** — but never while the
+       * camera is in flight.
+       *
+       * `pitched` has to be an intent rather than a derivation, because over imagery it is what
+       * swaps in the Flyover type, and the Flyover type is what *allows* the tilt. Reconciling
+       * without the grace window deadlocked exactly there: the press set the intent, a region
+       * change fired before the new `mapType` had reached the view, the camera honestly
+       * reported pitch 0, and the reconcile turned the intent off again. Measured — the map
+       * dived and stayed flat, which is the same symptom as the original bug and a different
+       * cause.
+       *
+       * Outside a flight the reading is the truth, and that is what stops the label lying after
+       * a two-finger tilt.
+       */
+      if (!inFlight.current) setPitched((camera.pitch ?? 0) > 1);
+    } catch {
+      // `getCamera()` rejects when the native view has gone. A stale heading is correct then.
+    }
+  }
+
+  /**
+   * The 3D half of a mode is a different `MapType`, not a different camera — see `MODES`.
+   * Explore and Driving pitch as they are and carry no `flyover`.
+   */
+  const shownType = pitched && mode.flyover ? mode.flyover : mode.type;
+
   useEffect(() => {
     const frame = requestAnimationFrame(() => setTraffic(!!mode.traffic));
     return () => cancelAnimationFrame(frame);
-  }, [mode]);
-  const [pitched, setPitched] = useState(false);
+  }, [shownType, mode.traffic]);
   // Jade on the locate glyph while the camera is actually flying to the reader, and only then —
   // see `MapControls`. The map holds no continuous tracking mode, so this is the honest span.
   const [locating, setLocating] = useState(false);
@@ -127,21 +206,58 @@ export function DayMap({
     // flattens as a side effect of doing the right thing. Only the tilted direction needs an
     // altitude guess, and there a slightly tight frame is the point: you tilted in to look at
     // the buildings.
+    inFlight.current = true;
+    setTimeout(() => {
+      inFlight.current = false;
+    }, FLIGHT_GRACE_MS);
+
     if (camera.pitch > 1) {
       map.current?.animateToRegion(region, Motion.settle);
       setPitched(false);
       return;
     }
-    map.current?.animateCamera(
-      {
-        center: camera.center,
-        heading: camera.heading,
-        pitch: PITCH_3D,
-        altitude: Math.min(altitudeForRegion(region), DIVE_ALTITUDE_M),
-      },
-      { duration: Motion.settle },
-    );
+
     setPitched(true);
+    // **A frame, so the Flyover type reaches the view before the camera is asked to tilt.**
+    // `satellite` and `hybrid` refuse pitch; asking them and swapping the type in the same
+    // commit means asking the flat one. Same shape as the `showsTraffic` lag, same reason — the
+    // native assignment has not happened yet when React's commit has.
+    requestAnimationFrame(() => {
+      map.current?.animateCamera(
+        {
+          center: camera.center,
+          heading: camera.heading,
+          pitch: PITCH_3D,
+          altitude: Math.min(altitudeForRegion(region), DIVE_ALTITUDE_M),
+        },
+        // Accepted and ignored on the new architecture — `RNMapsMapView.mm`'s `animateCamera`
+        // takes the duration and never reads it. Left as the honest intent.
+        { duration: Motion.settle },
+      );
+    });
+  }
+
+  /**
+   * **The camera it already has, turned north — and nothing else.**
+   *
+   * Written first with the 3D button's camera model, which recomputes the altitude from the
+   * day's region. That is right there, where the point *is* to re-frame, and wrong here: on the
+   * device it threw away whatever the reader had zoomed to and dived back to the day. Pressing
+   * a compass means "north", not "start again".
+   *
+   * Still a whole camera rather than `{ heading: 0 }` alone, for the reason `toggle3D` records:
+   * a partial camera lets the fields it omits fall to a default. Every value but the heading is
+   * copied straight back off the camera that is already there.
+   */
+  async function resetNorth() {
+    const camera = await map.current?.getCamera();
+    if (!camera) return;
+    map.current?.animateCamera({
+      center: camera.center,
+      heading: 0,
+      pitch: camera.pitch,
+      altitude: camera.altitude,
+    });
   }
 
   /** Same camera model as the 3D button, for the same reason — a partial one drifts the zoom. */
@@ -183,7 +299,7 @@ export function DayMap({
   }
 
   const line = drawn.map(({ stop }) => ({ latitude: stop.lat, longitude: stop.lng }));
-  const named = emphasis === null ? undefined : stops[emphasis]?.name;
+  const shown = emphasis === null ? undefined : stops[emphasis];
 
   return (
     <View style={styles.fill}>
@@ -200,7 +316,7 @@ export function DayMap({
         // that list is three long, and why label-free `satellite` is not one of them. The muted
         // type Explore uses is Apple's own answer for a map carrying overlays; iOS-only, and
         // Android gets the same restraint from Google's colour scheme above.
-        mapType={mode.type}
+        mapType={shownType}
         // Driving, and the whole of it — Apple's own mode is the standard map plus traffic.
         // **A frame behind `mapType`, deliberately — see `traffic` above.**
         showsTraffic={traffic}
@@ -227,6 +343,21 @@ export function DayMap({
         showsMyLocationButton={here !== null}
         // Apple Maps only, and it appears during a zoom gesture rather than standing there. The
         // cheapest answer to "is that walk actually ten minutes" that does not cost a tap.
+        // **Ours is drawn, so MapKit's is off** — `Needle` in `map-controls.tsx` carries the
+        // citation for why it cannot simply be moved.
+        showsCompass={false}
+        // The only way to learn which way the camera faces: there is no heading event, and
+        // `onRegionChange` reports that the view moved and nothing about its bearing.
+        onRegionChange={() => {
+          const now = Date.now();
+          if (now - lastRead.current < CAMERA_POLL_MS) return;
+          lastRead.current = now;
+          readCamera();
+        }}
+        onRegionChangeComplete={() => {
+          lastRead.current = Date.now();
+          readCamera();
+        }}
         showsScale
         // **The compass lands where the summary already is.** Both platforms put their native
         // controls in the top corners, and the pill above is centred at 90% width and wraps to
@@ -319,11 +450,35 @@ export function DayMap({
         ))}
       </MapView>
 
+      {/* The name lives here rather than on the map. The Swift app reached the same conclusion:
+          a pile of labelled chips is unreadable, so the bubble carries the order and something
+          else carries the name.
+
+          **Before `MapControls`, and the order is the z-order.** The style sheet is a scrim and
+          a panel rendered inside those controls; with the card after them it floated over the
+          sheet and covered the thumbnails' labels. Nothing here uses `zIndex` — source order is
+          what the rest of this file relies on too (Apple Maps ignores a Polyline's `zIndex`
+          outright). */}
+      {shown ? (
+        <StopCard
+          stop={shown}
+          ordinal={(emphasis ?? 0) + 1}
+          mapType={shownType}
+          onDismiss={() => onEmphasise(null)}
+          onLayout={(event) => setCardHeight(event.nativeEvent.layout.height)}
+        />
+      ) : null}
+
       <MapControls
         pitched={pitched}
         onToggle3D={toggle3D}
         mode={mode}
         onMode={setMode}
+        heading={mapHeading}
+        onResetNorth={resetNorth}
+        // Apple's own controls step aside for its place card; ours do the same, and the height
+        // is measured rather than guessed so Dynamic Type cannot push the card under them.
+        floor={shown ? CARD_FLOOR + cardHeight + Spacing.tight : FLOOR}
         // Absent rather than disabled when there is no fix: a locate button that cannot locate
         // is the permission prompt by another route, which `here.ts` exists to avoid.
         onLocate={here ? locate : undefined}
@@ -335,23 +490,14 @@ export function DayMap({
           cost is the half somebody is deciding on — "is this the day I do Belém" is a question
           about how much of it is spent moving. Time rather than distance, for the reason
           `TravelSegment` records: nothing here knows whether the reader thinks in miles. */}
-      <View style={styles.summary} pointerEvents="none">
-        <ThemedText type="detail" themeColor="muted">
-          {travelSummary(stops)}
-        </ThemedText>
-      </View>
-
-      {/* The name lives here rather than on the map. The Swift app reached the same conclusion:
-          a pile of labelled chips is unreadable, so the bubble carries the order and something
-          else carries the name. Here that something else is the list face — this pill is just
-          the bridge while you are looking at the map. */}
-      {named ? (
-        <Pressable style={styles.caption} onPress={() => onEmphasise(null)}>
-          <ThemedText type="headingSmall" numberOfLines={2}>
-            {named}
+      <Group tint={chrome(shownType).tint} style={styles.summary} radius={Radius.pill}>
+        <View style={styles.summaryInset} pointerEvents="none">
+          <ThemedText type="detail" style={{ color: chrome(shownType).inkMuted }}>
+            {travelSummary(stops)}
           </ThemedText>
-        </Pressable>
-      ) : null}
+        </View>
+      </Group>
+
     </View>
   );
 }
@@ -433,40 +579,34 @@ const styles = StyleSheet.create({
   empty: { flex: 1, paddingTop: Spacing.regular },
   target: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   /**
-   * The caption's twin at the other end of the map.
+   * The stop card's twin at the other end of the map, and now its twin in material too.
    *
-   * Two differences from it, both earned. It is **content width and centred** rather than a
-   * full-width strip: the caption holds a stop's name and needs the room, while this is six
-   * words that read as a label rather than as a bar across the view. And it is the **opaque**
-   * slate rather than the bar's 72%, because a map crowds its labels at the top and an
-   * always-present panel with a café's name showing through it reads as a rendering fault —
-   * the caption gets away with translucency by appearing only when a stop is emphasised.
+   * It shipped as an **opaque** paper capsule on the argument that a map crowds its labels at
+   * the top and an always-present panel with a café's name showing through reads as a
+   * rendering fault. The fault in that argument is the same one the card's own docblock
+   * records: over Satellite the ground is a photograph and the appearance's surfaces are
+   * measured against a page. An opaque capsule does not *fail* there the way a 4% one did — it
+   * simply reads as a second visual system sitting above one that gets the material right.
    *
-   * `pointerEvents: none` because it is a label, and an overlay that swallowed a pan would be
-   * worse than no overlay.
+   * So it takes `chrome()` as well, and the crowding objection is answered by what the
+   * material actually is: `systemChromeMaterial` is a blur, not a window, and a café's name
+   * does not survive it legibly enough to be mistaken for this pill's own text.
+   *
+   * It stays **content width and centred** where the card is a full-width row: the card holds a
+   * name and needs the room, this is six words that read as a label.
+   *
+   * `pointerEvents: none` on the inside, because it is a label and an overlay that swallowed a
+   * pan would be worse than no overlay — on the inner view rather than the `Group`, which
+   * carries the shadow and must stay a plain box.
    */
   summary: {
     position: 'absolute',
     alignSelf: 'center',
     top: Spacing.read,
     maxWidth: '90%',
-    backgroundColor: Colors.surfaceDeep,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-    paddingHorizontal: Spacing.regular,
-    paddingVertical: Spacing.tight,
   },
-  caption: {
-    position: 'absolute',
-    left: Spacing.read,
-    right: Spacing.read,
-    bottom: Spacing.read,
-    backgroundColor: Colors.bar,
-    borderRadius: Radius.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-    paddingHorizontal: Spacing.rows,
+  summaryInset: {
+    paddingHorizontal: Spacing.regular,
     paddingVertical: Spacing.tight,
   },
 });

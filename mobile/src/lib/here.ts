@@ -213,8 +213,9 @@ export function useHeading(): number | null {
   return heading;
 }
 
-/** Degrees apart on a circle, so 359° and 1° are 2° apart rather than 358°. */
-function angleBetween(a: number, b: number): number {
+/** Degrees apart on a circle, so 359° and 1° are 2° apart rather than 358°. Shared with the
+ *  map's own compass, which asks the same question of a different heading. */
+export function angleBetween(a: number, b: number): number {
   const raw = Math.abs(a - b) % 360;
   return raw > 180 ? 360 - raw : raw;
 }

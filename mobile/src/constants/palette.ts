@@ -141,9 +141,16 @@ export const Light: Palette = {
  *
  * The ink half of "over a photograph" lives in the palette as `onDeep` / `onDeepMuted`, because
  * `ThemedText` takes a `ThemeColor` and a text colour has to be one.
+ *
+ * **`money` joined it the same way the disc did: by failing on the device.** The stop card draws
+ * a cost on glass over imagery, and `Colors.money` under the light appearance is `#886019`, a
+ * cut darkened until it reads on paper. On a dark card it is an olive smudge. Same shape of
+ * mistake as the disc, same answer — the figure is standing on the map, so it takes the map's
+ * value, which is the bright cut both appearances started from.
  */
 export const OverPhotograph = {
   accentDisc: '#28B981',
+  money: '#E9B44C',
 } as const;
 
 /**

@@ -1,5 +1,12 @@
 import type { DayPlan } from '@/api/types';
-import { formatDate, formatDateline, formatDayChip, formatRange, weatherLine } from './dayDisplay';
+import {
+  formatDate,
+  formatDateline,
+  formatDayChip,
+  formatRange,
+  stopParticulars,
+  weatherLine,
+} from './dayDisplay';
 
 // The whole reason this module exists: `new Date('2026-09-19')` is UTC midnight, so a local
 // formatter west of Greenwich prints the 18th. This process runs in UTC-5 to prove the port
@@ -116,4 +123,15 @@ test("the day's own theme is allowed, because it claims nothing about the world"
 test('a forecast outranks a theme; neither means no badge', () => {
   expect(weatherLine(day({ theme: 'Old town on foot', weatherDetail: detail() }))).toBe('23° / 19°');
   expect(weatherLine(day({}))).toBeUndefined();
+});
+
+test('a stop states its time, its length and what it is, in that order', () => {
+  expect(
+    stopParticulars({ time: '1:00 PM', durationLabel: '1.5 hours', category: 'food' }),
+  ).toBe('1:00 PM  ·  1.5 hours  ·  Food');
+});
+
+test('a hand-added stop with no time or length says only what it is', () => {
+  expect(stopParticulars({ time: '', durationLabel: '  ', category: 'other' })).toBe('Other');
+  expect(stopParticulars({})).toBe('');
 });
