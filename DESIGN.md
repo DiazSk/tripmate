@@ -445,8 +445,8 @@ is that shape, and its own note records why filling it would make a second prima
 
 The limit is a count, not a style. Two jade fills on one screen is the defect this licenses
 against: it makes the thing you must do indistinguishable from the thing you might, which is
-exactly why sign-in's mode toggle is a slate capsule rather than a second green one. One Meaning is
-untouched — jade is still only ever action, whether it is the ink or the ground.
+exactly why the auth chooser's `Log in` is a slate capsule rather than a second green one — see **The
+Auth Entry** below. One Meaning is untouched — jade is still only ever action, whether it is the ink or the ground.
 
 An outside review read One Slate together with the tint clause below and concluded that the app's
 most prominent controls broke its own system. It was right that nothing written licensed them: the
@@ -985,6 +985,61 @@ A single fixed, frosted `Navbar` spanning every route at `z-20` and `h-[var(--na
   morphs continuously into an X — Lucide's `Menu` and `X` share no geometry, so swapping them is
   always an instant cut however well the panel animates. Escape closes it and returns focus to the
   toggle; there is deliberately no close-on-outside-tap, because full-screen there is no outside.
+
+### The Auth Entry (mobile, `src/app/signin/`)
+**Two screens with one job each, under one photograph.** A chooser, then a form. The screen this
+replaced did both at once and asked for three things in one stack — a task (`Sign in`), an
+alternative *mode* (`Create an account instead`) and a way *out* (`Keep planning without an
+account`) — with the last two wearing the same slate capsule. Three calls to action at two levels,
+over a staircase: full width, then 218pt, then 272pt, because `PillButton` sets
+`alignSelf: 'flex-start'` and two of them stacked under a full-width button is the one arrangement
+where that rule yields a ragged edge.
+
+- **The chooser is three choices at three weights sharing one edge.** The mark, then `Sign up`
+  (the one jade fill), `Log in` (the slate capsule, stretched by `PillButton`'s `block`), and
+  `Keep planning without an account` (`tone="quiet"` — jade ink, no fill, no hairline, the 44pt
+  target intact). The escape stops competing with a task because on this screen it is the same
+  *kind* of thing as the other two. `block` is documented at the component as this exception: the
+  rule it relaxes is about a capsule standing *in* content, and these are peers of the primary
+  above them.
+- **Sign up takes the one jade fill** under the Primary Action Surface rule. `launchTarget` routes
+  here only on a bare launch with an empty keychain, so nobody who sees this screen has an account
+  on this device, and sign-up is the action that moves their anonymous planning onto one through
+  `claimAnonymousOwner`.
+- **The mode switch is deleted, not moved.** You arrived by choosing, so **back** is the switch.
+  That also removes a collision the old screen carried: `Create account` sat directly above
+  `Sign in`, and a press on the lower one silently flipped the form.
+- **The band is mounted in the group's `_layout.tsx`, above its `Stack`, and that placement is the
+  whole reason this is a route group.** A band rendered inside each screen would remount on every
+  navigation — the reel would restart and you would land on a different photograph than the one
+  you left. One instance outside the `Stack` means the picture holds still while the content below
+  it pushes, which is the only argument for the form screen keeping a band at all. The beat index
+  and the keyboard collapse live there too, because both belong to the flow rather than to a
+  screen.
+- **Both screens keep the band at 46% of the window, and that is a resolution number rather than a
+  rhythm one.** The four photographs are 1200x1309; 46% of a 932pt window asks for ~1290px at 3x
+  and lands near-native, while 56% would want 1468px and upscale. It collapses to a 132pt sliver
+  under the keyboard and past `fontScale > 1.2` — a sliver rather than nothing, because the
+  photograph leaving entirely makes the screen look like it navigated somewhere.
+- **The logo is the mono cut, tinted, and the obvious asset cannot be used.** `assets/brand/
+  lockup.png` is 1024x1024 **opaque RGB** with a baked `#121110` ground — byte-identical to the
+  dark canvas, so seamless there and a near-black square on paper — and there is no transparent
+  lockup raster, which `brand/README.md` forbids retouching one into existence. Those same rules
+  forbid the full-colour mark on a light ground and prescribe `mono.svg` in `#121110`. So the
+  chooser carries `assets/images/android-icon-monochrome.png`, which is that master's alpha-only
+  render, tinted `Colors.foreground`: near-black on paper, paper on near-black, one asset and one
+  prop in both appearances. The name does not appear, which the brand rules already accept ("No
+  text in the app icon. The name appears only in the lockup."); putting it there means a new mono
+  *lockup* master and render, and belongs to the brand folder.
+- **`buttonInert` is the slate fill with muted ink, not `opacity: 0.4`.** The opacity faded the
+  fill and the label together, so a disabled primary measured **1.92:1** against its own button in
+  light and **2.04:1** in dark, and in light the fill composited to `#A3B9AE` — a pastel that read
+  as a brand colour rather than as unavailability. Slate with muted ink measures 4.76:1 and
+  6.71:1. It is shared, so every disabled primary in the app changed with it, including the plan
+  wizard's. `palette.test.ts` carries the assertion, with the 0.4 pairing as a negative control.
+- **The 8-character hint shows in both modes**, so an inert button always has a reason beside it.
+  It used to render only in create mode, which left the sign-in form with a dead button and
+  nothing explaining it.
 
 ### The Landing Sequence (`src/components/blue-hour/`)
 Six beats composed by `ScrollStory` inside a wrapper that cancels `<main>`'s padding so every section
