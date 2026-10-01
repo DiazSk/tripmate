@@ -340,14 +340,18 @@ export function PrimaryButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        inert && styles.buttonInert,
+        // **`disabled`, not `inert`.** The two states `inert` covers mean different things to a
+        // reader: `disabled` is "you cannot do this yet", and `busy` is "the thing you asked for
+        // is happening". Draining the fill for the second would report the action as unavailable
+        // at the exact moment it is in flight, so busy keeps the jade and only loses its press.
+        disabled && !busy && styles.buttonInert,
         pressed && !inert && Platform.OS === 'ios' && styles.buttonPressed,
       ]}
       android_ripple={inert ? undefined : { color: Colors.accentForeground }}>
       {busy ? (
         <ActivityIndicator color={Colors.accentForeground} />
       ) : (
-        <ThemedText type="heading" themeColor="accentForeground">
+        <ThemedText type="heading" themeColor={disabled ? 'muted' : 'accentForeground'}>
           {title}
         </ThemedText>
       )}
@@ -524,7 +528,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.regular,
     overflow: 'hidden',
   },
-  buttonInert: { opacity: 0.4 },
+  /**
+   * **Not `opacity: 0.4`, which hid the label along with the fill.** Dimming the whole
+   * `Pressable` took the word "Sign in" to 1.92:1 against its own button under the light
+   * appearance and 2.04:1 under dark — unreadable, and in light the fill composited to a mint
+   * `#A3B9AE` that read as a brand colour rather than as unavailability. A surface and an ink
+   * instead: 4.76:1 and 6.71:1, and it no longer impersonates the primary. `palette.test.ts`
+   * guards the pairing and records the old measurement.
+   */
+  buttonInert: {
+    backgroundColor: Colors.panel,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
   pill: {
     // Never stretches. In a row it sizes to its words; standing alone under a block it must not
     // become a full-width bar, which is the treatment `PrimaryButton` owns.

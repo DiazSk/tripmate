@@ -152,6 +152,28 @@ describe('the surface ladder', () => {
       }
     }
   });
+
+  /**
+   * The disabled primary. `PrimaryButton` used to dim the whole control with `opacity: 0.4`,
+   * which fades the fill and the label together — the negative control below is what that
+   * measured. The pairing it uses now is a surface and an ink, so it can be checked.
+   */
+  it('shows a disabled primary whose label can still be read', () => {
+    for (const palette of [Dark, Light]) {
+      const surface = flatten(palette.panel, palette.canvas);
+      const ink = flatten(palette.muted, surface);
+      expect(contrast(ink, surface)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('records why dimming the whole control was abandoned', () => {
+    for (const palette of [Dark, Light]) {
+      const fill = composite(palette.accent, 0.4, palette.canvas);
+      const label = composite(palette.accentForeground, 0.4, palette.canvas);
+      // Both appearances land near 2:1 — the label all but disappears into its own button.
+      expect(contrast(label, fill)).toBeLessThan(2.5);
+    }
+  });
 });
 
 /** A surface may be `#RRGGBB` or `#RRGGBBAA`; resolve it against its ground either way. */
