@@ -505,6 +505,17 @@ one slate or toward black, never toward white. `.glass-control` darkens on hover
 rather than lightening, because these pills float over a live globe that idles anywhere from open
 ocean to a snowfield and a white wash would cut contrast exactly where the terrain is brightest.
 
+**The direction follows the ground, and photography is the case this rule was written from.** The
+clause above reads as a blanket ban on a light control, and on the web it is one, because there the
+thing underneath is always the globe. On the phone the basemap changes: a vector map that follows
+the appearance, or satellite imagery that does not. So the rule generalises the same way the
+photograph scrim does — *a control moves away from what is under it, and which direction that is
+belongs to the ground rather than to the appearance.* Over the vector basemap the glass takes the
+appearance's own side; over satellite or hybrid it darkens in both appearances, which is the
+original clause applying exactly where it was aimed. Apple Maps resolves it identically, which is
+worth recording because it was measured rather than assumed: its chrome stays light over the vector
+modes and tints grey over satellite.
+
 **The Photograph-Is-Not-A-Surface Rule.** A scrim over destination photography makes *large* type
 safe and small type only apparently safe. Measured across eight cities, mean luminance ranges 0.040
 to 0.348 and Kyoto peaks at 0.947 — near-white sky, where white body text is 2.41:1 under a 60% scrim
@@ -1319,6 +1330,21 @@ against 77,002 on disk. In production that is a returning visitor scrubbing a *m
 edits. **Never point `immutable` at a path whose contents can change.**
 
 ### Map Controls
+
+**On the phone the same stack is 48pt, and the material is the native one.** 44 is the HIG floor
+rather than the size — Apple's own map chrome measures 48, read off a column scan of the simulator
+at 3x. The mobile port had dropped both halves of the separation this section depends on: there was
+no blur and no shadow anywhere in that client, and an opaque slate fill stood in for both, which is
+why three attempts at the geometry never made it read as floating. It uses `expo-blur`'s
+`systemChromeMaterial` — UIKit's material *for floating chrome*, the one Maps itself draws with —
+over the Shadow Vocabulary's **Control** entry, and `ControlShadow` in `mobile/src/constants/theme.ts`
+is that entry ported. The explicit `…Light`/`…Dark` variants rather than the adaptive one, because
+`app.json` pins `userInterfaceStyle: "dark"` and the adaptive value follows the *system* rather than
+the app. Glyphs are neutral ink; the accent appears only while the locate button is actually
+moving the camera, which is Apple's own rule for its blue arrow and the One Meaning Rule's for jade.
+
+The web's stack, unchanged:
+
 Apple-Maps-grade chrome, and the only place `.glass-control` is used: a vertical stack of 44px targets
 — a two-button zoom pill, a 2D/3D toggle labelled with the mode you'll *get*, a rotated native `range`
 tilt slider in a round pill, and a compass whose needle is written directly to the DOM on `postRender`

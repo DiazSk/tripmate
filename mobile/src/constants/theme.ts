@@ -80,6 +80,32 @@ export const Spacing = {
   regular: 24,
 } as const;
 
+/**
+ * **The first shadow in this client, and it is a port rather than an invention.**
+ *
+ * DESIGN.md's Shadow Vocabulary names this exact case: *"**Control**
+ * (`0 4px 16px 0 rgba(0,0,0,0.32)`): floating chrome over the globe."* The web separates floating
+ * chrome with a material **and** a shadow; this port had dropped both, substituting an opaque fill
+ * and a hairline, which is why the map's controls never read as floating. Measured against Apple
+ * Maps on the same device: its buttons are translucent, blurred and shadowed, and the shadow is
+ * what lifts them off the map.
+ *
+ * **The prohibition is on a *hard offset* shadow, not on shadow.** DESIGN.md states it three
+ * times — "every one of them is soft and non-directional", "no lift, no glow, no shadow growth",
+ * "don't use a hard offset shadow" — and all five vocabulary entries are large-radius blurs with
+ * zero spread. This is one of those.
+ *
+ * `elevation` is Android's only shadow control and takes no colour, offset or radius, so the two
+ * platforms agree on intent rather than on rendering.
+ */
+export const ControlShadow = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.32,
+  shadowRadius: 16,
+  elevation: 6,
+} as const;
+
 export const BarHeight = 56;
 export const MaxContentWidth = 800;
 

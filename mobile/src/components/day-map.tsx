@@ -63,6 +63,9 @@ export function DayMap({
   const { here } = useHere();
   const [mapType, setMapType] = useState<MapType>('mutedStandard');
   const [pitched, setPitched] = useState(false);
+  // Jade on the locate glyph while the camera is actually flying to the reader, and only then —
+  // see `MapControls`. The map holds no continuous tracking mode, so this is the honest span.
+  const [locating, setLocating] = useState(false);
 
   /**
    * **Reads the camera rather than trusting the toggle's own state.** The reader can tilt with
@@ -112,6 +115,8 @@ export function DayMap({
   async function locate() {
     const camera = await map.current?.getCamera();
     if (!camera || !region || !here) return;
+    setLocating(true);
+    setTimeout(() => setLocating(false), Motion.settle);
     map.current?.animateCamera(
       {
         center: { latitude: here.lat, longitude: here.lng },
@@ -250,6 +255,7 @@ export function DayMap({
         // Absent rather than disabled when there is no fix: a locate button that cannot locate
         // is the permission prompt by another route, which `here.ts` exists to avoid.
         onLocate={here ? locate : undefined}
+        locating={locating}
       />
 
       {/* What the map cannot draw. A route is visibly a shape and invisibly a cost, and the
