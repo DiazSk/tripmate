@@ -1383,6 +1383,23 @@ that the view moved and nothing about its bearing. **The needle carries no colou
 half is red; here coral is an alert and jade is "act on this", so the two tones of the chrome's own
 ink and a tail shorter than the point do the work instead.
 
+**Two switches sit under the thumbnails, and Apple has neither.** Its own Map Modes sheet in
+iOS 26 is four tiles and an attribution line — checked, not recalled. Traffic and Points of
+interest are ours because they *compose* with the modes in a way no mode can: traffic over
+satellite is a pairing a single basemap cannot express, and the labels are worth dropping exactly
+where imagery is already dense. A mode is a **preset, not a lock** — picking Driving turns Traffic
+on and the switch owns it from there, while Explore and Satellite leave it alone, since clearing
+it would put that pairing back out of reach.
+
+**Their three native writes arrive in the wrong order, and the fix is to sequence them.**
+`showsTraffic` is written at `RNMapsMapView.mm:570`, `showsPointsOfInterests` at `:574` and
+`mapType` at `:598`; the POI setter does its work by *assigning* `preferredConfiguration`, which
+is the same operation that loses traffic. So in any one commit, POI beats traffic and the type
+beats both — measured as labels correctly gone and not one traffic pixel left on the metro area.
+They are applied one commit apart instead, traffic last, **and traffic passes through off on the
+way**: React does not re-send an unchanged prop, so a mode change that leaves traffic on would
+wipe it natively and then skip the write that would restore it.
+
 **The map's own overlays take the ground's material, not the appearance's.** The stop card and the
 travel summary are `chrome()`'s material, like the buttons — not `Colors.bar` and `Colors.surfaceDeep`,
 which are measured against a page. The caption that preceded the card proved why: in the light

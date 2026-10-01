@@ -21,6 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import MapView, { type MapType, type Region } from 'react-native-maps';
 
+import { ToggleRow } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
 import { Colors, ControlShadow, Motion, OverPhotograph, Radius, Spacing } from '@/constants/theme';
@@ -81,7 +82,13 @@ export const PITCH_3D = 55;
 export interface MapMode {
   type: MapType;
   label: string;
-  /** Apple's Driving mode, and the whole of it. */
+  /**
+   * What this mode sets the Traffic switch to when it is picked. **A preset, not a lock** —
+   * Driving turns traffic on and the switch owns it from there, so "Driving is the unmuted
+   * basemap with traffic on" stays literally true and you can still turn it off without
+   * leaving the mode. The other two leave the switch alone, because clearing it for you would
+   * put traffic-over-satellite out of reach.
+   */
   traffic?: true;
   /** The type to swap to while the camera is tilted. Absent on the vector modes, which pitch
    *  perfectly well as they are. */
@@ -162,6 +169,10 @@ export function MapControls({
   locating,
   heading,
   onResetNorth,
+  traffic,
+  onTraffic,
+  poi,
+  onPoi,
   floor = FLOOR,
   region,
 }: {
@@ -179,6 +190,12 @@ export function MapControls({
    *  one, and they are never the same number. */
   heading: number;
   onResetNorth: () => void;
+  /** Both switches are global rather than per-mode: the library's POI prop is one boolean, and
+   *  remembering a pair of them per mode is state nobody asked for. */
+  traffic: boolean;
+  onTraffic: (on: boolean) => void;
+  poi: boolean;
+  onPoi: (on: boolean) => void;
   /** Where the bottom of the stack sits. Raised while the stop card is up, the way Apple's own
    *  controls step aside for its place card. */
   floor?: number;
@@ -395,6 +412,20 @@ export function MapControls({
                 );
               })}
             </View>
+
+            {/* **Apple has no equivalent and that was checked, not assumed** — its own Map Modes
+                sheet in iOS 26 is four thumbnails and an attribution line, nothing more. These
+                two are ours, and they earn their place by composing with the modes: traffic over
+                satellite is a pairing no single mode can express, and the labels are worth
+                dropping precisely where imagery is already dense.
+
+                `ToggleRow` straight from `form.tsx`, with no material question to answer — the
+                sheet is `surfaceDeep`, an ordinary page surface, unlike everything else this
+                file draws over the map. */}
+            <View style={styles.switches}>
+              <ToggleRow label="Traffic" value={traffic} onChange={onTraffic} />
+              <ToggleRow label="Points of interest" value={poi} onChange={onPoi} />
+            </View>
           </View>
         </Animated.View>
       ) : null}
@@ -549,6 +580,13 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.tight,
   },
   tile: { gap: Spacing.hair, alignItems: 'center' },
+  // A rule above them, because they are a different kind of choice from the tiles: the tiles
+  // are one-of-three, these are each their own yes or no.
+  switches: {
+    paddingHorizontal: Spacing.read,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.cardBorder,
+  },
   thumb: {
     borderRadius: Radius.read,
     overflow: 'hidden',

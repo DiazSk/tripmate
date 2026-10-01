@@ -94,7 +94,9 @@ export function DayMap({
   // mode breaks. The mode carries its own flag and its own name.
   const [mode, setMode] = useState<MapMode>(MODES[0]);
   /**
-   * **Traffic has to be applied a render *after* the map type, or it never appears.**
+   * **What the reader asked for, and what is actually on the view — two things, a frame apart.**
+   *
+   * Traffic has to be applied a render *after* the map type, or it never appears.
    *
    * `RNMapsMapView.mm` writes `showsTraffic` onto the `MKMapView` at line 570 and `mapType` at
    * 598 — in that order, in one pass — and assigning `mapType` installs a fresh
@@ -109,10 +111,30 @@ export function DayMap({
    * cheapest thing that waits for it.
    *
    * Keyed on the type actually shown rather than on the mode, because a Flyover swap is a
-   * `mapType` assignment too. No mode pairs traffic with a flyover today; the coupling is the
-   * bug, not the pairing.
+   * `mapType` assignment too.
+   *
+   * **Points of interest make it worse, and measurably so.** `AIRMap`'s
+   * `setShowsPointsOfInterests` does its work by *assigning* `preferredConfiguration` — and
+   * assigning a configuration is the same operation that loses traffic. The three writes reach
+   * the view in a fixed order that is exactly the wrong one: `showsTraffic` at
+   * `RNMapsMapView.mm:570`, `showsPointsOfInterests` at `:574`, `mapType` at `:598`. So in any
+   * single commit, POI beats traffic and the type beats both. Measured: turning points of
+   * interest off over Satellite with traffic already on left the labels correctly gone and not
+   * one traffic-coloured pixel on the whole metro area.
+   *
+   * **So the writes are sequenced, one commit each, with traffic last.** The type lands first
+   * (it is already on the view by the time this effect runs), then the POI filter, then
+   * traffic, which is the only one that has to survive the other two.
+   *
+   * **Traffic is cleared on the way, and that is not belt-and-braces.** React does not re-send
+   * a prop whose value has not changed, so a mode change that leaves traffic on would wipe it
+   * natively and then skip the write that would restore it — the value never changed, so there
+   * is nothing to send. Passing through `false` makes the restore a real change.
    */
-  const [traffic, setTraffic] = useState(false);
+  const [trafficWanted, setTrafficWanted] = useState(false);
+  const [poiWanted, setPoiWanted] = useState(true);
+  const [applied, setApplied] = useState({ traffic: false, poi: true });
+
   const [pitched, setPitched] = useState(false);
   /**
    * The camera's bearing, for a compass this client has to draw itself.
@@ -172,9 +194,12 @@ export function DayMap({
   const shownType = pitched && mode.flyover ? mode.flyover : mode.type;
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setTraffic(!!mode.traffic));
+    let frame = requestAnimationFrame(() => {
+      setApplied({ poi: poiWanted, traffic: false });
+      frame = requestAnimationFrame(() => setApplied({ poi: poiWanted, traffic: trafficWanted }));
+    });
     return () => cancelAnimationFrame(frame);
-  }, [shownType, mode.traffic]);
+  }, [shownType, trafficWanted, poiWanted]);
   // Jade on the locate glyph while the camera is actually flying to the reader, and only then —
   // see `MapControls`. The map holds no continuous tracking mode, so this is the honest span.
   const [locating, setLocating] = useState(false);
@@ -317,9 +342,8 @@ export function DayMap({
         // type Explore uses is Apple's own answer for a map carrying overlays; iOS-only, and
         // Android gets the same restraint from Google's colour scheme above.
         mapType={shownType}
-        // Driving, and the whole of it — Apple's own mode is the standard map plus traffic.
-        // **A frame behind `mapType`, deliberately — see `traffic` above.**
-        showsTraffic={traffic}
+        // Both a frame behind `mapType`, deliberately — see `applied` above.
+        showsTraffic={applied.traffic}
         // **The base map's own places stay on, and turning them off was my mistake.** I removed
         // them on a density count — 23 restaurant, café and museum labels against 4 numbered
         // stops on the Lisbon fixture, several overlapping a disc — and that count is real but
@@ -328,6 +352,9 @@ export function DayMap({
         // because a `Marker` draws above the basemap. Crowding was a judgement that was not
         // mine to make alone.
         //
+        // The reader can now turn them off, which is the honest end of the argument above: the
+        // density count was real, it was just not mine to decide alone. Default on.
+        showsPointsOfInterests={applied.poi}
         // **A POI tap does nothing on iPhone, and that cannot be fixed here.** `onPoiClick` is
         // "iOS: Google Maps only" and this map is deliberately Apple's (see the provider note
         // above), so there is no callback to hang anything off. These are labels rather than
@@ -473,7 +500,15 @@ export function DayMap({
         pitched={pitched}
         onToggle3D={toggle3D}
         mode={mode}
-        onMode={setMode}
+        onMode={(next) => {
+          setMode(next);
+          // The preset, and only in the on direction — see `MapMode.traffic`.
+          if (next.traffic) setTrafficWanted(true);
+        }}
+        traffic={trafficWanted}
+        onTraffic={setTrafficWanted}
+        poi={poiWanted}
+        onPoi={setPoiWanted}
         heading={mapHeading}
         onResetNorth={resetNorth}
         // Apple's own controls step aside for its place card; ours do the same, and the height
