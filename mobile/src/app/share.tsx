@@ -104,7 +104,7 @@ export default function ShareScreen() {
     // `back()` now that the root layout anchors `(tabs)` — a cold-start share resolves to
     // `[(tabs), share]`, so replacing with `/` would push a second `(tabs)` entry onto a stack that
     // already had one underneath. `back()` is also simply the right verb for dismissing a modal.
-    // The guard is the house idiom (`signin.tsx`, `plan/_layout.tsx`) and keeps this correct if the
+    // The guard is the house idiom (`signin/index.tsx`, `plan/_layout.tsx`) and keeps this correct if
     // anchor ever goes away.
     if (router.canGoBack()) router.back();
     else router.replace('/');

@@ -223,7 +223,7 @@ export function MapControls({
    * `Motion.settle` and the house curve, not `Motion.respond` and Reanimated's default easing.
    * This is not a control answering a touch — it is the chrome getting out of the way of a card
    * arriving, so it takes the arrival's own duration, and `Easing.bezier(...Curve)` is how the
-   * rest of this client spends it (`signin.tsx`, `today.tsx`).
+   * rest of this client spends it (`signin/scene-band.tsx`, `today.tsx`).
    */
   const lift = useSharedValue(0);
   useEffect(() => {

@@ -28,6 +28,19 @@ import { Colors } from '@/constants/theme';
  * `/signin` still resolves — to `index` — so `lib/authGate.ts`'s `launchTarget`, its tests and the
  * root layout's `fullScreenModal` registration are all untouched.
  */
+/**
+ * The chooser sits beneath the form, always.
+ *
+ * Without this a deep link straight to `/signin/form` builds the group's stack as `[form]` alone,
+ * and that screen is a dead end: no header (`headerShown: false` below), no back control, no
+ * escape capsule — it moved to the chooser — and no swipe-down, because the root registers
+ * `signin` as a `fullScreenModal`, which iOS does not make gesture-dismissible. `launchTarget`
+ * passes every non-bare path through untouched, so the link is honoured rather than redirected,
+ * and a visitor who landed there and did not want an account had to force-quit the app. With the
+ * anchor, back always has the chooser — and its escape — underneath it.
+ */
+export const unstable_settings = { anchor: 'index' };
+
 export default function AuthLayout() {
   const { height, fontScale } = useWindowDimensions();
   const reduceMotion = useReducedMotion();

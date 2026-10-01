@@ -1,36 +1,34 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { signIn, signUp } from '@/api/auth';
-import { authMode } from '@/lib/authMode';
 import { FieldTrough, PrimaryButton, TextField } from '@/components/form';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-
-
-
-
-
-
-
-
+import { authMode } from '@/lib/authMode';
 
 /**
- * Sign in, or make an account — and the screen the app opens on.
+ * Sign in, or make an account — the second of the two screens this flow is.
  *
  * **Nothing is gated by it, and that distinction is the whole design.** This used to say "nothing in
- * this app is behind it", which was true when it could only be reached from Trips or Profile and
- * is now false in the literal sense: `+native-intent.tsx` opens a signed-out launch here, and the
- * root layout anchors `(tabs)` so Home sits directly behind the sheet. What remains true is that it
- * demands nothing. Planning, generating and saving all work signed out under the anonymous owner,
- * the server claims that work on session creation, and "Keep planning without an account" — plus the
- * sheet's own swipe-down — leaves without a cost.
+ * this app is behind it", which was true when it could only be reached from Trips or Profile and is
+ * now false in the literal sense: `+native-intent.tsx` opens a signed-out launch on the chooser,
+ * and the root layout anchors `(tabs)` so Home sits directly behind the modal. What remains true is
+ * that it demands nothing. Planning, generating and saving all work signed out under the anonymous
+ * owner, and the server claims that work on session creation.
  *
- * One screen with a mode toggle rather than two routes: the forms differ by a single field, and
- * somebody who has typed their email into the wrong one should not have to type it again.
+ * **The way out is back, and the escape capsule lives one screen up.** This screen has one action,
+ * because the mode was chosen before you arrived — the switch that used to sit here (`Create an
+ * account instead`) is the chooser now, which also retires a collision where `Create account` sat
+ * directly above `Sign in` and a press on the lower one silently flipped the form. What the split
+ * costs is that a typed email does not cross between the modes; the arrangement this replaced kept
+ * it, and the docblock that argued for it was right about that much. Judged worth one screen with
+ * one job — carrying the address as a param is the fix if it ever bites. Note that the presentation
+ * is `fullScreenModal`, not a sheet: there is no swipe-down here, so `signin/_layout.tsx` anchors
+ * the chooser beneath this to keep back a real way out even on a direct deep link.
  */
 export default function AuthFormScreen() {
   // The mode is the route's, not this screen's — you arrived by choosing it. See `authMode` for
@@ -43,10 +41,9 @@ export default function AuthFormScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const insets = useSafeAreaInsets();
-
-
-
-
+  // The root `Stack`, not this group's — see `done()` for why the difference decides whether a
+  // successful sign-in closes the modal or pops back to the chooser.
+  const rootNavigation = useNavigation('/');
 
   async function submit() {
     setBusy(true);
@@ -68,14 +65,25 @@ export default function AuthFormScreen() {
   /**
    * Out of the whole flow, not back to the chooser.
    *
-   * `back()` would land on the screen you just came from, which after a successful sign-in is
-   * absurd. `canDismiss()` asks whether there is a modal to close — true whenever this was
-   * reached through `/signin`, including the `+native-intent` launch — and `dismissAll()` closes
-   * the group in one move. The `replace` is for the case where it was not: a direct deep link
-   * with nothing underneath.
+   * **This was `router.dismissAll()`, which is wrong here and reads as though it were right.** It
+   * queues a bare `POP_TO_TOP`, and `BaseNavigationContainer` routes a target-less action through
+   * the focus chain to the *deepest* focused navigator — which, now that this is a group, is the
+   * `Stack` in `_layout.tsx` rather than the one holding the modal. `StackRouter` turns that into
+   * a `POP` of `routes.length - 1`; on `[index, form]` it returns a new state instead of `null`,
+   * so the inner stack handles it and nothing bubbles. You end up signed in, looking at a chooser
+   * offering to sign you in, with the modal still up. `canDismiss()` does not catch it either: it
+   * walks *down* from the root and returns `true` at the first stack with more than one route,
+   * which the root's `[(tabs), signin]` always is, so the `replace` branch was unreachable on
+   * every path the app actually takes. Both calls name the modal and mean the nearest stack.
+   *
+   * So dispatch on the navigator that owns the modal instead of asking the focus chain to find
+   * it. `useNavigation('/')` resolves the root `Stack`, and a navigator's own `goBack()` calls
+   * that navigator's `onAction` directly — which pops `signin` and leaves the tab you came from
+   * where it was, exactly as this did before the group existed. The guard is the house idiom and
+   * the `replace` keeps a target if the root anchor ever goes away.
    */
   function done() {
-    if (router.canDismiss()) router.dismissAll();
+    if (rootNavigation.canGoBack()) rootNavigation.goBack();
     else router.replace('/(tabs)/trips');
   }
 
