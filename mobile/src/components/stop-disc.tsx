@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { DiscInk } from '@/constants/theme';
+import { Colors, DiscInk, MapObjectShadow } from '@/constants/theme';
 
 /**
  * A stop's number, in its day's colour.
@@ -12,29 +12,45 @@ import { DiscInk } from '@/constants/theme';
  * the two agree about which stop is which. A copy in each file would make that claim while
  * quietly permitting the two to drift.
  *
- * The hairline is white at 30% rather than a palette token: it exists to hold the disc's edge
- * against whatever is behind it, which on the map is a photograph of the world and not a surface
- * this system controls.
+ * **The ring and the shadow are what make it findable on photography.** It shipped with a
+ * white-at-30% hairline and nothing else, which is enough on the vector basemap and disappears
+ * entirely over satellite — a small saturated circle on a field of saturated circles. DESIGN.md's
+ * Shadow Vocabulary specifies this exact case ("**Object on the map**… the marker title card,
+ * sitting on real photography") and names the ring as part of it: a 1px inset white highlight.
+ * Opaque and 2pt here rather than a hairline at 30%, because the thing being separated is 26pt
+ * across and the ground underneath it can be any colour at all.
+ *
+ * The fill and the ink do not change. `dayCore` is map-native and `DiscInk` is measured against
+ * it; the ring sits outside both.
  */
 export function StopDisc({ ordinal, color }: { ordinal: number; color: string }) {
   return (
-    <View style={[styles.disc, { backgroundColor: color }]}>
-      <ThemedText type="money" style={styles.ordinal}>
-        {ordinal}
-      </ThemedText>
+    // Two boxes, because a view that clips its children clips its own shadow with them — the
+    // same split the floating map controls make, for the same reason.
+    <View style={styles.lift}>
+      <View style={[styles.disc, { backgroundColor: color }]}>
+        <ThemedText type="money" style={styles.ordinal}>
+          {ordinal}
+        </ThemedText>
+      </View>
     </View>
   );
 }
 
+/** The disc, and the white ring around it. */
+export const DISC_SIZE = 26;
+const RING = 2;
+
 const styles = StyleSheet.create({
+  lift: { borderRadius: (DISC_SIZE + RING * 2) / 2, ...MapObjectShadow },
   disc: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: DISC_SIZE,
+    height: DISC_SIZE,
+    borderRadius: DISC_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderWidth: RING,
+    borderColor: Colors.onDeep,
   },
   ordinal: { color: DiscInk, lineHeight: 15 },
 });

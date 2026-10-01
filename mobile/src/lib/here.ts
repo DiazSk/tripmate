@@ -149,3 +149,72 @@ export function useHere(): {
 
   return { here, canAsk, busy, ask };
 }
+
+/**
+ * The smallest heading change worth redrawing for.
+ *
+ * **This exists because of a platform limit, not a battery one.** `Marker`'s `rotation` prop is
+ * "iOS: Google Maps only", so on Apple Maps the cone is rotated by a JS transform on the
+ * marker's own content — and a marker whose content changes has to be re-rasterised through
+ * `tracksViewChanges`. The magnetometer reports far faster than that is worth doing. Five
+ * degrees is below what anyone reads as a wrong direction and roughly an order of magnitude
+ * fewer redraws than the raw stream.
+ */
+const HEADING_STEP_DEGREES = 5;
+
+/**
+ * Which way the phone is pointing, or null where nothing can say.
+ *
+ * **This is a watcher, and the file above it says there are none.** That rule is about *position*
+ * and the reason given is battery: a GPS stream kept open all afternoon to sort three rows. The
+ * magnetometer is not that — it is cheap, and a direction cone that does not turn is a decoration
+ * claiming to be an instrument. So the position stays a single fix per mount and the heading
+ * streams, which is the honest reading of why the rule exists rather than of what it says.
+ *
+ * Null covers every way this can be unavailable, and they are not rare: permission not granted,
+ * a device with no magnetometer, **and the simulator**, which has none. The caller draws a plain
+ * dot in that case rather than a cone pointing at a guess.
+ *
+ * `trueHeading` over `magHeading`: the map is drawn to true north, so a magnetic heading would
+ * be off by the local declination — up to ~20° in places people actually travel.
+ */
+export function useHeading(): number | null {
+  const [heading, setHeading] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    let last: number | null = null;
+    let subscription: Location.LocationSubscription | null = null;
+
+    (async () => {
+      try {
+        const permission = await Location.getForegroundPermissionsAsync();
+        // Never prompts, for the same reason `useHere` never does.
+        if (!permission.granted || !alive) return;
+        subscription = await Location.watchHeadingAsync((next) => {
+          // A negative `trueHeading` is how iOS reports that it has no usable value yet.
+          if (!alive || next.trueHeading < 0) return;
+          if (last !== null && angleBetween(last, next.trueHeading) < HEADING_STEP_DEGREES) return;
+          last = next.trueHeading;
+          setHeading(next.trueHeading);
+        });
+        if (!alive) subscription.remove();
+      } catch {
+        // No magnetometer, no native module, or the platform refusing. A plain dot is correct.
+      }
+    })();
+
+    return () => {
+      alive = false;
+      subscription?.remove();
+    };
+  }, []);
+
+  return heading;
+}
+
+/** Degrees apart on a circle, so 359° and 1° are 2° apart rather than 358°. */
+function angleBetween(a: number, b: number): number {
+  const raw = Math.abs(a - b) % 360;
+  return raw > 180 ? 360 - raw : raw;
+}

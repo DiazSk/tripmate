@@ -106,6 +106,24 @@ export const ControlShadow = {
   elevation: 6,
 } as const;
 
+/**
+ * The Shadow Vocabulary's **Object on the map**: `0 2px 10px rgb(0 0 0 / 0.55)` plus a 1px inset
+ * white highlight, specified for "the marker title card, sitting on real photography."
+ *
+ * Heavier and tighter than `ControlShadow`, and both halves are doing work. Over the vector
+ * basemap a numbered disc reads on its fill alone; over satellite it is a small saturated circle
+ * on a field of saturated circles, and the ring plus the shadow are what separate an object the
+ * app drew from a rooftop that happens to be teal. The ring is the highlight the clause names —
+ * opaque here rather than 1px, because 26pt of disc at 3x needs a mark somebody can see.
+ */
+export const MapObjectShadow = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.55,
+  shadowRadius: 10,
+  elevation: 5,
+} as const;
+
 export const BarHeight = 56;
 export const MaxContentWidth = 800;
 

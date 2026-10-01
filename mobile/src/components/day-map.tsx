@@ -5,11 +5,12 @@ import MapView, { Marker, Polyline, type MapType } from 'react-native-maps';
 import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
 import { DIVE_ALTITUDE_M, MapControls, PITCH_3D } from '@/components/map-controls';
+import { HereMarker } from '@/components/here-marker';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
 import { Colors, Motion, OverPhotograph, Radius, Spacing, dayCore, dayGlow } from '@/constants/theme';
-import { useHere } from '@/lib/here';
+import { useHeading, useHere } from '@/lib/here';
 import { travelSummary } from '@/lib/dayTravel';
 import { altitudeForRegion, drawableStops, regionForStops } from '@/lib/mapRegion';
 
@@ -61,6 +62,7 @@ export function DayMap({
 }) {
   const map = useRef<MapView>(null);
   const { here } = useHere();
+  const heading = useHeading();
   const [mapType, setMapType] = useState<MapType>('mutedStandard');
   const [pitched, setPitched] = useState(false);
   // Jade on the locate glyph while the camera is actually flying to the reader, and only then —
@@ -181,11 +183,10 @@ export function DayMap({
         // above), so there is no callback to hang anything off. These are labels rather than
         // controls — orientation, like the street names beside them, which are not tappable
         // either. Don't go looking for the handler.
-        // **Only when the permission is already granted.** `useHere` reports that without ever
-        // prompting; left unguarded, `react-native-maps` raises the system dialog the moment the
-        // map mounts — a prompt asked before the reason for it is on screen, which is answered
-        // "no" once and then forever. See `lib/here.ts`.
-        showsUserLocation={here !== null}
+        // **Our own mark, not Apple's.** `showsUserLocation` draws `MKUserLocation`, which
+        // pulses and carries no direction — see `HereMarker` below for why that trade is the
+        // wrong way round on a screen read in a street.
+        showsUserLocation={false}
         // Android-only in effect — on iOS this is a Google Maps prop and Apple Maps ignores it,
         // which is also why there is no locate button on iPhone to turn on. Gated identically:
         // a button that raises the permission dialog is the same prompt by another route.
@@ -240,6 +241,25 @@ export function DayMap({
               lineJoin="round"
             />
           </>
+        ) : null}
+
+        {/* **Below the stops, deliberately.** Where the reader is standing is context for the
+            day; which stop is which is the day. `zIndex: 0` puts this under every marker above,
+            so it can crowd a stop but never hide one. Only drawn with a fix — there is no
+            "somewhere in this city" position worth marking. */}
+        {here ? (
+          <Marker
+            coordinate={{ latitude: here.lat, longitude: here.lng }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            zIndex={0}
+            // The cone's rotation is a JS transform on this marker's content (the native
+            // `rotation` prop is Google-only on iOS), so the marker has to be re-rasterised to
+            // turn. `useHeading` throttles to 5 degrees for exactly this reason.
+            tracksViewChanges
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants">
+            <HereMarker heading={heading} />
+          </Marker>
         ) : null}
 
         {drawn.map(({ stop, index }) => (
