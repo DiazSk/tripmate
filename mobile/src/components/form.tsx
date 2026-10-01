@@ -16,6 +16,7 @@ import {
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import { MAX_FONT_SCALE, prefixedWidth } from '@/lib/fieldWidth';
 
 /**
  * The app's first input controls. Built from Kiln tokens rather than pulled in, because the
@@ -74,34 +75,15 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
-/**
- * How wide the box behind a prefixed value is.
- *
- * **Only a prefixed field is sized to its content, and that is the whole point.** A plain field
- * fills the row and right-aligns, so its text ends at the column whatever its length. Put a `$` to
- * the left of that and the symbol is stranded at the far end of the row, a whole field away from
- * the number it belongs to — there is no gap to close, because the gap *is* the field.
- *
- * `ponytail:` a digit-width estimate rather than a measurement. `TextInput` does not report a
- * usable intrinsic width here — left to size itself it collapses toward its minimum and scrolls,
- * which shows the tail of a long value and nothing else. Estimating is sound for the only prefixed
- * field this app has, a numeric one, because digits share an advance width. If a prefixed *text*
- * field ever appears, measure with `onContentSizeChange` instead of widening this guess.
- */
-const DIGIT_WIDTH = 10;
-
-function prefixedWidth(value: string, placeholder?: string): number {
-  // The placeholder's width while empty, so the box does not jump on the first keystroke. Three
-  // characters is the floor once something is typed — a tap target, not a text width.
-  const chars = value.length > 0 ? Math.max(value.length, 3) : (placeholder?.length ?? 4);
-  return chars * DIGIT_WIDTH;
-}
-
 export function TextField({
   label,
   prefix,
   ...input
 }: TextInputProps & { label: string; prefix?: string }) {
+  // Same hook `FieldRow` uses, and for the same reason: this one re-renders when the reader
+  // changes the setting, instead of holding whatever the scale was at mount. See `prefixedWidth`
+  // for what the box gets wrong without it.
+  const { fontScale } = useWindowDimensions();
   return (
     <FieldRow label={label}>
       <View style={styles.textWrap}>
@@ -113,15 +95,16 @@ export function TextField({
         <TextInput
           // The cap `ThemedText` gives every other string, which a bare TextInput does not
           // inherit. Without it the value grew to ~3x while its label stopped at 1.6x, and the
-          // value simply took the label's half of the row.
-          maxFontSizeMultiplier={1.6}
+          // value simply took the label's half of the row. `MAX_FONT_SCALE` is this number, and
+          // the width estimate reads it so the two cannot drift.
+          maxFontSizeMultiplier={MAX_FONT_SCALE}
           placeholderTextColor={Colors.muted}
           selectionColor={Colors.accent}
           {...input}
           style={[
             styles.input,
             prefix
-              ? { width: prefixedWidth(String(input.value ?? ''), input.placeholder) }
+              ? { width: prefixedWidth(String(input.value ?? ''), input.placeholder, fontScale) }
               : styles.inputFill,
             input.style,
           ]}
