@@ -387,6 +387,7 @@ export function PillButton({
   disabled,
   tone = 'accent',
   compact,
+  block,
   role = 'button',
   accessibilityLabel,
   style,
@@ -397,15 +398,27 @@ export function PillButton({
   /**
    * `muted` for an action the screen cannot currently perform — offline, mostly. `primary` is
    * the jade fill, and a screen gets **one** (DESIGN.md's Primary Action Surface): it is the
-   * thing the screen exists to do. Everything else is a slate capsule with jade ink.
+   * thing the screen exists to do. Everything else is a slate capsule with jade ink. `quiet`
+   * drops the fill and the hairline entirely, keeping the jade ink and the 44pt target — for a
+   * third action standing under two that already have shape.
    */
-  tone?: 'accent' | 'muted' | 'alert' | 'primary';
+  tone?: 'accent' | 'muted' | 'alert' | 'primary' | 'quiet';
   /**
    * For a capsule standing *in* content rather than under a block: `detail` ink and tighter
    * sides, so three of them fit across a phone. The 44pt target does not move — that is the
    * floor, not a size.
    */
   compact?: boolean;
+  /**
+   * Stretch to the parent's width.
+   *
+   * **The rule this relaxes is about a capsule standing *in* content**, where a full-width bar is
+   * `PrimaryButton`'s treatment and taking it would make a second primary. A chooser screen is
+   * the exception that rule did not have in view: two actions that are peers in prominence and
+   * must share an edge with the button above them. Not a general licence — a lone capsule under
+   * a block should still size to its words.
+   */
+  block?: boolean;
   /** `link` where the press leaves the app, so VoiceOver says so. */
   role?: 'button' | 'link';
   accessibilityLabel?: string;
@@ -421,14 +434,24 @@ export function PillButton({
       style={({ pressed }) => [
         styles.pill,
         compact && styles.pillCompact,
+        block && styles.pillBlock,
         tone === 'primary' && !disabled && styles.pillPrimary,
+        tone === 'quiet' && styles.pillQuiet,
         style,
         pressed && !disabled && styles.pillPressed,
       ]}
       android_ripple={disabled ? undefined : { color: Colors.pressed }}>
       <ThemedText
         type={compact ? 'detail' : 'headingSmall'}
-        themeColor={disabled ? 'muted' : tone === 'primary' ? 'accentForeground' : tone}>
+        themeColor={
+          disabled
+            ? 'muted'
+            : tone === 'primary'
+              ? 'accentForeground'
+              : tone === 'quiet'
+                ? 'accent'
+                : tone
+        }>
         {title}
       </ThemedText>
     </Pressable>
@@ -565,6 +588,13 @@ const styles = StyleSheet.create({
   pillCompact: { paddingHorizontal: Spacing.tight },
   // The border goes jade too, or the hairline reads as a slate outline drawn around the fill.
   pillPrimary: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  // Stretch *and* centre: a block capsule's words belong in the middle of it, where
+  // `styles.pill`'s own left-aligned padding would otherwise leave them.
+  pillBlock: { alignSelf: 'stretch', alignItems: 'center' },
+  // No fill and no hairline, so it reads as the third weight rather than a third button. The
+  // 44pt target and the pill radius stay — what makes it quiet is the absence of a surface, not
+  // a smaller target.
+  pillQuiet: { backgroundColor: 'transparent', borderColor: 'transparent', alignItems: 'center' },
   pillPressed: { opacity: 0.7 },
   buttonPressed: { opacity: 0.85 },
 
