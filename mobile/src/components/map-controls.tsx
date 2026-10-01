@@ -1,7 +1,14 @@
 import { BlurView } from 'expo-blur';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import MapView, { type MapType, type Region } from 'react-native-maps';
 
@@ -109,6 +116,23 @@ export function MapControls({
 }) {
   const [picking, setPicking] = useState(false);
   const { tint, ink } = chrome(mapType);
+
+  /**
+   * The tile's size, computed rather than left to flex.
+   *
+   * **This does not silence what it was written to silence, and that is worth recording.** Each
+   * thumbnail logs `CAMetalLayer ignoring invalid setDrawableSize width=0.000000` once on open,
+   * and the main map does the same on mount. Sizing the wrapper did not stop it and neither did
+   * sizing the `MapView` itself — `MKMapView` creates its Metal layer during its own setup,
+   * before React Native applies any frame, so there is nothing to reach from here. Harmless:
+   * Metal ignores the call and the tiles render correctly. Don't spend another afternoon on it.
+   *
+   * The arithmetic stays because a known width is the honest way to size three tiles in a row.
+   */
+  const tile = Math.floor(
+    (useWindowDimensions().width - Spacing.read * 2 - Spacing.rows * (MODES.length - 1)) /
+      MODES.length,
+  );
 
   return (
     <>
@@ -219,15 +243,20 @@ export function MapControls({
                     accessibilityRole="button"
                     accessibilityLabel={`${mode.label} style`}
                     accessibilityState={{ selected: chosen }}
-                    style={styles.tile}>
+                    style={[styles.tile, { width: tile }]}>
                     {/* **A real map, not a shipped screenshot.** `cacheEnabled` renders it once
                         to a bitmap, which is the whole thumbnail mechanism — and because it is
                         MapKit drawing its own tiles there is no question of caching or
                         redistributing somebody's map imagery, which bundling cropped renders
                         would raise. It previews *this* day rather than Apple's stock junction. */}
-                    <View style={[styles.thumb, chosen && styles.thumbChosen]}>
+                    <View
+                      style={[
+                        styles.thumb,
+                        { width: tile, height: tile },
+                        chosen && styles.thumbChosen,
+                      ]}>
                       <MapView
-                        style={StyleSheet.absoluteFill}
+                        style={{ width: tile, height: tile }}
                         region={region}
                         mapType={mode.type}
                         // Same as the real map. Without it the thumbnail follows `app.json`'s
@@ -239,7 +268,6 @@ export function MapControls({
                         zoomEnabled={false}
                         rotateEnabled={false}
                         pitchEnabled={false}
-                        showsPointsOfInterests={false}
                         toolbarEnabled={false}
                         pointerEvents="none"
                       />
@@ -352,11 +380,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.read,
     paddingBottom: Spacing.tight,
   },
-  tile: { flex: 1, gap: Spacing.hair, alignItems: 'center' },
-  /** `aspectRatio`, not a height: three tiles share the row and the row owns the width. */
+  tile: { gap: Spacing.hair, alignItems: 'center' },
   thumb: {
-    alignSelf: 'stretch',
-    aspectRatio: 1,
     borderRadius: Radius.read,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,

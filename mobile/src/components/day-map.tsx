@@ -168,12 +168,19 @@ export function DayMap({
         // muted type is Apple's own answer for a map carrying overlays; iOS-only, and Android
         // gets the same restraint from Google's colour scheme above.
         mapType={mapType}
-        // **Apple's own POI labels are the densest thing on this screen and none of them are
-        // ours.** Counted on the Lisbon fixture: 23 restaurant, café and museum labels against
-        // 4 numbered stops, several of them overlapping a disc. They also make a promise the app
-        // cannot keep — a tap on one does nothing, because `onPress` is deliberately absent (see
-        // the note below). The day's own stops are what this map is for.
-        showsPointsOfInterests={false}
+        // **The base map's own places stay on, and turning them off was my mistake.** I removed
+        // them on a density count — 23 restaurant, café and museum labels against 4 numbered
+        // stops on the Lisbon fixture, several overlapping a disc — and that count is real but
+        // it is not the decision. Knowing there is a café across the street from stop 3 is a
+        // large part of what a map on a trip is *for*, and the day's own stops win anyway
+        // because a `Marker` draws above the basemap. Crowding was a judgement that was not
+        // mine to make alone.
+        //
+        // **A POI tap does nothing on iPhone, and that cannot be fixed here.** `onPoiClick` is
+        // "iOS: Google Maps only" and this map is deliberately Apple's (see the provider note
+        // above), so there is no callback to hang anything off. These are labels rather than
+        // controls — orientation, like the street names beside them, which are not tappable
+        // either. Don't go looking for the handler.
         // **Only when the permission is already granted.** `useHere` reports that without ever
         // prompting; left unguarded, `react-native-maps` raises the system dialog the moment the
         // map mounts — a prompt asked before the reason for it is on screen, which is answered
