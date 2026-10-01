@@ -256,6 +256,7 @@ export function DayMap({
         // is the permission prompt by another route, which `here.ts` exists to avoid.
         onLocate={here ? locate : undefined}
         locating={locating}
+        region={region}
       />
 
       {/* What the map cannot draw. A route is visibly a shape and invisibly a cost, and the

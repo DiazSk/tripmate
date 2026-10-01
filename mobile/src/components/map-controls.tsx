@@ -3,7 +3,7 @@ import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import type { MapType } from 'react-native-maps';
+import MapView, { type MapType, type Region } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE } from '@/constants/appearance';
@@ -30,10 +30,10 @@ export const PITCH_3D = 55;
  * `mutedStandard`. `terrain` is Android-only, and the two `*Flyover` types are `satellite` and
  * `hybrid` with 3D scenery — which the 3D button reaches anyway, without a second row.
  */
-const MODES: { type: MapType; label: string; hint: string }[] = [
-  { type: 'mutedStandard', label: 'Map', hint: 'Streets and places' },
-  { type: 'satellite', label: 'Satellite', hint: 'Photography, no labels' },
-  { type: 'hybrid', label: 'Hybrid', hint: 'Photography with names' },
+const MODES: { type: MapType; label: string }[] = [
+  { type: 'mutedStandard', label: 'Map' },
+  { type: 'satellite', label: 'Satellite' },
+  { type: 'hybrid', label: 'Hybrid' },
 ];
 
 const IMAGERY: MapType[] = ['satellite', 'hybrid', 'satelliteFlyover', 'hybridFlyover'];
@@ -94,6 +94,7 @@ export function MapControls({
   onMapType,
   onLocate,
   locating,
+  region,
 }: {
   pitched: boolean;
   onToggle3D: () => void;
@@ -103,6 +104,8 @@ export function MapControls({
   onLocate?: () => void;
   /** True while the map is centred on the reader, which is the one place jade belongs here. */
   locating?: boolean;
+  /** The day's own framing, so each thumbnail previews this trip rather than a stock junction. */
+  region: Region;
 }) {
   const [picking, setPicking] = useState(false);
   const { tint, ink } = chrome(mapType);
@@ -166,10 +169,12 @@ export function MapControls({
         ) : null}
       </Group>
 
-      {/* **A centred card, not a dropdown beside the button.** Apple presents map modes as a
-          titled sheet with a close control, and the reason holds here: choosing a style changes
-          the whole surface behind it, so the choice belongs in front of the map rather than
-          hanging off one corner of it. */}
+      {/* **A sheet at the bottom, and each style shown rather than described.** Apple presents
+          map modes as a titled sheet of thumbnails, and both halves of that are right: choosing a
+          style changes the whole surface behind it, so the choice belongs in front of the map and
+          not hanging off one corner — and a picture of satellite imagery says "photography"
+          better than the words "photography, no labels" did. The sheet leaves the map readable
+          above it, which is what makes comparing a thumbnail to the real thing possible. */}
       {picking ? (
         <Animated.View
           entering={FadeIn.duration(Motion.respond)}
@@ -182,7 +187,7 @@ export function MapControls({
             accessibilityLabel="Close map styles"
             onPress={() => setPicking(false)}
           />
-          <View style={styles.card}>
+          <View style={styles.sheet}>
             <View style={styles.cardHead}>
               <ThemedText type="headingSmall" style={styles.cardTitle}>
                 Map style
@@ -201,36 +206,54 @@ export function MapControls({
               </Pressable>
             </View>
 
-            {MODES.map((mode, index) => (
-              <Pressable
-                key={mode.type}
-                onPress={() => {
-                  onMapType(mode.type);
-                  setPicking(false);
-                }}
-                accessibilityRole="button"
-                accessibilityState={{ selected: mode.type === mapType }}
-                style={({ pressed }) => [
-                  styles.mode,
-                  index > 0 && styles.ruled,
-                  pressed && styles.pressed,
-                ]}>
-                <View style={styles.grow}>
-                  <ThemedText type="body">{mode.label}</ThemedText>
-                  <ThemedText type="detail" themeColor="muted">
-                    {mode.hint}
-                  </ThemedText>
-                </View>
-                {mode.type === mapType ? (
-                  <SymbolView
-                    name={{ ios: 'checkmark', android: 'check' }}
-                    tintColor={Colors.accent}
-                    size={16}
-                    fallback={<Text style={styles.glyphFallback}>✓</Text>}
-                  />
-                ) : null}
-              </Pressable>
-            ))}
+            <View style={styles.tiles}>
+              {MODES.map((mode) => {
+                const chosen = mode.type === mapType;
+                return (
+                  <Pressable
+                    key={mode.type}
+                    onPress={() => {
+                      onMapType(mode.type);
+                      setPicking(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${mode.label} style`}
+                    accessibilityState={{ selected: chosen }}
+                    style={styles.tile}>
+                    {/* **A real map, not a shipped screenshot.** `cacheEnabled` renders it once
+                        to a bitmap, which is the whole thumbnail mechanism — and because it is
+                        MapKit drawing its own tiles there is no question of caching or
+                        redistributing somebody's map imagery, which bundling cropped renders
+                        would raise. It previews *this* day rather than Apple's stock junction. */}
+                    <View style={[styles.thumb, chosen && styles.thumbChosen]}>
+                      <MapView
+                        style={StyleSheet.absoluteFill}
+                        region={region}
+                        mapType={mode.type}
+                        // Same as the real map. Without it the thumbnail follows `app.json`'s
+                        // pinned dark style and the "Map" tile renders a dark map inside the
+                        // light appearance — a preview of a thing the app will not show you.
+                        userInterfaceStyle={APPEARANCE}
+                        cacheEnabled
+                        scrollEnabled={false}
+                        zoomEnabled={false}
+                        rotateEnabled={false}
+                        pitchEnabled={false}
+                        showsPointsOfInterests={false}
+                        toolbarEnabled={false}
+                        pointerEvents="none"
+                      />
+                    </View>
+                    <ThemedText
+                      type="caption"
+                      themeColor={chosen ? 'accent' : 'muted'}
+                      numberOfLines={1}>
+                      {mode.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </Animated.View>
       ) : null}
@@ -303,19 +326,45 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: `${Colors.canvas}B8`,
+    // Bottom, not centred: the map stays readable above the sheet, which is what lets a
+    // thumbnail be compared against the thing it is a thumbnail of.
+    justifyContent: 'flex-end',
+    // **A dim, not a wash, and light enough to leave the map readable.** It shipped at the canvas
+    // colour over 72%, which in the light appearance is paper — so the "scrim" *lightened* the map
+    // into near-nothing and defeated the whole reason the sheet sits at the bottom, which is that
+    // you can compare a thumbnail against the thing it is a thumbnail of. The one slate at 35%
+    // darkens in both appearances, which is what Darken-Never-Lighten asks for over a map.
+    backgroundColor: '#1C1A1859',
   },
-  card: {
-    width: '84%',
-    maxWidth: 360,
-    borderRadius: Radius.surface,
+  sheet: {
     backgroundColor: Colors.surfaceDeep,
+    // Top corners only — it is anchored to the device edge, and rounding the bottom of something
+    // flush against the edge draws two corners of canvas that mean nothing.
+    borderTopLeftRadius: Radius.surface,
+    borderTopRightRadius: Radius.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+    paddingBottom: Spacing.regular,
+  },
+  tiles: {
+    flexDirection: 'row',
+    gap: Spacing.rows,
+    paddingHorizontal: Spacing.read,
+    paddingBottom: Spacing.tight,
+  },
+  tile: { flex: 1, gap: Spacing.hair, alignItems: 'center' },
+  /** `aspectRatio`, not a height: three tiles share the row and the row owns the width. */
+  thumb: {
+    alignSelf: 'stretch',
+    aspectRatio: 1,
+    borderRadius: Radius.read,
+    overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
-    overflow: 'hidden',
   },
+  // Apple rings the chosen tile in its tint; ours is jade, which is what the checkmark this
+  // replaces already used.
+  thumbChosen: { borderWidth: 2, borderColor: Colors.accent },
   cardHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -331,15 +380,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.pill,
   },
-  mode: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.tight,
-    minHeight: 56,
-    paddingHorizontal: Spacing.read,
-    paddingVertical: Spacing.tight,
-  },
-  ruled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
-  grow: { flex: 1 },
   glyphFallback: { color: Colors.accent, fontSize: 11 },
 });
