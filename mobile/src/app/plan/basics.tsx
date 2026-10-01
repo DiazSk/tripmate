@@ -11,7 +11,9 @@ import {
   StyleSheet,
   TextInput,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, withTiming } from 'react-native-reanimated';
 
 import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@shared/weather';
 
@@ -20,7 +22,7 @@ import type { Anchor, ImportItem, SavedPlace } from '@/api/types';
 import { usePlanDraft } from '@/lib/planDraft';
 import { ChoiceRow, DateField, FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
 import { anchorKey, mergeAnchors } from '@/lib/anchors';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
@@ -33,6 +35,58 @@ export default function Basics() {
   const budgetBasis = draft.budgetBasis ?? 'whole_party';
   /** Held as a string, not a number: a numeric binding renders "$ 01800" while you type. */
   const [budgetText, setBudgetText] = useState(budget ? String(budget) : '');
+
+  /**
+   * Total / Per person is Budget's second half, so it keeps Budget's company.
+   *
+   * It used to stand open permanently, under a field that is empty on arrival — a choice about a
+   * number nobody had typed yet, and the loudest thing on the screen while it was meaningless
+   * (two full-width rows, one of them washed jade). So it is shown while the field is **focused
+   * or answered**: tapping Budget slides it out from under the row, so the choice is in view
+   * while you type rather than arriving under your thumb afterwards, and it stays as long as
+   * there is a figure for it to qualify. Clearing the amount puts it away again, because the
+   * basis matters exactly as long as the number does.
+   *
+   * `budgetBasis` still defaults to `whole_party`, so somebody who never opens this gets Total —
+   * the same answer the permanently-open version gave them by default.
+   */
+  const [budgetFocused, setBudgetFocused] = useState(false);
+  const showBasis = budgetFocused || budgetText.trim().length > 0;
+
+  /**
+   * The slide, on a **measured** height rather than a constant.
+   *
+   * Two 52pt rows is 104 at scale 1 and well over 200 once `FieldRow` starts stacking its label
+   * above its value, so a hardcoded height would clip the second option for exactly the readers
+   * who need it most. The child reports its natural height through `onLayout` — it lays out
+   * normally inside the clipped box, which is what makes this the ordinary accordion — and the
+   * wrapper animates between that and nothing. Same shape as `scene-band.tsx`'s band height and
+   * `map-controls.tsx`'s lift, on the same curve and duration.
+   *
+   * Animating the wrapper's height is also what moves everything below it: the trough grows and
+   * the sections after it are pushed down by the same tween, rather than snapping into a new
+   * position while the block fades in over the gap.
+   */
+  const reduceMotion = useReducedMotion();
+  const [basisHeight, setBasisHeight] = useState(0);
+  const measureBasis = (event: LayoutChangeEvent) => {
+    const height = Math.round(event.nativeEvent.layout.height);
+    if (height > 0 && height !== basisHeight) setBasisHeight(height);
+  };
+  const basisStyle = useAnimatedStyle(() => {
+    // **No height at all until one has been measured**, which is the whole reason for the
+    // out-of-flow first pass below: a box already clipped to nothing cannot report what its
+    // contents are worth, so applying `height: 0` from the first frame measures 0 for ever and
+    // the block never opens. Verified on device before it was written this way.
+    if (basisHeight === 0) return {};
+    return {
+      height: withTiming(showBasis ? basisHeight : 0, {
+        // Zero, not slower: the setting asks for no travel, and the rows still arrive.
+        duration: reduceMotion ? 0 : Motion.settle,
+        easing: Easing.bezier(...Curve),
+      }),
+    };
+  }, [showBasis, basisHeight, reduceMotion]);
 
   // Real defaults rather than empty. A native date picker always draws *some* date, so an
   // "unset" field is indistinguishable from one showing today — it reads as answered when it
@@ -202,25 +256,54 @@ export default function Basics() {
             minimumDate={startDate || undefined}
             onChange={setEndDate}
           />
-          <TextField
-            label="Budget"
-            value={budgetText}
-            onChangeText={setBudget}
-            placeholder="2,600"
-            keyboardType="number-pad"
-            prefix="$"
-          />
-          {/* The number above means nothing without this. "$2,600" for a family of four is either
-              comfortable or tight, and everything downstream reads a party total — the server's
-              `partyBudget()` converts a per-person figure once, so nothing here multiplies. */}
-          <ChoiceRow
-            options={[
-              { value: 'whole_party', label: 'Total' },
-              { value: 'per_person', label: 'Per person' },
-            ]}
-            value={budgetBasis}
-            onChange={(next) => patch({ budgetBasis: next })}
-          />
+          {/* Budget and its basis are **one** trough child, not two.
+              `FieldTrough` rules every child after the first, and that rule is drawn on the
+              wrapper it supplies — which still paints a hairline when the child inside it is
+              collapsed to nothing. Kept together, the trough's own line lands above Budget where
+              it always did, and the line between Budget and the options is the one `bare` mode
+              draws, inside the box that gets clipped. */}
+          <View>
+            <TextField
+              label="Budget"
+              value={budgetText}
+              onChangeText={setBudget}
+              onFocus={() => {
+                closeSuggestions();
+                setBudgetFocused(true);
+              }}
+              onBlur={() => setBudgetFocused(false)}
+              placeholder="2,600"
+              keyboardType="number-pad"
+              prefix="$"
+            />
+            {/* The number above means nothing without this. "$2,600" for a family of four is
+                either comfortable or tight, and everything downstream reads a party total — the
+                server's `partyBudget()` converts a per-person figure once, so nothing here
+                multiplies. */}
+            <Animated.View style={[styles.basis, basisStyle]}>
+              <View
+                onLayout={measureBasis}
+                // **Out of flow for the one frame before the height is known.** Absolute, so it
+                // contributes nothing to the wrapper's own height — which is how the collapsed
+                // state stays collapsed on arrival instead of flashing open and animating shut
+                // — and invisible to eye and screen reader while it is there. The moment
+                // `onLayout` reports, this drops away and the rows are ordinary content again,
+                // so a later change of font scale re-measures through the same path.
+                style={basisHeight === 0 && styles.measuring}
+                accessibilityElementsHidden={basisHeight === 0}
+                importantForAccessibility={basisHeight === 0 ? 'no-hide-descendants' : 'auto'}>
+                <ChoiceRow
+                  bare
+                  options={[
+                    { value: 'whole_party', label: 'Total' },
+                    { value: 'per_person', label: 'Per person' },
+                  ]}
+                  value={budgetBasis}
+                  onChange={(next) => patch({ budgetBasis: next })}
+                />
+              </View>
+            </Animated.View>
+          </View>
         </FieldTrough>
 
         <SavedPlacesSection
@@ -268,16 +351,24 @@ export default function Basics() {
             onPress={() => router.push('/plan/group')}
             disabled={!complete}
           />
-          {/* **It differs from the button above it by fill, not by shape.** Both are ways on,
-              and the fast path was the only one drawn as a caption. `compact` is load-bearing
-              rather than taste: at `headingSmall` x 1.6 this label wraps inside its own
-              capsule. */}
+          {/* **Jade text on a 44pt target — and that is the third version of this control, so
+              the record is worth keeping straight.** It shipped as muted `detail` body copy,
+              which was reported as not reading as pressable at all; the fix for that was a slate
+              capsule, on the argument that it differs from the button above it by fill rather
+              than by shape. Two capsules stacked on the screen's bottom edge is what that cost,
+              and the first one is the thing you are meant to press.
+
+              `quiet` is the distinction the capsule was standing in for: jade ink says action
+              under the One Meaning Rule, and `block` keeps the full-width 44pt target. What
+              failed the first time was the *ink and the target*, not the absence of a fill. No
+              `compact`, so the label keeps `headingSmall` — the chooser's escape is the same
+              treatment at the same length and holds one line through AX3. */}
           <PillButton
-            compact
+            block
+            tone="quiet"
             title="Skip the questions and generate"
             disabled={!complete}
             onPress={() => router.replace('/plan/generating')}
-            style={styles.skip}
           />
         </View>
       </ScrollView>
@@ -514,7 +605,10 @@ function ImportSection({
           {busy ? (
             <ActivityIndicator color={Colors.accentForeground} />
           ) : (
-            <ThemedText type="label" themeColor="accentForeground">
+            // The ink follows the fill. `accentForeground` is defined as the ink drawn ON jade,
+            // so leaving it on the inert slate would reproduce the unreadable label the fill
+            // above was just fixed for, one appearance over.
+            <ThemedText type="label" themeColor={canFind ? 'accentForeground' : 'muted'}>
               Find the places
             </ThemedText>
           )}
@@ -614,6 +708,11 @@ const styles = StyleSheet.create({
   },
   importActions: { flexDirection: 'row', gap: Spacing.tight },
   importButton: {
+    // **Half the row each, rather than sized to their words.** These two are a pair — put what
+    // you have in, then read it — and content-sized capsules made them a wide one and a narrow
+    // one with a ragged right edge against the input above. `flex: 1` also fixes the left one
+    // changing width the moment its label becomes "Screenshots (3)".
+    flex: 1,
     minHeight: 44,
     borderRadius: Radius.pill,
     backgroundColor: Colors.control,
@@ -622,7 +721,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   importButtonPrimary: { backgroundColor: Colors.accent },
-  importButtonInert: { opacity: 0.4 },
+  // The slate fill with muted ink, **not `opacity: 0.4`**, which is the same defect `buttonInert`
+  // carried: the fill and the label fade together, so the label measured 1.92:1 against its own
+  // button in the light appearance and the jade composited to a pastel that read as a brand
+  // colour rather than as unavailability. `palette.test.ts` holds the assertion for that pairing.
+  importButtonInert: {
+    backgroundColor: Colors.panel,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
   importUnread: { gap: Spacing.hair },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.tight },
   chip: {
@@ -640,7 +747,11 @@ const styles = StyleSheet.create({
   note: { marginTop: -Spacing.tight },
   readout: { marginTop: -Spacing.tight },
   action: { marginTop: Spacing.tight, gap: Spacing.rows },
-  // Centred under the primary button rather than left-aligned, which is where `PillButton`'s
-  // own `alignSelf` would put it. The disabled state is the component's now, not an opacity.
-  skip: { alignSelf: 'center' },
+  // The clip the accordion needs: the measured child keeps its own height while the wrapper's
+  // animates to nothing, so what is hidden is hidden rather than drawn outside the trough.
+  basis: { overflow: 'hidden' },
+  // The measuring pass: natural height, no layout space, nothing to see. Full width because an
+  // absolute box has none of its own, and a narrower measurement would under-report the height
+  // at the type sizes where the rows wrap.
+  measuring: { position: 'absolute', left: 0, right: 0, opacity: 0 },
 });

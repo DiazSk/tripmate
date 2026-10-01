@@ -664,13 +664,27 @@ export function ChoiceRow<T extends string>({
   options,
   value,
   onChange,
+  bare,
 }: {
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
+  /**
+   * Drop the trough, for a choice nested *inside* a `FieldTrough`.
+   *
+   * Without it this draws `styles.trough` within a `styles.trough` — a panel inside a panel,
+   * one slate composited onto itself with a second hairline around it — and a choice that
+   * belongs to the field above it reads as a block grafted underneath. Bare, the options are
+   * simply two more ruled rows of that form, so the **first** option takes a rule too: nested,
+   * the line above it is the one separating it from the field it answers.
+   *
+   * Defaults off. A choice standing on the canvas needs its own surface, which is every other
+   * call site.
+   */
+  bare?: boolean;
 }) {
   return (
-    <View style={styles.trough}>
+    <View style={bare ? undefined : styles.trough}>
       {options.map((option, i) => {
         const selected = option.value === value;
         return (
@@ -679,7 +693,11 @@ export function ChoiceRow<T extends string>({
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             onPress={() => onChange(option.value)}
-            style={[styles.choice, i > 0 && styles.ruled, selected && styles.choiceSelected]}
+            style={[
+              styles.choice,
+              (bare || i > 0) && styles.ruled,
+              selected && styles.choiceSelected,
+            ]}
             android_ripple={{ color: Colors.pressed }}>
             <ThemedText type="body" themeColor={selected ? 'foreground' : 'muted'}>
               {option.label}
