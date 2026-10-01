@@ -377,8 +377,14 @@ against 7.50 in dark. A map mark standing beside four day cores that do not move
 
 **Named gaps, not bugs.** `app.json` still pins `userInterfaceStyle: "dark"` so the flag ships
 inert, which leaves the keyboard, the native date picker, the tab bar's system materials and the
-splash dark under the light appearance. Closing that costs a prebuild and belongs to a commitment
-rather than to a look.
+**native** splash dark under the light appearance. Closing that costs a prebuild and belongs to a
+commitment rather than to a look.
+
+The splash is half a gap rather than a whole one. The JS overlay that continues it takes
+`Colors.canvas`, so what stays dark is only the frame the OS draws before any JS has loaded —
+which cannot read the preference, because the preference is a file this app writes.
+`expo-splash-screen` does take a `dark` variant that would resolve it natively and for free, and
+the pin is exactly what makes that variant dead.
 
 ### Tertiary (map-native, outside the interface palette)
 These are the route's own colours. They are **not** part of the interface palette and must never

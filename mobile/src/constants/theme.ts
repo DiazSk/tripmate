@@ -20,9 +20,13 @@
  *
  * `app.json` still pins `userInterfaceStyle: "dark"`, deliberately. Changing it would alter the
  * dark app's behaviour when the flag must ship inert, so under the light appearance the
- * keyboard, the native date picker, the tab bar's system materials and the splash stay dark.
- * **A named gap in a prototype, not a bug** — closing it costs a prebuild and belongs to a
- * commitment rather than to a look.
+ * keyboard, the native date picker, the tab bar's system materials and the **native** splash
+ * stay dark. **A named gap in a prototype, not a bug** — closing it costs a prebuild and
+ * belongs to a commitment rather than to a look.
+ *
+ * The splash is now only half a gap: the JS overlay that continues it follows `Colors.canvas`,
+ * so the dark frame is the one the OS draws before any of this has loaded. `animated-icon.tsx`
+ * carries the mechanism.
  */
 
 import '@/global.css';

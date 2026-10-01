@@ -5,6 +5,8 @@ import { Dimensions, StyleSheet, View } from 'react-native';
 import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { Colors } from '@/constants/theme';
+
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
@@ -144,9 +146,29 @@ const styles = StyleSheet.create({
     height: 128,
     position: 'absolute',
   },
+  /**
+   * **The half of the splash that can follow the appearance.**
+   *
+   * This shipped as the literal `#121110`, which is `Dark.canvas` — so under the light
+   * appearance the app opened on a near-black screen and faded to paper. `Colors.canvas` is
+   * byte-identical in dark and paper in light.
+   *
+   * **The other half cannot follow, and that is a configuration choice rather than a platform
+   * limit.** The native splash is drawn by the OS before a line of JS runs, so it cannot read
+   * `APPEARANCE`, which `constants/appearance.ts` reads from a file. `expo-splash-screen`'s
+   * plugin does take a `dark` variant — an iOS colour-asset appearance entry, Android's
+   * `drawable-night` — and it would resolve natively and for free, except that `app.json` pins
+   * `userInterfaceStyle: "dark"` at the root and again under `android`, which forces the whole
+   * app including the launch screen, so the dark entry always wins. `theme.ts` and DESIGN.md
+   * both record that pin as deliberate and name the splash as one of its named gaps.
+   *
+   * So in light there is a dark moment before JS, and then this. The overlay was written to
+   * make the hand-off from the native splash invisible, and under paper it no longer can be —
+   * which is the cost of narrowing the gap without closing it.
+   */
   splashOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#121110',
+    backgroundColor: Colors.canvas,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
