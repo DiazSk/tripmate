@@ -1,27 +1,14 @@
-import { Image } from "expo-image";
-import { StyleSheet, View } from "react-native";
-import Animated, {
-  Easing,
-  Keyframe,
-  useAnimatedStyle,
-  useReducedMotion,
-  withTiming,
-} from "react-native-reanimated";
+import { Image } from 'expo-image';
+import { StyleSheet, View } from 'react-native';
+import Animated, { Easing, Keyframe, useAnimatedStyle, useReducedMotion, withTiming } from 'react-native-reanimated';
 
-import { ThemedText } from "@/components/themed-text";
-import {
-  Colors,
-  Curve,
-  MaxContentWidth,
-  Motion,
-  PhotoScrim,
-  Spacing,
-} from "@/constants/theme";
+import { ThemedText } from '@/components/themed-text';
+import { Colors, Curve, MaxContentWidth, Motion, PhotoScrim, Spacing } from '@/constants/theme';
 
-import balconyMorningView from "@/assets/images/scenes/balcony-morning-view.webp";
-import spiceMarketBarrels from "@/assets/images/scenes/spice-market-barrels.webp";
-import stormOverForestRidge from "@/assets/images/scenes/storm-over-forest-ridge.webp";
-import vernazzaBlueHour from "@/assets/images/scenes/vernazza-blue-hour.webp";
+import balconyMorningView from '@/assets/images/scenes/balcony-morning-view.webp';
+import spiceMarketBarrels from '@/assets/images/scenes/spice-market-barrels.webp';
+import stormOverForestRidge from '@/assets/images/scenes/storm-over-forest-ridge.webp';
+import vernazzaBlueHour from '@/assets/images/scenes/vernazza-blue-hour.webp';
 
 /**
  * The four beats, and the photography they carry — lifted whole from the web app's
@@ -39,26 +26,10 @@ import vernazzaBlueHour from "@/assets/images/scenes/vernazza-blue-hour.webp";
  * re-encodes, so there is one crop and one encode of each in the repo.
  */
 export const BEATS = [
-  {
-    photo: vernazzaBlueHour,
-    label: "The Blue Hour",
-    stat: "One 20-minute window, every evening",
-  },
-  {
-    photo: spiceMarketBarrels,
-    label: "Real Prices",
-    stat: "Lodging, food, and transit — itemized",
-  },
-  {
-    photo: stormOverForestRidge,
-    label: "Live Weather",
-    stat: "Real forecast, up to 16 days out",
-  },
-  {
-    photo: balconyMorningView,
-    label: "Three Ways to Travel",
-    stat: "Budget · Mid-range · Luxury",
-  },
+  { photo: vernazzaBlueHour, label: 'The Blue Hour', stat: 'One 20-minute window, every evening' },
+  { photo: spiceMarketBarrels, label: 'Real Prices', stat: 'Lodging, food, and transit — itemized' },
+  { photo: stormOverForestRidge, label: 'Live Weather', stat: 'Real forecast, up to 16 days out' },
+  { photo: balconyMorningView, label: 'Three Ways to Travel', stat: 'Budget · Mid-range · Luxury' },
 ] as const;
 /**
  * How long a beat holds. Long on purpose: at three or four seconds this reads as a slideshow
@@ -93,11 +64,7 @@ export const STACK_ABOVE_SCALE = 1.2;
  */
 const rise = new Keyframe({
   0: { opacity: 0, transform: [{ translateY: 14 }] },
-  100: {
-    opacity: 1,
-    transform: [{ translateY: 0 }],
-    easing: Easing.bezier(...Curve),
-  },
+  100: { opacity: 1, transform: [{ translateY: 0 }], easing: Easing.bezier(...Curve) },
 });
 
 /**
@@ -143,19 +110,14 @@ export function SceneBand({ beat, height }: { beat: number; height: number }) {
   // other timed animation — the style re-evaluates when `height` changes and there is no shared
   // value to keep in step with React state.
   const bandStyle = useAnimatedStyle(
-    () => ({
-      height: withTiming(height, {
-        duration: Motion.settle,
-        easing: Easing.bezier(...Curve),
-      }),
-    }),
+    () => ({ height: withTiming(height, { duration: Motion.settle, easing: Easing.bezier(...Curve) }) }),
     [height],
   );
 
   return (
     <Animated.View style={[styles.band, bandStyle]}>
       {/* One `Image` whose source changes, rather than a stack of them cross-faded by hand:
-            `transition` is exactly this, and expo-image holds the outgoing frame itself. */}
+          `transition` is exactly this, and expo-image holds the outgoing frame itself. */}
       <Image
         source={current.photo}
         style={StyleSheet.absoluteFill}
@@ -167,9 +129,9 @@ export function SceneBand({ beat, height }: { beat: number; height: number }) {
         alt=""
       />
       {/* `PhotoScrim` is measured, not picked — destination photography runs to 0.947 mean
-            luminance, where white text needs this much to clear contrast. Only tracked caps and
-            display type ride a picture (the Photograph-Is-Not-A-Surface rule), which is exactly
-            what the caption is. */}
+          luminance, where white text needs this much to clear contrast. Only tracked caps and
+          display type ride a picture (the Photograph-Is-Not-A-Surface rule), which is exactly
+          what the caption is. */}
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
       <Animated.View
         // Re-keyed per beat so the caption rises with each photograph instead of swapping under
@@ -177,13 +139,8 @@ export function SceneBand({ beat, height }: { beat: number; height: number }) {
         key={beat}
         entering={rise.duration(Motion.settle)}
         exiting={fade.duration(Motion.settle)}
-        style={styles.caption}
-      >
-        <ThemedText
-          type="label"
-          themeColor="onDeep"
-          style={styles.captionLabel}
-        >
+        style={styles.caption}>
+        <ThemedText type="label" themeColor="onDeep" style={styles.captionLabel}>
           {current.label}
         </ThemedText>
         {height > BAND_COLLAPSED ? (
@@ -201,8 +158,8 @@ const styles = StyleSheet.create({
     // Squared, not rounded: this is read, not touched, and it reaches three screen edges. The
     // bottom hairline is the whole separation between the picture and the form — the system draws
     // rules rather than putting a card around things.
-    overflow: "hidden",
-    justifyContent: "flex-end",
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
     backgroundColor: Colors.surfaceDeep,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.cardBorder,
@@ -216,8 +173,8 @@ const styles = StyleSheet.create({
     gap: Spacing.tight,
     // Matches the page gutter below the rule, so the caption and the form share one left edge.
     maxWidth: MaxContentWidth,
-    width: "100%",
-    alignSelf: "center",
+    width: '100%',
+    alignSelf: 'center',
   },
   // Paper at 72%, the same step the trip masthead's overline takes. Opacity rather than `muted`,
   // which is tuned for the canvas and goes grey over a photograph.
