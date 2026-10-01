@@ -18,6 +18,13 @@ import { altitudeForRegion, drawableStops, regionForStops } from '@/lib/mapRegio
 const MAP_INSET = { top: 72, right: 0, bottom: 0, left: 0 };
 
 /**
+ * How far right of its coordinate Apple Maps places a custom marker, and therefore how far back
+ * `centerOffset` has to pull it. See the note at the `Marker` below for why `anchor` cannot do
+ * this job on iOS. Ignored on Android, where `anchor` is the working prop.
+ */
+const MARKER_SKEW_PT = 12;
+
+/**
  * A day's stops, on a map.
  *
  * **Apple Maps on iOS, Google on Android — and deliberately no `provider`.** Setting
@@ -222,21 +229,30 @@ export function DayMap({
             emphasis is reachable two ways: press the marker again, or press the caption. */}
         {line.length >= 2 ? (
           <>
-            {/* Two strokes, glow first: a thin core inside a soft spill. Order is the z-order —
-                Apple Maps ignores a Polyline's `zIndex` entirely. The Swift original blurs its
-                halo for real; a wide low-alpha stroke is a fake of that, and the honest word for
-                it is fake. */}
+            {/* **A casing and a core, not a spill and a thread.** It shipped as a 14pt glow at
+                33% under a 2pt core at 50%, which is a route you cannot see: scanning thirteen
+                rows across a real day, the core was detectable in four of them, and over
+                satellite neither stroke survives at all. A pale wash over photography is the
+                same mistake the stop discs made before they got their ring.
+
+                So the same answer as the discs — the day's own pale half, opaque, as a tight
+                casing around an opaque core. Both tokens keep their meaning: `dayGlow` is still
+                "the pale half of each day's pair", still drawn under, still never the core's own
+                colour. What changes is that it outlines rather than spills, which is what works
+                on a ground the app does not control.
+
+                Order is the z-order: Apple Maps ignores a Polyline's `zIndex` entirely. */}
             <Polyline
               coordinates={line}
-              strokeColor={`${dayGlow(dayIndex)}54`}
-              strokeWidth={14}
+              strokeColor={dayGlow(dayIndex)}
+              strokeWidth={7}
               lineCap="round"
               lineJoin="round"
             />
             <Polyline
               coordinates={line}
-              strokeColor={`${dayCore(dayIndex)}80`}
-              strokeWidth={2}
+              strokeColor={dayCore(dayIndex)}
+              strokeWidth={3}
               lineCap="round"
               lineJoin="round"
             />
@@ -251,6 +267,8 @@ export function DayMap({
           <Marker
             coordinate={{ latitude: here.lat, longitude: here.lng }}
             anchor={{ x: 0.5, y: 0.5 }}
+            // The same correction as the stop discs — see the note on `centerOffset` below.
+            centerOffset={{ x: -MARKER_SKEW_PT, y: 0 }}
             zIndex={0}
             // The cone's rotation is a JS transform on this marker's content (the native
             // `rotation` prop is Google-only on iOS), so the marker has to be re-rasterised to
@@ -356,10 +374,19 @@ function StopMarker({
   return (
     <Marker
       coordinate={{ latitude: stop.lat, longitude: stop.lng }}
-      // Android anchors a custom marker at its bottom edge, iOS at its centre. Without this the
-      // disc sits on its coordinate on one platform and floats a radius above it on the other —
-      // plausible-looking on both, wrong on one.
+      // Android anchors a custom marker at its bottom edge, so it needs this.
       anchor={{ x: 0.5, y: 0.5 }}
+      // **`anchor` does nothing on iPhone, and that is why the discs never met the route.**
+      // react-native-maps documents it: "@platform iOS: Google Maps only. For Apple Maps, see
+      // the `centerOffset` prop" — the fourth prop in this file with that trap, after
+      // `onPoiClick`, `showsMyLocationButton` and `Marker.rotation`. So the disc has always sat
+      // 12pt right of its coordinate on Apple Maps while the polyline sat on it, and the route
+      // ran past the discs rather than through them.
+      //
+      // Measured rather than guessed: `centerOffset` responds exactly 1:1 (applying -13,-13
+      // moved the disc -13.0,-13.0), and fitting the drawn line's axis against the two disc
+      // centres puts the residual at 12pt on the horizontal with nothing vertical.
+      centerOffset={{ x: -MARKER_SKEW_PT, y: 0 }}
       // Deterministic stacking for the stop pairs that sit ten metres apart, with the one you
       // are pointing at always on top.
       zIndex={emphasised ? 999 : index}
