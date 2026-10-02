@@ -78,8 +78,17 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
 export function TextField({
   label,
   prefix,
+  ref,
   ...input
-}: TextInputProps & { label: string; prefix?: string }) {
+}: TextInputProps & {
+  label: string;
+  prefix?: string;
+  /**
+   * So a blocked press can put the cursor in the field it is waiting for. A plain prop rather
+   * than `forwardRef` — React 19 passes `ref` like any other.
+   */
+  ref?: React.Ref<TextInput>;
+}) {
   // Same hook `FieldRow` uses, and for the same reason: this one re-renders when the reader
   // changes the setting, instead of holding whatever the scale was at mount. See `prefixedWidth`
   // for what the box gets wrong without it.
@@ -93,6 +102,7 @@ export function TextField({
           </ThemedText>
         ) : null}
         <TextInput
+          ref={ref}
           // The cap `ThemedText` gives every other string, which a bare TextInput does not
           // inherit. Without it the value grew to ~3x while its label stopped at 1.6x, and the
           // value simply took the label's half of the row. `MAX_FONT_SCALE` is this number, and
@@ -308,16 +318,28 @@ export function PrimaryButton({
   onPress,
   disabled,
   busy,
+  accessibilityHint,
 }: {
   title: string;
   onPress: () => void;
   disabled?: boolean;
   busy?: boolean;
+  /**
+   * Why the press will not get you anywhere yet.
+   *
+   * **This is what replaces greying out an incomplete form.** DESIGN.md's Buttons section says to
+   * avoid disabled, and the screens now keep their primary live and explain on press — so
+   * `accessibilityState.disabled` must stay false, or VoiceOver announces "dimmed" on a button
+   * that is genuinely pressable. The hint is how the reason is heard *before* the press instead
+   * of only after it.
+   */
+  accessibilityHint?: string;
 }) {
   const inert = disabled || busy;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!inert }}
       disabled={inert}
       onPress={onPress}
@@ -371,6 +393,8 @@ export function PillButton({
   tone = 'accent',
   compact,
   block,
+  busy,
+  accessibilityHint,
   role = 'button',
   accessibilityLabel,
   style,
@@ -402,6 +426,14 @@ export function PillButton({
    * a block should still size to its words.
    */
   block?: boolean;
+  /**
+   * The work this capsule asked for is happening. Keeps the surface and swaps the label for a
+   * spinner — draining a secondary action's fill mid-flight would report it unavailable at the
+   * exact moment it is working, which is the same call `PrimaryButton` makes.
+   */
+  busy?: boolean;
+  /** Why the press will not get you anywhere yet — see `PrimaryButton`. */
+  accessibilityHint?: string;
   /** `link` where the press leaves the app, so VoiceOver says so. */
   role?: 'button' | 'link';
   accessibilityLabel?: string;
@@ -411,8 +443,9 @@ export function PillButton({
     <Pressable
       accessibilityRole={role}
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled: !!disabled }}
-      disabled={disabled}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: !!disabled || !!busy }}
+      disabled={disabled || busy}
       onPress={onPress}
       style={({ pressed }) => [
         styles.pill,
@@ -424,19 +457,23 @@ export function PillButton({
         pressed && !disabled && styles.pillPressed,
       ]}
       android_ripple={disabled ? undefined : { color: Colors.pressed }}>
-      <ThemedText
-        type={compact ? 'detail' : 'headingSmall'}
-        themeColor={
-          disabled
-            ? 'muted'
-            : tone === 'primary'
-              ? 'accentForeground'
-              : tone === 'quiet'
-                ? 'accent'
-                : tone
-        }>
-        {title}
-      </ThemedText>
+      {busy ? (
+        <ActivityIndicator color={tone === 'primary' ? Colors.accentForeground : Colors.accent} />
+      ) : (
+        <ThemedText
+          type={compact ? 'detail' : 'headingSmall'}
+          themeColor={
+            disabled
+              ? 'muted'
+              : tone === 'primary'
+                ? 'accentForeground'
+                : tone === 'quiet'
+                  ? 'accent'
+                  : tone
+          }>
+          {title}
+        </ThemedText>
+      )}
     </Pressable>
   );
 }
