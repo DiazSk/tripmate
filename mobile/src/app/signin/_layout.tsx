@@ -4,7 +4,6 @@ import { Keyboard, Platform, StyleSheet, useWindowDimensions, View } from 'react
 import { useReducedMotion } from 'react-native-reanimated';
 
 import {
-  BAND_COLLAPSED,
   BAND_RATIO,
   BAND_RATIO_FORM,
   BEATS,
@@ -81,17 +80,17 @@ export default function AuthLayout() {
     };
   }, []);
 
-  // The form carries more below the fold than the chooser does, so it gets a shorter band. Both
-  // collapses still win: the keyboard and the Dynamic Type threshold outrank the route.
+  // The form carries more below the fold than the chooser does, so it gets a shorter band.
   const onForm = usePathname().startsWith('/signin/form');
-  const bandHeight =
-    keyboardUp || fontScale > STACK_ABOVE_SCALE
-      ? BAND_COLLAPSED
-      : Math.round(height * (onForm ? BAND_RATIO_FORM : BAND_RATIO));
+  const bandHeight = Math.round(height * (onForm ? BAND_RATIO_FORM : BAND_RATIO));
+  // And the collapse outranks the route: whichever screen is up, the keyboard and the Dynamic
+  // Type threshold take the room. `SceneBand` eases this one and applies the height above
+  // directly — see its `bandStyle` for why only one of the two is animated.
+  const collapsed = keyboardUp || fontScale > STACK_ABOVE_SCALE;
 
   return (
     <View style={styles.root}>
-      <SceneBand beat={beat} height={bandHeight} />
+      <SceneBand beat={beat} height={bandHeight} collapsed={collapsed} />
       <Stack
         screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.canvas } }}
       />

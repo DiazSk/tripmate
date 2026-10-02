@@ -1,6 +1,13 @@
 import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, Keyframe, useAnimatedStyle, useReducedMotion, withTiming } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  Keyframe,
+  useAnimatedStyle,
+  useDerivedValue,
+  useReducedMotion,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Curve, MaxContentWidth, Motion, PhotoScrim, Spacing } from '@/constants/theme';
@@ -128,15 +135,48 @@ const fade = new Keyframe({
  * inset by the safe area instead. A band that starts below the notch reads as a picture pasted
  * onto a screen rather than as the screen itself.
  */
-export function SceneBand({ beat, height }: { beat: number; height: number }) {
+export function SceneBand({
+  beat,
+  height,
+  collapsed,
+}: {
+  beat: number;
+  /** The band's height for the route under it, applied immediately — see `bandStyle`. */
+  height: number;
+  /** Whether the keyboard or the type scale has taken the room. This is the part that eases. */
+  collapsed: boolean;
+}) {
   const reduceMotion = useReducedMotion();
   const current = BEATS[beat];
 
-  // Reading a plain JS number out of the closure, which is how `trip/[id].tsx` drives its only
-  // other timed animation — the style re-evaluates when `height` changes and there is no shared
-  // value to keep in step with React state.
+  /**
+   * **Only the collapse is animated. A change of route is not.**
+   *
+   * Both used to run through one `withTiming` on `height`, and `height` is a layout property —
+   * animating it re-runs layout for this band and for everything below it, the `Stack` and the
+   * screen and the form, on every frame. Over a 420ms push that was three faults at once: the
+   * transition stuttered, the canvas below was visibly expanding, and for most of the window the
+   * form had less room than its content, so its primary button sat clipped. The clipping *was*
+   * the animation.
+   *
+   * A route's band height belongs to that route, so it arrives with it: `height` is used
+   * directly and takes effect on the frame the route changes. What eases is the collapse, as a
+   * 0-to-1 progress between the route's height and `BAND_COLLAPSED` — there the content *gains*
+   * room as the band shrinks, so nothing can clip, and snapping the photograph away the instant
+   * a keyboard appears is the jarring version.
+   *
+   * Expressing it as progress rather than as a duration is what keeps it honest: there is no
+   * previous-value to remember, so nothing has to read a ref during render to work out which
+   * kind of change this was.
+   */
+  const collapseProgress = useDerivedValue(() =>
+    withTiming(collapsed ? 1 : 0, {
+      duration: reduceMotion ? 0 : Motion.settle,
+      easing: Easing.bezier(...Curve),
+    }),
+  );
   const bandStyle = useAnimatedStyle(
-    () => ({ height: withTiming(height, { duration: Motion.settle, easing: Easing.bezier(...Curve) }) }),
+    () => ({ height: height + (BAND_COLLAPSED - height) * collapseProgress.value }),
     [height],
   );
 
@@ -169,11 +209,15 @@ export function SceneBand({ beat, height }: { beat: number; height: number }) {
         <ThemedText type="label" themeColor="onDeep" style={styles.captionLabel}>
           {current.label}
         </ThemedText>
-        {height > BAND_COLLAPSED ? (
+        {/* **`collapsed`, not a height comparison.** `height` is the route's full height now and
+            the collapse is a separate progress, so testing it against `BAND_COLLAPSED` was always
+            true — which drew the display line into the 132pt sliver, where it ran up into the
+            status bar. */}
+        {collapsed ? null : (
           <ThemedText type="display" themeColor="onDeep" numberOfLines={2}>
             {current.stat}
           </ThemedText>
-        ) : null}
+        )}
       </Animated.View>
     </Animated.View>
   );
