@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { signIn, signUp } from '@/api/auth';
@@ -9,6 +9,7 @@ import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { authMode } from '@/lib/authMode';
+import { authGap } from '@/lib/formGap';
 
 /**
  * Sign in, or make an account — the second of the two screens this flow is.
@@ -46,6 +47,12 @@ export default function AuthFormScreen() {
   const rootNavigation = useNavigation('/');
 
   async function submit() {
+    if (gap) {
+      setAsked(true);
+      (gap.field === 'email' ? emailField : passwordField).current?.focus();
+      return;
+    }
+
     setBusy(true);
     setError(null);
 
@@ -87,7 +94,15 @@ export default function AuthFormScreen() {
     else router.replace('/(tabs)/trips');
   }
 
-  const ready = email.trim().length > 0 && password.length >= 8;
+  /**
+   * Live, not greyed. The same rule the wizard follows: DESIGN.md says to avoid disabled and
+   * handle the empty case at submit, where focus moves to the field. Derived every render, so
+   * filling the field clears the sentence without a reset.
+   */
+  const gap = authGap(email, password);
+  const [asked, setAsked] = useState(false);
+  const emailField = useRef<TextInput>(null);
+  const passwordField = useRef<TextInput>(null);
 
   return (
     <KeyboardAvoidingView
@@ -121,6 +136,7 @@ export default function AuthFormScreen() {
               />
             ) : null}
             <TextField
+              ref={emailField}
               label="Email"
               value={email}
               onChangeText={setEmail}
@@ -133,6 +149,7 @@ export default function AuthFormScreen() {
             {/* `textContentType` is what lets iOS offer the keychain entry, and it has to say
                 which of the two this is — otherwise it proposes a new password on a sign-in. */}
             <TextField
+              ref={passwordField}
               label="Password"
               value={password}
               onChangeText={setPassword}
@@ -151,10 +168,22 @@ export default function AuthFormScreen() {
 
           {error ? <Notice>{error}</Notice> : null}
 
+          {/* Muted rather than alert: an unfilled field is not a failure, and the server's own
+              refusals are what `Notice` above is for. */}
+          {asked && gap ? (
+            <ThemedText
+              type="detail"
+              themeColor="muted"
+              accessibilityLiveRegion="polite"
+              style={styles.hint}>
+              {gap.reason}
+            </ThemedText>
+          ) : null}
+
           <PrimaryButton
             title={creating ? 'Create account' : 'Sign in'}
             onPress={submit}
-            disabled={!ready}
+            accessibilityHint={gap?.reason}
             busy={busy}
           />
 
