@@ -883,10 +883,24 @@ actually are; new surfaces take `{rounded.surface-lg}` or tighter.
   in-page state rather than navigating.
 - **Destructive:** coral fill, the only place the app spends its alert colour on a button someone
   presses on purpose.
-- **Disabled:** avoid. The hero's go button uses `aria-disabled` with a cursor change and never
-  greys out, because a washed-out mint pill is what a first-time visitor would see for the first
-  three seconds and no consumer product ships a greyed-out hero CTA. The empty case is handled at
-  submit, where focus moves to the field.
+- **Disabled, in three states.** The web said only "avoid", and the mobile port read that as
+  licence to grey out anything unfinished — which on the plan wizard's first step produced six
+  controls, none of them carrying jade, because an untouched draft disables almost everything.
+  The three situations are different and only one of them is disabled:
+  - **Unavailable** — offline, no handler, a range limit. Nothing the reader types fixes it.
+    `disabled`, with the inert slate fill and muted ink (`buttonInert`). The `disabled={offline}`
+    controls in `trip/[id].tsx` and `day-page.tsx` are this.
+  - **In flight** — `busy`. Keeps its fill and shows a spinner. Draining the surface would report
+    the action unavailable at the moment it is working.
+  - **Incomplete** — the form is not filled in yet. **Not disabled.** The control stays
+    full-strength and pressing it names what is missing and focuses that field, which is what the
+    hero's `aria-disabled` has always done on the web: no consumer product ships a greyed-out
+    hero CTA. `src/lib/formGap.ts` decides what is missing; `accessibilityHint` carries the reason
+    to a screen reader, and `accessibilityState.disabled` must stay **false**, or VoiceOver
+    announces "dimmed" on a button that is genuinely pressable.
+
+  The one exception is a composer's send button beside its own empty box (`chat-sheet.tsx`), where
+  greying is the universal convention and the gap is the thing you are already looking at.
 
 ### The Entry Capsule (signature)
 **The one light surface in the product, and the only place the system inverts.** A near-white pill
