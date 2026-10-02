@@ -386,6 +386,67 @@ which cannot read the preference, because the preference is a file this app writ
 `expo-splash-screen` does take a `dark` variant that would resolve it natively and for free, and
 the pin is exactly what makes that variant dead.
 
+### The token table (both appearances)
+
+The lookup. The reasoning is above — this is the place to read a value off.
+
+**Authority:** `mobile/src/constants/palette.ts` for both appearances. This file's own front-matter
+`colors:` block is the **dark set as the web ships it** and carries neither the light values nor
+the mobile-only surface ramp, so it is not the place to check light.
+
+| Token | Dark | Light |
+|---|---|---|
+| `canvas` | `#121110` | `#F7F5F2` |
+| `surfaceDeep` | `#1C1A18` | `#EBE9E6` |
+| `panel` | `#1C1A189E` (62%) | `#1C1A1809` (3.5%) |
+| `control` | `#1C1A188C` (55%) | `#1C1A1807` (2.7%) |
+| `bar` | `#1C1A18B8` (72%) | `#1C1A180A` (3.9%) |
+| `pressed` | `#1C1A18D1` (82%) | `#1C1A180C` (4.7%) |
+| `foreground` | `#F7F5F2` | `#121110` |
+| `muted` | `#F7F5F29E` (62%) | `#1211109E` (62%) |
+| `cardBorder` | `#FFFFFF1F` (12%) | `#0000001F` (12%) |
+| `accent` | `#28B981` | `#245E48` |
+| `accentForeground` | `#06241A` | `#EAFAF4` |
+| `accentWash` | `#28B98117` (9%) | `#28B9812D` (18%) |
+| `money` | `#E9B44C` | `#886019` |
+| `moneySoft` | `#E9B44C2E` (18%) | `#E9B44C5A` (35%) |
+| `alert` | `#E4553F` | `#AE3F2C` |
+| `alertSoft` | `#E4553F29` (16%) | `#E4553F2F` (18%) |
+| `onDeep` | `#F7F5F2` | **unchanged** |
+| `onDeepMuted` | `#F7F5F29E` | **unchanged** |
+| `photoBorder` | `#FFFFFF24` | **unchanged** |
+
+Four things the table encodes rather than states:
+
+- **The four surface rows are one colour.** `#1C1A18` at four alphas in dark, the same slate at
+  four much smaller alphas over paper. A fifth grey never appears.
+- **`foreground` and `canvas` trade places.** Nothing else in the neutral column is sampled.
+- **The soft tints keep their dark hex** and change only alpha, which is how "no new accent
+  colours" holds for tints as well as for roles.
+- **The last three rows are the ones that do not move**, because they are drawn on photography
+  rather than on a page.
+
+And the colours outside the palette, invariant by the same logic — they are measured against
+terrain, not against the page:
+
+| Token | Value | Where |
+|---|---|---|
+| `RouteDayCore` | `#4E8C99` `#A46E93` `#C4784B` `#7E9C5E` `#7B77AE` | a day's route line, and its disc |
+| `RouteDayGlow` | `#7FB3BD` `#C596B6` `#DFA079` `#A6BF89` `#A6A2D0` | the halo under that line |
+| `DiscInk` | `#12110FEB` | the numeral on a day disc |
+| `OverPhotograph.accentDisc` | `#28B981` | the emphasised stop, which keeps the bright jade |
+| `OverPhotograph.money` | `#E9B44C` | a cost on glass over imagery |
+| `PhotoScrim` | `0.58` | the scrim over destination photography |
+| `PhotoScrimLight` | `0.34` | parked; the number if those mastheads ever go light |
+
+The two `OverPhotograph` entries exist because the light cuts failed on the device and not on
+paper: `#245E48` with `DiscInk` on a stop pin measures **2.49:1**, and `#886019` on dark glass over
+rooftops is an olive smudge. A mark standing on the map takes the map's values.
+
+**Light is mobile-only.** `src/app/globals.css` has no `prefers-color-scheme` or `[data-theme]`
+block at all — the web is the dark column, full stop. On mobile the appearance is chosen once at
+module load and defaults to dark; see the section above for the flag and its named gaps.
+
 ### Tertiary (map-native, outside the interface palette)
 These are the route's own colours. They are **not** part of the interface palette and must never
 appear in a panel, chip or button — the globe gets its own colours because it is photography, not a
@@ -858,7 +919,7 @@ Where a rule spans a cell, the cell must be `items-stretch` and re-centre its ow
 only span the full height if the box carrying it is that tall.
 
 No clip-path silhouettes, no angled cuts, no decorative geometry. The one drawn mark in the system is
-`LogoMark`: a glass globe, a route lifting off it, and the jade stop it lands on (the one-colour glyph
+`LogoMark`: a glass globe, a route lifting off it, and the jade stop it lands on (the small cut
 of the Meridian app icon, masters in `mobile/assets/brand/`). `SectionOpener`'s six-stroke rule and the
 four-point `ButtonMark` are the landing's own punctuation and are deliberately not the logo. Every
 icon in the product is inline SVG, sized in `em` so it tracks its type step.
