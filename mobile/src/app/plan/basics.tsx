@@ -1,3 +1,4 @@
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { SymbolView } from 'expo-symbols';
 import { Stack, useRouter } from 'expo-router';
@@ -27,7 +28,14 @@ import { anchorKey, mergeAnchors } from '@/lib/anchors';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
 import { crossFieldProblem, gapSentence, hasImportContent, planGap } from '@/lib/formGap';
+import { summariseUnread } from '@/lib/unreadSummary';
 import { closestTier, tierName, tripDays } from '@/lib/tiers';
+
+/**
+ * The long edge every screenshot is shrunk to before upload — the size Anthropic's vision API
+ * downsamples to, so anything larger is bytes and tokens spent on detail the model discards.
+ */
+const LONG_EDGE = 1568;
 
 export default function Basics() {
   const router = useRouter();
@@ -566,22 +574,50 @@ function ImportSection({
   const [busy, setBusy] = useState(false);
   const [unread, setUnread] = useState<string[]>([]);
 
+  /**
+   * Pick screenshots, and **shrink them before they are ever encoded**.
+   *
+   * The picker used to be asked for `base64` at full camera resolution. Base64 inflates bytes by
+   * about a third, so five to seven phone photos cleared `/api/import`'s 10MB body cap and the
+   * traveller got "That's a lot at once — try fewer screenshots." The `selectionLimit: 20` this
+   * advertises had never actually been reachable.
+   *
+   * **1568px is not a guess**: it is the long edge Anthropic's vision API downsamples to, so
+   * every pixel above it was bytes uploaded and tokens billed for detail the model never saw.
+   * Resized and re-encoded, twenty screenshots land around 5MB — inside the cap, with the
+   * extraction reading exactly what it read before.
+   *
+   * So the picker is no longer asked for `base64` or `quality`: it hands back the original file
+   * and the manipulator does the one encode, instead of the picker building a full-resolution
+   * base64 in memory for every image and this throwing most of it away.
+   */
   async function pickScreenshots() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: 20,
-      quality: 0.5,
-      base64: true,
     });
     if (result.canceled) return;
-    const picked = result.assets
-      .filter((asset) => asset.base64)
-      .map((asset) => ({
-        mediaType: mediaTypeOf(asset.mimeType),
-        data: asset.base64!,
-      }));
-    setImages((prev) => [...prev, ...picked]);
+
+    const picked = await Promise.all(
+      result.assets.map(async (asset) => {
+        const context = ImageManipulator.manipulate(asset.uri);
+        // Resize on the longer side so the ratio is kept — passing one dimension lets the
+        // manipulator work the other out. A `0` dimension means the system did not report one,
+        // and `0 > LONG_EDGE` is false, so those pass through unresized rather than crash.
+        if (Math.max(asset.width, asset.height) > LONG_EDGE) {
+          context.resize(asset.width >= asset.height ? { width: LONG_EDGE } : { height: LONG_EDGE });
+        }
+        const image = await context.renderAsync();
+        const saved = await image.saveAsync({
+          format: SaveFormat.JPEG,
+          compress: 0.6,
+          base64: true,
+        });
+        return saved.base64 ? { mediaType: 'image/jpeg' as const, data: saved.base64 } : null;
+      }),
+    );
+    setImages((prev) => [...prev, ...picked.filter((image) => image !== null)]);
   }
 
   async function findPlaces() {
@@ -682,8 +718,10 @@ function ImportSection({
 
       {unread.length > 0 ? (
         <View accessibilityLiveRegion="polite" style={styles.importUnread}>
-          {unread.map((reason, i) => (
-            <ThemedText key={i} type="detail" themeColor="muted">
+          {/* One line per *reason*, not per file — four unreadable screenshots said the same
+              sentence four times. See `summariseUnread`. */}
+          {summariseUnread(unread).map((reason) => (
+            <ThemedText key={reason} type="detail" themeColor="muted">
               {reason}
             </ThemedText>
           ))}
@@ -721,12 +759,6 @@ function ImportSection({
       ) : null}
     </View>
   );
-}
-
-function mediaTypeOf(mimeType: string | undefined | null): 'image/jpeg' | 'image/png' | 'image/webp' {
-  if (mimeType === 'image/png') return 'image/png';
-  if (mimeType === 'image/webp') return 'image/webp';
-  return 'image/jpeg';
 }
 
 /** `YYYY-MM-DD`, n days from today, read with local accessors to match the date picker. */
@@ -778,7 +810,9 @@ const styles = StyleSheet.create({
     rowGap: Spacing.hair,
     minHeight: 44,
     paddingHorizontal: Spacing.tight,
-    paddingVertical: Spacing.hair,
+    // 8, not 4: the capsule is itself 44pt inside a 44pt-minimum row, so at `hair` its bottom
+    // edge all but touched the box's own border.
+    paddingVertical: Spacing.tight,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.cardBorder,
   },
