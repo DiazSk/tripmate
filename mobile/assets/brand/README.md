@@ -1,7 +1,19 @@
 # TripMate logo — Meridian
 
-A glass globe, a route that lifts off it, and one jade stop. The globe is the live map behind the
-product, the arc is its route tubes, the jade dot is "jade acts": the place you are going.
+A glass globe, **two** routes across it, and one jade stop. The globe is the live map behind the
+product, the arcs are its route tubes, the jade dot is "jade acts": the place you are going.
+
+**Two paths, one destination — that is the logo's argument, and it is the product's.** The solid
+arc lifts off the globe; the dashed one runs low and flat. They share both endpoints: the same
+start dot, the same jade stop. Two people travelling differently, arriving together.
+
+The dashed route used to be drawn at `stroke-width="1.3"` / 35% — *thinner* than the 1.5 globe
+graticule it has to be told apart from, so it read as another latitude line and the mark said only
+"travel". It is `2.6` / 78% now, which clears the graticule and stays under the solid arc's 3.2 so
+the hierarchy holds. Checked where it actually matters: it survives **Tinted**, where iOS strips
+all colour and only luminance is left (see iOS appearances below). Below ~48px none of this
+survives at all, which is what `small.svg` and `mono.svg` are for — they carry one route, and
+should not be given a second.
 
 ## Files (SVG masters, 256-unit viewBox)
 
