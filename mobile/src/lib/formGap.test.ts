@@ -1,4 +1,4 @@
-import { authGap, crossFieldProblem, planGap } from './formGap';
+import { authGap, crossFieldProblem, hasImportContent, planGap } from './formGap';
 
 const complete = {
   destination: 'Kyoto, Japan',
@@ -73,5 +73,23 @@ describe('authGap', () => {
 describe('crossFieldProblem', () => {
   it('says nothing while either date is unset, so a half-filled form is not scolded', () => {
     expect(crossFieldProblem('', '2026-11-06')).toBeUndefined();
+  });
+});
+
+describe('hasImportContent', () => {
+  it('is false for an empty box with no screenshots', () => {
+    expect(hasImportContent('', 0)).toBe(false);
+  });
+
+  it('is false for whitespace only, so a press focuses the box instead of posting nothing', () => {
+    expect(hasImportContent('   \n  ', 0)).toBe(false);
+  });
+
+  it('is true for a pasted line', () => {
+    expect(hasImportContent('https://example.com/place', 0)).toBe(true);
+  });
+
+  it('is true for screenshots with an empty box', () => {
+    expect(hasImportContent('', 2)).toBe(true);
   });
 });

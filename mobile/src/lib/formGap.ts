@@ -72,3 +72,13 @@ export function authGap(email: string, password: string): Gap | null {
   }
   return null;
 }
+
+/**
+ * Whether the import composer has anything to work on.
+ *
+ * Trimmed, because a box holding only spaces is an empty box — pressing the action there should
+ * put the cursor back in it rather than post an import with nothing in it.
+ */
+export function hasImportContent(text: string, imageCount: number): boolean {
+  return text.trim().length > 0 || imageCount > 0;
+}

@@ -1,8 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
+import { SymbolView } from 'expo-symbols';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -26,7 +26,7 @@ import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
 import { anchorKey, mergeAnchors } from '@/lib/anchors';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
-import { crossFieldProblem, planGap } from '@/lib/formGap';
+import { crossFieldProblem, hasImportContent, planGap } from '@/lib/formGap';
 import { closestTier, tierName, tripDays } from '@/lib/tiers';
 
 export default function Basics() {
@@ -620,46 +620,64 @@ function ImportSection({
       prev.map((a) => (a.name === name ? { ...a, priority: a.priority === 'must' ? 'want' : 'must' } : a))
     );
   const remove = (name: string) => onAnchorsChange((prev) => prev.filter((a) => a.name !== name));
-  const canFind = !busy && (text.trim().length > 0 || images.length > 0);
+  const box = useRef<TextInput>(null);
+  const hasContent = hasImportContent(text, images.length);
 
   return (
     <View style={styles.import}>
-      <TextInput
-        value={text}
-        onChangeText={setText}
-        placeholder="Paste links or notes"
-        placeholderTextColor={Colors.muted}
-        selectionColor={Colors.accent}
-        multiline
-        maxFontSizeMultiplier={1.6}
-        style={styles.importInput}
-      />
-
-      <View style={styles.importActions}>
-        <Pressable
-          onPress={() => void pickScreenshots()}
-          accessibilityRole="button"
-          style={styles.importButton}>
-          <ThemedText type="label" themeColor="foreground">
-            {images.length > 0 ? `Screenshots (${images.length})` : 'Add screenshots'}
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => void findPlaces()}
-          disabled={!canFind}
-          accessibilityRole="button"
-          style={[styles.importButton, styles.importButtonPrimary, !canFind && styles.importButtonInert]}>
-          {busy ? (
-            <ActivityIndicator color={Colors.accentForeground} />
-          ) : (
-            // The ink follows the fill. `accentForeground` is defined as the ink drawn ON jade,
-            // so leaving it on the inert slate would reproduce the unreadable label the fill
-            // above was just fixed for, one appearance over.
-            <ThemedText type="label" themeColor={canFind ? 'accentForeground' : 'muted'}>
-              Find the places
+      {/* **One object, not three.** The box is an input with two things that feed it and one
+          action that consumes it — `Add screenshots` is a second way to put content *in*, not a
+          sibling of `Find the places`. As peers below the box the two were the same capsule at
+          the same width and read as twins; in the footer they are an affordance and an action.
+          It also resolves a count: with `Next` permanently jade, a jade-filled `Find the places`
+          would be the screen's second fill, which the Primary Action Surface rule allows one
+          of. */}
+      <View style={styles.composer}>
+        <TextInput
+          ref={box}
+          value={text}
+          onChangeText={setText}
+          placeholder="Paste links or notes"
+          placeholderTextColor={Colors.muted}
+          selectionColor={Colors.accent}
+          multiline
+          maxFontSizeMultiplier={1.6}
+          style={styles.composerInput}
+        />
+        <View style={styles.composerFooter}>
+          <Pressable
+            onPress={() => void pickScreenshots()}
+            accessibilityRole="button"
+            accessibilityLabel={
+              images.length > 0 ? `Screenshots, ${images.length} added` : 'Add screenshots'
+            }
+            style={styles.attach}>
+            <SymbolView
+              // Object form, never a bare SF string — the Android path renders nothing at all
+              // given one, silently.
+              name={{ ios: 'photo.on.rectangle', android: 'image' }}
+              tintColor={images.length > 0 ? Colors.foreground : Colors.muted}
+              size={16}
+              fallback={
+                <ThemedText type="detail" themeColor="muted">
+                  +
+                </ThemedText>
+              }
+            />
+            <ThemedText type="detail" themeColor={images.length > 0 ? 'foreground' : 'muted'}>
+              {images.length > 0 ? `Screenshots (${images.length})` : 'Screenshots'}
             </ThemedText>
-          )}
-        </Pressable>
+          </Pressable>
+          {/* No `disabled`: an empty box is incomplete, not unavailable. Pressing it puts the
+              cursor in the box and says nothing — the gap is two centimetres away and a cursor
+              arriving explains itself, where a field three rows up does not. */}
+          <PillButton
+            compact
+            title="Find the places"
+            busy={busy}
+            onPress={() => (hasContent ? void findPlaces() : box.current?.focus())}
+          />
+        </View>
       </View>
 
       {unread.length > 0 ? (
@@ -730,42 +748,39 @@ const styles = StyleSheet.create({
   savedGroup: { gap: Spacing.hair },
   chipOn: { backgroundColor: Colors.accent },
   import: { gap: Spacing.tight },
-  importInput: {
-    minHeight: 72,
-    color: Colors.foreground,
-    fontSize: 14,
-    lineHeight: 20,
+  composer: {
     backgroundColor: Colors.panel,
     borderColor: Colors.cardBorder,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.surface,
+    // So the footer's rule meets the box's sides instead of floating inside its corners.
+    overflow: 'hidden',
+  },
+  composerInput: {
+    minHeight: 72,
+    color: Colors.foreground,
+    fontSize: 14,
+    lineHeight: 20,
     paddingHorizontal: Spacing.read,
     paddingVertical: Spacing.tight,
     textAlignVertical: 'top',
   },
-  importActions: { flexDirection: 'row', gap: Spacing.tight },
-  importButton: {
-    // **Half the row each, rather than sized to their words.** These two are a pair — put what
-    // you have in, then read it — and content-sized capsules made them a wide one and a narrow
-    // one with a ragged right edge against the input above. `flex: 1` also fixes the left one
-    // changing width the moment its label becomes "Screenshots (3)".
-    flex: 1,
-    minHeight: 44,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.control,
-    paddingHorizontal: Spacing.rows,
+  composerFooter: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    paddingHorizontal: Spacing.tight,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.cardBorder,
   },
-  importButtonPrimary: { backgroundColor: Colors.accent },
-  // The slate fill with muted ink, **not `opacity: 0.4`**, which is the same defect `buttonInert`
-  // carried: the fill and the label fade together, so the label measured 1.92:1 against its own
-  // button in the light appearance and the jade composited to a pastel that read as a brand
-  // colour rather than as unavailability. `palette.test.ts` holds the assertion for that pairing.
-  importButtonInert: {
-    backgroundColor: Colors.panel,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
+  // 44 is the floor, and the row is the target rather than the words in it.
+  attach: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.tight,
+    minHeight: 44,
+    paddingHorizontal: Spacing.tight,
   },
   importUnread: { gap: Spacing.hair },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.tight },
