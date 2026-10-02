@@ -26,7 +26,8 @@ import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
 import { anchorKey, mergeAnchors } from '@/lib/anchors';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
-import { closestTier, isEndBeforeStart, isTripTooLong, tierName, tripDays } from '@/lib/tiers';
+import { crossFieldProblem, planGap } from '@/lib/formGap';
+import { closestTier, tierName, tripDays } from '@/lib/tiers';
 
 export default function Basics() {
   const router = useRouter();
@@ -176,8 +177,38 @@ export default function Basics() {
   };
   const missed = draft.destinationMissed;
   const problem = crossFieldProblem(startDate, endDate);
-  const complete =
-    destination.trim().length > 0 && !!startDate && !!endDate && budget > 0 && !problem;
+
+  /**
+   * **Nothing here is disabled for being unfinished.** DESIGN.md: *"Disabled: avoid … The empty
+   * case is handled at submit, where focus moves to the field."* The wizard used to grey `Next`
+   * out until every field was in, which on an untouched draft left a screen of six controls with
+   * no jade on any of them — the product's one action colour spent on nothing.
+   *
+   * So the gap is derived every render rather than stored, which is what makes the sentence
+   * clear itself: fill the field and `gap` is `null` and the sentence goes, with no reset to
+   * forget. `asked` records only whether a blocked press has happened, so the screen stays quiet
+   * until the reader has actually asked for something.
+   */
+  const gap = planGap({ destination, startDate, endDate, budget });
+  const [asked, setAsked] = useState(false);
+  const destinationField = useRef<TextInput>(null);
+  const budgetField = useRef<TextInput>(null);
+
+  /**
+   * One way on, whichever button was pressed. The guard lives here rather than in a `disabled`
+   * prop, so the thing to be careful about is the early return: without it a second press would
+   * navigate on an incomplete form.
+   */
+  function goOn(proceed: () => void) {
+    if (gap) {
+      setAsked(true);
+      if (gap.field === 'destination') destinationField.current?.focus();
+      // `dates` is a native picker with nothing to focus, so that gap says its piece and stops.
+      if (gap.field === 'budget') budgetField.current?.focus();
+      return;
+    }
+    proceed();
+  }
 
   const days = startDate && endDate && !problem ? tripDays(startDate, endDate) : 0;
   const readout =
@@ -218,6 +249,7 @@ export default function Basics() {
 
         <FieldTrough>
           <TextField
+            ref={destinationField}
             label="Where"
             value={destination}
             onChangeText={setDestination}
@@ -264,6 +296,7 @@ export default function Basics() {
               draws, inside the box that gets clipped. */}
           <View>
             <TextField
+              ref={budgetField}
               label="Budget"
               value={budgetText}
               onChangeText={setBudget}
@@ -343,13 +376,27 @@ export default function Basics() {
           </ThemedText>
         ) : null}
 
+        {/* The gap, said once the reader has asked for something and not before.
+            **Muted, not alert** — a field you have not reached yet is not an error, and DESIGN.md
+            keeps coral for the impossible. The loud half of this feedback is the cursor moving
+            and the keyboard arriving; the sentence only names it. */}
+        {asked && gap ? (
+          <ThemedText
+            type="detail"
+            themeColor="muted"
+            accessibilityLiveRegion="polite"
+            style={styles.note}>
+            {gap.reason}
+          </ThemedText>
+        ) : null}
+
         {/* Two ways on. The optional steps sharpen the plan; they never gate it, so the fast
             path stays one tap from here. */}
         <View style={styles.action}>
           <PrimaryButton
             title="Next"
-            onPress={() => router.push('/plan/group')}
-            disabled={!complete}
+            onPress={() => goOn(() => router.push('/plan/group'))}
+            accessibilityHint={gap?.reason}
           />
           {/* **Jade text on a 44pt target — and that is the third version of this control, so
               the record is worth keeping straight.** It shipped as muted `detail` body copy,
@@ -367,8 +414,8 @@ export default function Basics() {
             block
             tone="quiet"
             title="Skip the questions and generate"
-            disabled={!complete}
-            onPress={() => router.replace('/plan/generating')}
+            accessibilityHint={gap?.reason}
+            onPress={() => goOn(() => router.replace('/plan/generating'))}
           />
         </View>
       </ScrollView>
@@ -671,16 +718,6 @@ function isoDaysFromNow(days: number): string {
   const m = `${d.getMonth() + 1}`.padStart(2, '0');
   const day = `${d.getDate()}`.padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
-}
-
-/** Copy taken from the Swift wizard, which had already settled the wording. */
-function crossFieldProblem(startDate: string, endDate: string): string | undefined {
-  if (!startDate || !endDate) return undefined;
-  if (isEndBeforeStart(startDate, endDate)) return 'End date must be on or after the start date.';
-  if (isTripTooLong(startDate, endDate)) {
-    return "Trips over 30 days aren't supported — please choose a shorter date range.";
-  }
-  return undefined;
 }
 
 const styles = StyleSheet.create({
