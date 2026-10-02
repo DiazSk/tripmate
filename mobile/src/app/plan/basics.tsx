@@ -26,7 +26,7 @@ import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
 import { anchorKey, mergeAnchors } from '@/lib/anchors';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
-import { crossFieldProblem, hasImportContent, planGap } from '@/lib/formGap';
+import { crossFieldProblem, gapSentence, hasImportContent, planGap } from '@/lib/formGap';
 import { closestTier, tierName, tripDays } from '@/lib/tiers';
 
 export default function Basics() {
@@ -380,13 +380,13 @@ export default function Basics() {
             **Muted, not alert** — a field you have not reached yet is not an error, and DESIGN.md
             keeps coral for the impossible. The loud half of this feedback is the cursor moving
             and the keyboard arriving; the sentence only names it. */}
-        {asked && gap ? (
+        {asked && gapSentence(gap, problem) ? (
           <ThemedText
             type="detail"
             themeColor="muted"
             accessibilityLiveRegion="polite"
             style={styles.note}>
-            {gap.reason}
+            {gapSentence(gap, problem)}
           </ThemedText>
         ) : null}
 
@@ -769,15 +769,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // **`wrap`, because the box clips and the action is on the right.** React Native defaults
+    // `flexShrink` to 0 rather than CSS's 1, so without this the row simply overflows at large
+    // type — and `composer`'s `overflow: 'hidden'` cuts off whichever end runs past, which is
+    // the capsule. `Screenshots (12)` beside the capsule needs roughly 400pt of a ~340pt row at
+    // AX3. `form.tsx`'s `timeRow` carries the same fix with the same note.
+    flexWrap: 'wrap',
+    rowGap: Spacing.hair,
     minHeight: 44,
     paddingHorizontal: Spacing.tight,
+    paddingVertical: Spacing.hair,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.cardBorder,
   },
-  // 44 is the floor, and the row is the target rather than the words in it.
+  // 44 is the floor, and the row is the target rather than the words in it. `flexShrink` so a
+  // long count gives way to the action rather than pushing it out of the box.
   attach: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
     gap: Spacing.tight,
     minHeight: 44,
     paddingHorizontal: Spacing.tight,

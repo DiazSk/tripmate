@@ -82,3 +82,21 @@ export function authGap(email: string, password: string): Gap | null {
 export function hasImportContent(text: string, imageCount: number): boolean {
   return text.trim().length > 0 || imageCount > 0;
 }
+
+/**
+ * The gap's sentence, unless the screen is already saying it.
+ *
+ * **The date rules feed two surfaces and they collided.** `crossFieldProblem` supplies the coral
+ * note `basics.tsx` renders the moment a range goes wrong, *and* the dates gap's own reason — the
+ * same string. So a blocked press printed it a second time in muted, one line under the coral
+ * one; and because the dates gap focuses nothing (the chips are a native picker), that duplicate
+ * was the entire response to the press. Worse, the two copies disagreed about what they meant:
+ * coral says "this is broken", muted says "you have not got here yet".
+ *
+ * Comparing the text rather than the field keeps the rule where the duplication actually is. A
+ * gap whose sentence is new still gets said.
+ */
+export function gapSentence(gap: Gap | null, alreadyShown: string | undefined): string | null {
+  if (!gap) return null;
+  return gap.reason === alreadyShown ? null : gap.reason;
+}

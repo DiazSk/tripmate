@@ -1,4 +1,4 @@
-import { authGap, crossFieldProblem, hasImportContent, planGap } from './formGap';
+import { authGap, crossFieldProblem, gapSentence, hasImportContent, planGap } from './formGap';
 
 const complete = {
   destination: 'Kyoto, Japan',
@@ -91,5 +91,33 @@ describe('hasImportContent', () => {
 
   it('is true for screenshots with an empty box', () => {
     expect(hasImportContent('', 2)).toBe(true);
+  });
+});
+
+describe('gapSentence', () => {
+  const dates = planGap({ ...complete, startDate: '2026-11-06', endDate: '2026-10-31' });
+
+  it('says nothing when the screen is already showing that exact sentence', () => {
+    // The date rules feed two things: the coral note the screen renders the moment a range goes
+    // wrong, and the dates gap's own reason. They are the same string, so a blocked press used
+    // to print it a second time in muted directly under the coral one — and since the dates gap
+    // focuses nothing, that duplicate was the *entire* response to the press.
+    expect(gapSentence(dates, 'End date must be on or after the start date.')).toBeNull();
+  });
+
+  it('says the gap when the screen is showing a different note', () => {
+    expect(gapSentence(dates, "We couldn't find that place, but the plan will still work.")).toBe(
+      'End date must be on or after the start date.',
+    );
+  });
+
+  it('says the gap when the screen is showing nothing', () => {
+    expect(gapSentence(planGap({ ...complete, budget: 0 }), undefined)).toBe(
+      'Add a budget — the plan stays inside it.',
+    );
+  });
+
+  it('says nothing when there is no gap', () => {
+    expect(gapSentence(null, undefined)).toBeNull();
   });
 });

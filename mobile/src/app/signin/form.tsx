@@ -9,7 +9,7 @@ import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { authMode } from '@/lib/authMode';
-import { authGap } from '@/lib/formGap';
+import { authGap, gapSentence } from '@/lib/formGap';
 
 /**
  * Sign in, or make an account — the second of the two screens this flow is.
@@ -170,13 +170,13 @@ export default function AuthFormScreen() {
 
           {/* Muted rather than alert: an unfilled field is not a failure, and the server's own
               refusals are what `Notice` above is for. */}
-          {asked && gap ? (
+          {asked && gapSentence(gap, error ?? undefined) ? (
             <ThemedText
               type="detail"
               themeColor="muted"
               accessibilityLiveRegion="polite"
               style={styles.hint}>
-              {gap.reason}
+              {gapSentence(gap, error ?? undefined)}
             </ThemedText>
           ) : null}
 
