@@ -1,7 +1,8 @@
 /**
- * The TripMate logo mark, reduced to a glyph: a globe, a route lifting off it, and the stop it lands
- * on. The full-colour app icon (glass lens, dawn light, jade stop) lives in `mobile/assets/brand/`;
- * this is its one-colour small cut, drawn thick enough to survive at the navbar's ~20px.
+ * The TripMate logo mark, reduced to a glyph: a lit glass globe, a route lifting off it, and the jade stop it
+ * lands on. The full app icon (glass lens, dawn light) lives in `mobile/assets/brand/`; this is its
+ * small cut, with the fine latitudes dropped and the route and stop made bold enough for ~20px. The
+ * rim follows `currentColor`, so it still tracks the wordmark; the globe and the jade stop are fixed.
  *
  * Inlined rather than loaded from `public/scenes/image-logo.svg` through `next/image`, for three
  * reasons in order of weight:
@@ -27,13 +28,28 @@
  */
 export default function LogoMark({ className = "h-[1em] w-[1em]" }: { className?: string }) {
   return (
-    <svg aria-hidden viewBox="0 0 18 18" fill="none" stroke="currentColor" className={`${className} shrink-0`}>
-      <circle cx="9" cy="9" r="7.6" strokeWidth="1.3" />
-      <ellipse cx="9" cy="9" rx="3.13" ry="6.80" strokeWidth="0.9" opacity="0.55" transform="rotate(-16 9 9)" />
-      <circle cx="13.30" cy="8.14" r="2.03" strokeWidth="0.9" />
-      <path d="M5.42 11.87Q7.85 -0.31 13.30 8.14" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="5.42" cy="11.87" r="0.78" fill="currentColor" stroke="none" />
-      <circle cx="13.30" cy="8.14" r="1.07" fill="currentColor" stroke="none" />
+    <svg aria-hidden viewBox="0 0 18 18" fill="none" className={`${className} shrink-0`}>
+      <defs>
+        <radialGradient id="lm-globe" cx="34%" cy="28%" r="80%">
+          <stop offset="0" stopColor="#2b3a35" />
+          <stop offset="1" stopColor="#0b0b0a" />
+        </radialGradient>
+        <linearGradient id="lm-rim" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="currentColor" stopOpacity="1" />
+          <stop offset="0.5" stopColor="currentColor" stopOpacity="0.45" />
+          <stop offset="1" stopColor="#ffbc98" stopOpacity="0.95" />
+        </linearGradient>
+      </defs>
+      <circle cx="9" cy="9" r="8.3" fill="url(#lm-globe)" />
+      <g transform="rotate(-16 9 9)" stroke="currentColor" strokeOpacity="0.4" strokeWidth="0.6">
+        <ellipse cx="9" cy="9" rx="3.3" ry="7.2" />
+        <ellipse cx="9" cy="9" rx="7.2" ry="1.5" />
+      </g>
+      <circle cx="9" cy="9" r="8.3" stroke="url(#lm-rim)" strokeWidth="1" />
+      <path d="M4.3 12.7Q6 1.4 13 7.4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="4.3" cy="12.7" r="0.85" fill="#fff" />
+      <circle cx="13" cy="7.4" r="2.3" fill="#28b981" fillOpacity="0.4" />
+      <circle cx="13" cy="7.4" r="1.35" fill="#28b981" stroke="#b8f5da" strokeOpacity="0.9" strokeWidth="0.3" />
     </svg>
   );
 }
