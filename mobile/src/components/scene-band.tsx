@@ -57,6 +57,21 @@ export const DWELL_MS = 7000;
  */
 export const BAND_RATIO = 0.58;
 /**
+ * The form's share, which is smaller, because the form has more to fit under it.
+ *
+ * **One ratio cannot serve both screens.** Measured on an 874pt window: the chooser's stack needs
+ * 342pt, log in needs 383, and sign up needs **435** — 24pt of padding, a 25pt title, a 48pt
+ * blurb, 280pt of form block (24 + three 52pt rows + two 16pt gaps + a 16pt hint + the 52pt
+ * button) and 58pt of bottom inset. Those cap the band at 0.609, 0.562 and **0.502**
+ * respectively, so a single number that clears sign up puts ~95pt of empty paper back under the
+ * chooser's mark — the thing `BAND_RATIO` was raised to remove.
+ *
+ * At 0.46 sign up gets 472 for its 435 and keeps 37pt of slack, which is enough that the ordinary
+ * case never scrolls. An error `Notice` or AX3 still can, and `form.tsx` keeps its `ScrollView`
+ * for exactly those.
+ */
+export const BAND_RATIO_FORM = 0.46;
+/**
  * What the band shrinks to when the keyboard is up, or when the type is scaled past the point where
  * `FieldRow` starts stacking its label above its value. A sliver rather than nothing: the photograph
  * leaving entirely makes the screen look like it navigated somewhere.

@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Keyboard, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -6,6 +6,7 @@ import { useReducedMotion } from 'react-native-reanimated';
 import {
   BAND_COLLAPSED,
   BAND_RATIO,
+  BAND_RATIO_FORM,
   BEATS,
   DWELL_MS,
   SceneBand,
@@ -19,8 +20,16 @@ import { Colors } from '@/constants/theme';
  * **The band is outside the `Stack`, and that is the whole reason this is a group.** Mounted once
  * here it survives the navigation between the two screens, so the reel keeps its place and the
  * photograph does not jump — which is the only argument for the form screen keeping a band at
- * all. The `Stack` fills what is left, so a push slides the content under a picture that holds
- * still.
+ * all. The `Stack` fills what is left, so a push slides the content under a picture that is
+ * still the same picture.
+ *
+ * **Its identity holds across a push; its height does not, and that is deliberate.** This used
+ * to say the picture "holds still", and one ratio served both screens — but the two screens need
+ * different amounts of room, and sign up needs so much more that a single number either clips its
+ * button or leaves ~95pt of paper under the chooser's mark. So the height is per-route
+ * (`BAND_RATIO` / `BAND_RATIO_FORM`, which carry the arithmetic) and animates on the curve the
+ * keyboard collapse already uses. What that original rule was protecting is intact: no remount,
+ * no restarted reel, no different photograph on the other side.
  *
  * The beat and the collapse live here because they are the flow's, not a screen's: the reel is
  * continuous across both, and the keyboard that collapses the band is raised on one of them.
@@ -72,8 +81,13 @@ export default function AuthLayout() {
     };
   }, []);
 
+  // The form carries more below the fold than the chooser does, so it gets a shorter band. Both
+  // collapses still win: the keyboard and the Dynamic Type threshold outrank the route.
+  const onForm = usePathname().startsWith('/signin/form');
   const bandHeight =
-    keyboardUp || fontScale > STACK_ABOVE_SCALE ? BAND_COLLAPSED : Math.round(height * BAND_RATIO);
+    keyboardUp || fontScale > STACK_ABOVE_SCALE
+      ? BAND_COLLAPSED
+      : Math.round(height * (onForm ? BAND_RATIO_FORM : BAND_RATIO));
 
   return (
     <View style={styles.root}>
