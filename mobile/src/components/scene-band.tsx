@@ -38,13 +38,24 @@ export const BEATS = [
  */
 export const DWELL_MS = 7000;
 /**
- * The band's share of the screen, and why it is not full-bleed.
+ * The band's share of the screen, and why it is neither full-bleed nor native.
  *
- * The photographs are 1200x1309. A full-screen hero on a 3x phone wants ~2800px of height and would
- * upscale them about 2.1x, which is visibly soft on the one screen that has to look expensive. At
- * 46% of a 932pt window the band asks for ~1290px and lands near-native.
+ * The photographs are 1200x1309, so on a 3x phone the band is pixel-native up to a height of
+ * 1309px — **436pt, or 49.9% of an 874pt window.** A full-screen hero wants ~2800px and would
+ * upscale them about 2.1x, which is visibly soft on the one screen that has to look expensive.
+ *
+ * **It sits above that native ceiling anyway, and the arithmetic is why.** At 46% the lower half
+ * had 472pt for a 342pt stack — 24pt of padding, the 96pt mark, 164pt of actions (`PrimaryButton`
+ * is 52, two `PillButton`s are 44, two gaps are 12) and 58pt of bottom inset — leaving **130pt of
+ * empty paper** with the mark floating in it. At 58% that slack drops to about 25 and the lower
+ * half reads as a deliberate stack. The cost is 1521px against 1309, a **1.16x upscale**, which at
+ * 3x is hard to see; 70% was asked for and does not exist, because it leaves 262pt for a stack
+ * that needs 342 and would crop 28% off every photograph's width besides.
+ *
+ * On a shorter screen the floor rises relative to the window — a 667pt device needs 308 and gets
+ * 280 here — so `signin/index.tsx` lets the mark shrink rather than push the actions off.
  */
-export const BAND_RATIO = 0.46;
+export const BAND_RATIO = 0.58;
 /**
  * What the band shrinks to when the keyboard is up, or when the type is scaled past the point where
  * `FieldRow` starts stacking its label above its value. A sliver rather than nothing: the photograph

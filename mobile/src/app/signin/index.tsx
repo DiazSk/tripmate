@@ -89,9 +89,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   identity: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  // 96, not the 72 the plan guessed: the lower half leaves roughly 280pt of slack for the mark
-  // once the three actions have taken theirs, and at 72 a thin outline glyph read as lost in it.
-  logo: { width: 96, height: 96 },
+  // 96 is the size it wants; `flexShrink` is what it does when it cannot have it. At
+  // `BAND_RATIO` 0.58 a 667pt screen is about 28pt short of the stack's floor, and without this
+  // the mark would hold its height and push the actions off the bottom instead of giving way.
+  // `contentFit="contain"` keeps the glyph circular as the box compresses.
+  logo: { width: 96, height: 96, flexShrink: 1 },
   // `Spacing.rows` between them, not `read`: three controls at three weights are one group, and
   // 16pt lands on top of the slack two 44pt targets already carry.
   actions: { gap: Spacing.rows },
