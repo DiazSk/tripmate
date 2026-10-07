@@ -16,6 +16,13 @@ COPY package.json package-lock.json ./
 COPY scripts ./scripts
 RUN npm ci
 COPY . .
+# NEXT_PUBLIC_* is inlined into the client bundle at build time, and .dockerignore keeps .env*
+# out of the image — so these must arrive as --build-arg or the deployed app links back to
+# localhost:3000 (share links, metadata) and the Satellite engine has no Cesium token.
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_CESIUM_ION_TOKEN
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+    NEXT_PUBLIC_CESIUM_ION_TOKEN=$NEXT_PUBLIC_CESIUM_ION_TOKEN
 RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3000
