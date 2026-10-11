@@ -348,6 +348,12 @@ export default function GlobeBackground({
           tileset.colorBlendMode = Cesium.Cesium3DTileColorBlendMode.MIX;
           tileset.colorBlendAmount = 0.1;
 
+          // Each tile's data providers on screen, in the credit line, not behind Cesium's "Data
+          // attribution" link: Google's Map Tiles policy requires every displayed tile's
+          // attribution shown in a line, and names this setting for CesiumJS. The helper leaves it
+          // false (1.144), so without it the line said "Google" and none of who the imagery is from.
+          tileset.showCreditsOnScreen = true;
+
           // Draw the coarse ancestor immediately instead of waiting for the whole chain down to
           // the target detail. `createGooglePhotorealistic3DTileset` leaves this false.
           //
@@ -601,12 +607,15 @@ export default function GlobeBackground({
           globeWanted ? "" : "invisible"
         }`}
       />
-      {/* Visually hidden per request — NOTE: Google's Photorealistic 3D Tiles terms of
-          service require this attribution to stay visible when those tiles are in use
-          (see the token check above). Re-enable if shipping with a live Ion token. */}
+      {/* Shown whenever this engine draws the world, and only then: it follows the canvas's own
+          `invisible`, or its credits would sit in the same corner as MapLibre's over a map that
+          is not Cesium's. It was `hidden` outright, which left Satellite mode with no attribution
+          at all — and the beta ships a live Ion token, so that was Google's photorealistic tiles
+          (whose terms require their attribution on screen, in a line, unobscured) and, without
+          the token, OpenStreetMap's imagery, which requires its own. */}
       <div
         ref={creditRef}
-        className={`hidden z-30 max-w-[85%] leading-tight ${creditClassName ?? ""}`}
+        className={`globe-credits z-30 max-w-[85%] leading-tight ${globeWanted ? "" : "invisible"} ${creditClassName ?? ""}`}
       />
     </>
   );

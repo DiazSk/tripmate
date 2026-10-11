@@ -2435,8 +2435,32 @@ html[data-story-mode="true"] .marker-day-label {
    white-on-dark, which disappears once they sit over the cream pane. */
 .cesium-widget-credits {
   position: static !important;
-  padding-right: 0 !important;
+  /* The One Slate as a band under the line: Satellite mode sets this small muted type on daylight
+     aerial photography, which is DESIGN.md's Photograph-Is-Not-A-Surface case — over bright roofs
+     the bare text was barely legible, and Google's terms want the attribution read, not just
+     present. 0.82 (the map curtain's alpha) is where muted text holds 4.5:1 over pure white. No
+     backdrop-filter: under a live map that is a re-blur every frame, and this band does not need one. */
+  padding: 3px 8px !important;
+  border-radius: 6px;
+  background: rgb(var(--surface-deep-rgb) / 0.82);
 }
+/* Satellite mode's attribution, kept clear of what floats beside it — Google's terms want it
+   unobscured, and its line (the ion logo, Google's, a list of imagery providers) is long enough to
+   wrap. On a phone it sits where MapLibre's does: the controls move right there, and an open plan
+   is full-bleed over the map. From `sm:` up the map controls are a column at the left (`left-6`,
+   46px wide) and an open plan a column at the right (`DockedPanel`: 40% up to 520px, or 62% up to
+   880px when wide, 1.5rem in). So the line starts right of the controls, where wrapping upward meets
+   nothing, and is capped at the width left of the panel, which is what it must never run under. */
+@media (width >= 40rem) {
+  .globe-credits {
+    left: 5.5rem;
+    max-width: calc(100vw - 5.5rem - 1.5rem - min(40vw, 520px) - 0.75rem);
+  }
+  .app-shell:has(.docked-panel-wide) .globe-credits {
+    max-width: calc(100vw - 5.5rem - 1.5rem - min(62vw, 880px) - 0.75rem);
+  }
+}
+
 /* 0.75rem, the system's Label step, rather than the 10px this was. Required
    attribution should not compete with the interface, but 10px muted text over
    arbitrary terrain is closer to unreadable than to quiet — and 10px is off the

@@ -182,7 +182,9 @@ export default function DockedPanel({
         transition:
           "width 300ms ease-in-out, height 300ms ease-in-out, left 300ms ease-in-out, right 300ms ease-in-out",
       }}
-      className={`docked-panel fixed z-10 m-0 flex flex-col ${
+      // `docked-panel-wide` names the 62% width for CSS that has to stay clear of it — Satellite
+      // mode's attribution (`.globe-credits` in globals.css) is measured against this edge.
+      className={`docked-panel fixed z-10 m-0 flex flex-col ${wide ? "docked-panel-wide" : ""} ${
         busy ? "pointer-events-none" : "pointer-events-auto"
       } ${
         isCollapsed
