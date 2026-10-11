@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 import type { Stop } from '@/api/types';
@@ -24,6 +25,7 @@ import { Colors, Motion, OverPhotograph, Radius, Spacing, dayCore, dayGlow } fro
 import { useHeading, useHere } from '@/lib/here';
 import { travelSummary } from '@/lib/dayTravel';
 import { altitudeForRegion, drawableStops, regionForStops } from '@/lib/mapRegion';
+import { filmCameraFor } from '@/lib/storyFilm';
 
 /** Clear of the summary pill — see `mapPadding` below. */
 const MAP_INSET = { top: 72, right: 0, bottom: 0, left: 0 };
@@ -79,14 +81,21 @@ export function DayMap({
   dayIndex,
   emphasis,
   onEmphasise,
+  film,
 }: {
   stops: Stop[];
   dayIndex: number;
   /** Index of the emphasised stop within this day, or null. */
   emphasis: number | null;
   onEmphasise: (index: number | null) => void;
+  /**
+   * Present while a film plays this day. `stop` is the day's stop the camera should be on, or null
+   * to frame the whole day. Hides everything that is not the place being talked about.
+   */
+  film?: { stop: number | null };
 }) {
   const map = useRef<MapView>(null);
+  const reduceMotion = useReducedMotion();
   const { here } = useHere();
   const heading = useHeading();
   // The whole mode rather than its `MapType`. The three types do happen to differ today, so the
@@ -324,6 +333,60 @@ export function DayMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayIndex]);
 
+  const filmStop = film ? film.stop : undefined;
+  /**
+   * **The film's camera: a dive to each stop, facing along the day.** A whole camera every time,
+   * for the reason `toggle3D` records — a partial one lets the omitted fields fall to defaults.
+   *
+   * Two frames, for two reasons. `pitched` is set in the first, never in the effect body: a
+   * synchronous `setState` in an effect is a cascading render the lint refuses. The camera moves
+   * in the second, so Satellite has become Flyover before it is asked to tilt — the sequencing
+   * `toggle3D` uses. Reduce Motion cuts instead of flying; the beat keeps its length either way,
+   * because the narrator is the clock.
+   */
+  const wasFilming = useRef(false);
+  useEffect(() => {
+    if (!region) return;
+    let frame = 0;
+    const frameDay = () => {
+      frame = requestAnimationFrame(() => {
+        setPitched(false);
+        map.current?.animateToRegion(region, reduceMotion ? 0 : Motion.settle);
+      });
+    };
+    // **Close re-frames the day.** The film may have left the camera tilted over its last stop;
+    // `film` going away is the one moment to put the reader back on the framing they started from.
+    if (filmStop === undefined) {
+      if (!wasFilming.current) return;
+      wasFilming.current = false;
+      frameDay();
+      return () => cancelAnimationFrame(frame);
+    }
+    wasFilming.current = true;
+    inFlight.current = true;
+    const grace = setTimeout(() => {
+      inFlight.current = false;
+    }, FLIGHT_GRACE_MS);
+    const target = filmStop === null ? null : filmCameraFor(stops, filmStop);
+    if (filmStop === null) frameDay();
+    else if (target) {
+      frame = requestAnimationFrame(() => {
+        setPitched(true);
+        frame = requestAnimationFrame(() => {
+          const camera = { ...target, pitch: PITCH_3D, altitude: DIVE_ALTITUDE_M };
+          if (reduceMotion) map.current?.setCamera(camera);
+          else map.current?.animateCamera(camera, { duration: Motion.settle });
+        });
+      });
+    }
+    return () => {
+      clearTimeout(grace);
+      cancelAnimationFrame(frame);
+    };
+    // The stop is the trigger; a re-render with equal stops must not re-fly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filmStop]);
+
   // An empty day is legitimate; a map of nowhere is not.
   if (!region) {
     return (
@@ -425,7 +488,7 @@ export function DayMap({
             not ours to make tappable, so a tap here points at nothing and any answer would be a
             guess. "What is near here" now hangs off a stop, which is a referent. Clearing the
             emphasis is reachable two ways: press the marker again, or press the caption. */}
-        {line.length >= 2 ? (
+        {line.length >= 2 && !film ? (
           <>
             {/* **A casing and a core, not a spill and a thread.** It shipped as a 14pt glow at
                 33% under a 2pt core at 50%, which is a route you cannot see: scanning thirteen
@@ -484,8 +547,8 @@ export function DayMap({
             stop={stop}
             index={index}
             dayIndex={dayIndex}
-            emphasised={emphasis === index}
-            onPress={() => onEmphasise(emphasis === index ? null : index)}
+            emphasised={film ? film.stop === index : emphasis === index}
+            onPress={film ? () => {} : () => onEmphasise(emphasis === index ? null : index)}
           />
         ))}
       </MapView>
@@ -499,7 +562,7 @@ export function DayMap({
           sheet and covered the thumbnails' labels. Nothing here uses `zIndex` — source order is
           what the rest of this file relies on too (Apple Maps ignores a Polyline's `zIndex`
           outright). */}
-      {shown ? (
+      {shown && !film ? (
         <StopCard
           stop={shown}
           ordinal={(emphasis ?? 0) + 1}
@@ -509,38 +572,42 @@ export function DayMap({
         />
       ) : null}
 
-      <MapControls
-        pitched={pitched}
-        onToggle3D={toggle3D}
-        mode={mode}
-        onMode={setMode}
-        traffic={trafficWanted}
-        onTraffic={setTrafficWanted}
-        poi={poiWanted}
-        onPoi={setPoiWanted}
-        heading={mapHeading}
-        onResetNorth={resetNorth}
-        // Apple's own controls step aside for its place card; ours do the same, and the height
-        // is measured rather than guessed so Dynamic Type cannot push the card under them.
-        floor={shown ? MAP_FLOOR + cardHeight + Spacing.tight : MAP_FLOOR}
-        // Absent rather than disabled when there is no fix: a locate button that cannot locate
-        // is the permission prompt by another route, which `here.ts` exists to avoid.
-        onLocate={here ? locate : undefined}
-        locating={locating}
-        region={region}
-      />
+      {film ? null : (
+        <MapControls
+          pitched={pitched}
+          onToggle3D={toggle3D}
+          mode={mode}
+          onMode={setMode}
+          traffic={trafficWanted}
+          onTraffic={setTrafficWanted}
+          poi={poiWanted}
+          onPoi={setPoiWanted}
+          heading={mapHeading}
+          onResetNorth={resetNorth}
+          // Apple's own controls step aside for its place card; ours do the same, and the height
+          // is measured rather than guessed so Dynamic Type cannot push the card under them.
+          floor={shown ? MAP_FLOOR + cardHeight + Spacing.tight : MAP_FLOOR}
+          // Absent rather than disabled when there is no fix: a locate button that cannot locate
+          // is the permission prompt by another route, which `here.ts` exists to avoid.
+          onLocate={here ? locate : undefined}
+          locating={locating}
+          region={region}
+        />
+      )}
 
       {/* What the map cannot draw. A route is visibly a shape and invisibly a cost, and the
           cost is the half somebody is deciding on — "is this the day I do Belém" is a question
           about how much of it is spent moving. Time rather than distance, for the reason
           `TravelSegment` records: nothing here knows whether the reader thinks in miles. */}
-      <Group tint={chrome(shownType).tint} style={styles.summary} radius={Radius.pill}>
-        <View style={styles.summaryInset} pointerEvents="none">
-          <ThemedText type="detail" style={{ color: chrome(shownType).inkMuted }}>
-            {travelSummary(stops)}
-          </ThemedText>
-        </View>
-      </Group>
+      {film ? null : (
+        <Group tint={chrome(shownType).tint} style={styles.summary} radius={Radius.pill}>
+          <View style={styles.summaryInset} pointerEvents="none">
+            <ThemedText type="detail" style={{ color: chrome(shownType).inkMuted }}>
+              {travelSummary(stops)}
+            </ThemedText>
+          </View>
+        </Group>
+      )}
 
     </View>
   );
