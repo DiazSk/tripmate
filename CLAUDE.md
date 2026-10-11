@@ -297,6 +297,21 @@ measured per sentence in the worker, WASM runs at a real-time factor of ~1.5 (co
 permanently behind, since the one-sentence prefetch cannot make that up), `fp32` on WebGPU at
 0.18-0.25.
 
+**Story mode on mobile is the same film behind the same seams.** The Expo app's ▶ (trip day row) runs
+`useStoryFilm` → `speakBeat` (`mobile/src/lib/narrator.ts`), the counterpart of `speakOn`, over the phone's
+own speech engine (`expo-speech`, injected via `narratorEngine.ts` so the queue is testable). It paces beats
+with the same `src/lib/storyPacing.ts` the web re-exports from `storyVoice.ts` — moved there because
+`storyVoice.ts` imports `kokoroVoice`, a browser Worker Metro would bundle. Three mobile-only facts:
+`animateCamera`'s duration is ignored on iOS (`RNMapsMapView.mm`), so the narrator is the only clock; the
+film narrates with the silent switch on (`expo-audio` `playsInSilentMode`, set at film start) because Play is
+a request for sound; and the expo-audio plugin's `enableBackgroundPlayback` is off because a film pauses when
+backgrounded. No travel beats — the app sends no `legs`.
+Meri (`mobile/src/components/meridian.tsx`) heads its panel and the chat sheet: a code-drawn
+globe whose per-state motion is the pure `meridianMotion` table in `mobile/src/lib/meri.ts`, fed
+by `meriForFilm`/`meriForChat` so it only ever shows a state the app is in. Its speaking pulse is
+`expo-speech`'s `onBoundary`, surfaced as `speakBeat`'s `onWord` — the engine reports words, not
+volume, so nothing here claims to measure audio.
+
 **Which one wins, and why the other still exists.** `/api/itinerary` is the incumbent and owns the traveller-facing path: `generate()` in `HomeView.tsx` posts to it with `?stream=1`, and a plan a visitor actually sees always came from there. The staged pipeline is the **intended direction** — it is where the skill/facts/ask separation lives, and it is the one to extend when generation logic changes. Treat `/api/itinerary` as legacy that has not been retired yet, not as the design.
 
 What blocks the migration is a data contract, not missing work: the staged path emits **markdown** into `trip_artifacts`, while every rendering surface (`ItineraryCard`, the day panel, the export, `applyPatch`) reads a strict-JSON `Itinerary` off `trips.itinerary_json`. Switching the wizard needs either a markdown renderer or a converter, and until one exists both paths stay.

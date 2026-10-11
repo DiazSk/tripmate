@@ -437,7 +437,8 @@ function openingFallback(params: {
   const parts = [`Day ${dayIndex + 1} of ${dayCount} in ${city}.`];
   if (day.title) parts.push(`${day.title}.`);
   if (day.summary) parts.push(day.summary.trim().replace(/\.?$/, "."));
-  else if (day.stops.length > 0) parts.push(`${day.stops.length} places, starting with ${day.stops[0].name}.`);
+  else if (day.stops.length > 0)
+    parts.push(`${day.stops.length} ${day.stops.length === 1 ? "place" : "places"}, starting with ${day.stops[0].name}.`);
   return parts.join(" ");
 }
 

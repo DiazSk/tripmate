@@ -11,6 +11,7 @@ import type {
   GenerationResult,
   GeocodedPlace,
   CompletePlanRequest,
+  DayPlan,
   ImportItem,
   ImportResult,
   ImportedPlan,
@@ -23,6 +24,7 @@ import type {
   SavedSource,
   SketchEvent,
   StageEvent,
+  StoryScript,
   StreamedStop,
   Trip,
   TripEdit,
@@ -632,5 +634,36 @@ export async function arrivalPoints(lat: number, lng: number): Promise<ArrivalPo
     return body.points ?? [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * The day's story script. `undefined` on any failure, and the film then reads the plan itself
+ * (`fallbackScript`). The route already answers model failures with its own fallback, and caches
+ * per owner — `proxy.ts` turns this app's owner header into the cookie `readOwnTrip` reads — so a
+ * replayed day costs no model call.
+ */
+export async function storyScript(params: {
+  destination: string;
+  day: DayPlan;
+  dayIndex: number;
+  dayCount: number;
+  tripId: string;
+}): Promise<StoryScript | undefined> {
+  try {
+    const res = await fetchWithSession("/api/trip-story", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) return undefined;
+    const body = await res.json();
+    // A reply without beats would throw inside the film's `.then` and leave it on "Writing…"
+    // forever; treated as a failure, the plan is read instead.
+    return Array.isArray(body?.script?.beats) && body.script.beats.length > 0
+      ? (body.script as StoryScript)
+      : undefined;
+  } catch {
+    return undefined;
   }
 }

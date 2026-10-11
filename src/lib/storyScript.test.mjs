@@ -358,3 +358,8 @@ test("the last stop cannot claim a leg off the end of the day", () => {
   const prompt = buildStoryPrompt({ ...params(twoStops), legs: [LEG, LEG, LEG] });
   assert.match(prompt, /Exactly 5 beats/, "2 stops + 1 leg + opening + closing");
 });
+
+test("a one-stop day's fallback opening says one place, not one places", () => {
+  const script = fallbackScript(params(day([stop("A")])));
+  assert.match(script.beats[0].text, /1 place, starting with A\./);
+});

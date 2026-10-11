@@ -14,10 +14,12 @@ import {
 
 import type { ChatTurn } from '@/api/types';
 import { ChangePreview } from '@/components/change-preview';
+import { Meridian } from '@/components/meridian';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Motion, Radius, Spacing } from '@/constants/theme';
 import { formatDayChip } from '@/lib/dayDisplay';
 import type { ItineraryDiff } from '@/lib/itineraryDiff';
+import { meriForChat } from '@/lib/meri';
 
 /**
  * Ask the planner for a change.
@@ -74,6 +76,22 @@ export function ChatSheet({
   onDiscard: () => void;
 }) {
   const [draft, setDraft] = useState(initialDraft ?? '');
+  /**
+   * True for one lift after a reply lands without a failure. Tracked during render (React's
+   * "adjust state on prop change" pattern) rather than in an effect, which the lint refuses — and
+   * cleared on a timer, which it allows.
+   */
+  const [wasReplying, setWasReplying] = useState(replying);
+  const [justReplied, setJustReplied] = useState(false);
+  if (replying !== wasReplying) {
+    setWasReplying(replying);
+    if (!replying && !failure) setJustReplied(true);
+  }
+  useEffect(() => {
+    if (!justReplied) return;
+    const timer = setTimeout(() => setJustReplied(false), Motion.settle + 200);
+    return () => clearTimeout(timer);
+  }, [justReplied]);
   const [hint, setHint] = useState(0);
 
   // Only while the field is empty — a placeholder under text nobody can see is a timer running
@@ -143,9 +161,24 @@ export function ChatSheet({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={inset}>
         <View style={styles.bar}>
-          <ThemedText type="title" numberOfLines={1} style={styles.grow}>
-            Ask for a change
-          </ThemedText>
+          <Meridian state={meriForChat({ replying, failure, justReplied })} size={36} />
+          <View style={styles.grow}>
+            <ThemedText type="headingSmall" numberOfLines={1}>
+              TripMate
+            </ThemedText>
+            {replying ? (
+              <View style={styles.status}>
+                <View style={styles.dot} />
+                <ThemedText type="caption" themeColor="muted">
+                  Replying
+                </ThemedText>
+              </View>
+            ) : (
+              <ThemedText type="caption" themeColor="muted">
+                Ask for a change
+              </ThemedText>
+            )}
+          </View>
           <Pressable onPress={onClose} accessibilityRole="button" hitSlop={12}>
             <ThemedText type="label" themeColor="muted">
               Done
@@ -374,13 +407,14 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.read,
+    gap: Spacing.tight,
     paddingHorizontal: Spacing.read,
     paddingTop: Spacing.read,
     paddingBottom: Spacing.tight,
   },
   grow: { flex: 1 },
+  status: { flexDirection: 'row', alignItems: 'center', gap: Spacing.hair },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.accent },
   // A column, not a row. Sharing a line with its label pushed the track to whatever x the
   // word ended at, so the header had three left edges — title, label, control — and a right
   // edge that nearly but never quite met Done. Stacked, every edge in this sheet is one inset.

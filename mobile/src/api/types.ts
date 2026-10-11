@@ -635,3 +635,5 @@ export type {
   ImportedPlan,
   ImportedStop,
 } from '@shared/importedPlan';
+
+export type { StoryBeat, StoryScript } from '@shared/storyScript';
