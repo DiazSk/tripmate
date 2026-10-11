@@ -1,4 +1,5 @@
-import { pauseAfter, rateFor, splitForSpeech, type SpeakHandle } from "./storyVoice";
+import { pauseAfter, rateFor, splitForSpeech } from "./storyPacing";
+import type { SpeakHandle } from "./storyVoice";
 
 /**
  * The optional **natural voice** for Story mode — Kokoro-82M, running in the browser.
