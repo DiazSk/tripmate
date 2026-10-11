@@ -11,7 +11,7 @@ describe('meridianMotion', () => {
     expect(meridianMotion('idle', false)).toEqual({ breatheMs: 3200, blink: true, driftMs: null, squash: false, lift: false, eyes: 1 });
   });
   it('breathes faster while thinking', () => {
-    expect(meridianMotion('thinking', false).breatheMs).toBe(2000);
+    expect(meridianMotion('thinking', false).breatheMs).toBe(1400);
   });
   it('lets the eyes drift while streaming', () => {
     expect(meridianMotion('streaming', false).driftMs).toBe(2400);
