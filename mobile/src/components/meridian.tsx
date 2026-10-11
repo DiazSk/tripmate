@@ -66,13 +66,13 @@ export function Meridian({
     breathe.value = motion.breatheMs
       ? withSequence(
           withTiming(1, { duration: Motion.respond }),
-          withRepeat(withTiming(1.03, { duration: motion.breatheMs / 2, easing: ease }), -1, true),
+          withRepeat(withTiming(1.06, { duration: motion.breatheMs / 2, easing: ease }), -1, true),
         )
       : withTiming(1, { duration: Motion.respond });
     squash.value = motion.squash
       ? withSequence(
           withTiming(0, { duration: Motion.respond }),
-          withRepeat(withTiming(1, { duration: 300, easing: ease }), -1, true),
+          withRepeat(withTiming(1, { duration: 280, easing: ease }), -1, true),
         )
       : withTiming(0, { duration: Motion.respond });
     drift.value = motion.driftMs
@@ -80,7 +80,7 @@ export function Meridian({
       : withTiming(0.5, { duration: Motion.respond });
     lift.value = motion.lift
       ? withSequence(
-          withTiming(-3, { duration: Motion.settle / 2, easing: Easing.bezier(...Curve) }),
+          withTiming(-5, { duration: Motion.settle / 2, easing: Easing.bezier(...Curve) }),
           withTiming(0, { duration: Motion.settle / 2, easing: Easing.bezier(...Curve) }),
         )
       : 0;
@@ -88,7 +88,8 @@ export function Meridian({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, still]);
 
-  // A blink every 4–7s, randomised so two Meris never blink in step.
+  // A blink every 2.8–5s, randomised so two Meris never blink in step. Any slower and, measured on
+  // a phone, Meri read as a still image between blinks.
   useEffect(() => {
     if (!motion.blink) {
       blink.value = withTiming(1, { duration: Motion.respond });
@@ -99,7 +100,7 @@ export function Meridian({
       timer = setTimeout(() => {
         blink.value = withSequence(withTiming(0.1, { duration: 70 }), withTiming(1, { duration: 110 }));
         schedule();
-      }, 4000 + Math.random() * 3000);
+      }, 2800 + Math.random() * 2200);
     };
     schedule();
     return () => clearTimeout(timer);
@@ -113,7 +114,7 @@ export function Meridian({
     () => pulse?.value ?? 0,
     (now, before) => {
       if (before === null || now === before || !tapping) return;
-      tap.value = withSequence(withTiming(1.04, { duration: 60 }), withTiming(1, { duration: 60 }));
+      tap.value = withSequence(withTiming(1.08, { duration: 80 }), withTiming(1, { duration: 80 }));
     },
     [tapping],
   );
@@ -123,12 +124,13 @@ export function Meridian({
     transform: [
       { translateY: lift.value },
       { scale: breathe.value * tap.value },
-      { scaleX: 1 + 0.02 * squash.value },
-      { scaleY: 1 - 0.02 * squash.value },
+      // ±5%: at ±2% the speaking squash was invisible on a real phone at 40pt.
+      { scaleX: 1 + 0.05 * squash.value },
+      { scaleY: 1 - 0.05 * squash.value },
     ],
   }));
   const eyeStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: (drift.value * 2 - 1) * 0.015 * size }, { scaleY: blink.value * eyes }],
+    transform: [{ translateX: (drift.value * 2 - 1) * 0.03 * size }, { scaleY: blink.value * eyes }],
   }));
 
   const eye = { width: 0.075 * size, height: 0.2 * size, borderRadius: size, top: 0.4 * size };

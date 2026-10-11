@@ -39,7 +39,7 @@ const STILL: MeridianMotion = { breatheMs: null, blink: false, driftMs: null, sq
 
 const MOTION: Record<MeridianState, MeridianMotion> = {
   idle: { ...STILL, breatheMs: 3200, blink: true },
-  thinking: { ...STILL, breatheMs: 2000, blink: true },
+  thinking: { ...STILL, breatheMs: 1400, blink: true },
   streaming: { ...STILL, breatheMs: 3200, blink: true, driftMs: 2400 },
   speaking: { ...STILL, blink: true, squash: true },
   paused: { ...STILL, eyes: 0.8 },
