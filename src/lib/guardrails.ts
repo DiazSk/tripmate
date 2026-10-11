@@ -58,7 +58,11 @@ export type GuardrailRule =
   | "required"
   | "anchors"
   | "routing"
-  | "weather";
+  | "weather"
+  /** A stop on a weekday its published hours say it's closed. Only from known hours. */
+  | "closed"
+  /** A day of an imported plan with nothing in it. */
+  | "empty";
 
 /** Looked-up door-to-door minutes for one hop, or `null` when no route was found. */
 export type LegMinutesLookup = (from: Stop, to: Stop) => number | null;
@@ -373,6 +377,48 @@ export function evaluateDay(
  * whether you are over budget is exactly the drift the contract docblock in itinerary.ts was
  * written about.
  */
+const WEEKDAY_CODES = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/** Monday-first index of a calendar date, read in UTC — a local parse rolls back a day west of Greenwich. */
+export function weekdayIndex(isoDate: string): number {
+  return (new Date(`${isoDate}T00:00:00Z`).getUTCDay() + 6) % 7;
+}
+
+export const weekdayName = (isoDate: string): string => WEEKDAY_NAMES[weekdayIndex(isoDate)];
+
+/** True only when the hours are known and say closed that weekday. Unknown is never closed. */
+export function isClosedOn(stop: Pick<Stop, "closedDays">, isoDate: string): boolean {
+  return Boolean(stop.closedDays?.includes(WEEKDAY_CODES[weekdayIndex(isoDate)]));
+}
+
+/**
+ * Stops planned on a day they're closed. Deliberately not `detectConflicts`: that writes its
+ * warning into the stop's `note`, which on an imported plan is the traveller's own words.
+ */
+export function checkClosed(itinerary: CheckableItinerary): Guardrail[] {
+  return itinerary.days.flatMap((day, dayIndex) =>
+    day.stops.flatMap((stop, stopIndex) =>
+      isClosedOn(stop, day.date)
+        ? [{ rule: "closed" as const, dayIndex, stopIndex, message: `${stop.name} is closed on ${weekdayName(day.date)}s.` }]
+        : []
+    )
+  );
+}
+
+/**
+ * Days with nothing in them, on imported plans only: `evaluateItinerary` also feeds generation's
+ * critique and the benchmark scorer, which counts findings, and neither should change.
+ */
+export function checkEmptyDays(itinerary: CheckableItinerary): Guardrail[] {
+  if (itinerary.origin !== "imported") return [];
+  return itinerary.days.flatMap((day, dayIndex) =>
+    day.stops.length === 0
+      ? [{ rule: "empty" as const, dayIndex, message: `Nothing is planned on day ${dayIndex + 1} yet.` }]
+      : []
+  );
+}
+
 export function evaluateBudget(itinerary: CheckableItinerary, budget: number): Guardrail[] {
   if (!budget || budget <= 0) return [];
   const total = tripSpend(itinerary.days);
@@ -782,6 +828,8 @@ export function evaluateItinerary(
   // introduced it.
   return [
     ...perDay,
+    ...checkClosed(itinerary),
+    ...checkEmptyDays(itinerary),
     ...checkDuplicates(itinerary),
     ...commitments,
     ...required,
