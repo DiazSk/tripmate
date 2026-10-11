@@ -2,6 +2,7 @@ import { estimateDurationMs } from '@shared/storyPacing';
 import { fallbackScript, type StoryScript } from '@shared/storyScript';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 
 import { storyScript } from '@/api/tripMateApi';
 import type { Trip } from '@/api/types';
@@ -21,8 +22,9 @@ import { filmReducer, filmStopFor, initialFilm } from '@/lib/storyFilm';
 export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex: number; active: boolean }) {
   const [state, dispatch] = useReducer(filmReducer, initialFilm);
   const [script, setScript] = useState<StoryScript | null>(null);
-  /** Words spoken so far, for Meri's speaking pulse. */
-  const [words, setWords] = useState(0);
+  /** Words spoken so far, for Meri's speaking pulse. A shared value, not state: at two or three
+   *  words a second, state would re-render the whole trip screen while the camera is flying. */
+  const words = useSharedValue(0);
   const voice = useRef<string | undefined>(undefined);
   // Read inside the fetch rather than depended on: a refreshed trip object mid-film must not
   // restart it.
@@ -82,12 +84,14 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
       {
         onEnd: () => dispatch({ type: 'next' }),
         onError: () => dispatch({ type: 'voiceError' }),
-        onWord: () => setWords((n) => n + 1),
+        onWord: () => {
+          words.value += 1;
+        },
       },
       { speech: deviceSpeech, voice: voice.current },
     );
     return () => handle.cancel();
-  }, [active, state.phase, state.beat, state.voiceBroken, beat]);
+  }, [active, state.phase, state.beat, state.voiceBroken, beat, words]);
 
   // A film is watched: leaving the app pauses it, and resume says the beat again.
   useEffect(() => {

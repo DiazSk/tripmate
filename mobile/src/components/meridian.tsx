@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, {
   Easing,
+  type SharedValue,
   cancelAnimation,
+  useAnimatedReaction,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -34,14 +36,15 @@ export function Meridian({
   state,
   size = 32,
   reducedMotion,
-  pulse = 0,
+  pulse,
 }: {
   state: MeridianState;
   size?: number;
   /** Defaults to the system setting. */
   reducedMotion?: boolean;
-  /** Each increase plays one word pulse while speaking. */
-  pulse?: number;
+  /** A count of spoken words, as a shared value: each increase plays one pulse while speaking.
+   *  Shared rather than React state, so a word costs no render of whoever hosts Meri. */
+  pulse?: SharedValue<number>;
 }) {
   const systemReduced = useReducedMotion();
   const still = reducedMotion ?? systemReduced;
@@ -57,11 +60,20 @@ export function Meridian({
   useEffect(() => {
     for (const value of [breathe, squash, drift, lift]) cancelAnimation(value);
     const ease = Easing.inOut(Easing.sin);
+    // **Every loop starts from rest.** `cancelAnimation` leaves a value mid-swing, and a reversing
+    // `withRepeat` swings between wherever it starts and its target — so a breath cut at its peak
+    // became a "thinking" Meri swinging from 1.03 to 1.03: frozen.
     breathe.value = motion.breatheMs
-      ? withRepeat(withTiming(1.03, { duration: motion.breatheMs / 2, easing: ease }), -1, true)
+      ? withSequence(
+          withTiming(1, { duration: Motion.respond }),
+          withRepeat(withTiming(1.03, { duration: motion.breatheMs / 2, easing: ease }), -1, true),
+        )
       : withTiming(1, { duration: Motion.respond });
     squash.value = motion.squash
-      ? withRepeat(withTiming(1, { duration: 300, easing: ease }), -1, true)
+      ? withSequence(
+          withTiming(0, { duration: Motion.respond }),
+          withRepeat(withTiming(1, { duration: 300, easing: ease }), -1, true),
+        )
       : withTiming(0, { duration: Motion.respond });
     drift.value = motion.driftMs
       ? withRepeat(withTiming(1, { duration: motion.driftMs / 2, easing: ease }), -1, true)
@@ -94,12 +106,17 @@ export function Meridian({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [motion.blink]);
 
-  // One word, one tap — only while speaking, and never under Reduce Motion.
-  useEffect(() => {
-    if (!pulse || !motion.squash) return;
-    tap.value = withSequence(withTiming(1.04, { duration: 60 }), withTiming(1, { duration: 60 }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pulse]);
+  // One word, one tap — only while speaking, and never under Reduce Motion. Read on the UI thread,
+  // so the words never pass through React.
+  const tapping = motion.squash;
+  useAnimatedReaction(
+    () => pulse?.value ?? 0,
+    (now, before) => {
+      if (before === null || now === before || !tapping) return;
+      tap.value = withSequence(withTiming(1.04, { duration: 60 }), withTiming(1, { duration: 60 }));
+    },
+    [tapping],
+  );
 
   const eyes = motion.eyes;
   const body = useAnimatedStyle(() => ({
