@@ -39,6 +39,13 @@ export interface ScheduleOptions {
   /** Pins the day's start (minutes since midnight). Defaults to the earliest time already on the
    *  day, so a reorder keeps the morning the traveler planned instead of drifting. */
   anchorMinutes?: number;
+  /**
+   * Stops whose own time is the traveller's and must not move. The cursor jumps to each one and the
+   * rest flow around them. With this set, an untimed first stop starts the day at 9:00 rather than
+   * at the day's earliest time — on an imported day whose third stop is at 2 PM, "earliest" would
+   * start the whole morning at 2 PM.
+   */
+  keepTimeOf?: (stop: Stop) => boolean;
 }
 
 /**
@@ -69,11 +76,18 @@ function dayAnchor(day: DayPlan, override?: number): number {
 export function rescheduleDay(day: DayPlan, options: ScheduleOptions = {}): DayPlan {
   if (day.stops.length === 0) return day;
 
-  let cursor = dayAnchor(day, options.anchorMinutes);
+  const { keepTimeOf } = options;
+  const own = (stop: Stop) => (keepTimeOf?.(stop) ? parseClock(stop.time ?? "") : null);
+  let cursor =
+    options.anchorMinutes !== undefined || !keepTimeOf
+      ? dayAnchor(day, options.anchorMinutes)
+      : (own(day.stops[0]) ?? DEFAULT_DAY_START_MIN);
+
   const stops = day.stops.map((stop, i) => {
+    const pinned = own(stop);
     // The anchor is left exactly as the traveler's own plan had it; only derived starts get rounded.
-    const startAt = i === 0 ? cursor : roundUpToSlot(cursor);
-    const timed: Stop = { ...stop, time: formatClock(startAt) };
+    const startAt = pinned ?? (i === 0 ? cursor : roundUpToSlot(cursor));
+    const timed: Stop = pinned === null ? { ...stop, time: formatClock(startAt) } : stop;
     cursor = startAt + parseDuration(stop.durationLabel ?? "");
     const next = day.stops[i + 1];
     if (next) cursor += legMinutes(stop, next, options.modes);
@@ -96,13 +110,13 @@ export interface StopRef {
  * what a drag actually does — computing it against the original list puts a stop dragged downward
  * one slot short of where it was dropped.
  */
-export function moveStop(
-  itinerary: Itinerary,
+export function moveStop<T extends Pick<Itinerary, "days">>(
+  itinerary: T,
   from: StopRef,
   to: StopRef,
   options: ScheduleOptions = {}
-): Itinerary {
-  const next: Itinerary = structuredClone(itinerary);
+): T {
+  const next: T = structuredClone(itinerary);
   const source = next.days[from.dayIndex];
   const target = next.days[to.dayIndex];
   if (!source || !target) return itinerary;
@@ -118,6 +132,15 @@ export function moveStop(
   for (const i of touched) next.days[i] = rescheduleDay(next.days[i], options);
 
   return next;
+}
+
+/**
+ * The `keepTimeOf` an itinerary's own times need: on an imported plan, the times the traveller
+ * gave. Generated plans get undefined, so every existing caller keeps re-timing everything.
+ */
+export function travellerTimes(itinerary: Pick<Itinerary, "origin">): ScheduleOptions["keepTimeOf"] {
+  if (itinerary.origin !== "imported") return undefined;
+  return (stop) => !stop.estimated?.includes("time");
 }
 
 /** Where a stop dropped on another day should land: after the last stop it would still follow in
