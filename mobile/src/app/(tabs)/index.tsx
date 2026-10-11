@@ -181,8 +181,14 @@ export default function Home() {
         ) : (
           <View style={styles.cta}>
             <PrimaryButton title="Plan a trip" onPress={() => router.push('/plan/basics')} />
-            {/* The second door: a slate pill under the screen's one jade fill (Primary Action Surface). */}
-            <PillButton title="I already have a plan" onPress={() => router.push('/plan/own')} />
+            {/* The second door: a slate pill under the screen's one jade fill (Primary Action Surface),
+                at the same width and height so the two read as peers sharing an edge. */}
+            <PillButton
+              block
+              title="I already have a plan"
+              onPress={() => router.push('/plan/own')}
+              style={styles.secondDoor}
+            />
           </View>
         )}
 
@@ -303,6 +309,8 @@ const styles = StyleSheet.create({
   },
   headline: { marginTop: Spacing.read },
   cta: { marginTop: Spacing.read, gap: Spacing.tight },
+  // PrimaryButton's height, so the slate door matches the jade one above it.
+  secondDoor: { minHeight: 52 },
   // Same 44pt target as Today's own actions, and no wider than its words.
   quietCta: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   band: { marginTop: Spacing.regular * 1.5 },
