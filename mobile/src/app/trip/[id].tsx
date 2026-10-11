@@ -1,4 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SymbolView } from 'expo-symbols';
 import {
@@ -138,6 +139,9 @@ export default function TripDetail() {
     setFilming(false);
     setFace(faceBefore.current);
   }
+  // Back during a film means Close, not "leave the trip" — Android's back button, and the header
+  // and edge swipe the film hides.
+  usePreventRemove(filming, closeFilm);
   const [adding, setAdding] = useState(false);
   /**
    * The stop being asked "what else is near this?", or null when the sheet was opened by +.
@@ -411,6 +415,8 @@ export default function TripDetail() {
   }
 
   const days = trip.itinerary?.days ?? [];
+  // A day with nothing on the map has nothing to fly to.
+  const canPlay = drawableStops(days[day]?.stops ?? []).length > 0;
 
   return (
     <View style={styles.screen}>
@@ -459,15 +465,20 @@ export default function TripDetail() {
                   film reads the plan when TripMate cannot write the story. */}
               <Pressable
                 onPress={startFilm}
-                disabled={drawableStops(days[day]?.stops ?? []).length === 0}
+                disabled={!canPlay}
                 accessibilityRole="button"
                 accessibilityLabel={`Play day ${day + 1}`}
+                accessibilityState={{ disabled: !canPlay }}
                 style={({ pressed }) => [styles.ask, pressed && styles.askPressed]}>
                 <SymbolView
                   name={{ ios: 'play.fill', android: 'play_arrow' }}
-                  tintColor={Colors.foreground}
+                  tintColor={canPlay ? Colors.foreground : Colors.muted}
                   size={14}
-                  fallback={<ThemedText type="label">Play</ThemedText>}
+                  fallback={
+                    <ThemedText type="label" themeColor={canPlay ? 'foreground' : 'muted'}>
+                      Play
+                    </ThemedText>
+                  }
                 />
               </Pressable>
                   {/* Beside + for the reason + is here: the trailing end of this row is the toolbar,

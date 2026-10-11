@@ -63,7 +63,7 @@ export function filmReducer(state: FilmState, action: FilmAction): FilmState {
         ? { ...state, beat: state.count - 1, phase: 'playing' }
         : { ...state, beat: Math.max(0, state.beat - 1), phase: 'playing' };
     case 'toggle':
-      if (state.phase === 'ended') return { ...state, beat: 0, phase: 'playing' };
+      if (state.phase === 'ended') return state.count > 0 ? { ...state, beat: 0, phase: 'playing' } : state;
       return { ...state, phase: state.phase === 'playing' ? 'paused' : 'playing' };
   }
 }

@@ -64,7 +64,12 @@ export function StoryPanel({
           </View>
         ) : null}
 
-        <ThemedText type="body" accessibilityLiveRegion="polite" style={{ color: ink }}>
+        <ThemedText
+          type="body"
+          // Announced only when the voice is not reading it: with the narrator working, TalkBack
+          // would speak every line twice. (iOS ignores live regions either way.)
+          accessibilityLiveRegion={state.voiceBroken ? 'polite' : 'none'}
+          style={{ color: ink }}>
           {loading ? `Writing the story of day ${dayIndex + 1}…` : ended ? 'That was the day.' : beat?.text}
         </ThemedText>
         {following && !ended && !loading ? (
@@ -97,14 +102,28 @@ export function StoryPanel({
             </>
           ) : (
             <>
-              <Control icon={{ ios: 'backward.fill', android: 'skip_previous' }} label="Previous" onPress={film.prev} ink={ink} />
+              {/* Nothing to step through until the script lands, and nothing before the first beat. */}
+              <Control
+                icon={{ ios: 'backward.fill', android: 'skip_previous' }}
+                label="Previous"
+                onPress={film.prev}
+                ink={ink}
+                disabled={loading || state.beat === 0}
+              />
               <Control
                 icon={state.phase === 'playing' ? { ios: 'pause.fill', android: 'pause' } : { ios: 'play.fill', android: 'play_arrow' }}
                 label={state.phase === 'playing' ? 'Pause' : 'Play'}
                 onPress={film.toggle}
                 ink={ink}
+                disabled={loading}
               />
-              <Control icon={{ ios: 'forward.fill', android: 'skip_next' }} label="Next" onPress={film.next} ink={ink} />
+              <Control
+                icon={{ ios: 'forward.fill', android: 'skip_next' }}
+                label="Next"
+                onPress={film.next}
+                ink={ink}
+                disabled={loading}
+              />
               <ThemedText type="detail" style={[styles.grow, styles.count, { color: inkMuted }]}>
                 {loading ? '' : `${state.beat + 1} of ${state.count}`}
               </ThemedText>
@@ -123,18 +142,22 @@ function Control({
   label,
   onPress,
   ink,
+  disabled = false,
 }: {
   icon?: React.ComponentProps<typeof SymbolView>['name'];
   label: string;
   onPress: () => void;
   ink: string;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.control, pressed && { opacity: 0.6 }]}>
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => [styles.control, disabled ? { opacity: 0.35 } : pressed && { opacity: 0.6 }]}>
       {icon ? (
         <SymbolView
           // Object form, never a bare SF string — the Android path renders nothing given one.

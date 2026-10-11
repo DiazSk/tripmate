@@ -33,6 +33,9 @@ describe('filmReducer', () => {
       at({ phase: 'playing', beat: 0, count: 3 }),
     );
   });
+  it('Again on a script with no beats stays ended rather than playing nothing', () => {
+    expect(filmReducer(at({ phase: 'ended', count: 0 }), { type: 'toggle' }).phase).toBe('ended');
+  });
   it('ignores the transport while the script is still being written', () => {
     for (const type of ['next', 'prev', 'toggle'] as const) {
       expect(filmReducer(initialFilm, { type })).toBe(initialFilm);
