@@ -135,3 +135,23 @@ test('a hand-added stop with no time or length says only what it is', () => {
   expect(stopParticulars({ time: '', durationLabel: '  ', category: 'other' })).toBe('Other');
   expect(stopParticulars({})).toBe('');
 });
+
+describe('stopParticulars on an imported plan', () => {
+  it('hedges the time and duration TripMate supplied', () => {
+    expect(
+      stopParticulars({ time: '9:30 AM', durationLabel: '1.5 h', category: 'entry', estimated: ['time', 'duration'] }),
+    ).toBe('about 9:30 AM  ·  about 1.5 h  ·  Entry');
+  });
+
+  it("leaves the traveller's own time plain", () => {
+    expect(stopParticulars({ time: '9:30 AM', durationLabel: '1.5 h', category: 'entry', estimated: ['duration'] })).toBe(
+      '9:30 AM  ·  about 1.5 h  ·  Entry',
+    );
+  });
+
+  it('reads a generated stop exactly as before', () => {
+    expect(stopParticulars({ time: '9:30 AM', durationLabel: '1.5 h', category: 'entry' })).toBe(
+      '9:30 AM  ·  1.5 h  ·  Entry',
+    );
+  });
+});

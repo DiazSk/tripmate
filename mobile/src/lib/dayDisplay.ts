@@ -1,4 +1,5 @@
 import type { DayPlan } from '@/api/types';
+import { aboutDuration } from '@shared/travelTime';
 /**
  * How a day states itself. Ported from `ios/TripMateKit/Sources/TripMateKit/DayDisplay.swift`.
  *
@@ -186,13 +187,20 @@ export function clockAt(iso: string | null): string | null {
  *
  * `category` is stored lowercase (`'food'`, `'entry'`) and used to be capitalised by the label
  * step's `textTransform`. Sentence case has to happen in the string, or the line reads "· food".
+ *
+ * On an imported plan, what TripMate supplied rather than the traveller reads "about …" — the
+ * estimates spec's rule that the hedge belongs in the sentence.
  */
 export function stopParticulars(stop: {
   time?: string;
   durationLabel?: string;
   category?: string;
+  /** Fields TripMate supplied on an imported plan; hedged in words, per the estimates rule. */
+  estimated?: readonly string[];
 }): string {
-  return [stop.time, stop.durationLabel, sentence(stop.category)]
+  const hedge = (field: string, value: string | undefined) =>
+    value && stop.estimated?.includes(field) ? aboutDuration(value) : value;
+  return [hedge('time', stop.time), hedge('duration', stop.durationLabel), sentence(stop.category)]
     .map((part) => part?.trim())
     .filter(Boolean)
     .join('  ·  ');
