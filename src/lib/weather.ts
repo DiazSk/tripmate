@@ -175,7 +175,7 @@ async function fetchWeatherBundle(
   // Trip too far out to forecast: use the same calendar dates one year back as a "typical weather" stand-in.
   const lastYear = (d: string) => {
     const date = new Date(d);
-    date.setFullYear(date.getFullYear() - 1);
+    date.setUTCFullYear(date.getUTCFullYear() - 1);
     return date.toISOString().slice(0, 10);
   };
   return fetchDaily(
