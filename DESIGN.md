@@ -1572,9 +1572,16 @@ and not `writing-mode: vertical-lr` (which only became a vertical range in Safar
 thumb need explicit rules because `appearance: none` strips the platform rendering.
 
 **The film's panel takes the stop card's place and material, and Meri heads it.** Pressing ▶ on
-the phone hands the foot of the map to a narration panel: the same `Group`, the same `chrome()`
-choice of glass and ink by whether the ground is a photograph, the same `MAP_FLOOR`, arriving
-with `SlideInDown`. Its layout is the Frosted Meridian reference (column 02 of
+the phone hands the foot of the map to a narration sheet: the same `Group` and the same `chrome()`
+choice of glass and ink by whether the ground is a photograph, but **full bleed** — edge to edge,
+standing on the screen's bottom edge with its top corners rounded and its bottom square, the
+home-indicator inset added inside it — arriving with `SlideInDown`. Covering the foot of the map
+means covering Apple's logo and Legal link, which must stay visible, so while it plays the map's
+`mapPadding` grows to the sheet's measured height: MapKit keeps its marks inside the padded area,
+just above the sheet, and centres every dive in the map that is left. The sheet's lines are
+spaced generously (20pt insets, 12pt beside Meri, 16pt before the narration and before the
+controls, 8pt between the two lines) so the header, the narration and the controls read as three
+things rather than one block. Its layout is the Frosted Meridian reference (column 02 of
 `docs/superpowers/specs/assets/2026-10-11-meri-reference.webp`): Meri, the day's title — with
 "Read from your plan" or "Voice unavailable" beneath it only when true — the beat count and
 Close; the line being spoken and the next one in a single muted row; then three centred

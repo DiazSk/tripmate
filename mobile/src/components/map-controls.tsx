@@ -469,6 +469,7 @@ export function Group({
   tint,
   style,
   radius = Radius.pill,
+  squareBottom = false,
   onLayout,
   entering,
   exiting,
@@ -479,6 +480,8 @@ export function Group({
   style?: StyleProp<AnimatedStyle<ViewStyle>>;
   /** `Radius.pill` for the control stacks, a card radius for the stop card. */
   radius?: number;
+  /** Square bottom corners, for a sheet standing on the screen's bottom edge. */
+  squareBottom?: boolean;
   /** On the shadow box, which is the one that has the group's real height. */
   onLayout?: (event: LayoutChangeEvent) => void;
   /** Reanimated layout animations, for the groups that arrive and leave rather than just sit
@@ -492,8 +495,11 @@ export function Group({
       onLayout={onLayout}
       entering={entering}
       exiting={exiting}
-      style={[styles.lift, { borderRadius: radius }, style]}>
-      <BlurView tint={tint} intensity={70} style={[styles.glass, { borderRadius: radius }]}>
+      style={[styles.lift, { borderRadius: radius }, squareBottom && styles.squareBottom, style]}>
+      <BlurView
+        tint={tint}
+        intensity={70}
+        style={[styles.glass, { borderRadius: radius }, squareBottom && styles.squareBottom]}>
         {children}
       </BlurView>
     </Animated.View>
@@ -560,6 +566,7 @@ const NEEDLE_SOUTH = 9;
 
 const styles = StyleSheet.create({
   // The shadow box. It must not clip, or the shadow is clipped with its children.
+  squareBottom: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   lift: {
     position: 'absolute',
     borderRadius: Radius.pill,

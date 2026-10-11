@@ -1,9 +1,10 @@
 import { SymbolView } from 'expo-symbols';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { MapType } from 'react-native-maps';
 import { SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Group, MAP_FLOOR, chrome } from '@/components/map-controls';
+import { Group, chrome } from '@/components/map-controls';
 import { Meridian } from '@/components/meridian';
 import { ThemedText } from '@/components/themed-text';
 import { Motion, Radius, Spacing } from '@/constants/theme';
@@ -29,6 +30,7 @@ export function StoryPanel({
   mapType,
   onClose,
   onNextDay,
+  onLayout,
 }: {
   film: ReturnType<typeof useStoryFilm>;
   destination: string;
@@ -38,7 +40,10 @@ export function StoryPanel({
   mapType: MapType;
   onClose: () => void;
   onNextDay?: () => void;
+  /** Its measured height, so the map can keep Apple's marks and its dives above the sheet. */
+  onLayout?: (event: LayoutChangeEvent) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const { tint, ink, inkMuted } = chrome(mapType);
   const { state, script } = film;
   const beat = script?.beats[state.beat];
@@ -52,14 +57,16 @@ export function StoryPanel({
     <Group
       tint={tint}
       radius={Radius.surface}
+      squareBottom
       style={styles.panel}
+      onLayout={onLayout}
       entering={SlideInDown.duration(Motion.settle)}
       exiting={SlideOutDown.duration(Motion.exit)}>
-      <View style={styles.body}>
+      <View style={[styles.body, { paddingBottom: insets.bottom + Spacing.tight }]}>
         {/* Reference 02's header: Meri, the film's title, where you are in it, and the way out. */}
         <View style={styles.header}>
           <Meridian state={meriForFilm(state)} size={40} pulse={film.words} />
-          <View style={styles.grow}>
+          <View style={[styles.grow, styles.heading]}>
             {/* `detail` at medium weight, not `label` — that is the 11pt tracked caps of "LIST · MAP". */}
             <ThemedText type="detail" numberOfLines={1} style={{ color: ink, fontWeight: '500' }}>
               {filmTitle(day, destination)}
@@ -88,7 +95,7 @@ export function StoryPanel({
           {loading ? `Writing the story of day ${dayIndex + 1}…` : ended ? 'That was the day.' : beat?.text}
         </ThemedText>
         {following && !ended && !loading ? (
-          <ThemedText type="detail" numberOfLines={1} style={{ color: inkMuted }}>
+          <ThemedText type="detail" numberOfLines={1} style={[styles.next, { color: inkMuted }]}>
             {following.text}
           </ThemedText>
         ) : null}
@@ -184,11 +191,17 @@ function Control({
 }
 
 const styles = StyleSheet.create({
-  panel: { position: 'absolute', left: Spacing.read, right: Spacing.read, bottom: MAP_FLOOR },
-  body: { paddingHorizontal: Spacing.rows, paddingTop: Spacing.rows, paddingBottom: Spacing.tight, gap: Spacing.hair },
-  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
+  // Full bleed, like the reference: edge to edge and standing on the screen's bottom edge, its top
+  // corners rounded and its bottom square. The safe-area inset is added at the foot in the render.
+  panel: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  // **Room between every line, deliberately.** The header, the line being spoken, the next line
+  // and the controls are four different kinds of thing; packed at a 4pt gap they read as one block.
+  body: { paddingHorizontal: Spacing.compact, paddingTop: Spacing.compact },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows, marginBottom: Spacing.read },
+  heading: { gap: 2 },
+  next: { marginTop: Spacing.tight },
   grow: { flex: 1 },
-  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.read * 2, marginTop: Spacing.tight },
+  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.read * 2, marginTop: Spacing.read },
   play: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   control: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.tight },
 });

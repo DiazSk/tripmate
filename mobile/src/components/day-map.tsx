@@ -93,7 +93,7 @@ export function DayMap({
    * Present while a film plays this day. `stop` is the day's stop the camera should be on, or null
    * to frame the whole day. Hides everything that is not the place being talked about.
    */
-  film?: { stop: number | null };
+  film?: { stop: number | null; inset?: number };
   /** What the map is actually drawing, for a panel standing on it that must pick its material by
    *  whether the ground is a photograph (`chrome()`). The film's panel is that panel. */
   onMapType?: (type: MapType) => void;
@@ -484,7 +484,10 @@ export function DayMap({
         // ponytail: a fixed 72 sized to a two-line pill at Default. A three-line summary at an
         // accessibility size grows past it; give the pill an `onLayout` and feed its height back
         // if that turns up on a real trip.
-        mapPadding={MAP_INSET}
+        // During a film the sheet covers the foot of the map, so the padding grows to its height:
+        // MapKit keeps Apple's logo and Legal link inside the padded area — a licence condition, so
+        // they must stay visible — and centres every dive in the map that is left.
+        mapPadding={film ? { ...MAP_INSET, bottom: film.inset ?? 0 } : MAP_INSET}
         // Defaults to white, and would flash against the near-black canvas on every first draw.
         loadingBackgroundColor={Colors.canvas}
         // Android otherwise puts Google's own directions buttons over the map on a marker press.
