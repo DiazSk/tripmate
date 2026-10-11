@@ -17,6 +17,7 @@ import { evidenceTags } from '@/lib/provenance';
 import { locationNote } from '@shared/evidence';
 import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
 import { formatMoney } from '@/lib/spend';
+import { emptyDayFindings } from '@/lib/importNotes';
 
 /**
  * One day of a trip, read as a page.
@@ -113,6 +114,14 @@ export function DayPage({
       <View style={styles.slot}>
         <SectionRule label="The day" />
       </View>
+
+      {/* An empty day has no rows for a finding to sit on, so its own "Fix this" goes here — the
+          same `Finding`, which with no repairs opens chat pre-filled. See `emptyDayFindings`. */}
+      {emptyDayFindings(day, findings).map((finding) => (
+        <View key={finding.message} style={styles.slot}>
+          <Finding finding={finding} repairs={[]} onRepair={onRepair} onAsk={onAsk} />
+        </View>
+      ))}
 
       {groups.map((group, groupIndex) => (
         <View key={group.label ?? `group-${groupIndex}`}>

@@ -1,4 +1,4 @@
-import { importNoteLines, showsHealthOnOpen } from './importNotes';
+import { emptyDayFindings, importNoteLines, showsHealthOnOpen } from './importNotes';
 
 describe('importNoteLines', () => {
   it('says each thing an import could not do, once', () => {
@@ -18,5 +18,18 @@ describe('showsHealthOnOpen', () => {
     expect(showsHealthOnOpen({ origin: 'imported' })).toBe(true);
     expect(showsHealthOnOpen({ origin: 'generated' })).toBe(false);
     expect(showsHealthOnOpen({})).toBe(false);
+  });
+});
+
+describe('emptyDayFindings', () => {
+  const empty = { rule: 'empty' as const, dayIndex: 2, message: 'Nothing is planned on day 3 yet.' };
+  const pace = { rule: 'pace' as const, dayIndex: 2, message: 'A long day.' };
+
+  it('gives an empty day its own finding, so "Fix this" has somewhere to live', () => {
+    expect(emptyDayFindings({ stops: [] }, [empty, pace])).toEqual([empty]);
+  });
+
+  it('gives a day with stops nothing — its findings already sit on its rows', () => {
+    expect(emptyDayFindings({ stops: [{}] }, [empty])).toEqual([]);
   });
 });

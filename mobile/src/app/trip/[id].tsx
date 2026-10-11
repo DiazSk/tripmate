@@ -520,13 +520,16 @@ export default function TripDetail() {
               not about the list, and hiding it there would make the face swap jump. */}
           <BudgetBar days={days} budget={trip.budget} activeDayIndex={day} />
 
-          {trip
-            ? importNoteLines(trip.itinerary).map((line) => (
+          {trip && importNoteLines(trip.itinerary).length > 0 ? (
+            // Inset to the same edge as the PlanHealth card beneath it, so the two read as one block.
+            <View style={styles.importNotes}>
+              {importNoteLines(trip.itinerary).map((line) => (
                 <ThemedText key={line} type="detail" themeColor="muted">
                   {line}
                 </ThemedText>
-              ))
-            : null}
+              ))}
+            </View>
+          ) : null}
           {health && (touched || chat.turns.length > 0 || (trip && showsHealthOnOpen(trip.itinerary))) ? (
             <PlanHealth health={health} />
           ) : null}
@@ -1299,6 +1302,7 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
 const CHIP_STRIDE = 52;
 
 const styles = StyleSheet.create({
+  importNotes: { marginHorizontal: Spacing.read, gap: Spacing.hair },
   screen: { flex: 1, backgroundColor: Colors.canvas },
   stateWrap: { paddingTop: Spacing.regular },
 
