@@ -74,6 +74,10 @@ const DIMENSION_OF: Record<GuardrailRule, HealthKey> = {
   pace: "load",
   required: "requests",
   anchors: "requests",
+  // A closed door decides whether the day can happen as planned, which is what Schedule asks.
+  closed: "schedule",
+  // An empty day is the bottom of the same scale an overpacked one tops.
+  empty: "load",
 };
 
 const LABELS: Record<HealthKey, string> = {

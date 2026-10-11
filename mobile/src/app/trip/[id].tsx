@@ -44,6 +44,7 @@ import { type Repair, repairsFor } from '@shared/guardrailFixes';
 import { clockAt, formatDayChip, formatRange } from '@/lib/dayDisplay';
 import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/itineraryDiff';
 import { tripHealth, type Guardrail } from '@/lib/health';
+import { importNoteLines, showsHealthOnOpen } from '@/lib/importNotes';
 import { regionForStops } from '@/lib/mapRegion';
 import { loadTrip } from '@/lib/tripCache';
 import { todayInZone } from '@/lib/tripClock';
@@ -519,7 +520,19 @@ export default function TripDetail() {
               not about the list, and hiding it there would make the face swap jump. */}
           <BudgetBar days={days} budget={trip.budget} activeDayIndex={day} />
 
-          {health && (touched || chat.turns.length > 0) ? <PlanHealth health={health} /> : null}
+          {trip && importNoteLines(trip.itinerary).length > 0 ? (
+            // Inset to the same edge as the PlanHealth card beneath it, so the two read as one block.
+            <View style={styles.importNotes}>
+              {importNoteLines(trip.itinerary).map((line) => (
+                <ThemedText key={line} type="detail" themeColor="muted">
+                  {line}
+                </ThemedText>
+              ))}
+            </View>
+          ) : null}
+          {health && (touched || chat.turns.length > 0 || (trip && showsHealthOnOpen(trip.itinerary))) ? (
+            <PlanHealth health={health} />
+          ) : null}
 
           <AnchorReceipt
             itinerary={trip.itinerary}
@@ -1289,6 +1302,7 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
 const CHIP_STRIDE = 52;
 
 const styles = StyleSheet.create({
+  importNotes: { marginHorizontal: Spacing.read, gap: Spacing.hair },
   screen: { flex: 1, backgroundColor: Colors.canvas },
   stateWrap: { paddingTop: Spacing.regular },
 

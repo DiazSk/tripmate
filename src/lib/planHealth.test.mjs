@@ -163,3 +163,20 @@ test("no finding is dropped by the partition", () => {
   assert.equal(partitioned.length, all.length, "every finding has exactly one home");
   assert.deepEqual(new Set(partitioned.map((f) => f.message)), new Set(all.map((f) => f.message)));
 });
+
+test("a closed stop counts against Schedule and an empty imported day against Day load", () => {
+  const s = (over) => ({ name: "x", lat: 38.7, lng: -9.14, cost: 0, note: "", time: "10:00 AM", durationLabel: "60 min", category: "entry", ...over });
+  const health = planHealth(
+    {
+      origin: "imported",
+      days: [
+        { date: "2026-11-02", weather: "", stops: [s({ closedDays: ["Mo"] })] },
+        { date: "2026-11-03", weather: "", stops: [] },
+      ],
+    },
+    {}
+  );
+  const dim = (key) => health.dimensions.find((d) => d.key === key);
+  assert.ok(dim("schedule").findings.some((f) => f.rule === "closed"));
+  assert.ok(dim("load").findings.some((f) => f.rule === "empty"));
+});

@@ -1,5 +1,6 @@
-import { fmt, legFit } from "./guardrails";
+import { fmt, isClosedOn, legFit, weekdayName } from "./guardrails";
 import { parseClock } from "./itinerary";
+import { insertionIndexByTime, moveStop, travellerTimes } from "./schedule";
 import type { Guardrail } from "./guardrails";
 import type { CheckableItinerary, DayPlan, Stop } from "./types";
 
@@ -85,7 +86,33 @@ function acceptable(before: number[], after: number[], leg: number): boolean {
   return after.every((s, i) => s <= before[i]);
 }
 
+/**
+ * A closed stop's way out: the nearest other day of the trip it's open on, placed by its time.
+ * One repair, not a menu — the nearest is the least surprising move, and "Fix this" is still
+ * there for anything else. On an imported plan the traveller's own times stay put on both days.
+ */
+function closedRepairs(itinerary: CheckableItinerary, finding: Guardrail): Repair[] {
+  if (finding.dayIndex === null || finding.stopIndex === undefined) return [];
+  const from = finding.dayIndex;
+  const stop = itinerary.days[from]?.stops[finding.stopIndex];
+  if (!stop) return [];
+  const target = itinerary.days
+    .map((day, i) => ({ day, i }))
+    .filter(({ day, i }) => i !== from && !isClosedOn(stop, day.date))
+    // Nearest first; on a tie, the later day, so the move reads as "later in the trip".
+    .sort((a, b) => Math.abs(a.i - from) - Math.abs(b.i - from) || b.i - a.i)[0];
+  if (!target) return [];
+  const next = moveStop(
+    itinerary,
+    { dayIndex: from, stopIndex: finding.stopIndex },
+    { dayIndex: target.i, stopIndex: insertionIndexByTime(target.day, stop) },
+    { keepTimeOf: travellerTimes(itinerary) }
+  );
+  return [{ label: `Move ${stop.name} to ${weekdayName(target.day.date)} (day ${target.i + 1})`, next }];
+}
+
 export function repairsFor(itinerary: CheckableItinerary, finding: Guardrail): Repair[] {
+  if (finding.rule === "closed") return closedRepairs(itinerary, finding);
   if (!REPAIRABLE.has(finding.rule)) return [];
   if (finding.dayIndex === null || finding.stopIndex === undefined) return [];
 

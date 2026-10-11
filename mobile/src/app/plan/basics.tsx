@@ -1,6 +1,3 @@
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import * as ImagePicker from 'expo-image-picker';
-import { SymbolView } from 'expo-symbols';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -22,20 +19,15 @@ import { geocode, importPlaces, listSavedPlaces } from '@/api/tripMateApi';
 import type { Anchor, ImportItem, SavedPlace } from '@/api/types';
 import { usePlanDraft } from '@/lib/planDraft';
 import { ChoiceRow, DateField, FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
+import { ImportComposer } from '@/components/import-composer';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
 import { anchorKey, mergeAnchors } from '@/lib/anchors';
+import { looksLikeDayPlan } from '@/lib/importItems';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
-import { crossFieldProblem, gapSentence, hasImportContent, planGap } from '@/lib/formGap';
-import { summariseUnread } from '@/lib/unreadSummary';
+import { crossFieldProblem, gapSentence, planGap } from '@/lib/formGap';
 import { closestTier, tierName, tripDays } from '@/lib/tiers';
-
-/**
- * The long edge every screenshot is shrunk to before upload — the size Anthropic's vision API
- * downsamples to, so anything larger is bytes and tokens spent on detail the model discards.
- */
-const LONG_EDGE = 1568;
 
 export default function Basics() {
   const router = useRouter();
@@ -547,6 +539,9 @@ function SavedPlacesSection({
   );
 }
 
+/** The import box's placeholder on this screen — the box itself is `ImportComposer`. */
+const PASTE_PLACEHOLDER = 'Paste links or notes';
+
 /**
  * "Chaos in, trip out" — paste what you already saved (screenshots, links, notes) and get the
  * places back as starrable chips. Mirrors the web's `ImportDropZone.tsx`.
@@ -567,70 +562,11 @@ function ImportSection({
   onAnchorsChange: (update: (prev: Anchor[]) => Anchor[]) => void;
   onDestinationGuess: (guess: string) => void;
 }) {
-  const [text, setText] = useState('');
-  const [images, setImages] = useState<
-    { mediaType: 'image/jpeg' | 'image/png' | 'image/webp'; data: string }[]
-  >([]);
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [unread, setUnread] = useState<string[]>([]);
 
-  /**
-   * Pick screenshots, and **shrink them before they are ever encoded**.
-   *
-   * The picker used to be asked for `base64` at full camera resolution. Base64 inflates bytes by
-   * about a third, so five to seven phone photos cleared `/api/import`'s 10MB body cap and the
-   * traveller got "That's a lot at once — try fewer screenshots." The `selectionLimit: 20` this
-   * advertises had never actually been reachable.
-   *
-   * **1568px is not a guess**: it is the long edge Anthropic's vision API downsamples to, so
-   * every pixel above it was bytes uploaded and tokens billed for detail the model never saw.
-   * Resized and re-encoded, twenty screenshots land around 5MB — inside the cap, with the
-   * extraction reading exactly what it read before.
-   *
-   * So the picker is no longer asked for `base64` or `quality`: it hands back the original file
-   * and the manipulator does the one encode, instead of the picker building a full-resolution
-   * base64 in memory for every image and this throwing most of it away.
-   */
-  async function pickScreenshots() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: 20,
-    });
-    if (result.canceled) return;
-
-    const picked = await Promise.all(
-      result.assets.map(async (asset) => {
-        const context = ImageManipulator.manipulate(asset.uri);
-        // Resize on the longer side so the ratio is kept — passing one dimension lets the
-        // manipulator work the other out. A `0` dimension means the system did not report one,
-        // and `0 > LONG_EDGE` is false, so those pass through unresized rather than crash.
-        if (Math.max(asset.width, asset.height) > LONG_EDGE) {
-          context.resize(asset.width >= asset.height ? { width: LONG_EDGE } : { height: LONG_EDGE });
-        }
-        const image = await context.renderAsync();
-        const saved = await image.saveAsync({
-          format: SaveFormat.JPEG,
-          compress: 0.6,
-          base64: true,
-        });
-        return saved.base64 ? { mediaType: 'image/jpeg' as const, data: saved.base64 } : null;
-      }),
-    );
-    setImages((prev) => [...prev, ...picked.filter((image) => image !== null)]);
-  }
-
-  async function findPlaces() {
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const urls = lines.filter((l) => /^https?:\/\/\S+$/.test(l));
-    const rest = lines.filter((l) => !urls.includes(l)).join('\n');
-    const items: ImportItem[] = [
-      ...images.map((img) => ({ kind: 'image' as const, mediaType: img.mediaType, data: img.data })),
-      ...urls.map((url) => ({ kind: 'url' as const, url })),
-      ...(rest ? [{ kind: 'text' as const, text: rest }] : []),
-    ];
-    if (items.length === 0) return;
-
+  async function findPlaces(items: ImportItem[]): Promise<boolean> {
     setBusy(true);
     setUnread([]);
     const result = await importPlaces(items, destination.trim() || undefined);
@@ -638,17 +574,16 @@ function ImportSection({
 
     if (result === undefined) {
       setUnread(["Couldn't read these right now."]);
-      return;
+      return false;
     }
     if (typeof result === 'string') {
       setUnread([result]);
-      return;
+      return false;
     }
     onAnchorsChange((prev) => mergeAnchors(prev, result.places));
     if (result.destinationGuess) onDestinationGuess(result.destinationGuess);
     setUnread(result.unread.map((u) => u.reason));
-    setText('');
-    setImages([]);
+    return true;
   }
 
   const toggleMust = (name: string) =>
@@ -656,77 +591,24 @@ function ImportSection({
       prev.map((a) => (a.name === name ? { ...a, priority: a.priority === 'must' ? 'want' : 'must' } : a))
     );
   const remove = (name: string) => onAnchorsChange((prev) => prev.filter((a) => a.name !== name));
-  const box = useRef<TextInput>(null);
-  const hasContent = hasImportContent(text, images.length);
 
   return (
     <View style={styles.import}>
-      {/* **One object, not three.** The box is an input with two things that feed it and one
-          action that consumes it — `Add screenshots` is a second way to put content *in*, not a
-          sibling of `Find the places`. As peers below the box the two were the same capsule at
-          the same width and read as twins; in the footer they are an affordance and an action.
-          It also resolves a count: with `Next` permanently jade, a jade-filled `Find the places`
-          would be the screen's second fill, which the Primary Action Surface rule allows one
-          of. */}
-      <View style={styles.composer}>
-        <TextInput
-          ref={box}
-          value={text}
-          onChangeText={setText}
-          placeholder="Paste links or notes"
-          placeholderTextColor={Colors.muted}
-          selectionColor={Colors.accent}
-          multiline
-          maxFontSizeMultiplier={1.6}
-          style={styles.composerInput}
-        />
-        <View style={styles.composerFooter}>
-          <Pressable
-            onPress={() => void pickScreenshots()}
-            accessibilityRole="button"
-            accessibilityLabel={
-              images.length > 0 ? `Screenshots, ${images.length} added` : 'Add screenshots'
-            }
-            style={styles.attach}>
-            <SymbolView
-              // Object form, never a bare SF string — the Android path renders nothing at all
-              // given one, silently.
-              name={{ ios: 'photo.on.rectangle', android: 'image' }}
-              tintColor={images.length > 0 ? Colors.foreground : Colors.muted}
-              size={16}
-              fallback={
-                <ThemedText type="detail" themeColor="muted">
-                  +
-                </ThemedText>
-              }
+      <ImportComposer
+        busy={busy}
+        unread={unread}
+        actionTitle="Find the places"
+        placeholder={PASTE_PLACEHOLDER}
+        onSubmit={findPlaces}
+        below={(text) =>
+          looksLikeDayPlan(text) ? (
+            <PillButton
+              title="This looks like a full plan — use it as your trip"
+              onPress={() => router.push({ pathname: '/plan/own', params: { text } })}
             />
-            <ThemedText type="detail" themeColor={images.length > 0 ? 'foreground' : 'muted'}>
-              {images.length > 0 ? `Screenshots (${images.length})` : 'Screenshots'}
-            </ThemedText>
-          </Pressable>
-          {/* No `disabled`: an empty box is incomplete, not unavailable. Pressing it puts the
-              cursor in the box and says nothing — the gap is two centimetres away and a cursor
-              arriving explains itself, where a field three rows up does not. */}
-          <PillButton
-            compact
-            title="Find the places"
-            busy={busy}
-            onPress={() => (hasContent ? void findPlaces() : box.current?.focus())}
-          />
-        </View>
-      </View>
-
-      {unread.length > 0 ? (
-        <View accessibilityLiveRegion="polite" style={styles.importUnread}>
-          {/* One line per *reason*, not per file — four unreadable screenshots said the same
-              sentence four times. See `summariseUnread`. */}
-          {summariseUnread(unread).map((reason) => (
-            <ThemedText key={reason} type="detail" themeColor="muted">
-              {reason}
-            </ThemedText>
-          ))}
-        </View>
-      ) : null}
+          ) : null
+        }
+      />
 
       {anchors.length > 0 ? (
         <View style={styles.chips}>
@@ -780,53 +662,6 @@ const styles = StyleSheet.create({
   savedGroup: { gap: Spacing.hair },
   chipOn: { backgroundColor: Colors.accent },
   import: { gap: Spacing.tight },
-  composer: {
-    backgroundColor: Colors.panel,
-    borderColor: Colors.cardBorder,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.surface,
-    // So the footer's rule meets the box's sides instead of floating inside its corners.
-    overflow: 'hidden',
-  },
-  composerInput: {
-    minHeight: 72,
-    color: Colors.foreground,
-    fontSize: 14,
-    lineHeight: 20,
-    paddingHorizontal: Spacing.read,
-    paddingVertical: Spacing.tight,
-    textAlignVertical: 'top',
-  },
-  composerFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    // **`wrap`, because the box clips and the action is on the right.** React Native defaults
-    // `flexShrink` to 0 rather than CSS's 1, so without this the row simply overflows at large
-    // type — and `composer`'s `overflow: 'hidden'` cuts off whichever end runs past, which is
-    // the capsule. `Screenshots (12)` beside the capsule needs roughly 400pt of a ~340pt row at
-    // AX3. `form.tsx`'s `timeRow` carries the same fix with the same note.
-    flexWrap: 'wrap',
-    rowGap: Spacing.hair,
-    minHeight: 44,
-    paddingHorizontal: Spacing.tight,
-    // 8, not 4: the capsule is itself 44pt inside a 44pt-minimum row, so at `hair` its bottom
-    // edge all but touched the box's own border.
-    paddingVertical: Spacing.tight,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.cardBorder,
-  },
-  // 44 is the floor, and the row is the target rather than the words in it. `flexShrink` so a
-  // long count gives way to the action rather than pushing it out of the box.
-  attach: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-    gap: Spacing.tight,
-    minHeight: 44,
-    paddingHorizontal: Spacing.tight,
-  },
-  importUnread: { gap: Spacing.hair },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.tight },
   chip: {
     flexDirection: 'row',

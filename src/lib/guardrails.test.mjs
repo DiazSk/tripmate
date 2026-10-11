@@ -12,7 +12,9 @@ import {
   evaluateBudget,
   evaluateDay,
   evaluateItinerary,
+  isClosedOn,
   revisionIsNoWorse,
+  weekdayName,
 } from "./guardrails.ts";
 
 /** One stop, one day, priced to whatever the case needs. */
@@ -702,4 +704,38 @@ test("the budget rule is excluded from the comparison", () => {
   const v = revisionIsNoWorse(fixed, pricey, { budget: 10 });
   assert.equal(v.ok, true, "an over-budget revision is not refused by this gate");
   assert.equal(v.totalAfter, 0);
+});
+
+const importedStop = (over = {}) => ({
+  name: "x",
+  lat: 38.7,
+  lng: -9.14,
+  cost: 0,
+  note: "",
+  time: "10:00 AM",
+  durationLabel: "60 min",
+  category: "entry",
+  ...over,
+});
+
+test("closed fires on the weekday the stop's date falls on, read in UTC", () => {
+  // 2026-11-02 is a Monday everywhere, but a local-time parse west of Greenwich reads Sunday.
+  const it = { days: [{ date: "2026-11-02", weather: "", stops: [importedStop({ name: "Belém Tower", closedDays: ["Mo"] })] }] };
+  const found = evaluateItinerary(it, {}).filter((f) => f.rule === "closed");
+  assert.deepEqual(found, [{ rule: "closed", dayIndex: 0, stopIndex: 0, message: "Belém Tower is closed on Mondays." }]);
+  assert.equal(weekdayName("2026-11-02"), "Monday");
+});
+
+test("unknown hours are never closed", () => {
+  for (const closedDays of [null, undefined, []]) {
+    assert.equal(isClosedOn({ closedDays }, "2026-11-02"), false);
+  }
+  assert.equal(isClosedOn({ closedDays: ["Tu"] }, "2026-11-02"), false);
+});
+
+test("an empty day is a finding on an imported plan and nothing on a generated one", () => {
+  const days = [{ date: "2026-11-02", weather: "", stops: [importedStop()] }, { date: "2026-11-03", weather: "", stops: [] }];
+  const imported = evaluateItinerary({ origin: "imported", days }, {}).filter((f) => f.rule === "empty");
+  assert.deepEqual(imported, [{ rule: "empty", dayIndex: 1, message: "Nothing is planned on day 2 yet." }]);
+  assert.deepEqual(evaluateItinerary({ days }, {}).filter((f) => f.rule === "empty"), []);
 });

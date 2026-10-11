@@ -46,6 +46,7 @@ export default function PlanLayout() {
     <PlanDraftProvider>
       <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
         <Stack.Screen name="basics" options={{ headerLeft: () => <CloseButton /> }} />
+        <Stack.Screen name="own" options={{ headerLeft: () => <CloseButton /> }} />
         <Stack.Screen name="generating" options={{ headerLeft: () => <CloseButton /> }} />
       </Stack>
     </PlanDraftProvider>

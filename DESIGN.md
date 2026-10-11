@@ -1662,6 +1662,12 @@ The Map/Satellite toggle keeps the view by capturing `cameraState()` off the out
 synchronously in `setEngine` — not in an effect reacting to the change, because by then the outgoing
 canvas may already be hidden, and a hidden canvas is a camera nobody can read.
 
+**Imported plans hedge only what TripMate supplied.** A stop on a plan the traveller brought in
+carries `estimated` — the fields TripMate filled rather than read. Those read "about 9:30 AM",
+"about 1.5 h" (`stopParticulars`); the traveller's own times and durations read plainly beside
+them. Cost is not hedged here: the evidence caption under the stop already says where a cost
+came from, and a second way of saying "estimate" is how the two start disagreeing.
+
 ### The Day on the Globe (signature)
 The map has to be readable on its own — you should be able to take the day off it without the panel.
 All of it is built in `mapRoute.ts` and floats at one sampled altitude:

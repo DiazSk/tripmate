@@ -57,6 +57,16 @@ export interface Stop {
    * counts as settled and as neither booked nor spent. See `spendSplit`.
    */
   costState?: CostState;
+  /**
+   * Fields TripMate supplied rather than the traveller, on an imported plan. Drives the hedged
+   * wording ("about 10:00"). Absent on generated plans, where every value is the planner's.
+   */
+  estimated?: ('time' | 'cost' | 'duration' | 'note')[];
+  /**
+   * Weekdays it's closed, as "Mo"…"Su", from OSM hours. `[]` open every day; null hours unknown
+   * or unreadable; absent never looked up. Read by the `closed` guardrail.
+   */
+  closedDays?: string[] | null;
 }
 
 export interface Lodging {
@@ -127,6 +137,9 @@ export interface UnplacedAnchor {
   reason: string;
 }
 
+/** What an import could not do: its hours lookup failed, or its cost estimates did. */
+export type ImportNote = 'hoursUnchecked' | 'costsUnestimated';
+
 export interface Itinerary {
   tier?: TierId;
   days: DayPlan[];
@@ -135,6 +148,10 @@ export interface Itinerary {
   /** A `must` anchor the model deliberately left out, with its reason. Anything neither here nor
    *  placed was dropped silently. */
   unplaced?: UnplacedAnchor[];
+  /** How the plan came to exist. Absent on every plan saved before imports. */
+  origin?: 'generated' | 'imported';
+  /** What an import could not do, said once on the trip. */
+  importNotes?: ImportNote[];
 }
 
 export interface TripSummary {
@@ -611,3 +628,10 @@ export interface SavedPlace {
   url: string | null;
   createdAt: string;
 }
+
+export type {
+  CompletePlanRequest,
+  ImportedDay,
+  ImportedPlan,
+  ImportedStop,
+} from '@shared/importedPlan';

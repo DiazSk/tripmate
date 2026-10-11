@@ -6,7 +6,8 @@
  * after a lift, the anchor a re-time cascades from, and durations surviving a move. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { insertionIndexByTime, legMinutes, moveStop, rescheduleDay } from "./schedule.ts";
+import { insertionIndexByTime, legMinutes, moveStop, rescheduleDay, travellerTimes } from "./schedule.ts";
+import { parseClock } from "./itinerary.ts";
 import { evaluateDay, evaluateBudget, evaluateItinerary } from "./guardrails.ts";
 
 /** Two points ~1km apart (walkable) and one ~9km away (transit). */
@@ -263,4 +264,58 @@ test("moveStop works BACKWARDS across days, not just forwards", () => {
   assert.ok(out.days[0].stops[1].time !== "", "the arrival is re-timed onto day 1");
   // Day 2 re-anchors on what's left of it rather than keeping a hole where B was.
   assert.equal(out.days[1].stops[0].time, "2:00 PM");
+});
+
+test("keepTimeOf keeps a traveller's own time and starts an untimed morning at 9:00", () => {
+  // Without keepTimeOf the anchor is the day's earliest time — 2:00 PM here — which would start
+  // stop "a" in the afternoon although nobody said so.
+  const out = rescheduleDay(
+    day([
+      stop({ name: "a", time: "", durationLabel: "60 min" }),
+      stop({ name: "b", time: "2:00 PM", durationLabel: "60 min" }),
+      stop({ name: "c", time: "", durationLabel: "60 min" }),
+    ]),
+    { keepTimeOf: (s) => s.name === "b" }
+  );
+  assert.equal(out.stops[0].time, "9:00 AM");
+  assert.equal(out.stops[1].time, "2:00 PM");
+  assert.ok(parseClock(out.stops[2].time) >= 15 * 60, out.stops[2].time);
+});
+
+test("keepTimeOf starts the day at the first stop's own time when the traveller gave one", () => {
+  // Passes before and after the change — kept so the anchor rule is pinned from both sides.
+  const out = rescheduleDay(
+    day([
+      stop({ name: "a", time: "10:30 AM", durationLabel: "60 min" }),
+      stop({ name: "b", time: "", durationLabel: "60 min" }),
+    ]),
+    { keepTimeOf: (s) => s.name === "a" }
+  );
+  assert.equal(out.stops[0].time, "10:30 AM");
+  assert.ok(parseClock(out.stops[1].time) >= 11 * 60 + 30, out.stops[1].time);
+});
+
+test("travellerTimes pins only the times a traveller gave, and only on imported plans", () => {
+  const keep = travellerTimes({ origin: "imported" });
+  assert.equal(keep({ estimated: ["time", "duration"] }), false);
+  assert.equal(keep({ estimated: ["duration"] }), true);
+  assert.equal(travellerTimes({ origin: "generated" }), undefined);
+  assert.equal(travellerTimes({}), undefined);
+});
+
+test("untimed stops before a traveller's timed one finish before it, instead of overlapping it", () => {
+  // Starting the café at 9:00 with a 45-minute estimate ran it into the traveller's 9:30 museum,
+  // and the overlap that opened the trip was one TripMate invented — whose first offered repair
+  // then moved the traveller's own time. The run is scheduled back from the time they gave.
+  const out = rescheduleDay(
+    day([
+      stop({ name: "cafe", time: "", durationLabel: "45 min" }),
+      stop({ name: "museum", time: "9:30 AM", durationLabel: "60 min" }),
+    ]),
+    { keepTimeOf: (s) => s.name === "museum" }
+  );
+  assert.equal(out.stops[1].time, "9:30 AM");
+  const cafeEnds = parseClock(out.stops[0].time) + 45 + legMinutes(out.stops[0], out.stops[1]);
+  assert.ok(cafeEnds <= 9 * 60 + 30, `café runs until minute ${cafeEnds}`);
+  assert.deepEqual(evaluateDay(out, 0).filter((f) => f.rule === "overlap" || f.rule === "travel"), []);
 });
