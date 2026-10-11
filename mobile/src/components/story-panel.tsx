@@ -1,14 +1,13 @@
-import { beatOpacity } from '@shared/storyScript';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { MapType } from 'react-native-maps';
 import { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
-import type { Stop } from '@/api/types';
 import { Group, MAP_FLOOR, chrome } from '@/components/map-controls';
-import { StopDisc } from '@/components/stop-disc';
+import { Meridian } from '@/components/meridian';
 import { ThemedText } from '@/components/themed-text';
-import { Motion, OverPhotograph, Radius, Spacing } from '@/constants/theme';
+import { Motion, Radius, Spacing } from '@/constants/theme';
+import { filmSubtitle, filmTitle, meriForFilm } from '@/lib/meri';
 import type { useStoryFilm } from '@/lib/useStoryFilm';
 
 /**
@@ -16,13 +15,15 @@ import type { useStoryFilm } from '@/lib/useStoryFilm';
  * place, because it stands on the same ground (`chrome()` decides glass and ink by whether the
  * basemap is imagery).
  *
- * Two lines rather than the web's lyric column: the line being spoken, and the next one faded by
- * the same `beatOpacity` — enough to read along without covering the place the camera just
- * arrived at.
+ * Laid out to the Frosted Meridian reference (column 02 of
+ * `docs/superpowers/specs/assets/2026-10-11-meri-reference.webp`): Meri and the day's title head
+ * it, the line being spoken sits under them with the next one in a single muted row, and three
+ * centred controls close it — the middle one the panel's only fill.
  */
 export function StoryPanel({
   film,
-  stops,
+  destination,
+  day,
   dayIndex,
   dayCount,
   mapType,
@@ -30,7 +31,8 @@ export function StoryPanel({
   onNextDay,
 }: {
   film: ReturnType<typeof useStoryFilm>;
-  stops: Stop[];
+  destination: string;
+  day: { title?: string } | undefined;
   dayIndex: number;
   dayCount: number;
   mapType: MapType;
@@ -41,11 +43,10 @@ export function StoryPanel({
   const { state, script } = film;
   const beat = script?.beats[state.beat];
   const following = script?.beats[state.beat + 1];
-  // The hook's own answer (`filmStopFor`), which is null once the film has ended — re-deriving it
-  // from the beat left the last stop's name standing over "That was the day."
-  const stop = film.stop === null ? undefined : stops[film.stop];
   const loading = state.phase === 'loading';
   const ended = state.phase === 'ended';
+  const playing = state.phase === 'playing';
+  const subtitle = filmSubtitle(script, state);
 
   return (
     <Group
@@ -55,14 +56,28 @@ export function StoryPanel({
       entering={SlideInDown.duration(Motion.settle)}
       exiting={SlideOutDown.duration(Motion.exit)}>
       <View style={styles.body}>
-        {stop && film.stop !== null ? (
-          <View style={styles.title}>
-            <StopDisc ordinal={film.stop + 1} color={OverPhotograph.accentDisc} />
-            <ThemedText type="headingSmall" numberOfLines={1} style={[styles.grow, { color: ink }]}>
-              {stop.name}
+        {/* Reference 02's header: Meri, the film's title, where you are in it, and the way out. */}
+        <View style={styles.header}>
+          <Meridian state={meriForFilm(state)} size={40} pulse={film.words} />
+          <View style={styles.grow}>
+            {/* `detail` at medium weight, not `label` — that is the 11pt tracked caps of "LIST · MAP". */}
+            <ThemedText type="detail" numberOfLines={1} style={{ color: ink, fontWeight: '500' }}>
+              {filmTitle(day, destination)}
             </ThemedText>
+            {/* Only when it is true — the reference has no status lines, and these are facts. */}
+            {subtitle ? (
+              <ThemedText type="caption" numberOfLines={1} style={{ color: inkMuted }}>
+                {subtitle}
+              </ThemedText>
+            ) : null}
           </View>
-        ) : null}
+          {loading || ended ? null : (
+            <ThemedText type="caption" style={{ color: inkMuted }}>
+              {`${state.beat + 1} of ${state.count}`}
+            </ThemedText>
+          )}
+          <Control icon={{ ios: 'xmark', android: 'close' }} label="Close" onPress={onClose} ink={inkMuted} />
+        </View>
 
         <ThemedText
           type="body"
@@ -73,22 +88,8 @@ export function StoryPanel({
           {loading ? `Writing the story of day ${dayIndex + 1}…` : ended ? 'That was the day.' : beat?.text}
         </ThemedText>
         {following && !ended && !loading ? (
-          <ThemedText
-            type="detail"
-            numberOfLines={2}
-            style={{ color: inkMuted, opacity: beatOpacity(state.beat + 1, state.beat) }}>
+          <ThemedText type="detail" numberOfLines={1} style={{ color: inkMuted }}>
             {following.text}
-          </ThemedText>
-        ) : null}
-
-        {script?.source === 'fallback' ? (
-          <ThemedText type="caption" style={{ color: inkMuted }}>
-            Read from your plan.
-          </ThemedText>
-        ) : null}
-        {state.voiceBroken ? (
-          <ThemedText type="caption" style={{ color: inkMuted }}>
-            The voice isn&rsquo;t available, so the story plays as text.
           </ThemedText>
         ) : null}
 
@@ -102,34 +103,41 @@ export function StoryPanel({
             </>
           ) : (
             <>
-              {/* Nothing to step through until the script lands, and nothing before the first beat. */}
               <Control
-                icon={{ ios: 'backward.fill', android: 'skip_previous' }}
+                icon={{ ios: 'backward.end.fill', android: 'skip_previous' }}
                 label="Previous"
                 onPress={film.prev}
                 ink={ink}
                 disabled={loading || state.beat === 0}
               />
-              <Control
-                icon={state.phase === 'playing' ? { ios: 'pause.fill', android: 'pause' } : { ios: 'play.fill', android: 'play_arrow' }}
-                label={state.phase === 'playing' ? 'Pause' : 'Play'}
+              {/* The one filled control: a 48pt disc in the ink at 14%, the reference's centre. */}
+              <Pressable
                 onPress={film.toggle}
-                ink={ink}
                 disabled={loading}
-              />
+                accessibilityRole="button"
+                accessibilityLabel={playing ? 'Pause' : 'Play'}
+                accessibilityState={{ disabled: loading }}
+                style={({ pressed }) => [
+                  styles.play,
+                  { backgroundColor: `${ink}24` },
+                  loading ? { opacity: 0.35 } : pressed && { opacity: 0.7 },
+                ]}>
+                <SymbolView
+                  name={playing ? { ios: 'pause.fill', android: 'pause' } : { ios: 'play.fill', android: 'play_arrow' }}
+                  tintColor={ink}
+                  size={20}
+                  fallback={<Text style={{ color: ink }}>{playing ? 'Pause' : 'Play'}</Text>}
+                />
+              </Pressable>
               <Control
-                icon={{ ios: 'forward.fill', android: 'skip_next' }}
+                icon={{ ios: 'forward.end.fill', android: 'skip_next' }}
                 label="Next"
                 onPress={film.next}
                 ink={ink}
                 disabled={loading}
               />
-              <ThemedText type="detail" style={[styles.grow, styles.count, { color: inkMuted }]}>
-                {loading ? '' : `${state.beat + 1} of ${state.count}`}
-              </ThemedText>
             </>
           )}
-          <Control icon={{ ios: 'xmark', android: 'close' }} label="Close" onPress={onClose} ink={inkMuted} />
         </View>
       </View>
     </Group>
@@ -178,9 +186,9 @@ function Control({
 const styles = StyleSheet.create({
   panel: { position: 'absolute', left: Spacing.read, right: Spacing.read, bottom: MAP_FLOOR },
   body: { paddingHorizontal: Spacing.rows, paddingTop: Spacing.rows, paddingBottom: Spacing.tight, gap: Spacing.hair },
-  title: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
   grow: { flex: 1 },
-  count: { textAlign: 'right' },
-  transport: { flexDirection: 'row', alignItems: 'center', marginTop: Spacing.tight },
+  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.read * 2, marginTop: Spacing.tight },
+  play: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   control: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.tight },
 });

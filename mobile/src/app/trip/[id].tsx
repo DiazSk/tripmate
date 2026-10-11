@@ -631,7 +631,8 @@ export default function TripDetail() {
             {filming ? (
               <StoryPanel
                 film={film}
-                stops={days[day]?.stops ?? []}
+                destination={trip.destination}
+                day={days[day]}
                 dayIndex={day}
                 dayCount={days.length}
                 mapType={mapType}
