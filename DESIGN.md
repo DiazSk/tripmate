@@ -1575,7 +1575,8 @@ thumb need explicit rules because `appearance: none` strips the platform renderi
 the phone hands the foot of the map to a narration sheet: the same `Group` and the same `chrome()`
 choice of glass and ink by whether the ground is a photograph, but **full bleed** — edge to edge,
 standing on the screen's bottom edge with its top corners rounded and its bottom square, the
-home-indicator inset added inside it — arriving with `SlideInDown`. Covering the foot of the map
+home-indicator inset added inside it — rising on a transform rather than `SlideInDown`, whose
+frame animation could land on a position measured before the sheet grew and leave it floating. Covering the foot of the map
 means covering Apple's logo and Legal link, which must stay visible, so while it plays the map's
 `mapPadding` grows to the sheet's measured height: MapKit keeps its marks inside the padded area,
 just above the sheet, and centres every dive in the map that is left. The sheet's lines are

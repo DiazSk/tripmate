@@ -47,18 +47,6 @@ const STORY_TIMEOUT_MS = 180_000;
  * `"preview"` placeholder), and those scripts live in the browser's session cache alone.
  */
 export async function POST(req: NextRequest) {
-  if (isThrottled(req)) {
-    return NextResponse.json(
-      { error: "Too many requests — slow down and try again shortly." },
-      { status: 429 }
-    );
-  }
-  if (isOverDailyCap()) {
-    return NextResponse.json(
-      { error: "Demo budget for today has been used up — try again tomorrow." },
-      { status: 503 }
-    );
-  }
   let body: {
     destination?: string;
     dayIndex?: number;
@@ -110,6 +98,23 @@ export async function POST(req: NextRequest) {
         cached: true,
       });
     }
+  }
+
+  // **The gates guard the model, not the cache.** They used to run first, so a replay of a day
+  // already written — free, served from `trip_stories` — still spent one of the three requests per
+  // ten minutes, and the fourth replay fell back to reading the plan aloud. Only a request that is
+  // about to call the model is counted or capped now.
+  if (isThrottled(req)) {
+    return NextResponse.json(
+      { error: "Too many requests — slow down and try again shortly." },
+      { status: 429 }
+    );
+  }
+  if (isOverDailyCap()) {
+    return NextResponse.json(
+      { error: "Demo budget for today has been used up — try again tomorrow." },
+      { status: 503 }
+    );
   }
 
   const runId = randomUUID();

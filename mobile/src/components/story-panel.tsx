@@ -1,13 +1,21 @@
 import { SymbolView } from 'expo-symbols';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { MapType } from 'react-native-maps';
-import { SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import {
+  Easing,
+  SlideOutDown,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Group, chrome } from '@/components/map-controls';
 import { Meridian } from '@/components/meridian';
 import { ThemedText } from '@/components/themed-text';
-import { Motion, Radius, Spacing } from '@/constants/theme';
+import { Curve, Motion, Radius, Spacing } from '@/constants/theme';
 import { filmSubtitle, filmTitle, meriForFilm } from '@/lib/meri';
 import type { useStoryFilm } from '@/lib/useStoryFilm';
 
@@ -44,6 +52,20 @@ export function StoryPanel({
   onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   const insets = useSafeAreaInsets();
+  /**
+   * **The rise is a transform, not a layout animation.** It was `SlideInDown`, which animates the
+   * sheet's *frame* to a position measured when it mounts — and the sheet changes height almost at
+   * once, as "Writing the story…" becomes a three-line beat (instantly, when the story is cached).
+   * Caught mid-slide, the animation landed on the short sheet's position and left the tall one
+   * floating ~60pt above the screen's edge. Laid out at `bottom: 0` and lifted by a transform that
+   * always ends at 0, there is no stale position to land on.
+   */
+  const reduceMotion = useReducedMotion();
+  const rise = useSharedValue(reduceMotion ? 0 : 480);
+  useEffect(() => {
+    rise.value = withTiming(0, { duration: Motion.settle, easing: Easing.bezier(...Curve) });
+  }, [rise]);
+  const riseStyle = useAnimatedStyle(() => ({ transform: [{ translateY: rise.value }] }));
   const { tint, ink, inkMuted } = chrome(mapType);
   const { state, script } = film;
   const beat = script?.beats[state.beat];
@@ -58,9 +80,8 @@ export function StoryPanel({
       tint={tint}
       radius={Radius.surface}
       squareBottom
-      style={styles.panel}
+      style={[styles.panel, riseStyle]}
       onLayout={onLayout}
-      entering={SlideInDown.duration(Motion.settle)}
       exiting={SlideOutDown.duration(Motion.exit)}>
       <View style={[styles.body, { paddingBottom: insets.bottom + Spacing.tight }]}>
         {/* Reference 02's header: Meri, the film's title, where you are in it, and the way out. */}
