@@ -1571,14 +1571,21 @@ so steady-state re-renders stay at zero. The tilt slider is a native input rotat
 and not `writing-mode: vertical-lr` (which only became a vertical range in Safari 17.4); its track and
 thumb need explicit rules because `appearance: none` strips the platform rendering.
 
-**The film's panel takes the stop card's place and material.** Pressing ▶ on the phone hands the
-foot of the map to a narration panel: the same `Group`, the same `chrome()` choice of glass and ink by
-whether the ground is a photograph, the same `MAP_FLOOR`, arriving with `SlideInDown`. While it plays,
-everything that is not the place being talked about leaves the shot — the control stacks, the stop
-card, the route line (it gives away the order, as on the web) and the travel-summary pill. It carries
-two lines rather than the web's lyric column: the one being spoken and the next, faded by
-`beatOpacity`, so you can read along without the panel covering the ground the camera just reached.
-The transport row is 44pt targets.
+**The film's panel takes the stop card's place and material, and Meri heads it.** Pressing ▶ on
+the phone hands the foot of the map to a narration panel: the same `Group`, the same `chrome()`
+choice of glass and ink by whether the ground is a photograph, the same `MAP_FLOOR`, arriving
+with `SlideInDown`. Its layout is the Frosted Meridian reference (column 02 of
+`docs/superpowers/specs/assets/2026-10-11-meri-reference.webp`): Meri, the day's title — with
+"Read from your plan" or "Voice unavailable" beneath it only when true — the beat count and
+Close; the line being spoken and the next one in a single muted row; then three centred
+controls, the middle one the panel's only fill (a 48pt disc in the ink at 14%). While it plays,
+everything that is not the place being talked about leaves the shot — the control stacks, the
+stop card, the route line and the travel-summary pill.
+
+**Meri never changes colour.** It is the same frosted pearl over dark and light ground, its
+states are motion only (breathing, blinking, a speaking squash, one lift for success, stillness
+for error), and its host always says the state in words — so no state is carried by colour or
+by motion alone, and Reduce Motion loses nothing.
 
 ### The Itinerary Card (signature)
 The card leads with a photograph of the destination, pinned to the top of the panel's scroller,
