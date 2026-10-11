@@ -61,7 +61,7 @@ export interface Stop {
    * Fields TripMate supplied rather than the traveller, on an imported plan. Drives the hedged
    * wording ("about 10:00"). Absent on generated plans, where every value is the planner's.
    */
-  estimated?: ('time' | 'cost' | 'duration')[];
+  estimated?: ('time' | 'cost' | 'duration' | 'note')[];
   /**
    * Weekdays it's closed, as "Mo"…"Su", from OSM hours. `[]` open every day; null hours unknown
    * or unreadable; absent never looked up. Read by the `closed` guardrail.

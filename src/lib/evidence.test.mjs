@@ -93,3 +93,13 @@ test("nothing on a stop claims to be live", () => {
     ["computed", "entered", "planner", "sourced"]
   );
 });
+
+test("an imported stop's own note is the traveller's, and a note TripMate wrote is the planner's", () => {
+  // On an imported plan `note` is the traveller's own words unless the fill supplied it, which
+  // `estimated` records. Captioning their words "the planner's" would invert the whole promise.
+  const base = { name: "Torre de Belém", lat: 38.69, lng: -9.21, cost: 0, time: "10:00 AM", durationLabel: "1.5 h", category: "entry", located: "osm" };
+  const detail = (stop) => stopEvidence(stop).find((f) => f.label === "Detail")?.evidence;
+  assert.equal(detail({ ...base, note: "Go early", estimated: ["duration"] }), "entered");
+  assert.equal(detail({ ...base, note: "Best at opening.", estimated: ["duration", "note"] }), "planner");
+  assert.equal(detail({ ...base, note: "Planner prose." }), "planner");
+});

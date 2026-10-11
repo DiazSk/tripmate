@@ -302,3 +302,20 @@ test("travellerTimes pins only the times a traveller gave, and only on imported 
   assert.equal(travellerTimes({ origin: "generated" }), undefined);
   assert.equal(travellerTimes({}), undefined);
 });
+
+test("untimed stops before a traveller's timed one finish before it, instead of overlapping it", () => {
+  // Starting the café at 9:00 with a 45-minute estimate ran it into the traveller's 9:30 museum,
+  // and the overlap that opened the trip was one TripMate invented — whose first offered repair
+  // then moved the traveller's own time. The run is scheduled back from the time they gave.
+  const out = rescheduleDay(
+    day([
+      stop({ name: "cafe", time: "", durationLabel: "45 min" }),
+      stop({ name: "museum", time: "9:30 AM", durationLabel: "60 min" }),
+    ]),
+    { keepTimeOf: (s) => s.name === "museum" }
+  );
+  assert.equal(out.stops[1].time, "9:30 AM");
+  const cafeEnds = parseClock(out.stops[0].time) + 45 + legMinutes(out.stops[0], out.stops[1]);
+  assert.ok(cafeEnds <= 9 * 60 + 30, `café runs until minute ${cafeEnds}`);
+  assert.deepEqual(evaluateDay(out, 0).filter((f) => f.rule === "overlap" || f.rule === "travel"), []);
+});

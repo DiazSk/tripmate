@@ -8,7 +8,7 @@ import { DateField, PillButton, PrimaryButton, TextField } from '@/components/fo
 import { ImportComposer } from '@/components/import-composer';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing } from '@/constants/theme';
-import { isFound, looseAnchors, needsStartDate, ownPlanGap, renameStop } from '@/lib/ownPlan';
+import { forgetPlaces, isFound, looseAnchors, ownPlanGap, renameStop, suggestedStart } from '@/lib/ownPlan';
 import { usePlanDraft } from '@/lib/planDraft';
 import { summariseUnread } from '@/lib/unreadSummary';
 
@@ -23,6 +23,8 @@ export default function OwnPlan() {
   const { patch } = usePlanDraft();
   const [plan, setPlan] = useState<ImportedPlan | null>(null);
   const [renamed, setRenamed] = useState<ReadonlySet<string>>(new Set());
+  // Set once "Where" changes: every stop is then looked up again near the corrected destination.
+  const [relocated, setRelocated] = useState(false);
   const [destination, setDestination] = useState('');
   const [startDate, setStartDate] = useState('');
   const [budget, setBudget] = useState('');
@@ -52,10 +54,20 @@ export default function OwnPlan() {
     }
     setPlan(result);
     setRenamed(new Set());
+    setRelocated(false);
     setDestination(result.destinationGuess ?? '');
+    setStartDate(suggestedStart(result));
     // Said once each — four unreadable screenshots are one line with a count, not four lines.
     setProblems([...result.notes, ...summariseUnread(result.unread.map((u) => u.reason))]);
     return true;
+  }
+
+  function changeDestination(value: string) {
+    setDestination(value);
+    if (plan && !relocated) {
+      setPlan(forgetPlaces(plan));
+      setRelocated(true);
+    }
   }
 
   function rename(d: number, s: number, name: string) {
@@ -77,7 +89,7 @@ export default function OwnPlan() {
     const result = await completePlan({
       plan,
       destination: destination.trim(),
-      ...(needsStartDate(plan) ? { startDate } : {}),
+      startDate,
       ...(amount > 0 ? { budget: amount } : {}),
     });
     setBusy(false);
@@ -111,15 +123,17 @@ export default function OwnPlan() {
         </>
       ) : (
         <>
-          <TextField label="Where" value={destination} onChangeText={setDestination} placeholder="City, Country" />
-          {needsStartDate(plan) ? <DateField label="Starts" value={startDate} onChange={setStartDate} /> : null}
+          <TextField label="Where" value={destination} onChangeText={changeDestination} placeholder="City, Country" />
+          <DateField label="Starts" value={startDate} onChange={setStartDate} />
           <TextField
-            label="Budget"
+            // Per person, because the fill estimates each stop for one visitor; a group total against
+            // per-visitor costs would report headroom that isn't there. Where they stay is unpriced.
+            label="Budget per person"
             prefix="$"
             value={budget}
             onChangeText={setBudget}
             keyboardType="number-pad"
-            placeholder="Optional"
+            placeholder="Optional, not counting where you stay"
           />
           {plan.days.map((day, d) => (
             <View key={d} style={styles.day}>
@@ -131,7 +145,7 @@ export default function OwnPlan() {
               ) : null}
               {day.stops.map((stop, s) => {
                 const key = `${d}-${s}`;
-                const status = renamed.has(key)
+                const status = relocated || renamed.has(key)
                   ? 'Looked up when you build'
                   : isFound(stop)
                     ? 'On the map'
@@ -145,7 +159,7 @@ export default function OwnPlan() {
                     />
                     <ThemedText
                       type="detail"
-                      themeColor={renamed.has(key) || isFound(stop) ? 'muted' : 'alert'}>
+                      themeColor={relocated || renamed.has(key) || isFound(stop) ? 'muted' : 'alert'}>
                       {status}
                     </ThemedText>
                   </View>

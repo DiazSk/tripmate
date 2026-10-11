@@ -70,14 +70,31 @@ export function readCompleteRequest(body: unknown): CompletePlanRequest | string
   return { plan, destination, ...(startDate ? { startDate } : {}), ...(budget ? { budget } : {}) };
 }
 
+/** How many more days than the plan has a stated date span may cover before it reads as a misread. */
+const DATE_SPAN_SLACK = 3;
+
+/**
+ * Stated dates worth trusting: every day has one, they never run backwards in reading order, and
+ * they span about as many days as the plan has. "1 Jan" read as the wrong year makes a 365-day
+ * span out of a two-day plan, and trusting it left the traveller at "too long" with no way out.
+ */
+function trustworthyDates(days: ImportedDay[]): boolean {
+  if (days.length === 0 || !days.every((d) => d.date)) return false;
+  for (let i = 1; i < days.length; i++) if (days[i].date! < days[i - 1].date!) return false;
+  const first = days[0].date!;
+  const last = days.reduce((max, d) => (d.date! > max ? d.date! : max), first);
+  return Math.round((utc(last) - utc(first)) / DAY_MS) + 1 <= days.length + DATE_SPAN_SLACK;
+}
+
 /**
  * A date for every day, consecutive, because the trip routes derive the end date as
  * `tripEndDate(start, days.length)`. Real dates count only when every day has one: a skipped date
- * becomes an empty day and a repeated one merges in reading order. Otherwise the days count
- * forward from `startDate`, and without one there is nothing to count from.
+ * becomes an empty day and a repeated one merges in reading order — and only when they read as
+ * trustworthy (`trustworthyDates`). A `startDate` moves trusted dates to the traveller's own.
+ * Otherwise the days count forward from `startDate`, and without one there is nothing to count from.
  */
 export function datesFor(days: ImportedDay[], startDate?: string): DatedDay[] | null {
-  if (days.length > 0 && days.every((d) => d.date)) {
+  if (trustworthyDates(days)) {
     const byDate = new Map<string, ImportedDay>();
     for (const d of days) {
       const prev = byDate.get(d.date!);
@@ -85,9 +102,12 @@ export function datesFor(days: ImportedDay[], startDate?: string): DatedDay[] | 
     }
     const sorted = [...byDate.keys()].sort();
     const count = Math.round((utc(sorted[sorted.length - 1]) - utc(sorted[0])) / DAY_MS) + 1;
+    // A start date the traveller chose moves the whole plan, gaps and all — a friend's plan or a
+    // reel carries their dates, not this trip's.
+    const shift = startDate ? Math.round((utc(startDate) - utc(sorted[0])) / DAY_MS) : 0;
     return Array.from({ length: count }, (_, i) => {
-      const date = addDays(sorted[0], i);
-      return { date, day: byDate.get(date) ?? { stops: [] } };
+      const stated = addDays(sorted[0], i);
+      return { date: addDays(stated, shift), day: byDate.get(stated) ?? { stops: [] } };
     });
   }
   if (!startDate) return null;
@@ -214,10 +234,14 @@ export function assembleItinerary(input: AssembleInput): Itinerary {
       const filled = input.fill?.[stopId(d, i)];
       const e = filled ?? defaultFill();
       const found = typeof s.lat === "number" && typeof s.lng === "number";
-      const estimated: ("time" | "cost" | "duration")[] = [
+      // The note is the traveller's own words unless they gave none and the fill wrote one, so
+      // `stopEvidence` can caption it truthfully.
+      const noteIsOurs = !s.note && Boolean(e.note);
+      const estimated: ("time" | "cost" | "duration" | "note")[] = [
         ...(s.time ? [] : ["time" as const]),
         "duration",
         ...(filled ? ["cost" as const] : []),
+        ...(noteIsOurs ? ["note" as const] : []),
       ];
       return {
         name: s.name,

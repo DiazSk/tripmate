@@ -127,7 +127,13 @@ export function stopEvidence(
     facts.push({
       label: "Detail",
       value: stop.note.trim(),
-      evidence: stop.located === "search" ? "sourced" : "planner",
+      // An imported stop's note is the traveller's own unless `estimated` says TripMate wrote it.
+      evidence:
+        stop.located === "search"
+          ? "sourced"
+          : stop.estimated && !stop.estimated.includes("note")
+            ? "entered"
+            : "planner",
     });
   }
   if (stop.why?.trim()) {

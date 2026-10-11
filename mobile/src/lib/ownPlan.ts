@@ -5,15 +5,38 @@ import type { Anchor, ImportedPlan } from '@/api/types';
  * renderer in this repo's mobile tests — see `authGate.ts` — so what the screen decides lives here.
  */
 
-/** True when the plan didn't say which dates its days are. Dates count only when every day has one — the server's rule. */
-export function needsStartDate(plan: ImportedPlan): boolean {
-  return !plan.days.every((d) => d.date);
+/**
+ * The start date to prefill: the plan's own first date when every day has one, otherwise empty.
+ * Always editable — a friend's plan or a reel carries their dates, and picking a different start
+ * moves every day (the server shifts trusted dates; see `datesFor`).
+ */
+export function suggestedStart(plan: ImportedPlan): string {
+  return plan.days.length > 0 && plan.days.every((d) => d.date) ? (plan.days[0].date as string) : '';
+}
+
+/**
+ * Every stop forgets where it was found. The read geocoded near its own guess at the destination;
+ * once the traveller corrects "Where", those pins may be on the wrong continent, and the build only
+ * looks up stops that have no coordinates.
+ */
+export function forgetPlaces(plan: ImportedPlan): ImportedPlan {
+  return {
+    ...plan,
+    days: plan.days.map((day) => ({
+      ...day,
+      stops: day.stops.map((stop) => ({
+        name: stop.name,
+        ...(stop.time ? { time: stop.time } : {}),
+        ...(stop.note ? { note: stop.note } : {}),
+      })),
+    })),
+  };
 }
 
 /** What the screen still needs before building, in the order it appears on screen. */
 export function ownPlanGap(plan: ImportedPlan, destination: string, startDate: string): string | null {
   if (!destination.trim()) return 'Add where this trip is.';
-  if (needsStartDate(plan) && !startDate) return 'Pick the day your trip starts.';
+  if (!startDate) return 'Pick the day your trip starts.';
   if (plan.days.some((d) => d.stops.some((s) => !s.name.trim()))) return 'Every stop needs a name.';
   return null;
 }

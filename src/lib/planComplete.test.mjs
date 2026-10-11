@@ -181,3 +181,33 @@ test("measured weather lands on weatherDetail and the prose field stays empty", 
   assert.equal(it.days[0].weather, "");
   assert.equal(it.days[0].weatherDetail.precipitationProbability, 70);
 });
+
+test("a note TripMate wrote is marked as its estimate, and the traveller's own is not", () => {
+  const fill = { d0s0: entry({ note: "model note" }), d0s1: entry({ note: "model note" }) };
+  const it = assembleItinerary({ dated: plan2(), fill, hours: null, weather: [], budget: 0, fallback });
+  const [belem, tasca] = it.days[0].stops;
+  assert.equal(belem.note, "Go early");
+  assert.ok(!belem.estimated.includes("note"));
+  assert.equal(tasca.note, "model note");
+  assert.ok(tasca.estimated.includes("note"));
+});
+
+test("a start date moves a dated plan to the traveller's own dates, keeping its gaps", () => {
+  // A friend's plan, or a reel, carries their dates. The traveller picks theirs and every day moves.
+  const dated = datesFor(
+    [day([{ name: "A" }], { date: "2026-11-02" }), day([{ name: "B" }], { date: "2026-11-04" })],
+    "2027-03-10"
+  );
+  assert.deepEqual(dated.map((d) => [d.date, d.day.stops.length]), [["2027-03-10", 1], ["2027-03-11", 0], ["2027-03-12", 1]]);
+});
+
+test("dates that run backwards are a misread year, not a 365-day trip", () => {
+  const days = [day([{ name: "A" }], { date: "2026-12-31" }), day([{ name: "B" }], { date: "2026-01-01" })];
+  assert.equal(datesFor(days, undefined), null);
+  assert.deepEqual(datesFor(days, "2026-12-31").map((d) => d.date), ["2026-12-31", "2027-01-01"]);
+});
+
+test("dates spanning far longer than the plan are ignored rather than trusted", () => {
+  const days = [day([{ name: "A" }], { date: "2026-11-01" }), day([{ name: "B" }], { date: "2026-12-20" })];
+  assert.equal(datesFor(days, undefined), null);
+});

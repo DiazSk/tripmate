@@ -73,6 +73,34 @@ function dayAnchor(day: DayPlan, override?: number): number {
  *
  * Durations are preserved — a 2-hour museum stays 2 hours wherever it lands. Only the clock moves.
  */
+/** No earlier than this does a run of untimed stops start, however early the time it leads into. */
+const EARLIEST_START_MIN = 6 * 60;
+
+/**
+ * Where a day starts when its first stops are untimed but a later one carries the traveller's time.
+ *
+ * Counting forward from 9:00 ran an untimed café into a 9:30 museum the traveller wrote down — an
+ * overlap TripMate invented, whose first offered repair then moved their time. So the untimed run
+ * is scheduled *back* from the first pinned stop: it starts late enough to end exactly there, and
+ * never later than 9:00, so a 2 PM museum still gets a normal morning before it. Each derived start
+ * is rounded up to a slot, so the run gives back that much in advance.
+ */
+function leadIn(
+  stops: Stop[],
+  own: (stop: Stop) => number | null,
+  modes?: TransportMode[]
+): number {
+  const firstPinned = stops.findIndex((s) => own(s) !== null);
+  if (firstPinned <= 0) return DEFAULT_DAY_START_MIN;
+  let lead = 0;
+  for (let i = 0; i < firstPinned; i++) {
+    lead += parseDuration(stops[i].durationLabel ?? "") + legMinutes(stops[i], stops[i + 1], modes);
+  }
+  const slack = SLOT_MINUTES * (firstPinned - 1);
+  const latest = Math.floor(((own(stops[firstPinned]) as number) - lead - slack) / SLOT_MINUTES) * SLOT_MINUTES;
+  return Math.max(EARLIEST_START_MIN, Math.min(DEFAULT_DAY_START_MIN, latest));
+}
+
 export function rescheduleDay(day: DayPlan, options: ScheduleOptions = {}): DayPlan {
   if (day.stops.length === 0) return day;
 
@@ -81,7 +109,7 @@ export function rescheduleDay(day: DayPlan, options: ScheduleOptions = {}): DayP
   let cursor =
     options.anchorMinutes !== undefined || !keepTimeOf
       ? dayAnchor(day, options.anchorMinutes)
-      : (own(day.stops[0]) ?? DEFAULT_DAY_START_MIN);
+      : (own(day.stops[0]) ?? leadIn(day.stops, own, options.modes));
 
   const stops = day.stops.map((stop, i) => {
     const pinned = own(stop);
