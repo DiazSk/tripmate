@@ -153,6 +153,8 @@ table this describes lives in `src/lib/db.ts` as `llm_sessions`.
 
 The pipeline's governing separation: the **skill** (`.claude/skills/itinerary-planner/SKILL.md`) holds planning *rules*, `trip-context.md` holds *facts only* (no instructions), and `src/lib/generationPrompt.ts` holds the *ask* with no trip data. Don't duplicate rules into the prompt or facts into the skill.
 
+**A third way a plan comes into being: imported.** `POST /api/import-plan` reads a traveller's own plan into days, and `POST /api/import-plan/complete` saves it as a draft with `Itinerary.origin: "imported"`. The model only copies and fills cost, duration, category and description — `parseFill` refuses any reply whose stop ids differ from the traveller's, so nothing is added, dropped or reordered. Stops carry `estimated` (what TripMate supplied) and `closedDays` (read by the `closed` guardrail). Spec: `docs/superpowers/specs/2026-10-10-import-own-itinerary-design.md`.
+
 ### Story mode owns the camera, and the beat is the clock
 
 Pressing Play on a day narrates it: the camera flies to each stop while a voice reads a story-format
