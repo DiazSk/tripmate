@@ -23,6 +23,7 @@ import { ImportComposer } from '@/components/import-composer';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
 import { anchorKey, mergeAnchors } from '@/lib/anchors';
+import { looksLikeDayPlan } from '@/lib/importItems';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
 import { crossFieldProblem, gapSentence, planGap } from '@/lib/formGap';
@@ -561,6 +562,7 @@ function ImportSection({
   onAnchorsChange: (update: (prev: Anchor[]) => Anchor[]) => void;
   onDestinationGuess: (guess: string) => void;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [unread, setUnread] = useState<string[]>([]);
 
@@ -598,6 +600,14 @@ function ImportSection({
         actionTitle="Find the places"
         placeholder={PASTE_PLACEHOLDER}
         onSubmit={findPlaces}
+        below={(text) =>
+          looksLikeDayPlan(text) ? (
+            <PillButton
+              title="This looks like a full plan — use it as your trip"
+              onPress={() => router.push({ pathname: '/plan/own', params: { text } })}
+            />
+          ) : null
+        }
       />
 
       {anchors.length > 0 ? (
