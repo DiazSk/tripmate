@@ -130,6 +130,27 @@ describe('speakBeat', () => {
     jest.advanceTimersByTime(LEAD_IN_MS);
     expect(calls[0].options.voice).toBe('com.apple.voice.enhanced.en-GB.Serena');
   });
+  it('reports each spoken word', () => {
+    const { speech, calls } = fakeSpeech();
+    const onWord = jest.fn();
+    speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn(), onWord }, { speech });
+    jest.advanceTimersByTime(LEAD_IN_MS);
+    calls[0].options.onStart?.();
+    calls[0].options.onBoundary?.();
+    calls[0].options.onBoundary?.();
+    expect(onWord).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports no words after a cancel', () => {
+    // Review Focus 2: a stale word event must not pulse Meri.
+    const { speech, calls } = fakeSpeech();
+    const onWord = jest.fn();
+    const handle = speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn(), onWord }, { speech });
+    jest.advanceTimersByTime(LEAD_IN_MS);
+    handle.cancel();
+    calls[0].options.onBoundary?.();
+    expect(onWord).not.toHaveBeenCalled();
+  });
 });
 
 describe('pickNarrator', () => {

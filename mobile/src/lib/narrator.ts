@@ -18,6 +18,8 @@ export interface SpeakOptions {
   onStart?: () => void;
   onDone?: () => void;
   onStopped?: () => void;
+  /** A word is about to be spoken (`expo-speech`'s `onBoundary`). Not every engine fires it. */
+  onBoundary?: () => void;
   onError?: (error: unknown) => void;
 }
 
@@ -44,7 +46,7 @@ function watchdogMs(sentence: string): number {
 
 export function speakBeat(
   text: string,
-  handlers: { onEnd: () => void; onError: () => void },
+  handlers: { onEnd: () => void; onError: () => void; onWord?: () => void },
   options: { speech: SpeechLike; voice?: string },
 ): { cancel(): void } {
   const { speech, voice } = options;
@@ -96,6 +98,10 @@ export function speakBeat(
         timer = setTimeout(next, watchdogMs(chunk));
       },
       onDone: next,
+      // Meri's speaking pulse. Dropped by the same latch as everything else after a cancel.
+      onBoundary: () => {
+        if (!done) handlers.onWord?.();
+      },
       onError: fail,
     });
   };

@@ -21,6 +21,8 @@ import { filmReducer, filmStopFor, initialFilm } from '@/lib/storyFilm';
 export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex: number; active: boolean }) {
   const [state, dispatch] = useReducer(filmReducer, initialFilm);
   const [script, setScript] = useState<StoryScript | null>(null);
+  /** Words spoken so far, for Meri's speaking pulse. */
+  const [words, setWords] = useState(0);
   const voice = useRef<string | undefined>(undefined);
   // Read inside the fetch rather than depended on: a refreshed trip object mid-film must not
   // restart it.
@@ -77,7 +79,11 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
     }
     const handle = speakBeat(
       beat.text,
-      { onEnd: () => dispatch({ type: 'next' }), onError: () => dispatch({ type: 'voiceError' }) },
+      {
+        onEnd: () => dispatch({ type: 'next' }),
+        onError: () => dispatch({ type: 'voiceError' }),
+        onWord: () => setWords((n) => n + 1),
+      },
       { speech: deviceSpeech, voice: voice.current },
     );
     return () => handle.cancel();
@@ -96,6 +102,7 @@ export function useStoryFilm({ trip, dayIndex, active }: { trip: Trip; dayIndex:
     state,
     script,
     stop: filmStopFor(script, state),
+    words,
     next: () => dispatch({ type: 'next' }),
     prev: () => dispatch({ type: 'prev' }),
     toggle: () => dispatch({ type: 'toggle' }),
