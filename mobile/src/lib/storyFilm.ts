@@ -22,6 +22,9 @@ export interface FilmState {
   count: number;
   /** Latched for the rest of the film once the voice fails — later beats run on a timer. */
   voiceBroken: boolean;
+  /** A pause asked for while the script was still being written — the app went to the
+   *  background — so the film arrives paused instead of speaking behind another app. */
+  holdOnLoad: boolean;
 }
 
 export type FilmAction =
@@ -33,7 +36,7 @@ export type FilmAction =
   | { type: 'pause' }
   | { type: 'voiceError' };
 
-export const initialFilm: FilmState = { phase: 'loading', beat: 0, count: 0, voiceBroken: false };
+export const initialFilm: FilmState = { phase: 'loading', beat: 0, count: 0, voiceBroken: false, holdOnLoad: false };
 
 export function filmReducer(state: FilmState, action: FilmAction): FilmState {
   switch (action.type) {
@@ -41,11 +44,12 @@ export function filmReducer(state: FilmState, action: FilmAction): FilmState {
       return initialFilm;
     case 'loaded':
       return action.count > 0
-        ? { ...state, phase: 'playing', beat: 0, count: action.count }
-        : { ...state, phase: 'ended', beat: 0, count: 0 };
+        ? { ...state, phase: state.holdOnLoad ? 'paused' : 'playing', beat: 0, count: action.count, holdOnLoad: false }
+        : { ...state, phase: 'ended', beat: 0, count: 0, holdOnLoad: false };
     case 'voiceError':
       return { ...state, voiceBroken: true };
     case 'pause':
+      if (state.phase === 'loading') return { ...state, holdOnLoad: true };
       return state.phase === 'playing' ? { ...state, phase: 'paused' } : state;
   }
   if (state.phase === 'loading') return state;

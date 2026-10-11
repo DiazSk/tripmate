@@ -61,6 +61,14 @@ export function speakBeat(
     clearTimeout(timer);
     report();
   };
+  // **A failed beat silences the engine too.** A first utterance that begins just after the start
+  // guard gave up (an older phone, an Enhanced voice) would otherwise read over a film that has
+  // already switched to text — and `cancel()` can no longer reach it, because `done` is set.
+  const fail = () =>
+    finish(() => {
+      speech.stop();
+      handlers.onError();
+    });
 
   const speakChunk = (index: number) => {
     if (done) return;
@@ -77,7 +85,7 @@ export function speakBeat(
 
     timer = started
       ? setTimeout(next, watchdogMs(chunk))
-      : setTimeout(() => finish(handlers.onError), START_GUARD_MS);
+      : setTimeout(fail, START_GUARD_MS);
     speech.speak(chunk, {
       rate: rateFor(index, chunks.length),
       voice,
@@ -88,7 +96,7 @@ export function speakBeat(
         timer = setTimeout(next, watchdogMs(chunk));
       },
       onDone: next,
-      onError: () => finish(handlers.onError),
+      onError: fail,
     });
   };
 

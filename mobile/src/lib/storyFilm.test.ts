@@ -42,6 +42,15 @@ describe('filmReducer', () => {
     expect(filmReducer(at({ phase: 'playing', count: 3 }), { type: 'pause' }).phase).toBe('paused');
     expect(filmReducer(at({ phase: 'ended', count: 3 }), { type: 'pause' }).phase).toBe('ended');
   });
+  it('holds a film that was backgrounded while its script was being written', () => {
+    // Pressing Play and switching apps during "Writing the story…" must not start a voice in the
+    // background when the script lands.
+    const asked = filmReducer(initialFilm, { type: 'pause' });
+    expect(asked.phase).toBe('loading');
+    expect(filmReducer(asked, { type: 'loaded', count: 3 })).toMatchObject({ phase: 'paused', beat: 0, count: 3 });
+    expect(filmReducer(filmReducer(asked, { type: 'reset' }), { type: 'loaded', count: 3 }).phase).toBe('playing');
+  });
+
   it('latches a broken voice until the film is reset', () => {
     const broken = filmReducer(at({ phase: 'playing', count: 3 }), { type: 'voiceError' });
     expect(broken.voiceBroken).toBe(true);

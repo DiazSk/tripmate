@@ -94,6 +94,16 @@ describe('speakBeat', () => {
     expect(onEnd).not.toHaveBeenCalled();
   });
 
+  it('silences a voice that starts after the guard gave up on it', () => {
+    // A slow first utterance (an older phone, an Enhanced voice) that begins at 2.3s must not read
+    // over a film that has already switched to text.
+    const { speech, calls } = fakeSpeech();
+    speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn() }, { speech });
+    jest.advanceTimersByTime(LEAD_IN_MS + START_GUARD_MS);
+    calls[0].options.onStart?.();
+    expect(speech.stopped).toBe(1);
+  });
+
   it('passes an engine error up once', () => {
     const { speech, calls } = fakeSpeech();
     const onError = jest.fn();
