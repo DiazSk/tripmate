@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { repairsFor } from "./guardrailFixes.ts";
-import { evaluateDay } from "./guardrails.ts";
+import { evaluateDay, evaluateItinerary } from "./guardrails.ts";
 
 const stop = (name, time, durationLabel, extra = {}) => ({
   name,
@@ -136,4 +136,49 @@ test("a leg that already fits, and a rule that is not a leg, offer nothing", () 
     repairsFor(tight(), { rule: "budget", dayIndex: null, message: "" }),
     []
   );
+});
+
+// 2026-11-02 is a Monday, 11-03 a Tuesday, 11-04 a Wednesday.
+const importedDay = (date, stops) => ({ date, weather: "", stops });
+const closedPlan = (closedDays) => ({
+  origin: "imported",
+  days: [
+    importedDay("2026-11-02", [stop("Belém Tower", "10:00 AM", "60 min", { closedDays, estimated: ["duration"] })]),
+    importedDay("2026-11-03", [stop("Alfama", "9:00 AM", "60 min", { estimated: ["duration"] })]),
+    importedDay("2026-11-04", [stop("LX Factory", "2:00 PM", "60 min", { estimated: ["duration"] })]),
+  ],
+});
+const closedFinding = (it) => evaluateItinerary(it, {}).find((f) => f.rule === "closed");
+const names = (it) => it.days.flatMap((d) => d.stops.map((s) => s.name)).sort();
+
+test("a closed stop moves to the nearest day it's open on", () => {
+  const it = closedPlan(["Mo", "Tu"]);
+  const [repair, ...rest] = repairsFor(it, closedFinding(it));
+  assert.equal(rest.length, 0);
+  assert.equal(repair.label, "Move Belém Tower to Wednesday (day 3)");
+  assert.deepEqual(repair.next.days[2].stops.map((s) => s.name), ["Belém Tower", "LX Factory"]);
+});
+
+test("applying the repair removes its own finding", () => {
+  const it = closedPlan(["Mo", "Tu"]);
+  const [repair] = repairsFor(it, closedFinding(it));
+  assert.equal(closedFinding(repair.next), undefined);
+});
+
+test("the set of stops is unchanged by the repair — TripMate moves, it never deletes", () => {
+  const it = closedPlan(["Mo"]);
+  const [repair] = repairsFor(it, closedFinding(it));
+  assert.deepEqual(names(repair.next), names(it));
+});
+
+test("the traveller's own time survives the move", () => {
+  const it = closedPlan(["Mo"]);
+  const [repair] = repairsFor(it, closedFinding(it));
+  const moved = repair.next.days.flatMap((d) => d.stops).find((s) => s.name === "Belém Tower");
+  assert.equal(moved.time, "10:00 AM");
+});
+
+test("no repair when it's closed every day of the trip", () => {
+  const it = closedPlan(["Mo", "Tu", "We"]);
+  assert.deepEqual(repairsFor(it, closedFinding(it)), []);
 });
