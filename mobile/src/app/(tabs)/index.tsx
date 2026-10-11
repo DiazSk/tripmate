@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { Trip, TripSummary } from '@/api/types';
 import { Today } from '@/components/today';
-import { PrimaryButton } from '@/components/form';
+import { PillButton, PrimaryButton } from '@/components/form';
 import { PlacePhoto } from '@/components/place-photo';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
@@ -181,6 +181,8 @@ export default function Home() {
         ) : (
           <View style={styles.cta}>
             <PrimaryButton title="Plan a trip" onPress={() => router.push('/plan/basics')} />
+            {/* The second door: a slate pill under the screen's one jade fill (Primary Action Surface). */}
+            <PillButton title="I already have a plan" onPress={() => router.push('/plan/own')} />
           </View>
         )}
 
@@ -300,7 +302,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   headline: { marginTop: Spacing.read },
-  cta: { marginTop: Spacing.read },
+  cta: { marginTop: Spacing.read, gap: Spacing.tight },
   // Same 44pt target as Today's own actions, and no wider than its words.
   quietCta: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   band: { marginTop: Spacing.regular * 1.5 },

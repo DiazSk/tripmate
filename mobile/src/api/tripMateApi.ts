@@ -10,8 +10,10 @@ import type {
   GenerateRequest,
   GenerationResult,
   GeocodedPlace,
+  CompletePlanRequest,
   ImportItem,
   ImportResult,
+  ImportedPlan,
   Itinerary,
   PlaceCategory,
   PlacePhoto,
@@ -151,6 +153,39 @@ export async function importPlaces(
     });
     if (!res.ok) return errorMessage(res);
     return (await res.json()) as ImportResult;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `POST /api/import-plan` — read a traveller's own plan into days, and find each stop on the map. */
+export async function readPlan(
+  items: ImportItem[],
+  destination?: string
+): Promise<ImportedPlan | string | undefined> {
+  try {
+    const res = await fetchWithSession("/api/import-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items, destination }),
+    });
+    if (!res.ok) return errorMessage(res);
+    return (await res.json()) as ImportedPlan;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `POST /api/import-plan/complete` — build the confirmed plan into a draft trip. */
+export async function completePlan(body: CompletePlanRequest): Promise<{ id: string } | string | undefined> {
+  try {
+    const res = await fetchWithSession("/api/import-plan/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return errorMessage(res);
+    return (await res.json()) as { id: string };
   } catch {
     return undefined;
   }
