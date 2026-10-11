@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, type MapType } from 'react-native-maps';
 
 import type { Stop } from '@/api/types';
 import { Invitation } from '@/components/states';
@@ -82,6 +82,7 @@ export function DayMap({
   emphasis,
   onEmphasise,
   film,
+  onMapType,
 }: {
   stops: Stop[];
   dayIndex: number;
@@ -93,6 +94,9 @@ export function DayMap({
    * to frame the whole day. Hides everything that is not the place being talked about.
    */
   film?: { stop: number | null };
+  /** What the map is actually drawing, for a panel standing on it that must pick its material by
+   *  whether the ground is a photograph (`chrome()`). The film's panel is that panel. */
+  onMapType?: (type: MapType) => void;
 }) {
   const map = useRef<MapView>(null);
   const reduceMotion = useReducedMotion();
@@ -222,6 +226,10 @@ export function DayMap({
     });
     return () => cancelAnimationFrame(frame);
   }, [shownType, wantTraffic, wantPoi]);
+
+  useEffect(() => {
+    onMapType?.(shownType);
+  }, [shownType, onMapType]);
   // Jade on the locate glyph while the camera is actually flying to the reader, and only then —
   // see `MapControls`. The map holds no continuous tracking mode, so this is the honest span.
   const [locating, setLocating] = useState(false);

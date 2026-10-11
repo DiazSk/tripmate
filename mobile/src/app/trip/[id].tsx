@@ -15,6 +15,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 
+import type { MapType } from 'react-native-maps';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 import {
@@ -33,6 +34,7 @@ import { BudgetBar } from '@/components/budget-bar';
 import { ChatSheet } from '@/components/chat-sheet';
 import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
+import { StoryPanel } from '@/components/story-panel';
 import { PlanHealth } from '@/components/plan-health';
 import { PrimaryButton } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
@@ -45,11 +47,16 @@ import { clockAt, formatDayChip, formatRange } from '@/lib/dayDisplay';
 import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/itineraryDiff';
 import { tripHealth, type Guardrail } from '@/lib/health';
 import { importNoteLines, showsHealthOnOpen } from '@/lib/importNotes';
-import { regionForStops } from '@/lib/mapRegion';
+import { drawableStops, regionForStops } from '@/lib/mapRegion';
+import { useStoryFilm } from '@/lib/useStoryFilm';
 import { loadTrip } from '@/lib/tripCache';
 import { todayInZone } from '@/lib/tripClock';
 import { openingDay } from '@/lib/tripPhase';
 import { todayISO } from '@/lib/tripsWall';
+
+/** Handed to `useStoryFilm` before the trip has loaded: hooks cannot be conditional, and with
+ *  `active` false the hook never reads it. */
+const PLACEHOLDER_TRIP = { id: '', destination: '', itinerary: { days: [] } } as unknown as Trip;
 
 export default function TripDetail() {
   const { id, ask } = useLocalSearchParams<{ id: string; ask?: string }>();
@@ -104,6 +111,15 @@ export default function TripDetail() {
    */
   const [face, setFace] = useState<'list' | 'map'>('list');
   /**
+   * Whether a film is playing this day. While it is, the map fills the screen: header, day strip,
+   * toolbar and the bars beneath are not rendered, and the face is forced to Map. `faceBefore` is
+   * what Close restores.
+   */
+  const [filming, setFilming] = useState(false);
+  const faceBefore = useRef<'list' | 'map'>('list');
+  /** What the map is drawing, so the film's panel takes the right material over imagery. */
+  const [mapType, setMapType] = useState<MapType>('mutedStandard');
+  /**
    * One-way: false until the map is first asked for, true forever after.
    *
    * The map is never unmounted once built — the same latch the web app's map background uses.
@@ -111,7 +127,17 @@ export default function TripDetail() {
    * list would make the second look as slow as the first.
    */
   const [mapBuilt, setMapBuilt] = useState(false);
-  if (face === 'map' && !mapBuilt) setMapBuilt(true);
+  if ((face === 'map' || filming) && !mapBuilt) setMapBuilt(true);
+  const film = useStoryFilm({ trip: trip ?? PLACEHOLDER_TRIP, dayIndex: day, active: filming && !!trip });
+  function startFilm() {
+    faceBefore.current = face;
+    setFace('map');
+    setFilming(true);
+  }
+  function closeFilm() {
+    setFilming(false);
+    setFace(faceBefore.current);
+  }
   const [adding, setAdding] = useState(false);
   /**
    * The stop being asked "what else is near this?", or null when the sheet was opened by +.
@@ -400,6 +426,7 @@ export default function TripDetail() {
           // A draft is not a thing to send anybody, so the slot is simply empty until Keep — the
           // same mutual exclusion `KeepShelf` and the old shelf had, expressed as presence.
           headerRight: trip.status === 'draft' ? undefined : shareRight,
+          headerShown: !filming,
         }}
       />
 
@@ -412,133 +439,153 @@ export default function TripDetail() {
         </View>
       ) : (
         <>
-          <View style={styles.chrome}>
-            <ThemedText type="label" themeColor="muted">
-              {formatRange(trip.startDate, trip.endDate)}
-            </ThemedText>
-            {/* Two rows, because these are two kinds of thing. Which day you are reading is
-                navigation; List/Map and Ask/+ act on the day you landed on. Sharing one row made
-                them one group of controls of equal weight, and it also capped the strip at
-                whatever width the other three left — which is the wrong constraint on a
-                fourteen-day trip, where the strip is the control that needs the room. */}
-            <DayStrip days={days} current={day} onSelect={setDay} />
-            <View style={styles.chromeRow}>
-              <FaceToggle face={face} onChange={setFace} />
-              <View style={styles.spacer} />
-              {/* Beside + for the reason + is here: the trailing end of this row is the toolbar,
-                  and both act on the plan below it — the same pairing `TripHeaderRow` makes in the
-                  Swift app. Muted rather than jade, also copied from there: two filled jade
-                  targets side by side read as two primary actions, and adding one stop is the
-                  ordinary one. These two stay out of the nav bar's `headerRight` because they act
-                  on the day below them rather than on the trip — `headerRight` now carries Share,
-                  which does act on the whole trip. (The original reason was Expo Go's floating dev
-                  button parking on that slot and swallowing every tap. It no longer binds:
-                  `expo-share-intent` is not one of Expo Go's bundled modules, so this app has
-                  required a development build since it was added and can no longer run there.) */}
+          {filming ? null : (
+            <>
+              <View style={styles.chrome}>
+                <ThemedText type="label" themeColor="muted">
+                  {formatRange(trip.startDate, trip.endDate)}
+                </ThemedText>
+                {/* Two rows, because these are two kinds of thing. Which day you are reading is
+                    navigation; List/Map and Ask/+ act on the day you landed on. Sharing one row made
+                    them one group of controls of equal weight, and it also capped the strip at
+                    whatever width the other three left — which is the wrong constraint on a
+                    fourteen-day trip, where the strip is the control that needs the room. */}
+                <DayStrip days={days} current={day} onSelect={setDay} />
+                <View style={styles.chromeRow}>
+                  <FaceToggle face={face} onChange={setFace} />
+                  <View style={styles.spacer} />
+              {/* Play narrates the day shown, so it sits with Ask and +, which act on that day
+                  too. Muted like Ask: + keeps the screen's one jade fill. It works offline — the
+                  film reads the plan when TripMate cannot write the story. */}
               <Pressable
-                onPress={() => {
-                  setChatSeed(undefined);
-                  // The plain Ask button is not about the day you happen to be reading — see
-                  // the scope note in `chat-sheet.tsx`.
-                  setChatScope(null);
-                  setChatOpenId((n) => n + 1);
-                  chat.open();
-                }}
-                disabled={offline}
+                onPress={startFilm}
+                disabled={drawableStops(days[day]?.stops ?? []).length === 0}
                 accessibilityRole="button"
-                accessibilityLabel="Ask for a change"
-                accessibilityState={{ disabled: offline }}
+                accessibilityLabel={`Play day ${day + 1}`}
                 style={({ pressed }) => [styles.ask, pressed && styles.askPressed]}>
-                <ThemedText type="label" themeColor={offline ? 'muted' : 'foreground'}>
-                  Ask
-                </ThemedText>
+                <SymbolView
+                  name={{ ios: 'play.fill', android: 'play_arrow' }}
+                  tintColor={Colors.foreground}
+                  size={14}
+                  fallback={<ThemedText type="label">Play</ThemedText>}
+                />
               </Pressable>
-              <Pressable
-                onPress={() => setAdding(true)}
-                disabled={offline}
-                accessibilityRole="button"
-                accessibilityLabel="Add a stop"
-                accessibilityState={{ disabled: offline }}
-                style={[styles.add, offline && styles.addOff]}>
-                <ThemedText
-                  type="heading"
-                  themeColor={offline ? 'muted' : 'accentForeground'}>
-                  +
-                </ThemedText>
-              </Pressable>
-            </View>
-          </View>
+                  {/* Beside + for the reason + is here: the trailing end of this row is the toolbar,
+                      and both act on the plan below it — the same pairing `TripHeaderRow` makes in the
+                      Swift app. Muted rather than jade, also copied from there: two filled jade
+                      targets side by side read as two primary actions, and adding one stop is the
+                      ordinary one. These two stay out of the nav bar's `headerRight` because they act
+                      on the day below them rather than on the trip — `headerRight` now carries Share,
+                      which does act on the whole trip. (The original reason was Expo Go's floating dev
+                      button parking on that slot and swallowing every tap. It no longer binds:
+                      `expo-share-intent` is not one of Expo Go's bundled modules, so this app has
+                      required a development build since it was added and can no longer run there.) */}
+                  <Pressable
+                    onPress={() => {
+                      setChatSeed(undefined);
+                      // The plain Ask button is not about the day you happen to be reading — see
+                      // the scope note in `chat-sheet.tsx`.
+                      setChatScope(null);
+                      setChatOpenId((n) => n + 1);
+                      chat.open();
+                    }}
+                    disabled={offline}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ask for a change"
+                    accessibilityState={{ disabled: offline }}
+                    style={({ pressed }) => [styles.ask, pressed && styles.askPressed]}>
+                    <ThemedText type="label" themeColor={offline ? 'muted' : 'foreground'}>
+                      Ask
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setAdding(true)}
+                    disabled={offline}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add a stop"
+                    accessibilityState={{ disabled: offline }}
+                    style={[styles.add, offline && styles.addOff]}>
+                    <ThemedText
+                      type="heading"
+                      themeColor={offline ? 'muted' : 'accentForeground'}>
+                      +
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
 
-          {/* A parked proposal is invisible behind a closed sheet, and an approved one is easy
-              to regret once you see it in the plan rather than in a list. One bar answers both,
-              because they are the same question — "something just happened to this plan, and
-              here is the way back" — and two bars competing for the same slot would be a state
-              machine nobody asked for. */}
-          {/* Says which copy this is, once, above everything it explains. Each disabled control
-              below goes grey without repeating the reason — eight copies of "no connection" is
-              a screen shouting, and the state is a property of the screen rather than of any
-              one button. */}
-          {offline ? (
-            <View style={styles.stale}>
-              <ThemedText type="detail" themeColor="muted">
-                {`Saved copy${clockAt(cachedAt) ? ` from ${clockAt(cachedAt)}` : ''} — no connection. Nothing can be changed until you are back.`}
-              </ThemedText>
-            </View>
-          ) : null}
+              {/* A parked proposal is invisible behind a closed sheet, and an approved one is easy
+                  to regret once you see it in the plan rather than in a list. One bar answers both,
+                  because they are the same question — "something just happened to this plan, and
+                  here is the way back" — and two bars competing for the same slot would be a state
+                  machine nobody asked for. */}
+              {/* Says which copy this is, once, above everything it explains. Each disabled control
+                  below goes grey without repeating the reason — eight copies of "no connection" is
+                  a screen shouting, and the state is a property of the screen rather than of any
+                  one button. */}
+              {offline ? (
+                <View style={styles.stale}>
+                  <ThemedText type="detail" themeColor="muted">
+                    {`Saved copy${clockAt(cachedAt) ? ` from ${clockAt(cachedAt)}` : ''} — no connection. Nothing can be changed until you are back.`}
+                  </ThemedText>
+                </View>
+              ) : null}
 
-          {/* **A refused write, said out loud.** Coral, because this is the alert sense the One
-              Meaning Rule reserves it for: something the traveller asked for cannot happen. It
-              sits in the same slot as the offline line above and never both at once — offline is
-              refused before the optimistic update, so a failure here is always the online kind.
+              {/* **A refused write, said out loud.** Coral, because this is the alert sense the One
+                  Meaning Rule reserves it for: something the traveller asked for cannot happen. It
+                  sits in the same slot as the offline line above and never both at once — offline is
+                  refused before the optimistic update, so a failure here is always the online kind.
 
-              An event rather than a state, so it does not linger like the banner above it: the
-              next write that succeeds clears it, and a tap dismisses it in the meantime. The live
-              region is what makes it reach a screen reader at all — the value the traveller just
-              typed snaps back somewhere further down the page, and nothing else announces. */}
-          {saveError ? (
-            <Pressable
-              style={styles.stale}
-              onPress={() => setSaveError(null)}
-              accessibilityRole="button"
-              accessibilityLiveRegion="polite"
-              accessibilityHint="Dismisses this message">
-              <ThemedText type="detail" themeColor="alert">
-                {saveError}
-              </ThemedText>
-            </Pressable>
-          ) : null}
+                  An event rather than a state, so it does not linger like the banner above it: the
+                  next write that succeeds clears it, and a tap dismisses it in the meantime. The live
+                  region is what makes it reach a screen reader at all — the value the traveller just
+                  typed snaps back somewhere further down the page, and nothing else announces. */}
+              {saveError ? (
+                <Pressable
+                  style={styles.stale}
+                  onPress={() => setSaveError(null)}
+                  accessibilityRole="button"
+                  accessibilityLiveRegion="polite"
+                  accessibilityHint="Dismisses this message">
+                  <ThemedText type="detail" themeColor="alert">
+                    {saveError}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
 
-          <EditBar
-            pending={chat.pending !== null && !chat.visible}
-            onReview={chat.open}
-            undoable={chat.undoable}
-            onUndo={chat.undo}
-          />
+              <EditBar
+                pending={chat.pending !== null && !chat.visible}
+                onReview={chat.open}
+                undoable={chat.undoable}
+                onUndo={chat.undo}
+              />
 
-          {/* Below the chrome and outside it, so the bar spans the width rather than sitting in
-              the row with the controls. Shown on the map face too: it is a fact about the trip,
-              not about the list, and hiding it there would make the face swap jump. */}
-          <BudgetBar days={days} budget={trip.budget} activeDayIndex={day} />
+              {/* Below the chrome and outside it, so the bar spans the width rather than sitting in
+                  the row with the controls. Shown on the map face too: it is a fact about the trip,
+                  not about the list, and hiding it there would make the face swap jump. */}
+              <BudgetBar days={days} budget={trip.budget} activeDayIndex={day} />
 
-          {trip && importNoteLines(trip.itinerary).length > 0 ? (
-            // Inset to the same edge as the PlanHealth card beneath it, so the two read as one block.
-            <View style={styles.importNotes}>
-              {importNoteLines(trip.itinerary).map((line) => (
-                <ThemedText key={line} type="detail" themeColor="muted">
-                  {line}
-                </ThemedText>
-              ))}
-            </View>
-          ) : null}
-          {health && (touched || chat.turns.length > 0 || (trip && showsHealthOnOpen(trip.itinerary))) ? (
-            <PlanHealth health={health} />
-          ) : null}
+              {trip && importNoteLines(trip.itinerary).length > 0 ? (
+                // Inset to the same edge as the PlanHealth card beneath it, so the two read as one block.
+                <View style={styles.importNotes}>
+                  {importNoteLines(trip.itinerary).map((line) => (
+                    <ThemedText key={line} type="detail" themeColor="muted">
+                      {line}
+                    </ThemedText>
+                  ))}
+                </View>
+              ) : null}
+              {health && (touched || chat.turns.length > 0 || (trip && showsHealthOnOpen(trip.itinerary))) ? (
+                <PlanHealth health={health} />
+              ) : null}
 
-          <AnchorReceipt
-            itinerary={trip.itinerary}
-            kept={trip.status !== 'draft'}
-            onFitAnchor={(name) => askWith(fitMessage(name))}
-          />
+              <AnchorReceipt
+                itinerary={trip.itinerary}
+                kept={trip.status !== 'draft'}
+                onFitAnchor={(name) => askWith(fitMessage(name))}
+              />
+            </>
+          )}
 
           <View style={styles.faces}>
             <DayPager
@@ -564,8 +611,22 @@ export default function TripDetail() {
                   dayIndex={day}
                   emphasis={stopIndexFor(emphasis, day)}
                   onEmphasise={(stop) => setEmphasis(stop === null ? null : `${day}:${stop}`)}
+                  film={filming ? { stop: film.stop } : undefined}
+                  onMapType={setMapType}
                 />
               </MapFace>
+            ) : null}
+
+            {filming ? (
+              <StoryPanel
+                film={film}
+                stops={days[day]?.stops ?? []}
+                dayIndex={day}
+                dayCount={days.length}
+                mapType={mapType}
+                onClose={closeFilm}
+                onNextDay={() => setDay(day + 1)}
+              />
             ) : null}
           </View>
         </>

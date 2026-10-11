@@ -1571,6 +1571,15 @@ so steady-state re-renders stay at zero. The tilt slider is a native input rotat
 and not `writing-mode: vertical-lr` (which only became a vertical range in Safari 17.4); its track and
 thumb need explicit rules because `appearance: none` strips the platform rendering.
 
+**The film's panel takes the stop card's place and material.** Pressing ▶ on the phone hands the
+foot of the map to a narration panel: the same `Group`, the same `chrome()` choice of glass and ink by
+whether the ground is a photograph, the same `MAP_FLOOR`, arriving with `SlideInDown`. While it plays,
+everything that is not the place being talked about leaves the shot — the control stacks, the stop
+card, the route line (it gives away the order, as on the web) and the travel-summary pill. It carries
+two lines rather than the web's lyric column: the one being spoken and the next, faded by
+`beatOpacity`, so you can read along without the panel covering the ground the camera just reached.
+The transport row is 44pt targets.
+
 ### The Itinerary Card (signature)
 The card leads with a photograph of the destination, pinned to the top of the panel's scroller,
 compressing as the plan scrolls under it and springing back on the way up. `--hero-p` is written by
