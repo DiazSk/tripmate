@@ -87,6 +87,16 @@ export interface Stop {
    * counts as settled and as neither booked nor spent. See `spendSplit`.
    */
   costState?: CostState;
+  /**
+   * Fields TripMate supplied rather than the traveller, on an imported plan. Drives the hedged
+   * wording ("about 10:00"). Absent on generated plans, where every value is the planner's.
+   */
+  estimated?: ("time" | "cost" | "duration")[];
+  /**
+   * Weekdays it's closed, as "Mo"…"Su", from OSM hours. `[]` open every day; null hours unknown
+   * or unreadable; absent never looked up. Read by the `closed` guardrail.
+   */
+  closedDays?: string[] | null;
 }
 
 export interface Lodging {
@@ -145,6 +155,9 @@ export interface DayPlan {
   stops: Stop[];
 }
 
+/** What an import could not do: its hours lookup failed, or its cost estimates did. */
+export type ImportNote = "hoursUnchecked" | "costsUnestimated";
+
 export interface Itinerary {
   tier: TierId;
   days: DayPlan[];
@@ -153,6 +166,10 @@ export interface Itinerary {
   anchors?: Anchor[];
   /** `must` anchors the model says it could not schedule, and why. */
   unplaced?: UnplacedAnchor[];
+  /** How the plan came to exist. Absent on every plan saved before imports. */
+  origin?: "generated" | "imported";
+  /** What an import could not do, said once on the trip. */
+  importNotes?: ImportNote[];
 }
 
 /**
@@ -180,7 +197,7 @@ export interface Itinerary {
  * `mobile/src/api/types.ts` records what casting at this boundary costs: it has to be repeated per
  * shared function, and each copy goes on claiming a shape the server does not send.
  */
-export type CheckableItinerary = Pick<Itinerary, "days" | "anchors" | "unplaced">;
+export type CheckableItinerary = Pick<Itinerary, "days" | "anchors" | "unplaced" | "origin">;
 
 export type TripStatus = "draft" | "saved";
 

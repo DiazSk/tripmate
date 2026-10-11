@@ -114,6 +114,8 @@ describe("model routing", () => {
       "extract",
       "sketch",
       "judge",
+      "plan-read",
+      "plan-fill",
     ];
     for (const type of types) assert.ok(apiModelFor(type), `${type} routed nowhere`);
   });
@@ -146,7 +148,7 @@ describe("model routing", () => {
   it("gives every call type a token ceiling, largest for whole itineraries", () => {
     assert.ok(maxTokensFor("generate") > maxTokensFor("chat"));
     assert.ok(maxTokensFor("chat") > maxTokensFor("place-detail"));
-    for (const type of ["generate", "refine", "rebalance", "critique", "chat", "element-edit", "place-detail", "context", "story", "extract", "sketch", "judge"]) {
+    for (const type of ["generate", "refine", "rebalance", "critique", "chat", "element-edit", "place-detail", "context", "story", "extract", "sketch", "judge", "plan-read", "plan-fill"]) {
       assert.ok(maxTokensFor(type) > 0, type);
     }
   });
@@ -248,5 +250,14 @@ describe("extract and sketch call types", () => {
     } finally {
       delete process.env.LLM_MODEL_EXTRACT;
     }
+  });
+});
+
+describe("bring-your-own-itinerary call types", () => {
+  // plan-read is the same kind of vision read as the import's extract call; plan-fill is bounded
+  // work over facts that already exist, which is what the cheap tier is for.
+  it("routes plan-read like extract and plan-fill to the cheap tier", () => {
+    assert.equal(apiModelFor("plan-read"), extractModel());
+    assert.equal(apiModelFor("plan-fill"), cheapModel());
   });
 });

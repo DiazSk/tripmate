@@ -36,6 +36,10 @@ export type ClaudeCallType =
   | "extract"
   /** The ~20s day sketch — themes, areas and anchor assignment — shown before the full plan. */
   | "sketch"
+  /** Bring-your-own-itinerary: reads a traveller's plan into days and stops. */
+  | "plan-read"
+  /** Fills cost, duration, category and description for an imported plan's stops, keyed by id. */
+  | "plan-fill"
   /** Dev-only: the blinded quality judge in the model benchmark harness (src/lib/bench). */
   | "judge";
 
@@ -242,9 +246,11 @@ export function apiModelFor(type: ClaudeCallType): string {
     case "story":
       return storyModel();
     case "extract":
+    case "plan-read":
       return extractModel();
     case "sketch":
       return sketchModel();
+    case "plan-fill":
     case "element-edit":
     case "place-detail":
     case "context":
@@ -316,6 +322,12 @@ export function maxTokensFor(type: ClaudeCallType): number {
     // A list of place names, one short object each.
     case "extract":
       return 4_000;
+    // A whole plan as days of stops — a name, a time and a note each, at most 30 days of 12.
+    case "plan-read":
+      return 16_000;
+    // Five short fields per stop, keyed by id. A bound on a runaway, as `place-detail` is.
+    case "plan-fill":
+      return 24_000;
     // One short object per day, at most 14 days.
     case "sketch":
       return 6_000;
