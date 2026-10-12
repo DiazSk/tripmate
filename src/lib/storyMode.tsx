@@ -131,6 +131,11 @@ export interface StoryPlayback {
    */
   silentPlatform: boolean;
   /**
+   * The voice was present but proved mute (`START_GUARD_MS`). Distinct from `silentPlatform`, which is
+   * also true for a browser with no speech API at all — Meri shows an error for this one only.
+   */
+  voiceBroken: boolean;
+  /**
    * Where the natural voice is: `idle` (no film has started yet), `loading` (downloading the
    * model, `naturalProgress` is a 0-1 fraction), `ready`, or `unavailable` (it failed, or this
    * browser cannot run it).
@@ -969,6 +974,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       beatIndex,
       muted,
       silentPlatform: !speaks,
+      voiceBroken,
       naturalStatus,
       naturalProgress,
       next,
@@ -985,6 +991,7 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       beatIndex,
       muted,
       speaks,
+      voiceBroken,
       naturalStatus,
       naturalProgress,
       next,

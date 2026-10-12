@@ -25,6 +25,8 @@ import { devLabel } from "@/lib/devInspector";
 import { useRouteProfile } from "@/lib/dayRoutes";
 import type { DayPlan, Stop } from "@/lib/types";
 import { StopAvatar } from "./StopList";
+import { meriForStory } from "@/lib/meri";
+import Meridian from "./Meridian";
 
 /**
  * The stage's arrival and its departure, and they are deliberately not mirror images.
@@ -203,6 +205,7 @@ function StoryStageBody({
     phase,
     muted,
     silentPlatform,
+    voiceBroken,
     naturalStatus,
     naturalProgress,
     next,
@@ -270,6 +273,13 @@ function StoryStageBody({
         {/* Transport. Prev/Next are the traveller's own way through the day, Play/Pause between
             them is the film's own clock, and Mute and Close are the way out. */}
         <div className="flex items-center gap-1">
+          {/* The narrator, at the head of the controls. The panel's live region already says
+              what is happening, so Meri is decorative to assistive tech. */}
+          <Meridian
+            size={32}
+            state={meriForStory({ phase, voiceBroken, muted, silentPlatform })}
+            className="mr-1.5"
+          />
           <TransportButton label="Previous place" onClick={prev} disabled={!script}>
             <SkipBack className="h-4 w-4" strokeWidth={2} />
           </TransportButton>
