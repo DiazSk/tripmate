@@ -296,6 +296,10 @@ db.exec(`
     updated_at TEXT NOT NULL
   )
 `);
+// The welcome after sign-up runs once per account: set when it is finished or skipped. Only sign-up
+// routes to it, so accounts that existed before it shipped (null here) never meet it.
+addColumnIfMissing(`"user"`, "onboarded_at", "TEXT");
+addColumnIfMissing(`"user"`, "onboarding_skipped", "INTEGER");
 
 // Dev-only: one row per (fixture x model) benchmark cell. Kept here with every other table so it
 // follows the same create-at-import convention, but nothing in the production app reads it — see
@@ -1521,6 +1525,15 @@ export function deleteAvatar(userId: string): void {
 export function getUserImage(userId: string): string | null {
   const row = db.prepare(`SELECT "image" FROM "user" WHERE "id" = ?`).get(userId) as { image: string | null } | undefined;
   return row?.image ?? null;
+}
+
+export function needsOnboarding(userId: string): boolean {
+  const row = db.prepare(`SELECT onboarded_at FROM "user" WHERE "id" = ?`).get(userId) as { onboarded_at: string | null } | undefined;
+  return row !== undefined && row.onboarded_at === null;
+}
+
+export function markOnboarded(userId: string, skipped: boolean): void {
+  db.prepare(`UPDATE "user" SET onboarded_at = ?, onboarding_skipped = ? WHERE "id" = ?`).run(new Date().toISOString(), skipped ? 1 : 0, userId);
 }
 
 export interface TraceWithBatchTag extends TraceRow {
