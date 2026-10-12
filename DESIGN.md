@@ -1595,6 +1595,18 @@ states are motion only (breathing, blinking, a speaking squash, one lift for suc
 for error), and its host always says the state in words — so no state is carried by colour or
 by motion alone, and Reduce Motion loses nothing.
 
+**On the web Meri appears in four places**, drawn by `src/components/Meridian.tsx` from the same
+`meridianMotion` table (`src/lib/meri.ts`) the phone uses:
+
+- leading the narration stage's transport row (32px);
+- heading the edit chat (28px), with "TripMate" over "● Replying" or "Ask for a change";
+- beside "Planning {city}" in the generation band (40px);
+- in place of the sparkle on each day's Refine with AI button (16px).
+
+Its motion is CSS keyframes on `transform` alone, applied only under `prefers-reduced-motion:
+no-preference`, so it rides the compositor over a flying map. The Refine Meri is `quiet`: still until
+its own button is hovered or focused, because a trip's worth of breathing Meris would upstage the plan.
+
 ### The Itinerary Card (signature)
 The card leads with a photograph of the destination, pinned to the top of the panel's scroller,
 compressing as the plan scrolls under it and springing back on the way up. `--hero-p` is written by
@@ -1835,18 +1847,25 @@ focus trap and no backdrop — so an effect must translate the prop into imperat
 thinks it is open.
 
 ### The Wait (signature)
-Two and a half minutes with nothing to show yet. The screen answers it by stating what is already known
-instead of asking for patience: the destination photographed full-bleed, its name at display scale, and
-— the actual content — a rotating feed of true facts about the place. The machinery sits in a darkened
-band at the foot: the four steps, one forecast line, the elapsed expectation, and a Cancel that appears
-only after ten seconds.
+A plan takes a few minutes to write, and the map behind is where it appears. The generation stream draws
+each stop as the model produces it, so the route and the pins build themselves over the wait. Everything
+there is to read sits in one darkened band at the foot of the screen:
 
-**Only large type sits on the photograph** — see The Photograph-Is-Not-A-Surface Rule. That is why the
-facts are set at display scale rather than as prose, and why every small run was pushed into the band.
+- the progress strip;
+- Meri, with the "Planning {city}" label and a rotating fact beside it;
+- the four steps;
+- a Cancel that appears only after ten seconds.
 
-**The globe is covered, not switched off.** Cesium boots at generation start and this screen is opaque
-on top of it; the import and first tiles are free inside a wait this long, and the queued destination
-flight replays on `setViewer` so the result opens already framed.
+The band is `--surface-deep` at 92%. That keeps small text at 7.1:1 over the brightest ground measured.
+
+**Do not thin the band to let the map show.** Its opacity is the whole reason small text is allowed on
+this screen.
+
+**Meri says where the run is:** thinking until the first stop arrives (while facts are gathered and the
+model starts writing), then streaming once that stop has drawn. It lifts only if every step finishes while the band is still up. Usually the
+band gives way the moment the plan lands, with the check still running behind it, and the plan
+opening is the success. The band unmounts on failure, so Meri never shows an error here; the form
+says it instead.
 
 **Four steps, not five.** `geocode` and `context` total about three seconds of the ~150 and mean nothing
 to a person waiting, so they share a column. The four that remain are the same four the landing's "How
@@ -1861,7 +1880,7 @@ whichever stage is running the fill advances on `1 - exp(-t/tau)`, approaching i
 reaching it, so only a real `done` event completes it. Structural, not a "stop at 95%" clamp.
 
 ### Destination Facts (signature)
-True facts about *this* trip, rotating every 7s directly beneath the destination name at display scale.
+True facts about *this* trip, rotating every 7s under the "Planning {city}" label.
 They are the screen's content, not its footnote.
 
 - **The facts are real and cost nothing.** Derived from data already fetched for other reasons — the

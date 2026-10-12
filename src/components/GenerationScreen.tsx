@@ -14,6 +14,8 @@ import {
   stepGroupState,
 } from "@/lib/generationStages";
 import type { RawFetch } from "@/lib/types";
+import { meriForGeneration } from "@/lib/meri";
+import Meridian from "./Meridian";
 
 /**
  * What a traveller looks at for the ~five minutes a plan takes to write.
@@ -97,6 +99,7 @@ export default function GenerationScreen({
   budget,
   rawFetch,
   onCancel,
+  streaming = false,
 }: {
   mode?: "generate" | "refine";
   stages: StageProgress[];
@@ -108,6 +111,8 @@ export default function GenerationScreen({
   budget: number;
   rawFetch: RawFetch | null;
   onCancel?: () => void;
+  /** The first real stop has arrived from the stream and is drawing on the map behind the band. */
+  streaming?: boolean;
 }) {
   const stripRef = useRef<HTMLDivElement>(null);
   const [factIndex, setFactIndex] = useState(0);
@@ -220,7 +225,9 @@ export default function GenerationScreen({
               content, and partly because large text needs 3:1 where body text needs 4.5:1, which
               is the margin worth having on the one element people actually read while waiting. */}
           <div className="grid gap-x-10 gap-y-5 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
-            <div>
+            <div className="flex items-start gap-4">
+              <Meridian size={40} state={meriForGeneration({ complete, streaming })} />
+              <div className="min-w-0 flex-1">
               <p className="text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-accent uppercase">
                 {mode === "refine" ? "Reworking" : "Planning"} {city}
               </p>
@@ -235,6 +242,7 @@ export default function GenerationScreen({
                 {facts[factIndex] ?? `Reading everything we can find about ${city}.`}
               </p>
               {summary && <p className="text-xs tabular-nums text-muted">{summary}</p>}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 self-start sm:grid-cols-4">
