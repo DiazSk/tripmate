@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PillButton, PrimaryButton } from '@/components/form';
+import { BAND_RATIO, SceneWindow } from '@/components/scene-band';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 /**
@@ -45,37 +46,59 @@ export default function AuthChooserScreen() {
   }
 
   return (
-    <View style={[styles.content, { paddingBottom: insets.bottom + Spacing.regular }]}>
-      {/* The mark sits in its own block above the actions rather than in a row with them: it says
-          whose app this is, which is not a choice and should not stand in the column of choices. */}
-      <View style={styles.identity}>
-        <Image
-          // `require`, not an `import`: `expo/types` declares `*.webp` — which is why the band's
-          // scenes import cleanly — and does not declare `*.png`, so every PNG in this app is a
-          // require. `animated-icon.tsx` does the same for the splash mark.
-          source={require('@/assets/images/android-icon-monochrome.png')}
-          style={styles.logo}
-          tintColor={Colors.foreground}
-          contentFit="contain"
-          accessibilityIgnoresInvertColors
-          alt="TripMate"
-        />
-      </View>
+    <View style={styles.flex}>
+      <SceneWindow ratio={BAND_RATIO} />
+      <View style={styles.page}>
+        <View style={[styles.content, { paddingBottom: insets.bottom + Spacing.regular }]}>
+          {/* The mark sits in its own block above the actions rather than in a row with them: it
+              says whose app this is, which is not a choice and should not stand in the column of
+              choices. */}
+          <View style={styles.identity}>
+            <Image
+              // `require`, not an `import`: `expo/types` declares `*.webp` — which is why the
+              // band's scenes import cleanly — and does not declare `*.png`, so every PNG in this
+              // app is a require. `animated-icon.tsx` does the same for the splash mark.
+              source={require('@/assets/images/android-icon-monochrome.png')}
+              style={styles.logo}
+              tintColor={Colors.foreground}
+              contentFit="contain"
+              accessibilityIgnoresInvertColors
+              alt="TripMate"
+            />
+          </View>
 
-      <View style={styles.actions}>
-        <PrimaryButton title="Sign up" onPress={() => router.push('/signin/form?mode=signup')} />
-        <PillButton block title="Log in" onPress={() => router.push('/signin/form?mode=login')} />
-        {/* The quietest of the three, and still unmistakably a control — jade ink and a 44pt
-            target. The version this descends from was muted `detail` body text, which is the same
-            face and colour as a caption and was reported as not reading as a button at all; what
-            fixed that is the ink and the target, not a fill. */}
-        <PillButton block tone="quiet" title="Keep planning without an account" onPress={leave} />
+          <View style={styles.actions}>
+            <PrimaryButton
+              title="Sign up"
+              onPress={() => router.push('/signin/form?mode=signup')}
+            />
+            <PillButton
+              block
+              title="Log in"
+              onPress={() => router.push('/signin/form?mode=login')}
+            />
+            {/* The quietest of the three, and still unmistakably a control — jade ink and a 44pt
+                target. The version this descends from was muted `detail` body text, which is the
+                same face and colour as a caption and was reported as not reading as a button at
+                all; what fixed that is the ink and the target, not a fill. */}
+            <PillButton
+              block
+              tone="quiet"
+              title="Keep planning without an account"
+              onPress={leave}
+            />
+          </View>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  // Full width and opaque: the band runs behind the whole screen, so below this screen's window
+  // the canvas has to be painted rather than assumed.
+  page: { flex: 1, backgroundColor: Colors.canvas },
   // `space-between` so the mark takes the slack above and the actions stay on the bottom edge: at
   // AX3 the band collapses to `BAND_COLLAPSED` and this box grows, and the actions must not drift
   // into the middle of it.

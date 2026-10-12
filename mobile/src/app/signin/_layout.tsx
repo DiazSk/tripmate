@@ -1,34 +1,30 @@
-import { Stack, usePathname } from 'expo-router';
+import { Stack, ThemeProvider, useTheme } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Keyboard, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import {
-  BAND_RATIO,
-  BAND_RATIO_FORM,
   BEATS,
   DWELL_MS,
   SceneBand,
+  SceneContext,
   STACK_ABOVE_SCALE,
 } from '@/components/scene-band';
 import { Colors } from '@/constants/theme';
 
 /**
- * The auth flow: a chooser, then a form, under one band.
+ * The auth flow: a chooser, then a form, over one photograph.
  *
- * **The band is outside the `Stack`, and that is the whole reason this is a group.** Mounted once
+ * **The band is behind the `Stack`, and that is the whole reason this is a group.** Mounted once
  * here it survives the navigation between the two screens, so the reel keeps its place and the
- * photograph does not jump — which is the only argument for the form screen keeping a band at
- * all. The `Stack` fills what is left, so a push slides the content under a picture that is
- * still the same picture.
+ * photograph does not jump.
  *
- * **Its identity holds across a push; its height does not, and that is deliberate.** This used
- * to say the picture "holds still", and one ratio served both screens — but the two screens need
- * different amounts of room, and sign up needs so much more that a single number either clips its
- * button or leaves ~95pt of paper under the chooser's mark. So the height is per-route
- * (`BAND_RATIO` / `BAND_RATIO_FORM`, which carry the arithmetic) and animates on the curve the
- * keyboard collapse already uses. What that original rule was protecting is intact: no remount,
- * no restarted reel, no different photograph on the other side.
+ * **Each screen decides how much of it shows, and the `Stack` never resizes.** The two screens
+ * need different amounts of room (`BAND_RATIO` / `BAND_RATIO_FORM` carry the arithmetic). This
+ * used to hand the band each route's height from `usePathname()`, which resized the `Stack` on
+ * every navigation, off the native transition's clock both ways: the form clipped through every
+ * push and the chooser's photograph arrived ~300ms after every pop. `SceneBand`'s docblock has the
+ * measurements and the arrangement that replaced it.
  *
  * The beat and the collapse live here because they are the flow's, not a screen's: the reel is
  * continuous across both, and the keyboard that collapses the band is raised on one of them.
@@ -50,7 +46,8 @@ import { Colors } from '@/constants/theme';
 export const unstable_settings = { anchor: 'index' };
 
 export default function AuthLayout() {
-  const { height, fontScale } = useWindowDimensions();
+  const { fontScale } = useWindowDimensions();
+  const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const [beat, setBeat] = useState(0);
   const [keyboardUp, setKeyboardUp] = useState(false);
@@ -80,21 +77,28 @@ export default function AuthLayout() {
     };
   }, []);
 
-  // The form carries more below the fold than the chooser does, so it gets a shorter band.
-  const onForm = usePathname().startsWith('/signin/form');
-  const bandHeight = Math.round(height * (onForm ? BAND_RATIO_FORM : BAND_RATIO));
-  // And the collapse outranks the route: whichever screen is up, the keyboard and the Dynamic
-  // Type threshold take the room. `SceneBand` eases this one and applies the height above
-  // directly — see its `bandStyle` for why only one of the two is animated.
+  // The collapse outranks the route: whichever screen is up, the keyboard and the Dynamic Type
+  // threshold take the room.
   const collapsed = keyboardUp || fontScale > STACK_ABOVE_SCALE;
 
   return (
-    <View style={styles.root}>
-      <SceneBand beat={beat} height={bandHeight} collapsed={collapsed} />
-      <Stack
-        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.canvas } }}
-      />
-    </View>
+    <SceneContext.Provider value={{ beat, collapsed }}>
+      <View style={styles.root}>
+        <SceneBand beat={beat} />
+        {/* Transparent, so each screen's `SceneWindow` shows the band behind it. Each screen
+            paints its own canvas below that. `contentStyle` alone is not enough: native-stack
+            also paints the theme's background on the stack container itself unless its parent
+            is a transparent modal, and this one sits in a `fullScreenModal`. */}
+        <ThemeProvider value={{ ...theme, colors: { ...theme.colors, background: 'transparent' } }}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: 'transparent' },
+            }}
+          />
+        </ThemeProvider>
+      </View>
+    </SceneContext.Provider>
   );
 }
 

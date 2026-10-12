@@ -5,9 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { signIn, signUp } from '@/api/auth';
 import { FieldTrough, PrimaryButton, TextField } from '@/components/form';
+import { BAND_RATIO_FORM, SceneWindow } from '@/components/scene-band';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { authMode } from '@/lib/authMode';
 import { authGap, gapSentence } from '@/lib/formGap';
 
@@ -110,96 +111,105 @@ export default function AuthFormScreen() {
   const passwordField = useRef<TextInput>(null);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* The bottom inset is applied here rather than by wrapping in a `SafeAreaView`, because
-          the band above has to reach the top edge and a `SafeAreaView` would inset that too.
-          Without it the last row — the escape out of this screen — sits under the home indicator,
-          where a tap does not reliably reach it. */}
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.regular }]}
-        keyboardShouldPersistTaps="handled">
-        <ThemedText type="title">{creating ? 'Make an account' : 'Welcome back'}</ThemedText>
-        <ThemedText type="detail" themeColor="muted" style={styles.blurb}>
-          {creating
-            ? 'Your trips and travel profile stay with you — on this phone and on the web.'
-            : 'Sign in to find your trips wherever you are.'}
-        </ThemedText>
-
-        <View style={styles.form}>
-          <FieldTrough>
-            {creating ? (
-              <TextField
-                label="Name"
-                value={name}
-                onChangeText={setName}
-                placeholder="Optional"
-                autoCapitalize="words"
-                autoComplete="name"
-                textContentType="name"
-              />
-            ) : null}
-            <TextField
-              ref={emailField}
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              autoComplete="email"
-              textContentType="emailAddress"
-            />
-            {/* `textContentType` is what lets iOS offer the keychain entry, and it has to say
-                which of the two this is — otherwise it proposes a new password on a sign-in. */}
-            <TextField
-              ref={passwordField}
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoComplete={creating ? 'new-password' : 'current-password'}
-              textContentType={creating ? 'newPassword' : 'password'}
-            />
-          </FieldTrough>
-
-          {/* Both modes, not just create. `ready` wants 8 characters either way, so gating
-              this on `creating` left a sign-in with a dead button and no reason beside it. */}
-          <ThemedText type="micro" themeColor="muted" style={styles.hint}>
-            At least 8 characters.
+    <View style={styles.flex}>
+      <SceneWindow ratio={BAND_RATIO_FORM} />
+      <KeyboardAvoidingView
+        style={styles.page}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* The bottom inset is applied here rather than by wrapping in a `SafeAreaView`, because
+            the band above has to reach the top edge and a `SafeAreaView` would inset that too.
+            Without it the last row — the escape out of this screen — sits under the home
+            indicator, where a tap does not reliably reach it. */}
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + Spacing.regular },
+          ]}
+          keyboardShouldPersistTaps="handled">
+          <ThemedText type="title">{creating ? 'Make an account' : 'Welcome back'}</ThemedText>
+          <ThemedText type="detail" themeColor="muted" style={styles.blurb}>
+            {creating
+              ? 'Your trips and travel profile stay with you — on this phone and on the web.'
+              : 'Sign in to find your trips wherever you are.'}
           </ThemedText>
 
-          {error ? <Notice>{error}</Notice> : null}
+          <View style={styles.form}>
+            <FieldTrough>
+              {creating ? (
+                <TextField
+                  label="Name"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Optional"
+                  autoCapitalize="words"
+                  autoComplete="name"
+                  textContentType="name"
+                />
+              ) : null}
+              <TextField
+                ref={emailField}
+                label="Email"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                autoComplete="email"
+                textContentType="emailAddress"
+              />
+              {/* `textContentType` is what lets iOS offer the keychain entry, and it has to say
+                  which of the two this is — otherwise it proposes a new password on a sign-in. */}
+              <TextField
+                ref={passwordField}
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete={creating ? 'new-password' : 'current-password'}
+                textContentType={creating ? 'newPassword' : 'password'}
+              />
+            </FieldTrough>
 
-          {/* Muted rather than alert: an unfilled field is not a failure, and the server's own
-              refusals are what `Notice` above is for. */}
-          {asked && gapSentence(gap, error ?? undefined) ? (
-            <ThemedText
-              type="detail"
-              themeColor="muted"
-              accessibilityLiveRegion="polite"
-              style={styles.hint}>
-              {gapSentence(gap, error ?? undefined)}
+            {/* Both modes, not just create. `ready` wants 8 characters either way, so gating
+                this on `creating` left a sign-in with a dead button and no reason beside it. */}
+            <ThemedText type="micro" themeColor="muted" style={styles.hint}>
+              At least 8 characters.
             </ThemedText>
-          ) : null}
 
-          <PrimaryButton
-            title={creating ? 'Create account' : 'Sign in'}
-            onPress={submit}
-            accessibilityHint={gap?.reason}
-            busy={busy}
-          />
+            {error ? <Notice>{error}</Notice> : null}
 
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            {/* Muted rather than alert: an unfilled field is not a failure, and the server's own
+                refusals are what `Notice` above is for. */}
+            {asked && gapSentence(gap, error ?? undefined) ? (
+              <ThemedText
+                type="detail"
+                themeColor="muted"
+                accessibilityLiveRegion="polite"
+                style={styles.hint}>
+                {gapSentence(gap, error ?? undefined)}
+              </ThemedText>
+            ) : null}
+
+            <PrimaryButton
+              title={creating ? 'Create account' : 'Sign in'}
+              onPress={submit}
+              accessibilityHint={gap?.reason}
+              busy={busy}
+            />
+
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  // Opaque, and starting higher than the chooser's: this canvas is what covers the photograph's
+  // lower edge as the screen slides in. See `SceneBand`.
+  page: { flex: 1, backgroundColor: Colors.canvas },
   content: {
     paddingHorizontal: Spacing.read,
     paddingTop: Spacing.regular,

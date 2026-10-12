@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
-import { StyleSheet, View } from 'react-native';
+import { createContext, useContext } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   Keyframe,
@@ -119,73 +120,44 @@ const fade = new Keyframe({
   100: { opacity: 0, easing: Easing.bezier(...Curve) },
 });
 
-/**
- * The photographic band both auth screens stand under.
- *
- * **It is mounted by `signin/_layout.tsx`, above the group's `Stack`, and that placement is the
- * point.** A band rendered inside each screen would remount on every navigation: the reel would
- * restart and you would land on a different photograph than the one you left. One instance
- * outside the `Stack` means the picture holds still while the content below it pushes, which is
- * the only reason the form screen keeps a band at all.
- *
- * The height arrives as a plain number rather than being worked out here, because what collapses
- * it — the keyboard, and the Dynamic Type threshold — is known to the flow and not to a band.
- *
- * **Full-bleed to the top edge**, so the photograph runs under the status bar; the caption is
- * inset by the safe area instead. A band that starts below the notch reads as a picture pasted
- * onto a screen rather than as the screen itself.
- */
-export function SceneBand({
-  beat,
-  height,
-  collapsed,
-}: {
-  beat: number;
-  /** The band's height for the route under it, applied immediately — see `bandStyle`. */
-  height: number;
-  /** Whether the keyboard or the type scale has taken the room. This is the part that eases. */
-  collapsed: boolean;
-}) {
-  const reduceMotion = useReducedMotion();
-  const current = BEATS[beat];
+/** What the flow knows and the screens draw: which beat is up, and whether the room is taken. */
+export const SceneContext = createContext({ beat: 0, collapsed: false });
 
-  /**
-   * **Only the collapse is animated. A change of route is not.**
-   *
-   * Both used to run through one `withTiming` on `height`, and `height` is a layout property —
-   * animating it re-runs layout for this band and for everything below it, the `Stack` and the
-   * screen and the form, on every frame. Over a 420ms push that was three faults at once: the
-   * transition stuttered, the canvas below was visibly expanding, and for most of the window the
-   * form had less room than its content, so its primary button sat clipped. The clipping *was*
-   * the animation.
-   *
-   * A route's band height belongs to that route, so it arrives with it: `height` is used
-   * directly and takes effect on the frame the route changes. What eases is the collapse, as a
-   * 0-to-1 progress between the route's height and `BAND_COLLAPSED` — there the content *gains*
-   * room as the band shrinks, so nothing can clip, and snapping the photograph away the instant
-   * a keyboard appears is the jarring version.
-   *
-   * Expressing it as progress rather than as a duration is what keeps it honest: there is no
-   * previous-value to remember, so nothing has to read a ref during render to work out which
-   * kind of change this was.
-   */
-  const collapseProgress = useDerivedValue(() =>
-    withTiming(collapsed ? 1 : 0, {
-      duration: reduceMotion ? 0 : Motion.settle,
-      easing: Easing.bezier(...Curve),
-    }),
-  );
-  const bandStyle = useAnimatedStyle(
-    () => ({ height: height + (BAND_COLLAPSED - height) * collapseProgress.value }),
-    [height],
-  );
+/** One rounding for the band and for every window onto it, so their edges cannot disagree. */
+export function bandHeight(windowHeight: number, ratio: number) {
+  return Math.round(windowHeight * ratio);
+}
+
+/**
+ * The photograph both auth screens stand over — and only the photograph.
+ *
+ * **It sits behind the `Stack`, at the chooser's height, and never changes size.** It used to sit
+ * above the `Stack` and take each route's height, so every navigation resized the `Stack` — and
+ * that resize could not land on the native transition's clock in either direction. Recorded on an
+ * iPhone 18 Pro simulator: a push applied the new height at the tap, but the native stack keeps a
+ * screen's frame for the length of its transition, so for ~450ms the form sat 105pt short with
+ * Create account clipped over a black strip. A pop applied it only once the route state caught up,
+ * ~300ms *after* the swipe had finished, so the chooser sat under the form's short band and then
+ * jumped. Animating the height instead was tried before that and stuttered (`git log` this file).
+ *
+ * So no screen's frame depends on the band. Each screen starts with a transparent `SceneWindow`
+ * of its own height and paints canvas below it; the form's canvas starts higher and covers the
+ * photograph's lower edge as it slides in. The band "resizes" in lockstep with the native
+ * animation — an interactive swipe-back included — with nothing timed in JS at all.
+ *
+ * **Full-bleed to the top edge**, so the photograph runs under the status bar. A band that starts
+ * below the notch reads as a picture pasted onto a screen rather than as the screen itself.
+ */
+export function SceneBand({ beat }: { beat: number }) {
+  const reduceMotion = useReducedMotion();
+  const { height } = useWindowDimensions();
 
   return (
-    <Animated.View style={[styles.band, bandStyle]}>
+    <View style={[styles.band, { height: bandHeight(height, BAND_RATIO) }]}>
       {/* One `Image` whose source changes, rather than a stack of them cross-faded by hand:
           `transition` is exactly this, and expo-image holds the outgoing frame itself. */}
       <Image
-        source={current.photo}
+        source={BEATS[beat].photo}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
         // The same duration the caption's rise and fade take — see `fade` above for why these
@@ -199,6 +171,39 @@ export function SceneBand({
           display type ride a picture (the Photograph-Is-Not-A-Surface rule), which is exactly
           what the caption is. */}
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
+    </View>
+  );
+}
+
+/**
+ * A screen's window onto the band: transparent, `ratio` of the window tall, with the caption on
+ * its bottom edge. The caption lives here rather than on the band so it sits on the edge this
+ * screen actually shows — which also means it travels with the page during a push.
+ *
+ * **Only the collapse is animated.** The keyboard and the Dynamic Type threshold take the room as
+ * a 0-to-1 progress between this screen's height and `BAND_COLLAPSED`; there the content *gains*
+ * room as the window shrinks, so nothing can clip. A screen's own height never changes, which is
+ * the point of the arrangement above.
+ */
+export function SceneWindow({ ratio }: { ratio: number }) {
+  const { beat, collapsed } = useContext(SceneContext);
+  const reduceMotion = useReducedMotion();
+  const height = bandHeight(useWindowDimensions().height, ratio);
+  const current = BEATS[beat];
+
+  const collapseProgress = useDerivedValue(() =>
+    withTiming(collapsed ? 1 : 0, {
+      duration: reduceMotion ? 0 : Motion.settle,
+      easing: Easing.bezier(...Curve),
+    }),
+  );
+  const windowStyle = useAnimatedStyle(
+    () => ({ height: height + (BAND_COLLAPSED - height) * collapseProgress.value }),
+    [height],
+  );
+
+  return (
+    <Animated.View style={[styles.window, windowStyle]}>
       <Animated.View
         // Re-keyed per beat so the caption rises with each photograph instead of swapping under
         // it. Same keyframe as the arrival, so this is one authored motion rather than two.
@@ -209,10 +214,8 @@ export function SceneBand({
         <ThemedText type="label" themeColor="onDeep" style={styles.captionLabel}>
           {current.label}
         </ThemedText>
-        {/* **`collapsed`, not a height comparison.** `height` is the route's full height now and
-            the collapse is a separate progress, so testing it against `BAND_COLLAPSED` was always
-            true — which drew the display line into the 132pt sliver, where it ran up into the
-            status bar. */}
+        {/* `collapsed`, not a height comparison: the display line drawn into the 132pt sliver
+            runs up into the status bar. */}
         {collapsed ? null : (
           <ThemedText type="display" themeColor="onDeep" numberOfLines={2}>
             {current.stat}
@@ -225,12 +228,18 @@ export function SceneBand({
 
 const styles = StyleSheet.create({
   band: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.surfaceDeep,
+  },
+  window: {
     // Squared, not rounded: this is read, not touched, and it reaches three screen edges. The
     // bottom hairline is the whole separation between the picture and the form — the system draws
     // rules rather than putting a card around things.
     overflow: 'hidden',
     justifyContent: 'flex-end',
-    backgroundColor: Colors.surfaceDeep,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.cardBorder,
   },
