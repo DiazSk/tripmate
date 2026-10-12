@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { signOut, useAccount } from '@/api/auth';
+import { signOut, useAccount, type Account } from '@/api/auth';
 import { subscribeToSession } from '@/api/session';
 import { getProfile, getProfileStats, saveProfile } from '@/api/tripMateApi';
 import { legacyExplorerStyle, travelStyleOf } from '@shared/userAnswers';
@@ -23,6 +23,7 @@ import type {
   ProfileStats,
   TravelerProfile,
 } from '@/api/types';
+import { Avatar } from '@/components/avatar';
 import { FieldSheet } from '@/components/field-sheet';
 import { ChoiceRow, FieldTrough, PrimaryButton, TagGrid, TextField } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
@@ -250,7 +251,7 @@ export default function Profile() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Avatar profile={loadedProfile} name={account?.name?.trim() || null} />
+        <ProfileHeader profile={loadedProfile} account={account} />
 
         {stats ? <Record stats={stats} /> : null}
 
@@ -493,25 +494,12 @@ function Figure({ label, value, money }: { label: string; value: string; money?:
   );
 }
 
-/**
- * A picture, and the one line that says who you are — how every mobile profile opens.
- *
- * Not tappable: this product has no accounts and no image storage, and a control that opens a
- * picker whose result cannot be saved is worse than a placeholder that admits what it is.
- */
-function Avatar({ profile, name }: { profile: TravelerProfile | null; name: string | null }) {
+/** The traveller's face and the one line that says who they are. */
+function ProfileHeader({ profile, account }: { profile: TravelerProfile | null; account: Account | null }) {
+  const name = account?.name?.trim() || null;
   return (
     <View style={styles.avatarBlock}>
-      <View style={styles.avatar}>
-        <SymbolView
-          name={{ ios: 'person.fill', android: 'person' }}
-          tintColor={Colors.muted}
-          size={38}
-          // Given a bare SF string, the Android path renders nothing at all, silently — hence the
-          // object form above.
-          fallback={<Text style={styles.avatarFallback}>—</Text>}
-        />
-      </View>
+      <Avatar account={account} size={84} editable />
       {/* The name when there is one, with the portrait sentence demoted beneath it. Signed out
           the sentence stands alone exactly as before — this screen still has to work for somebody
           who has never made an account, which is most first-time openers.
@@ -700,15 +688,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.compact,
     paddingHorizontal: Spacing.regular,
   },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarFallback: { color: Colors.muted, fontSize: 32 },
   name: {
     color: Colors.foreground,
     fontSize: 22,
