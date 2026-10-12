@@ -3952,3 +3952,56 @@ html[data-story-mode="true"] .marker-day-label {
     animation: search-pin-card-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 }
+
+/* ── The travel card (src/components/welcome/TravelCard.tsx) ──────────────────────────────────────
+   A passport data page on paper — the only paper object in a dark-glass app, because it is the
+   welcome's reward and a reward should be a thing. Spec: 2026-10-12-profile-photos-and-onboarding. */
+.travel-card {
+  --paper: #f2ece1; --paper-2: #e6ddcd; --card-ink: #2a2420; --card-ink-soft: #7a6f63; --card-rule: rgb(42 36 32 / 0.16);
+  position: relative; width: 100%; aspect-ratio: 1.45; border-radius: 9px; color: var(--card-ink); overflow: hidden; isolation: isolate;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.32 0 0 0 0 0.27 0 0 0 0 0.2 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(90deg, rgb(60 45 30 / 0.16), rgb(60 45 30 / 0.04) 4.5%, transparent 7%),
+    radial-gradient(130% 100% at 28% 18%, var(--paper), var(--paper-2));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 34px 70px rgb(0 0 0 / 0.55), 0 8px 18px rgb(0 0 0 / 0.38);
+  padding: 18px 26px 14px 34px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto 1fr auto; column-gap: 18px;
+}
+.travel-card-print { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.55; }
+.travel-card-perf { position: absolute; right: 9px; top: 16px; bottom: 16px; width: 6px; background: radial-gradient(circle, rgb(18 17 16 / 0.5) 1.1px, transparent 1.5px) 0 0 / 6px 8px repeat-y; opacity: 0.55; }
+.travel-card-head { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--card-rule); padding-bottom: 8px; margin-bottom: 12px; }
+.travel-card-title { font-family: var(--font-display-stack), ui-serif, Georgia, serif; font-size: 1.1rem; line-height: 1; white-space: nowrap; }
+.travel-card-title small { font: 600 0.54rem/1 var(--font-sans-stack), system-ui, sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: var(--card-ink-soft); margin-left: 8px; }
+.travel-card-no { font-size: 0.6rem; letter-spacing: 0.14em; color: var(--card-ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.travel-card-photo { position: relative; width: 94px; aspect-ratio: 3 / 4; border-radius: 3px; background: linear-gradient(165deg, #d3dbd8, #b9c4c1); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12); display: grid; place-items: center; font-weight: 600; font-size: 1.7rem; color: rgb(42 36 32 / 0.42); align-self: start; }
+.travel-card-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 3px; filter: saturate(0.82) contrast(1.03) sepia(0.06); }
+.travel-card-seal { position: absolute; right: -15px; bottom: -13px; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 34% 30%, rgb(255 255 255 / 0.55), transparent 62%), var(--paper); box-shadow: inset 1px 1px 1.5px rgb(255 255 255 / 0.8), inset -1.5px -1.5px 2px rgb(60 45 30 / 0.22), 0 1px 1px rgb(60 45 30 / 0.18); }
+.travel-card-seal svg { width: 22px; height: 22px; }
+.travel-card-fields { display: grid; align-content: start; gap: 7px; min-width: 0; padding-right: 36%; }
+.travel-card-field small { display: block; font-size: 0.5rem; font-weight: 600; line-height: 1.2; letter-spacing: 0.18em; text-transform: uppercase; color: var(--card-ink-soft); }
+.travel-card-field span { display: block; font-size: 0.76rem; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
+.travel-card-field span.is-empty { color: rgb(42 36 32 / 0.26); font-weight: 400; }
+.travel-card-field.is-name span { font-family: var(--font-display-stack), ui-serif, Georgia, serif; font-weight: 400; font-size: 1.7rem; line-height: 1; letter-spacing: -0.012em; }
+.travel-card-foot { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--card-rule); padding-top: 7px; margin-top: 8px; font-size: 0.54rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--card-ink-soft); }
+.travel-card-stamps { position: absolute; inset: 0; pointer-events: none; }
+.travel-card-stamp { position: absolute; transform: translate(-50%, -50%) rotate(var(--r)); mix-blend-mode: multiply; opacity: 0.88; }
+.travel-card-stamp svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* Phone width: only the top of the page, like a card tucked into a sleeve. */
+.travel-card.is-compact { aspect-ratio: auto; height: 136px; padding: 11px 16px 10px 24px; grid-template-rows: auto 1fr; }
+.travel-card.is-compact .travel-card-no, .travel-card.is-compact .travel-card-foot, .travel-card.is-compact .travel-card-field:not(.is-name):not(.is-home) { display: none; }
+.travel-card.is-compact .travel-card-photo { width: 54px; font-size: 1.05rem; }
+.travel-card.is-compact .travel-card-seal { width: 26px; height: 26px; right: -9px; bottom: -8px; }
+.travel-card.is-compact .travel-card-seal svg { width: 14px; height: 14px; }
+.travel-card.is-compact .travel-card-field.is-name span { font-size: 1.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.travel-card.is-compact .travel-card-fields { padding-right: 44%; gap: 5px; }
+@media (prefers-reduced-motion: no-preference) {
+  .travel-card-stamp { animation: stamp-press 520ms cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+  .travel-card.is-thud { animation: card-thud 240ms ease-out 230ms; }
+  .travel-card.is-complete { animation: card-complete 1000ms cubic-bezier(0.16, 1, 0.3, 1); }
+}
+@keyframes stamp-press {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--r)) scale(1.4); filter: blur(2px); }
+  45% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--r)) scale(0.95); filter: blur(0); }
+  100% { opacity: 0.88; transform: translate(-50%, -50%) rotate(var(--r)) scale(1); }
+}
+@keyframes card-thud { 40% { translate: 0 2px; } }
+@keyframes card-complete { 35% { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 44px 90px rgb(0 0 0 / 0.6), 0 0 0 2px rgb(40 185 129 / 0.7); } }
