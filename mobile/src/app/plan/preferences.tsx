@@ -185,17 +185,6 @@ export default function PreferencesStep() {
           </FieldTrough>
         </Question>
 
-        <Question title="Already booked or off-limits" caption="Optional.">
-          <FieldTrough>
-            <TextField
-              label="Also"
-              value={draft.constraintsNote}
-              onChangeText={(constraintsNote) => patch({ constraintsNote })}
-              placeholder="No rental car; dinner booked Thursday"
-            />
-          </FieldTrough>
-        </Question>
-
         <View style={styles.action}>
           <PrimaryButton title="Next" onPress={() => router.push('/plan/review')} />
         </View>

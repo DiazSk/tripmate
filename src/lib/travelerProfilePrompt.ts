@@ -156,7 +156,7 @@ export function formatRequirements(answers: UserAnswers | null): string {
   }
   if (answers.constraintsNote?.trim()) {
     lines.push(
-      `In the traveler's own words: "${answers.constraintsNote.trim()}" — treat anything named there as already decided. Never assume access to a transport mode, a booking or a budget basis it does not mention, but don't read its silence as a denial either: if it doesn't say they have a car, don't plan a day that needs one — that is not the same as assuming they don't have one.`
+      `In the traveler's own words: "${answers.constraintsNote.trim()}" — treat anything named there as already decided, and keep any time they say they're busy or unavailable free of stops. Never assume access to a transport mode, a booking or a budget basis it does not mention, but don't read its silence as a denial either: if it doesn't say they have a car, don't plan a day that needs one — that is not the same as assuming they don't have one.`
     );
   }
   if (lines.length === 0) return "";
