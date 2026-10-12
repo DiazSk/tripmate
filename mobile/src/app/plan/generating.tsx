@@ -5,10 +5,12 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { createTripDraft, generateTrip, getTrip, saveProfile, updateTripItinerary } from '@/api/tripMateApi';
 import type { GenerationStage, Itinerary, SketchEvent, StreamedStop } from '@/api/types';
 import { PrimaryButton } from '@/components/form';
+import { Meridian } from '@/components/meridian';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Spacing, dayCore } from '@/constants/theme';
 import { formatDateline } from '@/lib/dayDisplay';
+import { meriForGeneration } from '@shared/meri';
 import { toGenerateRequest, toTravelerProfile, toUserAnswers, usePlanDraft } from '@/lib/planDraft';
 
 /** Stage copy ported from the Swift wizard's `waitingLabel`. */
@@ -136,11 +138,18 @@ export default function Generating() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // `complete` is always false here: the screen hands off to the trip the moment the plan is saved,
+  // so the plan opening is the success. A sketch alone is not streaming — only a real stop is.
+  const meri = meriForGeneration({ complete: false, streaming: stops.length > 0, failed: !!failure });
+
   if (failure) {
     return (
       <View style={styles.screen}>
         <Stack.Screen options={{ title: '', headerBackButtonDisplayMode: 'minimal' }} />
         <View style={styles.failure}>
+          <View style={styles.meriFailed}>
+            <Meridian state={meri} size={56} />
+          </View>
           <Notice>{failure}</Notice>
           <View style={styles.retry}>
             <PrimaryButton title="Back to the details" onPress={() => router.back()} />
@@ -158,6 +167,9 @@ export default function Generating() {
         options={{ title: '', headerBackButtonDisplayMode: 'minimal', gestureEnabled: false }}
       />
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.meri}>
+          <Meridian state={meri} size={56} />
+        </View>
         <ThemedText type="label" themeColor="muted">
           {draft.destination}
         </ThemedText>
@@ -255,6 +267,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.canvas },
   content: { padding: Spacing.read, paddingBottom: Spacing.regular * 2, gap: Spacing.hair },
   stage: { marginTop: Spacing.tight, marginBottom: Spacing.hair },
+  meri: { marginBottom: Spacing.compact },
+  meriFailed: { paddingHorizontal: Spacing.read },
   failure: { paddingTop: Spacing.regular, gap: Spacing.read },
   sketch: { marginTop: Spacing.tight, gap: Spacing.hair },
   retry: { paddingHorizontal: Spacing.read },

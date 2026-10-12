@@ -44,6 +44,12 @@ test("the generation run thinks, then streams once stops draw, then succeeds", (
   assert.equal(meriForGeneration({ complete: true, streaming: true }), "success");
 });
 
+test("a failed generation is an error, whatever else the run had reached", () => {
+  // The phone's wait screen stays up on failure; the web band never passes `failed`.
+  assert.equal(meriForGeneration({ complete: false, streaming: true, failed: true }), "error");
+  assert.equal(meriForGeneration({ complete: true, streaming: true, failed: true }), "error");
+});
+
 test("a pending reply outranks one that just landed", () => {
   assert.equal(meriForChat({ replying: true, failure: null, justReplied: true }), "thinking");
 });

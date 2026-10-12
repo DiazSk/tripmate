@@ -77,8 +77,12 @@ export function meriForStory(story: {
   return story.muted || story.silentPlatform ? "idle" : "speaking";
 }
 
-/** The generation band. It unmounts on failure, so it never has an error to show. */
-export function meriForGeneration(run: { complete: boolean; streaming: boolean }): MeridianState {
+/**
+ * A plan being written. The web band unmounts on failure and never passes `failed`; the phone's wait
+ * screen stays up to show the failure, so there a failure outranks everything the run had reached.
+ */
+export function meriForGeneration(run: { complete: boolean; streaming: boolean; failed?: boolean }): MeridianState {
+  if (run.failed) return "error";
   if (run.complete) return "success";
   return run.streaming ? "streaming" : "thinking";
 }

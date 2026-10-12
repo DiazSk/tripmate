@@ -1595,6 +1595,10 @@ states are motion only (breathing, blinking, a speaking squash, one lift for suc
 for error), and its host always says the state in words — so no state is carried by colour or
 by motion alone, and Reduce Motion loses nothing.
 
+**On the phone Meri also heads the plan-generation screen** (56pt, above the destination): thinking
+until the first stop streams in, streaming after it, and error above the notice on the failure
+screen. There is no lift — the screen hands off to the trip the moment the plan is saved.
+
 **On the web Meri appears in four places**, drawn by `src/components/Meridian.tsx` from the same
 `meridianMotion` table (`src/lib/meri.ts`) the phone uses:
 
