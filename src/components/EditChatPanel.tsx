@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { Itinerary, TripSummary, UserAnswers } from "@/lib/types";
 import { devLabel } from "@/lib/devInspector";
+import { meriForChat } from "@/lib/meri";
+import Meridian from "./Meridian";
 
 const SUGGESTIONS = [
   "Is this day too packed?",
@@ -91,6 +93,8 @@ export default function EditChatPanel({
   const [input, setInput] = useState(initialMessage ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** True for one lift (420ms) after a reply lands, so Meri marks the arrival once. */
+  const [justReplied, setJustReplied] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -162,6 +166,12 @@ export default function EditChatPanel({
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, busy]);
 
+  useEffect(() => {
+    if (!justReplied) return;
+    const id = setTimeout(() => setJustReplied(false), 420);
+    return () => clearTimeout(id);
+  }, [justReplied]);
+
   async function send(preset?: string) {
     const text = (preset ?? input).trim();
     if (!text || busy) return;
@@ -217,6 +227,7 @@ export default function EditChatPanel({
           options: data.options ?? [],
         },
       ]);
+      setJustReplied(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -229,6 +240,24 @@ export default function EditChatPanel({
     // Fills whatever pane it is placed in — Focus Mode owns the framing, header and dimensions
     // now, so this component no longer positions itself.
     <div className="flex h-full min-h-0 flex-col" {...devLabel("EditChatPanel")}>
+      {/* Who is replying, and whether they are. This replaces the "Thinking…" line that used to sit
+          at the foot of the transcript. */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-card-border px-4 py-3">
+        <Meridian size={28} state={meriForChat({ replying: busy, failure: error, justReplied })} />
+        <div className="min-w-0" role="status">
+          <p className="text-sm font-medium text-foreground">TripMate</p>
+          {busy ? (
+            <p className="text-xs text-foreground/80">
+              <span aria-hidden="true" className="text-accent">
+                ●
+              </span>{" "}
+              Replying
+            </p>
+          ) : (
+            <p className="text-xs text-muted">Ask for a change</p>
+          )}
+        </div>
+      </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {loadingHistory && messages.length === 0 && (
           <p className="text-sm text-muted">Loading your conversation…</p>
@@ -327,7 +356,6 @@ export default function EditChatPanel({
           </div>
         ))}
 
-        {busy && <p className="text-xs text-muted">Thinking…</p>}
         {error && (
           <p role="alert" className="text-xs text-alert">
             {error}
