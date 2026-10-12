@@ -1861,9 +1861,11 @@ The band is `--surface-deep` at 92%. That keeps small text at 7.1:1 over the bri
 **Do not thin the band to let the map show.** Its opacity is the whole reason small text is allowed on
 this screen.
 
-**Meri says where the run is:** thinking while the trip's facts are gathered, streaming once the first
-stop has drawn, and one lift when the plan is complete. The band unmounts on failure, so Meri never
-shows an error here; the form says it instead.
+**Meri says where the run is:** thinking while the trip's facts are gathered, and streaming once the
+first stop has drawn. It lifts only if every step finishes while the band is still up. Usually the
+band gives way the moment the plan lands, with the check still running behind it, and the plan
+opening is the success. The band unmounts on failure, so Meri never shows an error here; the form
+says it instead.
 
 **Four steps, not five.** `geocode` and `context` total about three seconds of the ~150 and mean nothing
 to a person waiting, so they share a column. The four that remain are the same four the landing's "How
