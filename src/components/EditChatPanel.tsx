@@ -244,7 +244,7 @@ export default function EditChatPanel({
           at the foot of the transcript. */}
       <div className="flex shrink-0 items-center gap-3 border-b border-card-border px-4 py-3">
         <Meridian size={28} state={meriForChat({ replying: busy, failure: error, justReplied })} />
-        <div className="min-w-0" role="status">
+        <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">TripMate</p>
           {busy ? (
             <p className="text-xs text-foreground/80">
@@ -257,6 +257,11 @@ export default function EditChatPanel({
             <p className="text-xs text-muted">Ask for a change</p>
           )}
         </div>
+        {/* The only announcement: that a reply is coming. The visible header would re-read "TripMate"
+            and the idle prompt after every turn, behind any error alert. */}
+        <p className="sr-only" role="status">
+          {busy ? "TripMate is replying" : ""}
+        </p>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {loadingHistory && messages.length === 0 && (

@@ -2303,11 +2303,6 @@ html[data-story-mode="true"] .marker-day-label {
    that re-blurs every glass panel each frame. Every animation is applied inside the no-preference gate,
    so under reduced motion Meri is completely still and the global 0.01ms rule has nothing to flatten —
    no exemption. The paused state's relaxed eyes are an inline style and survive either way. */
-.meri-eyes {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .meri-breathe {
     animation: meri-breathe var(--meri-breathe) ease-in-out infinite alternate;
@@ -2353,13 +2348,13 @@ html[data-story-mode="true"] .marker-day-label {
   }
 }
 
-/* SVG user units: 3 of the 100-unit viewBox is the phone's 3% of size. */
+/* The eye wrapper is Meri's full box, so 3% of it is the phone's 3% of size. */
 @keyframes meri-drift {
   from {
-    transform: translateX(-3px);
+    transform: translateX(-3%);
   }
   to {
-    transform: translateX(3px);
+    transform: translateX(3%);
   }
 }
 
