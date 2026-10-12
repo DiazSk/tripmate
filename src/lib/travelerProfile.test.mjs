@@ -155,3 +155,19 @@ test("a junk pace does not throw the whole profile away", () => {
   assert.equal(parsed.pace, undefined);
   assert.equal(travelStyleOf(parsed).pace, "packed");
 });
+
+const base = {
+  group: "solo", explorerStyle: "mixed", energy: "moderate", crowds: "mixed", priorities: [], topPriorities: [],
+  dietary: { tags: [], note: "" }, accessibility: { stepFreeRequired: false, limitStairs: false, note: "" },
+};
+
+test("a valid home city is kept on the profile", () => {
+  const p = parseProfile({ ...base, homeCity: { name: "Boston", latitude: 42.36, longitude: -71.06 } });
+  assert.deepEqual(p.homeCity, { name: "Boston", latitude: 42.36, longitude: -71.06 });
+});
+
+test("a malformed home city is dropped, not allowed to reject the whole profile", () => {
+  const p = parseProfile({ ...base, homeCity: { name: "", latitude: "x" } });
+  assert.ok(p);
+  assert.equal(p.homeCity, undefined);
+});
