@@ -306,7 +306,7 @@ with the same `src/lib/storyPacing.ts` the web re-exports from `storyVoice.ts` �
 film narrates with the silent switch on (`expo-audio` `playsInSilentMode`, set at film start) because Play is
 a request for sound; and the expo-audio plugin's `enableBackgroundPlayback` is off because a film pauses when
 backgrounded. No travel beats — the app sends no `legs`.
-Meri (`mobile/src/components/meridian.tsx`) heads its panel, the chat sheet and the plan-generation screen: a code-drawn
+Meri (`mobile/src/components/meridian.tsx`) heads its panel, the chat sheet and the plan-generation screen — and the welcome after sign-up; on screen it is 'your TripMate': a code-drawn
 globe whose per-state motion is the pure `meridianMotion` table in `src/lib/meri.ts`, fed by
 `meriForFilm`/`meriForChat`/`meriForGeneration` so it only ever shows a state the app is in. That table is shared with the
 web's `src/components/Meridian.tsx`, which shows Meri in the narration stage, the edit chat, the

@@ -1600,6 +1600,10 @@ by motion alone, and Reduce Motion loses nothing.
 until the first stop streams in, streaming after it, and error above the notice on the failure
 screen. There is no lift — the screen hands off to the trip the moment the plan is saved.
 
+**On screen the character is "your TripMate", never "Meri".** "Meri" (from the Meridian mark) is a code
+and design-doc name only: a trip mate *is* a companion, so the product's own name names it, where a
+second unrelated word would read as a second brand.
+
 **On the web Meri appears in four places**, drawn by `src/components/Meridian.tsx` from the same
 `meridianMotion` table (`src/lib/meri.ts`) the phone uses:
 
@@ -1883,6 +1887,18 @@ exempted from the blanket reduced-motion rule — removing its transition would 
 calmer, which is the opposite of what the setting asks for. **A segment cannot finish early**: inside
 whichever stage is running the fill advances on `1 - exp(-t/tau)`, approaching its segment's end without
 reaching it, so only a real `done` event completes it. Structural, not a "stop at 95%" clamp.
+
+### The Welcome (signature)
+Right after an account is created, seven pages ask one thing each — name and photo, who comes along,
+pace and crowds, what matters, home city — and every answer rubber-stamps the **TripMate travel card**:
+a passport data page on warm paper (`#f2ece1` into `#e6ddcd`, fibre grain, a darker binding gutter, a
+perforated edge, a faint guilloché rosette) — the only paper object in a dark-glass app, because it is
+the reward and a reward should be a thing. Stamps are one shape and one ink per step — a blue-black
+circle, an oxblood double-ruled rectangle, a bottle-green oval, a violet hexagon — each dated, each
+multiplied into the paper with speckled edges, each landing with a press. Your TripMate hosts: one line
+per page, a new line per answer, the success squint when an answer lands. No confetti: the bar is
+restraint, so the card filling up is the celebration. On the web the card sits beside the steps, tilted
+−1.4°; on the phone it is a 136pt strip — the top of the page, as if tucked into a sleeve.
 
 ### Destination Facts (signature)
 True facts about *this* trip, rotating every 7s under the "Planning {city}" label.
