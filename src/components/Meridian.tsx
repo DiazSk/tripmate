@@ -44,7 +44,6 @@ export default function Meridian({
   const vars = {
     width: size,
     height: size,
-    boxShadow: "0 3px 6px rgba(0,0,0,0.18)",
     "--meri-breathe": `${(motion.breatheMs ?? 0) / 2}ms`,
     "--meri-drift": `${(motion.driftMs ?? 0) / 2}ms`,
     "--meri-blink": `${blinkCycleMs(id)}ms`,
@@ -58,7 +57,14 @@ export default function Meridian({
       style={vars}
     >
       <span className={`block h-full w-full ${motion.lift ? "meri-lift" : ""}`}>
-        <span className={`block h-full w-full ${motion.breatheMs ? "meri-breathe" : ""}`}>
+        {/* The shadow is on the moving body, as on the phone, so a lift carries it. Keyed on the rhythm:
+            changing a running animation's duration recomputes its progress and the scale jumps, so a
+            new rhythm remounts and starts from rest instead. ponytail: snaps to rest; the phone eases
+            back over 220ms — needs the current scale in JS if that ever shows. */}
+        <span
+          key={motion.breatheMs ?? 0}
+          className={`block h-full w-full rounded-full shadow-[0_3px_6px_rgba(0,0,0,0.18)] ${motion.breatheMs ? "meri-breathe" : ""}`}
+        >
           <span className={`relative block h-full w-full ${motion.squash ? "meri-squash" : ""}`}>
             <svg viewBox="0 0 100 100" width={size} height={size} className="block">
               <defs>

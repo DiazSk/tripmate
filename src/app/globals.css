@@ -2319,14 +2319,11 @@ html[data-story-mode="true"] .marker-day-label {
   .meri-lift {
     animation: meri-lift 420ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  /* `quiet`: asleep until its own button is hovered or focused. */
-  .meri-quiet,
-  .meri-quiet * {
-    animation-play-state: paused;
-  }
-  .group:is(:hover, :focus-visible) .meri-quiet,
-  .group:is(:hover, :focus-visible) .meri-quiet * {
-    animation-play-state: running;
+  /* `quiet`: asleep until its own button is hovered or focused. No animation at all rather than a
+     paused one, so leaving mid-blink or mid-breath returns it to rest instead of freezing it there.
+     `focus-within` rather than `focus-visible`, because it reaches the outer `.group` too. */
+  .group:not(:hover):not(:focus-within) .meri-quiet * {
+    animation: none;
   }
 }
 

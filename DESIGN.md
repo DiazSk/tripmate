@@ -1861,8 +1861,8 @@ The band is `--surface-deep` at 92%. That keeps small text at 7.1:1 over the bri
 **Do not thin the band to let the map show.** Its opacity is the whole reason small text is allowed on
 this screen.
 
-**Meri says where the run is:** thinking while the trip's facts are gathered, and streaming once the
-first stop has drawn. It lifts only if every step finishes while the band is still up. Usually the
+**Meri says where the run is:** thinking until the first stop arrives (while facts are gathered and the
+model starts writing), then streaming once that stop has drawn. It lifts only if every step finishes while the band is still up. Usually the
 band gives way the moment the plan lands, with the check still running behind it, and the plan
 opening is the success. The band unmounts on failure, so Meri never shows an error here; the form
 says it instead.

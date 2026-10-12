@@ -272,13 +272,15 @@ function StoryStageBody({
       >
         {/* Transport. Prev/Next are the traveller's own way through the day, Play/Pause between
             them is the film's own clock, and Mute and Close are the way out. */}
-        <div className="flex items-center gap-1">
+        {/* Tighter below `sm`: with Meri at its head the row is ~19px over a 360px phone's panel, which
+            wrapped "10 of 12" onto three lines. */}
+        <div className="flex items-center gap-0.5 sm:gap-1">
           {/* The narrator, at the head of the controls. The panel's live region already says
               what is happening, so Meri is decorative to assistive tech. */}
           <Meridian
             size={32}
             state={meriForStory({ phase, voiceBroken, muted, silentPlatform })}
-            className="mr-1.5"
+            className="sm:mr-1.5"
           />
           <TransportButton label="Previous place" onClick={prev} disabled={!script}>
             <SkipBack className="h-4 w-4" strokeWidth={2} />
@@ -304,7 +306,7 @@ function StoryStageBody({
 
           {/* Beats, not minutes: nobody knows how long a narration is, and everybody understands
               "four of eleven". */}
-          <span className="ml-1 flex-1 text-xs tabular-nums text-muted">
+          <span className="ml-0.5 flex-1 whitespace-nowrap text-xs tabular-nums text-muted sm:ml-1">
             {beats.length > 0 ? `${position} of ${beats.length}` : "…"}
           </span>
 

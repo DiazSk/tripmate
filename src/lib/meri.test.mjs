@@ -56,11 +56,12 @@ test("the moved motion table still stills everything under reduced motion", () =
 });
 
 test("the blink cycle is the same for the same seed, so server and client agree", () => {
-  assert.equal(blinkCycleMs("«r1»"), blinkCycleMs("«r1»"));
+  assert.equal(blinkCycleMs("_R_1_"), blinkCycleMs("_R_1_"));
 });
 
 test("the blink cycle stays within 2.8 to 5 seconds and varies by seed", () => {
-  const seeds = ["«r1»", "«r2»", "«r3»", "«r4»", "«r5»", ":R1:"];
+  // React 19.2 emits ids like `_R_1kl_`; the hash only needs a stable string.
+  const seeds = ["_R_1_", "_R_2_", "_R_3_", "_R_4_", "_R_5_", "_r_1kl_"];
   const cycles = seeds.map(blinkCycleMs);
   for (const ms of cycles) {
     assert.ok(Number.isInteger(ms) && ms >= 2800 && ms < 5000, String(ms));
