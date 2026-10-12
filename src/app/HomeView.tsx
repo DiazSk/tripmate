@@ -1905,6 +1905,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           budget={budget}
           rawFetch={rawFetch}
           onCancel={cancelGeneration}
+          // A `sketch` frame fills the draft with day themes and no stops, so it does not count.
+          streaming={draftItinerary?.days.some((d) => d.stops.length > 0) ?? false}
         />
       )}
 
