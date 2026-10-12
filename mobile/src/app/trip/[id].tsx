@@ -682,6 +682,7 @@ export default function TripDetail() {
         initialDraft={chatSeed}
         days={days}
         initialScope={chatScope}
+        currentDay={day}
         pending={chat.pending?.diff ?? null}
         applying={chat.applying}
         onApply={chat.apply}

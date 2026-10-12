@@ -4,6 +4,7 @@ import {
   formatDateline,
   formatDayChip,
   formatRange,
+  scopeDay,
   stopParticulars,
   weatherLine,
 } from './dayDisplay';
@@ -153,5 +154,17 @@ describe('stopParticulars on an imported plan', () => {
     expect(stopParticulars({ time: '9:30 AM', durationLabel: '1.5 h', category: 'entry' })).toBe(
       '9:30 AM  ·  1.5 h  ·  Entry',
     );
+  });
+});
+
+describe('scopeDay', () => {
+  it('names the day on screen when the chat opened with no day of its own', () => {
+    expect(scopeDay(null, null, 2)).toBe(2);
+    expect(scopeDay(null, undefined, 4)).toBe(4);
+  });
+
+  it('keeps the day the chat was opened about, then the chosen scope', () => {
+    expect(scopeDay(null, 1, 3)).toBe(1);
+    expect(scopeDay(0, 1, 3)).toBe(0);
   });
 });

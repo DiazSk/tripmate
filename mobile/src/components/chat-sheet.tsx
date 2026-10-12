@@ -17,7 +17,7 @@ import { ChangePreview } from '@/components/change-preview';
 import { Meridian } from '@/components/meridian';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Motion, Radius, Spacing } from '@/constants/theme';
-import { formatDayChip } from '@/lib/dayDisplay';
+import { formatDayChip, scopeDay } from '@/lib/dayDisplay';
 import type { ItineraryDiff } from '@/lib/itineraryDiff';
 import { meriForChat } from '@/lib/meri';
 
@@ -44,6 +44,7 @@ export function ChatSheet({
   initialDraft,
   days,
   initialScope,
+  currentDay,
   pending,
   applying,
   onApply,
@@ -68,6 +69,8 @@ export function ChatSheet({
   /** The scope to open on: a day index, or null for the whole trip. Seeded openings that name a
    *  day — a leg that does not fit, a stop somebody pressed "Fix this" on — arrive with theirs. */
   initialScope?: number | null;
+  /** The day on screen behind the sheet — what the narrow half names until a scope is chosen. */
+  currentDay: number;
   /** What the last reply would do to the plan, or null when there is nothing to approve.
    *  The plan itself does not move until `onApply` — see `useChat.send`. */
   pending: ItineraryDiff | null;
@@ -195,9 +198,9 @@ export function ChatSheet({
           </ThemedText>
           <View style={styles.toggle}>
             <ScopeHalf
-              label={dayName(days, dayOf(initialScope, scope))}
+              label={dayName(days, scopeDay(scope, initialScope, currentDay))}
               on={scope !== null}
-              onPress={() => setScope(dayOf(initialScope, scope))}
+              onPress={() => setScope(scopeDay(scope, initialScope, currentDay))}
             />
             <ScopeHalf label="Whole trip" on={scope === null} onPress={() => setScope(null)} />
           </View>
@@ -304,14 +307,6 @@ const HINTS = [
 
 /** Long enough to read one and glance away, short enough that a pause shows a second. */
 const HINT_MS = 4200;
-
-/**
- * Which day the narrow half means.
- *
- * The current scope while there is one, else the day the sheet was opened about, else the first
- * — so the half always names a real day and pressing it never has to ask which.
- */
-const dayOf = (initial: number | null | undefined, scope: number | null) => scope ?? initial ?? 0;
 
 const dayName = (days: { date: string }[], index: number) => {
   const chip = formatDayChip(days[index]?.date ?? '');
