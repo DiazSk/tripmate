@@ -708,6 +708,13 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   /* eslint-disable react-hooks/set-state-in-effect -- see the note above; the lazy-initializer
      fix this rule suggests would reintroduce a real SSR/hydration mismatch. */
   useEffect(() => {
+    // The welcome's Ready page links here as `/?plan=1`: "Plan a trip" opens the wizard rather
+    // than the landing film. The param is dropped first so Back returns to a plain `/`.
+    if (new URLSearchParams(window.location.search).get("plan") === "1") {
+      window.history.replaceState(null, "", window.location.pathname);
+      startPlanning();
+      return;
+    }
     const urlStep = new URLSearchParams(window.location.search).get("step");
     if (!isPlanStep(urlStep)) return;
     let draft: Record<string, unknown> | null = null;

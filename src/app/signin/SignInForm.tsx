@@ -98,7 +98,8 @@ export default function SignInForm() {
     // refreshing, Next can serve them from the client router cache as they looked a moment ago —
     // signed out, and empty. The claim has already run server-side by this point.
     router.refresh();
-    router.push(next);
+    // A new account is welcomed first; `next` rides along so Ready can offer the way back.
+    router.push(creating ? `/welcome${next !== "/trips" ? `?next=${encodeURIComponent(next)}` : ""}` : next);
   }
 
   return (
