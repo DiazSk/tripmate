@@ -8,7 +8,7 @@ web, ios, android
 
 ## Stack
 
-Next.js (App Router, TypeScript) + Tailwind v4 for the web client and the server every client shares. **SQLite via `libsql`** — a single local `tripmate.db` by default, or a hosted Turso database by setting `TURSO_DATABASE_URL`; the API stayed synchronous through that swap, which is why it was a constructor change rather than a port. No accounts: identity is an owner id in a cookie, minted per browser.
+Next.js (App Router, TypeScript) + Tailwind v4 for the web client and the server every client shares. **SQLite via `libsql`** — a single local `tripmate.db` by default, or a hosted Turso database by setting `TURSO_DATABASE_URL`; the API stayed synchronous through that swap, which is why it was a constructor change rather than a port. Accounts are email and password (Better Auth). Until someone signs in, identity is an owner id in a cookie, and signing in moves that owner's trips, places and profile onto the account.
 
 **A React Native client (`mobile/`, Expo SDK 57 + expo-router) targets iOS and Android from one codebase** and talks to the same REST routes unchanged. It ships the plan wizard end to end, SSE generation with stops appearing as they stream, Keep, a trip screen with map/chat/spend, a memories wall and a profile tab. **The earlier SwiftUI app in `ios/` is frozen rather than deleted** — `ios/TripMateKit` remains the reference both later clients were ported from.
 
@@ -47,7 +47,7 @@ A plan is persisted the moment it is generated, as a `draft`, so a back press or
 ## Capabilities and Constraints
 
 **Accounts and data**
-- No sign-up. Identity is an owner id in a cookie, so trips and the profile are per-browser rather than per-person. The React Native client mints its own id and sends it as a header, because RN's networking owns cookies end to end and a hand-set `Cookie` was being overwritten from the native store.
+- Accounts are email and password (Better Auth). Until someone signs in, identity is an owner id in a cookie, and signing in moves that owner's trips, places and profile onto the account. The React Native client mints its own id and sends it as a header, because RN's networking owns cookies end to end and a hand-set `Cookie` was being overwritten from the native store.
 - `trips` rows are not yet scoped by owner — the profile is, trips are not. Adding real auth means a `trips` migration, not just a login screen.
 
 **What the traveler can state, and what happens to it**

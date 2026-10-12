@@ -667,3 +667,27 @@ export async function storyScript(params: {
     return undefined;
   }
 }
+
+/**
+ * `true`/`false` is the server's answer; `'signed-out'` is a 401 (a stray link opened this with no
+ * session, so the welcome has nobody to welcome); `undefined` is "could not ask" (offline or a 5xx),
+ * where the welcome simply shows.
+ */
+export async function onboardingNeeded(): Promise<boolean | 'signed-out' | undefined> {
+  try {
+    const res = await fetchWithSession('/api/onboarding', {});
+    if (res.status === 401) return 'signed-out';
+    if (!res.ok) return undefined;
+    return ((await res.json()) as { needed?: boolean }).needed === true;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function completeOnboarding(skipped: boolean): Promise<void> {
+  try {
+    await fetchWithSession('/api/onboarding/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skipped }) });
+  } catch {
+    // Best-effort: at worst the account is never shown the welcome again, which only sign-up opens anyway.
+  }
+}

@@ -5,7 +5,7 @@
  * way in — and these asserts are what fail if that guard is loosened. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseProfile } from "./travelerProfile.ts";
+import { keepHomeCity, parseProfile } from "./travelerProfile.ts";
 import { derivePaceSpotsPerDay, travelStyleOf } from "./userAnswers.ts";
 
 const valid = {
@@ -154,4 +154,36 @@ test("a junk pace does not throw the whole profile away", () => {
   assert.notEqual(parsed, null);
   assert.equal(parsed.pace, undefined);
   assert.equal(travelStyleOf(parsed).pace, "packed");
+});
+
+const base = {
+  group: "solo", explorerStyle: "mixed", energy: "moderate", crowds: "mixed", priorities: [], topPriorities: [],
+  dietary: { tags: [], note: "" }, accessibility: { stepFreeRequired: false, limitStairs: false, note: "" },
+};
+
+test("a valid home city is kept on the profile", () => {
+  const p = parseProfile({ ...base, homeCity: { name: "Boston", latitude: 42.36, longitude: -71.06 } });
+  assert.deepEqual(p.homeCity, { name: "Boston", latitude: 42.36, longitude: -71.06 });
+});
+
+test("a malformed home city is dropped, not allowed to reject the whole profile", () => {
+  const p = parseProfile({ ...base, homeCity: { name: "", latitude: "x" } });
+  assert.ok(p);
+  assert.equal(p.homeCity, undefined);
+});
+
+const LISBON = { name: "Lisbon", latitude: 38.72, longitude: -9.14 };
+const PORTO = { name: "Porto", latitude: 41.15, longitude: -8.61 };
+
+test("keepHomeCity keeps the stored city when a writer that predates the field omits it", () => {
+  assert.deepEqual(keepHomeCity(valid, { ...valid, homeCity: LISBON }), { ...valid, homeCity: LISBON });
+});
+
+test("keepHomeCity lets a stated home city win", () => {
+  assert.deepEqual(keepHomeCity({ ...valid, homeCity: PORTO }, { ...valid, homeCity: LISBON }).homeCity, PORTO);
+});
+
+test("keepHomeCity leaves the profile alone when nothing is stored", () => {
+  assert.equal(keepHomeCity(valid, null), valid);
+  assert.equal(keepHomeCity(valid, valid), valid);
 });

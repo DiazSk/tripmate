@@ -70,6 +70,8 @@ export default async function ProfilePage() {
       savedPlaceCount={places.length}
       accountEmail={session?.user?.email ?? null}
       accountName={session?.user?.name ?? null}
+      accountId={session?.user?.id ?? null}
+      accountImage={session?.user?.image ?? null}
     />
   );
 }

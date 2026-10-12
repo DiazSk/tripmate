@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import Avatar from "@/components/Avatar";
 import SiteFooter from "@/components/SiteFooter";
 import ChoicePicker, { CROWD_PREFERENCES, ENERGY_LEVELS } from "@/components/ChoicePicker";
 import { DiscoveryPicker, PacePicker } from "@/components/ExplorerStylePicker";
@@ -12,6 +13,7 @@ import { legacyExplorerStyle, travelStyleOf } from "@/lib/userAnswers";
 import GroupTypePicker from "@/components/GroupTypePicker";
 import InterestPicker from "@/components/InterestPicker";
 import DietaryPicker from "@/components/DietaryPicker";
+import HomeCitySearch from "@/components/welcome/HomeCitySearch";
 import ErrorNote from "@/components/ErrorNote";
 import AccountReceipt from "@/components/AccountReceipt";
 import { formatDateRange, formatMoney } from "@/lib/format";
@@ -281,13 +283,17 @@ function SavedPlaces({
  * account is for rather than by gating anything.
  */
 function Masthead({
+  id,
   name,
   email,
+  image,
   lead,
   stats,
 }: {
+  id: string | null;
   name: string | null;
   email: string | null;
+  image: string | null;
   lead: TripSummary | undefined;
   stats: ProfileStats;
 }) {
@@ -298,11 +304,15 @@ function Masthead({
   return (
     <header>
       <div className="flex min-w-0 items-center gap-5 sm:gap-7">
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-card-border bg-tile sm:h-28 sm:w-28">
-          {photo && (
-            <Image key={photo} src={photo} alt="" fill sizes="112px" className="value-in object-cover" />
-          )}
-        </div>
+        {id ? (
+          // Signed in: the traveller's own face, editable. `router.refresh()` re-reads the session so
+          // the server-rendered page carries the new `user.image` too.
+          <Avatar userId={id} name={name} image={image} size={112} editable onChange={() => router.refresh()} />
+        ) : (
+          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-card-border bg-tile sm:h-28 sm:w-28">
+            {photo && <Image key={photo} src={photo} alt="" fill sizes="112px" className="value-in object-cover" />}
+          </div>
+        )}
         <div className="min-w-0">
           {/* `.font-display-xl` — the display serif at a size this page picks. **Not**
               `.font-scene-display`: the scene classes carry the landing's own fluid clamp and are
@@ -321,7 +331,7 @@ function Masthead({
             {name ?? "Your travel profile"}
           </h1>
           <p className="max-w-lg truncate pt-2.5 text-sm text-muted">
-            {email ?? "Not signed in — this profile lives on this browser only."}
+            {email ?? "Not signed in. Sign in to add a photo and keep this profile on every device."}
           </p>
         </div>
       </div>
@@ -414,6 +424,8 @@ export default function ProfileForm({
   savedPlaceCount,
   accountEmail,
   accountName,
+  accountId,
+  accountImage,
 }: {
   initialProfile: TravelerProfile | null;
   /** The signed-in account's email, or `null` when this is an anonymous browser. Resolved on the
@@ -423,6 +435,8 @@ export default function ProfileForm({
    *  email's local part at sign-up — so the masthead does not need an empty case, only a
    *  signed-out one. */
   accountName: string | null;
+  accountId: string | null;
+  accountImage: string | null;
   /** Most-recent saved trips, newest first, for the memories column. Empty is a real state
    *  (nothing saved yet), not a loading one — the server read is synchronous. */
   recentTrips: TripSummary[];
@@ -551,7 +565,7 @@ export default function ProfileForm({
           <AccountReceipt />
         </div>
 
-        <Masthead name={accountName} email={accountEmail} lead={recentTrips[0]} stats={stats} />
+        <Masthead id={accountId} name={accountName} email={accountEmail} image={accountImage} lead={recentTrips[0]} stats={stats} />
 
         <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:gap-0 lg:border-y lg:border-white/10">
           <div className="lg:pr-10 lg:pt-16 lg:pb-16">
@@ -642,6 +656,15 @@ export default function ProfileForm({
               hint="Applied to every food stop on every trip. Leave empty if nothing applies."
             >
               <DietaryPicker value={profile.dietary} onChange={(v) => set("dietary", v)} />
+            </Section>
+
+            <Section
+              title="Home city"
+              hint="Where you usually set off from. It helps with travel times and the best months to go."
+            >
+              {/* A null is the search reporting that the text moved off the picked city. It must not
+                  clear the saved one: only a real pick changes it. */}
+              <HomeCitySearch value={profile.homeCity ?? null} onPick={(home) => { if (home) set("homeCity", home); }} />
             </Section>
 
             <div className="space-y-3 pt-5">

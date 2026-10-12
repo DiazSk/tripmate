@@ -48,7 +48,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "TripMate reads the places in screenshots you pick. They are never stored."
+          "photosPermission": "TripMate reads the places in screenshots you pick, and saves a photo you choose for your profile."
         }
       ],
       [

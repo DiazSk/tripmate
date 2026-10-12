@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-import { adoptToken, clearToken, currentToken, fetchWithSession, subscribeToSession } from "./session";
+import { resolveImage } from "@/lib/avatarImage";
+
+import { apiBaseUrl } from "./config";
+import { adoptToken, announceSessionChange, clearToken, currentToken, fetchWithSession, subscribeToSession } from "./session";
 
 /**
  * Accounts, over the same `fetchWithSession` everything else here uses.
@@ -17,6 +20,7 @@ export interface Account {
   id: string;
   email: string;
   name: string | null;
+  image: string | null;
 }
 
 /** What `set-auth-token` is called on the way back. Better Auth's `bearer` plugin sets it. */
@@ -107,7 +111,8 @@ export async function fetchAccount(): Promise<Account | null> {
     const response = await fetchWithSession("/api/auth/get-session");
     if (!response.ok) return null;
     const payload = (await response.json().catch(() => null)) as { user?: Account } | null;
-    return payload?.user ?? null;
+    const user = payload?.user;
+    return user ? { ...user, image: resolveImage((user as { image?: string | null }).image ?? null, apiBaseUrl) } : null;
   } catch {
     return null;
   }
@@ -144,3 +149,26 @@ export function useAccount(): { account: Account | null; loading: boolean } {
 
   return { account, loading };
 }
+
+/** Errors come back as the sentence to show; null means it worked and every `useAccount` refreshed. */
+async function accountWrite(path: string, method: string, body?: unknown): Promise<string | null> {
+  try {
+    const response = await fetchWithSession(path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
+      return payload?.error ?? payload?.message ?? "Couldn't save that. Try again.";
+    }
+    announceSessionChange();
+    return null;
+  } catch {
+    return "Couldn't reach TripMate. Check your connection.";
+  }
+}
+
+export const uploadAvatar = (base64: string) => accountWrite("/api/avatar", "PUT", { mediaType: "image/jpeg", data: base64 });
+export const removeAvatar = () => accountWrite("/api/avatar", "DELETE");
+export const updateName = (name: string) => accountWrite("/api/auth/update-user", "POST", { name: name.trim().slice(0, 40) });

@@ -21,6 +21,13 @@ export interface DietaryNeeds {
   note: string;
 }
 
+/** Where the traveller usually sets off from. Stored for later (flight hints, months to go); the planner does not read it yet. */
+export interface HomeCity {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
 /**
  * What stays true between trips. Purpose, dates, budget amount and POIs are
  * deliberately absent: a business trip and an anniversary are the same person,
@@ -52,6 +59,7 @@ export interface TravelerProfile {
    * outranking pace and priority, so an unstated one is the expensive kind of missing.
    */
   accessibility: AccessibilityNeeds;
+  homeCity?: HomeCity;
 }
 
 /** "Nothing stated", which is a real answer and not a missing value — same contract as an
@@ -106,6 +114,16 @@ function parseAccessibility(value: unknown): AccessibilityNeeds | null {
   return { stepFreeRequired, limitStairs, note };
 }
 
+function parseHomeCity(value: unknown): HomeCity | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const v = value as Record<string, unknown>;
+  const name = typeof v.name === "string" ? v.name.trim() : "";
+  if (!name || name.length > 80) return undefined;
+  if (typeof v.latitude !== "number" || !Number.isFinite(v.latitude) || Math.abs(v.latitude) > 90) return undefined;
+  if (typeof v.longitude !== "number" || !Number.isFinite(v.longitude) || Math.abs(v.longitude) > 180) return undefined;
+  return { name, latitude: v.latitude, longitude: v.longitude };
+}
+
 /**
  * The trust boundary. Rejects anything that isn't a known enum value and returns
  * only known fields, so a bad enum value can never reach storage — from there it
@@ -125,6 +143,8 @@ export function parseProfile(value: unknown): TravelerProfile | null {
 
   const dietary = parseDietary(v.dietary);
   const accessibility = parseAccessibility(v.accessibility);
+  // Lenient like `pace`: a junk home city is dropped rather than costing the traveller their whole profile.
+  const homeCity = parseHomeCity(v.homeCity);
   const priorities = stringList(v.priorities);
   const topPriorities = stringList(v.topPriorities);
   if (
@@ -155,5 +175,11 @@ export function parseProfile(value: unknown): TravelerProfile | null {
     topPriorities,
     dietary,
     accessibility,
+    ...(homeCity ? { homeCity } : {}),
   };
+}
+
+/** Writers that predate `homeCity` (the phone's post-generation save, the iOS app) PUT whole profiles without it, and nothing in the UI clears one, so an absent city means "unchanged". */
+export function keepHomeCity(next: TravelerProfile, previous: TravelerProfile | null): TravelerProfile {
+  return next.homeCity || !previous?.homeCity ? next : { ...next, homeCity: previous.homeCity };
 }

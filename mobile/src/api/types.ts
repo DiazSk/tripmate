@@ -1,4 +1,5 @@
 import type { Located } from '@shared/evidence';
+import type { HomeCity } from '@shared/travelerProfile';
 export type StopCategory = "food" | "entry" | "transit" | "other";
 
 /**
@@ -240,6 +241,8 @@ export interface TravelerProfile {
   /** A fact about the traveler, not the trip — kept here for the same reason `dietary` is.
    *  Absent on rows written before the field existed; the server's parser defaults it. */
   accessibility?: AccessibilityNeeds;
+  /** Where the traveler sets off from. Set on the welcome and on Profile; absent until then. */
+  homeCity?: HomeCity;
 }
 
 export interface PlacePhoto {

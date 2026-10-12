@@ -76,6 +76,11 @@ export function subscribeToSession(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/** For a change the server made to the account (a photo, a name): every `useAccount` re-reads it. */
+export function announceSessionChange(): void {
+  announce();
+}
+
 function announce() {
   for (const listener of listeners) listener();
 }
