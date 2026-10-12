@@ -2,7 +2,7 @@ import { usePathname } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TravelerProfile } from '@shared/travelerProfile';
-import { answersFromProfile, welcomeToProfile, type WelcomeAnswers } from '@shared/travelCard';
+import { answersFromProfile, hasAnyAnswer, welcomeToProfile, type WelcomeAnswers } from '@shared/travelCard';
 
 import { useAccount } from '@/api/auth';
 import { completeOnboarding, getProfile, saveProfile } from '@/api/tripMateApi';
@@ -114,6 +114,8 @@ export function WelcomeDraftProvider({ children }: { children: React.ReactNode }
       // Building a profile before the stored one is known would overwrite what the account already
       // has (access needs, the dietary note), so a load that failed or has not finished writes nothing.
       if (load !== 'loaded') return setUnsaved(true);
+      // Skipping an unanswered step must not invent answers (solo, balanced) for an account with none.
+      if (!profile && !hasAnyAnswer(a)) return;
       const next = welcomeToProfile(a, profile);
       setProfile(next);
       if (!(await saveProfile(next))) setUnsaved(true);

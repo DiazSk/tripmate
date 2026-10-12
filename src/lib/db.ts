@@ -1533,7 +1533,7 @@ export function needsOnboarding(userId: string): boolean {
 }
 
 export function markOnboarded(userId: string, skipped: boolean): void {
-  db.prepare(`UPDATE "user" SET onboarded_at = ?, onboarding_skipped = ? WHERE "id" = ?`).run(new Date().toISOString(), skipped ? 1 : 0, userId);
+  db.prepare(`UPDATE "user" SET onboarded_at = ?, onboarding_skipped = ? WHERE "id" = ? AND onboarded_at IS NULL`).run(new Date().toISOString(), skipped ? 1 : 0, userId);
 }
 
 export interface TraceWithBatchTag extends TraceRow {

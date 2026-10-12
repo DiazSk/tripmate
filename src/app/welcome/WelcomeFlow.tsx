@@ -11,7 +11,7 @@ import { authClient } from "@/lib/authClient";
 import type { TravelerProfile } from "@/lib/travelerProfile";
 import {
   CROWD_CHOICES, GROUP_CHOICES, MAX_LOVES, PACE_CHOICES, STEP_LINES, WELCOME_STEPS,
-  answersFromProfile, dietLine, firstName, homeLine, loveLine, photoLine, readyLine, welcomeSummary, welcomeToProfile,
+  answersFromProfile, dietLine, firstName, hasAnyAnswer, homeLine, loveLine, photoLine, readyLine, welcomeSummary, welcomeToProfile,
   type WelcomeAnswers,
 } from "@/lib/travelCard";
 import HomeCitySearch from "@/components/welcome/HomeCitySearch";
@@ -65,6 +65,8 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
   const set = (patch: Partial<WelcomeAnswers>) => setAnswers((a) => ({ ...a, ...patch }));
 
   async function saveProfile(a: WelcomeAnswers) {
+    // Skipping an unanswered step must not invent answers (solo, balanced) for an account with none.
+    if (!profile && !hasAnyAnswer(a)) return;
     const p = welcomeToProfile(a, profile);
     setProfile(p);
     // Each write sends the whole profile, so a failed one is repaired by the next that succeeds.
@@ -131,7 +133,7 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
                 <div className="flex items-center gap-4">
                   <Avatar userId={user.id} name={answers.name} image={image} size={104} editable onChange={(img) => { setImage(img); if (img) react(photoLine(answers.name)); }} />
                   <div className="grid gap-1"><strong className="text-[0.95rem]">{image ? "Looking good." : "Add a face to the card"}</strong>
-                    <span className="text-sm text-muted">{image ? "Tap the photo to change it." : "Optional. It shows on your profile and on trips you share."}</span></div>
+                    <span className="text-sm text-muted">{image ? "Tap the photo to change it." : "Optional. It shows on your profile."}</span></div>
                 </div>
               </>
             )}

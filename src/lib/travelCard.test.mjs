@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  answersFromProfile, firstName, loveLine, readyLine, stampDate, stampsFor, welcomeSummary, welcomeToProfile,
+  answersFromProfile, firstName, hasAnyAnswer, loveLine, readyLine, stampDate, stampsFor, welcomeSummary, welcomeToProfile,
 } from "./travelCard.ts";
 
 const ISSUED = new Date("2026-10-11T12:00:00Z");
@@ -83,4 +83,22 @@ test("names and lines", () => {
   assert.equal(readyLine("Zaid Shaikh"), "Your card is done, Zaid. I've got you now.");
   assert.equal(loveLine(["Food"], "Food"), "Food first. Good choice.");
   assert.equal(loveLine(["Food", "Nature & Outdoors", "Photography"], "Photography"), "That's your three. I know what to look for.");
+});
+
+test("hasAnyAnswer: a name alone is not a profile answer", () => {
+  assert.equal(hasAnyAnswer(blank()), false);
+  for (const o of [{ group: "solo" }, { pace: "relaxed" }, { crowds: "avoid" }, { loves: ["Food"] }, { diet: ["Halal"] }, { home: { name: "Lagos", latitude: 6.45, longitude: 3.39 } }]) {
+    assert.equal(hasAnyAnswer(blank(o)), true, JSON.stringify(o));
+  }
+});
+
+test("welcomeToProfile keeps a claimed profile's unstarred interests while loves are untouched", () => {
+  const claimed = { ...existing, priorities: ["Food", "Nightlife", "Shopping", "Relaxation", "Photography"], topPriorities: ["Food", "Nightlife", "Shopping"] };
+  const seeded = answersFromProfile(claimed, "Zaid");
+  const kept = welcomeToProfile({ ...seeded, group: "couple" }, claimed);
+  assert.deepEqual(kept.priorities, claimed.priorities);
+  assert.deepEqual(kept.topPriorities, claimed.topPriorities);
+  const changed = welcomeToProfile({ ...seeded, loves: ["Food", "Photography"] }, claimed);
+  assert.deepEqual(changed.priorities, ["Food", "Photography"]);
+  assert.deepEqual(changed.topPriorities, ["Food", "Photography"]);
 });

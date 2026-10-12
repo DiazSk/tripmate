@@ -37,7 +37,7 @@ export default function WelcomeYou() {
         <Avatar account={account} size={96} editable />
         <View style={styles.copy}>
           <Text style={styles.strong}>{image ? 'Looking good.' : 'Add a face to the card'}</Text>
-          <Text style={styles.muted}>{image ? 'Tap the photo to change it.' : 'Optional. It shows on your profile and on trips you share.'}</Text>
+          <Text style={styles.muted}>{image ? 'Tap the photo to change it.' : 'Optional. It shows on your profile.'}</Text>
         </View>
       </View>
     </WelcomeFrame>

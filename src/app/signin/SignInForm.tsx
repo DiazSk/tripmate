@@ -8,6 +8,7 @@ import { signIn, signUp } from "@/lib/authClient";
 import { useToast } from "@/lib/toast";
 import ErrorNote from "@/components/ErrorNote";
 import { ACCOUNT_CREATED_KEY } from "@/components/AccountReceipt";
+import { safeNextPath } from "@/lib/safeNext";
 
 const FIELD =
   "w-full rounded-md border border-card-border bg-white/10 px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25";
@@ -31,7 +32,8 @@ export default function SignInForm() {
   const params = useSearchParams();
   // Where to land afterwards. `/trips` by default because the memories wall is the thing signing
   // in actually changes — arriving back at a page that looks identical is a poor confirmation.
-  const next = params.get("next") ?? "/trips";
+  // Checked here because both branches navigate to it — an unchecked `?next=https://…` is an open redirect.
+  const next = safeNextPath(params.get("next"));
 
   const [mode, setMode] = useState<"in" | "up">("in");
   const [name, setName] = useState("");

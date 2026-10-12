@@ -95,6 +95,11 @@ export function answersFromProfile(profile: TravelerProfile | null, name: string
   };
 }
 
+/** Whether any step has been answered. The name is an account field, not a profile one. */
+export function hasAnyAnswer(a: WelcomeAnswers): boolean {
+  return Boolean(a.group || a.pace || a.crowds || a.home || a.loves.length || a.diet.length);
+}
+
 /**
  * The answers as a full profile. What the welcome does not ask about — energy, accessibility,
  * discovery, the dietary note — comes from the existing profile untouched, so a claimed profile's
@@ -116,6 +121,9 @@ export function welcomeToProfile(answers: WelcomeAnswers, existing: TravelerProf
   const pace = answers.pace ?? base.pace ?? "balanced";
   const discovery = base.discovery ?? "mix";
   const home = answers.home ?? base.homeCity;
+  // Loves are seeded from `topPriorities`; while they are untouched, a claimed profile keeps its
+  // unstarred interests instead of being narrowed to three on the first Continue.
+  const lovesUntouched = existing !== null && answers.loves.join("\n") === existing.topPriorities.slice(0, MAX_LOVES).join("\n");
   return {
     ...base,
     group: answers.group ?? base.group,
@@ -123,8 +131,8 @@ export function welcomeToProfile(answers: WelcomeAnswers, existing: TravelerProf
     discovery,
     explorerStyle: legacyExplorerStyle({ pace, discovery }),
     crowds: answers.crowds ?? base.crowds,
-    priorities: answers.loves.length ? [...answers.loves] : base.priorities,
-    topPriorities: answers.loves.slice(0, MAX_LOVES),
+    priorities: lovesUntouched ? base.priorities : answers.loves.length ? [...answers.loves] : base.priorities,
+    topPriorities: lovesUntouched ? base.topPriorities : answers.loves.slice(0, MAX_LOVES),
     dietary: { tags: [...answers.diet], note: base.dietary.note },
     ...(home ? { homeCity: home } : {}),
   };

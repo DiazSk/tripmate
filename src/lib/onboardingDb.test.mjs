@@ -26,3 +26,13 @@ test("skipping counts as done", () => {
 test("an id with no account never needs it", () => {
   assert.equal(needsOnboarding("nobody"), false);
 });
+
+test("a finished welcome stays finished: a later call can't flip it to skipped", () => {
+  makeUser("u-onb-3");
+  markOnboarded("u-onb-3", false);
+  const first = rawDb.prepare(`SELECT onboarded_at FROM "user" WHERE id = ?`).get("u-onb-3").onboarded_at;
+  markOnboarded("u-onb-3", true);
+  const row = rawDb.prepare(`SELECT onboarded_at, onboarding_skipped FROM "user" WHERE id = ?`).get("u-onb-3");
+  assert.equal(row.onboarding_skipped, 0);
+  assert.equal(row.onboarded_at, first);
+});
