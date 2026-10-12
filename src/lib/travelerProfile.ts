@@ -178,3 +178,8 @@ export function parseProfile(value: unknown): TravelerProfile | null {
     ...(homeCity ? { homeCity } : {}),
   };
 }
+
+/** Writers that predate `homeCity` (the phone's post-generation save, the iOS app) PUT whole profiles without it, and nothing in the UI clears one, so an absent city means "unchanged". */
+export function keepHomeCity(next: TravelerProfile, previous: TravelerProfile | null): TravelerProfile {
+  return next.homeCity || !previous?.homeCity ? next : { ...next, homeCity: previous.homeCity };
+}

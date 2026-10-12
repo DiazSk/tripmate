@@ -13,6 +13,7 @@ import { legacyExplorerStyle, travelStyleOf } from "@/lib/userAnswers";
 import GroupTypePicker from "@/components/GroupTypePicker";
 import InterestPicker from "@/components/InterestPicker";
 import DietaryPicker from "@/components/DietaryPicker";
+import HomeCitySearch from "@/components/welcome/HomeCitySearch";
 import ErrorNote from "@/components/ErrorNote";
 import AccountReceipt from "@/components/AccountReceipt";
 import { formatDateRange, formatMoney } from "@/lib/format";
@@ -655,6 +656,15 @@ export default function ProfileForm({
               hint="Applied to every food stop on every trip. Leave empty if nothing applies."
             >
               <DietaryPicker value={profile.dietary} onChange={(v) => set("dietary", v)} />
+            </Section>
+
+            <Section
+              title="Home city"
+              hint="Where you usually set off from. It helps with travel times and the best months to go."
+            >
+              {/* A null is the search reporting that the text moved off the picked city. It must not
+                  clear the saved one: only a real pick changes it. */}
+              <HomeCitySearch value={profile.homeCity ?? null} onPick={(home) => { if (home) set("homeCity", home); }} />
             </Section>
 
             <div className="space-y-3 pt-5">

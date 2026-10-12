@@ -26,6 +26,7 @@ import type {
 import { Avatar } from '@/components/avatar';
 import { FieldSheet } from '@/components/field-sheet';
 import { ChoiceRow, FieldTrough, PrimaryButton, TagGrid, TextField } from '@/components/form';
+import { HomeCitySearch } from '@/components/home-city-search';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { APPEARANCE, setAppearance } from '@/constants/appearance';
@@ -95,7 +96,7 @@ function withLegacy(
   return { ...change, explorerStyle: legacyExplorerStyle(next) };
 }
 
-type Field = 'group' | 'pace' | 'discovery' | 'energy' | 'crowds' | 'interests' | 'dietary';
+type Field = 'group' | 'pace' | 'discovery' | 'energy' | 'crowds' | 'interests' | 'dietary' | 'home';
 
 /**
  * iOS and Android want the same tree — rows, separators, section headers — with different numbers,
@@ -133,6 +134,7 @@ const CAPTIONS = {
   travel: 'Every new trip is planned from these answers.',
   interests: 'Starred interests weigh most when a plan is written.',
   dietary: 'Named up front, so a plan never suggests somewhere you can’t eat.',
+  home: 'Where you usually set off from. It helps with travel times and the best months to go.',
 };
 
 export default function Profile() {
@@ -323,6 +325,15 @@ export default function Profile() {
                 first
               />
             </Section>
+
+            <Section title="Home" footer={CAPTIONS.home}>
+              <Row
+                label="Home city"
+                value={profile.homeCity?.name ?? 'Not set'}
+                onPress={() => setEditing('home')}
+                first
+              />
+            </Section>
           </>
         )}
 
@@ -456,6 +467,17 @@ function Sheets({
             placeholder="No shellfish, low salt…"
           />
         </FieldTrough>
+      </FieldSheet>
+
+      {/* Only a real pick saves. The search reports `null` when the text moves off the picked city;
+          that must not clear the saved one, or typing in the box would wipe it. */}
+      <FieldSheet
+        visible={editing === 'home'}
+        title="Home city"
+        caption="Where you usually set off from. It helps with travel times and the best months to go."
+        onClose={onClose}
+      >
+        <HomeCitySearch value={profile.homeCity ?? null} onPick={(homeCity) => { if (homeCity) pick({ homeCity }); }} />
       </FieldSheet>
     </>
   );
