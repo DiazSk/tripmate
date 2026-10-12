@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Bike, Car, Footprints, Sparkles } from "lucide-react";
+import { Bike, Car, Footprints } from "lucide-react";
 import { DayPlan, Itinerary, Stop, Trip, TripSummary } from "@/lib/types";
 import { EVIDENCE_FOOTNOTE } from "@/lib/evidence";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
@@ -26,6 +26,7 @@ import DayHeader, { DayEditUpdates } from "./DayHeader";
 import StopList from "./StopList";
 import Typewriter from "./Typewriter";
 import { devLabel } from "@/lib/devInspector";
+import Meridian from "./Meridian";
 
 /** Ms between each stop's reveal during the post-generation stagger. */
 const REVEAL_STEP_MS = 400;
@@ -1125,7 +1126,9 @@ export default function ItineraryCard({
                 <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium transition-[max-width,margin-right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:mr-1.5 group-hover:max-w-[5.5rem] group-focus-visible:mr-1.5 group-focus-visible:max-w-[5.5rem]">
                   Refine with AI
                 </span>
-                <Sparkles className="h-4 w-4 shrink-0" />
+                {/* Asleep until this button is hovered or focused — a breathing Meri on every
+                    day would upstage the plan. */}
+                <Meridian size={16} state="idle" quiet />
               </button>
             </div>
           )}

@@ -307,8 +307,10 @@ film narrates with the silent switch on (`expo-audio` `playsInSilentMode`, set a
 a request for sound; and the expo-audio plugin's `enableBackgroundPlayback` is off because a film pauses when
 backgrounded. No travel beats — the app sends no `legs`.
 Meri (`mobile/src/components/meridian.tsx`) heads its panel and the chat sheet: a code-drawn
-globe whose per-state motion is the pure `meridianMotion` table in `mobile/src/lib/meri.ts`, fed
-by `meriForFilm`/`meriForChat` so it only ever shows a state the app is in. Its speaking pulse is
+globe whose per-state motion is the pure `meridianMotion` table in `src/lib/meri.ts`, fed by
+`meriForFilm`/`meriForChat` so it only ever shows a state the app is in. That table is shared with the
+web's `src/components/Meridian.tsx`, which shows Meri in the narration stage, the edit chat, the
+generation band and the Refine button (CSS-keyframe motion, no word pulses). Its speaking pulse is
 `expo-speech`'s `onBoundary`, surfaced as `speakBeat`'s `onWord` — the engine reports words, not
 volume, so nothing here claims to measure audio.
 
