@@ -57,8 +57,22 @@ test("a pending reply outranks one that just landed", () => {
 test("the moved motion table still stills everything under reduced motion", () => {
   assert.deepEqual(meridianMotion("speaking", true), {
     breatheMs: null, blink: false, driftMs: null, squash: false, lift: false, eyes: 1,
+    glance: null, squint: false, bob: false,
   });
   assert.equal(meridianMotion("paused", true).eyes, 0.8);
+});
+
+test("idle glances around and floats, thinking glances up, success squints", () => {
+  assert.equal(meridianMotion("idle", false).glance, "around");
+  assert.equal(meridianMotion("thinking", false).glance, "up");
+  assert.equal(meridianMotion("idle", false).bob, true);
+  assert.equal(meridianMotion("success", false).squint, true);
+  // Glance and drift share the eyes' wrapper; lift and bob share the body's. Never both at once.
+  for (const s of ["idle", "thinking", "streaming", "speaking", "paused", "success", "error", "offline"]) {
+    const m = meridianMotion(s, false);
+    assert.ok(!(m.glance && m.driftMs), `${s}: glance and drift`);
+    assert.ok(!(m.lift && m.bob), `${s}: lift and bob`);
+  }
 });
 
 test("the blink cycle is the same for the same seed, so server and client agree", () => {

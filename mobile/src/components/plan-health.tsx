@@ -76,6 +76,9 @@ export function PlanHealth({ health }: { health: PlanHealthReport }) {
                 {verdict}
               </ThemedText>
               <ThemedText type="detail" themeColor="muted">
+                These stop the plan working as written. Change each one before you go.
+              </ThemedText>
+              <ThemedText type="detail" themeColor="muted">
                 {coverage}
               </ThemedText>
               <ThemedText type="detail" themeColor="muted">
@@ -167,11 +170,11 @@ const isSevere = (key: HealthKey) => SEVERE.includes(key);
  *
  * The rule is the classification — it is the field the check already set, and naming it is
  * cheaper than any taxonomy laid over the top. Only the split that already governs coral gets a
- * word of its own: the three blocking rules all say BLOCKER, because "travel" and "overlap" are
+ * word of its own: the three blocking rules all say MUST FIX (it was BLOCKER, a word only developers read), because "travel" and "overlap" are
  * how the checker spells it and "this cannot happen" is what the reader needs.
  */
 const classify = (finding: Guardrail) =>
-  isBlocking(finding) ? 'BLOCKER' : finding.rule.toUpperCase();
+  isBlocking(finding) ? 'MUST FIX' : finding.rule.toUpperCase();
 
 const styles = StyleSheet.create({
   card: {

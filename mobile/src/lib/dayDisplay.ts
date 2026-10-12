@@ -210,3 +210,11 @@ export function stopParticulars(stop: {
 function sentence(word: string | undefined): string | undefined {
   return word ? word[0].toUpperCase() + word.slice(1) : word;
 }
+
+/**
+ * Which day the chat's narrow half means: the scope chosen, else the day the chat was opened
+ * about ("Fix this" on a stop), else the day on screen. It used to fall back to the first day, so
+ * opened from Ask on day 3 the half said "Day 1" and pressing it scoped the turn to the wrong day.
+ */
+export const scopeDay = (scope: number | null, initial: number | null | undefined, current: number): number =>
+  scope ?? initial ?? current;

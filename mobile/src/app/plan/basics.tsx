@@ -18,7 +18,7 @@ import { suggestDestinations, suggestionLabel, type GeoSuggestion } from '@share
 import { geocode, importPlaces, listSavedPlaces } from '@/api/tripMateApi';
 import type { Anchor, ImportItem, SavedPlace } from '@/api/types';
 import { usePlanDraft } from '@/lib/planDraft';
-import { ChoiceRow, DateField, FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
+import { ChoiceRow, DateField, FieldTrough, PillButton, PrimaryButton, Question, TextField } from '@/components/form';
 import { ImportComposer } from '@/components/import-composer';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Curve, Motion, Radius, Spacing } from '@/constants/theme';
@@ -345,14 +345,31 @@ export default function Basics() {
           onAnchorsChange={(update) => patch((prev) => ({ anchors: update(prev.anchors) }))}
         />
 
-        <ImportSection
-          destination={destination}
-          anchors={draft.anchors}
-          onAnchorsChange={(update) => patch((prev) => ({ anchors: update(prev.anchors) }))}
-          onDestinationGuess={(guess) =>
-            patch((prev) => (prev.destination.trim() ? {} : { destination: guess }))
-          }
-        />
+        {/* Two labelled jobs, because the unlabelled box did one and looked like the other: it
+            only ever finds places, and a note typed there ("busy Thursday") was thrown away. */}
+        <Question title="Places you've saved" caption="Links, a list or screenshots. We'll find the places in them.">
+          <ImportSection
+            destination={destination}
+            anchors={draft.anchors}
+            onAnchorsChange={(update) => patch((prev) => ({ anchors: update(prev.anchors) }))}
+            onDestinationGuess={(guess) =>
+              patch((prev) => (prev.destination.trim() ? {} : { destination: guess }))
+            }
+          />
+        </Question>
+
+        {/* The note the planner reads word for word. It lives here rather than on the preferences
+            page because "Skip the questions and generate" skips that page. */}
+        <Question title="Anything we should plan around?" caption="Optional. Booked tickets, times you're busy, places to skip.">
+          <FieldTrough>
+            <TextField
+              label="Note"
+              value={draft.constraintsNote}
+              onChangeText={(constraintsNote) => patch({ constraintsNote })}
+              placeholder="Busy Thursday afternoon; dinner booked Friday; no rental car"
+            />
+          </FieldTrough>
+        </Question>
 
         {/* A miss is a fact about the geocoder's index, not a verdict on the trip — so it is said
             plainly and the button stays enabled. A failed lookup says nothing at all. */}
@@ -540,7 +557,7 @@ function SavedPlacesSection({
 }
 
 /** The import box's placeholder on this screen — the box itself is `ImportComposer`. */
-const PASTE_PLACEHOLDER = 'Paste links or notes';
+const PASTE_PLACEHOLDER = 'Paste links or a list of places';
 
 /**
  * "Chaos in, trip out" — paste what you already saved (screenshots, links, notes) and get the

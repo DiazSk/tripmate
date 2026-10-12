@@ -31,17 +31,33 @@ export interface MeridianMotion {
   lift: boolean;
   /** Eye height as a fraction of open. */
   eyes: number;
+  /** Where the eyes wander between blinks: around the room, or up as if pondering. Never with drift. */
+  glance: "around" | "up" | null;
+  /** The eyes curve into happy arcs, once, on entering the state. */
+  squint: boolean;
+  /** A slow hover. Never with lift — they share the body's vertical. */
+  bob: boolean;
 }
 
-const STILL: MeridianMotion = { breatheMs: null, blink: false, driftMs: null, squash: false, lift: false, eyes: 1 };
+const STILL: MeridianMotion = {
+  breatheMs: null,
+  blink: false,
+  driftMs: null,
+  squash: false,
+  lift: false,
+  eyes: 1,
+  glance: null,
+  squint: false,
+  bob: false,
+};
 
 const MOTION: Record<MeridianState, MeridianMotion> = {
-  idle: { ...STILL, breatheMs: 3200, blink: true },
-  thinking: { ...STILL, breatheMs: 1400, blink: true },
-  streaming: { ...STILL, breatheMs: 3200, blink: true, driftMs: 2400 },
+  idle: { ...STILL, breatheMs: 3200, blink: true, glance: "around", bob: true },
+  thinking: { ...STILL, breatheMs: 1400, blink: true, glance: "up", bob: true },
+  streaming: { ...STILL, breatheMs: 3200, blink: true, driftMs: 2400, bob: true },
   speaking: { ...STILL, blink: true, squash: true },
   paused: { ...STILL, eyes: 0.8 },
-  success: { ...STILL, breatheMs: 3200, blink: true, lift: true },
+  success: { ...STILL, breatheMs: 3200, blink: true, lift: true, squint: true },
   error: STILL,
   offline: STILL,
 };

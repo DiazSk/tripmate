@@ -98,7 +98,9 @@ export function healthSummary(
   // What is actually known is what the checks that ran turned up — and with three dimensions
   // unmeasured those are different statements. One word is the whole difference.
   if (blockers > 0) {
-    return { verdict: `${blockers} blocker${blockers === 1 ? '' : 's'} found`, coverage };
+    // Plain words, not "blocker": what was found, and that it is the traveller's to fix.
+    const one = blockers === 1;
+    return { verdict: `${blockers} problem${one ? '' : 's'} found — you need to fix ${one ? 'it' : 'them'}`, coverage };
   }
   if (findings > 0) {
     return { verdict: `${findings} thing${findings === 1 ? '' : 's'} to look at`, coverage };

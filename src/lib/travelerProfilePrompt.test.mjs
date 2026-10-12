@@ -270,6 +270,13 @@ test("the constraints note tells the model not to assume access it wasn't given,
   assert.match(out, /don't read its silence as a denial/i, "silence is not the same as a stated absence");
 });
 
+test("busy times in the note are kept free of stops, not just noted", () => {
+  // "Already decided" fits a booked dinner; it does not obviously cover "I'm busy Thursday afternoon".
+  const out = formatRequirements(answers({ constraintsNote: "Busy Thursday afternoon." }));
+  assert.match(out, /busy or unavailable/i);
+  assert.match(out, /free of stops/i);
+});
+
 test("the group reaches the prompt in words", () => {
   // Before this line existed the legacy prompt carried no group at all — "solo" and "couple"
   // never reached the model, and the free-text "other" description was collected and discarded.
