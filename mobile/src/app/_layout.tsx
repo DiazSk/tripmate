@@ -93,6 +93,8 @@ export default function RootLayout() {
               to pop. Nothing is *gated* by this screen, which is the part that has always
               mattered. */}
           <Stack.Screen name="signin" options={{ presentation: 'fullScreenModal', headerShown: false }} />
+          {/* New accounts only: sign-up replaces itself with this, and sign-in never opens it. */}
+          <Stack.Screen name="welcome" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
         </Stack>
       </ThemeProvider>
     </ShareIntentProvider>

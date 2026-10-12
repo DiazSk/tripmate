@@ -66,6 +66,11 @@ export default function AuthFormScreen() {
       return;
     }
 
+    if (creating) {
+      // A new account is welcomed first. Replacing (not pushing) takes the sign-in modal away with it.
+      router.replace('/welcome');
+      return;
+    }
     done();
   }
 

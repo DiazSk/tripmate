@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useId, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { Keyframe, ReduceMotion } from 'react-native-reanimated';
-import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { initialsFor } from '@shared/avatar';
 import { guillochePaths, speckles } from '@shared/paperPrint';
@@ -58,7 +58,8 @@ export function TravelCard({ answers, image, issued, complete = false }: { answe
           </Defs>
           <Rect width={innerW} height={innerH} fill={`url(#${uid}-paper)`} />
           {grain.map((g, i) => <Circle key={i} cx={g.x * innerW} cy={g.y * innerH} r={g.r * 40} fill="#52453a" opacity={0.07} />)}
-          {print.map((d, i) => <Path key={i} d={d} stroke={i < 2 ? 'rgba(40,110,96,0.13)' : 'rgba(122,90,60,0.09)'} strokeWidth={0.6} fill="none" />)}
+          {/* The web's `.travel-card-print { opacity: 0.55 }`. */}
+          <G opacity={0.55}>{print.map((d, i) => <Path key={i} d={d} stroke={i < 2 ? 'rgba(40,110,96,0.13)' : 'rgba(122,90,60,0.09)'} strokeWidth={0.6} fill="none" />)}</G>
           <Rect width={innerW} height={innerH} fill={`url(#${uid}-gutter)`} />
           {Array.from({ length: 14 }, (_, i) => <Circle key={`p${i}`} cx={innerW - 12} cy={16 + i * 8} r={1.1} fill="#121110" opacity={0.5} />)}
         </Svg>
