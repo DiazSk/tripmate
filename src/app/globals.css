@@ -2299,6 +2299,96 @@ html[data-story-mode="true"] .marker-day-label {
   }
 }
 
+/* Meri (src/components/Meridian.tsx). Transform-only, so the character is compositor work over a map
+   that re-blurs every glass panel each frame. Every animation is applied inside the no-preference gate,
+   so under reduced motion Meri is completely still and the global 0.01ms rule has nothing to flatten —
+   no exemption. The paused state's relaxed eyes are an inline style and survive either way. */
+.meri-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .meri-breathe {
+    animation: meri-breathe var(--meri-breathe) ease-in-out infinite alternate;
+  }
+  .meri-squash {
+    animation: meri-squash 280ms ease-in-out infinite alternate;
+  }
+  .meri-drift {
+    animation: meri-drift var(--meri-drift) ease-in-out infinite alternate;
+  }
+  .meri-blink {
+    animation: meri-blink var(--meri-blink) linear infinite;
+  }
+  .meri-lift {
+    animation: meri-lift 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /* `quiet`: asleep until its own button is hovered or focused. */
+  .meri-quiet,
+  .meri-quiet * {
+    animation-play-state: paused;
+  }
+  .group:is(:hover, :focus-visible) .meri-quiet,
+  .group:is(:hover, :focus-visible) .meri-quiet * {
+    animation-play-state: running;
+  }
+}
+
+@keyframes meri-breathe {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes meri-squash {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.05, 0.95);
+  }
+}
+
+/* SVG user units: 3 of the 100-unit viewBox is the phone's 3% of size. */
+@keyframes meri-drift {
+  from {
+    transform: translateX(-3px);
+  }
+  to {
+    transform: translateX(3px);
+  }
+}
+
+/* Open for most of a 2.8-5s cycle, then a blink at its end — ~70ms closing and ~110ms opening across
+   that range — so a single CSS loop does what the phone's timer does. */
+@keyframes meri-blink {
+  0%,
+  96% {
+    transform: scaleY(1);
+  }
+  97.5% {
+    transform: scaleY(0.1);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+/* -12.5% of the element's own height: the phone's 5pt lift at 40pt, at any size. */
+@keyframes meri-lift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12.5%);
+  }
+}
+
 @keyframes pop-in {
   from {
     opacity: 0;
