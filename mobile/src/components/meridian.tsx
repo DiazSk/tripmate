@@ -8,17 +8,18 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
 
 import { Curve, Motion } from '@/constants/theme';
 import { meridianMotion, type MeridianState } from '@/lib/meri';
 
 /**
- * Meri, the Frosted Meridian — a small frosted glass globe with two pill eyes (spec
+ * Meri, the Frosted Meridian — a small frosted glass globe with two round eyes (spec
  * `2026-10-11-meri-frosted-meridian-design.md`, reference column 02).
  *
  * **Drawn, not shipped.** The body is one static SVG — a frosted radial gradient, a shading
@@ -56,9 +57,15 @@ export function Meridian({
   const lift = useSharedValue(0);
   const blink = useSharedValue(1);
   const tap = useSharedValue(1);
+  const bob = useSharedValue(0);
+  const glanceX = useSharedValue(0);
+  const glanceY = useSharedValue(0);
+  const joy = useSharedValue(0);
+  const wobbleX = useSharedValue(1);
+  const wobbleY = useSharedValue(1);
 
   useEffect(() => {
-    for (const value of [breathe, squash, drift, lift]) cancelAnimation(value);
+    for (const value of [breathe, squash, drift, lift, bob, glanceX, glanceY, joy, wobbleX, wobbleY]) cancelAnimation(value);
     const ease = Easing.inOut(Easing.sin);
     // **Every loop starts from rest.** `cancelAnimation` leaves a value mid-swing, and a reversing
     // `withRepeat` swings between wherever it starts and its target — so a breath cut at its peak
@@ -84,6 +91,39 @@ export function Meridian({
           withTiming(0, { duration: Motion.settle / 2, easing: Easing.bezier(...Curve) }),
         )
       : 0;
+    // A hover, not a bounce: −6% of size, 2s each way. Never with the lift, which owns success.
+    bob.value = motion.bob
+      ? withSequence(
+          withTiming(0, { duration: Motion.respond }),
+          withRepeat(withTiming(-0.06 * size, { duration: 2000, easing: ease }), -1, true),
+        )
+      : withTiming(0, { duration: Motion.respond });
+    // Glances: hold, look, hold, back — each move ~200ms. "around" looks left, then right and a touch
+    // up, over 6s; "up" ponders up and to the side over 4.2s. X and Y share one timeline.
+    const look = (to: number, hold: number) => withDelay(hold, withTiming(to, { duration: 200, easing: ease }));
+    const rest = (ms: number) => withTiming(0, { duration: ms });
+    if (motion.glance === 'around') {
+      glanceX.value = withRepeat(withSequence(look(-0.04 * size, 1800), look(0, 700), look(0.04 * size, 880), look(0, 700), rest(1120)), -1);
+      glanceY.value = withRepeat(withSequence(look(0, 1800), look(0, 700), look(-0.01 * size, 880), look(0, 700), rest(1120)), -1);
+    } else if (motion.glance === 'up') {
+      glanceX.value = withRepeat(withSequence(look(-0.03 * size, 1890), look(0, 700), rest(1210)), -1);
+      glanceY.value = withRepeat(withSequence(look(-0.04 * size, 1890), look(0, 700), rest(1210)), -1);
+    } else {
+      glanceX.value = withTiming(0, { duration: Motion.respond });
+      glanceY.value = withTiming(0, { duration: Motion.respond });
+    }
+    // Success's happy ◠◠: the eyes cross-fade into arcs for about a second, once per entry.
+    joy.value = motion.squint
+      ? withSequence(withTiming(1, { duration: 120 }), withDelay(760, withTiming(0, { duration: 220 })))
+      : 0;
+    // One jelly wobble on every entry into a state — a blob reacting. Never under Reduce Motion.
+    if (!still) {
+      wobbleX.value = withSequence(withTiming(1.08, { duration: 126 }), withTiming(0.95, { duration: 105 }), withTiming(1.02, { duration: 105 }), withTiming(1, { duration: 84 }));
+      wobbleY.value = withSequence(withTiming(0.92, { duration: 126 }), withTiming(1.05, { duration: 105 }), withTiming(0.98, { duration: 105 }), withTiming(1, { duration: 84 }));
+    } else {
+      wobbleX.value = 1;
+      wobbleY.value = 1;
+    }
     // The motion object is derived from these two; depending on it would restart every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, still]);
@@ -122,18 +162,28 @@ export function Meridian({
   const eyes = motion.eyes;
   const body = useAnimatedStyle(() => ({
     transform: [
-      { translateY: lift.value },
+      { translateY: lift.value + bob.value },
       { scale: breathe.value * tap.value },
       // ±5%: at ±2% the speaking squash was invisible on a real phone at 40pt.
-      { scaleX: 1 + 0.05 * squash.value },
-      { scaleY: 1 - 0.05 * squash.value },
+      { scaleX: (1 + 0.05 * squash.value) * wobbleX.value },
+      { scaleY: (1 - 0.05 * squash.value) * wobbleY.value },
     ],
   }));
-  const eyeStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: (drift.value * 2 - 1) * 0.03 * size }, { scaleY: blink.value * eyes }],
+  // Both eyes move as one group the size of Meri, so a blink pivots on their centre line (y 50%).
+  const eyesStyle = useAnimatedStyle(() => ({
+    opacity: 1 - joy.value,
+    transform: [
+      { translateX: (drift.value * 2 - 1) * 0.03 * size + glanceX.value },
+      { translateY: glanceY.value },
+      { scaleY: blink.value * eyes },
+    ],
   }));
+  const arcsStyle = useAnimatedStyle(() => ({ opacity: joy.value }));
 
-  const eye = { width: 0.075 * size, height: 0.2 * size, borderRadius: size, top: 0.4 * size };
+  // 13% × 17% ovals centred at 37% and 63%. They were 7.5% × 20% pills, which read as ‖ — a pause
+  // button, right beside the narration panel's real one.
+  const eye = { width: 0.13 * size, height: 0.17 * size, borderRadius: size, top: 0.415 * size };
+  const glint = { width: 0.045 * size, height: 0.045 * size, borderRadius: size, left: 0.52 * eye.width, top: 0.16 * eye.height };
   return (
     <Animated.View
       accessibilityElementsHidden
@@ -159,8 +209,19 @@ export function Meridian({
         <Ellipse cx={33} cy={27} rx={19} ry={12} fill="url(#meri-shine)" />
         <Circle cx={50} cy={50} r={49} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth={2} />
       </Svg>
-      <Animated.View style={[styles.eye, eye, { left: 0.4 * size - eye.width / 2 }, eyeStyle]} />
-      <Animated.View style={[styles.eye, eye, { left: 0.6 * size - eye.width / 2 }, eyeStyle]} />
+      <Animated.View style={[StyleSheet.absoluteFill, eyesStyle]}>
+        <Animated.View style={[styles.eye, eye, { left: 0.305 * size }]}>
+          <Animated.View style={[styles.glint, glint]} />
+        </Animated.View>
+        <Animated.View style={[styles.eye, eye, { left: 0.565 * size }]}>
+          <Animated.View style={[styles.glint, glint]} />
+        </Animated.View>
+      </Animated.View>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, arcsStyle]}>
+        <Svg width={size} height={size} viewBox="0 0 100 100">
+          <Path d="M30.5 54 Q37 34 43.5 54 M56.5 54 Q63 34 69.5 54" fill="none" stroke="#3D3B38" strokeWidth={3.5} strokeLinecap="round" />
+        </Svg>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -176,5 +237,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
-  eye: { position: 'absolute', backgroundColor: '#4A4844' },
+  eye: { position: 'absolute', backgroundColor: '#3D3B38' },
+  glint: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.9)' },
 });

@@ -8,31 +8,31 @@ const ALL: MeridianState[] = ['idle', 'thinking', 'streaming', 'speaking', 'paus
 
 describe('meridianMotion', () => {
   it('breathes slowly and blinks when idle', () => {
-    expect(meridianMotion('idle', false)).toEqual({ breatheMs: 3200, blink: true, driftMs: null, squash: false, lift: false, eyes: 1 });
+    expect(meridianMotion('idle', false)).toEqual({ breatheMs: 3200, blink: true, driftMs: null, squash: false, lift: false, eyes: 1, glance: 'around', squint: false, bob: true });
   });
   it('breathes faster while thinking', () => {
-    expect(meridianMotion('thinking', false).breatheMs).toBe(1400);
+    expect(meridianMotion('thinking', false)).toMatchObject({ breatheMs: 1400, glance: 'up', bob: true });
   });
   it('lets the eyes drift while streaming', () => {
-    expect(meridianMotion('streaming', false).driftMs).toBe(2400);
+    expect(meridianMotion('streaming', false)).toMatchObject({ driftMs: 2400, glance: null, bob: true });
   });
   it('squashes instead of breathing while speaking', () => {
-    expect(meridianMotion('speaking', false)).toMatchObject({ squash: true, breatheMs: null, blink: true });
+    expect(meridianMotion('speaking', false)).toMatchObject({ squash: true, breatheMs: null, blink: true, glance: null, bob: false });
   });
   it('rests with relaxed eyes when paused', () => {
-    expect(meridianMotion('paused', false)).toEqual({ breatheMs: null, blink: false, driftMs: null, squash: false, lift: false, eyes: 0.8 });
+    expect(meridianMotion('paused', false)).toEqual({ breatheMs: null, blink: false, driftMs: null, squash: false, lift: false, eyes: 0.8, glance: null, squint: false, bob: false });
   });
   it('lifts once on success, then breathes', () => {
-    expect(meridianMotion('success', false)).toMatchObject({ lift: true, breatheMs: 3200 });
+    expect(meridianMotion('success', false)).toMatchObject({ lift: true, breatheMs: 3200, squint: true, bob: false });
   });
   it('holds completely still on error and offline', () => {
     for (const s of ['error', 'offline'] as const) {
-      expect(meridianMotion(s, false)).toEqual({ breatheMs: null, blink: false, driftMs: null, squash: false, lift: false, eyes: 1 });
+      expect(meridianMotion(s, false)).toEqual({ breatheMs: null, blink: false, driftMs: null, squash: false, lift: false, eyes: 1, glance: null, squint: false, bob: false });
     }
   });
   it('is completely still in every state under Reduce Motion', () => {
     for (const s of ALL) {
-      expect(meridianMotion(s, true)).toMatchObject({ breatheMs: null, blink: false, driftMs: null, squash: false, lift: false });
+      expect(meridianMotion(s, true)).toMatchObject({ breatheMs: null, blink: false, driftMs: null, squash: false, lift: false, glance: null, squint: false, bob: false });
     }
   });
 });

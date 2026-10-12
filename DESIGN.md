@@ -1591,7 +1591,8 @@ everything that is not the place being talked about leaves the shot — the cont
 stop card, the route line and the travel-summary pill.
 
 **Meri never changes colour.** It is the same frosted pearl over dark and light ground, its
-states are motion only (breathing, blinking, a speaking squash, one lift for success, stillness
+states are motion only (breathing, blinking, glancing around, a speaking squash, a happy squint and
+one lift for success, a jelly wobble whenever its state changes, stillness
 for error), and its host always says the state in words — so no state is carried by colour or
 by motion alone, and Reduce Motion loses nothing.
 

@@ -12,7 +12,9 @@ test("the eye animations ride HTML boxes, not SVG groups, so the browser can com
   const src = read("Meridian.tsx");
   assert.equal(/<g\b[^>]*meri-(blink|drift)/.test(src), false);
   assert.match(src, /<span[^>]*meri-blink/);
-  assert.match(src, /<span[^>]*meri-drift/);
+  // Drift and the glances come from `eyeTravel`, applied to a span.
+  assert.match(src, /<span[^>]*eyeTravel\(motion\)/);
+  assert.equal(/<g\b[^>]*eyeTravel/.test(src), false);
 });
 
 test("the chat header announces only that TripMate is replying, not its whole header every turn", () => {
