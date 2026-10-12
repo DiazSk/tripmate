@@ -5,6 +5,7 @@ import { parseProfile, type TravelerProfile } from "./travelerProfile";
 import { staleDraftCutoff } from "./drafts";
 import { LEGACY_OWNER, isValidOwnerId, readableOwners, writableOwners } from "./owner";
 import { anchorKey } from "./anchors";
+import { avatarUrl } from "./avatar";
 import type { TripStatus } from "./types";
 
 /**
@@ -281,6 +282,20 @@ db.exec(`
 db.exec(`CREATE INDEX IF NOT EXISTS session_userId_idx ON "session" ("userId")`);
 db.exec(`CREATE INDEX IF NOT EXISTS account_userId_idx ON "account" ("userId")`);
 db.exec(`CREATE INDEX IF NOT EXISTS verification_identifier_idx ON "verification" ("identifier")`);
+
+/**
+ * Profile photos, as bytes in the database rather than files on disk. Production is Cloud Run, which
+ * keeps no disk between instances, plus Turso — and a 256px JPEG is 20–40 KB, which a row holds
+ * comfortably. `"user".image` points at `/api/avatar/<id>?v=…`; this table is what that serves.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_avatar (
+    user_id TEXT PRIMARY KEY,
+    bytes BLOB NOT NULL,
+    mime TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`);
 
 // Dev-only: one row per (fixture x model) benchmark cell. Kept here with every other table so it
 // follows the same create-at-import convention, but nothing in the production app reads it — see
@@ -1478,6 +1493,34 @@ export function readProfile(ownerId: string): TravelerProfile | null {
 
 export function writeProfile(profile: TravelerProfile, ownerId: string): void {
   upsertTravelerProfile(ownerId, JSON.stringify(profile));
+}
+
+export function getAvatar(userId: string): { bytes: Uint8Array; mime: string; updatedAt: string } | undefined {
+  const row = db.prepare(`SELECT bytes, mime, updated_at FROM user_avatar WHERE user_id = ?`).get(userId) as
+    | { bytes: Uint8Array; mime: string; updated_at: string }
+    | undefined;
+  return row ? { bytes: new Uint8Array(row.bytes), mime: row.mime, updatedAt: row.updated_at } : undefined;
+}
+
+/** Stores the photo and points the account at it. Returns the new `user.image`. */
+export function putAvatar(userId: string, bytes: Uint8Array, mime: string): string {
+  const updatedAt = new Date().toISOString();
+  const url = avatarUrl(userId, updatedAt);
+  db.prepare(
+    `INSERT OR REPLACE INTO user_avatar (user_id, bytes, mime, updated_at) VALUES (?, ?, ?, ?)`
+  ).run(userId, Buffer.from(bytes), mime, updatedAt);
+  db.prepare(`UPDATE "user" SET "image" = ? WHERE "id" = ?`).run(url, userId);
+  return url;
+}
+
+export function deleteAvatar(userId: string): void {
+  db.prepare(`DELETE FROM user_avatar WHERE user_id = ?`).run(userId);
+  db.prepare(`UPDATE "user" SET "image" = NULL WHERE "id" = ?`).run(userId);
+}
+
+export function getUserImage(userId: string): string | null {
+  const row = db.prepare(`SELECT "image" FROM "user" WHERE "id" = ?`).get(userId) as { image: string | null } | undefined;
+  return row?.image ?? null;
 }
 
 export interface TraceWithBatchTag extends TraceRow {
