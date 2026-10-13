@@ -53,16 +53,26 @@ Weather, geocoding, public holidays and OSM data need no key.
 
 ### Accounts
 
-Sign-up and sign-in are email and password, via [Better Auth](https://www.better-auth.com), with
-users and sessions in the same SQLite/Turso database as everything else — no external auth service
-and nothing to pay for.
+Sign-up and sign-in run on [Clerk](https://clerk.com): email and password with email verification,
+an email code, and Apple and Google. Clerk holds the credentials; TripMate keeps only a mapping from
+the Clerk user to the anonymous-style owner id that owns the trips (`accounts` in `src/lib/db.ts`).
 
 | Variable | Effect if absent |
 |---|---|
-| `BETTER_AUTH_SECRET` | Development still runs on a built-in default, with a warning. **Set it in production** — it signs and encrypts sessions, and must be ≥32 random characters |
-| `BETTER_AUTH_URL` | Defaults to the request's own origin. Set it where the app sits behind a proxy that rewrites the host |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | With the secret key, switches accounts on. **Baked in at build**, so it is a Docker build arg, not a runtime variable. Without it `/signin` says accounts aren't set up |
+| `CLERK_SECRET_KEY` | Accounts stay off. Runtime-only secret; keep it out of the image |
+| `CLERK_WEBHOOK_SIGNING_SECRET` | The `user.deleted` webhook (`/api/webhooks/clerk`) is rejected, so deleting a Clerk user leaves their trips behind |
 
-Generate one with `openssl rand -hex 32`.
+The mobile app reads `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and the `EXPO_PUBLIC_CLERK_GOOGLE_*`
+client ids (web, iOS, Android, plus the iOS URL scheme) from `mobile/.env`.
+
+Signed-out use needs no keys and works offline. Signing in locally needs Clerk **development** keys
+(the Development instance in the Clerk dashboard) and a network. In a development instance a
+`+clerk_test` email (for example `you+clerk_test@example.com`) takes the code `424242`, so no real
+inbox is involved.
+
+The Swift app in `ios/TripMateKit` is not ported to Clerk; the React Native app in `mobile/` is the
+mobile client.
 
 **An account is never required.** You can plan, generate and keep a trip without one — those land
 under an anonymous owner cookie, and signing in afterwards moves them, your saved places and your

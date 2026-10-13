@@ -16,6 +16,10 @@ COPY package.json package-lock.json ./
 COPY scripts ./scripts
 RUN npm ci
 COPY . .
+# NEXT_PUBLIC_* is inlined at build, so Clerk's publishable key must be a build arg. The secret
+# key and webhook secret are runtime-only and stay out of the image.
+ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3000
