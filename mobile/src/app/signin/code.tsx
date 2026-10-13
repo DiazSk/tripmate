@@ -54,7 +54,19 @@ export default function AuthCodeScreen() {
     }
   }
 
+  /** Why Continue would get nowhere yet. The button stays live and says so on press (DESIGN.md). */
+  const gap =
+    code.trim().length !== 6
+      ? 'Enter the 6-digit code.'
+      : purpose === 'reset' && password.length < 8
+        ? 'Use at least 8 characters for your new password.'
+        : undefined;
+
   async function submit() {
+    if (gap) {
+      setError(gap);
+      return;
+    }
     setBusy(true);
     setError(null);
     const resource = purpose === 'verify-signup' ? signUp : signIn;
@@ -94,8 +106,6 @@ export default function AuthCodeScreen() {
             : await step(() => signIn.emailCode.sendCode());
     setResent(sent);
   }
-
-  const ready = code.trim().length === 6 && (purpose !== 'reset' || password.length >= 8);
 
   return (
     <View style={styles.flex}>
@@ -137,7 +147,7 @@ export default function AuthCodeScreen() {
                 Sent again.
               </ThemedText>
             ) : null}
-            <PrimaryButton title="Continue" onPress={submit} busy={busy} disabled={!ready} />
+            <PrimaryButton title="Continue" onPress={submit} busy={busy} accessibilityHint={gap} />
             <PillButton title="Send it again" onPress={resend} />
           </View>
         </ScrollView>
