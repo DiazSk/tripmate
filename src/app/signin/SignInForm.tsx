@@ -118,18 +118,28 @@ export default function SignInForm() {
     if (!purpose) return;
     setBusy(true);
     setError(null);
+    const finished = (kind: "in" | "up") => (kind === "up" ? signUp : signIn).status === "complete";
+    let kind: "in" | "up" = "in";
+    let ok: boolean;
     if (purpose === "verify-signup") {
-      if ((await step(() => signUp.verifications.verifyEmailCode({ code }))) && signUp.status === "complete") await done("up");
+      kind = "up";
+      ok = await step(() => signUp.verifications.verifyEmailCode({ code }));
     } else if (purpose === "sign-in-code") {
-      if ((await step(() => signIn.emailCode.verifyCode({ code }))) && signIn.status === "complete") await done("in");
+      ok = await step(() => signIn.emailCode.verifyCode({ code }));
     } else if (purpose === "client-trust") {
-      if ((await step(() => signIn.mfa.verifyEmailCode({ code }))) && signIn.status === "complete") await done("in");
-    } else if (
-      (await step(() => signIn.resetPasswordEmailCode.verifyCode({ code }))) &&
-      (await step(() => signIn.resetPasswordEmailCode.submitPassword({ password, signOutOfOtherSessions: true }))) &&
-      signIn.status === "complete"
-    ) {
-      await done("in");
+      ok = await step(() => signIn.mfa.verifyEmailCode({ code }));
+    } else {
+      // A rejected new password (breached, too weak) leaves the code already verified and the
+      // status at `needs_new_password`; verifying again would error, so the retry skips it.
+      ok =
+        (signIn.status === "needs_new_password" || (await step(() => signIn.resetPasswordEmailCode.verifyCode({ code })))) &&
+        (await step(() => signIn.resetPasswordEmailCode.submitPassword({ password, signOutOfOtherSessions: true })));
+    }
+    // A step can succeed without finishing (sign-up missing fields, a second factor): say so
+    // rather than re-enabling the button on nothing, as `submitPassword` does.
+    if (ok) {
+      if (finished(kind)) await done(kind);
+      else setError("This account needs a sign-in step TripMate doesn't support yet.");
     }
     setBusy(false);
   }

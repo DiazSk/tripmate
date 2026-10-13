@@ -7,3 +7,12 @@
 export function clerkConfigured(env: Record<string, string | undefined> = process.env): boolean {
   return Boolean(env.CLERK_SECRET_KEY) && Boolean(env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 }
+
+/**
+ * Whether the browser side of Clerk can run: the publishable key alone. It is baked into the build
+ * (Dockerfile build arg), so prerendered pages and runtime agree; the secret is runtime-only and is
+ * checked server-side by `clerkConfigured()`.
+ */
+export function clerkClientConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean(env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+}

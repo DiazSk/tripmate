@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { clerkConfigured } from "@/lib/clerkConfig";
+import { clerkClientConfigured } from "@/lib/clerkConfig";
 import SignInForm from "./SignInForm";
 
 export const metadata: Metadata = {
@@ -23,9 +23,9 @@ export const metadata: Metadata = {
  * immediately and nothing jumps when the client half arrives.
  */
 export default function SignInPage() {
-  // The form's Clerk hooks throw without a provider, and the layout mounts one only when the keys
-  // exist. Say so plainly instead of crashing: accounts are optional here, planning is not gated.
-  if (!clerkConfigured()) {
+  // The form's Clerk hooks throw without a provider, and the layout mounts one only when the publishable
+  // key exists. That key, not the runtime-only secret, because this page is prerendered at build. Say so plainly instead of crashing: accounts are optional here, planning is not gated.
+  if (!clerkClientConfigured()) {
     return (
       <main className="map-chrome-hidden min-h-full px-5 pt-[calc(var(--nav-h)+1.25rem)] pb-16 sm:px-6 sm:pt-[calc(var(--nav-h)+1.5rem)] sm:pb-24">
         <div className="pointer-events-auto mx-auto w-full max-w-sm">

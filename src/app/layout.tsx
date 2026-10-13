@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import { ClerkProvider } from "@clerk/nextjs";
 import AppShell from "@/components/AppShell";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
-import { clerkConfigured } from "@/lib/clerkConfig";
+import { clerkClientConfigured } from "@/lib/clerkConfig";
 import "./globals.css";
 
 /**
@@ -190,7 +190,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       )}
     </>
   );
-  return clerkConfigured() ? <ClerkProvider>{app}</ClerkProvider> : app;
+  return clerkClientConfigured() ? <ClerkProvider>{app}</ClerkProvider> : app;
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -201,7 +201,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full">
         {/* Clerk's hooks and its middleware throw without keys, so the provider is only mounted
-            when they exist; without them the app runs anonymously and this is a bare body. */}
+            when its publishable key exists (the secret is runtime-only and the layout is prerendered at
+            build); without it the app runs anonymously and this is a bare body. */}
         <Shell>{children}</Shell>
       </body>
     </html>
