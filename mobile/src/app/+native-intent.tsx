@@ -1,5 +1,6 @@
-import { currentToken } from '@/api/session';
+import { readSignedInFlag } from '@/api/session';
 import { launchTarget } from '@/lib/authGate';
+import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
 
 /**
  * Where a launch actually goes, decided before any navigation state exists.
@@ -27,7 +28,9 @@ export async function redirectSystemPath({ path, initial }: { path: string; init
   // Home; being wrong the other way locks an account holder out of their own app.
   let signedIn = true;
   try {
-    signedIn = Boolean(await currentToken());
+    // The flag is written by `ClerkBridge`, because Clerk itself is not available before React
+    // mounts. A build with no Clerk key never opens on a sign-in screen that cannot work.
+    signedIn = !CLERK_PUBLISHABLE_KEY || (await readSignedInFlag());
   } catch {
     // Left as `true`.
   }

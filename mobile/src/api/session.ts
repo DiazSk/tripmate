@@ -6,17 +6,13 @@ const OWNER_KEY = "tripmate.session.owner";
 /** Mirrors `OWNER_HEADER` in the backend's `src/lib/owner.ts`. */
 const OWNER_HEADER = "X-TripMate-Owner";
 
-/** The signed-in session token, beside the anonymous owner rather than replacing it. */
-const TOKEN_KEY = "tripmate.session.token";
+/** Written when Clerk reports a session, cleared when it reports none. Read only by the launch gate. */
+const SIGNED_IN_KEY = "tripmate.signedIn";
 
 /**
- * Sent on every request, and it is about one specific failure mode.
- *
- * Better Auth validates `Origin` against its `trustedOrigins`, but only on a request that carries
- * a `Cookie` header. A bearer-only request would skip the check — except that *this* platform is
- * the one caught attaching cookies the client never set (see `fetchWithSession` below). Sending
- * the app's own scheme means sign-in behaves the same whether or not the native store decides to
- * put a cookie on the request. `tripmate` is the scheme declared in `app.json`.
+ * Sent on every request. The app's own scheme, so a request is identifiable as coming from the
+ * native app whether or not the platform's cookie store attaches cookies the client never set (see
+ * `fetchWithSession` below). `tripmate` is the scheme declared in `app.json`.
  */
 const ORIGIN = "tripmate://";
 
@@ -24,17 +20,12 @@ const ORIGIN = "tripmate://";
 // ships to web, but `npx expo start --web` is a dev-only preview that should still work — an
 // in-memory variable is fine since losing it on reload costs nothing real.
 let webOwner: string | null = null;
-let webToken: string | null = null;
+let webSignedIn = false;
 /** Resolved once per process, so concurrent first requests cannot mint two different owners. */
 let ownerPromise: Promise<string> | null = null;
-/**
- * The token, cached after the first read.
- *
- * `undefined` means "not read from the store yet"; `null` means "read, and there isn't one".
- * Collapsing those two into `null` would re-hit the keychain on every single request for a
- * signed-out traveller, which is the common case.
- */
-let cachedToken: string | null | undefined = undefined;
+
+type ClerkHandle = { getToken: () => Promise<string | null>; signOut: () => Promise<void> };
+let clerk: ClerkHandle | null = null;
 const listeners = new Set<() => void>();
 
 async function readStored(): Promise<string | null> {
@@ -50,26 +41,40 @@ async function writeStored(value: string): Promise<void> {
   await SecureStore.setItemAsync(OWNER_KEY, value);
 }
 
-/**
- * The session token in force, reading through to the store exactly once.
- *
- * A keychain read is a syscall and this is on the path of every request, so it is cached after
- * the first. `adoptToken` and `clearToken` are the only writers and both update the cache, so it
- * cannot go stale behind them.
- */
-export async function currentToken(): Promise<string | null> {
-  if (cachedToken !== undefined) return cachedToken;
-  cachedToken = Platform.OS === "web" ? webToken : await SecureStore.getItemAsync(TOKEN_KEY);
-  return cachedToken;
+/** Set by `<ClerkBridge>` inside the provider. This module is not a component, so Clerk is handed in. */
+export function registerClerk(handle: ClerkHandle | null): void {
+  clerk = handle;
 }
 
-// `hasTokenSync()` used to sit here — `Boolean(cachedToken)`, documented as "drives the signed-in
-// UI". It drove nothing: the only reference to it anywhere was its own definition. It is deleted
-// rather than kept because its one plausible use is the wrong one. `cachedToken` is tri-state, and
-// `Boolean(undefined)` is `false` — so on a cold start, before anything has awaited
-// `currentToken()`, it reports *signed out* for a traveller who is signed in. A launch gate reaching
-// for the synchronous answer would show an account holder the sign-in screen every single time.
-// The gate awaits `currentToken()` instead; see `src/app/+native-intent.tsx`.
+export async function clerkSignOut(): Promise<void> {
+  await clerk?.signOut();
+}
+
+/**
+ * Clerk's 60-second token, asked for per request — Clerk caches and refreshes it. A throw
+ * (`ClerkOfflineError` with no connection) sends the request anonymously rather than not at all.
+ */
+async function sessionToken(): Promise<string | null> {
+  try {
+    return (await clerk?.getToken()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function readSignedInFlag(): Promise<boolean> {
+  if (Platform.OS === "web") return webSignedIn;
+  return (await SecureStore.getItemAsync(SIGNED_IN_KEY)) === "1";
+}
+
+export async function writeSignedInFlag(on: boolean): Promise<void> {
+  if (Platform.OS === "web") {
+    webSignedIn = on;
+    return;
+  }
+  if (on) await SecureStore.setItemAsync(SIGNED_IN_KEY, "1");
+  else await SecureStore.deleteItemAsync(SIGNED_IN_KEY);
+}
 
 export function subscribeToSession(listener: () => void): () => void {
   listeners.add(listener);
@@ -83,38 +88,6 @@ export function announceSessionChange(): void {
 
 function announce() {
   for (const listener of listeners) listener();
-}
-
-/**
- * Take ownership of a freshly minted session token.
- *
- * Writes the store before the cache: if the keychain write throws, this leaves the session
- * unchanged, which is the honest outcome — a cache-first order would report a sign-in that does
- * not survive the next launch.
- */
-export async function adoptToken(token: string): Promise<void> {
-  if (Platform.OS === "web") webToken = token;
-  else await SecureStore.setItemAsync(TOKEN_KEY, token);
-  cachedToken = token;
-  announce();
-}
-
-/**
- * Drop the session.
- *
- * Clears the cache even when the store throws. A token the app cannot delete is worse held than
- * dropped: the traveller asked to be signed out, and keeping it live in memory so the next
- * request still succeeds is the one outcome nobody wants.
- */
-export async function clearToken(): Promise<void> {
-  cachedToken = null;
-  announce();
-  try {
-    if (Platform.OS === "web") webToken = null;
-    else await SecureStore.deleteItemAsync(TOKEN_KEY);
-  } catch {
-    // Cache is already cleared — see above.
-  }
 }
 
 /**
@@ -178,34 +151,17 @@ export async function fetchWithSession(
   init: Omit<RequestInit, "headers"> & { headers?: Record<string, string> } = {},
 ): Promise<Response> {
   const owner = await ownerId();
-  const token = await currentToken();
+  const token = await sessionToken();
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  return fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       ...init.headers,
       [OWNER_HEADER]: owner,
       Origin: ORIGIN,
-      // A bearer, for the same reason the owner is a header: the platform has no opinion about
-      // this one. `auth.ts` on the server runs Better Auth's `bearer` plugin precisely so a
-      // client with an untrustworthy cookie jar never has to rely on it.
+      // Clerk's session token as a bearer, for the same reason the owner is a header: the
+      // platform has no opinion about this one, and the server verifies it without any cookie.
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
-
-  /**
-   * A rejected token is a sign-out, not a retry.
-   *
-   * There is nothing the app can do to make an expired or revoked token acceptable, so retrying
-   * turns one failure into a loop. Dropping it here — at the one place every request in this app
-   * passes through — means the next request goes out anonymously and the UI follows, rather than
-   * every screen independently discovering it is unauthorised.
-   *
-   * Only when a token was actually sent: a 401 on an anonymous request is the server saying
-   * something else entirely, and clearing a token we do not have would announce a spurious
-   * sign-out.
-   */
-  if (response.status === 401 && token) await clearToken();
-
-  return response;
 }

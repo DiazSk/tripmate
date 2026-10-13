@@ -1,3 +1,5 @@
+import { ClerkProvider } from '@clerk/expo';
+import { tokenCache } from '@clerk/expo/token-cache';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -10,7 +12,9 @@ import TabularSemiBold from '../../assets/fonts/Tabular-SemiBold.ttf';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { APPEARANCE } from '@/constants/appearance';
+import { ClerkBridge } from '@/components/clerk-bridge';
 import { Colors } from '@/constants/theme';
+import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -56,7 +60,7 @@ export default function RootLayout() {
   // moment their phone dimmed at dusk, on a surface whose whole argument is that it was
   // composed. `APPEARANCE` is resolved once at module load — see `constants/appearance.ts`.
   const light = APPEARANCE === 'light';
-  return (
+  const tree = (
     <ShareIntentProvider>
       <ThemeProvider value={light ? DefaultTheme : DarkTheme}>
         {/* Without this, Android's forced edge-to-edge draws dark system icons over the near-black
@@ -98,5 +102,14 @@ export default function RootLayout() {
         </Stack>
       </ThemeProvider>
     </ShareIntentProvider>
+  );
+
+  // No key, no Clerk: the app runs signed-out only (see `lib/clerkConfig.ts`).
+  if (!CLERK_PUBLISHABLE_KEY) return tree;
+  return (
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+      <ClerkBridge />
+      {tree}
+    </ClerkProvider>
   );
 }
