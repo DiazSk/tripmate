@@ -104,7 +104,7 @@ test("deleteAccountData clears the generation trail too: runs, traces, artifacts
     run_id: runId,
     chat_session_id: sessionId,
   }).id;
-  insertRun({ id: runId, kind: "generate", destination: "Kyoto", tripId });
+  insertRun({ id: runId, kind: "generate", destination: "Kyoto" });
   insertTrace({ type: "generate", prompt: "p", model: "m", runId });
   insertTripArtifacts({ run_id: runId, trip_context_md: "c", itinerary_md: "i" });
   insertGeneration({ run_id: runId, trip_id: tripId, session_id: sessionId, kind: "generate", destination: "Kyoto", context_json: "{}", prompt: "p", response: "r", model: "m", mode: "cli" });

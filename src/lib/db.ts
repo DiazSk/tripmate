@@ -1522,8 +1522,11 @@ export function deleteAccountData(clerkUserId: string): boolean {
     db.prepare(`DELETE FROM generations WHERE trip_id IN (${tripsOf})`).run(owner);
     db.prepare(`DELETE FROM trip_artifacts WHERE run_id IN (SELECT run_id FROM trips WHERE owner_id = ? AND run_id IS NOT NULL)`).run(owner);
     db.prepare(`DELETE FROM llm_sessions WHERE id IN (SELECT chat_session_id FROM trips WHERE owner_id = ? AND chat_session_id IS NOT NULL)`).run(owner);
-    db.prepare(`DELETE FROM llm_traces WHERE run_id IN (SELECT id FROM llm_runs WHERE trip_id IN (${tripsOf}))`).run(owner);
-    db.prepare(`DELETE FROM llm_runs WHERE trip_id IN (${tripsOf})`).run(owner);
+    // A run is linked to its trip two ways: `llm_runs.trip_id`, and `trips.run_id` for the primary
+    // generate run, which is written with a null `trip_id`. Both must match or that run's traces survive.
+    const runsOf = `SELECT id FROM llm_runs WHERE trip_id IN (${tripsOf}) OR id IN (SELECT run_id FROM trips WHERE owner_id = ? AND run_id IS NOT NULL)`;
+    db.prepare(`DELETE FROM llm_traces WHERE run_id IN (${runsOf})`).run(owner, owner);
+    db.prepare(`DELETE FROM llm_runs WHERE id IN (${runsOf})`).run(owner, owner);
     db.prepare(`DELETE FROM trips WHERE owner_id = ?`).run(owner);
     db.prepare(`DELETE FROM saved_places WHERE owner_id = ?`).run(owner);
     db.prepare(`DELETE FROM traveler_profile WHERE owner_id = ?`).run(owner);
