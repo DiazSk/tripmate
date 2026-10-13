@@ -3,7 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { parseProfile, type TravelerProfile } from "./travelerProfile";
 import { staleDraftCutoff } from "./drafts";
-import { LEGACY_OWNER, isValidOwnerId, readableOwners, writableOwners } from "./owner";
+import { LEGACY_OWNER, isValidOwnerId, newOwnerId, readableOwners, writableOwners } from "./owner";
 import { anchorKey } from "./anchors";
 import { avatarUrl } from "./avatar";
 import type { TripStatus } from "./types";
@@ -212,81 +212,9 @@ db.exec(`
 `);
 
 /**
- * Better Auth's four tables, created here rather than by its migrator.
- *
- * `CLAUDE.md` is explicit that this file creates every table at import with
- * `CREATE TABLE IF NOT EXISTS` and adds later columns through `addColumnIfMissing()`, and that
- * this repo does not carry migration files. An auth library that provisioned its own schema by a
- * separate CLI step would give this app two ways to be ready, and a fresh Turso database would
- * come up half-built — the app's own tables present, sign-in broken.
- *
- * **The DDL is Better Auth's, not hand-written.** It was taken verbatim from what its own
- * migrator emits (`better-auth@1.7.6`, `getMigrations().runMigrations()` against an empty file,
- * read back out of `sqlite_master`), with only `IF NOT EXISTS` added. Regenerate it the same way
- * on a version bump rather than editing columns by hand — `advanced.database.generateId` in
- * `auth.ts` is the only part of this shape this app chooses.
- *
- * The quoting is load-bearing: `user` and `session` are keywords in enough SQL dialects that
- * Better Auth emits them quoted, and its queries reference them quoted.
- */
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "user" (
-    "id" text NOT NULL PRIMARY KEY,
-    "name" text NOT NULL,
-    "email" text NOT NULL UNIQUE,
-    "emailVerified" integer NOT NULL,
-    "image" text,
-    "createdAt" date NOT NULL,
-    "updatedAt" date NOT NULL
-  )
-`);
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "session" (
-    "id" text NOT NULL PRIMARY KEY,
-    "expiresAt" date NOT NULL,
-    "token" text NOT NULL UNIQUE,
-    "createdAt" date NOT NULL,
-    "updatedAt" date NOT NULL,
-    "ipAddress" text,
-    "userAgent" text,
-    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE
-  )
-`);
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "account" (
-    "id" text NOT NULL PRIMARY KEY,
-    "accountId" text NOT NULL,
-    "providerId" text NOT NULL,
-    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
-    "accessToken" text,
-    "refreshToken" text,
-    "idToken" text,
-    "accessTokenExpiresAt" date,
-    "refreshTokenExpiresAt" date,
-    "scope" text,
-    "password" text,
-    "createdAt" date NOT NULL,
-    "updatedAt" date NOT NULL
-  )
-`);
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "verification" (
-    "id" text NOT NULL PRIMARY KEY,
-    "identifier" text NOT NULL,
-    "value" text NOT NULL,
-    "expiresAt" date NOT NULL,
-    "createdAt" date NOT NULL,
-    "updatedAt" date NOT NULL
-  )
-`);
-db.exec(`CREATE INDEX IF NOT EXISTS session_userId_idx ON "session" ("userId")`);
-db.exec(`CREATE INDEX IF NOT EXISTS account_userId_idx ON "account" ("userId")`);
-db.exec(`CREATE INDEX IF NOT EXISTS verification_identifier_idx ON "verification" ("identifier")`);
-
-/**
  * Profile photos, as bytes in the database rather than files on disk. Production is Cloud Run, which
  * keeps no disk between instances, plus Turso — and a 256px JPEG is 20–40 KB, which a row holds
- * comfortably. `"user".image` points at `/api/avatar/<id>?v=…`; this table is what that serves.
+ * comfortably. `accounts.image` points at `/api/avatar/<id>?v=…`; this table is what that serves.
  */
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_avatar (
@@ -296,10 +224,23 @@ db.exec(`
     updated_at TEXT NOT NULL
   )
 `);
-// The welcome after sign-up runs once per account: set when it is finished or skipped. Only sign-up
-// routes to it, so accounts that existed before it shipped (null here) never meet it.
-addColumnIfMissing(`"user"`, "onboarded_at", "TEXT");
-addColumnIfMissing(`"user"`, "onboarding_skipped", "INTEGER");
+
+/**
+ * One row per Clerk user: the bridge from Clerk's `user_…` id to the UUID every owner-scoped table
+ * stores. Clerk holds the identity; this holds what the app attaches to it — the owner id, the
+ * avatar URL and whether the welcome has run. Created on the first signed-in request
+ * (`getOrCreateAccount`), so there is no sign-up hook to miss.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS accounts (
+    clerk_user_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL UNIQUE,
+    image TEXT,
+    onboarded_at TEXT,
+    onboarding_skipped INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  )
+`);
 
 // Dev-only: one row per (fixture x model) benchmark cell. Kept here with every other table so it
 // follows the same create-at-import convention, but nothing in the production app reads it — see
@@ -1506,34 +1447,94 @@ export function getAvatar(userId: string): { bytes: Uint8Array; mime: string; up
   return row ? { bytes: new Uint8Array(row.bytes), mime: row.mime, updatedAt: row.updated_at } : undefined;
 }
 
-/** Stores the photo and points the account at it. Returns the new `user.image`. */
-export function putAvatar(userId: string, bytes: Uint8Array, mime: string): string {
+export interface AccountRow {
+  clerk_user_id: string;
+  owner_id: string;
+  image: string | null;
+  onboarded_at: string | null;
+  onboarding_skipped: number;
+  created_at: string;
+}
+
+/**
+ * The account for a Clerk user, created on first sight. `ON CONFLICT DO NOTHING` then a read is
+ * what keeps two first requests from minting two owner ids: the loser's insert is a no-op and both
+ * read the winner's row.
+ */
+export function getOrCreateAccount(clerkUserId: string): AccountRow {
+  db.prepare(
+    `INSERT INTO accounts (clerk_user_id, owner_id, created_at) VALUES (?, ?, ?)
+     ON CONFLICT(clerk_user_id) DO NOTHING`
+  ).run(clerkUserId, newOwnerId(), new Date().toISOString());
+  const row = db.prepare(`SELECT * FROM accounts WHERE clerk_user_id = ?`).get(clerkUserId) as AccountRow | undefined;
+  if (!row) throw new Error(`accounts row missing for ${clerkUserId} right after insert`);
+  return row;
+}
+
+/** Stores the photo and points the account at it. Returns the new image URL. */
+export function putAvatar(ownerId: string, bytes: Uint8Array, mime: string): string {
   const updatedAt = new Date().toISOString();
-  const url = avatarUrl(userId, updatedAt);
+  const url = avatarUrl(ownerId, updatedAt);
   db.prepare(
     `INSERT OR REPLACE INTO user_avatar (user_id, bytes, mime, updated_at) VALUES (?, ?, ?, ?)`
-  ).run(userId, Buffer.from(bytes), mime, updatedAt);
-  db.prepare(`UPDATE "user" SET "image" = ? WHERE "id" = ?`).run(url, userId);
+  ).run(ownerId, Buffer.from(bytes), mime, updatedAt);
+  db.prepare(`UPDATE accounts SET image = ? WHERE owner_id = ?`).run(url, ownerId);
   return url;
 }
 
-export function deleteAvatar(userId: string): void {
-  db.prepare(`DELETE FROM user_avatar WHERE user_id = ?`).run(userId);
-  db.prepare(`UPDATE "user" SET "image" = NULL WHERE "id" = ?`).run(userId);
+export function deleteAvatar(ownerId: string): void {
+  db.prepare(`DELETE FROM user_avatar WHERE user_id = ?`).run(ownerId);
+  db.prepare(`UPDATE accounts SET image = NULL WHERE owner_id = ?`).run(ownerId);
 }
 
-export function getUserImage(userId: string): string | null {
-  const row = db.prepare(`SELECT "image" FROM "user" WHERE "id" = ?`).get(userId) as { image: string | null } | undefined;
+export function getAccountImage(ownerId: string): string | null {
+  const row = db.prepare(`SELECT image FROM accounts WHERE owner_id = ?`).get(ownerId) as { image: string | null } | undefined;
   return row?.image ?? null;
 }
 
-export function needsOnboarding(userId: string): boolean {
-  const row = db.prepare(`SELECT onboarded_at FROM "user" WHERE "id" = ?`).get(userId) as { onboarded_at: string | null } | undefined;
+// The welcome after sign-up runs once per account: set when it is finished or skipped. Accounts
+// that have never met it (onboarded_at null) are the ones it is for; an unknown owner is not.
+export function needsOnboarding(ownerId: string): boolean {
+  const row = db.prepare(`SELECT onboarded_at FROM accounts WHERE owner_id = ?`).get(ownerId) as { onboarded_at: string | null } | undefined;
   return row !== undefined && row.onboarded_at === null;
 }
 
-export function markOnboarded(userId: string, skipped: boolean): void {
-  db.prepare(`UPDATE "user" SET onboarded_at = ?, onboarding_skipped = ? WHERE "id" = ? AND onboarded_at IS NULL`).run(new Date().toISOString(), skipped ? 1 : 0, userId);
+export function markOnboarded(ownerId: string, skipped: boolean): void {
+  db.prepare(`UPDATE accounts SET onboarded_at = ?, onboarding_skipped = ? WHERE owner_id = ? AND onboarded_at IS NULL`)
+    .run(new Date().toISOString(), skipped ? 1 : 0, ownerId);
+}
+
+/**
+ * Everything a deleted Clerk user owned, gone in one transaction. Fired by the `user.deleted`
+ * webhook. The trip-keyed tables are listed by hand because none of them has a foreign key to
+ * `trips` — there is no cascade to rely on. Returns false when the user was never seen here.
+ */
+export function deleteAccountData(clerkUserId: string): boolean {
+  const account = db.prepare(`SELECT owner_id FROM accounts WHERE clerk_user_id = ?`).get(clerkUserId) as { owner_id: string } | undefined;
+  if (!account) return false;
+  const owner = account.owner_id;
+  const tripsOf = `SELECT id FROM trips WHERE owner_id = ?`;
+
+  db.prepare("BEGIN").run();
+  try {
+    db.prepare(`DELETE FROM trip_chat_turns WHERE trip_id IN (${tripsOf})`).run(owner);
+    db.prepare(`DELETE FROM trip_stories WHERE trip_id IN (${tripsOf})`).run(owner);
+    db.prepare(`DELETE FROM generations WHERE trip_id IN (${tripsOf})`).run(owner);
+    db.prepare(`DELETE FROM trip_artifacts WHERE run_id IN (SELECT run_id FROM trips WHERE owner_id = ? AND run_id IS NOT NULL)`).run(owner);
+    db.prepare(`DELETE FROM llm_sessions WHERE id IN (SELECT chat_session_id FROM trips WHERE owner_id = ? AND chat_session_id IS NOT NULL)`).run(owner);
+    db.prepare(`DELETE FROM llm_traces WHERE run_id IN (SELECT id FROM llm_runs WHERE trip_id IN (${tripsOf}))`).run(owner);
+    db.prepare(`DELETE FROM llm_runs WHERE trip_id IN (${tripsOf})`).run(owner);
+    db.prepare(`DELETE FROM trips WHERE owner_id = ?`).run(owner);
+    db.prepare(`DELETE FROM saved_places WHERE owner_id = ?`).run(owner);
+    db.prepare(`DELETE FROM traveler_profile WHERE owner_id = ?`).run(owner);
+    db.prepare(`DELETE FROM user_avatar WHERE user_id = ?`).run(owner);
+    db.prepare(`DELETE FROM accounts WHERE clerk_user_id = ?`).run(clerkUserId);
+    db.prepare("COMMIT").run();
+    return true;
+  } catch (err) {
+    db.prepare("ROLLBACK").run();
+    throw err;
+  }
 }
 
 export interface TraceWithBatchTag extends TraceRow {
@@ -1710,8 +1711,9 @@ export function deleteSavedPlace(ownerId: string, id: string): boolean {
  * their traveller profile and anything they had shared into the app have to follow them, or
  * signing up is punished by an empty memories wall.
  *
- * Called from the `session.create.after` hook in `auth.ts`, so it runs on sign-up *and* on every
- * later sign-in — signing in on a second device pulls that device's anonymous work in too.
+ * Called from `POST /api/account/claim`, which both clients call after every sign-in, so it runs on
+ * sign-up *and* on every later sign-in — signing in on a second device pulls that device's anonymous
+ * work in too.
  *
  * Returns the number of trips moved, which is the only count worth reporting: it is the one a
  * traveller would notice was wrong.
