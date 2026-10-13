@@ -1,16 +1,21 @@
-import { Stack, ThemeProvider, useTheme } from 'expo-router';
+import { router, Stack, ThemeProvider, useTheme } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Keyboard, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import {
+  BAND_RATIO,
   BEATS,
   DWELL_MS,
   SceneBand,
   SceneContext,
+  SceneWindow,
   STACK_ABOVE_SCALE,
 } from '@/components/scene-band';
-import { Colors } from '@/constants/theme';
+import { PillButton } from '@/components/form';
+import { ThemedText } from '@/components/themed-text';
+import { Colors, Spacing } from '@/constants/theme';
+import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
 
 /**
  * The auth flow: a chooser, then a form, over one photograph.
@@ -90,18 +95,51 @@ export default function AuthLayout() {
             also paints the theme's background on the stack container itself unless its parent
             is a transparent modal, and this one sits in a `fullScreenModal`. */}
         <ThemeProvider value={{ ...theme, colors: { ...theme.colors, background: 'transparent' } }}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: 'transparent' },
-            }}
-          />
+          {/* Without a Clerk key the root layout mounts no `ClerkProvider`, and every screen here
+              calls a Clerk hook that would throw. One guard at the group covers all of them. */}
+          {CLERK_PUBLISHABLE_KEY ? (
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: 'transparent' },
+              }}
+            />
+          ) : (
+            <KeylessNotice />
+          )}
         </ThemeProvider>
       </View>
     </SceneContext.Provider>
   );
 }
 
+/** Same way out as the chooser's `leave()`: back if there is a back, Trips if there is not. */
+function KeylessNotice() {
+  return (
+    <View style={styles.flex}>
+      <SceneWindow ratio={BAND_RATIO} />
+      <View style={styles.keyless}>
+        <ThemedText type="title">Accounts aren&apos;t set up in this build yet.</ThemedText>
+        <PillButton
+          block
+          tone="quiet"
+          title="Keep planning without an account"
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/trips'))}
+        />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.canvas },
+  flex: { flex: 1 },
+  // Opaque and below the band's window, like each real screen's `page`.
+  keyless: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: Spacing.read,
+    paddingHorizontal: Spacing.read,
+    backgroundColor: Colors.canvas,
+  },
 });

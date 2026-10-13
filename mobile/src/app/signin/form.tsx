@@ -1,16 +1,18 @@
-import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useSignIn, useSignUp } from '@clerk/expo';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { signIn, signUp } from '@/api/auth';
-import { FieldTrough, PrimaryButton, TextField } from '@/components/form';
+import { FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
 import { BAND_RATIO_FORM, SceneWindow } from '@/components/scene-band';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { authMode } from '@/lib/authMode';
+import { clerkMessage } from '@/lib/clerkError';
 import { authGap, gapSentence } from '@/lib/formGap';
+import { useFinishAuth } from '@/lib/useFinishAuth';
 
 /**
  * Sign in, or make an account — the second of the two screens this flow is.
@@ -43,9 +45,27 @@ export default function AuthFormScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const insets = useSafeAreaInsets();
-  // The root `Stack`, not this group's — see `done()` for why the difference decides whether a
-  // successful sign-in closes the modal or pops back to the chooser.
-  const rootNavigation = useNavigation('/');
+  const { signIn } = useSignIn();
+  const { signUp } = useSignUp();
+  const finish = useFinishAuth();
+
+  /** One Clerk step; an error is shown and stops the chain. */
+  async function step(run: () => Promise<{ error?: unknown } | void>): Promise<boolean> {
+    try {
+      const result = await run();
+      if (result && result.error) {
+        setError(clerkMessage(result.error));
+        return false;
+      }
+      return true;
+    } catch (err) {
+      setError(clerkMessage(err));
+      return false;
+    }
+  }
+
+  const toCode = (purpose: 'verify-signup' | 'sign-in-code' | 'client-trust' | 'reset') =>
+    router.push({ pathname: '/signin/code', params: { purpose, email: email.trim() } });
 
   async function submit() {
     if (gap) {
@@ -56,48 +76,37 @@ export default function AuthFormScreen() {
 
     setBusy(true);
     setError(null);
-
-    const result = creating
-      ? await signUp(email.trim(), password, name.trim() || email.trim().split('@')[0])
-      : await signIn(email.trim(), password);
-
-    if (result.error) {
-      setError(result.error);
-      setBusy(false);
-      return;
-    }
-
     if (creating) {
-      // A new account is welcomed first. Replacing (not pushing) takes the sign-in modal away with it.
-      router.replace('/welcome');
-      return;
+      const ok =
+        (await step(() =>
+          signUp.password({ emailAddress: email.trim(), password, firstName: name.trim() || undefined }),
+        )) && (signUp.status === 'complete' || (await step(() => signUp.verifications.sendEmailCode())));
+      if (ok) {
+        if (signUp.status === 'complete') {
+          if (await step(() => signUp.finalize({ navigate: () => {} }))) await finish();
+        } else toCode('verify-signup');
+      }
+    } else if (await step(() => signIn.password({ emailAddress: email.trim(), password }))) {
+      if (signIn.status === 'complete') {
+        if (await step(() => signIn.finalize({ navigate: () => {} }))) await finish();
+      } else if (signIn.status === 'needs_client_trust') {
+        if (await step(() => signIn.mfa.sendEmailCode())) toCode('client-trust');
+      } else setError("This account needs a sign-in step TripMate doesn't support yet.");
     }
-    done();
+    setBusy(false);
   }
 
-  /**
-   * Out of the whole flow, not back to the chooser.
-   *
-   * **This was `router.dismissAll()`, which is wrong here and reads as though it were right.** It
-   * queues a bare `POP_TO_TOP`, and `BaseNavigationContainer` routes a target-less action through
-   * the focus chain to the *deepest* focused navigator — which, now that this is a group, is the
-   * `Stack` in `_layout.tsx` rather than the one holding the modal. `StackRouter` turns that into
-   * a `POP` of `routes.length - 1`; on `[index, form]` it returns a new state instead of `null`,
-   * so the inner stack handles it and nothing bubbles. You end up signed in, looking at a chooser
-   * offering to sign you in, with the modal still up. `canDismiss()` does not catch it either: it
-   * walks *down* from the root and returns `true` at the first stack with more than one route,
-   * which the root's `[(tabs), signin]` always is, so the `replace` branch was unreachable on
-   * every path the app actually takes. Both calls name the modal and mean the nearest stack.
-   *
-   * So dispatch on the navigator that owns the modal instead of asking the focus chain to find
-   * it. `useNavigation('/')` resolves the root `Stack`, and a navigator's own `goBack()` calls
-   * that navigator's `onAction` directly — which pops `signin` and leaves the tab you came from
-   * where it was, exactly as this did before the group existed. The guard is the house idiom and
-   * the `replace` keeps a target if the root anchor ever goes away.
-   */
-  function done() {
-    if (rootNavigation.canGoBack()) rootNavigation.goBack();
-    else router.replace('/(tabs)/trips');
+  /** Code-first routes (a sign-in code, a reset) need only the address. */
+  async function withEmailOnly(send: () => Promise<{ error?: unknown } | void>, purpose: 'sign-in-code' | 'reset') {
+    if (!email.trim()) {
+      setAsked(true);
+      emailField.current?.focus();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    if ((await step(() => signIn.create({ identifier: email.trim() }))) && (await step(send))) toCode(purpose);
+    setBusy(false);
   }
 
   /**
@@ -198,6 +207,18 @@ export default function AuthFormScreen() {
               busy={busy}
             />
 
+            {creating ? null : (
+              <View style={styles.secondary}>
+                <PillButton
+                  title="Email me a code instead"
+                  onPress={() => withEmailOnly(() => signIn.emailCode.sendCode(), 'sign-in-code')}
+                />
+                <PillButton
+                  title="Forgot password?"
+                  onPress={() => withEmailOnly(() => signIn.resetPasswordEmailCode.sendCode(), 'reset')}
+                />
+              </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -220,4 +241,5 @@ const styles = StyleSheet.create({
   blurb: { paddingTop: Spacing.tight },
   form: { paddingTop: Spacing.regular, gap: Spacing.read },
   hint: { paddingHorizontal: Spacing.hair },
+  secondary: { gap: Spacing.hair },
 });
