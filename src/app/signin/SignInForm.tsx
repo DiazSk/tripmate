@@ -280,7 +280,14 @@ export default function SignInForm() {
             {/* Clerk's bot protection mounts here for custom sign-up flows. */}
             {creating && <div id="clerk-captcha" />}
 
-            <div className="space-y-2 pt-4">
+            {/* The same "or" rule the phone draws: Apple and Google are another way to do this
+                form's one job, so they sit under it rather than beside it. */}
+            <div className="flex items-center gap-3 pt-5" aria-hidden="true">
+              <span className="h-px flex-1 bg-card-border" />
+              <span className="text-xs text-muted">or</span>
+              <span className="h-px flex-1 bg-card-border" />
+            </div>
+            <div className="space-y-2 pt-3">
               <button type="button" className={SECONDARY} onClick={() => social("oauth_apple")}>Continue with Apple</button>
               <button type="button" className={SECONDARY} onClick={() => social("oauth_google")}>
                 <GoogleMark />
