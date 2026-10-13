@@ -3,201 +3,280 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useSignIn, useSignUp } from "@clerk/nextjs";
 
-import { signIn, signUp } from "@/lib/authClient";
-import { useToast } from "@/lib/toast";
 import ErrorNote from "@/components/ErrorNote";
-import { ACCOUNT_CREATED_KEY } from "@/components/AccountReceipt";
+import { clerkMessage } from "@/lib/clerkError";
 import { safeNextPath } from "@/lib/safeNext";
 
 const FIELD =
   "w-full rounded-md border border-card-border bg-white/10 px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25";
 
+/** What the code field is for. `client-trust` is Clerk's Device Trust: a password sign-in from a new browser. */
+type CodePurpose = "verify-signup" | "sign-in-code" | "client-trust" | "reset";
+
+const CODE_COPY: Record<CodePurpose, string> = {
+  "verify-signup": "We sent a 6-digit code to confirm your email.",
+  "sign-in-code": "We sent a 6-digit code to sign you in.",
+  "client-trust": "New browser — we sent a 6-digit code to confirm it's you.",
+  reset: "We sent a 6-digit code. Enter it with your new password.",
+};
+
 /**
- * Sign in, or make an account, on one screen.
+ * Sign in, make an account, or get back in — one screen, a mode toggle and a code step.
  *
- * Deliberately one route with a mode toggle rather than `/signin` and `/signup`. The two forms
- * differ by a single field, and somebody who typed their email into the wrong one should not have
- * to retype it — the toggle keeps what they have entered.
- *
- * **Nothing here is a gate.** The landing page, the plan wizard and generation all stay reachable
- * signed out, and a traveller arrives at this screen because they chose to keep something, not
- * because the app stopped them. What signing in buys is stated plainly rather than assumed: the
- * trips made on this device follow the account (`claimAnonymousOwner`, via the session hook), so
- * this is additive and there is nothing to lose by doing it later.
+ * **Nothing here is a gate.** Every path ends at `/signin/finish`, which claims what this browser
+ * made signed out and routes on; see `FinishSignIn`.
  */
 export default function SignInForm() {
   const router = useRouter();
-  const toast = useToast();
   const params = useSearchParams();
-  // Where to land afterwards. `/trips` by default because the memories wall is the thing signing
-  // in actually changes — arriving back at a page that looks identical is a poor confirmation.
-  // Checked here because both branches navigate to it — an unchecked `?next=https://…` is an open redirect.
   const next = safeNextPath(params.get("next"));
+  const finishUrl = `/signin/finish?next=${encodeURIComponent(next)}`;
+
+  const { signIn } = useSignIn();
+  const { signUp } = useSignUp();
 
   const [mode, setMode] = useState<"in" | "up">("in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [purpose, setPurpose] = useState<CodePurpose | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const creating = mode === "up";
 
-  async function submit(e: React.FormEvent) {
+  /** Runs one Clerk step; a returned or thrown error is shown and stops the chain. */
+  async function step(run: () => Promise<{ error?: unknown } | void>): Promise<boolean> {
+    try {
+      const result = await run();
+      if (result && result.error) {
+        setError(clerkMessage(result.error));
+        return false;
+      }
+      return true;
+    } catch (err) {
+      setError(clerkMessage(err));
+      return false;
+    }
+  }
+
+  async function done(kind: "in" | "up") {
+    const resource = kind === "up" ? signUp : signIn;
+    if (await step(() => resource.finalize({ navigate: () => {} }))) router.push(finishUrl);
+  }
+
+  async function submitPassword(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-
-    const result = creating
-      ? await signUp.email({ email, password, name: name.trim() || email.split("@")[0] })
-      : await signIn.email({ email, password });
-
-    if (result.error) {
-      // The library's own message, not a rewrite of it: it already distinguishes a wrong password
-      // from an email that is already registered, and those are different things to do next.
-      setError(result.error.message ?? "That didn't work. Try again.");
-      setBusy(false);
-      return;
-    }
-
-    const who = result.data?.user?.name?.trim() || null;
-
     if (creating) {
-      /**
-       * Hand the count to the receipt rather than announcing it here.
-       *
-       * The claim has already run server-side by this point (`session.create.after`), so this list
-       * *is* the post-claim set — for an account made seconds ago, every trip on it arrived that
-       * way. `sessionStorage` because the confirmation belongs on the page being navigated to, and
-       * survives exactly one client-side navigation and no reloads, which is the lifetime wanted.
-       *
-       * Best-effort: a failed count writes `0`, which the receipt still renders truthfully. Never
-       * block the redirect on it — the traveller has an account either way.
-       */
-      let claimed = 0;
-      try {
-        const res = await fetch("/api/trips?status=saved");
-        if (res.ok) {
-          const body = (await res.json()) as { trips?: unknown[] };
-          claimed = Array.isArray(body.trips) ? body.trips.length : 0;
-        }
-      } catch {
-        // Counted as none rather than not shown — see above.
+      const ok =
+        (await step(() => signUp.password({ emailAddress: email, password, firstName: name.trim() || undefined }))) &&
+        (signUp.status === "complete" || (await step(() => signUp.verifications.sendEmailCode())));
+      if (ok) {
+        if (signUp.status === "complete") await done("up");
+        else setPurpose("verify-signup");
       }
-      sessionStorage.setItem(ACCOUNT_CREATED_KEY, String(claimed));
-    } else {
-      // Signing in is the ordinary act, and its only invisible result is that the trips on the
-      // destination page are now yours. That is exactly what `toast.tsx` reserves itself for.
-      toast.show(
-        who ? `Signed in as ${who}` : "Signed in",
-        "Your trips and travel profile are here."
-      );
+    } else if (await step(() => signIn.password({ emailAddress: email, password }))) {
+      if (signIn.status === "complete") await done("in");
+      else if (signIn.status === "needs_client_trust") {
+        if (await step(() => signIn.mfa.sendEmailCode())) setPurpose("client-trust");
+      } else setError("This account needs a sign-in step TripMate doesn't support yet.");
     }
-
-    // `refresh()` before navigating, and this is load-bearing rather than belt-and-braces.
-    // `/trips` and `/profile` are server components that read the owner at render time; without
-    // refreshing, Next can serve them from the client router cache as they looked a moment ago —
-    // signed out, and empty. The claim has already run server-side by this point.
-    router.refresh();
-    // A new account is welcomed first; `next` rides along so Ready can offer the way back.
-    router.push(creating ? `/welcome${next !== "/trips" ? `?next=${encodeURIComponent(next)}` : ""}` : next);
+    setBusy(false);
   }
+
+  async function emailMeACode() {
+    if (!email) return setError("Enter your email first.");
+    setBusy(true);
+    setError(null);
+    if ((await step(() => signIn.create({ identifier: email }))) && (await step(() => signIn.emailCode.sendCode()))) {
+      setPurpose("sign-in-code");
+    }
+    setBusy(false);
+  }
+
+  async function forgotPassword() {
+    if (!email) return setError("Enter your email first.");
+    setBusy(true);
+    setError(null);
+    if (
+      (await step(() => signIn.create({ identifier: email }))) &&
+      (await step(() => signIn.resetPasswordEmailCode.sendCode()))
+    ) {
+      setPassword("");
+      setPurpose("reset");
+    }
+    setBusy(false);
+  }
+
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!purpose) return;
+    setBusy(true);
+    setError(null);
+    if (purpose === "verify-signup") {
+      if ((await step(() => signUp.verifications.verifyEmailCode({ code }))) && signUp.status === "complete") await done("up");
+    } else if (purpose === "sign-in-code") {
+      if ((await step(() => signIn.emailCode.verifyCode({ code }))) && signIn.status === "complete") await done("in");
+    } else if (purpose === "client-trust") {
+      if ((await step(() => signIn.mfa.verifyEmailCode({ code }))) && signIn.status === "complete") await done("in");
+    } else if (
+      (await step(() => signIn.resetPasswordEmailCode.verifyCode({ code }))) &&
+      (await step(() => signIn.resetPasswordEmailCode.submitPassword({ password, signOutOfOtherSessions: true }))) &&
+      signIn.status === "complete"
+    ) {
+      await done("in");
+    }
+    setBusy(false);
+  }
+
+  async function social(strategy: "oauth_apple" | "oauth_google") {
+    setError(null);
+    await step(() =>
+      signIn.sso({
+        strategy,
+        redirectCallbackUrl: `/sso-callback?next=${encodeURIComponent(next)}`,
+        redirectUrl: finishUrl,
+      }),
+    );
+  }
+
+  const LINK = "min-h-11 text-sm font-medium text-foreground underline underline-offset-4";
+  const SUBMIT =
+    "w-full rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-60";
+  const SECONDARY =
+    "w-full rounded-full border border-card-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/10 disabled:opacity-60";
 
   return (
     <main className="map-chrome-hidden min-h-full px-5 pt-[calc(var(--nav-h)+1.25rem)] pb-16 sm:px-6 sm:pt-[calc(var(--nav-h)+1.5rem)] sm:pb-24">
-      {/* `pointer-events-auto`: this sits inside AppShell's `pointer-events-none` scroll container,
-          which is what keeps the globe underneath draggable. Without opting back in, every click
-          would pass through to the canvas instead of reaching the form. */}
+      {/* `pointer-events-auto`: AppShell's scroll container is `pointer-events-none` so the globe
+          stays draggable; without opting back in, clicks would reach the canvas, not the form. */}
       <div className="pointer-events-auto mx-auto w-full max-w-sm">
         <h1 className="font-display text-2xl font-semibold text-foreground">
-          {creating ? "Make an account" : "Welcome back"}
+          {purpose ? "Check your email" : creating ? "Make an account" : "Welcome back"}
         </h1>
         <p className="pt-2 text-sm text-muted">
-          {creating
-            ? "Your trips and travel profile stay with you — on this browser and on your phone."
-            : "Sign in to find your trips wherever you are."}
+          {purpose
+            ? `${CODE_COPY[purpose]} (${email})`
+            : creating
+              ? "Your trips and travel profile stay with you — on this browser and on your phone."
+              : "Sign in to find your trips wherever you are."}
         </p>
 
-        <form onSubmit={submit} className="space-y-3 pt-7">
-          {creating && (
+        {purpose ? (
+          <form onSubmit={submitCode} className="space-y-3 pt-7">
             <div>
-              <label htmlFor="name" className="block pb-1.5 text-xs font-medium text-muted">
-                Name
-              </label>
+              <label htmlFor="code" className="block pb-1.5 text-xs font-medium text-muted">Code</label>
               <input
-                id="name"
+                id="code"
                 type="text"
-                autoComplete="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Optional"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                 className={FIELD}
               />
             </div>
-          )}
+            {purpose === "reset" && (
+              <div>
+                <label htmlFor="new-password" className="block pb-1.5 text-xs font-medium text-muted">New password</label>
+                <input
+                  id="new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={FIELD}
+                />
+              </div>
+            )}
+            {error && <ErrorNote>{error}</ErrorNote>}
+            <button type="submit" disabled={busy} className={SUBMIT}>
+              {busy ? "One moment…" : "Continue"}
+            </button>
+            <button
+              type="button"
+              className={LINK}
+              onClick={() => {
+                setPurpose(null);
+                setCode("");
+                setError(null);
+              }}
+            >
+              Use a different email
+            </button>
+          </form>
+        ) : (
+          <>
+            <form onSubmit={submitPassword} className="space-y-3 pt-7">
+              {creating && (
+                <div>
+                  <label htmlFor="name" className="block pb-1.5 text-xs font-medium text-muted">Name</label>
+                  <input id="name" type="text" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" className={FIELD} />
+                </div>
+              )}
+              <div>
+                <label htmlFor="email" className="block pb-1.5 text-xs font-medium text-muted">Email</label>
+                <input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={FIELD} />
+              </div>
+              <div>
+                <label htmlFor="password" className="block pb-1.5 text-xs font-medium text-muted">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  // The browser needs telling which of the two this is, or it offers to fill a new
+                  // password into a sign-in box and to autofill an old one into a sign-up box.
+                  autoComplete={creating ? "new-password" : "current-password"}
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={FIELD}
+                />
+                {creating && <p className="pt-1.5 text-xs text-muted">At least 8 characters.</p>}
+              </div>
+              {!creating && (
+                <div className="flex flex-wrap gap-x-4">
+                  <button type="button" className={LINK} onClick={emailMeACode} disabled={busy}>Email me a code instead</button>
+                  <button type="button" className={LINK} onClick={forgotPassword} disabled={busy}>Forgot password?</button>
+                </div>
+              )}
+              {error && <ErrorNote>{error}</ErrorNote>}
+              <button type="submit" disabled={busy} className={SUBMIT}>
+                {busy ? "One moment…" : creating ? "Create account" : "Sign in"}
+              </button>
+            </form>
+            {/* Clerk's bot protection mounts here for custom sign-up flows. */}
+            {creating && <div id="clerk-captcha" />}
 
-          <div>
-            <label htmlFor="email" className="block pb-1.5 text-xs font-medium text-muted">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={FIELD}
-            />
-          </div>
+            <div className="space-y-2 pt-4">
+              <button type="button" className={SECONDARY} onClick={() => social("oauth_apple")}>Continue with Apple</button>
+              <button type="button" className={SECONDARY} onClick={() => social("oauth_google")}>Continue with Google</button>
+            </div>
 
-          <div>
-            <label htmlFor="password" className="block pb-1.5 text-xs font-medium text-muted">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              // The browser needs telling which of the two this is, or it offers to fill a new
-              // password into a sign-in box and to autofill an old one into a sign-up box.
-              autoComplete={creating ? "new-password" : "current-password"}
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={FIELD}
-            />
-            {creating && <p className="pt-1.5 text-xs text-muted">At least 8 characters.</p>}
-          </div>
-
-          {/* `ErrorNote` rather than a bare paragraph: this was the only use of `--danger` in the
-              app, a token nothing else defines, with a hard-coded hex fallback. Every other error
-              in this product is this component. */}
-          {error && <ErrorNote>{error}</ErrorNote>}
-
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-60"
-          >
-            {busy ? "One moment…" : creating ? "Create account" : "Sign in"}
-          </button>
-        </form>
-
-        <p className="pt-5 text-sm text-muted">
-          {creating ? "Already have an account?" : "New here?"}{" "}
-          <button
-            type="button"
-            onClick={() => {
-              setMode(creating ? "in" : "up");
-              setError(null);
-            }}
-            className="min-h-11 font-medium text-foreground underline underline-offset-4"
-          >
-            {creating ? "Sign in" : "Make one"}
-          </button>
-        </p>
+            <p className="pt-5 text-sm text-muted">
+              {creating ? "Already have an account?" : "New here?"}{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(creating ? "in" : "up");
+                  setError(null);
+                }}
+                className="min-h-11 font-medium text-foreground underline underline-offset-4"
+              >
+                {creating ? "Sign in" : "Make one"}
+              </button>
+            </p>
+          </>
+        )}
 
         <p className="pt-2 text-sm text-muted">
           Or{" "}

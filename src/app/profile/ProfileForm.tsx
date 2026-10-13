@@ -18,7 +18,7 @@ import ErrorNote from "@/components/ErrorNote";
 import AccountReceipt from "@/components/AccountReceipt";
 import { formatDateRange, formatMoney } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
-import { signOut } from "@/lib/authClient";
+import { useClerk } from "@clerk/nextjs";
 import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile } from "@/lib/travelerProfile";
 import type { ProfileStats } from "@/lib/profileStats";
@@ -299,7 +299,6 @@ function Masthead({
 }) {
   const photo = usePlacePhoto(lead?.destination ?? "", "thumb");
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
 
   return (
     <header>
@@ -366,22 +365,7 @@ function Masthead({
         </dl>
 
         {email ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              await signOut();
-              // `refresh()` rather than a reload: every owner-scoped server component on this route
-              // and the next one has to re-read, and leaving the router cache holding the signed-in
-              // render would show this traveller their trips after they asked to be signed out.
-              router.refresh();
-              router.push("/");
-            }}
-            className="min-h-11 shrink-0 rounded-full bg-[rgb(247_245_242/0.07)] px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-[rgb(247_245_242/0.12)] disabled:opacity-60"
-          >
-            {busy ? "Signing out…" : "Sign out"}
-          </button>
+          <SignOutButton />
         ) : (
           <Link
             href="/signin?next=/profile"
@@ -392,6 +376,35 @@ function Masthead({
         )}
       </div>
     </header>
+  );
+}
+
+/**
+ * Its own component so `useClerk()` only runs where an account exists: the hook throws without a
+ * `ClerkProvider`, and the layout mounts one only when Clerk is configured. A signed-in traveller
+ * implies it is; the signed-out branch never renders this.
+ */
+function SignOutButton() {
+  const { signOut } = useClerk();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        await signOut();
+        // `refresh()` rather than a reload: every owner-scoped server component on this route
+        // and the next one has to re-read, and leaving the router cache holding the signed-in
+        // render would show this traveller their trips after they asked to be signed out.
+        router.refresh();
+        router.push("/");
+      }}
+      className="min-h-11 shrink-0 rounded-full bg-[rgb(247_245_242/0.07)] px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-[rgb(247_245_242/0.12)] disabled:opacity-60"
+    >
+      {busy ? "Signing out…" : "Sign out"}
+    </button>
   );
 }
 

@@ -7,7 +7,6 @@ import Meridian from "@/components/Meridian";
 import TravelCard from "@/components/welcome/TravelCard";
 import { INTEREST_TAGS } from "@/components/InterestPicker";
 import { DIETARY_TAGS } from "@/components/DietaryPicker";
-import { authClient } from "@/lib/authClient";
 import type { TravelerProfile } from "@/lib/travelerProfile";
 import {
   CROWD_CHOICES, GROUP_CHOICES, MAX_LOVES, PACE_CHOICES, STEP_LINES, WELCOME_STEPS,
@@ -82,8 +81,12 @@ export default function WelcomeFlow({ user, profile: initialProfile, next }: {
     setBusy(true);
     let a = answers;
     if (step === "you" && a.name.trim() && a.name.trim() !== user.name) {
-      const res = await authClient.updateUser({ name: a.name.trim().slice(0, 40) }).catch(() => ({ error: true }));
-      if (res.error) setUnsaved(true);
+      const res = await fetch("/api/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: a.name.trim().slice(0, 40) }),
+      }).catch(() => null);
+      if (!res?.ok) setUnsaved(true);
     }
     if (step === "rhythm") { a = { ...a, pace: a.pace ?? "balanced", crowds: a.crowds ?? "mixed" }; setAnswers(a); }
     if (PROFILE_STEPS.has(step)) await saveProfile(a);

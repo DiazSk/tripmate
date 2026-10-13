@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { ClerkProvider } from "@clerk/nextjs";
 import AppShell from "@/components/AppShell";
 import { LlmTraceFabProvider } from "@/components/LlmTraceFab";
+import { clerkConfigured } from "@/lib/clerkConfig";
 import "./globals.css";
 
 /**
@@ -173,6 +175,24 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 verdict, and DESIGN.md.
 -->`;
 
+function Shell({ children }: { children: React.ReactNode }) {
+  const app = (
+    <>
+      {/* The direction contract — see DIRECTION_CONTRACT above. Emitted as a real HTML
+          comment so it can be audited in the served page, not just in source. */}
+      <div hidden dangerouslySetInnerHTML={{ __html: DIRECTION_CONTRACT }} />
+      {SHOW_LLM_TRACES ? (
+        <LlmTraceFabProvider>
+          <AppShell>{children}</AppShell>
+        </LlmTraceFabProvider>
+      ) : (
+        <AppShell>{children}</AppShell>
+      )}
+    </>
+  );
+  return clerkConfigured() ? <ClerkProvider>{app}</ClerkProvider> : app;
+}
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -180,16 +200,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${displayFace.variable} ${textFace.variable} ${monoFace.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        {/* The direction contract — see DIRECTION_CONTRACT above. Emitted as a real HTML
-            comment so it can be audited in the served page, not just in source. */}
-        <div hidden dangerouslySetInnerHTML={{ __html: DIRECTION_CONTRACT }} />
-        {SHOW_LLM_TRACES ? (
-          <LlmTraceFabProvider>
-            <AppShell>{children}</AppShell>
-          </LlmTraceFabProvider>
-        ) : (
-          <AppShell>{children}</AppShell>
-        )}
+        {/* Clerk's hooks and its middleware throw without keys, so the provider is only mounted
+            when they exist; without them the app runs anonymously and this is a bare body. */}
+        <Shell>{children}</Shell>
       </body>
     </html>
   );
