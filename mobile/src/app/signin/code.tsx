@@ -10,6 +10,7 @@ import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { clerkMessage, unsupportedStepMessage } from '@/lib/clerkError';
+import { PASSWORD_MIN } from '@/lib/formGap';
 import { useFinishAuth } from '@/lib/useFinishAuth';
 
 type Purpose = 'verify-signup' | 'sign-in-code' | 'client-trust' | 'reset';
@@ -58,8 +59,8 @@ export default function AuthCodeScreen() {
   const gap =
     code.trim().length !== 6
       ? 'Enter the 6-digit code.'
-      : purpose === 'reset' && password.length < 8
-        ? 'Use at least 8 characters for your new password.'
+      : purpose === 'reset' && password.length < PASSWORD_MIN
+        ? `Use at least ${PASSWORD_MIN} characters for your new password.`
         : undefined;
 
   async function submit() {

@@ -398,6 +398,7 @@ export function PillButton({
   role = 'button',
   accessibilityLabel,
   style,
+  icon,
 }: {
   title: string;
   onPress?: () => void;
@@ -438,7 +439,24 @@ export function PillButton({
   role?: 'button' | 'link';
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
+  /** A glyph before the label — a provider's own mark on a sign-in capsule, mostly. */
+  icon?: React.ReactNode;
 }) {
+  const label = (
+    <ThemedText
+      type={compact ? 'detail' : 'headingSmall'}
+      themeColor={
+        disabled
+          ? 'muted'
+          : tone === 'primary'
+            ? 'accentForeground'
+            : tone === 'quiet'
+              ? 'accent'
+              : tone
+      }>
+      {title}
+    </ThemedText>
+  );
   return (
     <Pressable
       accessibilityRole={role}
@@ -459,20 +477,13 @@ export function PillButton({
       android_ripple={disabled ? undefined : { color: Colors.pressed }}>
       {busy ? (
         <ActivityIndicator color={tone === 'primary' ? Colors.accentForeground : Colors.accent} />
+      ) : icon ? (
+        <View style={styles.pillLabelRow}>
+          {icon}
+          {label}
+        </View>
       ) : (
-        <ThemedText
-          type={compact ? 'detail' : 'headingSmall'}
-          themeColor={
-            disabled
-              ? 'muted'
-              : tone === 'primary'
-                ? 'accentForeground'
-                : tone === 'quiet'
-                  ? 'accent'
-                  : tone
-          }>
-          {title}
-        </ThemedText>
+        label
       )}
     </Pressable>
   );
@@ -615,6 +626,7 @@ const styles = StyleSheet.create({
   // 44pt target and the pill radius stay — what makes it quiet is the absence of a surface, not
   // a smaller target.
   pillQuiet: { backgroundColor: 'transparent', borderColor: 'transparent', alignItems: 'center' },
+  pillLabelRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
   pillPressed: { opacity: 0.7 },
   buttonPressed: { opacity: 0.85 },
 

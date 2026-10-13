@@ -51,7 +51,7 @@ describe('planGap', () => {
 
 describe('authGap', () => {
   it('finds nothing to ask for when both fields are ready', () => {
-    expect(authGap('traveller@example.com', 'eight-or-more')).toBeNull();
+    expect(authGap('traveller@example.com', 'fifteen-or-longer')).toBeNull();
   });
 
   it('asks for the email first', () => {
@@ -61,12 +61,16 @@ describe('authGap', () => {
   it('asks for a longer password', () => {
     expect(authGap('traveller@example.com', 'short')).toEqual({
       field: 'password',
-      reason: 'Passwords are at least 8 characters.',
+      reason: 'Passwords are at least 15 characters.',
     });
   });
 
-  it('accepts a password of exactly eight characters', () => {
-    expect(authGap('traveller@example.com', '12345678')).toBeNull();
+  it('accepts a password of exactly fifteen characters', () => {
+    expect(authGap('traveller@example.com', '123456789012345')).toBeNull();
+  });
+
+  it('still asks at fourteen', () => {
+    expect(authGap('traveller@example.com', '12345678901234')?.field).toBe('password');
   });
 });
 

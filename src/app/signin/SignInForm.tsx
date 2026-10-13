@@ -6,11 +6,18 @@ import Link from "next/link";
 import { useSignIn, useSignUp } from "@clerk/nextjs";
 
 import ErrorNote from "@/components/ErrorNote";
+import GoogleMark from "@/components/GoogleMark";
 import { clerkMessage, unsupportedStepMessage } from "@/lib/clerkError";
 import { safeNextPath } from "@/lib/safeNext";
 
 const FIELD =
   "w-full rounded-md border border-card-border bg-white/10 px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25";
+
+/**
+ * The shortest password Clerk accepts — this instance's own setting, mirrored so the browser can say
+ * so before the request. Change it with the Clerk dashboard, not on its own.
+ */
+const PASSWORD_MIN = 15;
 
 /** What the code field is for. `client-trust` is Clerk's Device Trust: a password sign-in from a new browser. */
 type CodePurpose = "verify-signup" | "sign-in-code" | "client-trust" | "reset";
@@ -165,7 +172,7 @@ export default function SignInForm() {
   const SUBMIT =
     "w-full rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-60";
   const SECONDARY =
-    "w-full rounded-full border border-card-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/10 disabled:opacity-60";
+    "inline-flex w-full items-center justify-center gap-2 rounded-full border border-card-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/10 disabled:opacity-60";
 
   return (
     <main className="map-chrome-hidden min-h-full px-5 pt-[calc(var(--nav-h)+1.25rem)] pb-16 sm:px-6 sm:pt-[calc(var(--nav-h)+1.5rem)] sm:pb-24">
@@ -206,7 +213,7 @@ export default function SignInForm() {
                   id="new-password"
                   type="password"
                   autoComplete="new-password"
-                  minLength={8}
+                  minLength={PASSWORD_MIN}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -252,12 +259,12 @@ export default function SignInForm() {
                   // The browser needs telling which of the two this is, or it offers to fill a new
                   // password into a sign-in box and to autofill an old one into a sign-up box.
                   autoComplete={creating ? "new-password" : "current-password"}
-                  minLength={8}
+                  minLength={PASSWORD_MIN}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className={FIELD}
                 />
-                {creating && <p className="pt-1.5 text-xs text-muted">At least 8 characters.</p>}
+                {creating && <p className="pt-1.5 text-xs text-muted">At least {PASSWORD_MIN} characters.</p>}
               </div>
               {!creating && (
                 <div className="flex flex-wrap gap-x-4">
@@ -275,7 +282,10 @@ export default function SignInForm() {
 
             <div className="space-y-2 pt-4">
               <button type="button" className={SECONDARY} onClick={() => social("oauth_apple")}>Continue with Apple</button>
-              <button type="button" className={SECONDARY} onClick={() => social("oauth_google")}>Continue with Google</button>
+              <button type="button" className={SECONDARY} onClick={() => social("oauth_google")}>
+                <GoogleMark />
+                Continue with Google
+              </button>
             </div>
 
             <p className="pt-5 text-sm text-muted">

@@ -1,17 +1,19 @@
 import { useSignIn, useSignUp } from '@clerk/expo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
-import { BAND_RATIO_FORM, SceneWindow } from '@/components/scene-band';
+import { SceneWindow } from '@/components/scene-band';
+import { SocialSignIn } from '@/components/social-sign-in';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { authMode } from '@/lib/authMode';
+import { ratioToFit } from '@/lib/bandRatio';
 import { clerkMessage, unsupportedStepMessage } from '@/lib/clerkError';
-import { authGap, gapSentence } from '@/lib/formGap';
+import { PASSWORD_MIN, authGap, gapSentence } from '@/lib/formGap';
 import { useFinishAuth } from '@/lib/useFinishAuth';
 
 /**
@@ -34,6 +36,19 @@ import { useFinishAuth } from '@/lib/useFinishAuth';
  * is `fullScreenModal`, not a sheet: there is no swipe-down here, so `signin/_layout.tsx` anchors
  * the chooser beneath this to keep back a real way out even on a direct deep link.
  */
+/**
+ * Each mode's stack, measured like the chooser's: 24 padding, the title (25), the blurb (8 + 19 a
+ * line), the form block (24, the trough at 52 a row, 16 gaps, the 15pt hint, the 52pt button),
+ * log in's two quiet links (16 + 44 + 4 + 44), the social block (16, the "or" rule 15, 12, Apple
+ * 52, 12, Google 44) and 58 of bottom inset. Sign up has a third row and a two-line blurb but no
+ * links. Android has no Apple button (52 + 12). The photo takes what these leave — about 0.29 and
+ * 0.33 of an 874pt window — so Apple and Google are on screen without scrolling.
+ */
+const STACK_PT = {
+  login: Platform.OS === 'ios' ? 621 : 557,
+  signup: Platform.OS === 'ios' ? 584 : 520,
+};
+
 export default function AuthFormScreen() {
   // The mode is the route's, not this screen's — you arrived by choosing it. See `authMode` for
   // why an unrecognised parameter resolves rather than throws.
@@ -45,6 +60,7 @@ export default function AuthFormScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
   const finish = useFinishAuth();
@@ -121,7 +137,7 @@ export default function AuthFormScreen() {
 
   return (
     <View style={styles.flex}>
-      <SceneWindow ratio={BAND_RATIO_FORM} />
+      <SceneWindow ratio={ratioToFit(height, creating ? STACK_PT.signup : STACK_PT.login)} />
       <KeyboardAvoidingView
         style={styles.page}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -180,10 +196,10 @@ export default function AuthFormScreen() {
               />
             </FieldTrough>
 
-            {/* Both modes, not just create. `ready` wants 8 characters either way, so gating
-                this on `creating` left a sign-in with a dead button and no reason beside it. */}
+            {/* Both modes, not just create. `authGap` wants the minimum either way, so gating this
+                on `creating` left a sign-in with a dead button and no reason beside it. */}
             <ThemedText type="micro" themeColor="muted" style={styles.hint}>
-              At least 8 characters.
+              At least {PASSWORD_MIN} characters.
             </ThemedText>
 
             {error ? <Notice>{error}</Notice> : null}
@@ -207,18 +223,26 @@ export default function AuthFormScreen() {
               busy={busy}
             />
 
+            {/* Quiet links, the chooser's third weight: other ways to do this screen's one job, not
+                rivals to its button. */}
             {creating ? null : (
               <View style={styles.secondary}>
                 <PillButton
+                  block
+                  tone="quiet"
                   title="Email me a code instead"
                   onPress={() => withEmailOnly(() => signIn.emailCode.sendCode(), 'sign-in-code')}
                 />
                 <PillButton
+                  block
+                  tone="quiet"
                   title="Forgot password?"
                   onPress={() => withEmailOnly(() => signIn.resetPasswordEmailCode.sendCode(), 'reset')}
                 />
               </View>
             )}
+
+            <SocialSignIn disabled={busy} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

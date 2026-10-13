@@ -64,11 +64,17 @@ export function planGap(draft: {
   return null;
 }
 
+/**
+ * The shortest password Clerk accepts — this instance's own setting, mirrored here so the form can
+ * say so before the request rather than after. Change it with the dashboard, not on its own.
+ */
+export const PASSWORD_MIN = 15;
+
 /** The same shape for the auth form, whose two fields are in the same top-to-bottom order. */
 export function authGap(email: string, password: string): Gap | null {
   if (email.trim().length === 0) return { field: 'email', reason: 'Add your email address.' };
-  if (password.length < 8) {
-    return { field: 'password', reason: 'Passwords are at least 8 characters.' };
+  if (password.length < PASSWORD_MIN) {
+    return { field: 'password', reason: `Passwords are at least ${PASSWORD_MIN} characters.` };
   }
   return null;
 }

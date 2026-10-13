@@ -1,28 +1,17 @@
-import { useSignInWithApple } from '@clerk/expo/apple';
-import { useSignInWithGoogle } from '@clerk/expo/google';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PillButton, PrimaryButton } from '@/components/form';
 import { SceneWindow } from '@/components/scene-band';
-import { Notice } from '@/components/states';
-import { APPEARANCE } from '@/constants/appearance';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
-import { chooserRatio } from '@/lib/bandRatio';
-import { clerkMessage, isCancellation } from '@/lib/clerkError';
-import { useFinishAuth } from '@/lib/useFinishAuth';
+import { ratioToFit } from '@/lib/bandRatio';
 
 /**
- * The front door: what this is, and what you can do about it — Apple (iOS), Google, Sign up, Log in
- * and the escape.
- *
- * **Apple is the native button, at full width.** Apple's guidelines require Sign in with Apple to
- * be at least as prominent as the other sign-in options, so it is the system's own button at the
- * column's full width rather than a capsule dressed to match. Sign up keeps the one jade fill.
+ * The front door: what this is, and the three things you can do about it — Sign up, Log in and
+ * the escape. Apple and Google live one screen on, under each form (`SocialSignIn`): they are a
+ * way to do what Sign up and Log in already offer, not a fourth and fifth choice here.
  *
  * **One kind of thing, at three weights.** The screen this replaced asked for a task, an
  * alternative *mode* and a way *out* in one stack, with the last two wearing the same slate
@@ -45,40 +34,14 @@ import { useFinishAuth } from '@/lib/useFinishAuth';
  */
 /**
  * The chooser's stack, measured the way `scene-band.tsx` records `BAND_RATIO`: 24 padding, the
- * 96pt mark, the actions (52 Apple, 52 Google, 52 Sign up, 44 Log in, 44 Keep planning, four 12pt
- * gaps) and 58 of bottom inset. Android has no Apple button.
+ * 96pt mark, the actions (52 Sign up, 44 Log in, 44 Keep planning, two 12pt gaps) and 58 of bottom
+ * inset. On an 874pt window that leaves the full 0.58; a short phone gives up photo instead.
  */
-const STACK_PT = Platform.OS === 'ios' ? 470 : 406;
+const STACK_PT = 342;
 
 export default function AuthChooserScreen() {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const { startAppleAuthenticationFlow } = useSignInWithApple();
-  const { startGoogleAuthenticationFlow } = useSignInWithGoogle();
-  const finish = useFinishAuth();
-  const [error, setError] = useState<string | null>(null);
-  // A social flow is open or finishing. Presses on every sign-in action are ignored until it
-  // settles, so a double tap cannot start two flows.
-  const [busy, setBusy] = useState(false);
-
-  /** Apple and Google return a session to activate — or nothing, when the sheet was closed. */
-  async function social(
-    start: () => Promise<{ createdSessionId: string | null; setActive?: (p: { session: string }) => Promise<void> }>,
-  ) {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const { createdSessionId, setActive } = await start();
-      if (!createdSessionId || !setActive) return;
-      await setActive({ session: createdSessionId });
-      await finish();
-    } catch (err) {
-      if (!isCancellation(err)) setError(clerkMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   /**
    * Out, without a cost.
@@ -95,7 +58,7 @@ export default function AuthChooserScreen() {
 
   return (
     <View style={styles.flex}>
-      <SceneWindow ratio={chooserRatio(height, STACK_PT)} />
+      <SceneWindow ratio={ratioToFit(height, STACK_PT)} />
       <View style={styles.page}>
         <View style={[styles.content, { paddingBottom: insets.bottom + Spacing.regular }]}>
           {/* The mark sits in its own block above the actions rather than in a row with them: it
@@ -116,37 +79,14 @@ export default function AuthChooserScreen() {
           </View>
 
           <View style={styles.actions}>
-            {Platform.OS === 'ios' ? (
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                buttonStyle={
-                  APPEARANCE === 'light'
-                    ? AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-                    : AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                }
-                cornerRadius={26}
-                style={styles.apple}
-                onPress={() => social(() => startAppleAuthenticationFlow())}
-              />
-            ) : null}
-            <PillButton
-              block
-              title="Continue with Google"
-              onPress={() => social(() => startGoogleAuthenticationFlow())}
-            />
-            {error ? <Notice>{error}</Notice> : null}
             <PrimaryButton
               title="Sign up"
-              onPress={() => {
-                if (!busy) router.push('/signin/form?mode=signup');
-              }}
+              onPress={() => router.push('/signin/form?mode=signup')}
             />
             <PillButton
               block
               title="Log in"
-              onPress={() => {
-                if (!busy) router.push('/signin/form?mode=login');
-              }}
+              onPress={() => router.push('/signin/form?mode=login')}
             />
             {/* The quietest of the three, and still unmistakably a control — jade ink and a 44pt
                 target. The version this descends from was muted `detail` body text, which is the
@@ -184,12 +124,11 @@ const styles = StyleSheet.create({
   },
   identity: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   // 96 is the size it wants; `flexShrink` is what it does when it cannot have it. On a short
-  // screen `chooserRatio` bottoms out at the collapsed sliver, and without this the mark would
+  // screen `ratioToFit` bottoms out at the collapsed sliver, and without this the mark would
   // hold its height and push the actions off the bottom instead of giving way.
   // `contentFit="contain"` keeps the glyph circular as the box compresses.
   logo: { width: 96, height: 96, flexShrink: 1 },
   // `Spacing.rows` between them, not `read`: three controls at three weights are one group, and
   // 16pt lands on top of the slack two 44pt targets already carry.
   actions: { gap: Spacing.rows },
-  apple: { height: 52, width: '100%' },
 });
