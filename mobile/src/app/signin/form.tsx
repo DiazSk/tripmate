@@ -10,7 +10,7 @@ import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { authMode } from '@/lib/authMode';
-import { clerkMessage } from '@/lib/clerkError';
+import { clerkMessage, unsupportedStepMessage } from '@/lib/clerkError';
 import { authGap, gapSentence } from '@/lib/formGap';
 import { useFinishAuth } from '@/lib/useFinishAuth';
 
@@ -91,7 +91,7 @@ export default function AuthFormScreen() {
         if (await step(() => signIn.finalize({ navigate: () => {} }))) await finish();
       } else if (signIn.status === 'needs_client_trust') {
         if (await step(() => signIn.mfa.sendEmailCode())) toCode('client-trust');
-      } else setError("This account needs a sign-in step TripMate doesn't support yet.");
+      } else setError(unsupportedStepMessage(signIn));
     }
     setBusy(false);
   }

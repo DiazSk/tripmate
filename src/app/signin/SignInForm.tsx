@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSignIn, useSignUp } from "@clerk/nextjs";
 
 import ErrorNote from "@/components/ErrorNote";
-import { clerkMessage } from "@/lib/clerkError";
+import { clerkMessage, unsupportedStepMessage } from "@/lib/clerkError";
 import { safeNextPath } from "@/lib/safeNext";
 
 const FIELD =
@@ -90,7 +90,7 @@ export default function SignInForm() {
       if (signIn.status === "complete") await done("in");
       else if (signIn.status === "needs_client_trust") {
         if (await step(() => signIn.mfa.sendEmailCode())) setPurpose("client-trust");
-      } else setError("This account needs a sign-in step TripMate doesn't support yet.");
+      } else setError(unsupportedStepMessage(signIn));
     }
     setBusy(false);
   }
@@ -145,7 +145,7 @@ export default function SignInForm() {
     // rather than re-enabling the button on nothing, as `submitPassword` does.
     if (ok) {
       if (finished(kind)) await done(kind);
-      else setError("This account needs a sign-in step TripMate doesn't support yet.");
+      else setError(unsupportedStepMessage(kind === "up" ? signUp : signIn));
     }
     setBusy(false);
   }

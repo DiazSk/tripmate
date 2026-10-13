@@ -9,7 +9,7 @@ import { BAND_RATIO_FORM, SceneWindow } from '@/components/scene-band';
 import { Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
-import { clerkMessage } from '@/lib/clerkError';
+import { clerkMessage, unsupportedStepMessage } from '@/lib/clerkError';
 import { useFinishAuth } from '@/lib/useFinishAuth';
 
 type Purpose = 'verify-signup' | 'sign-in-code' | 'client-trust' | 'reset';
@@ -89,7 +89,7 @@ export default function AuthCodeScreen() {
     if (ok) {
       if (resource.status === 'complete') {
         if (await step(() => resource.finalize({ navigate: () => {} }))) await finish();
-      } else setError("This account needs a sign-in step TripMate doesn't support yet.");
+      } else setError(unsupportedStepMessage(resource));
     }
     setBusy(false);
   }
