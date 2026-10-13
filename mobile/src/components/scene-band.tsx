@@ -62,6 +62,10 @@ export const DWELL_MS = 7000;
  *
  * On a shorter screen the floor rises relative to the window — a 667pt device needs 308 and gets
  * 280 here — so `signin/index.tsx` lets the mark shrink rather than push the actions off.
+ *
+ * It is now the **ceiling** and the backdrop's height. The chooser's own window is
+ * `chooserRatio()` in `lib/bandRatio.ts`, because Apple and Google raised its stack to ~470pt; on
+ * an 874pt window that is ~0.46.
  */
 export const BAND_RATIO = 0.58;
 /**
