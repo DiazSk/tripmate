@@ -394,7 +394,13 @@ function SignOutButton() {
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        await signOut();
+        try {
+          await signOut();
+        } catch {
+          // A failed sign-out leaves the traveller signed in; put the button back so they can retry.
+          setBusy(false);
+          return;
+        }
         // `refresh()` rather than a reload: every owner-scoped server component on this route
         // and the next one has to re-read, and leaving the router cache holding the signed-in
         // render would show this traveller their trips after they asked to be signed out.

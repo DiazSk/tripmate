@@ -44,7 +44,13 @@ export default function SignInForm() {
   const [code, setCode] = useState("");
   const [purpose, setPurpose] = useState<CodePurpose | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // `/signin/finish` sends a traveller back here with `?error=account` when Clerk signed them in
+  // but this server saw no account for the session.
+  const [error, setError] = useState<string | null>(
+    params.get("error") === "account"
+      ? "Signed in with Clerk, but this server couldn't find your account. Try again."
+      : null,
+  );
 
   const creating = mode === "up";
 

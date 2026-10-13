@@ -11,8 +11,10 @@ import { safeNextPath } from "@/lib/safeNext";
  * Every web sign-in ends here: claim the device's anonymous work, confirm it, route on.
  *
  * One place for five ways in — email, code, reset, Apple, Google — so the claim cannot be
- * forgotten on any of them. A failed claim is swallowed (counted as nothing moved): the traveller
- * has an account either way, which is the contract BetterAuth's hook kept.
+ * forgotten on any of them. A failed claim is logged and counted as nothing moved: the traveller
+ * has an account either way. The exception is a 401, which means Clerk signed them in but this
+ * server sees no account for the session (keys missing or mismatched); "Signed in" would be a lie,
+ * so that one goes back to `/signin` with the reason.
  */
 export default function FinishSignIn() {
   const router = useRouter();
@@ -29,8 +31,15 @@ export default function FinishSignIn() {
       try {
         const res = await fetch("/api/account/claim", { method: "POST" });
         if (res.ok) ({ claimed, needsOnboarding } = (await res.json()) as { claimed: number; needsOnboarding: boolean });
-      } catch {
-        // See above.
+        else {
+          console.warn(`account claim failed: ${res.status}`);
+          if (res.status === 401) {
+            router.replace("/signin?error=account");
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("account claim failed", err);
       }
       if (needsOnboarding) sessionStorage.setItem(ACCOUNT_CREATED_KEY, String(claimed));
       else toast.show("Signed in", "Your trips and travel profile are here.");

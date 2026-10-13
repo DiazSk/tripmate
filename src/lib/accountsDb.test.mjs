@@ -41,7 +41,7 @@ test("a new Clerk user gets one UUID owner id, and keeps it", () => {
   assert.equal(getOrCreateAccount("user_acc_1").owner_id, a.owner_id);
 });
 
-test("two first calls for the same user never mint two owners", async () => {
+test("a repeat call for the same user returns the same owner and inserts no second row", async () => {
   const [a, b] = await Promise.all([
     Promise.resolve().then(() => getOrCreateAccount("user_acc_race")),
     Promise.resolve().then(() => getOrCreateAccount("user_acc_race")),
@@ -120,4 +120,24 @@ test("deleteAccountData clears the generation trail too: runs, traces, artifacts
   ]) {
     assert.equal(rawDb.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${col} = ?`).get(val).n, 0, table);
   }
+});
+
+// The back-fill of `generations.trip_id` can be missed; `trips.run_id` still names the run.
+test("deleteAccountData removes a generation that was never linked to its trip", () => {
+  const owner = getOrCreateAccount("user_acc_unlinked").owner_id;
+  const runId = randomUUID();
+  insertTrip({
+    id: randomUUID(),
+    destination: "Kyoto",
+    start_date: "2026-04-01",
+    end_date: "2026-04-04",
+    budget: 1200,
+    itinerary_json: JSON.stringify({ days: [] }),
+    owner_id: owner,
+    run_id: runId,
+  });
+  insertGeneration({ run_id: runId, trip_id: null, session_id: null, kind: "generate", destination: "Kyoto", context_json: "{}", prompt: "p", response: "r", model: "m", mode: "cli" });
+
+  assert.equal(deleteAccountData("user_acc_unlinked"), true);
+  assert.equal(rawDb.prepare(`SELECT COUNT(*) AS n FROM generations WHERE run_id = ?`).get(runId).n, 0);
 });

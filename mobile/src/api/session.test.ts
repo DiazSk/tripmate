@@ -103,7 +103,7 @@ test("no Authorization header before Clerk is registered", async () => {
 });
 
 test("Clerk's token rides on every request, beside the owner", async () => {
-  const { fetchWithSession, registerClerk } = freshSession({ owner: "11111111-2222-4333-8444-555555555555" });
+  const { fetchWithSession, registerClerk } = freshSession({ owner: "11111111-2222-4333-8444-555555555555", flag: "1" });
   registerClerk({ getToken: async () => "jwt_1", signOut: async () => {} });
   await fetchWithSession("/api/trips");
   expect(headersOf(0).Authorization).toBe("Bearer jwt_1");
@@ -111,7 +111,7 @@ test("Clerk's token rides on every request, beside the owner", async () => {
 });
 
 test("the token is asked for on every request, never cached here", async () => {
-  const { fetchWithSession, registerClerk } = freshSession();
+  const { fetchWithSession, registerClerk } = freshSession({ flag: "1" });
   const getToken = jest.fn().mockResolvedValueOnce("jwt_a").mockResolvedValueOnce("jwt_b");
   registerClerk({ getToken, signOut: async () => {} });
   await fetchWithSession("/api/trips");
@@ -122,10 +122,37 @@ test("the token is asked for on every request, never cached here", async () => {
 // Clerk's getToken throws ClerkOfflineError with no connection. The request must still go out —
 // and fail on its own terms — rather than throw before fetch.
 test("a getToken that throws sends the request anonymously", async () => {
-  const { fetchWithSession, registerClerk } = freshSession();
+  const { fetchWithSession, registerClerk } = freshSession({ flag: "1" });
   registerClerk({ getToken: async () => { throw new Error("offline"); }, signOut: async () => {} });
   await fetchWithSession("/api/trips");
   expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  expect(headersOf(0).Authorization).toBeUndefined();
+});
+
+// clerk-js failing to load leaves getToken pending forever, and every request awaits it. The
+// request must still go out, anonymously, once the wait runs out.
+test("a getToken that never settles does not hold the request back", async () => {
+  jest.useFakeTimers();
+  try {
+    const { fetchWithSession, registerClerk } = freshSession({ flag: "1" });
+    registerClerk({ getToken: () => new Promise<string | null>(() => {}), signOut: async () => {} });
+    const sent = fetchWithSession("/api/trips");
+    await jest.advanceTimersByTimeAsync(3000);
+    await sent;
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(headersOf(0).Authorization).toBeUndefined();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+// Signed out there is nothing to send, so Clerk is not asked at all — a stuck load cannot matter.
+test("no wait on Clerk when the signed-in flag is off", async () => {
+  const { fetchWithSession, registerClerk } = freshSession();
+  const getToken = jest.fn(() => new Promise<string | null>(() => {}));
+  registerClerk({ getToken, signOut: async () => {} });
+  await fetchWithSession("/api/trips");
+  expect(getToken).not.toHaveBeenCalled();
   expect(headersOf(0).Authorization).toBeUndefined();
 });
 

@@ -27,15 +27,12 @@ import type { TripStatus } from "./types";
 const url = process.env.TURSO_DATABASE_URL?.trim();
 
 /**
- * The same connection, unwrapped, for Better Auth.
+ * The same connection, unwrapped, for tests that inspect the DB directly.
  *
  * Exported rather than opened a second time. Two handles on one SQLite file is how this app
  * reacquaints itself with SQLITE_BUSY — see the `timeout` note below, where nine parallel build
- * workers already made that point. Better Auth drives it through Kysely's `SqliteDialect`, which
- * wants exactly the better-sqlite3 surface `libsql` provides, so it can share this one.
- *
- * `wrap()` is deliberately not applied: its `_metadata` strip exists for rows this file hands to
- * `NextResponse.json`, and Kysely reads its own results.
+ * workers already made that point. `wrap()` is deliberately not applied: its `_metadata` strip
+ * exists for rows this file hands to `NextResponse.json`, and a test reads its own results.
  */
 export const rawDb =
   url
@@ -1457,16 +1454,20 @@ export interface AccountRow {
 }
 
 /**
- * The account for a Clerk user, created on first sight. `ON CONFLICT DO NOTHING` then a read is
- * what keeps two first requests from minting two owner ids: the loser's insert is a no-op and both
- * read the winner's row.
+ * The account for a Clerk user, created on first sight. Read first: this runs on every signed-in
+ * request, and against Turso an unconditional insert is a write round trip each time. Only a miss
+ * inserts, and `ON CONFLICT DO NOTHING` then a re-read is what keeps two first requests from
+ * minting two owner ids: the loser's insert is a no-op and both read the winner's row.
  */
 export function getOrCreateAccount(clerkUserId: string): AccountRow {
+  const read = () => db.prepare(`SELECT * FROM accounts WHERE clerk_user_id = ?`).get(clerkUserId) as AccountRow | undefined;
+  const existing = read();
+  if (existing) return existing;
   db.prepare(
     `INSERT INTO accounts (clerk_user_id, owner_id, created_at) VALUES (?, ?, ?)
      ON CONFLICT(clerk_user_id) DO NOTHING`
   ).run(clerkUserId, newOwnerId(), new Date().toISOString());
-  const row = db.prepare(`SELECT * FROM accounts WHERE clerk_user_id = ?`).get(clerkUserId) as AccountRow | undefined;
+  const row = read();
   if (!row) throw new Error(`accounts row missing for ${clerkUserId} right after insert`);
   return row;
 }
@@ -1508,6 +1509,10 @@ export function markOnboarded(ownerId: string, skipped: boolean): void {
  * Everything a deleted Clerk user owned, gone in one transaction. Fired by the `user.deleted`
  * webhook. The trip-keyed tables are listed by hand because none of them has a foreign key to
  * `trips` — there is no cascade to rely on. Returns false when the user was never seen here.
+ *
+ * Two kinds of trace cannot be attributed to an owner and therefore survive: a generate run
+ * abandoned before any trip references it, and the import-plan traces (`runClaude` called without
+ * a `runId`). Neither row carries anything that names the account.
  */
 export function deleteAccountData(clerkUserId: string): boolean {
   const account = db.prepare(`SELECT owner_id FROM accounts WHERE clerk_user_id = ?`).get(clerkUserId) as { owner_id: string } | undefined;
@@ -1520,6 +1525,9 @@ export function deleteAccountData(clerkUserId: string): boolean {
     db.prepare(`DELETE FROM trip_chat_turns WHERE trip_id IN (${tripsOf})`).run(owner);
     db.prepare(`DELETE FROM trip_stories WHERE trip_id IN (${tripsOf})`).run(owner);
     db.prepare(`DELETE FROM generations WHERE trip_id IN (${tripsOf})`).run(owner);
+    // `trip_id` is back-filled when the draft is created, so a generation whose trip never got that
+    // link is still reachable through the trip's `run_id`.
+    db.prepare(`DELETE FROM generations WHERE run_id IN (SELECT run_id FROM trips WHERE owner_id = ? AND run_id IS NOT NULL)`).run(owner);
     db.prepare(`DELETE FROM trip_artifacts WHERE run_id IN (SELECT run_id FROM trips WHERE owner_id = ? AND run_id IS NOT NULL)`).run(owner);
     db.prepare(`DELETE FROM llm_sessions WHERE id IN (SELECT chat_session_id FROM trips WHERE owner_id = ? AND chat_session_id IS NOT NULL)`).run(owner);
     // A run is linked to its trip two ways: `llm_runs.trip_id`, and `trips.run_id` for the primary

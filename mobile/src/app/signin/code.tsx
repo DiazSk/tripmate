@@ -28,7 +28,7 @@ const COPY: Record<Purpose, { title: string; blurb: string }> = {
  */
 export default function AuthCodeScreen() {
   const { purpose: raw, email } = useLocalSearchParams<{ purpose?: string; email?: string }>();
-  const purpose: Purpose = raw && raw in COPY ? (raw as Purpose) : 'sign-in-code';
+  const purpose: Purpose = raw && Object.hasOwn(COPY, raw) ? (raw as Purpose) : 'sign-in-code';
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
   const finish = useFinishAuth();

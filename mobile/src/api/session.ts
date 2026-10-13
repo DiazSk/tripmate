@@ -50,15 +50,33 @@ export async function clerkSignOut(): Promise<void> {
   await clerk?.signOut();
 }
 
+/** How long a request waits on Clerk before going out anonymously. */
+const TOKEN_WAIT_MS = 3000;
+
 /**
  * Clerk's 60-second token, asked for per request — Clerk caches and refreshes it. A throw
  * (`ClerkOfflineError` with no connection) sends the request anonymously rather than not at all.
+ *
+ * **Bounded, and skipped when nobody is signed in.** `getToken()` first awaits Clerk's load, which
+ * settles only on `ready` or `degraded`; when clerk-js fails to load (an outage, a bad key, a blocked
+ * network) the status is `error` and that promise never settles. Every request awaits this one, so
+ * an unbounded wait would freeze the whole app, signed-out planning included. The flag is the
+ * cheap answer to "is there anything to send", and the race covers the signed-in case.
  */
 async function sessionToken(): Promise<string | null> {
+  if (!clerk || !(await readSignedInFlag())) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return (await clerk?.getToken()) ?? null;
+    return await Promise.race([
+      clerk.getToken(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), TOKEN_WAIT_MS);
+      }),
+    ]);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

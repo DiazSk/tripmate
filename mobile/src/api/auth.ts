@@ -74,6 +74,10 @@ export async function signOut(): Promise<void> {
  */
 export async function claimAccount(): Promise<{ claimed: number; needsOnboarding: boolean }> {
   try {
+    // The request carries Clerk's token only while the flag says someone is signed in, and
+    // `ClerkBridge` writes it in an effect that has not necessarily run yet. Raise it here so the
+    // claim is not sent anonymously.
+    await writeSignedInFlag(true);
     const response = await fetchWithSession('/api/account/claim', { method: 'POST' });
     if (!response.ok) return { claimed: 0, needsOnboarding: false };
     return (await response.json()) as { claimed: number; needsOnboarding: boolean };

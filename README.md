@@ -66,8 +66,13 @@ the Clerk user to the anonymous-style owner id that owns the trips (`accounts` i
 The mobile app reads `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and the `EXPO_PUBLIC_CLERK_GOOGLE_*`
 client ids (web, iOS, Android, plus the iOS URL scheme) from `mobile/.env`.
 
-Signed-out use needs no keys and works offline. Signing in locally needs Clerk **development** keys
-(the Development instance in the Clerk dashboard) and a network. In a development instance a
+Without keys, everything works signed out and offline. Signing in locally needs Clerk **development**
+keys (the Development instance in the Clerk dashboard) and a network. **Set both Clerk keys or
+neither:** with the publishable key alone the sign-in UI mounts while the server stays anonymous,
+and the claim after sign-in returns 401. With dev keys set, Clerk's middleware sends a browser's
+first document request through a dev-browser handshake with Clerk's servers, so pages cannot load
+offline and `verify-hero` and `browser-matrix` need network; curl and the perf scripts are
+unaffected. In a development instance a
 `+clerk_test` email (for example `you+clerk_test@example.com`) takes the code `424242`, so no real
 inbox is involved.
 
