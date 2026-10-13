@@ -16,10 +16,17 @@ COPY package.json package-lock.json ./
 COPY scripts ./scripts
 RUN npm ci
 COPY . .
-# NEXT_PUBLIC_* is inlined at build, so Clerk's publishable key must be a build arg. The secret
-# key and webhook secret are runtime-only and stay out of the image.
+# NEXT_PUBLIC_* is inlined into the client bundle at build time, and .dockerignore keeps .env*
+# out of the image — so these must arrive as --build-arg or the deployed app links back to
+# localhost:3000 (share links, metadata), the Satellite engine has no Cesium token, and Clerk's
+# browser side never mounts (accounts off). Clerk's secret key and webhook secret are runtime-only
+# and stay out of the image.
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_CESIUM_ION_TOKEN
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+    NEXT_PUBLIC_CESIUM_ION_TOKEN=$NEXT_PUBLIC_CESIUM_ION_TOKEN \
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3000

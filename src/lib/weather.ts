@@ -6,7 +6,9 @@ export interface DayWeather {
   humidity: number | null;
   weatherCode: number | null;
   /** Local ISO datetime (e.g. "2026-08-14T05:16"), astronomical so available on both the
-   *  forecast and historical-archive endpoints regardless of forecast horizon. */
+   *  forecast and historical-archive endpoints regardless of forecast horizon. Written by the
+   *  clock in force at the destination *that day* (see `localWallClock`); on the archive
+   *  fallback that is the trip's own date, a year after the row's `date`. */
   sunrise: string | null;
   sunset: string | null;
   historical: boolean;
@@ -173,6 +175,9 @@ async function fetchWeatherBundle(
   }
 
   // Trip too far out to forecast: use the same calendar dates one year back as a "typical weather" stand-in.
+  // UTC accessors, because `new Date("2026-11-02")` is UTC midnight: the local ones moved it a day
+  // on any machine whose own clocks change between the two years' dates (a Pacific dev box turned
+  // 2 Nov 2026 into 1 Nov 2025, and the trip lost its last day of weather).
   const lastYear = (d: string) => {
     const date = new Date(d);
     date.setUTCFullYear(date.getUTCFullYear() - 1);
@@ -215,6 +220,9 @@ async function fetchDaily(
   const timezone: string | null = data.timezone ?? null;
   const daily = data.daily;
   if (!daily?.time) return { days: [], timezone, historical };
+  // The archive branch asked for these dates a year early (`fetchWeatherBundle`), so its sun
+  // times are moved back onto the trip's own year before being read off the clock there.
+  const wallClock = (v: string | null) => localWallClock(v, data.utc_offset_seconds, timezone, historical ? 1 : 0);
 
   // Best-effort only: relative humidity isn't a supported "daily" aggregate on
   // Open-Meteo, so it's fetched separately (hourly, averaged per day) and
@@ -227,8 +235,8 @@ async function fetchDaily(
     date,
     tempMaxC: daily.temperature_2m_max[i],
     tempMinC: daily.temperature_2m_min[i],
-    sunrise: daily.sunrise?.[i] ?? null,
-    sunset: daily.sunset?.[i] ?? null,
+    sunrise: wallClock(daily.sunrise?.[i] ?? null),
+    sunset: wallClock(daily.sunset?.[i] ?? null),
     precipitationProbability: historical
       ? null
       : daily.precipitation_probability_max?.[i] ?? null,
@@ -237,6 +245,37 @@ async function fetchDaily(
     historical,
   }));
   return { days, timezone, historical };
+}
+
+/**
+ * Open-Meteo writes every time in a response at ONE UTC offset — `utc_offset_seconds`, the zone's
+ * offset at the start of the requested range — not at each day's own. So a range that crosses a
+ * clock change comes back an hour out on every day after it: Lisbon's sunrise on Sunday 25 October
+ * 2026 arrives as "07:56" when the clocks have gone back and it is 06:56, and a plan that trusts
+ * it sends somebody to a sunset viewpoint after the sun has set. Undoing the response's offset
+ * gives the instant; writing that instant in the zone itself gives each day the offset it has.
+ *
+ * `yearsAhead` first moves the instant onto a later year, for the archive branch's last-year
+ * stand-in. The sun rises within a minute of the same instant a year on, but the clocks change on
+ * different dates in different years (25 October in 2026, 31 October in 2027), so the offset has
+ * to be the trip year's, not the stand-in's.
+ *
+ * Anything it can't correct comes back as given: no zone, no offset, or a zone the runtime
+ * doesn't know. The hourly humidity below has the same one-offset clock, and is left alone: after
+ * a change its day buckets slide by an hour, which an average of 24 readings doesn't notice.
+ */
+function localWallClock(value: string | null, utcOffsetSeconds: unknown, timeZone: string | null, yearsAhead = 0): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value ?? "");
+  if (!m || !timeZone || typeof utcOffsetSeconds !== "number") return value;
+  const instant = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - utcOffsetSeconds * 1000);
+  instant.setUTCFullYear(instant.getUTCFullYear() + yearsAhead);
+  try {
+    const fields = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" } as const;
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone, ...fields }).formatToParts(instant).map((x) => [x.type, x.value]));
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+  } catch {
+    return value;
+  }
 }
 
 async function fetchHourlyHumidity(
