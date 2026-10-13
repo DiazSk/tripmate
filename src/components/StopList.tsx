@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Stop, StopCategory } from "@/lib/types";
 import { groupStopsByTimeOfDay, type TimeOfDay } from "@/lib/timeOfDay";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
+import { formatMoney } from "@/lib/format";
 import Typewriter from "./Typewriter";
 import { EntryIcon, FoodIcon, PinIcon, TransitIcon } from "./icons";
 import { devLabel } from "@/lib/devInspector";
@@ -26,8 +27,8 @@ function StopAvatar({ name, category }: { name: string; category: StopCategory }
   const Icon = CATEGORY_ICON[category ?? "other"];
 
   return (
-    <span className="relative block h-10 w-10 shrink-0">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-tag-neutral-bg text-accent">
+    <span className="editorial-stop-photo relative block shrink-0 overflow-hidden">
+      <span className="flex h-full w-full items-center justify-center bg-tag-neutral-bg text-muted">
         <Icon className="h-4 w-4" />
       </span>
       {photo && !failed && (
@@ -36,7 +37,8 @@ function StopAvatar({ name, category }: { name: string; category: StopCategory }
           src={photo}
           alt=""
           onError={() => setFailed(true)}
-          className="value-in absolute inset-0 h-10 w-10 rounded-full object-cover"
+          loading="lazy"
+          className="value-in absolute inset-0 h-full w-full object-cover"
         />
       )}
     </span>
@@ -46,7 +48,6 @@ function StopAvatar({ name, category }: { name: string; category: StopCategory }
 function StopRow({
   stop,
   index,
-  isLast,
   onSelect,
   revealAnimation,
   isHighlighted,
@@ -54,7 +55,6 @@ function StopRow({
 }: {
   stop: Stop;
   index: number;
-  isLast: boolean;
   onSelect: (stop: Stop) => void;
   /** True only for rows mounted during the post-generation stagger: swaps the normal
    *  scroll-triggered entrance for a plain slide-down-into-place + typewriter on the name,
@@ -78,16 +78,6 @@ function StopRow({
         transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] as const, delay: index * 0.08 },
       };
 
-  const connector = !isLast && (
-    /* Spans avatar-bottom to next-avatar-top, so it has to stop short of this row's own
-       height rather than exceed it: it starts at 2.75rem (top-11, a hair under the 2.5rem
-       h-10 avatar) and the next avatar begins at 100% + 1rem (the parent's space-y-4), so
-       the height is 100% + 1rem - 2.75rem. The old +0.5rem overshot by 2.25rem and drew
-       straight through the following stop's avatar and name. Update this if the avatar
-       size or the list gap changes. */
-    <div className="absolute top-11 left-5 h-[calc(100%-1.75rem)] w-px bg-card-border" />
-  );
-
   return (
     <motion.div
       {...motionProps}
@@ -97,11 +87,10 @@ function StopRow({
       data-stop-index={index}
       onPointerEnter={() => onHover?.(true)}
       onPointerLeave={() => onHover?.(false)}
-      className={`relative flex gap-3 rounded-xl transition-colors ${
+      className={`editorial-stop-row relative flex transition-colors ${
         isHighlighted ? "bg-white/10" : "hover:bg-white/5"
       }`}
     >
-      {connector}
       <button
         type="button"
         onClick={() => onSelect(stop)}
@@ -110,16 +99,17 @@ function StopRow({
         // coupling only works for people using a mouse.
         onFocus={() => onHover?.(true)}
         onBlur={() => onHover?.(false)}
-        className="relative z-10 flex flex-1 gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="editorial-stop-button relative z-10 grid flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
-        <StopAvatar name={stop.name} category={stop.category} />
+        <span className="editorial-stop-time font-mono">{stop.time || "—"}</span>
+        <StopAvatar key={stop.name} name={stop.name} category={stop.category} />
         <span className="min-w-0 flex-1">
           <div className="font-medium text-foreground">
             {revealAnimation ? <Typewriter text={stop.name} /> : stop.name}
           </div>
           {(stop.time || stop.durationLabel) && (
             <div className="text-sm text-muted">
-              {[stop.time, stop.durationLabel].filter(Boolean).join(" · ")}
+              {stop.durationLabel}
             </div>
           )}
           {/* Two lines, replacing the old tag chips: why this stop was chosen for this
@@ -128,6 +118,7 @@ function StopRow({
           {stop.why && <div className="mt-1 text-sm text-foreground/80">{stop.why}</div>}
           {stop.note && <div className="mt-0.5 text-sm text-muted">{stop.note}</div>}
         </span>
+        <span className="editorial-stop-cost font-mono">{stop.cost === 0 ? "Free" : formatMoney(stop.cost)}</span>
       </button>
     </motion.div>
   );
@@ -252,16 +243,11 @@ export default function StopList({
       {groups.map((group, groupIndex) => (
         <div key={`${group.label}-${groupIndex}`} className="space-y-4">
           {showHeadings && group.label && <TimeOfDayHeading label={group.label} />}
-          {group.stops.map(({ stop, index }, i) => (
+          {group.stops.map(({ stop, index }) => (
             <StopRow
               key={index}
               stop={stop}
               index={index}
-              // Last *in its group*, not in the day. The connector is drawn from this row's avatar
-              // to the next one's and is sized off the list's `space-y-4`; letting it run past the
-              // final row of a group would draw a line down through the next heading, and the
-              // thread breaking at the boundary is what makes the grouping read as grouping.
-              isLast={i === group.stops.length - 1}
               onSelect={onSelect}
               revealAnimation={revealAnimation}
               isHighlighted={highlightedIndex === index}

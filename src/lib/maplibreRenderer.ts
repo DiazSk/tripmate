@@ -38,6 +38,7 @@ import {
   SearchPin,
   STOP_MIN_RANGE_M,
   visibleMapWidthPx,
+  panelBiasDirection,
   ZoomStepOptions,
 } from "@/lib/mapRenderer";
 
@@ -1087,8 +1088,8 @@ export class MapLibreRenderer implements MapRenderer {
     return {
       top: 120,
       bottom: 80,
-      left: 80,
-      right: Math.max(80, panelInset),
+      left: panelBiasDirection() === -1 ? Math.max(80, panelInset) : 80,
+      right: panelBiasDirection() === -1 ? 80 : Math.max(80, panelInset),
     };
   }
 
@@ -1131,8 +1132,8 @@ export class MapLibreRenderer implements MapRenderer {
     const centre = offsetMetres(
       centreLat,
       centreLng,
-      biasM * Math.cos(heading),
-      -biasM * Math.sin(heading)
+      biasM * panelBiasDirection() * Math.cos(heading),
+      -biasM * panelBiasDirection() * Math.sin(heading)
     );
 
     this.map.flyTo({

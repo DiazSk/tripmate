@@ -324,11 +324,22 @@ export function drawnDaysOf(days: RouteStop[][], focusDay: number | null): Route
  */
 export function panelLeftEdgePx(panelVisible: boolean, viewWidthPx: number): number {
   if (!panelVisible || typeof window === "undefined" || window.innerWidth < 640) return viewWidthPx;
-  const panel = document.querySelector(".docked-panel");
+  const panel = document.querySelector<HTMLElement>(".docked-panel");
   // A *collapsed* panel is a capsule in the corner, not a wall — biasing away from it would shove
   // the subject left of an otherwise empty screen. `DockedPanel` marks that state itself.
   if (!panel || panel.classList.contains("docked-panel-collapsed")) return viewWidthPx;
-  return panel.getBoundingClientRect().left;
+  const box = panel.getBoundingClientRect();
+  if (panel.dataset.journal === "true") {
+    return window.innerWidth < 1024 ? viewWidthPx : Math.max(1, viewWidthPx - box.right);
+  }
+  return box.left;
+}
+
+/** A left-hand journal needs the opposite aim offset from a right-hand panel. */
+export function panelBiasDirection(): 1 | -1 {
+  if (typeof window === "undefined" || window.innerWidth < 1024) return 1;
+  const panel = document.querySelector<HTMLElement>(".docked-panel");
+  return panel?.dataset.journal === "true" && !panel.classList.contains("docked-panel-collapsed") ? -1 : 1;
 }
 
 /**

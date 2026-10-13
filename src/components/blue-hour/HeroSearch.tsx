@@ -132,7 +132,7 @@ export default function HeroSearch({ onPlan }: { onPlan: (prefill?: PlanPrefill)
             which is the wrong answer for the primary action on the page, and it also greyed out the
             one jade mark in the first viewport before the visitor had done anything. */}
         <button type="submit" className="hero-search-go" aria-disabled={!canSubmit}>
-          Plan it
+          Plan my trip
         </button>
       </div>
     </form>

@@ -57,7 +57,7 @@ export default function HeroFrames({ onLive }: { onLive: () => void }) {
     // Asks the DOM where it is rather than having four refs plumbed down from `Hero` — the same
     // instinct as `ItineraryCard` walking up for its scroller.
     const track = canvas.closest<HTMLElement>(".hero-track");
-    const stage = canvas.closest<HTMLElement>(".hero-stage");
+    const stage = canvas.closest<HTMLElement>(".editorial-hero-media");
     if (!track || !stage) return;
 
     // `alpha: false` lets the compositor skip blending a full-viewport surface, which is the
@@ -168,7 +168,7 @@ export default function HeroFrames({ onLive }: { onLive: () => void }) {
       // A viewport-height sticky stage inside a track of height H travels exactly H - stageH. So
       // p is 0 at the instant the hero pins and 1 at the instant it unpins, and the sequence
       // occupies the pinned run exactly rather than approximately.
-      travel = Math.max(1, track.offsetHeight - stage.offsetHeight);
+      travel = Math.max(1, track.offsetHeight - (canvas.closest<HTMLElement>(".hero-stage")?.offsetHeight ?? stage.offsetHeight));
       onScroll();
     };
 

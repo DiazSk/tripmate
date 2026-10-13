@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { Sparkles } from "lucide-react";
 import { DayPlan, Itinerary, Stop, TripSummary } from "@/lib/types";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
@@ -10,7 +9,7 @@ import { useMapCamera } from "@/lib/mapCamera";
 import { useStopTour } from "@/lib/useStopTour";
 import { daySpendByCategory } from "@/lib/itinerary";
 import { evaluateItinerary, Guardrail } from "@/lib/guardrails";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatDateRange } from "@/lib/format";
 import BudgetBar from "./BudgetBar";
 import SplitEditor from "./SplitEditor";
 import DayHeader, { DayEditUpdates } from "./DayHeader";
@@ -20,16 +19,6 @@ import { devLabel } from "@/lib/devInspector";
 
 /** Ms between each stop's reveal during the post-generation stagger. */
 const REVEAL_STEP_MS = 400;
-/**
- * The header photo's frame, in rem, mirrored from `.itinerary-hero` in globals.css.
- *
- * Duplicated deliberately, and only these two numbers: the collapse has to be measured in the same
- * units the scroller reports, and a custom property reads back unresolved (`"18rem"`, not `"288px"`)
- * unless it is registered with `@property`. Parsing them out of the computed style is the same
- * duplication with an extra step and a silent failure mode if the unit ever changes.
- */
-const HERO_MAX_REM = { base: 11, sm: 14 };
-const HERO_MIN_REM = 4.5;
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -380,83 +369,6 @@ export default function ItineraryCard({
     activeDayRef.current = dayIndex;
   }, [dayIndex]);
 
-  /**
-   * The collapsing header: the photo compresses as the plan scrolls under it and springs back on
-   * the way up, staying pinned the whole time.
-   *
-   * Written as one CSS custom property per frame rather than React state, and that is the point —
-   * a `useState` here would re-render this card, its day list and every consumer of the map camera
-   * context on every scroll frame. `--hero-p` (0 unscrolled, 1 fully compressed) drives the
-   * height and both titles' opacity from `.itinerary-hero` in globals.css, so the whole animation
-   * is one property write against the compositor.
-   *
-   * The scroller is found rather than passed: this card sits inside `DockedPanel`'s body on the
-   * result view and the trip page, but it is also rendered on the print page, where there is no
-   * scroller at all and the header simply stays at full height. Walking up to the nearest
-   * `overflow-y: auto` ancestor keeps the card from having to know which of those it is in.
-   */
-  useEffect(() => {
-    const hero = heroRef.current;
-    if (!hero || !headerPhoto) return;
-    let scroller: HTMLElement | null = null;
-    for (let el = hero.parentElement; el; el = el.parentElement) {
-      const overflowY = getComputedStyle(el).overflowY;
-      if (overflowY === "auto" || overflowY === "scroll") {
-        scroller = el;
-        break;
-      }
-    }
-    if (!scroller) return;
-
-    let frame = 0;
-    /**
-     * One pixel of scroll gives up one pixel of header, which is what keeps the two in step.
-     *
-     * A shorter range was tried and is wrong in a way that is invisible until you scroll: the
-     * header is in flow, so shrinking it also lifts everything below it. Collapse faster than the
-     * scroll and the plan rushes up to meet a header that is still eating itself.
-     */
-    const collapseRange = () => {
-      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      const max = window.innerWidth >= 640 ? HERO_MAX_REM.sm : HERO_MAX_REM.base;
-      return (max - HERO_MIN_REM) * rem;
-    };
-    let range = collapseRange();
-    // 0.45 is where `.itinerary-hero-full`'s opacity clamp reaches zero. Tracked as a boolean and
-    // written only when it flips, so the common case stays the single property write this effect
-    // was built to be — see the `[data-hero-collapsed]` rule in globals.css for what it fixes.
-    let hidden: boolean | null = null;
-    const apply = () => {
-      frame = 0;
-      const progress = Math.min(1, Math.max(0, scroller.scrollTop / range));
-      hero.style.setProperty("--hero-p", progress.toFixed(3));
-      const nextHidden = progress >= 0.45;
-      if (nextHidden !== hidden) {
-        hidden = nextHidden;
-        hero.dataset.heroCollapsed = String(nextHidden);
-      }
-    };
-    const onResize = () => {
-      range = collapseRange();
-      apply();
-    };
-    const onScroll = () => {
-      // Coalesced to one write per frame: a trackpad fires scroll events far faster than the
-      // compositor paints, and each of these touches style on an element with a photo in it.
-      if (frame === 0) frame = requestAnimationFrame(apply);
-    };
-    apply();
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onResize);
-    return () => {
-      scroller.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onResize);
-      if (frame !== 0) cancelAnimationFrame(frame);
-    };
-    // `dayIndex` is in here because switching days scrolls the body back to the top in the effect
-    // below; re-running re-reads that scrollTop rather than leaving a stale compressed header.
-  }, [headerPhoto, dayIndex]);
-
   useEffect(() => {
     panelCollapsedRef.current = panelCollapsed;
   }, [panelCollapsed]);
@@ -616,7 +528,7 @@ export default function ItineraryCard({
       // its nearest scrollport — which would be this box, which never scrolls, so the header
       // simply would not stick. `clip` creates no scrollport, so the header sticks to the panel
       // body it actually scrolls in.
-      className="glass-itinerary overflow-clip rounded-none sm:rounded-2xl"
+      className="glass-itinerary editorial-itinerary overflow-clip"
       {...devLabel("ItineraryCard")}
     >
       {/* The min-height is the photo's frame, so it only exists when there is a photo. The
@@ -625,145 +537,23 @@ export default function ItineraryCard({
           title marooned at its bottom edge — a reserved space for a value that isn't there,
           which is the one thing this system says not to render. Without the photo the band
           sizes to the title and the panel simply starts higher. */}
-      <div
-        ref={heroRef}
-        className={`relative flex flex-col justify-end p-5 text-on-deep sm:p-6 ${
-          headerPhoto
-            ? // Sticky, and sized by `--hero-p` — see `.itinerary-hero` in globals.css and the
-              // scroll effect above. `z-20` keeps it over the day tabs sliding under it.
-              "itinerary-hero sticky top-0 z-20 overflow-hidden"
-            : ""
-        }`}
-        style={{ backgroundColor: "var(--surface-deep)" }}
-        {...devLabel("ItineraryCard.Header")}
-      >
-        {headerPhoto && (
-          // A real photographic moment, not a blurred backdrop — next/image (fill), not a
-          // CSS background-image, since this box is overflow-hidden and would otherwise risk
-          // a GPU-layer softened blur independent of the source photo's own resolution.
-          <Image
-            key={headerPhoto}
-            src={headerPhoto}
-            alt=""
-            fill
-            sizes="(max-width: 640px) 100vw, 520px"
-            className="value-in object-cover contrast-105 saturate-110"
-          />
-        )}
-        {/* Same bottom-up scrim recipe as the Memories hero tiles: 0.95 where the heading
-            sits, 0.5 at 38%, transparent by 70% — darken over a photo whose brightness is
-            unknown ahead of time. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(to top, rgb(var(--surface-deep-rgb) / 0.95), rgb(var(--surface-deep-rgb) / 0.5) 38%, transparent 70%)",
-          }}
-        />
-        {headerPhoto && onMinimize && (
-          // The handle, on the photograph rather than on a bar above it. Centred at the top edge
-          // where a sheet's grab indicator belongs; the 40px-tall button around it is the hit
-          // target, and the 32x4 line is the part that reads as "this pulls away".
-          <button
-            type="button"
-            onClick={onMinimize}
-            aria-label="Show the map"
-            className="group absolute inset-x-0 top-0 z-30 flex h-10 cursor-pointer items-start justify-center pt-2 focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
-          >
-            {/* Over photography whose brightness is unknown ahead of time — a white line alone
-                vanishes against a bright sky or a gold roof — so it carries its own shadow rather
-                than relying on the scrim, which is bottom-up and reaches nothing up here. */}
-            <span
-              className="h-1 w-8 rounded-full bg-white/70 transition-colors group-hover:bg-white group-focus-visible:bg-white"
-              style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.55)" }}
-            />
-          </button>
-        )}
-        {headerPhoto && (
-          // The compact title, which is what the header *becomes*. It arrives as the large one
-          // leaves — the same trade an iOS large title makes — so the collapsed strip still says
-          // where you are and which day you are on, in one line the height of the photo it sits on.
-          <div
-            aria-hidden="true"
-            className="itinerary-hero-compact pointer-events-none absolute inset-x-0 bottom-0 z-20 flex h-full items-center gap-2 px-5 sm:px-6"
-          >
-            <span className="truncate text-sm font-semibold text-on-deep">
-              {cityName(destination)}
-            </span>
-            {/* Same correction as the "DAY N OF M" stamp on the photograph above: this is a label, not a
-                control, so it does not wear the action colour. It also sat at 10px, below the smallest
-                documented step — 0.6875rem is the `label` step and the 1px is invisible on an uppercase
-                bold chip, so the system loses a size rather than gaining one. */}
-            <span className="shrink-0 rounded bg-tile px-1.5 py-0.5 text-[0.6875rem] font-bold tracking-wide text-tile-foreground uppercase">
-              Day {dayIndex + 1}
-            </span>
+      <div ref={heroRef} className="editorial-trip-masthead" {...devLabel("ItineraryCard.Header")}>
+        <div className="flex items-center justify-between gap-4">
+          <p className="editorial-eyebrow">Your travel journal · {dayCount} days</p>
+          {onMinimize && <button type="button" onClick={onMinimize} className="editorial-map-button">Show the map <span aria-hidden>↗</span></button>}
+        </div>
+        <h1 className="editorial-trip-title">{cityName(destination)}</h1>
+        <p className="text-sm leading-relaxed text-muted">{trip ? `${formatDateRange(trip.startDate, trip.endDate)} · ${trip.startDate.slice(0, 4)}` : day.date}</p>
+        <div className="mt-5 flex items-center justify-between gap-4">
+          <p className="text-sm text-muted">{tier?.name}</p>
+          <div className="flex items-center gap-2">
+            {day.stops.length > 1 && <HeroAction label={touring ? "Stop tour" : "Play tour"} tone="glass" onClick={toggleTour}>
+              {touring ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
+            </HeroAction>}
+            {trip?.id && trip.id !== "preview" && <HeroAction label="Download itinerary" tone="glass" href={`/api/trips/${trip.id}/export`} download>
+              <span aria-hidden>↓</span>
+            </HeroAction>}
           </div>
-        )}
-        <div
-          className={`relative z-10 flex flex-col gap-1 ${headerPhoto ? "itinerary-hero-full" : ""}`}
-        >
-          {/* The active day, not the trip's day count — a "where am I right now" stamp, so
-              it moves with dayIndex rather than staying fixed.
-
-              **Not the accent.** This is a label: it reports where you are and there is nothing to
-              press. It shipped as a filled `bg-accent` chip because under the previous single-hue
-              palette the accent was the only colour there was, which is exactly the failure that
-              palette had — on this one screen the same paint marked the primary button, this
-              badge, the budget fill, the download control and the selected day tab, and a visitor
-              had no way to tell which of them wanted a click. A stamp on a photograph needs
-              contrast, not colour, so it gets an opaque dark ground. Set in the text face, not the
-              figure face: "Day 2 of 5" has two numerals and nothing to align them against, and
-              the narrowed rule is tabular mono *in a column* — this is a stamp, not a column. */}
-          <span className="mb-1 inline-block w-fit -rotate-2 rounded bg-black/60 px-2 py-1 text-[0.6875rem] font-semibold tracking-[var(--tracking-label)] text-on-deep uppercase">
-            Day {dayIndex + 1} of {dayCount}
-          </span>
-          {/* Both actions live on the photograph now, which is what lets the day panel below start
-              at the stops. Two circles rather than two pills, and deliberately at different
-              weights: amber is the reserved accent, so exactly one control here may wear it as a
-              fill. Download takes it (it is the terminal action on the whole trip); the tour takes
-              the neutral wash it already had in the body, keeping its amber to the glyph. Two
-              solid amber circles would read as two primaries, which is one more than there is. */}
-          <div className="flex items-start justify-between gap-3">
-            {/* Not italic. DESIGN.md records the display italic being deliberately cut from the
-                system — "an oblique display face was the last thing making the landing read as a
-                different product" — and this heading, on the most-seen screen in the app, kept it
-                anyway. */}
-            <h1 className="font-display text-2xl font-semibold">
-              {cityName(destination)}: {dayCount} day{dayCount > 1 ? "s" : ""}
-            </h1>
-            <div className="flex shrink-0 items-center gap-2">
-              {/* The same and only gate the pill carried in the day panel: a tour needs more than
-                  one place to move between. The arrange board is a separate overlay over this
-                  card rather than a mode of it, so there is nothing to gate against here. */}
-              {day.stops.length > 1 && (
-                <HeroAction
-                  label={touring ? "Stop tour" : "Play tour"}
-                  tone="glass"
-                  onClick={toggleTour}
-                >
-                  {touring ? (
-                    <PauseIcon className="h-4 w-4" />
-                  ) : (
-                    <PlayIcon className="h-4 w-4" />
-                  )}
-                </HeroAction>
-              )}
-              {trip?.id && trip.id !== "preview" && (
-                <HeroAction
-                  label="Download itinerary"
-                  tone="accent"
-                  href={`/api/trips/${trip.id}/export`}
-                  download
-                >
-                  <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.9}>
-                    <path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16" />
-                  </svg>
-                </HeroAction>
-              )}
-            </div>
-          </div>
-          <p className="text-sm opacity-90">{tier ? `${tier.name} · ${tier.description}` : ""}</p>
         </div>
       </div>
 
@@ -791,13 +581,7 @@ export default function ItineraryCard({
           className="scrollbar-none flex gap-1.5 overflow-x-auto"
         >
           {itinerary.days.map((d, i) => {
-            const isFirst = i === 0;
             const isActive = i === dayIndex;
-            // Right edge is an arrow point; tabs after the first also carry a matching notch on
-            // their left edge, so the row reads as a sequence rather than separate buttons.
-            const clipPath = isFirst
-              ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
-              : "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%)";
             return (
               <button
                 key={i}
@@ -814,14 +598,7 @@ export default function ItineraryCard({
                 tabIndex={isActive ? 0 : -1}
                 onKeyDown={onTabKeyDown}
                 onClick={() => setActiveDayIndex(i)}
-                style={{ clipPath }}
-                className={`shrink-0 py-3 pr-7 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70 ${
-                  isFirst ? "pl-5" : "pl-7"
-                } ${
-                  isActive
-                    ? "bg-accent font-semibold text-accent-foreground"
-                    : "bg-white/10 text-muted hover:bg-white/15"
-                }`}
+                className={`editorial-day-tab ${isActive ? "is-active" : ""}`}
               >
                 Day {i + 1}
                 {/* Amber dot: this day changed while you were reading another one. Amber because

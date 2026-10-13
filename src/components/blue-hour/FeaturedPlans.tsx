@@ -118,7 +118,7 @@ export default function FeaturedPlans({
           stylesheet that no element carries — one of them still there at the time this was
           rewritten, top-level and unconditional. A comment explaining a class cannot be written
           *as* that class. */}
-      <div className="mt-10 grid xl:auto-rows-fr xl:grid-cols-2">
+      <div className="editorial-plan-grid mt-10 grid">
         {planExamples.map((plan) => {
           // Resolved per render rather than hoisted: the value depends on today's date, and a module
           // constant would freeze it for the life of the server process.
@@ -126,13 +126,13 @@ export default function FeaturedPlans({
           return (
           <article
             key={plan.id}
-            className="group grid h-full gap-5 border-white/10 py-8 sm:grid-cols-2 sm:gap-6 max-xl:[&:nth-child(n+2)]:border-t xl:px-6 xl:[&:nth-child(2n)]:border-l xl:[&:nth-child(n+3)]:border-t"
+            className="editorial-plan group grid gap-5"
           >
             {/* `justify-between` against the row's shared height: the title sits at the top of every
                 card and the CTA at the bottom of every card, so the spec list absorbs the slack
                 instead of each card ending wherever its own copy happened to stop. */}
             <div className="flex h-full flex-col justify-between">
-              <h3 className="text-[1.75rem] font-semibold leading-[1.2] tracking-[var(--tracking-heading)] text-foreground">
+              <h3 className="editorial-chapter text-foreground">
                 {plan.title}
               </h3>
               {/* The figure in the money colour and the figure face. It shipped as

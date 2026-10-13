@@ -268,10 +268,10 @@ export default function DayHeader({
       {...devLabel("ItineraryCard.DayHeader")}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <h3 className="font-display text-lg font-semibold text-foreground">
-          Day {dayIndex + 1}
-          {day.title ? ` — ${day.title}` : ""} · {formatItineraryDate(day.date)}
-        </h3>
+        <div>
+          <p className="editorial-eyebrow mb-2">Day {String(dayIndex + 1).padStart(2, "0")} · {formatItineraryDate(day.date)}</p>
+          <h3 className="editorial-chapter">{day.title || `Day ${dayIndex + 1}`}</h3>
+        </div>
         {editable && onEditDay && (
           <button
             type="button"

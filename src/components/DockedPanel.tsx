@@ -80,6 +80,7 @@ const CONTENT_FADE = { duration: 0.14, ease: "linear" as const };
  * `motion-reduce:transition-none` holds it still for anyone who asked for less motion.
  */
 export default function DockedPanel({
+  journal = false,
   collapsible = false,
   className = "space-y-6",
   /** True while a request is replacing this panel's content. Stops the stale content
@@ -95,6 +96,7 @@ export default function DockedPanel({
   capsuleAction,
   children,
 }: {
+  journal?: boolean;
   collapsible?: boolean;
   className?: string;
   busy?: boolean;
@@ -140,6 +142,7 @@ export default function DockedPanel({
 
   return (
     <div
+      data-journal={journal || undefined}
       aria-busy={busy || undefined}
       // `z-10` carries the whole panel — capsule included — above the globe canvas at `z-0` and
       // the marker cards at `z-[5]`, which is what lets the shut capsule sit over live terrain

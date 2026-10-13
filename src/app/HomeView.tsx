@@ -566,7 +566,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
    * Starts true. A finished itinerary opens on its own map, every day clustered and labelled,
    * and the plan is one click behind the panel's arrow.
    */
-  const [planCollapsed, setPlanCollapsed] = useState(true);
+  const [planCollapsed, setPlanCollapsed] = useState(false);
   // Owned here, not in ItineraryCard, so the capsule's play button and the card's drive one
   // timer. `useStopTour` keeps `playing` in local state, so a second call site is a second
   // interval and a second boolean that disagree the moment either is used.
@@ -1239,7 +1239,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     // Back to the map for the new trip. Without this, a traveler who opened the plan on their
     // last result, backed out and generated again would land straight in the panel — this page
     // never unmounts between the two, so the collapse state would otherwise carry over.
-    setPlanCollapsed(true);
+    setPlanCollapsed(false);
     setStages(STAGE_ORDER.map((stage) => ({ stage, status: "pending" as const })));
     setDraftItinerary(null);
     setCoordsDay(null);
@@ -2449,6 +2449,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           The card is the same one the result view uses; only the value differs. */}
       {(step === "result" || generating || refining) && shownItinerary && (
         <DockedPanel
+        journal
           collapsible
           busy={refining}
           capsuleAction={

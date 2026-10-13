@@ -40,7 +40,7 @@ export default function MapEngineToggle() {
     // `z-20` puts it over the marker cards at z-5 and the content overlay at z-10, matching
     // `MapControls` — this is map chrome, and map chrome sits above the world it describes.
     // Hidden below `sm`, where the panel goes full-bleed and there is no map to look at anyway.
-    <div className="pointer-events-none fixed top-[calc(var(--nav-h)+1.5rem)] left-6 z-20 hidden sm:block print:hidden">
+    <div className="map-engine-control pointer-events-none fixed top-[calc(var(--nav-h)+1.5rem)] left-6 z-20 hidden sm:block print:hidden">
       <div
         className="glass-control pointer-events-auto flex overflow-hidden rounded-full p-1"
         role="group"

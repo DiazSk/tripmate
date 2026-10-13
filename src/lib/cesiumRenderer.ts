@@ -34,6 +34,7 @@ import {
   ScreenPoint,
   SearchPin,
   visibleMapWidthPx,
+  panelBiasDirection,
   ZoomStepOptions,
 } from "@/lib/mapRenderer";
 
@@ -339,6 +340,8 @@ export class CesiumRenderer implements MapRenderer {
       biasM = lateralPanelBiasM(rangeM, viewWidth, freeWidth, tanHalfFov);
     }
 
+    biasM *= panelBiasDirection();
+
     // The shove runs along the camera's own *right*, not along world east — see `frameRoute` for
     // why those stop being the same vector the moment the camera turns.
     let target = Cesium.Cartesian3.fromDegrees(
@@ -455,7 +458,7 @@ export class CesiumRenderer implements MapRenderer {
     );
     const target = Cesium.Cartesian3.add(
       sphere.center,
-      Cesium.Cartesian3.multiplyByScalar(right, biasM, new Cesium.Cartesian3()),
+      Cesium.Cartesian3.multiplyByScalar(right, biasM * panelBiasDirection(), new Cesium.Cartesian3()),
       new Cesium.Cartesian3()
     );
     viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(target, radius), {

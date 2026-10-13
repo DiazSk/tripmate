@@ -54,7 +54,7 @@ export default function TripView({
   /** Shut on arrival, same as the result view: a saved trip opens on its own clustered map and
    *  the plan is one click away. Owned here because `ItineraryCard` reads it too — see the
    *  `panelCollapsed` prop. */
-  const [planCollapsed, setPlanCollapsed] = useState(true);
+  const [planCollapsed, setPlanCollapsed] = useState(false);
   // The stop tour lives here rather than inside ItineraryCard so the capsule's play button
   // and the card's share one timer. `useStopTour` holds `playing` in local state, so two
   // call sites would be two intervals and two booleans that disagree the moment either runs.
@@ -265,6 +265,7 @@ export default function TripView({
       {/* Same bounded, right-docked panel the home page's result view uses — keeps
           every "content over the globe" surface visually consistent. */}
       <DockedPanel
+        journal
         collapsible
         capsuleAction={
           itinerary?.days.length

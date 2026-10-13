@@ -82,7 +82,7 @@ export default function HowItWorks() {
           the standfirst paragraph too and split it into spread-out fragments across the full width.
           FeaturedPlans records the same trap for the same reason. */}
       <SectionOpener label="Method">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
+        <div className="flex flex-col items-start gap-6">
           <h2
             ref={headingRef}
             className="font-scene-display is-quiet text-foreground"
