@@ -1,4 +1,5 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkConfigured } from "@/lib/clerkConfig";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
@@ -97,8 +98,12 @@ function ownerProxy(request: NextRequest) {
  * `Authorization: Bearer` — then the owner logic above runs exactly as it did. Returning
  * `NextResponse.next({ request: { headers } })` from inside is safe: Clerk appends its own
  * auth headers to the override list rather than replacing it.
+ *
+ * Without Clerk's keys the middleware would answer every route with a 500, anonymous ones
+ * included, so it is simply not installed and the owner logic runs alone.
  */
-export default clerkMiddleware(async (_auth, request) => ownerProxy(request));
+const handler = clerkConfigured() ? clerkMiddleware(async (_auth, request) => ownerProxy(request)) : ownerProxy;
+export default handler;
 
 export const config = {
   /**

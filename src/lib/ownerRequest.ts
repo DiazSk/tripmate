@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { clerkConfigured } from "./clerkConfig";
 import { getAccountImage, getOrCreateAccount, getTrip, type TripRow } from "./db";
 import { OWNER_COOKIE, readableOwners, resolveOwnerId } from "./owner";
 
@@ -35,10 +36,11 @@ export interface RequestOwner {
  *
  * When nobody is signed in this falls through to exactly the behaviour that existed before
  * accounts: the anonymous cookie, or the legacy bucket when there isn't one — which is what keeps
- * `curl`, the perf scripts and the bench harness working with no credentials.
+ * `curl`, the perf scripts and the bench harness working with no credentials. With no Clerk keys
+ * at all (`clerkConfigured()`) there are simply no accounts, and everything else works.
  */
 export async function currentOwner(): Promise<RequestOwner> {
-  const { userId } = await auth();
+  const userId = clerkConfigured() ? (await auth()).userId : null;
   if (userId) return { id: getOrCreateAccount(userId).owner_id, signedIn: true };
 
   const store = await cookies();
@@ -59,6 +61,7 @@ export interface AccountView {
  * owner check above.
  */
 export async function currentAccount(): Promise<AccountView | null> {
+  if (!clerkConfigured()) return null;
   const { userId } = await auth();
   if (!userId) return null;
   const user = await currentUser();
