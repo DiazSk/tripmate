@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 
 import { listSavedPlaces, listTrips, readProfile } from "@/lib/db";
 import { profileStats } from "@/lib/profileStats";
-import { currentOwner } from "@/lib/ownerRequest";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { currentAccount, currentOwner } from "@/lib/ownerRequest";
 import { toTripSummary } from "@/lib/tripPayload";
 import ProfileForm from "./ProfileForm";
 
@@ -55,7 +53,7 @@ export default async function ProfilePage() {
   const { id: ownerId, signedIn } = await currentOwner();
   // The account's own details, for the row that offers the way out. Read here rather than in the
   // client so this page keeps its one promise: the first paint is already correct.
-  const session = signedIn ? await auth.api.getSession({ headers: await headers() }) : null;
+  const account = signedIn ? await currentAccount() : null;
   // Every read below is synchronous (`libsql`), so this whole page still resolves before it
   // returns — the figures and the saved places cost a render, not a round trip.
   const saved = listTrips("saved", ownerId, signedIn);
@@ -68,10 +66,10 @@ export default async function ProfilePage() {
       stats={profileStats(ownerId, signedIn)}
       savedPlaces={places.slice(0, SAVED_PLACE_COUNT).map((p) => ({ id: p.id, name: p.name, city: p.city }))}
       savedPlaceCount={places.length}
-      accountEmail={session?.user?.email ?? null}
-      accountName={session?.user?.name ?? null}
-      accountId={session?.user?.id ?? null}
-      accountImage={session?.user?.image ?? null}
+      accountEmail={account?.email ?? null}
+      accountName={account?.name ?? null}
+      accountId={account?.id ?? null}
+      accountImage={account?.image ?? null}
     />
   );
 }

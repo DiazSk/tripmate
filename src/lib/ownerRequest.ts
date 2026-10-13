@@ -1,6 +1,6 @@
-import { cookies, headers } from "next/headers";
-import { auth } from "./auth";
-import { getTrip, type TripRow } from "./db";
+import { cookies } from "next/headers";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { getAccountImage, getOrCreateAccount, getTrip, type TripRow } from "./db";
 import { OWNER_COOKIE, readableOwners, resolveOwnerId } from "./owner";
 
 /**
@@ -29,21 +29,47 @@ export interface RequestOwner {
 /**
  * The owner for the request currently being served.
  *
- * **A verified session wins; everything else is unchanged.** `getSession` reads the session cookie
- * that the web app carries *or* the `Authorization: Bearer` header that the mobile app carries
- * (the `bearer` plugin in `auth.ts`), so this single call covers both transports and neither
- * caller has to say which it is.
+ * **A verified session wins; everything else is unchanged.** Clerk's `auth()` reads the session
+ * cookie that the web app carries *or* the `Authorization: Bearer` header that the mobile app
+ * carries, so this single call covers both transports and neither caller has to say which it is.
  *
  * When nobody is signed in this falls through to exactly the behaviour that existed before
  * accounts: the anonymous cookie, or the legacy bucket when there isn't one — which is what keeps
  * `curl`, the perf scripts and the bench harness working with no credentials.
  */
 export async function currentOwner(): Promise<RequestOwner> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (session?.user?.id) return { id: session.user.id, signedIn: true };
+  const { userId } = await auth();
+  if (userId) return { id: getOrCreateAccount(userId).owner_id, signedIn: true };
 
   const store = await cookies();
   return { id: resolveOwnerId(store.get(OWNER_COOKIE)?.value), signedIn: false };
+}
+
+export interface AccountView {
+  /** The owner id — what avatars and every table are keyed by, not Clerk's id. */
+  id: string;
+  email: string;
+  name: string | null;
+  image: string | null;
+}
+
+/**
+ * The signed-in account as the clients display it, or null. `currentUser()` is a Clerk API call
+ * (rate-limited), so this is for pages and the account endpoint — never for the per-request
+ * owner check above.
+ */
+export async function currentAccount(): Promise<AccountView | null> {
+  const { userId } = await auth();
+  if (!userId) return null;
+  const user = await currentUser();
+  if (!user) return null;
+  const { owner_id } = getOrCreateAccount(userId);
+  return {
+    id: owner_id,
+    email: user.primaryEmailAddress?.emailAddress ?? "",
+    name: user.firstName ?? user.fullName ?? null,
+    image: getAccountImage(owner_id),
+  };
 }
 
 /** The id alone, for the callers that never widen a read. */

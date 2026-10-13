@@ -1,3 +1,4 @@
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
@@ -39,7 +40,7 @@ import {
  */
 const DEV_ONLY_PREFIXES = ["/api/llm-traces", "/api/llm-mode", "/api/bench", "/backend", "/bench"];
 
-export function proxy(request: NextRequest) {
+function ownerProxy(request: NextRequest) {
   if (
     process.env.NODE_ENV !== "development" &&
     DEV_ONLY_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p))
@@ -90,6 +91,14 @@ export function proxy(request: NextRequest) {
   });
   return response;
 }
+
+/**
+ * Clerk runs first and resolves the session — the web app's cookie or the phone's
+ * `Authorization: Bearer` — then the owner logic above runs exactly as it did. Returning
+ * `NextResponse.next({ request: { headers } })` from inside is safe: Clerk appends its own
+ * auth headers to the override list rather than replacing it.
+ */
+export default clerkMiddleware(async (_auth, request) => ownerProxy(request));
 
 export const config = {
   /**
