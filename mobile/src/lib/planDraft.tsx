@@ -188,24 +188,29 @@ const count = (raw: string | undefined, min: number, max: number) => {
  * arrive as URL params, which anything can construct.
  */
 export function draftFromPrefill(params: PlanPrefillParams): PlanDraft {
-  const draft = emptyDraft();
+  return { ...emptyDraft(), ...prefillPatch(params) };
+}
+
+/** Only the fields a link speaks for, and only the ones that parse: `{}` for a link that says nothing. */
+export function prefillPatch(params: PlanPrefillParams): Partial<PlanDraft> {
+  const patch: Partial<PlanDraft> = {};
   const destination = params.destination?.trim().slice(0, 120);
-  if (destination) draft.destination = destination;
+  if (destination) patch.destination = destination;
   if (params.start && params.end && ISO_DAY.test(params.start) && ISO_DAY.test(params.end) && params.start <= params.end) {
-    draft.startDate = params.start;
-    draft.endDate = params.end;
+    patch.startDate = params.start;
+    patch.endDate = params.end;
   }
   const budget = count(params.budget, 1, 1_000_000);
-  if (budget !== null) draft.budget = budget;
+  if (budget !== null) patch.budget = budget;
   const adults = count(params.adults, 1, 12);
   const children = count(params.children, 0, 12);
   if (adults !== null || children !== null) {
     const a = adults ?? 1;
     const c = children ?? 0;
-    draft.party = { adults: a, children: c, infants: 0 };
-    draft.group = c > 0 ? 'family_with_kids' : a === 1 ? 'solo' : 'couple';
+    patch.party = { adults: a, children: c, infants: 0 };
+    patch.group = c > 0 ? 'family_with_kids' : a === 1 ? 'solo' : 'couple';
   }
-  return draft;
+  return patch;
 }
 
 type Ctx = {
@@ -230,10 +235,33 @@ export function PlanDraftProvider({
   prefill,
 }: {
   children: React.ReactNode;
-  /** Read once, at mount: the wizard starts from it and the traveller's edits win from then on. */
+  /** Applied once: the wizard starts from it and the traveller's edits win from then on. */
   prefill?: PlanPrefillParams;
 }) {
   const [draft, setDraft] = useState<PlanDraft>(() => (prefill ? draftFromPrefill(prefill) : emptyDraft()));
+  /**
+   * **A deep link's params arrive one render late, so "read at mount" read nothing.** A pushed
+   * route (the landing's buttons) has them on the first render. A link from outside the app
+   * (`tripmate://plan/basics?destination=…`) does not: the layout first renders with expo-router's
+   * own `{ pop, initial, path }` and gets the real params on the next render, by which time the
+   * initializer above has built an empty draft. Every prefilled field was silently dropped.
+   *
+   * So the link's fields are laid over the draft the first time any arrive, once. Over, not
+   * instead: Basics has already written its default dates by then, and the link's own dates
+   * should replace those, while everything the link does not mention stays as it is. Nobody can
+   * have typed in the one render between the two.
+   */
+  //
+  // During render rather than in an effect, React's pattern for state that follows a prop: the
+  // corrected draft is in place before anything paints, with no extra commit in between.
+  const [applied, setApplied] = useState(() => (prefill ? Object.keys(prefillPatch(prefill)).length > 0 : false));
+  if (!applied && prefill) {
+    const changes = prefillPatch(prefill);
+    if (Object.keys(changes).length > 0) {
+      setApplied(true);
+      setDraft((prev) => ({ ...prev, ...changes }));
+    }
+  }
   const value = useMemo<Ctx>(
     () => ({
       draft,

@@ -36,6 +36,17 @@ export default function Basics() {
   const budgetBasis = draft.budgetBasis ?? 'whole_party';
   /** Held as a string, not a number: a numeric binding renders "$ 01800" while you type. */
   const [budgetText, setBudgetText] = useState(budget ? String(budget) : '');
+  /**
+   * The text follows the draft when the draft changes from outside the field. A deep link's prefill
+   * lands a render after this screen mounts (see `PlanDraftProvider`), so the seed above read 0 and
+   * the field showed its placeholder over a budget the plan was already using. Typing never trips
+   * this: what the field writes parses back to the figure it already holds.
+   */
+  const [budgetSeen, setBudgetSeen] = useState(budget);
+  if (budget !== budgetSeen) {
+    setBudgetSeen(budget);
+    if (budget !== (Number(budgetText.replace(/[^0-9.]/g, '')) || 0)) setBudgetText(budget ? String(budget) : '');
+  }
 
   /**
    * Total / Per person is Budget's second half, so it keeps Budget's company.

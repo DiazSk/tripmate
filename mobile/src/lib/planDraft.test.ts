@@ -4,6 +4,7 @@ import {
   MAX_STARRED,
   draftFromPrefill,
   emptyDraft,
+  prefillPatch,
   toGenerateRequest,
   toTravelerProfile,
   toUserAnswers,
@@ -222,5 +223,23 @@ describe('draftFromPrefill', () => {
 
   it('is the empty draft when the link says nothing', () => {
     expect(draftFromPrefill({})).toEqual(emptyDraft());
+  });
+});
+
+describe('prefillPatch', () => {
+  // A deep link's params land a render after the wizard mounts, carried on expo-router's own
+  // `{ pop, initial, path }` first. The provider lays this patch over the draft when they do, so it
+  // must say nothing for that first object, and touch nothing the link does not name.
+  it('says nothing for the router object a deep link renders with first', () => {
+    expect(prefillPatch({ pop: 'true', initial: 'true', path: 'plan/basics?destination=Lisbon' } as never)).toEqual({});
+  });
+
+  it('carries only the fields the link names, so Basics’ other answers survive the merge', () => {
+    expect(prefillPatch({ destination: 'Lisbon, Portugal', start: '2026-11-13', end: '2026-11-16', budget: '2400' })).toEqual({
+      destination: 'Lisbon, Portugal',
+      startDate: '2026-11-13',
+      endDate: '2026-11-16',
+      budget: 2400,
+    });
   });
 });
