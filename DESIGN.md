@@ -86,6 +86,12 @@ typography:
     lineHeight: 1.04
     letterSpacing: "var(--tracking-display)"
     note: "`.font-display-xl` — the serif at whatever size the caller sets (the /trips and /profile mastheads). Declares no font-size, so a `text-*` utility beside it is live; it DOES declare line-height, so a `leading-*` utility beside it is dead."
+  monument:
+    fontFamily: "Oswald, Arial Narrow, Arial, sans-serif"
+    fontWeight: 400
+    lineHeight: 1
+    letterSpacing: "-0.005em"
+    note: "Polar's condensed face, for exactly two things: the landing's full-width place names over photographs (`.tm-monument`, `.tm-fb-monument`) and the nav's TRIPMATE wordmark (`.polar-wordmark`). Always uppercase. Line height 1 with no negative margin, so Oswald's baseline sits ~0.05em above the box and the word is never cropped by an overflow-hidden parent."
   headline:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.5rem"

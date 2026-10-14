@@ -37,7 +37,7 @@ import ImportDropZone from "@/components/ImportDropZone";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
 import DestinationSearch from "@/components/DestinationSearch";
-import ScrollStory from "@/components/blue-hour/ScrollStory";
+import PolarLanding from "@/components/polar/PolarLanding";
 import type { PlanPrefill } from "@/components/blue-hour/planExamples";
 import DockedPanel from "@/components/DockedPanel";
 import { useStoryControls } from "@/lib/storyMode";
@@ -81,7 +81,7 @@ import { formatDateRange } from "@/lib/format";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 
 /* Five `next/dynamic` boundaries, the same `{ ssr: false }` idiom AppShell uses for the globe.
-   None of these renders on the landing step — the landing renders `<ScrollStory>` and nothing
+   None of these renders on the landing step — the landing renders `<PolarLanding>` and nothing
    else — yet all five were parsed at module scope before its first paint, because this module is
    one `"use client"` component covering all three steps of the flow. `ssr: false` costs nothing:
    the initial server render is always `step: "landing"`.
@@ -97,7 +97,7 @@ import { usePlacePhoto } from "@/lib/usePlacePhoto";
    it exports CROWD_PREFERENCES and ENERGY_LEVELS as values used in the render below.
    `DestinationSearch` is deliberately static too: it is the first field of the plan step,
    rendered in the same tick as the "Plan a trip" click, and the failure mode of a prefetch miss
-   there is a form with no destination input. `ScrollStory` static is the whole point. */
+   there is a form with no destination input. `PolarLanding` static is the whole point. */
 const ItineraryCard = dynamic(() => import("@/components/ItineraryCard"), { ssr: false });
 const FocusEditMode = dynamic(() => import("@/components/FocusEditMode"), { ssr: false });
 const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), { ssr: false });
@@ -1872,21 +1872,15 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   return (
     <main
       // pt-[calc(var(--nav-h)+1.25rem)]: clearance for the fixed glass navbar (AppShell
-      // renders Navbar on every route). The Blue Hour scene tokens and display face are
-      // scoped to the landing step alone, not to every pre-result step the way the
-      // standalone Blue Hour build had it: the plan step here is this app's own card
-      // form, which carries its own type and palette and reads wrong under the scene
-      // hues. The extra top padding is what ScrollStory's negative top margin cancels —
-      // see the note on that component's wrapper.
+      // renders Navbar on every route). The extra top padding is what PolarLanding's negative
+      // top margin cancels — see the note on that component's wrapper.
       // `map-chrome-hidden` hides the control stack *and* `.stop-marker-layer` (globals.css), on
       // the grounds that the wizard's steps are a form over a decorative globe with no route on
       // it. Both halves of that stop being true the moment Generate is pressed: there is a route
       // now, arriving stop by stop, and the marker cards are what the traveller is watching. So a
       // generating run is neither a form step nor a result — it keeps the markers without taking
       // `dashboard-page`'s token overrides, which belong to the solid-background result view.
-      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : generating || refining ? "" : "map-chrome-hidden"} ${
-        step === "landing" ? "blue-hour-scene" : ""
-      }`}
+      className={`flex min-h-full flex-col gap-6 bg-transparent p-5 pt-[calc(var(--nav-h)+1.25rem)] sm:p-6 sm:pt-[calc(var(--nav-h)+1.5rem)] ${!preResult ? "dashboard-page" : generating || refining ? "" : "map-chrome-hidden"}`}
     >
       {/* The photograph the form stands on, from the moment the traveller opens it until Generate.
           Still not rendered while generating, but for the opposite reason it was before:
@@ -1917,12 +1911,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
         />
       )}
 
-      {/* The Blue Hour scroll story: a photo hero with no CTA, an image row and a mechanism
-          explainer, and "Plan a trip" uncovered only at the end. It owns full-bleed sections
-          with real scroll height, so it replaces the single centered hero this step used to
-          be — but it hands off to the same setStep("plan"), which is this app's own multi-step
-          form rather than the standalone build's one-card console. */}
-      {step === "landing" && <ScrollStory onPlan={startPlanning} />}
+      {/* The Polar Interior landing: a destination hero, sample plans, a day on a night map, what a
+          plan knows, and a closing form. Full-bleed sections with real scroll height, handing off
+          through the same startPlanning as before — every "plan" on it opens this app's own
+          multi-step form, prefilled where the landing knows what to fill. */}
+      {step === "landing" && <PolarLanding onPlan={startPlanning} />}
 
       {/* Form and tier picker merged into one card: the dates and budget are what price the
           tiers, so splitting them across two steps meant choosing a style blind. One <form>

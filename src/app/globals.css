@@ -1526,16 +1526,95 @@ html[data-story-mode="true"] .marker-day-label {
    The hero's top scrim went with the transparent variant. It existed only to give a groundless bar
    something to sit on, and with a real surface above it, it was darkening 140px of photograph for
    no one. */
-.glass-nav {
+/* The Polar nav (Navbar.tsx). Three themes, set by whatever band of the page is under the bar:
+
+   - `dark`, every route over the map: the band above, unchanged in material — the slate at 0.72
+     with a 16px blur — because the measurement above is about the map, and it still holds.
+   - `photo`, the landing's hero, night map and footer: no band. The reference's nav is groundless
+     over its photographs, and each chip carries its own glass (Polar's veil-20 and a 3px blur).
+   - `light`, the landing's paper bands: no band, ink chips.
+
+   Hide-on-scroll-down is a transform on the whole bar, on the reference's 0.3s sine. */
+.polar-nav {
+  border-bottom: 1px solid transparent;
+  color: var(--foreground);
+  transition:
+    transform 0.3s cubic-bezier(0.37, 0, 0.63, 1),
+    background-color 0.3s cubic-bezier(0.5, 1, 0.89, 1),
+    border-color 0.3s cubic-bezier(0.5, 1, 0.89, 1);
+  --chip-bg: rgba(255, 255, 255, 0.06);
+  --chip-bg-hover: rgba(255, 255, 255, 0.14);
+  --chip-blur: 0px;
+}
+.polar-nav[data-theme="dark"] {
   background: rgb(var(--surface-deep-rgb) / 0.72);
   backdrop-filter: blur(16px) saturate(1.1);
-  border-bottom: 1px solid var(--card-border);
+  border-bottom-color: var(--card-border);
+}
+.polar-nav[data-theme="photo"] {
+  --chip-bg: rgba(31, 42, 68, 0.2);
+  --chip-bg-hover: rgba(31, 42, 68, 0.5);
+  --chip-blur: 3px;
+}
+.polar-nav[data-theme="light"] {
+  --foreground: #1f2a44;
+  --chip-bg: rgba(31, 42, 68, 0.05);
+  --chip-bg-hover: rgba(31, 42, 68, 0.12);
+}
+.polar-nav.is-hidden {
+  transform: translateY(-100%);
+}
+.polar-chip {
+  height: 2.5rem;
+  padding: 0 0.95rem;
+  border-radius: 2px;
+  color: var(--foreground);
+  white-space: nowrap;
+  background: var(--chip-bg);
+  backdrop-filter: blur(var(--chip-blur));
+  transition: background-color 0.3s cubic-bezier(0.5, 1, 0.89, 1), color 0.3s cubic-bezier(0.5, 1, 0.89, 1);
+}
+.polar-chip:hover {
+  background: var(--chip-bg-hover);
+}
+/* The current page or section: the chip inverts, which is how the reference marks a selected one. */
+.polar-chip.is-current {
+  background: var(--foreground);
+  color: var(--canvas);
+}
+.polar-nav[data-theme="light"] .polar-chip.is-current {
+  color: #ffffff;
+}
+.polar-wordmark {
+  font-family: var(--font-condensed-stack), "Arial Narrow", Arial, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--foreground);
+}
+.polar-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  height: 2.5rem;
+  padding: 0 1.1rem;
+  border-radius: 2px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent-foreground);
+  background: var(--accent);
+  white-space: nowrap;
+  transition: background-color 0.3s cubic-bezier(0.5, 1, 0.89, 1);
+}
+.polar-nav-cta:hover {
+  background: var(--accent-hover);
 }
 
 
 /* The mobile menu panel, not the bar itself. It used to be a dropdown at 0.85 of the one
    slate — the more-alpha-for-more-content step `.glass-control`/`.glass-itinerary` take over
-   `.glass-nav`. Now that it fills the viewport it goes to the top of that same step rather
+   the nav's band. Now that it fills the viewport it goes to the top of that same step rather
    than to a new colour: still `--surface-deep-rgb`, at alpha 1. **Raising the alpha within the
    one slate is the move; leaving the material for `--canvas` is not**, and full opacity is
    where that step ends.
@@ -1550,12 +1629,13 @@ html[data-story-mode="true"] .marker-day-label {
   background: rgb(var(--surface-deep-rgb));
 }
 
-/* The bar while that panel is open. `.glass-nav` is a whisper of the slate at 0.15, which is
+/* The bar while that panel is open. The nav's own ground is a whisper of the slate at 0.15, which is
    right over a live globe and wrong butting up against the solid panel below it: the header row
    read as a visibly lighter strip across the top of one surface. The reference treats its own
    header and menu as a single field, and so does this — the divider under the row is then the
    panel's `border-t`, which is the only line that should be there. */
-.glass-nav.is-menu-open {
+.polar-nav.is-menu-open {
+  --foreground: #ffffff;
   background: rgb(var(--surface-deep-rgb));
   backdrop-filter: none;
 }

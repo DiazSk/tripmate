@@ -24,6 +24,10 @@ Chromium, Firefox and WebKit alike. `next dev` never showed it because dev does 
 neither `tsc`, `eslint` nor `node --test` can see a bundler's output. `shims/spz-loader-core.ts`
 is the fix (aliased in `next.config.ts`); `scripts/verify-build.mjs` is the guard.
 
+**Pending decision (2026-10-13):** the Petra hero film this gate tests is no longer rendered — `/`
+now shows the Polar landing (`src/components/polar/`), and the Blue Hour landing code is kept,
+unmounted, until it is retired or deleted. See the "Pending decision" row in `docs/frontend.md`.
+
 **`npm run verify-hero` is the manual gate for the landing hero, and it is manual for a reason.**
 Every defect the hero film shipped with was *silent*: `position: sticky` inside an
 `overflow-hidden` ancestor renders identically to sticky never being applied; `img.decode()`'s

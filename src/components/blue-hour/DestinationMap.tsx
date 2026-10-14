@@ -11,7 +11,7 @@ import { useScrollContainer } from "@/lib/scrollContainer";
 import { MAP_PLACES } from "./mapPlaces";
 import SectionOpener from "./SectionOpener";
 import { planExamples, toPrefill, type PlanExample, type PlanPrefill } from "./planExamples";
-import { MAP_VIEWBOX, WORLD_LAND_PATH, projectToMap } from "./worldLand";
+import { MAP_VIEWBOX, WORLD_LAND_PATH, projectToMap } from "@/lib/worldLand";
 
 /**
  * Where the planner can go, on a real map.

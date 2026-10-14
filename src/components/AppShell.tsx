@@ -172,7 +172,11 @@ function ShellBody({
           {/* The navbar stays up during a film. It used to go with the rest of the chrome, and the
               way out of a playing film was Esc or the film's own ✕ — which is fine once you know
               it and a dead end before you do, since the whole page had no visible exit. */}
-          <Navbar />
+          {/* Given the scroll container too: the nav's active section, its theme and its
+              hide-on-scroll all read the overlay, which is outside the provider above. */}
+          <ScrollContainerContext.Provider value={scrollRef}>
+            <Navbar />
+          </ScrollContainerContext.Provider>
           {/* What the film still takes off screen: the map's search box, the zoom / 2D / tilt /
               compass stack, and the install prompt. All of it acts *on the map* the film is
               driving, which is the line — `MapEngineToggle` stays for the same reason, it chooses

@@ -1,0 +1,568 @@
+/* Night map — rides on the Polar Interior tokens declared on .tm */
+.nm {
+  position: relative;
+  min-height: clamp(44em, 94vh, 62em);
+  background: var(--wd-night);
+  color: #fff;
+  overflow: hidden;
+  isolation: isolate;
+}
+.nm-stage {
+  position: absolute;
+  inset: 0;
+}
+.nm-canvas {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.2s var(--wd-ease-reveal);
+}
+.nm-canvas.is-live {
+  opacity: 1;
+}
+.nm-canvas .maplibregl-canvas:focus-visible {
+  outline: none;
+}
+.nm-world {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.nm-world-halo {
+  fill: rgba(106, 240, 255, 0.12);
+  stroke: rgba(106, 240, 255, 0.4);
+  stroke-width: 0.8;
+}
+.nm-world-dot {
+  fill: var(--wd-route);
+}
+.nm-world-pin text {
+  font-family: var(--wd-font-condensed);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  fill: var(--wd-night-text-2);
+}
+.nm-world-pin.is-on text {
+  fill: #fff;
+}
+.nm-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(9, 11, 16, 0.82) 0%, rgba(9, 11, 16, 0.35) 30%, rgba(9, 11, 16, 0) 48%),
+    linear-gradient(180deg, rgba(9, 11, 16, 0.5) 0%, rgba(9, 11, 16, 0) 18%, rgba(9, 11, 16, 0) 78%, rgba(9, 11, 16, 0.6) 100%);
+}
+.nm-status {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75em;
+  font-size: 0.85em;
+  color: var(--wd-night-text-2);
+}
+.nm-spinner {
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--wd-route);
+  animation: nm-spin 0.9s linear infinite;
+}
+@keyframes nm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* HUD — top right, like the reference's coordinate stamp */
+.nm-hud {
+  position: absolute;
+  top: var(--wd-space-4);
+  right: calc(var(--wd-pad) + 3em);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.9em;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.nm-scale {
+  font-family: var(--wd-font-condensed);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72em;
+  color: var(--wd-night-text-2);
+  padding: 0.35em 0.6em;
+  border: 1px solid var(--wd-frost-20);
+  border-radius: var(--wd-radius-hairline);
+}
+.nm-coord {
+  font-size: 0.75em;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.nm-chip {
+  height: 2.3em;
+  padding: 0 0.9em;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--wd-frost-20);
+  border-radius: var(--wd-radius-hairline);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  transition: background-color 0.3s var(--wd-ease-out);
+}
+.nm-chip:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.nm-fallback-note {
+  position: absolute;
+  right: var(--wd-pad);
+  bottom: var(--wd-space-3);
+  font-size: 0.72em;
+  color: var(--wd-night-text-2);
+}
+
+/* Panel — the day, as a list the beat lights up */
+.nm-panel {
+  position: absolute;
+  z-index: 3;
+  left: var(--wd-pad);
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(27em, 38vw);
+  display: grid;
+  gap: var(--wd-space-3);
+  padding: var(--wd-space-5) var(--wd-space-4);
+  background: rgba(14, 17, 24, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--wd-radius-card);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+}
+.nm-kicker {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.05em;
+  color: var(--wd-night-text-2);
+}
+.nm-title span {
+  display: block;
+}
+.nm-title {
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  font-size: clamp(2.1em, 3.6vw, 3em);
+  line-height: 1;
+}
+.nm-body {
+  font-size: 0.88em;
+  line-height: 1.5;
+  color: var(--wd-night-text-2);
+}
+.nm-cities {
+  display: flex;
+  gap: 0.3em;
+  flex-wrap: wrap;
+  margin-top: var(--wd-space-1);
+}
+.nm-city-tab {
+  height: 2.3em;
+  padding: 0 0.9em;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--wd-night-text-2);
+  border: 1px solid var(--wd-frost-20);
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.3s var(--wd-ease-out), color 0.3s var(--wd-ease-out), border-color 0.3s var(--wd-ease-out);
+}
+.nm-city-tab:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.nm-city-tab[aria-selected='true'] {
+  background: #fff;
+  border-color: #fff;
+  color: var(--wd-ink);
+}
+.nm-day-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1em;
+  padding-top: var(--wd-space-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.nm-day-place {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1.2em;
+}
+.nm-day-n {
+  font-family: var(--wd-font-condensed);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.7em;
+  color: var(--wd-night-text-2);
+}
+.nm-stops {
+  list-style: none;
+  padding: 0;
+  display: grid;
+}
+.nm-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr) 0.7em;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.55em 0.4em 0.55em 0;
+  text-align: left;
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.3s var(--wd-ease-out), padding 0.3s var(--wd-ease-out);
+}
+.nm-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.nm-row-time {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1.05em;
+  color: var(--wd-night-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.nm-row-text {
+  display: grid;
+  min-width: 0;
+}
+.nm-row-name {
+  font-family: var(--wd-font-condensed);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.86em;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.3s var(--wd-ease-out);
+}
+.nm-row-note {
+  font-size: 0.72em;
+  color: var(--wd-night-text-2);
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.45s var(--wd-ease-expedition), opacity 0.3s var(--wd-ease-out);
+}
+.nm-row-mark {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  transition: background-color 0.3s var(--wd-ease-out), border-color 0.3s var(--wd-ease-out), box-shadow 0.45s var(--wd-ease-expedition);
+}
+.nm-row.is-past .nm-row-mark {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: transparent;
+}
+.nm-row.is-on {
+  background: rgba(106, 240, 255, 0.07);
+  padding-left: 0.5em;
+}
+.nm-row.is-on .nm-row-name {
+  color: #fff;
+}
+.nm-row.is-on .nm-row-time {
+  color: var(--wd-route);
+}
+.nm-row.is-on .nm-row-note {
+  max-height: 2.4em;
+  opacity: 1;
+}
+.nm-row.is-on .nm-row-mark {
+  background: var(--wd-route);
+  border-color: var(--wd-route);
+  box-shadow: 0 0 0 0.35em rgba(106, 240, 255, 0.18);
+}
+.nm-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding-top: var(--wd-space-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.nm-icon-btn {
+  width: 2.6em;
+  height: 2.6em;
+  display: grid;
+  place-items: center;
+  font-size: 1em;
+  color: #fff;
+  border: 1px solid var(--wd-frost-20);
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.3s var(--wd-ease-out), opacity 0.3s var(--wd-ease-out);
+}
+.nm-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+.nm-icon-btn:disabled {
+  opacity: 0.3;
+}
+.nm-play {
+  height: 2.6em;
+  min-width: 10.5em;
+  padding: 0 1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2em;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.3s var(--wd-ease-out);
+}
+.nm-play:hover {
+  background: var(--wd-signal-hover);
+}
+.nm-progress {
+  margin-left: auto;
+  font-family: var(--wd-font-condensed);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.7em;
+  color: var(--wd-night-text-2);
+  white-space: nowrap;
+}
+
+/* Stats — bottom right */
+.nm-stats {
+  position: absolute;
+  z-index: 3;
+  right: calc(var(--wd-pad) + 3em);
+  bottom: var(--wd-space-6);
+  margin: 0;
+  display: flex;
+  gap: var(--wd-space-5);
+  padding: var(--wd-space-3) var(--wd-space-4);
+  background: rgba(14, 17, 24, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--wd-radius-card);
+  backdrop-filter: blur(7.5px);
+  -webkit-backdrop-filter: blur(7.5px);
+}
+.nm-stats div {
+  display: grid;
+}
+.nm-stats dt {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 0.9em;
+  color: var(--wd-night-text-2);
+}
+.nm-stats dd {
+  margin: 0;
+  font-size: clamp(1.3em, 2vw, 1.75em);
+  line-height: 1.25;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Markers (MapLibre places these; styled here) */
+.nm-city-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  cursor: pointer;
+  transition: opacity 0.45s var(--wd-ease-expedition);
+}
+.nm-city-pin.is-left {
+  flex-direction: row-reverse;
+}
+.nm-city-dot {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--wd-route);
+  box-shadow: 0 0 0 5px rgba(106, 240, 255, 0.16);
+}
+.nm-city-dot::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid rgba(106, 240, 255, 0.6);
+  animation: nm-ping 2.4s var(--wd-ease-out) infinite;
+}
+@keyframes nm-ping {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.nm-city-name {
+  font-family: 'Oswald', 'Arial Narrow', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 1px 6px #090b10;
+}
+.nm-city-pin:hover .nm-city-name,
+.nm-city-pin:focus-visible .nm-city-name {
+  color: var(--wd-route);
+}
+.nm-canvas.is-far .nm-stop-pin {
+  opacity: 0;
+  pointer-events: none;
+}
+.nm-stop-pin {
+  position: relative;
+  transition: opacity 0.45s cubic-bezier(0.76, 0, 0.24, 1);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.nm-stop-n {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font: 600 11px 'Inter Tight', system-ui, sans-serif;
+  color: #fff;
+  background: #090b10;
+  border: 1.5px solid #fff;
+  transition: background-color 0.3s cubic-bezier(0.5, 1, 0.89, 1), color 0.3s, border-color 0.3s, box-shadow 0.45s cubic-bezier(0.76, 0, 0.24, 1);
+}
+.nm-stop-pin.is-past .nm-stop-n {
+  background: #fff;
+  color: #090b10;
+}
+.nm-stop-pin.is-on .nm-stop-n {
+  background: #6af0ff;
+  border-color: #6af0ff;
+  color: #090b10;
+  box-shadow: 0 0 0 7px rgba(106, 240, 255, 0.2), 0 0 0 16px rgba(106, 240, 255, 0.07);
+}
+.nm-stop-tag {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  white-space: nowrap;
+  font-family: 'Oswald', 'Arial Narrow', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 12px;
+  color: #a8acb3;
+  text-shadow: 0 1px 6px #090b10, 0 0 2px #090b10;
+  pointer-events: none;
+  opacity: 0;
+  transition: color 0.3s, opacity 0.3s;
+}
+.nm-stop-pin.tag-left .nm-stop-tag {
+  left: auto;
+  right: calc(100% + 10px);
+  text-align: right;
+}
+.nm-stop-pin.show-tag .nm-stop-tag,
+.nm-stop-pin:hover .nm-stop-tag,
+.nm-stop-pin:focus-visible .nm-stop-tag {
+  opacity: 1;
+}
+.nm-stop-tag em {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+}
+.nm-stop-pin.is-on .nm-stop-tag {
+  color: #fff;
+  font-size: 14px;
+}
+.nm .maplibregl-ctrl-attrib,
+.nm .maplibregl-ctrl-attrib-inner {
+  background: rgba(9, 11, 16, 0.6) !important;
+  color: #a8acb3 !important;
+}
+.nm .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+.nm .maplibregl-ctrl-attrib a {
+  color: #a8acb3;
+}
+.nm .maplibregl-cooperative-gesture-screen {
+  font-family: var(--wd-font-sans);
+  background: rgba(9, 11, 16, 0.55);
+}
+
+/* Small screens: the map on top, the day beneath it */
+@media (max-width: 899px) {
+  .nm {
+    min-height: 0;
+    display: grid;
+  }
+  .nm-stage {
+    position: relative;
+    height: min(72vh, 34em);
+  }
+  .nm-vignette {
+    background: linear-gradient(180deg, rgba(9, 11, 16, 0.4) 0%, rgba(9, 11, 16, 0) 20%, rgba(9, 11, 16, 0) 70%, rgba(9, 11, 16, 1) 100%);
+  }
+  .nm-hud {
+    right: var(--wd-pad);
+    top: var(--wd-space-3);
+  }
+  .nm-coord {
+    display: none;
+  }
+  .nm-panel {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: auto;
+    margin: var(--wd-gutter) var(--wd-pad) 0;
+  }
+  .nm-stats {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    margin: var(--wd-gutter) var(--wd-pad) var(--wd-space-8);
+    justify-content: space-between;
+    gap: var(--wd-space-3);
+  }
+  .nm-stats dd {
+    font-size: 1.15em;
+  }
+  .nm-stats dt {
+    font-size: 0.78em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nm-city-dot::after,
+  .nm-spinner {
+    animation: none;
+  }
+}

@@ -1,0 +1,59 @@
+/* Generated from maplibre-gl/dist/maplibre-gl.css (v6): only the rules the landing's night map
+   needs — map, canvas, markers, control corners, attribution and the cooperative-gesture hint —
+   each scoped under .nm. Not the whole sheet: Next keeps global CSS across navigations, and the
+   trip view's map deliberately styles itself without it. */
+.nm .maplibregl-map{font:12px/20px Helvetica Neue,Arial,Helvetica,sans-serif;overflow:hidden;position:relative;-webkit-tap-highlight-color:rgb(0 0 0/0)}
+.nm .maplibregl-canvas{position:absolute;left:0;top:0}
+.nm .maplibregl-map:fullscreen{width:100%;height:100%}
+.nm .maplibregl-canvas-container.maplibregl-interactive{cursor:grab;-webkit-user-select:none;-moz-user-select:none;user-select:none}
+.nm .maplibregl-canvas-container.maplibregl-interactive:active{cursor:grabbing}
+.nm .maplibregl-canvas-container.maplibregl-touch-zoom-rotate,.nm .maplibregl-canvas-container.maplibregl-touch-zoom-rotate .maplibregl-canvas{touch-action:pan-x pan-y}
+.nm .maplibregl-canvas-container.maplibregl-touch-drag-pan,.nm .maplibregl-canvas-container.maplibregl-touch-drag-pan .maplibregl-canvas{touch-action:pinch-zoom}
+.nm .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,.nm .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas{touch-action:none}
+.nm .maplibregl-canvas-container.maplibregl-touch-drag-pan.maplibregl-cooperative-gestures,.nm .maplibregl-canvas-container.maplibregl-touch-drag-pan.maplibregl-cooperative-gestures .maplibregl-canvas{touch-action:pan-x pan-y}
+.nm .maplibregl-ctrl-bottom-left,.nm .maplibregl-ctrl-bottom-right,.nm .maplibregl-ctrl-top-left,.nm .maplibregl-ctrl-top-right{position:absolute;pointer-events:none;z-index:2}
+.nm .maplibregl-ctrl-top-left{top:0;left:0}
+.nm .maplibregl-ctrl-top-right{top:0;right:0}
+.nm .maplibregl-ctrl-bottom-left{bottom:0;left:0}
+.nm .maplibregl-ctrl-bottom-right{right:0;bottom:0}
+.nm .maplibregl-ctrl{clear:both;pointer-events:auto;transform:translate(0)}
+.nm .maplibregl-ctrl-top-left .maplibregl-ctrl{margin:10px 0 0 10px;float:left}
+.nm .maplibregl-ctrl-top-right .maplibregl-ctrl{margin:10px 10px 0 0;float:right}
+.nm .maplibregl-ctrl-bottom-left .maplibregl-ctrl{margin:0 0 10px 10px;float:left}
+.nm .maplibregl-ctrl-bottom-right .maplibregl-ctrl{margin:0 10px 10px 0;float:right}
+.nm .maplibregl-ctrl button::-moz-focus-inner{border:0;padding:0}
+.nm .maplibregl-ctrl-attrib-button:focus{box-shadow:0 0 2px 2px #0096ff}
+.nm .maplibregl-ctrl button:disabled{cursor:not-allowed}
+@media (hover:hover){.nm .maplibregl-ctrl button:not(:disabled):hover{background-color:rgba(0,0,0,.05)}
+}
+.nm .maplibregl-ctrl button:not(:disabled):active{background-color:rgba(0,0,0,.05)}
+.nm .maplibregl-ctrl.maplibregl-ctrl-attrib{padding:0 5px;background-color:hsla(0,0%,100%,.5);margin:0}
+@media screen{.nm .maplibregl-ctrl-attrib.maplibregl-compact{min-height:20px;padding:2px 24px 2px 0;margin:10px;position:relative;background-color:#fff;color:#000;border-radius:12px;box-sizing:content-box}
+.nm .maplibregl-ctrl-attrib.maplibregl-compact-show{padding:2px 28px 2px 8px;visibility:visible}
+.nm .maplibregl-ctrl-bottom-left>.maplibregl-ctrl-attrib.maplibregl-compact-show,.nm .maplibregl-ctrl-top-left>.maplibregl-ctrl-attrib.maplibregl-compact-show{padding:2px 8px 2px 28px;border-radius:12px}
+.nm .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner{display:none}
+.nm .maplibregl-ctrl-attrib-button{display:none;cursor:pointer;position:absolute;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20fill-rule%3D%22evenodd%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20d%3D%22M4%2010a6%206%200%201%200%2012%200%206%206%200%201%200-12%200m5-3a1%201%200%201%200%202%200%201%201%200%201%200-2%200m0%203a1%201%200%201%201%202%200v3a1%201%200%201%201-2%200%22%2F%3E%3C%2Fsvg%3E");background-color:hsla(0,0%,100%,.5);width:24px;height:24px;box-sizing:border-box;border-radius:12px;outline:none;top:0;right:0;border:0}
+.nm .maplibregl-ctrl-attrib summary.maplibregl-ctrl-attrib-button{-webkit-appearance:none;-moz-appearance:none;appearance:none;list-style:none}
+.nm .maplibregl-ctrl-attrib summary.maplibregl-ctrl-attrib-button::-webkit-details-marker{display:none}
+.nm .maplibregl-ctrl-bottom-left .maplibregl-ctrl-attrib-button,.nm .maplibregl-ctrl-top-left .maplibregl-ctrl-attrib-button{left:0}
+.nm .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button,.nm .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner{display:block}
+.nm .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button{background-color:rgba(0,0,0,.05)}
+.nm .maplibregl-ctrl-bottom-right>.maplibregl-ctrl-attrib.maplibregl-compact:after{bottom:0;right:0}
+.nm .maplibregl-ctrl-top-right>.maplibregl-ctrl-attrib.maplibregl-compact:after{top:0;right:0}
+.nm .maplibregl-ctrl-top-left>.maplibregl-ctrl-attrib.maplibregl-compact:after{top:0;left:0}
+.nm .maplibregl-ctrl-bottom-left>.maplibregl-ctrl-attrib.maplibregl-compact:after{bottom:0;left:0}
+}
+@media screen and (forced-colors:active){.nm .maplibregl-ctrl-attrib.maplibregl-compact:after{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22%23fff%22%20fill-rule%3D%22evenodd%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20d%3D%22M4%2010a6%206%200%201%200%2012%200%206%206%200%201%200-12%200m5-3a1%201%200%201%200%202%200%201%201%200%201%200-2%200m0%203a1%201%200%201%201%202%200v3a1%201%200%201%201-2%200%22%2F%3E%3C%2Fsvg%3E")}
+}
+@media screen and (forced-colors:active) and (prefers-color-scheme:light){.nm .maplibregl-ctrl-attrib.maplibregl-compact:after{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20fill-rule%3D%22evenodd%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20d%3D%22M4%2010a6%206%200%201%200%2012%200%206%206%200%201%200-12%200m5-3a1%201%200%201%200%202%200%201%201%200%201%200-2%200m0%203a1%201%200%201%201%202%200v3a1%201%200%201%201-2%200%22%2F%3E%3C%2Fsvg%3E")}
+}
+.nm .maplibregl-ctrl-attrib a{color:rgba(0,0,0,.75);text-decoration:none}
+.nm .maplibregl-ctrl-attrib a:hover{color:inherit;text-decoration:underline}
+.nm .maplibregl-marker{position:absolute;top:0;left:0;will-change:transform;transition:opacity .2s}
+.nm .maplibregl-marker-draggable{cursor:grab}
+.nm .maplibregl-cooperative-gesture-screen{background:rgba(0,0,0,.4);position:absolute;inset:0;display:flex;justify-content:center;align-items:center;color:#fff;padding:1rem;font-size:1.4em;line-height:1.2;opacity:0;pointer-events:none;transition:opacity 1s ease 1s;z-index:99999}
+.nm .maplibregl-cooperative-gesture-screen.maplibregl-show{opacity:1;transition:opacity .05s}
+.nm .maplibregl-cooperative-gesture-screen .maplibregl-mobile-message{display:none}
+@media (hover:none),(pointer:coarse){.nm .maplibregl-cooperative-gesture-screen .maplibregl-desktop-message{display:none}
+.nm .maplibregl-cooperative-gesture-screen .maplibregl-mobile-message{display:block}
+}

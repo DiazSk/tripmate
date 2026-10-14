@@ -27,8 +27,8 @@ const SHOW_LLM_TRACES = process.env.NODE_ENV === "development";
  * in for the reference's Cardinal Classic Long, a commercial face; it keeps the high-contrast
  * didone voice — at weight 400 the thick-thin modulation does the work bold type would only fake —
  * and its italic carries the reference's kicker lines, so both cuts ship. Inter Tight is the
- * reference's own text face. Oswald, the reference's third face, sets only full-width monuments on
- * photographs; it arrives with the first screen that draws one.
+ * reference's own text face. Oswald, the reference's third face, sets the nav's wordmark on every
+ * route and the full-width monuments the landing prints over its photographs.
  *
  * **Figures no longer have a face of their own.** Kiln preloaded a whole mono family for the
  * columns that compare values; Polar sets them in Inter Tight with tabular figures, which line up
@@ -54,6 +54,13 @@ const textFace = localFont({
   src: "../../public/fonts/inter-tight-variable.woff2",
   variable: "--font-sans-stack",
   weight: "100 900",
+  display: "swap",
+});
+
+const monumentFace = localFont({
+  src: "../../public/fonts/oswald-variable.woff2",
+  variable: "--font-condensed-stack",
+  weight: "200 700",
   display: "swap",
 });
 
@@ -165,7 +172,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${displayFace.variable} ${textFace.variable} h-full antialiased`}
+      className={`${displayFace.variable} ${textFace.variable} ${monumentFace.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {/* Clerk's hooks and its middleware throw without keys, so the provider is only mounted
