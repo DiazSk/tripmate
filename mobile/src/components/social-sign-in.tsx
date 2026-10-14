@@ -2,23 +2,19 @@ import { useSignInWithApple } from '@clerk/expo/apple';
 import { useSignInWithGoogle } from '@clerk/expo/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { PillButton } from '@/components/form';
 import { GoogleMark } from '@/components/google-mark';
-import { Notice } from '@/components/states';
-import { ThemedText } from '@/components/themed-text';
-import { APPEARANCE } from '@/constants/appearance';
-import { Colors, Spacing } from '@/constants/theme';
+import { PaperError } from '@/components/polar-ui';
+import { Polar, PolarFonts, PolarRadius } from '@/constants/polar';
 import { clerkMessage, isCancellation } from '@/lib/clerkError';
 import { useFinishAuth } from '@/lib/useFinishAuth';
 
 type Flow = () => Promise<{ createdSessionId: string | null; setActive?: (p: { session: string }) => Promise<void> }>;
 
 /**
- * Apple (iOS) and Google, under an "or" rule — the alternative to the email form above it, on
- * both the log in and the sign up screen. They lived on the chooser and moved here so the chooser
- * is back to one decision (in, up or neither) and the photograph gets its room back.
+ * Apple (iOS) and Google, under an "or" rule: the alternative to the email form above it on the
+ * boarding pass, in both modes. Drawn for the pass's ice ground, as the web's are.
  *
  * **Apple is the system's own button, at full width.** Apple's guidelines require Sign in with
  * Apple to be at least as prominent as the other sign-in options, so it is the native control
@@ -55,39 +51,48 @@ export function SocialSignIn({ disabled }: { disabled?: boolean }) {
     <View style={styles.group}>
       <View style={styles.rule} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <View style={styles.line} />
-        <ThemedText type="micro" themeColor="muted">
-          or
-        </ThemedText>
+        <Text style={styles.or}>or</Text>
         <View style={styles.line} />
       </View>
       {Platform.OS === 'ios' ? (
         <AppleAuthentication.AppleAuthenticationButton
           buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-          buttonStyle={
-            APPEARANCE === 'light'
-              ? AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-              : AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-          }
-          cornerRadius={26}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+          cornerRadius={PolarRadius.hairline}
           style={styles.apple}
           onPress={() => run(() => startAppleAuthenticationFlow())}
         />
       ) : null}
-      <PillButton
-        block
-        title="Continue with Google"
-        icon={<GoogleMark />}
-        busy={busy}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ busy }}
         onPress={() => run(() => startGoogleAuthenticationFlow())}
-      />
-      {error ? <Notice>{error}</Notice> : null}
+        style={({ pressed }) => [styles.google, pressed && styles.googlePressed]}>
+        {busy ? <ActivityIndicator color={Polar.ink} /> : <GoogleMark />}
+        <Text style={styles.googleText}>Continue with Google</Text>
+      </Pressable>
+      {error ? <PaperError>{error}</PaperError> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  group: { gap: Spacing.rows },
-  rule: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows },
-  line: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder },
-  apple: { height: 52, width: '100%' },
+  group: { gap: 10 },
+  rule: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  line: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Polar.rule },
+  or: { fontFamily: PolarFonts.display, fontSize: 16, color: Polar.ink },
+  apple: { height: 48, width: '100%' },
+  google: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: PolarRadius.hairline,
+    borderWidth: 1,
+    borderColor: 'rgba(31,42,68,0.15)',
+    backgroundColor: Polar.ice,
+  },
+  googlePressed: { borderColor: Polar.ink, backgroundColor: Polar.snow },
+  googleText: { fontFamily: PolarFonts.sansSemi, fontSize: 15, color: Polar.ink },
 });

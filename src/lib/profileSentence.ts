@@ -20,7 +20,9 @@ const CROWDS = { love: "glad of a crowd", mixed: "either way on crowds", avoid: 
  * The profile said back as one sentence, so `/profile` shows what the planner will read rather than
  * eight separate answers. Only what was answered: no starred interests, no dietary line.
  */
-export function profileSentence(p: TravelerProfile): string {
+export function profileSentence(
+  p: Pick<TravelerProfile, "group" | "explorerStyle" | "pace" | "discovery" | "energy" | "crowds" | "topPriorities" | "dietary" | "homeCity">
+): string {
   const { pace, discovery } = travelStyleOf(p);
   const stars = p.topPriorities.length ? ` What matters most: ${p.topPriorities.join(", ")}.` : "";
   const diet = p.dietary.tags.length ? ` Every food stop is ${p.dietary.tags.join(", ").toLowerCase()}.` : "";

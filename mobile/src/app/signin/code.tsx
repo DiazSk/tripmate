@@ -1,14 +1,11 @@
 import { useSignIn, useSignUp } from '@clerk/expo';
-import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { FieldTrough, PillButton, PrimaryButton, TextField } from '@/components/form';
-import { BAND_RATIO_FORM, SceneWindow } from '@/components/scene-band';
-import { Notice } from '@/components/states';
-import { ThemedText } from '@/components/themed-text';
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Pass, PassBelow, PassScreen, StubFoot, StubRows, passStyles } from '@/components/boarding-pass';
+import { PaperError, PaperInput, QuietLink, SignalButton } from '@/components/polar-ui';
+import { Polar, PolarFonts, PolarRadius, PolarSpace } from '@/constants/polar';
 import { clerkMessage, unsupportedStepMessage } from '@/lib/clerkError';
 import { PASSWORD_MIN } from '@/lib/formGap';
 import { useFinishAuth } from '@/lib/useFinishAuth';
@@ -23,23 +20,25 @@ const COPY: Record<Purpose, { title: string; blurb: string }> = {
 };
 
 /**
- * The one code screen for four jobs. Clerk keeps the in-flight sign-in or sign-up on its client, so
- * this screen picks up exactly where `form.tsx` left it; only the purpose and the address travel as
- * params. Inside the `signin/` group, so the photograph behind and the transition stay as they are.
+ * The one code screen for four jobs, drawn as the pass at the gate: six cells over one real input
+ * (so typing, pasting and one-time-code autofill all work), and the stub's gate code fills in as
+ * you type. Clerk keeps the in-flight sign-in or sign-up on its client, so this screen picks up
+ * exactly where the pass left it; only the purpose, the address and the passenger travel as params.
  */
 export default function AuthCodeScreen() {
-  const { purpose: raw, email } = useLocalSearchParams<{ purpose?: string; email?: string }>();
+  const { purpose: raw, email, passenger } = useLocalSearchParams<{ purpose?: string; email?: string; passenger?: string }>();
   const purpose: Purpose = raw && Object.hasOwn(COPY, raw) ? (raw as Purpose) : 'sign-in-code';
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
   const finish = useFinishAuth();
-  const insets = useSafeAreaInsets();
+  const input = useRef<TextInput>(null);
 
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
+  const [focused, setFocused] = useState(true);
 
   async function step(run: () => Promise<{ error?: unknown } | void>): Promise<boolean> {
     try {
@@ -108,60 +107,103 @@ export default function AuthCodeScreen() {
     setResent(sent);
   }
 
+  const digits = code.padEnd(6, ' ').split('');
+
   return (
-    <View style={styles.flex}>
-      <SceneWindow ratio={BAND_RATIO_FORM} />
-      <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.regular }]}
-          keyboardShouldPersistTaps="handled">
-          <ThemedText type="title">{COPY[purpose].title}</ThemedText>
-          <ThemedText type="detail" themeColor="muted" style={styles.blurb}>
-            {COPY[purpose].blurb} {email}.
-          </ThemedText>
-          <View style={styles.form}>
-            <FieldTrough>
-              <TextField
-                label="Code"
-                value={code}
-                onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                autoFocus
-              />
-              {purpose === 'reset' ? (
-                <TextField
-                  label="New password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoComplete="new-password"
-                  textContentType="newPassword"
-                />
-              ) : null}
-            </FieldTrough>
-            {error ? <Notice>{error}</Notice> : null}
-            {resent ? (
-              <ThemedText type="detail" themeColor="muted" style={styles.hint}>
-                Sent again.
-              </ThemedText>
-            ) : null}
-            <PrimaryButton title="Continue" onPress={submit} busy={busy} accessibilityHint={gap} />
-            <PillButton title="Send it again" onPress={resend} />
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+    <PassScreen below={<PassBelow />}>
+      <Pass
+        stage="At the gate"
+        head={<QuietLink title="Change email" onPress={() => router.back()} />}
+        stub={
+          <>
+            <StubRows passenger={passenger || email?.split('@')[0] || 'You'} />
+            <StubFoot
+              label="Gate code"
+              figure={
+                <View style={styles.gateCode} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                  {digits.map((d, i) => (
+                    <Text key={i} style={styles.gateDigit}>
+                      {d.trim() || '·'}
+                    </Text>
+                  ))}
+                </View>
+              }
+              note="From your email, typed or filled in by the keyboard."
+            />
+          </>
+        }>
+        <Text style={passStyles.title} accessibilityRole="header">
+          {COPY[purpose].title}
+        </Text>
+        <Text style={passStyles.lead}>
+          {COPY[purpose].blurb} {email}.
+        </Text>
+
+        {/* The cells are drawing only; the one TextInput over them is what is typed into. */}
+        <Pressable onPress={() => input.current?.focus()} style={styles.code} accessible={false}>
+          {digits.map((d, i) => (
+            <View
+              key={i}
+              style={[styles.cell, d.trim() ? styles.cellHas : null, focused && i === Math.min(code.length, 5) ? styles.cellNext : null]}>
+              <Text style={styles.cellText}>{d.trim()}</Text>
+            </View>
+          ))}
+          <TextInput
+            ref={input}
+            value={code}
+            onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            keyboardType="number-pad"
+            autoComplete="one-time-code"
+            textContentType="oneTimeCode"
+            maxLength={6}
+            autoFocus
+            caretHidden
+            accessibilityLabel="6-digit code"
+            style={styles.codeInput}
+          />
+        </Pressable>
+
+        {purpose === 'reset' ? (
+          <PaperInput
+            label="New password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+          />
+        ) : null}
+
+        {error ? <PaperError>{error}</PaperError> : null}
+        {resent ? <Text style={passStyles.hint}>Sent again.</Text> : null}
+
+        <SignalButton large title="Continue" onPress={submit} busy={busy} accessibilityHint={gap} />
+        <QuietLink title="Send it again" onPress={resend} />
+      </Pass>
+    </PassScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  page: { flex: 1, backgroundColor: Colors.canvas },
-  content: { paddingHorizontal: Spacing.read, paddingTop: Spacing.regular, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
-  blurb: { paddingTop: Spacing.tight },
-  form: { paddingTop: Spacing.regular, gap: Spacing.read },
-  hint: { paddingHorizontal: Spacing.hair },
+  code: { flexDirection: 'row', gap: 7, marginTop: PolarSpace.s1 },
+  cell: {
+    flex: 1,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: PolarRadius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(31,42,68,0.15)',
+    backgroundColor: Polar.snow,
+  },
+  cellHas: { borderColor: Polar.ink, backgroundColor: Polar.ice },
+  cellNext: { borderColor: Polar.signal, borderWidth: 2 },
+  cellText: { fontFamily: PolarFonts.condensed, fontSize: 24, color: Polar.ink },
+  // Over the cells and invisible, so a tap anywhere on them lands in it and autofill has a target.
+  codeInput: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, opacity: 0.02, color: 'transparent', fontSize: 16 },
+  gateCode: { flexDirection: 'row', justifyContent: 'space-between' },
+  gateDigit: { fontFamily: PolarFonts.condensed, fontSize: 34, lineHeight: 38, color: Polar.ink, fontVariant: ['tabular-nums'] },
 });

@@ -162,6 +162,8 @@ export interface TripSummary {
   endDate: string;
   budget: number;
   status?: TripStatus;
+  /** When the row was written (ISO). The wall counts a draft's days left from it. */
+  createdAt?: string;
 }
 
 export interface Trip {

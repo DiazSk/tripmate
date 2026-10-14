@@ -1,6 +1,6 @@
 import type { TravelerProfile } from '@/api/types';
 
-import { accessibilityValue, dietaryValue, interestsValue } from './profileRows';
+import { accessibilityValue, dietaryValue } from './profileRows';
 
 const profile = (overrides: Partial<TravelerProfile> = {}): TravelerProfile => ({
   group: 'solo',
@@ -11,18 +11,6 @@ const profile = (overrides: Partial<TravelerProfile> = {}): TravelerProfile => (
   topPriorities: [],
   dietary: { tags: [], note: '' },
   ...overrides,
-});
-
-test('the interests row counts what is chosen, and the stars only once there are any', () => {
-  expect(interestsValue(profile())).toBe('None yet');
-  expect(interestsValue(profile({ priorities: ['Food', 'Nightlife', 'Shopping'] }))).toBe(
-    '3 chosen'
-  );
-  expect(
-    interestsValue(
-      profile({ priorities: ['Food', 'Nightlife', 'Shopping'], topPriorities: ['Food', 'Shopping'] })
-    )
-  ).toBe('3 chosen, 2 starred');
 });
 
 // "1 noted" makes somebody open the sheet to learn a word that fits in the row.

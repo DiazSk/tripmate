@@ -19,51 +19,16 @@ export const todayISO = () => new Date().toISOString().slice(0, 10);
 export const isUpcoming = (trip: TripSummary, today: string) => trip.endDate >= today;
 
 /**
- * A two-column grid whose last row holds one tile would stretch it across the full width —
- * `flex: 1` has nothing to share the row with — and an `aspectRatio` photo then becomes enormous.
- * A phantom cell keeps every tile exactly the width it has in a full row, which `maxWidth: '50%'`
- * would only approximate once the column gap is counted.
- *
- * A header is padded the same way, for the same reason: it occupies the leading half of its own
- * row so that the tile after it starts a fresh pair.
+ * The wall's order: upcoming first, soonest at the top; then past, most recent at the top. One
+ * column of postcards, so there are no section headers to pad: each card's own flag says where it
+ * stands ("In 30 days", "Happening now"), and a past one carries none.
  */
-export type WallItem =
-  | { kind: 'header'; key: string; label: string }
-  | { kind: 'trip'; key: string; trip: TripSummary }
-  | { kind: 'spacer'; key: string };
-
-/**
- * Upcoming first, soonest at the top; then past, most recent at the top.
- *
- * **Headers appear only when both sections have something in them.** A lone "PAST" over a wall
- * where everything is past is a label that distinguishes nothing, and the wall read better
- * without one before this existed.
- */
-export function wallItems(trips: TripSummary[], today: string): WallItem[] {
+export function wallOrder(trips: TripSummary[], today: string): TripSummary[] {
   const upcoming = trips
     .filter((trip) => isUpcoming(trip, today))
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
   const past = trips
     .filter((trip) => !isUpcoming(trip, today))
     .sort((a, b) => b.endDate.localeCompare(a.endDate));
-
-  const labelled = upcoming.length > 0 && past.length > 0;
-  return [
-    ...section('upcoming', 'Upcoming', upcoming, labelled),
-    ...section('past', 'Past', past, labelled),
-  ];
-}
-
-function section(id: string, label: string, trips: TripSummary[], labelled: boolean): WallItem[] {
-  if (trips.length === 0) return [];
-  const head: WallItem[] = labelled
-    ? [
-        { kind: 'header', key: `${id}-header`, label },
-        { kind: 'spacer', key: `${id}-header-pad` },
-      ]
-    : [];
-  const tiles: WallItem[] = trips.map((trip) => ({ kind: 'trip', key: trip.id, trip }));
-  // Pad an odd section so the next one starts on a fresh row rather than sharing the last.
-  if (tiles.length % 2 === 1) tiles.push({ kind: 'spacer', key: `${id}-pad` });
-  return [...head, ...tiles];
+  return [...upcoming, ...past];
 }

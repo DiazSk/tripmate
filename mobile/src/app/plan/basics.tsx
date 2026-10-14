@@ -72,7 +72,7 @@ export default function Basics() {
    * above its value, so a hardcoded height would clip the second option for exactly the readers
    * who need it most. The child reports its natural height through `onLayout` — it lays out
    * normally inside the clipped box, which is what makes this the ordinary accordion — and the
-   * wrapper animates between that and nothing. Same shape as `scene-band.tsx`'s band height and
+   * wrapper animates between that and nothing. Same shape as
    * `map-controls.tsx`'s lift, on the same curve and duration.
    *
    * Animating the wrapper's height is also what moves everything below it: the trough grows and

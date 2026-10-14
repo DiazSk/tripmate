@@ -1,6 +1,6 @@
 import type { TripSummary } from '@/api/types';
 
-import { isUpcoming, wallItems } from './tripsWall';
+import { isUpcoming, wallOrder } from './tripsWall';
 
 const trip = (id: string, startDate: string, endDate: string): TripSummary => ({
   id,
@@ -25,34 +25,6 @@ test('a trip counts as upcoming until the day after it ends', () => {
 });
 
 test('upcoming comes first soonest-first, past follows most-recent-first', () => {
-  const items = wallItems([jaipur, kyoto, porto, lisbon], TODAY);
-  expect(items.filter((i) => i.kind === 'trip').map((i) => i.key)).toEqual([
-    'lisbon',
-    'kyoto',
-    'porto',
-    'jaipur',
-  ]);
-});
-
-test('each section starts on a fresh row', () => {
-  // One upcoming trip, so its section is odd and needs a phantom cell before "Past" begins.
-  const items = wallItems([lisbon, porto, jaipur], TODAY);
-  const kinds = items.map((i) => i.kind);
-  expect(kinds).toEqual([
-    'header', 'spacer', // Upcoming
-    'trip', 'spacer', // lisbon, padded to a full row
-    'header', 'spacer', // Past
-    'trip', 'trip', // porto, jaipur
-  ]);
-});
-
-// A label that distinguishes nothing is noise.
-test('headers appear only when both sections have something in them', () => {
-  expect(wallItems([jaipur, porto], TODAY).some((i) => i.kind === 'header')).toBe(false);
-  expect(wallItems([lisbon, kyoto], TODAY).some((i) => i.kind === 'header')).toBe(false);
-  expect(wallItems([lisbon, jaipur], TODAY).filter((i) => i.kind === 'header')).toHaveLength(2);
-});
-
-test('an empty wall is empty, not a pair of headers', () => {
-  expect(wallItems([], TODAY)).toEqual([]);
+  expect(wallOrder([jaipur, kyoto, porto, lisbon], TODAY).map((t) => t.id)).toEqual(['lisbon', 'kyoto', 'porto', 'jaipur']);
+  expect(wallOrder([], TODAY)).toEqual([]);
 });

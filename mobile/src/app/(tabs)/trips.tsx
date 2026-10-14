@@ -1,177 +1,376 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { DRAFT_TTL_DAYS } from '@shared/drafts';
+import { formatDateRange, formatMoney } from '@shared/format';
+import { city, clearsIn, country, featured, phase, phaseLine, postmark, rememberedLine } from '@shared/memories';
 
 import { useAccount } from '@/api/auth';
-import { listTrips } from '@/api/tripMateApi';
+import { usePlacePhoto } from '@/api/placePhotos';
+import { discardTrip, listTrips } from '@/api/tripMateApi';
 import type { TripSummary } from '@/api/types';
-import { PlacePhoto } from '@/components/place-photo';
-import { Invitation, Loading, Notice } from '@/components/states';
-import { ThemedText } from '@/components/themed-text';
-import { BarHeight, Colors, Radius, Spacing } from '@/constants/theme';
-import { formatRange } from '@/lib/dayDisplay';
-import { type WallItem, todayISO, wallItems } from '@/lib/tripsWall';
+import { Scrim } from '@/components/polar-landing/scrim';
+import { PaperError, QuietLink, SignalButton, monumentFontSize, usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
+import { Polar, PolarFonts, PolarRadius, PolarSpace, PolarType } from '@/constants/polar';
+import { BarHeight } from '@/constants/theme';
+import { tripDays } from '@/lib/tiers';
+import { todayISO, wallOrder } from '@/lib/tripsWall';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
 
+type Loaded = { saved: TripSummary[]; drafts: TripSummary[] };
+type Tab = 'memories' | 'drafts';
+
+/**
+ * My memories: the web's postcard wall (`/trips`, design A), for the phone.
+ *
+ * The next trip still to come, else the one that started last, fills the first screen with its city
+ * set across the foot as the monument. Below it, on paper, a postcard per trip in one column: the
+ * city stamped in Oswald, the month it starts as a postmark, and a flag for where it stands. Drafts
+ * sit behind a toggle that only exists while there are some, and say how long they have.
+ *
+ * **Delete is in the caption, on paper, level with the destination.** On the photograph it shared
+ * a corner with the postmark. It asks first, with the platform's own destructive alert.
+ */
 export default function Trips() {
   const router = useRouter();
+  const fonts = usePolarFonts();
   const { account } = useAccount();
-  // undefined = still loading, null = the fetch failed, [] = fetched fine, no trips yet.
-  // Re-read on focus rather than on mount: a trip kept in the wizard has to show up here.
-  const trips = useFocusedFetch<TripSummary[] | null>(async () => (await listTrips()) ?? null);
+  const { height } = useWindowDimensions();
+  // undefined = still loading, null = the fetch failed. Re-read on focus: a trip kept in the
+  // wizard has to show up here. Both lists at once, so the toggle never appears a beat late.
+  const loaded = useFocusedFetch<Loaded | null>(async () => {
+    const [saved, drafts] = await Promise.all([listTrips('saved'), listTrips('draft')]);
+    return saved ? { saved, drafts: drafts ?? [] } : null;
+  });
+  // Deleted here, spliced locally until the next focus re-reads the server.
+  const [gone, setGone] = useState<string[]>([]);
+  const [tab, setTab] = useState<Tab>('memories');
+  const [error, setError] = useState<string | null>(null);
+  const [pastHero, setPastHero] = useState(false);
+
+  const today = todayISO();
+  const saved = loaded ? wallOrder(loaded.saved.filter((t) => !gone.includes(t.id)), today) : [];
+  const drafts = loaded ? loaded.drafts.filter((t) => !gone.includes(t.id)) : [];
+  // The toggle exists only with a second collection, so the tab in force is derived every render:
+  // discarding the last draft must not leave `tab` pointing at a list that is gone.
+  const activeTab: Tab = drafts.length > 0 ? tab : 'memories';
+  const shown = activeTab === 'drafts' ? drafts : saved;
+  const heroHeight = Math.round(height * 0.86);
+  const hasHero = saved.length > 0;
+  usePolarStatusBar(!hasHero || pastHero);
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setPastHero(e.nativeEvent.contentOffset.y > heroHeight - 60);
+
+  function askDelete(trip: TripSummary) {
+    const draft = trip.status === 'draft';
+    Alert.alert(
+      draft ? 'Discard this draft?' : 'Delete this trip?',
+      `Your ${trip.destination} itinerary will be permanently deleted. This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: draft ? 'Discard draft' : 'Delete trip',
+          style: 'destructive',
+          onPress: async () => {
+            setError(null);
+            // The card stays put on a failure, which is the honest reflection of a delete that
+            // didn't happen; the line above the wall says so.
+            if (await discardTrip(trip.id)) setGone((g) => [...g, trip.id]);
+            else setError("We couldn't delete that trip. Try again.");
+          },
+        },
+      ],
+    );
+  }
+
+  if (!fonts || loaded === undefined) {
+    return (
+      <View style={[styles.screen, styles.center, { backgroundColor: Polar.night }]}>
+        <ActivityIndicator color={Polar.ice} />
+      </View>
+    );
+  }
+
+  const wallHead = (
+    <View style={styles.wallHead}>
+      {error ? <PaperError>{error}</PaperError> : null}
+      {drafts.length > 0 ? (
+        <View style={styles.tabs} accessibilityRole="radiogroup" accessibilityLabel="Which trips to show">
+          {(['memories', 'drafts'] as const).map((t) => (
+            <Pressable
+              key={t}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: activeTab === t }}
+              onPress={() => setTab(t)}
+              style={[styles.tab, activeTab === t && styles.tabOn]}>
+              <Text style={[styles.tabText, activeTab === t && styles.tabTextOn]}>
+                {t === 'memories' ? 'My memories' : 'Drafts'} <Text style={styles.tabCount}>{t === 'memories' ? saved.length : drafts.length}</Text>
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      {activeTab === 'drafts' ? (
+        <Text style={styles.note}>
+          Plans you generated but haven&apos;t kept. Open one to carry on where you left off. Unkept drafts are cleared after {DRAFT_TTL_DAYS} days.
+        </Text>
+      ) : null}
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <View style={styles.screen}>
       <FlatList
-        data={wall(trips)}
-        keyExtractor={(item) => item.key}
-        numColumns={2}
-        columnWrapperStyle={styles.row}
+        data={loaded === null ? [] : shown}
+        keyExtractor={(t) => t.id}
+        onScroll={onScroll}
+        scrollEventThrottle={64}
         contentContainerStyle={styles.content}
         ListHeaderComponent={
-          <View style={styles.masthead}>
-            <ThemedText type="display">Trips</ThemedText>
-            <ThemedText type="detail" themeColor="muted">
-              {countLine(trips)}
-            </ThemedText>
-          </View>
+          <>
+            {loaded === null ? (
+              <Empty title="Not loaded" body="Couldn't reach TripMate. Check your connection." />
+            ) : hasHero ? (
+              <Hero trips={saved} height={heroHeight} />
+            ) : (
+              <Empty
+                title="Your memories start here"
+                body="Plan a trip and it shows up here once you keep it: a postcard for every place you have been, and every place you are going."
+                action={<SignalButton large title="Plan your first trip" onPress={() => router.push('/plan/basics')} />}
+                // Only signed out, and only with nothing here: somebody with trips on the web opens
+                // this app to a blank wall, and this is the reason.
+                extra={!account ? <QuietLink title="Already have trips? Sign in" onPress={() => router.push('/signin')} style={styles.selfCenter} /> : null}
+              />
+            )}
+            {loaded !== null && (saved.length > 0 || drafts.length > 0) ? wallHead : null}
+          </>
         }
         ListEmptyComponent={
-          trips === undefined ? (
-            <Loading />
-          ) : trips === null ? (
-            <Notice>Couldn&rsquo;t reach TripMate. Check your connection.</Notice>
-          ) : (
-            <View>
-              <Invitation
-                title="No trips kept yet"
-                body="Plans you keep are collected here, with the places you chose."
-                note="Start one from Home"
-              />
-              {/* Only when signed out, and only when there is nothing here. Somebody who already
-                  has trips on the web opens this app to a blank wall and no reason for it; this
-                  is the reason. Offered to a signed-in traveller it would be nonsense, and
-                  offered above a full grid it would be an advert. */}
-              {!account ? (
-                <Pressable onPress={() => router.push('/signin')} style={styles.signIn}>
-                  <ThemedText type="detail" themeColor="muted">
-                    Already have trips? <ThemedText type="detail">Sign in</ThemedText>
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-            </View>
-          )
+          loaded !== null && drafts.length > 0 ? (
+            <Text style={[styles.note, styles.gutter]}>Nothing kept yet. Open a draft and press Keep this trip, and it becomes a memory here.</Text>
+          ) : null
         }
-        renderItem={({ item }) =>
-          item.kind === 'spacer' ? (
-            <View style={styles.spacer} />
-          ) : item.kind === 'header' ? (
-            <ThemedText type="label" themeColor="muted" style={styles.sectionLabel}>
-              {item.label}
-            </ThemedText>
-          ) : (
-            <TripTile trip={item.trip} onPress={() => router.push(`/trip/${item.trip.id}`)} />
-          )
-        }
+        ItemSeparatorComponent={() => <View style={styles.gap} />}
+        renderItem={({ item }) => <Postcard trip={item} today={today} onOpen={() => router.push(`/trip/${item.id}`)} onDelete={() => askDelete(item)} />}
+        ListFooterComponent={<Text style={styles.foot}>Every journey here was planned in TripMate. Photographs via Wikipedia.</Text>}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
-/** The clock is read here rather than inside the rule, so the arrangement stays testable. */
-function wall(trips: TripSummary[] | null | undefined): WallItem[] {
-  return trips ? wallItems(trips, todayISO()) : [];
-}
-
-function countLine(trips: TripSummary[] | null | undefined): string {
-  if (trips === undefined) return 'Gathering your plans';
-  if (trips === null) return 'Not loaded';
-  if (trips.length === 0) return 'Nothing kept yet';
-  // **Distinct destinations, not distinct countries.** This counted the last comma-separated
-  // segment — the country — while calling the result "places", so a Lisbon trip and a Porto trip
-  // read as "1 place". Two cities is two places to anybody who went to both, and the word on
-  // screen should be the thing being counted.
-  const places = new Set(trips.map((t) => t.destination.trim()).filter(Boolean));
-  const trip = trips.length === 1 ? 'trip' : 'trips';
-  const place = places.size === 1 ? 'place' : 'places';
-  return `${trips.length} ${trip} · ${places.size} ${place}`;
-}
-
-/**
- * A trip tile. Radius 8 rather than the Swift app's 16: DESIGN.md records those 16px panels as
- * a "Radius Drift" — incumbents the web retokenization deliberately left alone — and says new
- * surfaces take 5–8px or tighter. This app is all new surface.
- */
-function TripTile({ trip, onPress }: { trip: TripSummary; onPress: () => void }) {
+/** The first screen: the featured trip's photograph, the page's sentence, and the city across the foot. */
+function Hero({ trips, height }: { trips: TripSummary[]; height: number }) {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const hero = featured(trips);
+  const photo = usePlacePhoto(hero?.destination);
+  if (!hero) return null;
+  const word = city(hero);
+  const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
+  const size = monumentFontSize(word, width - PolarSpace.pad * 2, height * 0.24);
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.tile, pressed && Platform.OS === 'ios' && styles.tilePressed]}
-      android_ripple={{ color: Colors.pressed }}>
-      <View style={styles.photoWrap}>
-        <PlacePhoto name={trip.destination} aspectRatio={4 / 5} radius={Radius.read} />
-        {/* A second border inside the photo's own edge. The tile's hairline is white at 12%,
-            which disappears against a bright photograph; this one sits on the image itself. */}
-        <View pointerEvents="none" style={styles.photoEdge} />
+    <View style={[styles.hero, { height, paddingTop: insets.top }]}>
+      {url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={600} accessibilityIgnoresInvertColors /> : null}
+      <Scrim stops={[[0, Polar.night, 0.5], [0.22, Polar.night, 0], [0.38, Polar.night, 0], [0.62, Polar.night, 0.55], [1, Polar.night, 0.88]]} />
+      <View style={styles.heroCopy}>
+        <View style={styles.next}>
+          <View style={styles.dot} />
+          <Text style={[PolarType.eyebrow, styles.onDark, styles.small]}>
+            {phase(hero) === 'past' ? 'Most recent' : 'Next'}: {word} · {phaseLine(hero)}
+          </Text>
+        </View>
+        <Text style={[PolarType.display, styles.onDark]} accessibilityRole="header">
+          My memories
+        </Text>
+        <Text style={[PolarType.lead, styles.onDark]}>{rememberedLine(trips)}</Text>
+        <Text style={[PolarType.coord, styles.onDark2]}>
+          {hero.destination} · {formatDateRange(hero.startDate, hero.endDate)}
+        </Text>
       </View>
-
-      <ThemedText type="heading" numberOfLines={1} style={styles.tileName}>
-        {trip.destination}
-      </ThemedText>
-      {/* Two lines, not one: at a half-width tile these do not fit together. */}
-      <ThemedText type="money" themeColor="muted">
-        {formatRange(trip.startDate, trip.endDate)}
-      </ThemedText>
-      <ThemedText type="money" themeColor="money">
-        {formatBudget(trip.budget)}
-      </ThemedText>
-    </Pressable>
+      <Text style={[PolarType.monument, styles.monument, { fontSize: size, lineHeight: Math.round(size * 1.15) }]} numberOfLines={1} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {word}
+      </Text>
+    </View>
   );
 }
 
-/**
- * Gold says money and only money — which is exactly why the figure needs a noun.
- *
- * `trip.budget` is the ceiling the traveler set, not what the plan came to and not what they
- * paid; a bare gold `$1,800` beside a photograph reads as any of the three. The word costs four
- * characters and removes the guess.
- */
-const formatBudget = (budget: number) =>
-  budget > 0 ? `Budget · $${Math.round(budget).toLocaleString('en-US')}` : 'Budget not set';
+function Empty({ title, body, action, extra }: { title: string; body: string; action?: React.ReactNode; extra?: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.empty, { paddingTop: insets.top + PolarSpace.s10 }]}>
+      <Text style={PolarType.kicker}>Nothing kept yet.</Text>
+      <Text style={[PolarType.display, styles.ink, styles.centerText]} accessibilityRole="header">
+        {title}
+      </Text>
+      <Text style={[PolarType.body, styles.muted, styles.centerText]}>{body}</Text>
+      {action}
+      {extra}
+    </View>
+  );
+}
+
+function Postcard({ trip, today, onOpen, onDelete }: { trip: TripSummary; today: string; onOpen: () => void; onDelete: () => void }) {
+  const { width } = useWindowDimensions();
+  const photo = usePlacePhoto(trip.destination);
+  const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
+  const draft = trip.status === 'draft';
+  const pm = postmark(trip);
+  const days = tripDays(trip.startDate, trip.endDate);
+  const word = city(trip);
+  const place = country(trip);
+  const clears = draft ? clearsIn(trip, new Date(`${today}T12:00:00Z`)) : null;
+  const cardW = width - PolarSpace.pad * 2;
+  const stamp = Math.min(cardW * 0.18, monumentFontSize(word, cardW - 20, 66));
+  return (
+    // Delete is a sibling of the card's press target, never inside it: one press, one meaning.
+    <View style={styles.card}>
+      <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Open your ${trip.destination} ${draft ? 'draft' : 'trip'}`} style={({ pressed }) => [styles.cardPress, pressed && styles.pressed]}>
+        <View style={styles.photo}>
+          {/* The typographic card is the base and never unmounts: a photo miss reads as the
+              place's initial on the night ground, and a hit fades in over it. */}
+          <Text style={[styles.initial, { fontSize: cardW * 0.42, lineHeight: cardW * 0.5 }]}>{word.slice(0, 1)}</Text>
+          {url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={400} recyclingKey={trip.id} accessibilityIgnoresInvertColors /> : null}
+          <Scrim stops={[[0, Polar.night, 0.25], [0.3, Polar.night, 0], [0.55, Polar.night, 0], [1, Polar.night, 0.6]]} />
+          <Text style={[styles.stamp, { fontSize: stamp, lineHeight: Math.round(stamp * 1.15) }]} numberOfLines={1}>
+            {word}
+          </Text>
+          <View style={styles.postmark}>
+            <Text style={styles.pmMonth}>{pm.month}</Text>
+            <Text style={styles.pmYear}>{pm.year}</Text>
+          </View>
+          {draft ? (
+            <Text style={[styles.flag, styles.flagDraft]}>Draft</Text>
+          ) : phase(trip) !== 'past' ? (
+            <Text style={styles.flag}>{phaseLine(trip)}</Text>
+          ) : null}
+        </View>
+        <View style={styles.caption}>
+          <Text style={styles.dest}>
+            {word}
+            {place ? <Text style={styles.country}>{`  ${place.toUpperCase()}`}</Text> : null}
+          </Text>
+          <Text style={styles.meta}>
+            {formatDateRange(trip.startDate, trip.endDate)} · {days} {days === 1 ? 'day' : 'days'} · {formatMoney(trip.budget)}
+          </Text>
+          {clears ? <Text style={styles.clears}>{clears}</Text> : null}
+        </View>
+      </Pressable>
+      <Pressable
+        onPress={onDelete}
+        accessibilityRole="button"
+        accessibilityLabel={draft ? `Discard your ${trip.destination} draft` : `Delete your ${trip.destination} trip`}
+        style={({ pressed }) => [styles.delete, { top: cardW * 0.75 + 8 }, pressed && styles.deletePressed]}>
+        {({ pressed }) => (
+          <Svg width={15} height={15} viewBox="0 0 16 16">
+            <Path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.6 6.5v4.5M9.4 6.5v4.5" fill="none" stroke={pressed ? Polar.ice : Polar.charcoal} strokeWidth={1.3} />
+          </Svg>
+        )}
+      </Pressable>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
-  // 44pt is the platform's minimum touch target; a line of text is otherwise ~18pt tall.
-  signIn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.read },
-  screen: { flex: 1, backgroundColor: Colors.canvas },
-  /** The tab bar floats over the wall and its safe-area inset does not reach this list, so the
-   *  last row's budget line ended up underneath it — the same correction Home and Profile carry. */
-  content: { padding: Spacing.read, gap: Spacing.rows, paddingBottom: BarHeight + Spacing.regular },
-  row: { gap: Spacing.rows },
-  masthead: { gap: Spacing.hair, marginBottom: Spacing.tight },
-  // Sits in the leading half of its own row (see `wallItems`), aligned with the tile beneath it.
-  sectionLabel: { flex: 1, alignSelf: 'flex-end', paddingBottom: Spacing.hair },
-  tile: {
-    flex: 1,
-    backgroundColor: Colors.panel,
-    borderRadius: Radius.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-    padding: 10,
-    gap: 2,
-    overflow: 'hidden',
-  },
-  tilePressed: { opacity: 0.7 },
-  spacer: { flex: 1 },
-  photoWrap: { marginBottom: Spacing.tight },
-  photoEdge: {
+  screen: { flex: 1, backgroundColor: Polar.paper },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  // Clears the floating tab bar, whose inset does not reach this list.
+  content: { paddingBottom: BarHeight + PolarSpace.s5 },
+  gutter: { paddingHorizontal: PolarSpace.pad },
+  gap: { height: PolarSpace.s5 },
+  onDark: { color: Polar.ice },
+  onDark2: { color: Polar.nightText2 },
+  ink: { color: Polar.ink },
+  muted: { color: Polar.charcoal },
+  small: { fontSize: 11 },
+  centerText: { textAlign: 'center' },
+  selfCenter: { alignSelf: 'center' },
+
+  hero: { justifyContent: 'flex-end', overflow: 'hidden', backgroundColor: Polar.night, paddingHorizontal: PolarSpace.pad, marginBottom: PolarSpace.s6 },
+  heroCopy: { gap: 8, paddingBottom: PolarSpace.s3 },
+  next: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Polar.signal },
+  monument: { color: Polar.ice, opacity: 0.94 },
+
+  empty: { alignItems: 'center', gap: PolarSpace.s3, paddingHorizontal: PolarSpace.pad, paddingBottom: PolarSpace.s6 },
+
+  wallHead: { gap: PolarSpace.s3, paddingHorizontal: PolarSpace.pad, marginBottom: PolarSpace.s4 },
+  tabs: { flexDirection: 'row', alignSelf: 'flex-start', padding: 3, gap: 3, borderRadius: PolarRadius.sm, backgroundColor: Polar.veil05 },
+  tab: { minHeight: 40, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline },
+  tabOn: { backgroundColor: Polar.ice, shadowColor: Polar.ink, shadowOpacity: 0.12, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
+  tabText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.charcoal },
+  tabTextOn: { color: Polar.ink },
+  tabCount: { fontFamily: PolarFonts.sans, fontVariant: ['tabular-nums'] },
+  note: { fontFamily: PolarFonts.sans, fontSize: 14, lineHeight: 21, color: Polar.charcoal },
+
+  card: { marginHorizontal: PolarSpace.pad },
+  cardPress: { gap: 12 },
+  pressed: { opacity: 0.85 },
+  photo: { aspectRatio: 4 / 3, overflow: 'hidden', borderRadius: PolarRadius.card, backgroundColor: Polar.deep, alignItems: 'center', justifyContent: 'center' },
+  initial: { fontFamily: PolarFonts.display, color: 'rgba(255,255,255,0.14)' },
+  stamp: { ...PolarType.monument, position: 'absolute', left: 10, bottom: 2, right: 10, color: Polar.ice, opacity: 0.95 },
+  postmark: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: Radius.read,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.photoBorder,
+    top: 12,
+    right: 12,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '-12deg' }],
   },
-  tileName: { marginBottom: 1 },
+  pmMonth: { fontFamily: PolarFonts.condensed, fontSize: 16, lineHeight: 18, letterSpacing: 1, color: Polar.ice },
+  pmYear: { fontFamily: PolarFonts.sansSemi, fontSize: 9, letterSpacing: 1.3, color: Polar.ice },
+  flag: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    overflow: 'hidden',
+    borderRadius: PolarRadius.hairline,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    fontFamily: PolarFonts.sansSemi,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: Polar.ink,
+  },
+  flagDraft: { backgroundColor: Polar.signal },
+  // Room on the right for the delete control beside the first line.
+  caption: { gap: 3, paddingRight: 52 },
+  dest: { fontFamily: PolarFonts.display, fontSize: 25, lineHeight: 28, color: Polar.ink },
+  country: { fontFamily: PolarFonts.sansSemi, fontSize: 11, letterSpacing: 1.3, color: Polar.charcoal },
+  meta: { fontFamily: PolarFonts.sans, fontSize: 13, lineHeight: 18, color: Polar.charcoal, fontVariant: ['tabular-nums'] },
+  clears: { fontFamily: PolarFonts.sans, fontSize: 12, color: Polar.ember },
+  delete: {
+    position: 'absolute',
+    right: 0,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Polar.rule,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deletePressed: { backgroundColor: Polar.alertText, borderColor: Polar.alertText },
+  foot: { marginTop: PolarSpace.s6, paddingTop: PolarSpace.s4, paddingHorizontal: PolarSpace.pad, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Polar.rule, fontFamily: PolarFonts.sans, fontSize: 12, color: Polar.charcoal },
 });
