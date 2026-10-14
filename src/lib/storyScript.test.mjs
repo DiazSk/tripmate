@@ -46,9 +46,9 @@ test("compactDay carries every field the narration can see, and nothing it can't
     }),
     2
   );
-  assert.match(text, /Day 3 — 2026-09-19 — Arrival day/);
+  assert.match(text, /Day 3, 2026-09-19: Arrival day/);
   assert.match(text, /Day theme: Slow start, river light/);
-  assert.match(text, /Staying at: Casa Amarela — walkable to the tram/);
+  assert.match(text, /Staying at: Casa Amarela \(walkable to the tram\)/);
   assert.match(text, /Stop 0: Belém Tower, at 9:00 AM, for 1 hour, \(other\)/);
   assert.match(text, /Why it suits them: you asked for waterfront history/);
   // actualCost moves after the trip is over, so it must not invalidate a cached script.

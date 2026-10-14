@@ -432,7 +432,7 @@ export function renderItineraryHtml(trip: Trip, assets: ExportAssets): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>${escapeHtml(cityName)} — TripMate</title>
+<title>${escapeHtml(cityName)} · TripMate</title>
 <style>
 ${fontFace}${CSS}${mapCss}
 </style>

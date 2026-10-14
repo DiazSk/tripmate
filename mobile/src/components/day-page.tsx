@@ -503,7 +503,7 @@ function CostEntry({
           editable={!disabled}
           keyboardType="decimal-pad"
           returnKeyType="done"
-          placeholder="—"
+          placeholder="Add"
           placeholderTextColor={Colors.muted}
           selectionColor={Colors.accent}
           maxFontSizeMultiplier={1.6}

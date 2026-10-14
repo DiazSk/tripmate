@@ -26,13 +26,13 @@ export async function readImportRequest(
   if (isThrottled(req, { bucket, max: 30 })) {
     // One import is one short model call; a traveller shares several screenshots in a row;
     // the daily spend cap (isOverDailyCap) stays the real backstop.
-    return NextResponse.json({ error: "Too many requests — slow down and try again shortly." }, { status: 429 });
+    return NextResponse.json({ error: "Too many requests. Slow down and try again shortly." }, { status: 429 });
   }
   if (isOverDailyCap()) {
-    return NextResponse.json({ error: "Demo budget for today has been used up — try again tomorrow." }, { status: 503 });
+    return NextResponse.json({ error: "Demo budget for today has been used up. Try again tomorrow." }, { status: 503 });
   }
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "That's a lot at once — try fewer screenshots." }, { status: 413 });
+    return NextResponse.json({ error: "That's a lot at once. Try fewer screenshots." }, { status: 413 });
   }
   // The header above is a fast path only — it's client-supplied and a chunked request can omit
   // it entirely. This counts the bytes actually read off the stream, so a spoofed or missing
@@ -55,7 +55,7 @@ export async function readImportRequest(
     }
   }
   if (tooBig) {
-    return NextResponse.json({ error: "That's a lot at once — try fewer screenshots." }, { status: 413 });
+    return NextResponse.json({ error: "That's a lot at once. Try fewer screenshots." }, { status: 413 });
   }
   let body: { items?: unknown; destination?: unknown };
   try {

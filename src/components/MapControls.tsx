@@ -206,7 +206,7 @@ export default function MapControls() {
             // horizon, so the thumb starts where the camera actually is instead of 15° off it
             // until the first readout frame corrects it.
             defaultValue={-OBLIQUE_PITCH}
-            aria-label="Map tilt — top is looking straight down, bottom is a low 3D angle"
+            aria-label="Map tilt: top is looking straight down, bottom is a low 3D angle"
             className="tilt-slider"
             onPointerDown={() => {
               draggingRef.current = true;

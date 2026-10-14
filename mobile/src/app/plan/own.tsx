@@ -149,7 +149,7 @@ export default function OwnPlan() {
                   ? 'Looked up when you build'
                   : isFound(stop)
                     ? 'On the map'
-                    : 'Not found on the map — check the spelling';
+                    : 'Not found on the map. Check the spelling';
                 return (
                   <View key={key}>
                     <TextField

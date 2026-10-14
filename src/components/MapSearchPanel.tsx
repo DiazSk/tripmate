@@ -886,7 +886,7 @@ export default function MapSearchPanel({
             {!hasQuery && state !== "searching" && emptyState}
             {hasQuery && state === "throttled" && (
               <p className="px-3 py-4 text-xs text-alert/75">
-                Search is busy right now — the free places index rate-limits. Try again in a moment.
+                Search is busy right now: the free places index rate-limits. Try again in a moment.
               </p>
             )}
             {hasQuery && state === "empty" && (
@@ -985,7 +985,7 @@ export default function MapSearchPanel({
             addedDay={addedDays[selectedPlace.id]}
             suggestionText={
               cardSuggestion && pickingFor !== selectedPlace.id
-                ? `Closest to Day ${cardSuggestion.day + 1} — ${shortDistance(
+                ? `Closest to Day ${cardSuggestion.day + 1}, ${shortDistance(
                     cardSuggestion.distanceM
                   )} from its other stops`
                 : undefined
@@ -1072,7 +1072,7 @@ function AddToDayPicker({
         <>
           {suggestion && (
             <p className="px-1.5 pt-1 pb-1.5 text-[10px] text-muted">
-              Closest to <span className="text-accent">Day {suggestion.day + 1}</span> —{" "}
+              Closest to <span className="text-accent">Day {suggestion.day + 1}</span>,{" "}
               {shortDistance(suggestion.distanceM)} from its other stops
             </p>
           )}
@@ -1151,7 +1151,7 @@ function SlotPicker({
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
         <p className="min-w-0 flex-1 truncate text-[10px] text-muted">
-          Day {dayNumber} — when?
+          Day {dayNumber}: when?
         </p>
       </div>
       <div className="flex flex-col" {...devLabel("MapSearchPanel.SlotPicker")}>

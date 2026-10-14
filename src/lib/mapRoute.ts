@@ -107,7 +107,7 @@ export function cssColor(name: string): string {
   let value = colorCache.get(name);
   if (value === undefined) {
     value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    if (!value) throw new Error(`mapRoute: missing colour token ${name} — see globals.css :root`);
+    if (!value) throw new Error(`mapRoute: missing colour token ${name}; see globals.css :root`);
     colorCache.set(name, value);
   }
   return value;

@@ -1,4 +1,5 @@
 import { DEFAULT_TIMEOUT_MS, parseJsonResponse, runClaude } from "./claude";
+import { NO_EM_DASH_RULE } from "./writingStyle";
 
 const BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search";
 const MAX_RESULTS_FOR_EXTRACTION = 8;
@@ -76,7 +77,7 @@ function buildTextAndCitations(results: BraveResult[]): { text: string; citation
  */
 export function buildFestivalExtractionPrompt(answer: string, citations: WebCitation[]): string {
   const citationList = citations
-    .map((c, i) => `[${i + 1}] ${c.title ?? "untitled"} — ${c.url ?? "no url"}`)
+    .map((c, i) => `[${i + 1}] ${c.title ?? "untitled"} (${c.url ?? "no url"})`)
     .join("\n");
 
   return `Below is real, search-sourced text about festivals/events at a destination, with numbered citations.
@@ -92,6 +93,7 @@ Extract a JSON array of the festivals/events explicitly named in the TEXT above.
 - "dates" must be copied from what the TEXT actually states for that item. If the TEXT gives no clear date for an item, omit that item entirely rather than guessing one.
 - "sourceUrl" is the URL from the CITATIONS list matching that item's citation number.
 - Do not add any festival, date, or detail that is not present in the TEXT. If the TEXT names nothing extractable, respond with an empty array.
+- ${NO_EM_DASH_RULE}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 [{"name":"festival name","dates":"date range as stated","note":"one short line from the text","sourceUrl":"url or null"}]`;

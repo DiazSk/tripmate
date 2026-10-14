@@ -152,7 +152,7 @@ function Dimension({ dimension }: { dimension: HealthDimension }) {
             {classify(finding)}
           </ThemedText>
           <ThemedText type="detail" themeColor="muted">
-            {finding.dayIndex === null ? '' : `Day ${finding.dayIndex + 1} — `}
+            {finding.dayIndex === null ? '' : `Day ${finding.dayIndex + 1}: `}
             {finding.message}
           </ThemedText>
         </View>

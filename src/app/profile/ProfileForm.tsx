@@ -620,7 +620,7 @@ export default function ProfileForm({
 
             <Section
               title="Who you usually travel with"
-              hint="A default only — the planner still asks who's coming on each trip, since that changes."
+              hint="A default only. The planner still asks who's coming on each trip, since that changes."
             >
               <GroupTypePicker selected={profile.group} onSelect={(v: GroupType) => set("group", v)} />
             </Section>
@@ -661,7 +661,7 @@ export default function ProfileForm({
               />
             </Section>
 
-            <Section title="What matters most" hint="Star up to three — the starred ones drive the plan.">
+            <Section title="What matters most" hint="Star up to three. The starred ones drive the plan.">
               <InterestPicker
                 selected={profile.priorities}
                 starred={profile.topPriorities}

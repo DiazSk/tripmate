@@ -1,4 +1,5 @@
 import { parseJsonResponse } from "./claude";
+import { NO_EM_DASH_RULE } from "./writingStyle";
 import { formatAnchors, formatWeather } from "./itineraryPrompt";
 import type { Anchor } from "./types";
 import type { DayWeather } from "./weather";
@@ -25,10 +26,10 @@ export function buildSketchPrompt(p: {
   priorities: string[];
   weather: DayWeather[];
 }): string {
-  return `Sketch a ${p.dates.length}-day trip to ${p.destination} — only the shape, not the stops.
+  return `Sketch a ${p.dates.length}-day trip to ${p.destination}: only the shape, not the stops.
 Days: ${p.dates.join(", ")}
 ${p.priorities.length ? `What matters to them: ${p.priorities.join(", ")}\n` : ""}${p.weather.length ? `Weather:\n${formatWeather(p.weather)}\n` : ""}${formatAnchors(p.anchors)}
-For each day give: a "theme" of 2-5 evocative words (e.g. "Old Tokyo, slowly"), the one "area" the day centres on, and the traveler's places ("anchors", exact names from the list) that belong on that day. Group places that are near each other; put outdoor places on the better-weather days.
+For each day give: a "theme" of 2-5 evocative words (e.g. "Old Tokyo, slowly"), the one "area" the day centres on, and the traveler's places ("anchors", exact names from the list) that belong on that day. Group places that are near each other; put outdoor places on the better-weather days. ${NO_EM_DASH_RULE}
 
 Respond with ONLY valid JSON, no code fences:
 {"days":[{"date":"YYYY-MM-DD","theme":"2-5 words","area":"neighbourhood or town","anchors":["exact name"]}]}`;
@@ -59,7 +60,7 @@ export function parseSketch(raw: string, dates: string[]): SketchDay[] | null {
 export function formatSketchForGenerate(days: SketchDay[] | null): string {
   if (!days?.length) return "";
   const lines = days.map(
-    (d) => `- ${d.date}: "${d.theme}" — ${d.area}${d.anchors.length ? ` — ${d.anchors.join(", ")}` : ""}`
+    (d) => `- ${d.date}: "${d.theme}", ${d.area}${d.anchors.length ? ` (${d.anchors.join(", ")})` : ""}`
   );
-  return `\nThe traveler has already seen this sketch of the days. Keep this shape — each day's theme (copy it into that day's "theme" field), area and places — unless it conflicts with opening hours, weather or the rules above:\n${lines.join("\n")}\n`;
+  return `\nThe traveler has already seen this sketch of the days. Keep this shape (each day's theme, copied into that day's "theme" field, its area and its places) unless it conflicts with opening hours, weather or the rules above:\n${lines.join("\n")}\n`;
 }

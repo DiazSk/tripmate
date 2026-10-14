@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "TripMate — Plan your trip",
+    name: "TripMate: Plan your trip",
     short_name: "TripMate",
     description: "AI-planned itineraries with real weather, budget tracking, and maps.",
     start_url: "/",

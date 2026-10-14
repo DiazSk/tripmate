@@ -232,13 +232,13 @@ test("every wikipedia sentence carries its own attribution, one sentence each", 
     wikiExtract:
       "Kyoto is a city in Japan. It was the capital for over a thousand years. Many temples remain.",
   });
-  const wiki = facts.filter((f) => /Wikipedia$/.test(f));
+  const wiki = facts.filter((f) => /\(Wikipedia\)$/.test(f));
   assert.equal(wiki.length, 3, "all three sentences should surface, not just the first");
   // CC BY-SA: every quoted line carries the credit, not just the first of a run.
-  for (const f of wiki) assert.match(f, / — Wikipedia$/);
+  for (const f of wiki) assert.match(f, / \(Wikipedia\)$/);
   // One sentence per fact — the split is what keeps them glanceable.
   for (const f of wiki) {
-    const body = f.replace(/ — Wikipedia$/, "");
+    const body = f.replace(/ \(Wikipedia\)$/, "");
     assert.equal(body.split(". ").length, 1, `expected one sentence, got: ${body}`);
   }
   assert.ok(
@@ -257,7 +257,7 @@ test("a long opening sentence no longer suppresses the rest of the extract", () 
     ...fixture(),
     wikiExtract: `${long} More than half of the prefecture's population resides in the city.`,
   });
-  const wiki = facts.filter((f) => /Wikipedia$/.test(f));
+  const wiki = facts.filter((f) => /\(Wikipedia\)$/.test(f));
   assert.equal(wiki.length, 1, "the short second sentence should still surface");
   assert.match(wiki[0], /^More than half/);
 });

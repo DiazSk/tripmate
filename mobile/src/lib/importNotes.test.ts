@@ -3,7 +3,7 @@ import { emptyDayFindings, importNoteLines, showsHealthOnOpen } from './importNo
 describe('importNoteLines', () => {
   it('says each thing an import could not do, once', () => {
     expect(importNoteLines({ importNotes: ['hoursUnchecked', 'costsUnestimated'] })).toEqual([
-      "Opening hours not checked — the map data couldn't be reached.",
+      "Opening hours not checked. The map data couldn't be reached.",
       "Couldn't estimate costs, so the budget check is off for this trip.",
     ]);
   });

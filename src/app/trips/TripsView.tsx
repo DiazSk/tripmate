@@ -167,7 +167,7 @@ function MemoriesHero({ trips }: { trips: TripSummary[] }) {
             Your memories start here
           </h1>
           <p className="mt-3 text-base text-muted">
-            Plan a trip and it&apos;ll show up here once you save it — a postcard for every
+            Plan a trip and it&apos;ll show up here once you save it: a postcard for every
             place you&apos;ve been.
           </p>
           <Link
@@ -542,8 +542,8 @@ export default function TripsView({
               the traveler never saved — and that it will not sit here forever. */}
           {activeTab === "drafts" && (
             <p className="mb-5 max-w-[58ch] text-sm text-muted">
-              Plans you generated but haven&apos;t kept. Open one to carry on where you left off —
-              unkept drafts are cleared after {DRAFT_TTL_DAYS} days.
+              Plans you generated but haven&apos;t kept. Open one to carry on where you left off.
+              Unkept drafts are cleared after {DRAFT_TTL_DAYS} days.
             </p>
           )}
           {/* A third column from `xl`. Widening an uncapped grid by making two cards enormous is

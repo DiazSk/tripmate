@@ -119,5 +119,5 @@ export function dietaryNote(venues: DietaryVenue[] | null): string {
 /** Phrased for the critique prompt. An area with nothing the traveler can eat is a §3d defect —
  *  "a beautiful day with one impossible meal in it is a failed day". */
 export function noOptionsFinding(stopName: string, date: string): string {
-  return `${stopName} on ${date}: a search of this area found no places matching the traveler's stated dietary needs — move the meal to an area that has some.`;
+  return `${stopName} on ${date}: a search of this area found no places matching the traveler's stated dietary needs, so move the meal to an area that has some.`;
 }

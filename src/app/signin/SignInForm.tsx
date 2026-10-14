@@ -25,7 +25,7 @@ type CodePurpose = "verify-signup" | "sign-in-code" | "client-trust" | "reset";
 const CODE_COPY: Record<CodePurpose, string> = {
   "verify-signup": "We sent a 6-digit code to confirm your email.",
   "sign-in-code": "We sent a 6-digit code to sign you in.",
-  "client-trust": "New browser — we sent a 6-digit code to confirm it's you.",
+  "client-trust": "New browser, so we sent a 6-digit code to confirm it's you.",
   reset: "We sent a 6-digit code. Enter it with your new password.",
 };
 
@@ -186,7 +186,7 @@ export default function SignInForm() {
           {purpose
             ? `${CODE_COPY[purpose]} (${email})`
             : creating
-              ? "Your trips and travel profile stay with you — on this browser and on your phone."
+              ? "Your trips and travel profile stay with you, on this browser and on your phone."
               : "Sign in to find your trips wherever you are."}
         </p>
 

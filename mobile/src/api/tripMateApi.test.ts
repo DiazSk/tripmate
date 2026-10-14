@@ -229,15 +229,15 @@ function sseResponse(body: string, status = 200) {
 
 test("generateTrip surfaces a 429 as a throttle, not a generic failure", async () => {
   mockedFetch.mockResolvedValue(
-    new Response(JSON.stringify({ error: "Too many requests — slow down and try again shortly." }), { status: 429 })
+    new Response(JSON.stringify({ error: "Too many requests. Slow down and try again shortly." }), { status: 429 })
   );
   const result = await generateTrip(REQ, { onPlan: () => {} });
-  expect(result).toEqual({ kind: "throttled", message: "Too many requests — slow down and try again shortly." });
+  expect(result).toEqual({ kind: "throttled", message: "Too many requests. Slow down and try again shortly." });
 });
 
 test("generateTrip surfaces a 503 as the spend cap", async () => {
   mockedFetch.mockResolvedValue(
-    new Response(JSON.stringify({ error: "Demo budget for today has been used up — try again tomorrow." }), { status: 503 })
+    new Response(JSON.stringify({ error: "Demo budget for today has been used up. Try again tomorrow." }), { status: 503 })
   );
   const result = await generateTrip(REQ, { onPlan: () => {} });
   expect(result?.kind).toBe("spendCap");

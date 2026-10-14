@@ -154,7 +154,7 @@ export default function AuthFormScreen() {
           <ThemedText type="title">{creating ? 'Make an account' : 'Welcome back'}</ThemedText>
           <ThemedText type="detail" themeColor="muted" style={styles.blurb}>
             {creating
-              ? 'Your trips and travel profile stay with you — on this phone and on the web.'
+              ? 'Your trips and travel profile stay with you, on this phone and on the web.'
               : 'Sign in to find your trips wherever you are.'}
           </ThemedText>
 

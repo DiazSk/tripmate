@@ -33,7 +33,7 @@ test("parseSketch returns null when it can't be used", () => {
 test("formatSketchForGenerate is empty with no sketch and names each day otherwise", () => {
   assert.equal(formatSketchForGenerate(null), "");
   const out = formatSketchForGenerate([{ date: "2026-10-06", theme: "Old Tokyo, slowly", area: "Asakusa", anchors: ["Senso-ji"] }]);
-  assert.match(out, /2026-10-06: "Old Tokyo, slowly" — Asakusa — Senso-ji/);
+  assert.match(out, /2026-10-06: "Old Tokyo, slowly", Asakusa \(Senso-ji\)/);
   assert.match(out, /keep this shape/i);
 });
 

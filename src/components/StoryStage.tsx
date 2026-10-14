@@ -414,7 +414,7 @@ function StoryStageBody({
           <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted/80">
             <AudioLines className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" />
             <span>
-              Fetching a better narrator — {Math.round(naturalProgress * 100)}%. 88 MB, kept for
+              Fetching a better narrator: {Math.round(naturalProgress * 100)}%. 88 MB, kept for
               next time; 326 MB on a GPU, which is too big for the browser to keep, so it comes
               down each session. The story is playing in this device&rsquo;s own voice meanwhile.
             </span>
@@ -422,12 +422,12 @@ function StoryStageBody({
         )}
         {naturalStatus === "unavailable" && !silentPlatform && (
           <p className="mt-2 text-[11px] text-muted/80">
-            The natural voice couldn&rsquo;t load — staying with this device&rsquo;s own voice.
+            The natural voice couldn&rsquo;t load, so it&rsquo;s staying with this device&rsquo;s own voice.
           </p>
         )}
         {script?.source === "fallback" && (
           <p className="mt-2 text-xs text-muted/80">
-            Read from your plan — the storyteller wasn&rsquo;t reachable this time.
+            Read from your plan. The storyteller wasn&rsquo;t reachable this time.
           </p>
         )}
         {silentPlatform && (

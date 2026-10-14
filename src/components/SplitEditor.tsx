@@ -200,7 +200,7 @@ export default function SplitEditor({
     try {
       const res = await fetch(`/api/geocode?destination=${encodeURIComponent(q)}`);
       if (!res.ok) {
-        setAddError("Couldn't find that place — try a fuller name.");
+        setAddError("Couldn't find that place. Try a fuller name.");
         return;
       }
       const geo = (await res.json()) as { lat: number; lng: number; name: string };

@@ -25,13 +25,13 @@ function formatMs(ms: number): string {
 }
 
 function formatDurationDelta(deltaMs: number | null): string {
-  if (deltaMs == null) return "—";
+  if (deltaMs == null) return "n/a";
   if (deltaMs === 0) return "±0ms";
   return deltaMs > 0 ? `+${formatMs(deltaMs)} slower` : `-${formatMs(deltaMs)} faster`;
 }
 
 function formatTokenDelta(delta: number | null): string {
-  if (delta == null) return "—";
+  if (delta == null) return "n/a";
   if (delta === 0) return "±0 tok";
   return delta > 0 ? `+${delta} tok` : `${delta} tok`;
 }
@@ -99,7 +99,7 @@ function RoleCard({ role }: { role: RunComparisonRole }) {
         </div>
       )}
       {(!role.stepA || !role.stepB) && (
-        <p className="mt-1.5 text-xs text-muted">Only present in one run — nothing to diff.</p>
+        <p className="mt-1.5 text-xs text-muted">Only present in one run, so nothing to diff.</p>
       )}
     </div>
   );

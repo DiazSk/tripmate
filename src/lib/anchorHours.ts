@@ -54,7 +54,7 @@ export async function fetchAnchorHours(
     // Fail-soft must not mean silent: a plan written without its places' hours reads exactly like
     // one where OSM had none, and the 2026-09-26 Kyoto run was only caught by reading the prompt.
     if (tags === null) {
-      console.warn(`[itinerary] anchor hours unavailable — lookup failed or passed its ${budgetMs}ms budget`);
+      console.warn(`[itinerary] anchor hours unavailable: lookup failed or passed its ${budgetMs}ms budget`);
     }
     return attachHours(anchors, tags);
   } finally {

@@ -137,7 +137,7 @@ function TripTile({ trip, onPress }: { trip: TripSummary; onPress: () => void })
  * characters and removes the guess.
  */
 const formatBudget = (budget: number) =>
-  budget > 0 ? `Budget · $${Math.round(budget).toLocaleString('en-US')}` : '—';
+  budget > 0 ? `Budget · $${Math.round(budget).toLocaleString('en-US')}` : 'Budget not set';
 
 const styles = StyleSheet.create({
   // 44pt is the platform's minimum touch target; a line of text is otherwise ~18pt tall.

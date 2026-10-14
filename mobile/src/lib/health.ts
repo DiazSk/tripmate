@@ -100,7 +100,7 @@ export function healthSummary(
   if (blockers > 0) {
     // Plain words, not "blocker": what was found, and that it is the traveller's to fix.
     const one = blockers === 1;
-    return { verdict: `${blockers} problem${one ? '' : 's'} found — you need to fix ${one ? 'it' : 'them'}`, coverage };
+    return { verdict: `${blockers} problem${one ? '' : 's'} found. You need to fix ${one ? 'it' : 'them'}`, coverage };
   }
   if (findings > 0) {
     return { verdict: `${findings} thing${findings === 1 ? '' : 's'} to look at`, coverage };

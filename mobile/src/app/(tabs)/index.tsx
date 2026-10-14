@@ -32,12 +32,12 @@ const METHOD = [
   {
     number: '01',
     title: 'You set the constraints',
-    prose: 'Where, when, how much, and who is going. The budget is a ceiling — the plan stays inside it rather than spending up to it.',
+    prose: 'Where, when, how much, and who is going. The budget is a ceiling: the plan stays inside it rather than spending up to it.',
   },
   {
     number: '02',
     title: 'Real data goes in first',
-    prose: 'A real forecast for your dates inside the 16-day window and seasonal norms beyond it, plus public holidays, opening hours and travel times — fetched before a single word is written.',
+    prose: 'A real forecast for your dates inside the 16-day window and seasonal norms beyond it, plus public holidays, opening hours and travel times, fetched before a single word is written.',
   },
   {
     number: '03',

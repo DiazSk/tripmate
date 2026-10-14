@@ -77,7 +77,7 @@ export const NARRATION_WPM = 160;
  * beats — a one-sentence line between two stops, played while the camera walks the real street
  * route between them.
  */
-export const STORY_PROMPT_VERSION = 3;
+export const STORY_PROMPT_VERSION = 4;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Facts
@@ -108,12 +108,12 @@ export function compactDay(
   legs?: readonly (CompactLeg | null)[]
 ): string {
   const lines: string[] = [];
-  lines.push(`Day ${dayIndex + 1} — ${day.date}${day.title ? ` — ${day.title}` : ""}`);
+  lines.push(`Day ${dayIndex + 1}, ${day.date}${day.title ? `: ${day.title}` : ""}`);
   if (day.weather) lines.push(`Weather: ${day.weather}`);
   if (day.summary) lines.push(`Day theme: ${day.summary}`);
   if (day.lodging) {
     lines.push(
-      `Staying at: ${day.lodging.name}${day.lodging.note ? ` — ${day.lodging.note}` : ""}`
+      `Staying at: ${day.lodging.name}${day.lodging.note ? ` (${day.lodging.note})` : ""}`
     );
   }
   day.stops.forEach((stop, i) => {
@@ -251,7 +251,7 @@ ${compactDay(day, dayIndex, legs)}
 
 WRITE THE NARRATION.
 
-Voice: second person, present tense, warm and unhurried — "You come up out of the station into..." not "The traveler will visit...". You are walking them through their own day, not reading them a listing.
+Voice: second person, present tense, warm and unhurried. "You come up out of the station into...", not "The traveler will visit...". You are walking them through their own day, not reading them a listing.
 
 STRUCTURE
 
@@ -260,31 +260,31 @@ STRUCTURE
 - 2 to 4 sentences per beat, at most 55 words.${
     routedLegs > 0
       ? `
-- Where a "Travel" line appears above between two stops, write one "travel" beat and place it before the second stop's beat. It carries that leg's "legIndex" — the number on the left of the arrow. Where no "Travel" line appears between two stops, write no travel beat: those two stops follow each other directly.
+- Where a "Travel" line appears above between two stops, write one "travel" beat and place it before the second stop's beat. It carries that leg's "legIndex", the number on the left of the arrow. Where no "Travel" line appears between two stops, write no travel beat: those two stops follow each other directly.
 - **A travel beat is ONE sentence, twenty words at most.** It plays while the map moves along the actual street route, so it is the length of the movement, not of a paragraph.
-- **Do not restate the minutes or the distance.** The plan already shows them beside the stop. Say what the going is *like* — the river you cross, the arcade you cut through, the hill, the change of neighbourhood.
-- Where a travel beat carries the traveler between two places, the stop beat after it *arrives* rather than recapping the journey. Where there is no travel beat, the stop beat carries them from the previous one itself — the walk, the change of light, the shift in mood. That connective tissue is what makes this a story rather than a list.`
+- **Do not restate the minutes or the distance.** The plan already shows them beside the stop. Say what the going is *like*: the river you cross, the arcade you cut through, the hill, the change of neighbourhood.
+- Where a travel beat carries the traveler between two places, the stop beat after it *arrives* rather than recapping the journey. Where there is no travel beat, the stop beat carries them from the previous one itself: the walk, the change of light, the shift in mood. That connective tissue is what makes this a story rather than a list.`
       : `
-- Each stop beat should carry the traveler *from the previous one* — the walk, the ride, the change of light, the shift in mood. That connective tissue is what makes this a story rather than a list.`
+- Each stop beat should carry the traveler *from the previous one*: the walk, the ride, the change of light, the shift in mood. That connective tissue is what makes this a story rather than a list.`
   }
-- The opening sets the day: where they wake up, what shape the day has, what the weather is doing. The closing lands it — where the day leaves them, and (unless this is the last day) a single sentence of anticipation for tomorrow.
+- The opening sets the day: where they wake up, what shape the day has, what the weather is doing. The closing lands it: where the day leaves them, and (unless this is the last day) a single sentence of anticipation for tomorrow.
 
 WRITING FOR THE EAR
 
 This is read aloud by a voice, and the listener cannot go back over a sentence. Every rule below is about how it will *sound*:
 
-- **The first sentence of each stop beat is short — eight words or fewer — and names the place.** The map lands on that place as the beat begins, and the narration holds a beat of silence after that sentence, so it works as an arrival: "Then the bamboo closes over you at Arashiyama." Not a long clause with the name buried in the middle.
+- **The first sentence of each stop beat is short (eight words or fewer) and names the place.** The map lands on that place as the beat begins, and the narration holds a beat of silence after that sentence, so it works as an arrival: "Then the bamboo closes over you at Arashiyama." Not a long clause with the name buried in the middle.
 - **Vary sentence length.** A long one, then a short one. Four sentences of the same length in a row is a metronome, and it is the single thing that makes a synthesised voice sound synthetic.
 - **One idea per sentence.** Full stops are where the voice breathes, so a sentence carrying three clauses is read in one unbroken rush. Split it.
 - **No em-dashes, semicolons, colons, brackets or ellipses**, except a single "..." when you genuinely want the voice to trail off. Punctuation the engine cannot pronounce is either read out loud or dropped, and both are worse than the comma you should have used.
 - **Commas where a person would draw breath**, and nowhere else. They are the only fine-grained pause control there is.
-- **Plain prose only**: no markdown, no lists, no emoji, no symbols, no abbreviations. Write numbers, times and money as words — "half past nine", "about twenty euros" — never "9:30" or "$20", which are read as digit strings.
+- **Plain prose only**: no markdown, no lists, no emoji, no symbols, no abbreviations. Write numbers, times and money as words ("half past nine", "about twenty euros"), never "9:30" or "$20", which are read as digit strings.
 - **Do not open two beats the same way.** No beat after the first may begin with "You" if the one before it did.
 
 TRUTH
 
 - Use only the facts above. Do not invent history, prices, dishes, opening hours, or anything about a place that is not written down here. Where a fact is thin, describe the movement and the feeling instead of adding detail.
-- Never say "day ${dayIndex + 1} of ${dayCount}" more than once, and never refer to "stops", "the itinerary", or "the plan" — the traveler is living the day, not reading about it.
+- Never say "day ${dayIndex + 1} of ${dayCount}" more than once, and never refer to "stops", "the itinerary", or "the plan". The traveler is living the day, not reading about it.
 
 Return ONLY this JSON, no prose around it and no code fence:
 

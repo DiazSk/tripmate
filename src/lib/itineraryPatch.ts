@@ -61,19 +61,19 @@ function insertionIndex(day: DayPlan, before: Stop[], stopIndex: number): number
  */
 function refusesLock(op: PatchOp, target: Stop): string | null {
   if (target.timeFlexibility !== "FIXED") return null;
-  if (op.op === "remove_stop") return `${target.name} is booked — it cannot be dropped.`;
+  if (op.op === "remove_stop") return `${target.name} is booked and cannot be dropped.`;
   if (op.op !== "replace_stop") return null;
   // Declared `Stop`, but the merge below exists precisely because the model sends only the fields
   // it changed, so every one of these is absent more often than not.
   const patch = op.stop as Partial<Stop>;
   if (patch.time !== undefined && patch.time !== target.time) {
-    return `${target.name} is booked for ${target.time} — that time cannot be moved.`;
+    return `${target.name} is booked for ${target.time}, so that time cannot be moved.`;
   }
   if (patch.name !== undefined && patch.name !== target.name) {
-    return `${target.name} is booked — it cannot be swapped for ${patch.name}.`;
+    return `${target.name} is booked and cannot be swapped for ${patch.name}.`;
   }
   if (patch.timeFlexibility !== undefined && patch.timeFlexibility !== "FIXED") {
-    return `${target.name} is booked — only the traveler can unlock it.`;
+    return `${target.name} is booked, and only the traveler can unlock it.`;
   }
   return null;
 }

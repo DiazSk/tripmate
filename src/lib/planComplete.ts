@@ -1,4 +1,5 @@
 import { parseJsonResponse } from "./claude";
+import { NO_EM_DASH_RULE } from "./writingStyle";
 import {
   MAX_STOPS_PER_DAY,
   realDate,
@@ -21,7 +22,7 @@ import type { DayWeather } from "./weather";
 
 export type DatedDay = { date: string; day: ImportedDay };
 
-const TOO_LONG = "Trips over 30 days aren't supported — please choose a shorter date range.";
+const TOO_LONG = "Trips over 30 days aren't supported. Please choose a shorter date range.";
 const DAY_MS = 86_400_000;
 const utc = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
 const addDays = (iso: string, n: number) => new Date(utc(iso) + n * DAY_MS).toISOString().slice(0, 10);
@@ -117,7 +118,7 @@ export function datesFor(days: ImportedDay[], startDate?: string): DatedDay[] | 
 export const stopId = (dayIndex: number, stopIndex: number) => `d${dayIndex}s${stopIndex}`;
 
 export function buildFillPrompt(destination: string, dated: DatedDay[]): string {
-  const lines = dated.flatMap(({ date, day }, d) => day.stops.map((s, i) => `${stopId(d, i)} — ${s.name} (${date})`));
+  const lines = dated.flatMap(({ date, day }, d) => day.stops.map((s, i) => `${stopId(d, i)}: ${s.name} (${date})`));
   return `These are the stops of a traveller's own plan for a trip to ${destination}. Do not add, remove, rename or reorder anything: answer for exactly these ids.
 
 For each stop id, estimate for one visitor:
@@ -127,6 +128,8 @@ For each stop id, estimate for one visitor:
 - "why": one short sentence on what the place is
 - "note": one short practical sentence (best time to go, booking, what to know)
 - "outdoor": true if weather could spoil it, false if it's indoors, null if unsure
+
+${NO_EM_DASH_RULE}
 
 ${lines.join("\n")}
 

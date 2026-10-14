@@ -21,5 +21,5 @@ export function formatDietary(dietary: DietaryNeeds | null): string {
   if (note) parts.push(note);
   if (parts.length === 0) return "";
 
-  return `\nDietary needs: ${parts.join("; ")}. Every food stop must have something that genuinely fits — name what to order or which counter to use in that stop's "note", and never route the day through somewhere they would have nothing to eat. This constrains which food stops are chosen; it is not a remark to append to them.\n`;
+  return `\nDietary needs: ${parts.join("; ")}. Every food stop must have something that genuinely fits. Name what to order or which counter to use in that stop's "note", and never route the day through somewhere they would have nothing to eat. This constrains which food stops are chosen; it is not a remark to append to them.\n`;
 }

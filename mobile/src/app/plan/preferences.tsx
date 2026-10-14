@@ -48,8 +48,8 @@ export default function PreferencesStep() {
     starredInterests.length === 0
       ? 'Tap to pick, again to star, again to clear.'
       : starsLeft > 0
-        ? `Star ${starsLeft} more — those count most. Tap again to clear one.`
-        : 'Three stars is the most — clear a starred one to free it up.';
+        ? `Star ${starsLeft} more; those count most. Tap again to clear one.`
+        : 'Three stars is the most. Clear a starred one to free it up.';
 
   return (
     <KeyboardAvoidingView

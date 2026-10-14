@@ -35,7 +35,7 @@ import vernazzaBlueHour from '@/assets/images/scenes/vernazza-blue-hour.webp';
  */
 export const BEATS = [
   { photo: vernazzaBlueHour, label: 'The Blue Hour', stat: 'One 20-minute window, every evening' },
-  { photo: spiceMarketBarrels, label: 'Real Prices', stat: 'Lodging, food, and transit — itemized' },
+  { photo: spiceMarketBarrels, label: 'Real Prices', stat: 'Lodging, food, and transit, itemized' },
   { photo: stormOverForestRidge, label: 'Live Weather', stat: 'Real forecast, up to 16 days out' },
   { photo: balconyMorningView, label: 'Three Ways to Travel', stat: 'Budget · Mid-range · Luxury' },
 ] as const;

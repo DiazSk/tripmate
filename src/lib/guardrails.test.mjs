@@ -130,7 +130,7 @@ test("a repeat under the same name says which day the other one is on", () => {
   assert.equal(found[0].dayIndex, 3, "reported against the later day, which is the one to change");
   assert.equal(
     found[0].message,
-    "Dinner in Bairro Alto is already in the trip, on day 2 — the same place twice.",
+    "Dinner in Bairro Alto is already in the trip, on day 2: the same place twice.",
     "names the other day, and does not print the same name twice"
   );
 });
@@ -148,7 +148,7 @@ test("a repeat under a different name says both the name and the day", () => {
   assert.equal(found.length, 1);
   assert.equal(
     found[0].message,
-    "Miradouro de Santa Luzia is already in the trip as Alfama neighborhood walk, on day 1 — the same place twice.",
+    "Miradouro de Santa Luzia is already in the trip as Alfama neighborhood walk, on day 1: the same place twice.",
     "the proximity branch located the other stop too"
   );
 });
@@ -171,7 +171,7 @@ test("a repeat within one day does not name a day the finding already renders un
   assert.equal(found.length, 1);
   assert.equal(
     found[0].message,
-    "Pike Place Market is already in the trip — the same place twice.",
+    "Pike Place Market is already in the trip: the same place twice.",
     "no ' as' clause and no day, because both would repeat what the reader has"
   );
 });

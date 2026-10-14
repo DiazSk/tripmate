@@ -151,7 +151,7 @@ function checkLegs(
         stopIndex: i + 1,
         message: booked
           ? `${from.name} runs until ${fmt(end)}, past the ${fmt(nextStart)} booking at ${to.name}.`
-          : `${from.name} runs until ${fmt(end)} but ${to.name} starts at ${fmt(nextStart)} — they overlap.`,
+          : `${from.name} runs until ${fmt(end)} but ${to.name} starts at ${fmt(nextStart)}, so they overlap.`,
       });
       continue;
     }
@@ -169,7 +169,7 @@ function checkLegs(
         // arrives at…", as `checkCommitments` writes it) reads oddly to the person it is about.
         // Naming no one at all is correct in both.
         message: booked
-          ? `Leaving ${from.name} at ${fmt(end)} arrives about ${fmt(end + needed)} — after the ${fmt(nextStart)} booking at ${to.name}.`
+          ? `Leaving ${from.name} at ${fmt(end)} arrives about ${fmt(end + needed)}, after the ${fmt(nextStart)} booking at ${to.name}.`
           : `${from.name} to ${to.name} takes about ${needed} min, but only ${gap} min is left for it.`,
       });
     }
@@ -247,7 +247,7 @@ function checkPace(day: DayPlan, dayIndex: number): Guardrail[] {
           {
             rule: "pace",
             dayIndex,
-            message: `This day runs ${span.start} to ${span.end} — ${length}, even with breaks in it.`,
+            message: `This day runs ${span.start} to ${span.end}: ${length}, even with breaks in it.`,
           },
         ]
       : [];
@@ -257,7 +257,7 @@ function checkPace(day: DayPlan, dayIndex: number): Guardrail[] {
     {
       rule: "pace",
       dayIndex,
-      message: `This day runs ${span.start} to ${span.end} — ${length} with no meal or rest stop in it.`,
+      message: `This day runs ${span.start} to ${span.end}: ${length} with no meal or rest stop in it.`,
     },
   ];
 }
@@ -428,7 +428,7 @@ export function evaluateBudget(itinerary: CheckableItinerary, budget: number): G
     {
       rule: "budget",
       dayIndex: null,
-      message: `The trip now totals $${Math.round(total)} — $${over} over your $${budget} budget.`,
+      message: `The trip now totals $${Math.round(total)}, $${over} over your $${budget} budget.`,
     },
   ];
 }
@@ -512,7 +512,7 @@ function checkDuplicates(itinerary: CheckableItinerary): Guardrail[] {
         found.push({
           rule: "duplicate",
           dayIndex,
-          message: `${stop.name} is already in the trip${otherName}${otherDay} — the same place twice.`,
+          message: `${stop.name} is already in the trip${otherName}${otherDay}: the same place twice.`,
         });
       } else {
         seen.push({
@@ -602,7 +602,7 @@ function checkCommitments(
       found.push({
         rule: "commitment",
         dayIndex,
-        message: `${day.lodging.name} is already paid for — it should cost 0, not $${day.lodging.cost}.`,
+        message: `${day.lodging.name} is already paid for, so it should cost 0, not $${day.lodging.cost}.`,
       });
     });
   }

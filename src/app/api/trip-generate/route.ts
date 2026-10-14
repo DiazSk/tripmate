@@ -11,13 +11,13 @@ import { isOverDailyCap } from "@/lib/spendCap";
 export async function POST(req: NextRequest) {
   if (isThrottled(req)) {
     return NextResponse.json(
-      { error: "Too many requests — slow down and try again shortly." },
+      { error: "Too many requests. Slow down and try again shortly." },
       { status: 429 }
     );
   }
   if (isOverDailyCap()) {
     return NextResponse.json(
-      { error: "Demo budget for today has been used up — try again tomorrow." },
+      { error: "Demo budget for today has been used up. Try again tomorrow." },
       { status: 503 }
     );
   }

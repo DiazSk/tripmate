@@ -56,7 +56,7 @@ export default function TravelCard({
   const field = (label: string, value: string | undefined, extra = "") => (
     <div className={`travel-card-field ${extra}`}>
       <small>{label}</small>
-      <span className={value ? "" : "is-empty"}>{value || "—"}</span>
+      <span className={value ? "" : "is-empty"}>{value || "Not set"}</span>
     </div>
   );
   const spots = SPOTS[compact ? "compact" : "full"];

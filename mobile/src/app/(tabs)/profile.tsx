@@ -265,7 +265,7 @@ export default function Profile() {
           <View style={styles.block}>
             <Invitation
               title="No travel profile yet"
-              body="It shapes every plan you get afterwards — and dietary needs can only be set here."
+              body="It shapes every plan you get afterwards, and dietary needs can only be set here."
             />
             {/* Seeded from the wizard's own defaults rather than a second set that would drift.
                 Nothing is written until the first real edit. */}
@@ -346,7 +346,7 @@ export default function Profile() {
         {failed ? (
           <View style={styles.block}>
             <ThemedText type="detail" themeColor="alert">
-              Couldn&rsquo;t save that. It&rsquo;s still here — the next change tries again.
+              Couldn&rsquo;t save that. It&rsquo;s still here, and the next change tries again.
             </ThemedText>
           </View>
         ) : null}
@@ -430,7 +430,7 @@ function Sheets({
         title="Interests"
         caption={
           profile.topPriorities.length === 0
-            ? 'Tap to choose. Tap a chosen one again to star it — up to three.'
+            ? 'Tap to choose. Tap a chosen one again to star it, up to three.'
             : starsLeft > 0
               ? `Star ${starsLeft} more. Tap again to clear one.`
               : 'Those three drive which stops get picked. Clear one to free up a star.'
@@ -603,7 +603,7 @@ function AppearanceSection() {
   return (
     <Section
       title="Appearance"
-      footer="Kiln is drawn for the dark ground. The light appearance is a prototype — switching restarts the app, and the keyboard, date picker and tab bar stay dark until it ships for real.">
+      footer="Kiln is drawn for the dark ground. The light appearance is a prototype. Switching restarts the app, and the keyboard, date picker and tab bar stay dark until it ships for real.">
       <Row
         label="Appearance"
         value={light ? 'Light' : 'Dark'}

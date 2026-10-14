@@ -620,7 +620,7 @@ function ImportSection({
         below={(text) =>
           looksLikeDayPlan(text) ? (
             <PillButton
-              title="This looks like a full plan — use it as your trip"
+              title="This looks like a full plan. Use it as your trip"
               onPress={() => router.push({ pathname: '/plan/own', params: { text } })}
             />
           ) : null

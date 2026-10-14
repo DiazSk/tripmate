@@ -72,7 +72,7 @@ export const STAGED_NODES: (FlowNodeSpec & { id: StagedStepId; route: string })[
     route: "POST /api/trip-generate",
     variant: "cache",
     description:
-      "Deterministic, no LLM. Digests both bundles into compact fact lines — facts only, no planning instructions, since the rules live in the skill. Degraded fields state their default inline.",
+      "Deterministic, no LLM. Digests both bundles into compact fact lines: facts only, no planning instructions, since the rules live in the skill. Degraded fields state their default inline.",
     input: "reconciled + poi_details",
     output: "trip-context.md",
   },

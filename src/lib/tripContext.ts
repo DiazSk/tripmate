@@ -102,7 +102,7 @@ function logisticsSection(trip: ReconciledTrip): string {
   const l = trip.userAnswers.logistics;
   const lines: string[] = [];
   if (l?.stayBooked?.trim()) {
-    lines.push(`booked_lodging: ${l.stayBooked.trim()} — already paid for, cost 0, every night`);
+    lines.push(`booked_lodging: ${l.stayBooked.trim()} (already paid for, cost 0, every night)`);
   }
   if (l?.arrivalTime?.trim()) lines.push(`arrival_time (day 1, local): ${l.arrivalTime.trim()}`);
   if (l?.departureTime?.trim()) {
@@ -114,7 +114,7 @@ function logisticsSection(trip: ReconciledTrip): string {
   if (trip.userAnswers.constraintsNote?.trim()) {
     lines.push(`traveler's own words: ${trip.userAnswers.constraintsNote.trim()}`);
   }
-  return lines.length > 0 ? lines.join("\n") : "Nothing booked or stated — lodging is yours to choose.";
+  return lines.length > 0 ? lines.join("\n") : "Nothing booked or stated; lodging is yours to choose.";
 }
 
 /**
@@ -140,28 +140,28 @@ function destinationContextSection(ctx: DestinationContext | null): string {
   const lines: string[] = [];
   if (ctx.festivals.length > 0) {
     lines.push(
-      ...ctx.festivals.map((f) => `- festival: ${f.name} (${f.dates}) — ${f.note}`)
+      ...ctx.festivals.map((f) => `- festival: ${f.name} (${f.dates}): ${f.note}`)
     );
   }
   if (ctx.safety.length > 0) {
     lines.push(...ctx.safety.map((x) => `- safety [${x.severity}]: ${x.note}`));
   }
   if (ctx.shopping.length > 0) {
-    lines.push(...ctx.shopping.map((x) => `- shopping: ${x.name} (${x.area}) — ${x.note}`));
+    lines.push(...ctx.shopping.map((x) => `- shopping: ${x.name} (${x.area}): ${x.note}`));
   }
   if (ctx.trends.length > 0) lines.push(...ctx.trends.map((x) => `- trend: ${x.note}`));
   if (lines.length === 0) return "Fetched, nothing notable for these dates.";
-  return ["(background, model-sourced — weigh it below the fetched facts above)", ...lines].join("\n");
+  return ["(background, model-sourced: weigh it below the fetched facts above)", ...lines].join("\n");
 }
 
 function destinationSection(trip: ReconciledTrip): string {
   const d = trip.rawFetch.destination;
   if (!d.resolved) {
-    return "Coordinates unresolved — distances and weather below are unverified.";
+    return "Coordinates unresolved. Distances and weather below are unverified.";
   }
   const parts = [d.region ?? "location unknown", `${d.lat?.toFixed(4)}, ${d.lon?.toFixed(4)}`];
   if (d.timezone) parts.push(`timezone ${d.timezone}`);
-  return parts.join(" — ");
+  return parts.join("; ");
 }
 
 function datesSection(trip: ReconciledTrip): string {
@@ -197,7 +197,7 @@ function weatherSection(trip: ReconciledTrip): string {
 
   if (!w.available || w.days.length === 0) {
     const note = noteFor(trip.notes, "weather");
-    return `Unavailable — ${note?.detail ?? "plan against seasonal norms."}`;
+    return `Unavailable: ${note?.detail ?? "plan against seasonal norms."}`;
   }
 
   const lines = w.days.map((d, i) => {
@@ -218,14 +218,14 @@ function weatherSection(trip: ReconciledTrip): string {
   });
 
   const caveat = w.historical
-    ? "(estimated — trip is beyond the forecast horizon, these are same-dates-last-year averages)"
+    ? "(estimated: trip is beyond the forecast horizon, these are same-dates-last-year averages)"
     : "";
   return [caveat, ...lines].filter(Boolean).join("\n");
 }
 
 function holidaysSection(trip: ReconciledTrip): string {
   const h = trip.rawFetch.holidays;
-  if (!h.available) return "Unavailable — closures and crowding can't be anticipated.";
+  if (!h.available) return "Unavailable. Closures and crowding can't be anticipated.";
   if (h.events.length === 0) return "None during the trip window.";
   return h.events.map((e) => `- ${e.date}: ${e.name}`).join("\n");
 }
@@ -233,17 +233,17 @@ function holidaysSection(trip: ReconciledTrip): string {
 function transportSection(trip: ReconciledTrip): string {
   const note = noteFor(trip.notes, "transportModes");
   const modes = trip.transportModes.join(", ");
-  return note ? `${modes} (assumed — no transport data for this destination)` : modes;
+  return note ? `${modes} (assumed, no transport data for this destination)` : modes;
 }
 
 function bikeshareSection(trip: ReconciledTrip): string {
-  if (noteFor(trip.notes, "bikeshare")) return "Unknown — don't plan a leg around a shared bike.";
+  if (noteFor(trip.notes, "bikeshare")) return "Unknown. Don't plan a leg around a shared bike.";
   const system = trip.rawFetch.bikeshare.system;
   if (!system) return "None found for this destination.";
   const fare = system.dayPass
     ? `day pass ${system.dayPass.amount} ${system.dayPass.currency}`
-    : "fare not published — tell the traveler to check the operator rather than quoting a price";
-  return `${system.name} — about ${system.stationsNearby} docking stations near the centre; ${fare}.`;
+    : "fare not published, so tell the traveler to check the operator rather than quoting a price";
+  return `${system.name}: about ${system.stationsNearby} docking stations near the centre; ${fare}.`;
 }
 
 function poiLine(p: EnrichedPoi): string {
@@ -252,7 +252,7 @@ function poiLine(p: EnrichedPoi): string {
   else bits.push("coordinates unknown");
 
   if (p.openingHours) bits.push(`open ${p.openingHours}`);
-  else bits.push("hours unknown — verify before visiting");
+  else bits.push("hours unknown, verify before visiting");
 
   if (p.closedDays && p.closedDays.length > 0) bits.push(`closed ${p.closedDays.join("/")}`);
 
@@ -262,7 +262,7 @@ function poiLine(p: EnrichedPoi): string {
   // with a step-free requirement to a place we merely failed to look up is the failure to avoid.
   if (p.wheelchair) bits.push(`wheelchair ${p.wheelchair}`);
 
-  return `- ${p.name} — ${bits.join(" — ")}`;
+  return `- ${p.name}: ${bits.join("; ")}`;
 }
 
 function legLine(l: TravelLeg): string {
@@ -283,9 +283,9 @@ function travelHeader(legs: TravelLeg[]): string {
   const estimated = legs.filter((l) => l.estimated).length;
   if (estimated === 0) return "(real road-network routes)";
   if (estimated === legs.length) {
-    return "(estimated — straight-line distance with a road-circuity correction)";
+    return "(estimated: straight-line distance with a road-circuity correction)";
   }
-  return "(real road-network routes, except those marked (est) — straight-line with a road-circuity correction)";
+  return "(real road-network routes, except those marked (est), which are straight-line with a road-circuity correction)";
 }
 
 /** Full pair list while it stays short; otherwise each POI's nearest few, which preserves the
@@ -296,7 +296,7 @@ function travelHeader(legs: TravelLeg[]): string {
  *  and getting that backwards is invisible until a plan is built on a number that was never real. */
 export function travelSection(details: PoiDetails): string {
   const legs = details.travelLegs;
-  if (legs.length === 0) return "No travel times — fewer than two places have coordinates.";
+  if (legs.length === 0) return "No travel times: fewer than two places have coordinates.";
 
   const header = travelHeader(legs);
 
@@ -369,10 +369,10 @@ ${bikeshareSection(trip)}
 ## Anchor places (optional, traveler-chosen)
 ${
   details.pois.length === 0
-    ? "None — every stop is to be chosen from the traveler profile above."
+    ? "None. Every stop is to be chosen from the traveler profile above."
     : `${details.pois.map(poiLine).join("\n")}${
         unknownPois > 0
-          ? `\n(${unknownPois} of ${details.pois.length} have incomplete details — treat unknown hours as needing verification)`
+          ? `\n(${unknownPois} of ${details.pois.length} have incomplete details; treat unknown hours as needing verification)`
           : ""
       }`
 }

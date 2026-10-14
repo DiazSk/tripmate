@@ -95,7 +95,7 @@ export default function InterestPicker({
       {/* aria-live: the quota changes as a side effect of starring, so it has to be announced. */}
       <p className="text-xs text-muted" aria-live="polite">
         {starred.length === 0
-          ? `Star up to ${MAX_STARRED_PRIORITIES} that matter most — those drive the plan.`
+          ? `Star up to ${MAX_STARRED_PRIORITIES} that matter most; those drive the plan.`
           : `${starred.join(" > ")}${starsLeft > 0 ? ` · ${starsLeft} star${starsLeft === 1 ? "" : "s"} left` : " · top 3 set"}`}
       </p>
     </div>

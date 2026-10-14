@@ -9,8 +9,8 @@ export default function OfflinePage() {
       <div className="glass-control rounded-2xl px-8 py-10">
         <h1 className="font-display text-2xl font-semibold text-foreground">You&rsquo;re offline</h1>
         <p className="mt-2 text-sm text-white/70">
-          This page needs a connection. Trips you&rsquo;ve already opened may still be available —
-          try going back.
+          This page needs a connection. Trips you&rsquo;ve already opened may still be available,
+          so try going back.
         </p>
       </div>
     </div>

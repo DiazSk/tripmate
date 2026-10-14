@@ -412,7 +412,7 @@ function runClaudeViaCli(
 
     const images = meta?.images?.length ? meta.images : null;
     if (images && !CLI_SUPPORTS_IMAGES) {
-      const message = "screenshot reading needs LLM_TRANSPORT=api — this CLI cannot take image input";
+      const message = "screenshot reading needs LLM_TRANSPORT=api; this CLI cannot take image input";
       updateTrace(traceId, { status: "error", durationMs: 0, errorMessage: message });
       reject(new Error(message));
       return;
@@ -563,7 +563,7 @@ function runClaudeViaCli(
       // wrong way.
       const hint =
         (err as NodeJS.ErrnoException).code === "ENOENT"
-          ? ` — no runnable claude CLI was found (tried '${cliBin}'). If ~/.local/bin/claude is a` +
+          ? `: no runnable claude CLI was found (tried '${cliBin}'). If ~/.local/bin/claude is a` +
             ` symlink into a VS Code extension directory that an update has since deleted, repoint` +
             ` it at the current one; otherwise set CLAUDE_CLI_PATH to the binary's absolute path` +
             ` and restart the server; or, if this is a deployed container with no claude CLI` +
@@ -811,7 +811,7 @@ function runClaudeViaApi(
       if (response.stop_reason === "max_tokens") {
         const detail =
           `hit the ${maxTokensFor(type)}-token output ceiling for a '${type}' call (used` +
-          ` ${response.usage.output_tokens}) — the response is truncated, not malformed. The` +
+          ` ${response.usage.output_tokens}). The response is truncated, not malformed. The` +
           ` transport streams now, so this ceiling is a per-call-type budget in llmConfig.ts and` +
           ` can be raised there; it is no longer bounded by the SDK's non-streaming limit.`;
         updateTrace(traceId, {
@@ -847,7 +847,7 @@ function runClaudeViaApi(
       // invisible to getSpendSince() (cost_usd stays NULL), so the daily cap silently stops
       // covering it. No trace row field for this today; a warn is the only signal.
       if (costUsd === null) {
-        console.warn(`[claude] no price entry for model "${model}" — spend cap cannot see this call's cost`);
+        console.warn(`[claude] no price entry for model "${model}"; spend cap cannot see this call's cost`);
       }
 
       let sessionId: string | undefined;
@@ -884,7 +884,7 @@ function runClaudeViaApi(
       // less common case.
       const hint =
         err instanceof Anthropic.AuthenticationError || /authentication method/i.test(message)
-          ? " — ANTHROPIC_API_KEY is missing or invalid. Check Railway's environment variables."
+          ? ". ANTHROPIC_API_KEY is missing or invalid. Check Railway's environment variables."
           : "";
       updateTrace(traceId, { status: "error", durationMs, errorMessage: message + hint });
       throw new Error(`claude API call failed: ${message}${hint}`);

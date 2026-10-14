@@ -25,13 +25,13 @@ export async function enrichSelectedPois(reconciled: ReconciledTrip): Promise<Po
     notes.push({
       field: "poiOpeningHours",
       status: "unavailable",
-      detail: "Opening-hours lookup failed — verify hours before visiting.",
+      detail: "Opening-hours lookup failed. Verify hours before visiting.",
     });
   } else if (locatable.length > 0 && Object.keys(osmTags).length === 0) {
     notes.push({
       field: "poiOpeningHours",
       status: "unavailable",
-      detail: "No opening hours on record for these places — verify hours before visiting.",
+      detail: "No opening hours on record for these places. Verify hours before visiting.",
     });
   }
 
@@ -116,7 +116,7 @@ export async function enrichSelectedPois(reconciled: ReconciledTrip): Promise<Po
         field: "travelLegs",
         status: "estimated",
         detail:
-          "Routing unavailable — travel times are straight-line distance with a road-circuity correction.",
+          "Routing unavailable. Travel times are straight-line distance with a road-circuity correction.",
       });
     }
   }

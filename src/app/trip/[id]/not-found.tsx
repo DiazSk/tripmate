@@ -18,7 +18,7 @@ export default function TripNotFound() {
           That trip isn&rsquo;t saved here
         </h1>
         <p className="mt-2 text-sm text-muted">
-          The link may be from a different device — trips live in this app&rsquo;s own local
+          The link may be from a different device. Trips live in this app&rsquo;s own local
           storage, not in an account that follows you between them.
         </p>
         <Link

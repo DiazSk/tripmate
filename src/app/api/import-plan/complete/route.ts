@@ -36,10 +36,10 @@ const FILL_TIMEOUT_MS = 60_000;
 
 export async function POST(req: NextRequest) {
   if (isThrottled(req, { bucket: "import-plan-complete", max: 30 })) {
-    return NextResponse.json({ error: "Too many requests — slow down and try again shortly." }, { status: 429 });
+    return NextResponse.json({ error: "Too many requests. Slow down and try again shortly." }, { status: 429 });
   }
   if (isOverDailyCap()) {
-    return NextResponse.json({ error: "Demo budget for today has been used up — try again tomorrow." }, { status: 503 });
+    return NextResponse.json({ error: "Demo budget for today has been used up. Try again tomorrow." }, { status: 503 });
   }
   let body: unknown;
   try {
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (!dated) return NextResponse.json({ error: "Pick the day your trip starts." }, { status: 400 });
   if (dated.length > MAX_TRIP_DAYS) {
     return NextResponse.json(
-      { error: "Trips over 30 days aren't supported — please choose a shorter date range." },
+      { error: "Trips over 30 days aren't supported. Please choose a shorter date range." },
       { status: 400 }
     );
   }
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
   }
   const fallback = fallbackPoint(geo, stops);
   if (!fallback) {
-    return NextResponse.json({ error: "Couldn't find this trip on the map — check where it is." }, { status: 422 });
+    return NextResponse.json({ error: "Couldn't find this trip on the map. Check where it is." }, { status: 422 });
   }
 
   // `fetchAnchorHours` hands the anchors back unchanged when the lookup fails, which reads exactly

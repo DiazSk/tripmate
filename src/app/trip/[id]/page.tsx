@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 const PREVIEW_ID = "preview";
 
 const DESCRIPTION =
-  "A day-by-day itinerary on a living globe — glowing stop markers, arcs between them, real weather and budget tracking.";
+  "A day-by-day itinerary on a living globe: glowing stop markers, arcs between them, real weather and budget tracking.";
 
 export async function generateMetadata({
   params,

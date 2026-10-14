@@ -76,7 +76,7 @@ const monumentFace = localFont({
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 const DESCRIPTION =
-  "Day-by-day itineraries planned against your real dates — weather, public holidays, opening " +
+  "Day-by-day itineraries planned against your real dates: weather, public holidays, opening " +
   "hours and travel times checked before a single word is written.";
 
 /**
@@ -91,18 +91,18 @@ const DESCRIPTION =
  */
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "TripMate — Plan your trip",
+  title: "TripMate: Plan your trip",
   description: DESCRIPTION,
   openGraph: {
     type: "website",
     siteName: "TripMate",
-    title: "TripMate — Plan your trip",
+    title: "TripMate: Plan your trip",
     description: DESCRIPTION,
     url: "/",
   },
   twitter: {
     card: "summary_large_image",
-    title: "TripMate — Plan your trip",
+    title: "TripMate: Plan your trip",
     description: DESCRIPTION,
   },
 };

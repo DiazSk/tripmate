@@ -31,7 +31,7 @@ import TripsView from "./TripsView";
 export const metadata: Metadata = {
   title: "My memories · TripMate",
   description:
-    "Every trip you've planned and saved, as a postcard wall — reopen any itinerary on the globe.",
+    "Every trip you've planned and saved, as a postcard wall. Reopen any itinerary on the globe.",
 };
 
 export const dynamic = "force-dynamic";

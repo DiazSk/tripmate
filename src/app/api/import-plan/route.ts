@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     // Everything dropped in was unreadable (an Instagram link, a dead page): the reason is the
     // useful sentence, not "add your plan first" — they did, and need to know why it didn't take.
     const reasons = [...new Set(unread.map((u) => u.reason))];
-    const error = reasons.length ? `${reasons.join(". ")}.` : "Add your plan first — paste it or add screenshots.";
+    const error = reasons.length ? `${reasons.join(". ")}.` : "Add your plan first: paste it or add screenshots.";
     return NextResponse.json({ error }, { status: 400 });
   }
 
@@ -46,11 +46,11 @@ export async function POST(req: NextRequest) {
     console.error("[import-plan] read failed", err);
   }
   if (!plan) {
-    return NextResponse.json({ error: "Couldn't read your plan — try again, or paste it as text." }, { status: 502 });
+    return NextResponse.json({ error: "Couldn't read your plan. Try again, or paste it as text." }, { status: 502 });
   }
   if (plan.days.length > MAX_TRIP_DAYS) {
     return NextResponse.json(
-      { error: "Trips over 30 days aren't supported — please choose a shorter date range." },
+      { error: "Trips over 30 days aren't supported. Please choose a shorter date range." },
       { status: 400 }
     );
   }

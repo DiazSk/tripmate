@@ -215,9 +215,9 @@ function StepDetail({ step, onBack }: { step: RunStep; onBack: () => void }) {
         </div>
 
         <div className="flex flex-wrap gap-3 text-xs text-muted">
-          <span>In: {step.usage.inputTokens ?? "—"} tok</span>
-          <span>Out: {step.usage.outputTokens ?? "—"} tok</span>
-          <span>Cost: {step.usage.costUsd != null ? `$${step.usage.costUsd.toFixed(4)}` : "—"}</span>
+          <span>In: {step.usage.inputTokens ?? "n/a"} tok</span>
+          <span>Out: {step.usage.outputTokens ?? "n/a"} tok</span>
+          <span>Cost: {step.usage.costUsd != null ? `$${step.usage.costUsd.toFixed(4)}` : "n/a"}</span>
         </div>
 
         {step.errorMessage && (

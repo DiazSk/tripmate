@@ -208,7 +208,7 @@ export default function GenerationScreen({
       <p role="status" aria-live="polite" className="sr-only">
         {complete
           ? "Your itinerary is ready."
-          : `${mode === "refine" ? "Reworking" : "Building"} your ${city} itinerary — ${activeStep?.label ?? "starting"}.`}
+          : `${mode === "refine" ? "Reworking" : "Building"} your ${city} itinerary: ${activeStep?.label ?? "starting"}.`}
       </p>
 
       <div className="mx-auto w-full max-w-[100rem] px-5 py-5 sm:px-6">
@@ -272,7 +272,7 @@ export default function GenerationScreen({
                             ? "now"
                             : state === "failed"
                               ? "not run"
-                              : "—"}
+                              : "waiting"}
                       </p>
                     </div>
                   </div>

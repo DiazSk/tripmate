@@ -260,8 +260,8 @@ test("formatAnchors prints an anchor's OSM hours and the days it is shut", () =>
     { name: "Uffizi Gallery", lat: 43.7678, lng: 11.2553, priority: "want", openingHours: "Tu-Su 08:15-18:30", closedDays: ["Mo"] },
     { name: "Nijo Castle", lat: 35.0142, lng: 135.7481, priority: "must", openingHours: "Mo-Su 08:45-17:00", closedDays: [] },
   ]);
-  assert.ok(out.includes("- WANT: Uffizi Gallery (43.7678, 11.2553) — open Tu-Su 08:15-18:30; closed Mo (OpenStreetMap)"));
-  assert.ok(out.includes("- MUST: Nijo Castle (35.0142, 135.7481) — open Mo-Su 08:45-17:00 (OpenStreetMap)"));
+  assert.ok(out.includes("- WANT: Uffizi Gallery (43.7678, 11.2553), open Tu-Su 08:15-18:30; closed Mo (OpenStreetMap)"));
+  assert.ok(out.includes("- MUST: Nijo Castle (35.0142, 135.7481), open Mo-Su 08:45-17:00 (OpenStreetMap)"));
   assert.match(out, /they are OpenStreetMap data/);
 });
 
@@ -269,7 +269,7 @@ test("formatAnchors passes unreadable hours through raw and claims no closed day
   const out = formatAnchors([
     { name: "Town Museum", lat: 1, lng: 2, priority: "want", openingHours: "Mo-Fr 09:00-17:00; PH off", closedDays: null },
   ]);
-  assert.ok(out.includes("- WANT: Town Museum (1, 2) — open Mo-Fr 09:00-17:00; PH off (OpenStreetMap)"));
+  assert.ok(out.includes("- WANT: Town Museum (1, 2), open Mo-Fr 09:00-17:00; PH off (OpenStreetMap)"));
   assert.ok(!/closed Sa|closed Su/.test(out));
 });
 

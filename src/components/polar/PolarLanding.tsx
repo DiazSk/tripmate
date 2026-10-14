@@ -43,8 +43,8 @@ const SEASON: Record<string, string> = { tuscany: "Early autumn", jaipur: "Cool 
 
 // The same four steps HowItWorks states, in the same words.
 const STEPS = [
-  { n: "01", title: "You set the constraints", prose: "Where, when, how much, and who is going. The budget is a ceiling — the plan stays inside it rather than spending up to it." },
-  { n: "02", title: "Real data goes in first", prose: "Forecast for your actual dates, public holidays, opening hours and travel times — fetched before a single word is written." },
+  { n: "01", title: "You set the constraints", prose: "Where, when, how much, and who is going. The budget is a ceiling: the plan stays inside it rather than spending up to it." },
+  { n: "02", title: "Real data goes in first", prose: "Forecast for your actual dates, public holidays, opening hours and travel times, fetched before a single word is written." },
   { n: "03", title: "Written, then critiqued", prose: "A second pass reviews the finished plan against your budget and pace, and rewrites the days it finds fault with." },
   { n: "04", title: "Every place is checked", prose: "Coordinates are corrected against OpenStreetMap, so the pins land where the place actually is rather than where the model guessed." },
 ];
@@ -178,7 +178,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
         <section className="tm-intro" data-nav-theme="light">
           <p className="tm-kicker">The plan that already knows</p>
           <p className="tm-statement tm-scroll-fade">
-            Forecast, holidays, opening hours and travel times go in first — before a single word of your plan is written.
+            Forecast, holidays, opening hours and travel times go in first, before a single word of your plan is written.
           </p>
           <div className="tm-intro-cols">
             <div>
@@ -186,7 +186,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
             </div>
             <p className="tm-body">
               Tell TripMate where, when, how much and who is going. It fetches the real conditions for your dates, writes the days, then
-              runs a second pass that critiques the finished plan against your budget and pace — and rewrites the days it finds fault with.
+              runs a second pass that critiques the finished plan against your budget and pace, and rewrites the days it finds fault with.
               Every pin is corrected against OpenStreetMap.
             </p>
           </div>

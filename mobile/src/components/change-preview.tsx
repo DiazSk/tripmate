@@ -45,7 +45,7 @@ export function ChangePreview({
 
       {diff.stops.length === 0 ? (
         <ThemedText type="detail" themeColor="muted" style={styles.none}>
-          Nothing moves — only what things cost.
+          Nothing moves, only what things cost.
         </ThemedText>
       ) : (
         <View style={styles.rows}>

@@ -18,8 +18,8 @@ export default function BenchPage() {
         <header>
           <h1 className="text-xl font-semibold">Model benchmark</h1>
           <p className="mt-1 max-w-3xl text-sm text-stone-500">
-            Runs the real Step 6 generation path — same skill, same frozen trip-context, same
-            generation prompt — across several Claude models on a fixed set of sample trips, and
+            Runs the real Step 6 generation path (same skill, same frozen trip-context, same
+            generation prompt) across several Claude models on a fixed set of sample trips, and
             scores the output. Every model call here costs real tokens. Dev only.
           </p>
         </header>

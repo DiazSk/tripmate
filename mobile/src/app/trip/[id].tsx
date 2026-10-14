@@ -257,7 +257,7 @@ export default function TripDetail() {
       return true;
     }
     setTrip(previous);
-    setSaveError(`${what} did not save — the change has been put back.`);
+    setSaveError(`${what} did not save, so the change has been put back.`);
     return false;
   }
 
@@ -539,7 +539,7 @@ export default function TripDetail() {
               {offline ? (
                 <View style={styles.stale}>
                   <ThemedText type="detail" themeColor="muted">
-                    {`Saved copy${clockAt(cachedAt) ? ` from ${clockAt(cachedAt)}` : ''} — no connection. Nothing can be changed until you are back.`}
+                    {`Saved copy${clockAt(cachedAt) ? ` from ${clockAt(cachedAt)}` : ''}. No connection, so nothing can be changed until you are back.`}
                   </ThemedText>
                 </View>
               ) : null}
@@ -1360,7 +1360,7 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
         </ThemedText>
       ) : (
         <ThemedText type="detail" themeColor="muted" style={styles.shelfError}>
-          Not kept yet — it won&rsquo;t appear under Trips until you do.
+          Not kept yet. It won&rsquo;t appear under Trips until you do.
         </ThemedText>
       )}
       <PrimaryButton title="Keep this trip" onPress={keep} busy={busy === 'keep'} disabled={!!busy} />

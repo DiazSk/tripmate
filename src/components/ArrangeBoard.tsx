@@ -275,11 +275,11 @@ export default function ArrangeBoard({
             Arrange {trip.destination.split(",")[0].trim()}
             <span className="font-normal text-muted">
               {" "}
-              — {itinerary.days.length} day{itinerary.days.length > 1 ? "s" : ""}
+              · {itinerary.days.length} day{itinerary.days.length > 1 ? "s" : ""}
             </span>
           </h2>
           <p className="mt-0.5 text-xs text-muted">
-            Drag a stop anywhere — within a day or across days. Times recalculate from the travel
+            Drag a stop anywhere, within a day or across days. Times recalculate from the travel
             between stops as you go.
           </p>
         </div>

@@ -41,13 +41,13 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
     notes.push({
       field: "weather",
       status: "estimated",
-      detail: "Weather unavailable — plan against seasonal norms for the destination.",
+      detail: "Weather unavailable. Plan against seasonal norms for the destination.",
     });
   } else if (rawFetch.weather.historical) {
     notes.push({
       field: "weather",
       status: "estimated",
-      detail: "Trip is beyond the forecast horizon — using same-dates-last-year averages.",
+      detail: "Trip is beyond the forecast horizon, so these are same-dates-last-year averages.",
     });
   }
 
@@ -55,7 +55,7 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
     notes.push({
       field: "holidays",
       status: "unavailable",
-      detail: "Public holiday data unavailable — closures and crowding can't be anticipated.",
+      detail: "Public holiday data unavailable. Closures and crowding can't be anticipated.",
     });
   }
 
@@ -66,7 +66,7 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
     notes.push({
       field: "sunTimes",
       status: "unavailable",
-      detail: "Sunrise/sunset unknown — treat roughly 07:00–19:00 as usable daylight.",
+      detail: "Sunrise/sunset unknown. Treat roughly 07:00–19:00 as usable daylight.",
     });
   }
 
@@ -77,7 +77,7 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
     notes.push({
       field: "transportModes",
       status: "estimated",
-      detail: `Transport data unavailable — assuming ${DEFAULT_TRANSPORT_MODES.join(" + ")}.`,
+      detail: `Transport data unavailable, assuming ${DEFAULT_TRANSPORT_MODES.join(" + ")}.`,
     });
   }
 
@@ -88,7 +88,7 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
     notes.push({
       field: "bikeshare",
       status: "unavailable",
-      detail: "Bikeshare coverage unknown — don't plan a leg around a shared bike.",
+      detail: "Bikeshare coverage unknown. Don't plan a leg around a shared bike.",
     });
   }
 
@@ -96,7 +96,7 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
     notes.push({
       field: "destination",
       status: "unavailable",
-      detail: "Destination didn't resolve to coordinates — distances and weather are unverified.",
+      detail: "Destination didn't resolve to coordinates, so distances and weather are unverified.",
     });
   }
 
@@ -123,7 +123,7 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
       status: "unavailable",
       detail:
         userAnswers.customPois.length > 0
-          ? "Suggestions unavailable — proceeding with the traveler's own entries."
+          ? "Suggestions unavailable, proceeding with the traveler's own entries."
           : "Suggestions unavailable.",
     });
   }
@@ -136,7 +136,7 @@ export function reconcileTrip(rawFetch: RawFetch, rawAnswers: UserAnswers): Reco
     notes.push({
       field: "selectedPois",
       status: "ok",
-      detail: "No anchors given — select every stop from the traveler profile.",
+      detail: "No anchors given. Select every stop from the traveler profile.",
     });
   }
 

@@ -171,11 +171,11 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
         const e = inWindow[0];
         const day = formatDay(e.date);
         const local = e.localName && e.localName !== e.name ? ` (${e.localName})` : "";
-        if (day) push("holiday", 95, `${day} is a public holiday there — ${e.name}${local}.`);
+        if (day) push("holiday", 95, `${day} is a public holiday there: ${e.name}${local}.`);
       } else if (inWindow.length > 1) {
         const days = inWindow.map((e) => formatDay(e.date)).filter(Boolean);
         if (days.length > 1) {
-          push("holiday", 95, `Two public holidays land inside your dates — ${days.join(" and ")}.`);
+          push("holiday", 95, `Two public holidays land inside your dates: ${days.join(" and ")}.`);
         }
       }
     }
@@ -205,7 +205,7 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
         const wetChance = wettest?.precipitationProbability ?? null;
         if (wetChance != null && wetChance >= 60) {
           const n = dayNumber(wettest.date, dateContext.days);
-          if (n) push("weather", 90, `Day ${n} carries a ${Math.round(wetChance)}% chance of rain — worth an indoor morning.`);
+          if (n) push("weather", 90, `Day ${n} carries a ${Math.round(wetChance)}% chance of rain, so it's worth an indoor morning.`);
         } else if (
           days.length >= 3 &&
           days.every((d) => d.precipitationProbability != null && d.precipitationProbability <= 20)
@@ -219,7 +219,7 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
           push(
             "weather",
             55,
-            `Day 1 swings from ${Math.round(first.tempMinC)}°C at dawn to ${Math.round(first.tempMaxC)}°C — pack a layer.`
+            `Day 1 swings from ${Math.round(first.tempMinC)}°C at dawn to ${Math.round(first.tempMaxC)}°C, so pack a layer.`
           );
         }
 
@@ -228,7 +228,7 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
           const mean = humid.reduce((a, b) => a + b, 0) / humid.length;
           const warm = Math.max(...days.map((d) => d.tempMaxC));
           if (mean >= 70) {
-            push("weather", 45, `Humidity sits near ${Math.round(mean)}% — ${Math.round(warm)}°C will feel warmer than it reads.`);
+            push("weather", 45, `Humidity sits near ${Math.round(mean)}%, so ${Math.round(warm)}°C will feel warmer than it reads.`);
           }
         }
       }
@@ -254,14 +254,14 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
       const sunset = formatLocalTime(first?.sunset);
       const sunrise = formatLocalTime(first?.sunrise);
       if (sunset) {
-        push("sun", 65, `The sun sets around ${sunset} on your first day — plan the viewpoint before that.`);
+        push("sun", 65, `The sun sets around ${sunset} on your first day. Plan the viewpoint before that.`);
       }
       if (sunrise && sunset && first?.sunrise && first?.sunset) {
         const rh = Number(first.sunrise.slice(11, 13)) + Number(first.sunrise.slice(14, 16)) / 60;
         const sh = Number(first.sunset.slice(11, 13)) + Number(first.sunset.slice(14, 16)) / 60;
         const span = sh - rh;
         if (span >= 14 || (span > 0 && span <= 10)) {
-          push("sun", 50, `About ${Math.round(span)} hours of daylight on day 1 — sunrise ${sunrise}, sunset ${sunset}.`);
+          push("sun", 50, `About ${Math.round(span)} hours of daylight on day 1: sunrise ${sunrise}, sunset ${sunset}.`);
         }
       }
     }
@@ -277,7 +277,7 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
           // "three of the 3" reads as a bug, because it is one. Only count when there is
           // genuinely more behind the three being named.
           names.length > 3
-            ? `${three} — three of the ${names.length} we're weighing.`
+            ? `${three}: three of the ${names.length} we're weighing.`
             : `${three}, and the plan is picking between them.`
         );
         // Everything past the first three used to go unmentioned: twelve fetched places produced
@@ -299,7 +299,7 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
 
     // --- Calendar and geography: the filler tier, only surfaces when little else does ----
     if (dateContext.season && destination.region) {
-      push("calendar", 25, `${dateContext.tripDays} days in ${destination.region} — ${dateContext.season}, by the calendar.`);
+      push("calendar", 25, `${dateContext.tripDays} days in ${destination.region}, ${dateContext.season} by the calendar.`);
     }
     const weekendDays = dateContext.days.filter(
       (d) => d.dayOfWeek === "Saturday" || d.dayOfWeek === "Sunday"
@@ -316,7 +316,7 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
       push(
         "calendar",
         45,
-        `${place} runs ${Math.abs(ahead)} hours ${ahead > 0 ? "ahead of" : "behind"} your clock — the first morning will feel odd.`
+        `${place} runs ${Math.abs(ahead)} hours ${ahead > 0 ? "ahead of" : "behind"} your clock, so the first morning will feel odd.`
       );
     }
   }
@@ -330,11 +330,11 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
     // several of both and only index 0 was ever read.
     (ctx.festivals ?? []).forEach((festival, i) => {
       if (!festival?.name || !festival.dates) return;
-      push("context", 75 - i, `${festival.name}, around ${festival.dates} — an event we're checking against your dates.`);
+      push("context", 75 - i, `${festival.name}, around ${festival.dates}, is an event we're checking against your dates.`);
     });
     (ctx.shopping ?? []).forEach((shop, i) => {
       if (!shop?.name || !shop.area) return;
-      push("context", 40 - i, `${shop.name} sits in ${shop.area} — a shopping stop on the shortlist.`);
+      push("context", 40 - i, `${shop.name}, in ${shop.area}, is a shopping stop on the shortlist.`);
     });
 
     // Trends are new here and get their own family so they interleave rather than competing with
@@ -358,7 +358,7 @@ export function buildDestinationFacts(input: FactInput, limit: number = DEFAULT_
     // attribution is attached, so the *richest* extracts contributed zero facts while thin ones
     // contributed theirs. Measured against the live Kyoto extract: 0 facts before, 3 after.
     // `85 - i` keeps them in document order; `PER_FAMILY` caps how many actually ship.
-    sentences(input.wikiExtract).forEach((sentence, i) => push("wiki", 85 - i, `${sentence} — Wikipedia`));
+    sentences(input.wikiExtract).forEach((sentence, i) => push("wiki", 85 - i, `${sentence} (Wikipedia)`));
   }
 
   return rank(facts, limit);

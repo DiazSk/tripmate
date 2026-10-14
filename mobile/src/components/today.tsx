@@ -186,7 +186,7 @@ function Stale({ at }: { at: string }) {
   const time = clockAt(at);
   return (
     <ThemedText type="detail" themeColor="muted">
-      {time ? `Saved copy from ${time} — no connection` : 'Saved copy — no connection'}
+      {time ? `Saved copy from ${time}, no connection` : 'Saved copy, no connection'}
     </ThemedText>
   );
 }
@@ -338,7 +338,7 @@ function NowAndAfter({
                 traveller's own, which is why it outranks the plan's estimate of the hop. */}
             {state.kind === 'late' ? (
               <ThemedText type="detail" themeColor="alert" style={styles.beneath}>
-                {`Booked for ${stop.time} — ${describeGap(state.minutes)} past the departure`}
+                {`Booked for ${stop.time}, ${describeGap(state.minutes)} past the departure`}
               </ThemedText>
             ) : null}
           </View>
@@ -615,7 +615,7 @@ function SavedNearby({
     <View style={styles.block}>
       <View style={[styles.row, styles.sectionLabel]}>
         <ThemedText type="label" themeColor="muted" style={styles.grow}>
-          {here ? 'You saved these — near you' : 'You saved these'}
+          {here ? 'You saved these, near you' : 'You saved these'}
         </ThemedText>
         {/* Offered rather than demanded, and only where a prompt would really appear. The system
             dialog is answered once and for all, so asking before the list it improves is on
@@ -783,8 +783,8 @@ function Attention({
       {wet ? (
         <ThemedText type="detail" themeColor="muted">
           {cachedAt
-            ? `Rain was forecast today — ${rain}%${clockAt(cachedAt) ? `, as of ${clockAt(cachedAt)}` : ''}.`
-            : `Rain likely today — ${rain}% chance.`}
+            ? `Rain was forecast today: ${rain}%${clockAt(cachedAt) ? `, as of ${clockAt(cachedAt)}` : ''}.`
+            : `Rain likely today: ${rain}% chance.`}
         </ThemedText>
       ) : null}
     </View>

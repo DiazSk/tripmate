@@ -387,7 +387,7 @@ function Intro() {
     <View style={styles.intro}>
       <Text style={[PolarType.kicker, { color: Polar.ink }]}>The plan that already knows</Text>
       <Rise at="intro" fade>
-        <Text style={styles.statement}>Forecast, holidays, opening hours and travel times go in first — before a single word of your plan is written.</Text>
+        <Text style={styles.statement}>Forecast, holidays, opening hours and travel times go in first, before a single word of your plan is written.</Text>
       </Rise>
       <View style={styles.rule} />
       <Text style={[PolarType.eyebrow, { color: Polar.ink }]}>How a plan is made</Text>

@@ -147,7 +147,7 @@ export default function GroupStep() {
 
         {/* The planning rules say an already-booked thing beats anything the model would
             recommend, and nothing else in the app collects one. */}
-        <Question title="Already booked" caption="Optional — anything fixed already.">
+        <Question title="Already booked" caption="Optional: anything fixed already.">
           <FieldTrough>
             <TextField
               label="Staying"

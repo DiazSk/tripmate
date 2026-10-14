@@ -69,13 +69,13 @@ test('stated must-sees are read out of userAnswers and scored', () => {
 describe('healthSummary', () => {
   test('splits the verdict from the coverage', () => {
     expect(healthSummary(4, 2, 4, 7)).toEqual({
-      verdict: '2 problems found — you need to fix them',
+      verdict: '2 problems found. You need to fix them',
       coverage: '4 of 7 checks run',
     });
   });
 
   test('makes one problem singular', () => {
-    expect(healthSummary(1, 1, 4, 7).verdict).toBe('1 problem found — you need to fix it');
+    expect(healthSummary(1, 1, 4, 7).verdict).toBe('1 problem found. You need to fix it');
   });
 
   test('calls findings without blockers things to look at', () => {

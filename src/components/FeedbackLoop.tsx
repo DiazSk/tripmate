@@ -35,7 +35,7 @@ function DraftNote({ state }: { state: DraftState }) {
       className={`mt-0.5 text-xs ${failed ? "text-alert" : "text-muted"}`}
     >
       {state === "pending" && "Saving a draft…"}
-      {state === "saved" && "Saved as a draft — find it under Drafts in My memories."}
+      {state === "saved" && "Saved as a draft. Find it under Drafts in My memories."}
       {failed && "We couldn't save a draft of this. Keep it to be sure it sticks."}
     </p>
   );

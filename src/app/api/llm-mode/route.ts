@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
   const mode = (body as { mode?: unknown }).mode;
   if (mode !== "api" && mode !== "cli" && mode !== null) {
     return NextResponse.json(
-      { error: `mode must be "api", "cli", or null to clear the override — got ${JSON.stringify(mode)}` },
+      { error: `mode must be "api", "cli", or null to clear the override; got ${JSON.stringify(mode)}` },
       { status: 400 }
     );
   }
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     ...state,
     warning:
       state.mode === "api" && !state.apiKeyPresent
-        ? "Mode is 'api' but ANTHROPIC_API_KEY is not set — every model call will fail until it is."
+        ? "Mode is 'api' but ANTHROPIC_API_KEY is not set, so every model call will fail until it is."
         : null,
   });
 }

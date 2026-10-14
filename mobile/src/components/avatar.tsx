@@ -56,7 +56,7 @@ export function Avatar({ account, size = 84, editable = false }: { account: Acco
     </View>
   ) : (
     <View style={[disc, styles.center, styles.empty]}>
-      <SymbolView name={{ ios: 'person.fill', android: 'person' }} tintColor={Colors.muted} size={size * 0.45} fallback={<Text style={styles.fallback}>—</Text>} />
+      <SymbolView name={{ ios: 'person.fill', android: 'person' }} tintColor={Colors.muted} size={size * 0.45} />
     </View>
   );
 
@@ -78,6 +78,5 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   empty: { backgroundColor: Colors.cardBorder },
   initials: { color: '#fff', fontWeight: '600' },
-  fallback: { color: Colors.muted },
   error: { color: Colors.alert, fontSize: 13, textAlign: 'center', maxWidth: 240 },
 });

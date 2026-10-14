@@ -114,7 +114,7 @@ function DayDropChip({
       ref={setNodeRef}
       onClick={onClick}
       aria-current={isActive ? "true" : undefined}
-      title={dragging ? `Hold to open day ${dayIndex + 1}, or drop to move it here` : `Day ${dayIndex + 1} — ${date}`}
+      title={dragging ? `Hold to open day ${dayIndex + 1}, or drop to move it here` : `Day ${dayIndex + 1}, ${date}`}
       className={`h-7 min-w-7 shrink-0 rounded-full px-2 text-xs font-medium transition-all ${
         isOver
           ? "bg-accent text-accent-foreground ring-2 ring-accent"
@@ -285,13 +285,13 @@ export default function FocusEditMode({
                 Refining your trip
                 <span className="font-normal text-muted">
                   {" "}
-                  — {dayCount} day{dayCount > 1 ? "s" : ""}
+                  · {dayCount} day{dayCount > 1 ? "s" : ""}
                 </span>
               </>
             ) : (
               <>
                 Editing Day {dayIndex + 1}
-                <span className="font-normal text-muted"> — {day.date}</span>
+                <span className="font-normal text-muted"> · {day.date}</span>
               </>
             )}
           </h3>
@@ -353,7 +353,7 @@ export default function FocusEditMode({
       {dirty && !confirmingCancel && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-accent/25 bg-accent/10 px-4 py-2.5">
           <p className="text-sm text-foreground">
-            {scope === "trip" ? "Trip" : "Day"} updated — happy with it?
+            {scope === "trip" ? "Trip" : "Day"} updated. Happy with it?
           </p>
           <button
             type="button"

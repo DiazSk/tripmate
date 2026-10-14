@@ -147,10 +147,10 @@ export function annotateConflicts(days: DayPlan[], conflicts: PlaceConflict[]): 
 
     const message =
       conflict.kind === "closed"
-        ? `Closed on this date${conflict.publishedHours ? ` (published: ${conflict.publishedHours})` : ""} — verify before going.`
+        ? `Closed on this date${conflict.publishedHours ? ` (published: ${conflict.publishedHours})` : ""}. Verify before going.`
         : conflict.kind === "access"
-          ? `Step-free access not confirmed here — check before going.`
-          : `Usually very busy at this hour — consider an earlier/later time or an off-peak alternative.`;
+          ? `Step-free access not confirmed here. Check before going.`
+          : `Usually very busy at this hour. Consider an earlier or later time, or an off-peak alternative.`;
     if (stop.note?.includes(message)) continue;
     stop.note = stop.note ? `${stop.note} ${message}` : message;
     applied += 1;
@@ -165,7 +165,7 @@ export function annotateConflicts(days: DayPlan[], conflicts: PlaceConflict[]): 
  * can replace the day set wholesale, so annotation has to see whatever it actually returned.
  */
 export function annotateBookAhead(days: DayPlan[], facts: Map<string, PlaceFacts>): number {
-  const message = "Book ahead — tickets recommended in advance.";
+  const message = "Book ahead: tickets recommended in advance.";
   let applied = 0;
   for (const day of days) {
     for (const stop of day.stops ?? []) {
@@ -257,8 +257,8 @@ export function formatPlaceConflicts(
   const all = [...lines, ...travelMessages.map((m) => `- ${m}`)];
 
   return `
-These are verified facts looked up from real listings and real route data, not guesses — each one is a defect in the plan above:
+These are verified facts looked up from real listings and real route data, not guesses. Each one is a defect in the plan above:
 ${all.join("\n")}
-Fix each by moving the stop to a day or time the place is actually open, or by replacing it with a comparable alternative that is open — keeping the day's geography and pacing sensible. Do not simply reword the note to acknowledge the problem.
+Fix each by moving the stop to a day or time the place is actually open, or by replacing it with a comparable alternative that is open, keeping the day's geography and pacing sensible. Do not simply reword the note to acknowledge the problem.
 `;
 }

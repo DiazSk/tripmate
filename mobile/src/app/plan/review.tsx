@@ -211,7 +211,7 @@ function PoiPicker() {
       {state === 'loading' ? (
         <Loading />
       ) : state === 'unavailable' ? (
-        <Notice>Couldn&rsquo;t load nearby places — you can still name your own below.</Notice>
+        <Notice>Couldn&rsquo;t load nearby places. You can still name your own below.</Notice>
       ) : pois.length === 0 ? (
         <ThemedText type="detail" themeColor="muted">
           Nothing came back for this destination. Name your own below.

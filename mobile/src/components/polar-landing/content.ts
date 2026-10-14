@@ -44,8 +44,8 @@ export const FOOT_PHOTO: ImageSource = require('@/assets/images/scenes/wadi-rum-
 
 // The four steps the web's HowItWorks states, in the same words.
 export const STEPS = [
-  { n: '01', title: 'You set the constraints', prose: 'Where, when, how much, and who is going. The budget is a ceiling — the plan stays inside it rather than spending up to it.' },
-  { n: '02', title: 'Real data goes in first', prose: 'Forecast for your actual dates, public holidays, opening hours and travel times — fetched before a single word is written.' },
+  { n: '01', title: 'You set the constraints', prose: 'Where, when, how much, and who is going. The budget is a ceiling: the plan stays inside it rather than spending up to it.' },
+  { n: '02', title: 'Real data goes in first', prose: 'Forecast for your actual dates, public holidays, opening hours and travel times, fetched before a single word is written.' },
   { n: '03', title: 'Written, then critiqued', prose: 'A second pass reviews the finished plan against your budget and pace, and rewrites the days it finds fault with.' },
   { n: '04', title: 'Every place is checked', prose: 'Coordinates are corrected against OpenStreetMap, so the pins land where the place actually is rather than where the model guessed.' },
 ] as const;
@@ -89,7 +89,7 @@ export const CITIES: DayCity[] = [
       { time: '09:00', name: 'Peleș Castle', note: 'First tour of the day', lat: 45.3599, lng: 25.5427 },
       { time: '11:00', name: 'Pelișor Castle', note: 'Next door, quieter', lat: 45.3586, lng: 25.541, tagLeft: true },
       { time: '13:00', name: 'Sinaia Monastery', note: 'Warm lunch in town after', lat: 45.3539, lng: 25.5513 },
-      { time: '15:00', name: 'Cota 1400', note: 'Cable car — only if the wind allows', lat: 45.3423, lng: 25.5196 },
+      { time: '15:00', name: 'Cota 1400', note: 'Cable car, only if the wind allows', lat: 45.3423, lng: 25.5196 },
       { time: '17:30', name: 'Casino Sinaia', note: 'Park walk as the lamps come on', lat: 45.3508, lng: 25.5527 },
     ],
   },

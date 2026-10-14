@@ -37,7 +37,7 @@ import ProfileForm from "./ProfileForm";
 export const metadata: Metadata = {
   title: "Your travel profile · TripMate",
   description:
-    "The preferences that stay true between trips — pace, party, walking, crowds and budget.",
+    "The preferences that stay true between trips: pace, party, walking, crowds and budget.",
 };
 
 export const dynamic = "force-dynamic";

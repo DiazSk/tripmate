@@ -1120,7 +1120,7 @@ export default function ItineraryCard({
               <button
                 type="button"
                 onClick={() => onChatDay(dayIndex)}
-                aria-label={`Refine with AI — day ${dayIndex + 1}`}
+                aria-label={`Refine with AI, day ${dayIndex + 1}`}
                 className="group absolute top-0 right-0 flex items-center rounded-md p-1.5 text-muted shadow-none transition-[background-color,color,box-shadow] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-[rgb(var(--surface-deep-rgb))] hover:text-foreground hover:shadow-[0_4px_16px_rgba(0,0,0,0.32)] hover:ring-1 hover:ring-card-border focus-visible:bg-[rgb(var(--surface-deep-rgb))] focus-visible:text-foreground focus-visible:shadow-[0_4px_16px_rgba(0,0,0,0.32)] focus-visible:ring-1 focus-visible:ring-card-border"
               >
                 <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium transition-[max-width,margin-right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:mr-1.5 group-hover:max-w-[5.5rem] group-focus-visible:mr-1.5 group-focus-visible:max-w-[5.5rem]">
@@ -1222,7 +1222,7 @@ export default function ItineraryCard({
 
         {day.stops.length === 0 ? (
           <p className="text-sm text-muted">
-            No stops planned for this day — it&rsquo;s yours to fill.
+            No stops planned for this day. It&rsquo;s yours to fill.
           </p>
         ) : (
           <>

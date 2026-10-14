@@ -23,7 +23,7 @@ describe('planGap', () => {
   it('asks for the budget once the destination is there', () => {
     expect(planGap({ ...complete, budget: 0 })).toEqual({
       field: 'budget',
-      reason: 'Add a budget — the plan stays inside it.',
+      reason: 'Add a budget. The plan stays inside it.',
     });
   });
 
@@ -37,7 +37,7 @@ describe('planGap', () => {
   it('reports a trip over 30 days', () => {
     expect(planGap({ ...complete, startDate: '2026-01-01', endDate: '2026-03-01' })).toEqual({
       field: 'dates',
-      reason: "Trips over 30 days aren't supported — please choose a shorter date range.",
+      reason: "Trips over 30 days aren't supported. Please choose a shorter date range.",
     });
   });
 
@@ -117,7 +117,7 @@ describe('gapSentence', () => {
 
   it('says the gap when the screen is showing nothing', () => {
     expect(gapSentence(planGap({ ...complete, budget: 0 }), undefined)).toBe(
-      'Add a budget — the plan stays inside it.',
+      'Add a budget. The plan stays inside it.',
     );
   });
 

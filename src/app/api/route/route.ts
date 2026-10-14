@@ -101,7 +101,7 @@ function parseProfile(raw: string | null): RoutableMode {
 export async function GET(req: NextRequest) {
   if (throttled(req)) {
     return NextResponse.json(
-      { error: "Too many route requests — slow down and try again shortly." },
+      { error: "Too many route requests. Slow down and try again shortly." },
       { status: 429, headers: { "Retry-After": "10" } }
     );
   }

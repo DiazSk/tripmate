@@ -24,6 +24,7 @@ import {
 import { formatPlaceConflicts } from "./placeConflicts";
 import type { PlaceConflict } from "./placeConflicts";
 import type { DietaryNeeds } from "./travelerProfile";
+import { NO_EM_DASH_RULE } from "./writingStyle";
 
 /**
  * One stop's shape.
@@ -115,7 +116,7 @@ function formatPreferences(preferences?: ItineraryPreferences | null): string {
   if (guidance.length > 0) {
     out += `For these interests: ${guidance.join("; ")}.\n`;
   }
-  out += `Let these interests genuinely shape which stops are chosen, not just the notes — avoid a generic, one-size-fits-all tourist itinerary. Don't ignore the weather/budget constraints above while doing so.\n`;
+  out += `Let these interests genuinely shape which stops are chosen, not just the notes. Avoid a generic, one-size-fits-all tourist itinerary. Don't ignore the weather/budget constraints above while doing so.\n`;
   return out;
 }
 
@@ -138,7 +139,7 @@ export function formatContextInsight(context: DestinationContext): string {
   if (context.festivals.length > 0) {
     lines.push(
       `Festivals/events: ${context.festivals
-        .map((f) => `${f.name} (${f.dates}) — ${f.note}`)
+        .map((f) => `${f.name} (${f.dates}): ${f.note}`)
         .join("; ")}`
     );
   }
@@ -150,7 +151,7 @@ export function formatContextInsight(context: DestinationContext): string {
   if (context.shopping.length > 0) {
     lines.push(
       `Notable shopping areas: ${context.shopping
-        .map((s) => `${s.name} (${s.area}) — ${s.note}`)
+        .map((s) => `${s.name} (${s.area}): ${s.note}`)
         .join("; ")}`
     );
   }
@@ -175,9 +176,9 @@ export function formatContextInsight(context: DestinationContext): string {
 function formatBikeshare(system?: BikeshareSystem | null): string {
   if (!system) return "";
   const fare = system.dayPass
-    ? `A day pass costs about ${system.dayPass.amount} ${system.dayPass.currency} — use that figure for any bike leg you add.`
+    ? `A day pass costs about ${system.dayPass.amount} ${system.dayPass.currency}; use that figure for any bike leg you add.`
     : `Its fare is not published in a form worth quoting, so don't state a price: put the cost at 0 and say in the note that passes are bought from the operator.`;
-  return `\nGetting around: this city has a public bikeshare, ${system.name}, with roughly ${system.stationsNearby} docking stations near the centre. ${fare} Where two consecutive stops are between 1.5km and 8km apart, a shared bike is usually the pleasanter option and worth preferring over the metro — say so in the stop's note. Don't force it: ignore the bike for a traveler whose profile says limited mobility or low energy, in heavy rain, or where the stops are walkable anyway.\n`;
+  return `\nGetting around: this city has a public bikeshare, ${system.name}, with roughly ${system.stationsNearby} docking stations near the centre. ${fare} Where two consecutive stops are between 1.5km and 8km apart, a shared bike is usually the pleasanter option and worth preferring over the metro, so say so in the stop's note. Don't force it: ignore the bike for a traveler whose profile says limited mobility or low energy, in heavy rain, or where the stops are walkable anyway.\n`;
 }
 
 const CONTEXT_USE_INSTRUCTION = `If a festival's dates overlap the trip, include it as a stop on the relevant day. Weigh the safety notes when choosing areas and timing. Include at least one shopping stop from the list if it fits the budget and tier.`;
@@ -193,11 +194,11 @@ const CONTEXT_USE_INSTRUCTION = `If a festival's dates overlap the trip, include
  * Mirrored by SKILL.md §0. Move one, move both.
  */
 export const PRECEDENCE_INSTRUCTION = `When two of these conflict, this is the order that decides it, highest first:
-1. Fixed commitments and immutable facts — booked flights, trains, accommodation, timed tickets, anything the traveler says cannot move.
-2. Safety and accessibility — stated accessibility needs, dietary and allergy requirements, destination safety notes.
-3. Physical and temporal feasibility — opening hours, travel time, arrival and departure boundaries, daylight, realistic stop duration.
-4. Explicit traveler requirements and exclusions — must-dos, do-not-includes, transport restrictions, the budget ceiling.
-5. Traveler profile — pace, energy, crowd preference, group and family rules.
+1. Fixed commitments and immutable facts: booked flights, trains, accommodation, timed tickets, anything the traveler says cannot move.
+2. Safety and accessibility: stated accessibility needs, dietary and allergy requirements, destination safety notes.
+3. Physical and temporal feasibility: opening hours, travel time, arrival and departure boundaries, daylight, realistic stop duration.
+4. Explicit traveler requirements and exclusions: must-dos, do-not-includes, transport restrictions, the budget ceiling.
+5. Traveler profile: pace, energy, crowd preference, group and family rules.
 6. Primary (starred) interests.
 7. Secondary interests and vibe.
 8. Variety, aesthetics and optimization.
@@ -231,7 +232,7 @@ const CLAIMS_POLICY_REMINDER = `Neither line may claim anything you were not giv
  * So both examples now show what a grounded practical line looks like: distance, sequence, a
  * physical property of the place. Nothing about conditions, crowds or times of day.
  */
-const STOP_LINES_INSTRUCTION = `Each stop also needs exactly two one-line fields. "why": why THIS stop suits THIS traveler given their stated interests and how they travel — the reason it was chosen over alternatives, e.g. "Step-free rock garden — fits an easy-paced culture day". "note": one practical detail they'd act on, e.g. "10-minute walk from the last stop; tickets are sold at the north gate". Both must be a single line, under about 90 characters, and must not repeat the stop's name. ${CLAIMS_POLICY_REMINDER}`;
+const STOP_LINES_INSTRUCTION = `Each stop also needs exactly two one-line fields. "why": why THIS stop suits THIS traveler given their stated interests and how they travel: the reason it was chosen over alternatives, e.g. "Step-free rock garden, fits an easy-paced culture day". "note": one practical detail they'd act on, e.g. "10-minute walk from the last stop; tickets are sold at the north gate". Both must be a single line, under about 90 characters, and must not repeat the stop's name. ${CLAIMS_POLICY_REMINDER} ${NO_EM_DASH_RULE}`;
 
 // Meals were coming back as a single committed restaurant every time, which reads
 // like a booking and pins the day's route to one address. An area plus "what to look
@@ -252,12 +253,12 @@ const STOP_LINES_INSTRUCTION = `Each stop also needs exactly two one-line fields
 // (`placeQuery` → Overpass here, `StopResolution` → MKLocalSearch on iOS). A wrong coordinate
 // on "La Grotta" is fixable; "local trattoria" is not fixable by anything, ever. The prompt
 // cannot carry this — it is a knowledge problem, and the model has no coordinates to give.
-const FOOD_STOP_INSTRUCTION = `For "food" stops, prefer an AREA over a specific restaurant unless the place itself is the point (it's a landmark eatery, it needs a reservation, or a stated interest is the reason the day routes there). An area-level food stop uses the neighborhood/market as its "name" (e.g. "Dinner around Pike Place Market"), the area's approximate lat/lng, and a "why"/"note" that says what to look for there plus one or two example spots (e.g. "Seafood counters everywhere; e.g. Pike Place Chowder"). Never invent hours, wait times, or menu prices for an area-level stop. If a later meal returns to an area you already used for one, name the specific venue that time instead — a base in a small town otherwise yields four stops all called "Dinner in <that town>", which tells the traveler nothing about four different nights. The area must sit within or next to that part of the day's route — a meal should never pull the day across town.`;
+const FOOD_STOP_INSTRUCTION = `For "food" stops, prefer an AREA over a specific restaurant unless the place itself is the point (it's a landmark eatery, it needs a reservation, or a stated interest is the reason the day routes there). An area-level food stop uses the neighborhood/market as its "name" (e.g. "Dinner around Pike Place Market"), the area's approximate lat/lng, and a "why"/"note" that says what to look for there plus one or two example spots (e.g. "Seafood counters everywhere; e.g. Pike Place Chowder"). Never invent hours, wait times, or menu prices for an area-level stop. If a later meal returns to an area you already used for one, name the specific venue that time instead: a base in a small town otherwise yields four stops all called "Dinner in <that town>", which tells the traveler nothing about four different nights. The area must sit within or next to that part of the day's route; a meal should never pull the day across town.`;
 
 /** The traveler's own places. The rule lives here, not in SKILL.md, because this legacy path never
  *  loads the skill — every rule it follows is a constant in this file. SKILL.md §15 carries the
  *  same rule for the edit loop, which does load it. Keep the two in step. */
-const ANCHOR_INSTRUCTION = `Schedule every MUST place as a stop, on a day and at a time it is open, unless that is impossible — closed on every day the trip is near it, too far to reach and return within a day, or more MUST places than the days can hold. Fit WANT places where they suit a day's route; skipping one is fine. Use the traveler's name for the place in the stop's "name" so it can be recognised. For every MUST place you could not schedule, add an entry to the top-level "unplaced" array with a one-line, concrete reason (e.g. "Closed Tuesdays, the only day the plan is nearby"). Never drop a MUST place silently. Use "unplaced": [] when everything fits. Where a place's hours are given, they are OpenStreetMap data — schedule it inside them; where none are given, do not state hours for it.`;
+const ANCHOR_INSTRUCTION = `Schedule every MUST place as a stop, on a day and at a time it is open, unless that is impossible: closed on every day the trip is near it, too far to reach and return within a day, or more MUST places than the days can hold. Fit WANT places where they suit a day's route; skipping one is fine. Use the traveler's name for the place in the stop's "name" so it can be recognised. For every MUST place you could not schedule, add an entry to the top-level "unplaced" array with a one-line, concrete reason (e.g. "Closed Tuesdays, the only day the plan is nearby"). Never drop a MUST place silently. Use "unplaced": [] when everything fits. Where a place's hours are given, they are OpenStreetMap data, so schedule it inside them; where none are given, do not state hours for it.`;
 
 export function formatAnchors(anchors: Anchor[] | undefined): string {
   if (!anchors || anchors.length === 0) return "";
@@ -266,10 +267,10 @@ export function formatAnchors(anchors: Anchor[] | undefined): string {
     // Raw OSM string always, plus "closed" only where the narrow parser is sure — "PH off" and
     // seasonal syntax pass through for the model to read rather than being guessed at here.
     const closed = a.closedDays && a.closedDays.length > 0 ? `; closed ${a.closedDays.join(", ")}` : "";
-    const hours = a.openingHours ? ` — open ${a.openingHours}${closed} (OpenStreetMap)` : "";
+    const hours = a.openingHours ? `, open ${a.openingHours}${closed} (OpenStreetMap)` : "";
     return `- ${a.priority === "must" ? "MUST" : "WANT"}: ${a.name} ${where}${hours}`;
   });
-  return `\nThe traveler's own places — they chose these before asking for a plan:\n${lines.join("\n")}\n${ANCHOR_INSTRUCTION}\n`;
+  return `\nThe traveler's own places (they chose these before asking for a plan):\n${lines.join("\n")}\n${ANCHOR_INSTRUCTION}\n`;
 }
 
 // Lodging came back as the same mid-range city hotel every night regardless of who
@@ -291,13 +292,13 @@ export function formatAnchors(anchors: Anchor[] | undefined): string {
  * `weatherLine` will not render planner prose in the badge reserved for measured figures.
  */
 const CLAIMS_POLICY = `Never state as fact anything you were not given. Specifically:
-- No weather claim of any kind — conditions, temperatures, "pleasant", "mild", "rainy" — unless daily weather was supplied above. If it was not, write nothing about weather anywhere, including in a day's summary or a stop's note.
+- No weather claim of any kind (conditions, temperatures, "pleasant", "mild", "rainy") unless daily weather was supplied above. If it was not, write nothing about weather anywhere, including in a day's summary or a stop's note.
 - No sunrise, sunset, golden-hour or daylight claim ("catching sunset views", "before dark") unless sunrise/sunset times were supplied.
 - No claim about how busy, quiet, crowded or queued a place is, and no operational advice about how it currently runs (which entrance, which counter, how to skip a line). You do not know these and they change.
 - No opening or closing time unless it was supplied.
 Describing why a place is worth going to, what it is, and how it fits the day is exactly what you are for. Asserting a fact about the world that nobody gave you is not.`;
 
-const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD — what the WHOLE party pays there, never one person's share, so multiply a per-head price by the party size before writing it (0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM") — times across a day's stops must be sequential and non-overlapping; a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category" — "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs (including a bikeshare hop, when the destination has one), "other" for everything else. Also two fields the checks read rather than the traveler: "outdoor" — true where weather can spoil the stop (a garden, a viewpoint, a walking route), false where it cannot (a museum, a restaurant, a covered market). Judge the place, never the category: a rooftop bar and a basement one are both food. And "timeFlexibility" — write "FIXED" ONLY for something the traveler has told you is already booked or ticketed for a specific time, quoting their own words back as the stop; everything you chose yourself is "PREFERRED". A FIXED stop is one the plan may not later move or drop, so inventing one takes a decision away from them permanently.`;
+const STOP_FIELD_INSTRUCTION = `Each stop needs: a realistic estimated cost in USD (what the WHOLE party pays there, never one person's share, so multiply a per-head price by the party size before writing it; 0 is fine for free attractions); a "time" (approximate start time, e.g. "9:00 AM"; times across a day's stops must be sequential and non-overlapping); a "durationLabel" (short human label, e.g. "1 hour", "45 minutes"); 1-2 short "tags" describing the stop (e.g. "Local Pick", "Reservation Needed", "Free", "Must-See"); and a "category": "food" for meals/cafes/restaurants, "entry" for paid attractions/tickets, "transit" for explicit transport legs (including a bikeshare hop, when the destination has one), "other" for everything else. Also two fields the checks read rather than the traveler: "outdoor", true where weather can spoil the stop (a garden, a viewpoint, a walking route), false where it cannot (a museum, a restaurant, a covered market). Judge the place, never the category: a rooftop bar and a basement one are both food. And "timeFlexibility": write "FIXED" ONLY for something the traveler has told you is already booked or ticketed for a specific time, quoting their own words back as the stop; everything you chose yourself is "PREFERRED". A FIXED stop is one the plan may not later move or drop, so inventing one takes a decision away from them permanently.`;
 
 export function buildGeneratePrompt(params: {
   destination: string;
@@ -325,7 +326,7 @@ Style: ${tierStyle(params.tier)}
 ${params.weather.length > 0 ? `Daily weather:\n${formatWeather(params.weather)}` : `No weather data is available for these dates.`}
 ${formatPreferences(params.preferences)}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatTravelLegs(params.logistics ?? null)}${formatRequirements(params.answers ?? null)}${formatDietary(params.dietary ?? null)}${formatBikeshare(params.bikeshare)}${formatContextBlock(params.contextInsight)}${formatAnchors(params.anchors)}${params.sketch ?? ""}
 ${params.weather.length > 0 ? "Use the weather to favor indoor activities on days with high rain probability or extreme temperatures, and outdoor activities on good-weather days.\n" : ""}${CLAIMS_POLICY}
-Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city — repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
+Every day except the last should include a "lodging" entry representing that night's stay, ${lodgingPricingBasis()}. Use the SAME hotel for every night in the same city. Repeat its name and nightly cost on each of those days. Only switch lodging when the trip actually relocates to a different city or region, and say so in that day's note. Do not invent a different hotel each night: it costs the traveler more, wastes time re-checking in, and no one moves hotels nightly in one city. Pick one well-located base and plan the days around it.
 ${lodgingInstruction()}
 ${STOP_FIELD_INSTRUCTION}
 ${STOP_LINES_INSTRUCTION}
@@ -395,7 +396,7 @@ export function buildPlaceDetailPrompt(params: {
   itineraryContext?: string;
 }): string {
   const context = params.itineraryContext
-    ? `\n\n<their_itinerary>\n${params.itineraryContext}\n</their_itinerary>\n\nThis stop is part of the trip above. Judge "bestTime" and "duration" against the slot it actually occupies and the stops around it, and make at least one tip specific to this trip rather than generic — the weather that day, the stop before or after it, or the time they arrive. If the plan already puts them there at a poor time, say so plainly in a tip.`
+    ? `\n\n<their_itinerary>\n${params.itineraryContext}\n</their_itinerary>\n\nThis stop is part of the trip above. Judge "bestTime" and "duration" against the slot it actually occupies and the stops around it, and make at least one tip specific to this trip rather than generic: the weather that day, the stop before or after it, or the time they arrive. If the plan already puts them there at a poor time, say so plainly in a tip.`
     : "";
 
   return `Give a compact travel-guide entry for "${params.name}" in ${params.destination} (approx. coordinates ${params.lat}, ${params.lng}).${context}
@@ -403,7 +404,7 @@ export function buildPlaceDetailPrompt(params: {
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 {"history":"1-2 sentence history or significance","bestTime":"short best time of day or season to visit","tips":["practical tip 1","practical tip 2"],"duration":"suggested visit duration, e.g. '1-2 hours'","pros":["Short label: one sentence on what is genuinely good here","..."],"cons":["Short label: one sentence on what is genuinely worse here","..."]}
 
-Two or three entries each for "pros" and "cons". Open each with a two-to-four word label, then a colon, then one sentence — the card renders the label in bold. Cons must be real drawbacks a visitor would want warned about (crowds, cost, a climb, a closure pattern), never a hedge or a compliment in disguise. If a place has no honest drawback worth a sentence, return fewer rather than padding.`;
+Two or three entries each for "pros" and "cons". Open each with a two-to-four word label, then a colon, then one sentence; the card renders the label in bold. Cons must be real drawbacks a visitor would want warned about (crowds, cost, a climb, a closure pattern), never a hedge or a compliment in disguise. If a place has no honest drawback worth a sentence, return fewer rather than padding. ${NO_EM_DASH_RULE}`;
 }
 
 export function buildRebalancePrompt(params: {
@@ -441,7 +442,7 @@ export function buildContextPrompt(params: {
 }): string {
   return `Give background context useful for planning a trip to ${params.destination} between ${params.startDate} and ${params.endDate}.
 
-Cover: notable shopping areas/districts, and any current travel trends (popular new spots, seasonal crowds, etc.). Leave a category's array empty if you don't have anything genuinely relevant — don't invent filler.
+Cover: notable shopping areas/districts, and any current travel trends (popular new spots, seasonal crowds, etc.). Leave a category's array empty if you don't have anything genuinely relevant; don't invent filler. ${NO_EM_DASH_RULE}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 {"shopping":[{"name":"area/market name","area":"neighborhood","note":"short note"}],"trends":[{"note":"short trend note"}]}`;
@@ -468,10 +469,10 @@ export function buildCritiquePrompt(params: {
 
 ${JSON.stringify(params.itinerary)}
 ${formatContextBlock(params.contextInsight)}${interestLine}${formatTravelerProfile(params.resolvedFlags ?? null)}${formatDietary(params.dietary ?? null)}
-Review it for: (1) total cost (lodging + stops) landing at or under the budget, with anything already paid for counted as 0 and every cost read as the party total it already is rather than a per-person price, (2) stop times being sequential, non-overlapping, and realistically spaced (no implausibly tight back-to-back stops), (3) reasonable use of the destination context above, if any was given, (4) whether the itinerary genuinely reflects the traveler's stated interests above, if any were given — not just generic sightseeing, (5) whether each day respects the traveler profile above, if one was given — the stops-per-day target and any mobility or family constraints, (6) whether every food stop actually fits the traveler's dietary needs above, if any were given — a stop they could not eat at is a defect even if the rest of the day is good, (7) whether any attraction, restaurant or area appears more than once across the whole trip — including under a second name or as a branch of the same chain, (8) whether the trip as a whole reflects the starred priorities in the order given, rather than one day carrying all of them.
+Review it for: (1) total cost (lodging + stops) landing at or under the budget, with anything already paid for counted as 0 and every cost read as the party total it already is rather than a per-person price, (2) stop times being sequential, non-overlapping, and realistically spaced (no implausibly tight back-to-back stops), (3) reasonable use of the destination context above, if any was given, (4) whether the itinerary genuinely reflects the traveler's stated interests above, if any were given, not just generic sightseeing, (5) whether each day respects the traveler profile above, if one was given: the stops-per-day target and any mobility or family constraints, (6) whether every food stop actually fits the traveler's dietary needs above, if any were given (a stop they could not eat at is a defect even if the rest of the day is good), (7) whether any attraction, restaurant or area appears more than once across the whole trip, including under a second name or as a branch of the same chain, (8) whether the trip as a whole reflects the starred priorities in the order given, rather than one day carrying all of them.
 ${formatPlaceConflicts(params.placeConflicts ?? [], params.travelFindings ?? [])}
 If it already looks good, respond with exactly: {"issues":[],"revisedDays":null}
-Otherwise, respond with the specific issues found and a corrected "days" array in the same shape as the input, fixing those issues.
+Otherwise, respond with the specific issues found and a corrected "days" array in the same shape as the input, fixing those issues. ${NO_EM_DASH_RULE}
 
 Respond with ONLY valid JSON, no markdown code fences, no commentary, in exactly this shape:
 {"issues":["short issue description"],"revisedDays":[${dayShape(daysCarryWeather(params.itinerary.days))}]}`;

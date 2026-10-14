@@ -37,7 +37,7 @@ test("distils real GDELT articles into sourced notes", () => {
   const [note] = distilSafetyNotes(raw);
   assert.equal(
     note.note,
-    "Like something out of Taken: Perth woman reveals how she was almost human trafficked in Paris — perthnow.com.au"
+    "Like something out of Taken: Perth woman reveals how she was almost human trafficked in Paris (perthnow.com.au)"
   );
   // classifySeverity's keyword list doesn't cover "trafficked" — a real ceiling of the
   // title-only heuristic, not a bug in this test.

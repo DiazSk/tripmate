@@ -123,7 +123,7 @@ const CITIES: City[] = [{
   }, {
     time: '15:00',
     name: 'Cota 1400',
-    note: 'Cable car — only if the wind allows',
+    note: 'Cable car, only if the wind allows',
     at: [25.5196, 45.3423]
   }, {
     time: '17:30',
@@ -601,7 +601,7 @@ export default function NightMap() {
               Back to the globe
             </button>}
         </div>
-        {engine === 'fallback' && <p className="nm-fallback-note">Live map unavailable here — showing the world overview.</p>}
+        {engine === 'fallback' && <p className="nm-fallback-note">Live map unavailable here. Showing the world overview.</p>}
       </div>
 
       <div className="nm-panel">

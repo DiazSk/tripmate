@@ -77,7 +77,7 @@ export default function PoiCandidatePicker({
           about the missing suggestions is provisional or worth apologising for: OpenTripMap is
           either unconfigured or came back empty, and either way the plan still gets built. */}
       {!loading && !available && (
-        <p className="text-xs text-muted">We&apos;ll pick every stop for you — add any must-sees below.</p>
+        <p className="text-xs text-muted">We&apos;ll pick every stop for you. Add any must-sees below.</p>
       )}
 
       {customPois.length > 0 && (

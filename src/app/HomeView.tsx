@@ -1110,7 +1110,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   function validate(): string | null {
     if (endDate < startDate) return "End date must be on or after the start date.";
     if (isTripTooLong(startDate, endDate)) {
-      return `Trips over ${MAX_TRIP_DAYS} days aren't supported — please choose a shorter date range.`;
+      return `Trips over ${MAX_TRIP_DAYS} days aren't supported. Please choose a shorter date range.`;
     }
     return null;
   }
@@ -1177,7 +1177,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     if (permitted && typeof Notification !== "undefined" && Notification.permission === "granted") {
       const n = new Notification(
         ok ? "Your itinerary is ready!" : "Itinerary generation failed",
-        { body: ok ? "Click to view your trip." : "Something went wrong — tap to try again." }
+        { body: ok ? "Click to view your trip." : "Something went wrong. Tap to try again." }
       );
       n.onclick = () => {
         window.focus();
@@ -2205,8 +2205,8 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                             Closest match:{" "}
                             <span className="font-medium text-foreground">
                               {TIERS.find((t) => t.id === tier)?.name}
-                            </span>{" "}
-                            — {TIERS.find((t) => t.id === tier)?.description}
+                            </span>
+                            : {TIERS.find((t) => t.id === tier)?.description}
                           </div>
                         )}
                       </Field>
@@ -2308,7 +2308,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   <div aria-live="polite">
                     {destinationMissed && (
                       <p className="value-in mt-2.5 text-xs text-muted">
-                        Couldn&apos;t find that on the map — we&apos;ll still plan it.
+                        Couldn&apos;t find that on the map, but we&apos;ll still plan it.
                       </p>
                     )}
                   </div>
@@ -2471,7 +2471,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                       />
                     </div>
                     <p className="text-xs text-muted">
-                      These apply to this trip only. Your saved profile is untouched — edit it on
+                      These apply to this trip only. Your saved profile is untouched. Edit it on
                       the{" "}
                       <Link
                         href="/profile"
@@ -2542,7 +2542,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                       value={
                         selectedPois.length + customPois.length > 0
                           ? `${selectedPois.length + customPois.length}`
-                          : "None yet — add any below"
+                          : "None yet. Add any below"
                       }
                     />
                   </div>
@@ -2584,7 +2584,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   </label>
                   {notifyBlocked && (
                     <p className="mt-1 text-xs text-muted">
-                      Notifications are blocked in your browser — we&apos;ll still flash the tab
+                      Notifications are blocked in your browser, but we&apos;ll still flash the tab
                       title when it&apos;s done.
                     </p>
                   )}
@@ -2824,7 +2824,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
                   while the band is still up, and both saying it at once is noise. */}
               {step === "result" && !focus.target && itinerary && reviewing && !generating && (
                 <p role="status" aria-live="polite" className="px-1 text-xs text-muted">
-                  Still reviewing this plan — a day or two may change in a minute.
+                  Still reviewing this plan. A day or two may change in a minute.
                 </p>
               )}
               {/* `step === "result"`, because `itinerary` is not cleared when a traveller presses

@@ -41,7 +41,7 @@ export function distilSafetyNotes(raw: unknown, limit = MAX_NOTES): SafetyNote[]
 
     const domain = typeof a?.domain === "string" ? a.domain.trim() : null;
     notes.push({
-      note: domain ? `${title} — ${domain}` : title,
+      note: domain ? `${title} (${domain})` : title,
       severity: classifySeverity(title),
       sourceUrl: typeof a?.url === "string" ? a.url : null,
     });

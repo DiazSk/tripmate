@@ -76,7 +76,7 @@ export function TravelCard({ answers, image, issued, complete = false }: { answe
           <Text style={styles.label}>HOLDER</Text>
           <Text style={styles.name} numberOfLines={1}>{holder}</Text>
           <Text style={[styles.label, { marginTop: 5 }]}>HOME PORT</Text>
-          <Text style={[styles.value, !home && styles.empty]} numberOfLines={1}>{home ?? '—'}</Text>
+          <Text style={[styles.value, !home && styles.empty]} numberOfLines={1}>{home ?? 'Not set'}</Text>
         </View>
       </View>
       {width > 0 && stamps.map((s) => {

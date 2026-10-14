@@ -83,8 +83,8 @@ test("datesFor crosses New Year as four consecutive days", () => {
 
 test("the fill prompt names every stop by id and forbids changes", () => {
   const prompt = buildFillPrompt("Lisbon", [{ date: "2026-11-02", day: day([{ name: "A" }, { name: "B" }]) }]);
-  assert.match(prompt, /d0s0 — A \(2026-11-02\)/);
-  assert.match(prompt, /d0s1 — B \(2026-11-02\)/);
+  assert.match(prompt, /d0s0: A \(2026-11-02\)/);
+  assert.match(prompt, /d0s1: B \(2026-11-02\)/);
   assert.match(prompt, /Do not add, remove, rename or reorder/);
   assert.equal(stopId(2, 3), "d2s3");
 });

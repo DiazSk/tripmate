@@ -26,7 +26,7 @@ export const STEP_LABELS: Record<string, string> = {
 export const REFINE_KIND_TYPES = ["refine", "chat", "element-edit"];
 
 export function formatMs(ms: number | null): string {
-  if (ms == null) return "—";
+  if (ms == null) return "n/a";
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }

@@ -24,8 +24,8 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
     // simply vanished. Measured — Sonnet 5 on this exact line returned 9:00/11:00/1:00 PM days and
     // was fully compliant while doing it. The count now names what it counts, and the day's SPAN is
     // stated separately, because the two are independent and only one of them was ever specified.
-    `Plan about ${flags.paceSpotsPerDay} sightseeing stops per day — the traveler's resolved pace is "${flags.paceResolved}". Meals, coffee and rest breaks do NOT count toward that number; they are additional entries on top of it.`,
-    `Each day must still span the whole day, roughly morning through evening. Include lunch around 12:00-13:30 and dinner around 18:30-20:30, and end the day in the evening rather than at lunchtime. A lower stops-per-day target means more time and breathing room per stop — not a day that stops after lunch.`,
+    `Plan about ${flags.paceSpotsPerDay} sightseeing stops per day; the traveler's resolved pace is "${flags.paceResolved}". Meals, coffee and rest breaks do NOT count toward that number; they are additional entries on top of it.`,
+    `Each day must still span the whole day, roughly morning through evening. Include lunch around 12:00-13:30 and dinner around 18:30-20:30, and end the day in the evening rather than at lunchtime. A lower stops-per-day target means more time and breathing room per stop, not a day that stops after lunch.`,
   ];
 
   const mobility = flags.mobilityProfile;
@@ -40,11 +40,11 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
   const crowds = flags.crowdBias;
   if (crowds.preferOffpeakTiming || crowds.scheduleIconsAtOffpeak || crowds.boostOffbeatPois) {
     lines.push(
-      `Crowds: this traveler avoids them — schedule well-known sights at off-peak hours and favor lesser-known alternatives over headline attractions.`
+      `Crowds: this traveler avoids them, so schedule well-known sights at off-peak hours and favor lesser-known alternatives over headline attractions.`
     );
   } else if (crowds.marketsAndLivelyOk || crowds.peakTimingOk) {
     lines.push(
-      `Crowds: this traveler enjoys them — busy markets and lively areas are welcome, and peak-hour timing is fine.`
+      `Crowds: this traveler enjoys them: busy markets and lively areas are welcome, and peak-hour timing is fine.`
     );
   }
 
@@ -52,7 +52,7 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
 
   if (flags.partySize !== null) {
     lines.push(
-      `Party of ${flags.partySize} — size lodging and any booked table for that many, and prefer stops that can absorb the whole group at once.`
+      `Party of ${flags.partySize}. Size lodging and any booked table for that many, and prefer stops that can absorb the whole group at once.`
     );
   }
 
@@ -79,7 +79,7 @@ export function formatTravelerProfile(flags: ResolvedFlags | null): string {
 
   const { primary, tiebreakers } = flags.prioritiesRanked;
   if (primary.length > 0) {
-    let line = `Top priorities — these drive which stops are chosen, not just the notes: ${primary.join(", ")}.`;
+    let line = `Top priorities (these drive which stops are chosen, not just the notes): ${primary.join(", ")}.`;
     if (tiebreakers.length > 0) {
       line += ` Secondary interests, for tie-breaks only: ${tiebreakers.join(", ")}.`;
     }
@@ -112,7 +112,7 @@ export function formatTravelLegs(logistics: TripLogistics | null): string {
   if (logistics.arrivalTime || logistics.arrivalPoint) {
     const where = logistics.arrivalPoint ? ` at ${logistics.arrivalPoint}` : "";
     const when = logistics.arrivalTime
-      ? `The traveler arrives on day 1 at ${logistics.arrivalTime}${where}. Allow about 90 minutes for immigration, bags and the transfer in, then start the day from there — do not plan anything before that, and keep the first stop close to the arrival point.`
+      ? `The traveler arrives on day 1 at ${logistics.arrivalTime}${where}. Allow about 90 minutes for immigration, bags and the transfer in, then start the day from there. Do not plan anything before that, and keep the first stop close to the arrival point.`
       : `The traveler arrives on day 1${where}. Keep the first stop close to the arrival point.`;
     lines.push(when);
   }
@@ -120,14 +120,14 @@ export function formatTravelLegs(logistics: TripLogistics | null): string {
   if (logistics.departureTime || logistics.departurePoint) {
     const where = logistics.departurePoint ? ` from ${logistics.departurePoint}` : "";
     const when = logistics.departureTime
-      ? `The traveler departs on the last day at ${logistics.departureTime}${where}. Reserve two separate things before it: the travel time from the last stop to the departure point, PLUS an arrival buffer at the departure point itself — about 2 hours before a domestic flight, 3 hours before an international one, much less for a train. Those defaults apply unless the trip context says otherwise, and the airport buffer is not part of the transfer time. Plan nothing that would run into either.`
+      ? `The traveler departs on the last day at ${logistics.departureTime}${where}. Reserve two separate things before it: the travel time from the last stop to the departure point, PLUS an arrival buffer at the departure point itself: about 2 hours before a domestic flight, 3 hours before an international one, much less for a train. Those defaults apply unless the trip context says otherwise, and the airport buffer is not part of the transfer time. Plan nothing that would run into either.`
       : `The traveler departs on the last day${where}. Keep the last day's stops near the departure point.`;
     lines.push(when);
   }
 
   if (logistics.stayBooked) {
     lines.push(
-      `Lodging is already booked: ${logistics.stayBooked}. Use it for every night instead of choosing one, route the days around it, and give it a cost of 0 — SKILL.md §4e: charging again for something already paid for distorts what is left to spend.`
+      `Lodging is already booked: ${logistics.stayBooked}. Use it for every night instead of choosing one, route the days around it, and give it a cost of 0 (SKILL.md §4e), because charging again for something already paid for distorts what is left to spend.`
     );
   }
 
@@ -156,7 +156,7 @@ export function formatRequirements(answers: UserAnswers | null): string {
   }
   if (answers.constraintsNote?.trim()) {
     lines.push(
-      `In the traveler's own words: "${answers.constraintsNote.trim()}" — treat anything named there as already decided, and keep any time they say they're busy or unavailable free of stops. Never assume access to a transport mode, a booking or a budget basis it does not mention, but don't read its silence as a denial either: if it doesn't say they have a car, don't plan a day that needs one — that is not the same as assuming they don't have one.`
+      `In the traveler's own words: "${answers.constraintsNote.trim()}". Treat anything named there as already decided, and keep any time they say they're busy or unavailable free of stops. Never assume access to a transport mode, a booking or a budget basis it does not mention, but don't read its silence as a denial either: if it doesn't say they have a car, don't plan a day that needs one; that is not the same as assuming they don't have one.`
     );
   }
   if (lines.length === 0) return "";

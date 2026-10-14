@@ -347,7 +347,7 @@ function Invitation() {
   return (
     <View style={styles.invitation}>
       <ThemedText type="detail" themeColor="muted">
-        Ask for as many changes as you like in one go — swap a stop, move one to another day, make
+        Ask for as many changes as you like in one go: swap a stop, move one to another day, make
         a day quieter, add a day. Nothing changes until you have seen what would change and said
         yes, and whatever is not in scope above cannot be touched at all.
       </ThemedText>

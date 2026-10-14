@@ -270,7 +270,7 @@ export default function DayHeader({
       <div className="flex flex-wrap items-center gap-1.5">
         <h3 className="font-display text-lg font-semibold text-foreground">
           Day {dayIndex + 1}
-          {day.title ? ` — ${day.title}` : ""} · {formatItineraryDate(day.date)}
+          {day.title ? `: ${day.title}` : ""} · {formatItineraryDate(day.date)}
         </h3>
         {editable && onEditDay && (
           <button

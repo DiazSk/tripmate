@@ -32,7 +32,7 @@ export function crossFieldProblem(startDate: string, endDate: string): string | 
   if (!startDate || !endDate) return undefined;
   if (isEndBeforeStart(startDate, endDate)) return 'End date must be on or after the start date.';
   if (isTripTooLong(startDate, endDate)) {
-    return "Trips over 30 days aren't supported — please choose a shorter date range.";
+    return "Trips over 30 days aren't supported. Please choose a shorter date range.";
   }
   return undefined;
 }
@@ -59,7 +59,7 @@ export function planGap(draft: {
   // `> 0` rather than `!draft.budget`, so a NaN from a half-typed figure is a gap rather than a
   // number the form accepts.
   if (!(draft.budget > 0)) {
-    return { field: 'budget', reason: 'Add a budget — the plan stays inside it.' };
+    return { field: 'budget', reason: 'Add a budget. The plan stays inside it.' };
   }
   return null;
 }

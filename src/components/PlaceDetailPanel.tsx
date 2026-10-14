@@ -542,7 +542,7 @@ function Practical({ gallery, stop }: { gallery: PlaceGallery; stop: Stop }) {
           decade old and a phone number can belong to whoever had the unit before. The website in
           particular usually arrives from Wikidata rather than OSM, so the line says both. */}
       <p className="text-xs text-muted/70">
-        From OpenStreetMap and Wikidata — only as current as their last edit.
+        From OpenStreetMap and Wikidata, only as current as their last edit.
       </p>
     </div>
   );

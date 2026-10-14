@@ -196,7 +196,7 @@ export default function TodayPreview() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <Stack.Screen options={{ title: 'Today — preview' }} />
+      <Stack.Screen options={{ title: 'Today: preview' }} />
       <View style={styles.bar}>
         {SCENARIOS.map((s) => (
           <Switch key={s.id} label={s.label} on={scenario === s.id} onPress={() => setScenario(s.id)} />

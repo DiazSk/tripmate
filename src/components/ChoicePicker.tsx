@@ -41,9 +41,9 @@ export default function ChoicePicker<T extends string>({
 }
 
 export const ENERGY_LEVELS = [
-  { id: "high", label: "High — walk all day" },
+  { id: "high", label: "High: walk all day" },
   { id: "moderate", label: "Moderate" },
-  { id: "low", label: "Low — keep it easy" },
+  { id: "low", label: "Low: keep it easy" },
 ] as const;
 
 export const CROWD_PREFERENCES = [

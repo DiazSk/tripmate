@@ -26,7 +26,7 @@ export function buildEditContext(
 
   const dayLines = itinerary.days.map((d, i) => {
     const w = d.weatherDetail;
-    const bits: string[] = [`Day ${i + 1} — ${d.date}`];
+    const bits: string[] = [`Day ${i + 1}, ${d.date}`];
     if (w) {
       const parts = [`${Math.round(w.tempMinC)}-${Math.round(w.tempMaxC)}C`];
       if (w.precipitationProbability !== null) parts.push(`${w.precipitationProbability}% rain`);
@@ -46,7 +46,7 @@ export function buildEditContext(
   const profile = answers
     ? `
 
-## Traveler (already answered — never ask these again)
+## Traveler (already answered, never ask these again)
 priorities: ${answers.topPriorities?.length ? answers.topPriorities.join(" > ") : answers.priorities?.join(", ") || "none stated"}${
         answers.priorities?.length ? `\nalso interested in: ${answers.priorities.join(", ")}` : ""
       }
@@ -72,14 +72,14 @@ discovery: ${travelStyleOf(answers).discovery}${answers.purpose?.trim() ? `\npur
   return `# Trip Context (frozen for this edit session)
 
 ## Trip
-${trip.destination} — ${trip.startDate} to ${trip.endDate} (${itinerary.days.length} days)
+${trip.destination}, ${trip.startDate} to ${trip.endDate} (${itinerary.days.length} days)
 budget_usd: ${trip.budget}
-tier: ${itinerary.tier}${tier ? ` — ${tier.description}` : ""}
+tier: ${itinerary.tier}${tier ? ` (${tier.description})` : ""}
 
 ## Daily conditions
 ${dayLines.join("\n")}${profile}
 
-These facts are fixed. Do not assume any fact not stated here — if something needed to judge a
+These facts are fixed. Do not assume any fact not stated here. If something needed to judge a
 change isn't present (opening hours, exact travel time), say so in the change note rather than
 inventing it.`;
 }

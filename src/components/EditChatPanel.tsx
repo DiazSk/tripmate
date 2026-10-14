@@ -338,7 +338,7 @@ export default function EditChatPanel({
             {m.role === "assistant" && m.rejected && m.rejected.length > 0 && (
               <p className="mt-1 text-xs text-alert/80">
                 {m.rejected.length === 1 ? "1 change" : `${m.rejected.length} changes`} couldn&rsquo;t
-                be applied ({m.rejected.join("; ")}) — ask again to retry.
+                be applied ({m.rejected.join("; ")}). Ask again to retry.
               </p>
             )}
             {/* Tap-to-answer. The model is told to supply these whenever it asks something, so

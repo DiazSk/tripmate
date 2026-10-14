@@ -174,7 +174,7 @@ test("evaluateDay flags a long day with no break, and stays quieter when there i
   assert.equal(withBreaks.length, 1);
   // **Exact, not hedged.** A day's length is a subtraction over two clock times already in the
   // plan, so "about" would say a calculation happened rather than that the figure could be wrong.
-  assert.match(withBreaks[0].message, /runs 7:00 AM to 7:00 PM — 12 hr, even with breaks in it\./);
+  assert.match(withBreaks[0].message, /runs 7:00 AM to 7:00 PM: 12 hr, even with breaks in it\./);
   assert.doesNotMatch(withBreaks[0].message, /about/);
 
   // 10h with breaks sits inside the grace and stays silent.
@@ -207,7 +207,7 @@ test("evaluateBudget reports the overshoot only when there is one", () => {
   const [over] = evaluateBudget(it, 500);
   assert.equal(over.rule, "budget");
   assert.equal(over.dayIndex, null);
-  assert.match(over.message, /\$600 — \$100 over your \$500 budget/);
+  assert.match(over.message, /\$600, \$100 over your \$500 budget/);
   assert.deepEqual(evaluateBudget(it, 0), [], "no budget stated = nothing to check");
 });
 

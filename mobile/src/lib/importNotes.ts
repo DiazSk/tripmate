@@ -2,7 +2,7 @@ import type { ImportNote, Itinerary } from '@/api/types';
 import type { Guardrail } from '@/lib/health';
 
 const LINES: Record<ImportNote, string> = {
-  hoursUnchecked: "Opening hours not checked — the map data couldn't be reached.",
+  hoursUnchecked: "Opening hours not checked. The map data couldn't be reached.",
   costsUnestimated: "Couldn't estimate costs, so the budget check is off for this trip.",
 };
 

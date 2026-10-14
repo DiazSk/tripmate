@@ -72,15 +72,15 @@ export const sceneBeats: SceneBeat[] = [
     label: "The Blue Hour",
     stat: "One 20-minute window, every evening",
     detail:
-      "Dusk decides whether a city reads as ordinary or unforgettable — every stop we place is timed around catching it.",
+      "Dusk decides whether a city reads as ordinary or unforgettable. Every stop we place is timed around catching it.",
   },
   {
     id: "budget",
     photo: { src: "/scenes/spice-market-barrels.webp", alt: "" },
     label: "Real Prices",
-    stat: "Lodging, food, and transit — itemized",
+    stat: "Lodging, food, and transit, itemized",
     detail:
-      "Say what you can spend and get a plan costed against it before you land — every stop priced, nothing padded to use the budget up.",
+      "Say what you can spend and get a plan costed against it before you land: every stop priced, nothing padded to use the budget up.",
   },
   {
     id: "weather",
@@ -88,7 +88,7 @@ export const sceneBeats: SceneBeat[] = [
     label: "Live Weather",
     stat: "Real forecast, up to 16 days out",
     detail:
-      "Indoor days when it rains, golden hour when it doesn't — the plan already knows before you pack.",
+      "Indoor days when it rains, golden hour when it doesn't. The plan already knows before you pack.",
   },
   {
     id: "tiers",
