@@ -11,7 +11,7 @@ import { Colors, Spacing } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
 import { CROWDS, DISCOVERIES, ENERGY, PACES, labelOf, usePlanDraft } from '@/lib/planDraft';
 import { accessibilityValue, dietaryValue } from '@/lib/profileRows';
-import { closestTier, tierName, tripDays } from '@/lib/tiers';
+import { closestTier, perPersonBudget, tierName, tripDays } from '@/lib/tiers';
 
 export default function ReviewStep() {
   const router = useRouter();
@@ -37,7 +37,7 @@ export default function ReviewStep() {
           />
           <SummaryRow
             label="Budget"
-            value={`$${Math.round(draft.budget).toLocaleString('en-US')} · ${tierName(closestTier(draft.budget, days))}`}
+            value={`$${Math.round(draft.budget).toLocaleString('en-US')} · ${tierName(closestTier(perPersonBudget(draft.budget, draft.budgetBasis, draft.party), days))}`}
             onEdit={() => router.dismissTo('/plan/basics')}
           />
           <SummaryRow

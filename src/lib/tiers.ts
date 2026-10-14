@@ -49,6 +49,21 @@ export function estimateTierTotal(tier: Tier, days: number): number {
   return tier.dailyRate * days + tier.nightlyLodgingRate * nights;
 }
 
+/**
+ * One traveller's share of a budget, which is what every tier estimate prices: `estimateTierTotal` is one
+ * person's days and nights. A whole-party total is split across everyone the server counts
+ * (adults, children and infants, as `partySize` in userAnswers.ts); a per-person budget already is one
+ * share. The inverse of the server's `partyBudget`.
+ *
+ * Before this, the wizard matched the whole-party total against one person's estimate, so a couple's
+ * $4,200 for six days read as Luxury when each of them had $350 a day, a Mid-range trip; and that
+ * over-tier was what the plan, its hotels and its critique were generated against.
+ */
+export function perPersonBudget(budget: number, basis: "per_person" | "whole_party" | undefined, partySize: number): number {
+  return basis === "per_person" ? budget : budget / Math.max(partySize, 1);
+}
+
+/** The tier whose per-person estimate lands nearest `budget`, which must be one traveller's (see above). */
 export function closestTier(budget: number, days: number): TierId {
   let best = TIERS[0];
   let bestDiff = Infinity;

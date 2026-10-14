@@ -27,7 +27,7 @@ import { looksLikeDayPlan } from '@/lib/importItems';
 import { cityMatches, groupByCity, shouldPreselect, toAnchor } from '@/lib/savedPlaces';
 import { useFocusedFetch } from '@/lib/useFocusedFetch';
 import { crossFieldProblem, gapSentence, planGap } from '@/lib/formGap';
-import { closestTier, tierName, tripDays } from '@/lib/tiers';
+import { closestTier, perPersonBudget, tierName, tripDays } from '@/lib/tiers';
 
 export default function Basics() {
   const router = useRouter();
@@ -213,7 +213,7 @@ export default function Basics() {
   const days = startDate && endDate && !problem ? tripDays(startDate, endDate) : 0;
   const readout =
     days > 0 && budget > 0
-      ? `${days} ${days === 1 ? 'day' : 'days'} · ${tierName(closestTier(budget, days))}`
+      ? `${days} ${days === 1 ? 'day' : 'days'} · ${tierName(closestTier(perPersonBudget(budget, budgetBasis, draft.party), days))}`
       : undefined;
 
   /**

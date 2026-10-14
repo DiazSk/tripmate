@@ -15,7 +15,7 @@ import type {
   TripLogistics,
   UserAnswers,
 } from '@/api/types';
-import { closestTier, tripDays } from '@/lib/tiers';
+import { closestTier, perPersonBudget, tripDays } from '@/lib/tiers';
 
 /**
  * The four option vocabularies, in one place.
@@ -369,7 +369,7 @@ export function toGenerateRequest(draft: PlanDraft): GenerateRequest {
     startDate: draft.startDate,
     endDate: draft.endDate,
     budget: draft.budget,
-    tier: closestTier(draft.budget, days),
+    tier: closestTier(perPersonBudget(draft.budget, draft.budgetBasis, draft.party), days),
     preferences: { tags: draft.interests },
     userAnswers: toUserAnswers(draft),
     dietary: draft.dietary.tags.length || hasText(draft.dietary.note) ? draft.dietary : null,

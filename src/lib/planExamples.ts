@@ -173,8 +173,10 @@ export function toPrefill(example: PlanExample, todayISO: string): PlanPrefill {
  * than as four arbitrary trips. That mapping is why the destinations are what they are, and it is
  * the constraint to preserve if these are ever rewritten again.
  *
- * **Every budget is grounded in `estimateTierTotal`, not chosen for looks.** Each `budgetUsd` is
- * within $50 of a real tier estimate for its own day count, and `closestTier` resolves each one to
+ * **Every budget is grounded in `estimateTierTotal`, not chosen for looks.** Each `budgetUsd` is a
+ * trip total for the card's whole party, within $50 of the party's real tier estimate for its own
+ * day count (one person's estimate times the party), and `closestTier` resolves each one's
+ * per-person share (`perPersonBudget`) to
  * the tier its card is about: Jaipur and Wadi Rum to `budget` (one *is* the budget story, the other
  * quotes a "from" price, which has to be the cheapest of the three ways it advertises), Tuscany and
  * Sinaia to `midrange`. Change a number and re-check that it still lands where its copy claims.
@@ -188,7 +190,7 @@ export const planExamples: PlanExample[] = [
   {
     id: "tuscany",
     title: "Nine slow days in Tuscany",
-    budgetUsd: 2600,
+    budgetUsd: 5100,
     destination: "Val d'Orcia, Italy",
     startMonthDay: "09-12",
     days: 9,
@@ -214,7 +216,7 @@ export const planExamples: PlanExample[] = [
   {
     id: "sinaia",
     title: "Sinaia when the weather decides",
-    budgetUsd: 1700,
+    budgetUsd: 4950,
     destination: "Sinaia, Romania",
     startMonthDay: "02-06",
     days: 6,
@@ -227,7 +229,7 @@ export const planExamples: PlanExample[] = [
   {
     id: "wadi-rum",
     title: "Wadi Rum, three ways to travel",
-    budgetUsd: 1200,
+    budgetUsd: 1450,
     destination: "Wadi Rum, Jordan",
     startMonthDay: "03-20",
     days: 7,

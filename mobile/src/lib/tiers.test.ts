@@ -1,6 +1,7 @@
 import {
   closestTier,
   estimateTotal,
+  perPersonBudget,
   isEndBeforeStart,
   isTripTooLong,
   TIERS,
@@ -27,6 +28,15 @@ test('an exact midpoint between two tiers goes to the earlier one', () => {
   const midpoint = (estimateTotal(TIERS[0], 7) + estimateTotal(TIERS[1], 7)) / 2;
   expect(midpoint).toBe(1340);
   expect(closestTier(midpoint, 7)).toBe('budget');
+});
+
+// A couple's $4,200 for six days is $350 a day each, Mid-range; matched whole it read as Luxury.
+test('a whole-party budget is priced per person, infants included', () => {
+  const couple = { adults: 2, children: 0, infants: 0 };
+  expect(perPersonBudget(4200, 'whole_party', couple)).toBe(2100);
+  expect(perPersonBudget(4200, 'per_person', couple)).toBe(4200);
+  expect(perPersonBudget(3000, 'whole_party', { adults: 2, children: 0, infants: 1 })).toBe(1000);
+  expect(closestTier(perPersonBudget(4200, 'whole_party', couple), 6)).toBe('midrange');
 });
 
 test('a zero budget still yields a tier rather than nothing', () => {

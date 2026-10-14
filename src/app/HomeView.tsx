@@ -27,7 +27,7 @@ import { PlayIcon } from "@/components/icons";
 import ErrorNote from "@/components/ErrorNote";
 import OnboardingCard from "@/components/OnboardingCard";
 import { backPillClass } from "@/components/BrandMark";
-import { closestTier, isTripTooLong, MAX_TRIP_DAYS, tripDays, TierId, TIERS } from "@/lib/tiers";
+import { closestTier, isTripTooLong, MAX_TRIP_DAYS, perPersonBudget, tripDays, TierId, TIERS } from "@/lib/tiers";
 import {
   AccessibilityNeeds,
   Anchor,
@@ -712,7 +712,11 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   //
   // Still load-bearing downstream: this feeds `hotelClassForTier`, which is what keeps the real
   // hotel search from returning hostels for a luxury trip.
-  const tier: TierId = days === null ? "midrange" : closestTier(budget, days);
+  // One traveller's share is what a tier prices (`perPersonBudget`), whichever way the budget was given.
+  const tier: TierId =
+    days === null
+      ? "midrange"
+      : closestTier(perPersonBudget(budget, budgetBasis, party.adults + party.children + party.infants), days);
 
   /** Presets from the pill are the common case typed in one tap: Solo is 1, Couple is 2, Family is
    *  2 and a child. Deliberately one-way — the counts never flip the pill back, because a
