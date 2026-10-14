@@ -270,6 +270,23 @@ components:
 > but where it quotes a hex value, a contrast ratio, Melodrama, Switzer or Tabular, the frontmatter and
 > the canvas's "Polar — Token Mapping" sheet are current and the prose is not. It gets rewritten from
 > the built app when the screens are done, the way this file was written the first time.
+>
+> **Recorded exceptions, the landing's "a day you can imagine" (2026-10-14, confirmed by Zaid).** These
+> values are off the ramp above on purpose: they are the approved MagicPath canvas's own steps for this
+> one page, and they fold into the ramp when the prose is rewritten. Web only; the phone's styles are
+> numbers and the design check does not read them.
+>
+> | Value | Where | What it is |
+> |---|---|---|
+> | 22, 26, 30, 36px | `polar/ImagineDay.tsx` | the story's caption and closing line, lens names, the plan's stop titles, the sheet title |
+> | 21px | `polar/PlanGlobe.tsx` | stop titles in the compact plan card over the globe |
+> | 10px | `polar/PlanGlobe.tsx` | the bullet glyph before a practical note (a glyph, not text) |
+> | 20, 22px | `polar/PolarLanding.css` | the range calendar's month title, edge values and day numbers |
+> | `#bdbab3` | `polar/PolarLanding.css` | a range-calendar day that cannot be picked; always paired with a strike-through, so colour is never the only cue |
+> | MapLibre's own `#0096ff` and 12px radii | `polar/nightMapMaplibre.css` | vendored rules from `maplibre-gl`, kept as shipped |
+>
+> The design check's matching ignores live in `.impeccable/config.json`, scoped to those files. That
+> folder is gitignored here, so this table is the shared record.
 
 
 # Design System: TripMate
