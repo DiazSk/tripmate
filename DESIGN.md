@@ -271,7 +271,7 @@ components:
 > the canvas's "Polar — Token Mapping" sheet are current and the prose is not. It gets rewritten from
 > the built app when the screens are done, the way this file was written the first time.
 >
-> **Recorded exceptions, the landing's "a day you can imagine" (2026-10-14, confirmed by Zaid).** These
+> **Recorded exceptions, the landing's "a day you can imagine" and the planner built from the canvas (2026-10-14, confirmed by Zaid).** These
 > values are off the ramp above on purpose: they are the approved MagicPath canvas's own steps for this
 > one page, and they fold into the ramp when the prose is rewritten. Web only; the phone's styles are
 > numbers and the design check does not read them.
@@ -284,6 +284,10 @@ components:
 > | 20, 22px | `polar/PolarLanding.css` | the range calendar's month title, edge values and day numbers |
 > | `#bdbab3` | `polar/PolarLanding.css` | a range-calendar day that cannot be picked; always paired with a strike-through, so colour is never the only cue |
 > | MapLibre's own `#0096ff` and 12px radii | `polar/nightMapMaplibre.css` | vendored rules from `maplibre-gl`, kept as shipped |
+> | 1, 2, 3px radii | `polar/planner/PlanningFlow.css` | the planner's chips, rhythm-bar blocks and time-panel cells, from the canvas design "TripMate Planning flow (web)" |
+> | 20px | `polar/planner/PlanningFlow.css` | the time panel's typed readout, matching the range calendar's 20px edge values |
+> | `#d64545`, `#8a8780`, `#535353` | `polar/planner/PlanningFlow.css` | the time panel's invalid-entry ring, placeholder and labels, on its white panel like the calendar's |
+> | `#ffb3b3` | `polar/planner/PlanningFlow.css` | the text of the planner's failure alert above Back and Next, on dark glass |
 >
 > The design check's matching ignores live in `.impeccable/config.json`, scoped to those files. That
 > folder is gitignored here, so this table is the shared record.
