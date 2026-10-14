@@ -10,6 +10,7 @@ import { STEP_GROUPS, TYPICAL_WAIT_PHRASE, generationProgress, isStepTerminal, s
 import { useMapCamera } from "@/lib/mapCamera";
 import { dayColorToken } from "@/lib/mapRoute";
 import { meriForGeneration } from "@/lib/meri";
+import { monumentEms } from "@/lib/monumentFit";
 import type { Itinerary, RawFetch } from "@/lib/types";
 import { useAnchoredToMap } from "@/lib/useAnchoredToMap";
 
@@ -31,8 +32,6 @@ import { useAnchoredToMap } from "@/lib/useAnchoredToMap";
 const FACT_INTERVAL_MS = 7000;
 /** Cancel waits this long, as it did on the band: a stray click in the first seconds is not a decision. */
 const CANCEL_AFTER_MS = 10_000;
-/** The share of a 6-letter word Oswald's capitals take per letter, for fitting the monument. */
-const MONUMENT_EM_PER_LETTER = 0.5;
 
 function dayLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -269,7 +268,7 @@ export default function WritingThePlan({
         <p
           className="tm-monument wtp-monument"
           aria-hidden
-          style={{ fontSize: `min(calc((100vw - 2 * var(--wd-pad)) / ${(Math.max(word.length, 4) * MONUMENT_EM_PER_LETTER).toFixed(2)}), 26vh, 15em)` }}
+          style={{ fontSize: `min(calc((100vw - 2 * var(--wd-pad)) / ${monumentEms(word).toFixed(3)}), 26vh, 15em)` }}
         >
           {word}
         </p>

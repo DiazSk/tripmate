@@ -76,8 +76,15 @@ test('times read on a 12-hour clock; anything the model wrote in words stays as 
   expect(time12('Late morning')).toBe('Late morning');
 });
 
-test('the monument fills the measure for a short name and shrinks for a long one', () => {
-  expect(monumentSize('LISBON', 390, 844, 19)).toBeCloseTo(123.2, 1);
-  expect(monumentSize('KOTA KINABALU', 390, 844, 19)).toBeLessThan(60);
+test('the monument fills the measure without running past it, wide letters included', () => {
+  // Rendered widths in ems on the web's monument (same Oswald 400): what each name really takes.
+  for (const [word, ems] of [['LISBON', 2.679], ['ROME', 2.102], ['WARSAW', 3.345]] as const) {
+    // A tall screen, so the width is what binds; the height cap is checked on its own below.
+    const size = monumentSize(word, 390, 2000, 19);
+    expect(size * ems).toBeLessThanOrEqual(390 - 38);
+    expect(size * ems).toBeGreaterThan((390 - 38) * 0.95);
+  }
+  expect(monumentSize('KOTA KINABALU', 390, 844, 19)).toBeLessThan(65);
+  // A short screen caps it by height instead.
   expect(monumentSize('ROME', 390, 400, 19)).toBeCloseTo(68, 0);
 });

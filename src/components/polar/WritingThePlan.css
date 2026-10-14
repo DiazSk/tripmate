@@ -141,15 +141,17 @@
   color: var(--wd-night-text-2);
 }
 
-/* The foot: the instruments on one hairline, then the monument. */
+/* The foot: the instruments on one hairline, then the monument. The page gutter is the foot's, for
+   both: `--wd-pad` is 1.25em, and on the monument an em is the word's own size, so the gutter there
+   came to ~290px a side at 1440 and ~150px on a phone, clipping every city to its first letters. */
 .tm.wtp .wtp-foot {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
+  padding: 0 var(--wd-pad);
 }
 .wtp-strip {
-  margin: 0 var(--wd-pad);
   display: grid;
   gap: 0.75em;
   pointer-events: auto;
@@ -260,10 +262,11 @@
    the space under the baseline, and read as floating. Pulled down 0.05em, which scales with the size
    and leaves ~0.02em: below the baseline only the round letters (S, O) dip, by about that much, so
    nothing is cut. The canvas design pulled it 0.16em and cropped the foot of every letter. The size
-   is set inline, fitted to the word's length so a long city shrinks rather than overflows. */
+   is set inline, fitted to the word's length so a long city shrinks rather than overflows. Its side
+   space is the foot's gutter; only the vertical ems here are meant to scale with the word. */
 .tm.wtp .wtp-monument {
   margin: 0 0 -0.05em;
-  padding: 0 var(--wd-pad) 0.02em;
+  padding: 0 0 0.02em;
   line-height: 1;
   opacity: 0.92;
   white-space: nowrap;

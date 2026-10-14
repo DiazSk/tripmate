@@ -1,5 +1,6 @@
 import type { SketchEvent, Stop, StreamedStop } from '@/api/types';
 import { STAGE_SECONDS, STEP_GROUPS, stepGroupState, type StageProgress, type StepState } from '@shared/generationStages';
+import { monumentEms } from '@shared/monumentFit';
 import type { RawFetch } from '@shared/types';
 
 /**
@@ -109,10 +110,10 @@ export function time12(t: string): string {
 }
 
 /**
- * The monument's point size: the word across the measure, capped by the screen's height. Oswald's
- * capitals run about 0.476em each (measured on the canvas, same font files), so `2.1` letters per
- * em fills the width; a short word stops at four letters' worth rather than towering.
+ * The monument's point size: the word across the measure, capped by the screen's height. Sized from
+ * Oswald's own capital widths (`monumentEms`, shared with the web), not a flat per-letter average,
+ * which under-measured Rome or Warsaw and cut their last letter off.
  */
 export function monumentSize(word: string, width: number, height: number, pad: number): number {
-  return Math.min(height * 0.17, ((width - pad * 2) * 2.1) / Math.max(word.length, 4));
+  return Math.min(height * 0.17, (width - pad * 2) / monumentEms(word));
 }
