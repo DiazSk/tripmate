@@ -2,7 +2,7 @@ import Hero from "./Hero";
 import ImageRow from "./ImageRow";
 import HowItWorks from "./HowItWorks";
 import FeaturedPlans from "./FeaturedPlans";
-import type { PlanPrefill } from "./planExamples";
+import type { PlanPrefill } from "@/lib/planExamples";
 import DestinationMap from "./DestinationMap";
 import SiteFooter from "@/components/SiteFooter";
 

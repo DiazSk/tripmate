@@ -162,6 +162,52 @@ export function emptyDraft(): PlanDraft {
   };
 }
 
+/** What a link into the wizard may say — the landing's sample plans and its closing form. */
+export type PlanPrefillParams = {
+  destination?: string;
+  start?: string;
+  end?: string;
+  budget?: string;
+  adults?: string;
+  children?: string;
+};
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const count = (raw: string | undefined, min: number, max: number) => {
+  const n = raw === undefined ? NaN : Number(raw);
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+};
+
+/**
+ * The starting draft, filled from a link where the link speaks for a field.
+ *
+ * Mirrors the web's `startPlanning`: only what a sample plan or the landing form can honestly say
+ * is written — where, when, the budget and the party — and everything else stays `emptyDraft`'s.
+ * The group falls out of the party (any children → family, one adult → solo, else couple), the
+ * same rule the web uses. A value that does not parse is ignored rather than trusted: these
+ * arrive as URL params, which anything can construct.
+ */
+export function draftFromPrefill(params: PlanPrefillParams): PlanDraft {
+  const draft = emptyDraft();
+  const destination = params.destination?.trim().slice(0, 120);
+  if (destination) draft.destination = destination;
+  if (params.start && params.end && ISO_DAY.test(params.start) && ISO_DAY.test(params.end) && params.start <= params.end) {
+    draft.startDate = params.start;
+    draft.endDate = params.end;
+  }
+  const budget = count(params.budget, 1, 1_000_000);
+  if (budget !== null) draft.budget = budget;
+  const adults = count(params.adults, 1, 12);
+  const children = count(params.children, 0, 12);
+  if (adults !== null || children !== null) {
+    const a = adults ?? 1;
+    const c = children ?? 0;
+    draft.party = { adults: a, children: c, infants: 0 };
+    draft.group = c > 0 ? 'family_with_kids' : a === 1 ? 'solo' : 'couple';
+  }
+  return draft;
+}
+
 type Ctx = {
   draft: PlanDraft;
   /** Also accepts an updater, so a caller can merge against the *latest* draft rather than one
@@ -179,8 +225,15 @@ const PlanDraftContext = createContext<Ctx | null>(null);
  * Holding it in the `plan/` layout also scopes its lifetime to the flow — leaving the wizard
  * discards it, which is the behaviour anyway.
  */
-export function PlanDraftProvider({ children }: { children: React.ReactNode }) {
-  const [draft, setDraft] = useState<PlanDraft>(emptyDraft);
+export function PlanDraftProvider({
+  children,
+  prefill,
+}: {
+  children: React.ReactNode;
+  /** Read once, at mount: the wizard starts from it and the traveller's edits win from then on. */
+  prefill?: PlanPrefillParams;
+}) {
+  const [draft, setDraft] = useState<PlanDraft>(() => (prefill ? draftFromPrefill(prefill) : emptyDraft()));
   const value = useMemo<Ctx>(
     () => ({
       draft,

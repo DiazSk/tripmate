@@ -2,11 +2,11 @@ import { launchTarget } from './authGate';
 
 const bare = { path: 'tripmate:///', initial: true, signedIn: false };
 
-test('a bare launch by somebody signed out opens the sign-in screen', () => {
-  expect(launchTarget(bare)).toBe('/signin');
+test('a bare launch by somebody signed out opens the landing', () => {
+  expect(launchTarget(bare)).toBe('/landing');
   // Expo Go's root URL is the same event wearing a different scheme and a `/--/` separator.
-  expect(launchTarget({ ...bare, path: 'exp://10.0.0.2:8081/--/' })).toBe('/signin');
-  expect(launchTarget({ ...bare, path: 'tripmate://' })).toBe('/signin');
+  expect(launchTarget({ ...bare, path: 'exp://10.0.0.2:8081/--/' })).toBe('/landing');
+  expect(launchTarget({ ...bare, path: 'tripmate://' })).toBe('/landing');
 });
 
 test('a bare launch by somebody signed in is left alone', () => {

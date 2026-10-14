@@ -2,6 +2,7 @@ import type { PlanDraft } from '@/api/types';
 
 import {
   MAX_STARRED,
+  draftFromPrefill,
   emptyDraft,
   toGenerateRequest,
   toTravelerProfile,
@@ -192,4 +193,34 @@ test('the wizard sends both shapes, with the legacy one derived from the pair', 
   const profile = toTravelerProfile(draft({ pace: 'relaxed', discovery: 'mix' }));
   expect(profile.pace).toBe('relaxed');
   expect(profile.explorerStyle).toBe('relaxed');
+});
+
+describe('draftFromPrefill', () => {
+  it('fills only what the link speaks for, and leaves the rest as the empty draft', () => {
+    const d = draftFromPrefill({ destination: "Val d'Orcia, Italy", start: '2027-09-12', end: '2027-09-20', budget: '2600', adults: '2', children: '0' });
+    expect(d.destination).toBe("Val d'Orcia, Italy");
+    expect([d.startDate, d.endDate]).toEqual(['2027-09-12', '2027-09-20']);
+    expect(d.budget).toBe(2600);
+    expect(d.party).toEqual({ adults: 2, children: 0, infants: 0 });
+    expect(d.group).toBe('couple');
+    expect(d.pace).toBe(emptyDraft().pace);
+  });
+
+  it('derives the group from the party, as the web does', () => {
+    expect(draftFromPrefill({ adults: '1' }).group).toBe('solo');
+    expect(draftFromPrefill({ adults: '2', children: '1' }).group).toBe('family_with_kids');
+  });
+
+  it('ignores what does not parse rather than trusting a URL', () => {
+    const d = draftFromPrefill({ start: '2027-13', end: 'soon', budget: '-5', adults: '0', children: 'x' });
+    expect(d.startDate).toBe('');
+    expect(d.budget).toBe(emptyDraft().budget);
+    expect(d.party).toEqual(emptyDraft().party);
+    // Dates that run backwards are not a trip.
+    expect(draftFromPrefill({ start: '2027-09-20', end: '2027-09-12' }).startDate).toBe('');
+  });
+
+  it('is the empty draft when the link says nothing', () => {
+    expect(draftFromPrefill({})).toEqual(emptyDraft());
+  });
 });

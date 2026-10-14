@@ -17,7 +17,7 @@ import {
   resolveExampleDates,
   toPrefill,
   type PlanPrefill,
-} from "./planExamples";
+} from "@/lib/planExamples";
 import SectionOpener from "./SectionOpener";
 
 /**

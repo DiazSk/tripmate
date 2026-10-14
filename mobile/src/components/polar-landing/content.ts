@@ -1,8 +1,13 @@
 import type { ImageSource } from 'expo-image';
 
+import { planExamples, type PlanExample } from '@shared/planExamples';
+import { sceneBeats, type SceneBeat } from '@shared/sceneBeats';
+
 /**
- * The landing's copy — TripMate's own, transcribed from `sceneBeats.ts`, `planExamples.ts` and the
- * Swift app's `LandingContent.swift` — and the app's shipped Pexels photography.
+ * The landing's content. The plans and the four beats are the web's own modules, shared through
+ * `@shared` (`src/lib/planExamples.ts`, `src/lib/sceneBeats.ts`), so the two landings cannot
+ * disagree about a price, a date or a claim. What is local is what has to be: the photographs,
+ * which the phone bundles rather than fetching, matched to each record by its id.
  */
 
 export type Dest = { id: string; word: string; coord: string; img: ImageSource };
@@ -14,25 +19,41 @@ export const DESTS: Dest[] = [
   { id: 'sinaia', word: 'Sinaia', coord: '[ 45º 21’ 00” N, 25º 33’ 00” E ]', img: require('@/assets/images/scenes/peles-castle-romania-snow.webp') },
 ];
 
-export const PLANS = [
-  { title: 'Nine slow days in Tuscany', price: 2600, where: "Val d'Orcia, Italy", when: 'Sep 12–20, 2027', length: '9 days, 8 nights', party: '2 adults', season: 'Early autumn', img: require('@/assets/images/scenes/tuscany-cypress-road.webp') },
-  { title: 'Jaipur on a real budget', price: 900, where: 'Jaipur, India', when: 'Nov 7–13, 2026', length: '7 days, 6 nights', party: '1 adult', season: 'Cool season', img: require('@/assets/images/scenes/jaipur-amber-fort-elephant.webp') },
-  { title: 'Sinaia when the weather decides', price: 1700, where: 'Sinaia, Romania', when: 'Feb 6–11, 2027', length: '6 days, 5 nights', party: '2 adults, 1 child', season: 'Deep winter', img: require('@/assets/images/scenes/peles-castle-romania-snow.webp') },
-  { title: 'Wadi Rum, three ways to travel', price: 1200, where: 'Wadi Rum, Jordan', when: 'Mar 20–26, 2027', length: '7 days, 6 nights', party: '2 adults', season: 'Spring', img: require('@/assets/images/scenes/wadi-rum-desert.webp') },
-] as const;
+const PLAN_PHOTOS: Record<string, ImageSource> = {
+  tuscany: require('@/assets/images/scenes/tuscany-cypress-road.webp'),
+  jaipur: require('@/assets/images/scenes/jaipur-amber-fort-elephant.webp'),
+  sinaia: require('@/assets/images/scenes/peles-castle-romania-snow.webp'),
+  'wadi-rum': require('@/assets/images/scenes/wadi-rum-desert.webp'),
+};
+// The strip's season line, as the web prints it. Presentation copy, keyed by the plan's id.
+const SEASON: Record<string, string> = { tuscany: 'Early autumn', jaipur: 'Cool season', sinaia: 'Deep winter', 'wadi-rum': 'Spring' };
 
-export const BEATS = [
-  { label: 'The Blue Hour', stat: 'One 20-minute window, every evening', prose: 'Dusk decides whether a city reads as ordinary or unforgettable — every stop we place is timed around catching it.', img: require('@/assets/images/scenes/vernazza-blue-hour.webp') },
-  { label: 'Real Prices', stat: 'Lodging, food, and transit — itemized', prose: 'Say what you want to spend and get a plan that actually spends it, priced in before you land — not a lowball guess.', img: require('@/assets/images/scenes/spice-market-barrels.webp') },
-  { label: 'Live Weather', stat: 'Real forecast, up to 16 days out', prose: 'Indoor days when it rains, golden hour when it doesn’t — the plan already knows before you pack.', img: require('@/assets/images/scenes/storm-over-forest-ridge.webp') },
-  { label: 'Three Ways To Travel', stat: 'Budget · Mid-range · Luxury', prose: 'Every tier is priced against your actual dates before you commit to any of them.', img: require('@/assets/images/scenes/balcony-morning-view.webp') },
-] as const;
+export type LandingPlan = PlanExample & { img: ImageSource; season: string };
+export const PLANS: LandingPlan[] = planExamples.map((p) => ({ ...p, img: PLAN_PHOTOS[p.id], season: SEASON[p.id] ?? '' }));
 
+const BEAT_PHOTOS: Record<string, ImageSource> = {
+  dusk: require('@/assets/images/scenes/vernazza-blue-hour.webp'),
+  budget: require('@/assets/images/scenes/spice-market-barrels.webp'),
+  weather: require('@/assets/images/scenes/storm-over-forest-ridge.webp'),
+  tiers: require('@/assets/images/scenes/balcony-morning-view.webp'),
+};
+export type LandingBeat = SceneBeat & { img: ImageSource };
+export const BEATS: LandingBeat[] = sceneBeats.map((b) => ({ ...b, img: BEAT_PHOTOS[b.id] }));
+
+export const FOOT_PHOTO: ImageSource = require('@/assets/images/scenes/wadi-rum-desert.webp');
+
+// The four steps the web's HowItWorks states, in the same words.
 export const STEPS = [
-  { n: '01', title: 'You set the constraints', prose: 'Where, when, how much, and who is going. The budget is a target to hit, not a ceiling to stay under.' },
+  { n: '01', title: 'You set the constraints', prose: 'Where, when, how much, and who is going. The budget is a ceiling — the plan stays inside it rather than spending up to it.' },
   { n: '02', title: 'Real data goes in first', prose: 'Forecast for your actual dates, public holidays, opening hours and travel times — fetched before a single word is written.' },
   { n: '03', title: 'Written, then critiqued', prose: 'A second pass reviews the finished plan against your budget and pace, and rewrites the days it finds fault with.' },
   { n: '04', title: 'Every place is checked', prose: 'Coordinates are corrected against OpenStreetMap, so the pins land where the place actually is rather than where the model guessed.' },
+] as const;
+
+export const FACTS = [
+  ['Forecast', 'For your actual dates, up to 16 days out'],
+  ['Holidays & hours', 'Public holidays and opening times, fetched first'],
+  ['Critiqued', 'A second pass against your budget and pace'],
 ] as const;
 
 /** `lat`/`lng`, not `latitude`/`longitude`: the shape `regionForStops` and `legBearingRad` take. */
@@ -73,6 +94,3 @@ export const CITIES: DayCity[] = [
     ],
   },
 ];
-
-export const TIERS = ['Budget', 'Mid-range', 'Luxury'] as const;
-export const PHASES = ['Fetching the forecast for your dates', 'Checking holidays and opening hours', 'Writing the days', 'Critiquing against your budget and pace'];

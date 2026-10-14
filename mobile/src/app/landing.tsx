@@ -9,8 +9,9 @@ import { PolarLandingScreen } from '@/components/polar-landing/landing-screen';
 import { Polar } from '@/constants/polar';
 
 /**
- * `tripmate://polar-landing` — the Polar Interior landing, a design study ported from the
- * MagicPath board. Nothing in the app links here.
+ * `/landing` — the Polar Interior landing, and what a signed-out launch opens on (`launchTarget` in
+ * `lib/authGate.ts`). Everything on it leads somewhere real: the wizard, prefilled where it can be,
+ * or sign-in, which it offers and never requires.
  *
  * **Three of the six faces load here, not in the root layout.** The root already loads Polar's
  * display cut and the two figure cuts every screen uses; the italic, Inter Tight Regular and Oswald
@@ -19,7 +20,7 @@ import { Polar } from '@/constants/polar';
  * family at once. The root's rule still applies: nothing renders until they are in, because a
  * missing family is not an error in RN.
  */
-export default function PolarLandingRoute() {
+export default function LandingRoute() {
   const [loaded] = useFonts({
     CormorantGaramond_400Regular,
     CormorantGaramond_500Medium_Italic,

@@ -8,7 +8,7 @@ import { prefersReducedData, subscribeReducedData } from "@/lib/reducedData";
 import { prefersReducedMotion, subscribeReducedMotion } from "@/lib/reducedMotion";
 import HeroSearch from "./HeroSearch";
 import { HERO_SEQUENCE } from "./heroSequence";
-import type { PlanPrefill } from "./planExamples";
+import type { PlanPrefill } from "@/lib/planExamples";
 
 /** Lazy and `ssr: false` so a visitor who asked for reduced motion never downloads the engine at
  *  all — the gate below decides before this is ever referenced. */

@@ -52,7 +52,9 @@ export function launchTarget({ path, initial, signedIn }: LaunchEvent): string |
   // deep link and deserves to be recognised as one rather than to survive on a regex's shape.
   if (path.includes('dataUrl=')) return '/share';
 
-  if (initial && !signedIn && BARE_LAUNCH.test(path)) return '/signin';
+  // The landing, not the sign-in chooser: it offers sign-in and leads into planning without it,
+  // which is the soft gate described above, with the product shown before the choice.
+  if (initial && !signedIn && BARE_LAUNCH.test(path)) return '/landing';
 
   return null;
 }

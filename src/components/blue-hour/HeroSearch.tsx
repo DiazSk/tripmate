@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import DestinationSearch from "@/components/DestinationSearch";
-import type { PlanPrefill } from "./planExamples";
+import type { PlanPrefill } from "@/lib/planExamples";
 
 /** Local date as `YYYY-MM-DD`. `sv-SE` gives ISO shape from a *local* clock, which is what the
  *  native date input compares `min` against — `toISOString()` would hand a traveller west of

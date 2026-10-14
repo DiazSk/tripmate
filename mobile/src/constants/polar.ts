@@ -3,9 +3,10 @@
  * read off white-desert.com and translated for React Native: em → points at a 15pt base,
  * CSS variables → constants, font stacks → the families `@expo-google-fonts` registers.
  *
- * **Its own module, deliberately not `constants/theme.ts`.** Kiln is the app's system and this is
- * a separate direction being tried on one screen (`app/polar-landing.tsx`). Mixing the two would
- * leave half the app reading tokens it was never designed against.
+ * **Its own module, beside `constants/theme.ts` rather than inside it.** `theme.ts` carries the app's
+ * roles (Polar Night and Light through `palette.ts`), which every screen reads by name; this holds
+ * the landing's literal Polar values — ice, paper, ink, signal — which only the landing
+ * (`app/landing.tsx`) draws in, until each other screen is redesigned onto the roles.
  */
 export const Polar = {
   ice: '#FFFFFF',
@@ -23,6 +24,8 @@ export const Polar = {
   ember: '#B4530A',
   route: '#6AF0FF',
   alertText: '#D10F0F',
+  /** Alert on night ground — the light cut measures under AA there. The web's night `--alert`. */
+  alertNight: '#FF6B6B',
   veil05: 'rgba(31,42,68,0.05)',
   veil20: 'rgba(31,42,68,0.20)',
   frost10: 'rgba(255,255,255,0.10)',
@@ -30,7 +33,7 @@ export const Polar = {
   rule: 'rgba(31,42,68,0.12)',
 } as const;
 
-/** Loaded by the route itself — see `app/polar-landing.tsx`. */
+/** Loaded by the route itself — see `app/landing.tsx`. */
 export const PolarFonts = {
   display: 'CormorantGaramond_400Regular',
   displayItalic: 'CormorantGaramond_500Medium_Italic',
@@ -50,7 +53,6 @@ export const PolarMotion = {
   /** How long a stop is held once the camera has arrived. Apple Maps ignores `animateCamera`'s
    *  duration on this architecture (see `day-map.tsx`), so the hold is the only clock we own. */
   hold: 3600,
-  phase: 900,
 } as const;
 
 export const PolarType = {

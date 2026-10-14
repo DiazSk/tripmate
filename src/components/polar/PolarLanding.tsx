@@ -6,8 +6,8 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import "./PolarLanding.css";
 import { useScrollContainer } from "@/lib/scrollContainer";
-import { planExamples, toPrefill, formatExampleParty, formatExampleSpan, resolveExampleDates, type PlanPrefill } from "@/components/blue-hour/planExamples";
-import { sceneBeats } from "@/components/blue-hour/sceneBeats";
+import { planExamples, toPrefill, formatExampleParty, formatExampleSpan, resolveExampleDates, type PlanPrefill } from "@/lib/planExamples";
+import { sceneBeats } from "@/lib/sceneBeats";
 import { scrollToTarget, useLandingMotion } from "./motion";
 import { PLAN_EVENT } from "@/lib/planIntent";
 

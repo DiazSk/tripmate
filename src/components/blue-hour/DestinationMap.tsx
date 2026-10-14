@@ -10,7 +10,7 @@ import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
 import { MAP_PLACES } from "./mapPlaces";
 import SectionOpener from "./SectionOpener";
-import { planExamples, toPrefill, type PlanExample, type PlanPrefill } from "./planExamples";
+import { planExamples, toPrefill, type PlanExample, type PlanPrefill } from "@/lib/planExamples";
 import { MAP_VIEWBOX, WORLD_LAND_PATH, projectToMap } from "@/lib/worldLand";
 
 /**

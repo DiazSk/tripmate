@@ -38,7 +38,7 @@ import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
 import DestinationSearch from "@/components/DestinationSearch";
 import PolarLanding from "@/components/polar/PolarLanding";
-import type { PlanPrefill } from "@/components/blue-hour/planExamples";
+import type { PlanPrefill } from "@/lib/planExamples";
 import DockedPanel from "@/components/DockedPanel";
 import { useStoryControls } from "@/lib/storyMode";
 import { PlayIcon } from "@/components/icons";

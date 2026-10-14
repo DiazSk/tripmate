@@ -1093,8 +1093,9 @@ where that rule yields a ragged edge.
   *kind* of thing as the other two. `block` is documented at the component as this exception: the
   rule it relaxes is about a capsule standing *in* content, and these are peers of the primary
   above them.
-- **Sign up takes the one jade fill** under the Primary Action Surface rule. `launchTarget` routes
-  here only on a bare launch with an empty keychain, so nobody who sees this screen has an account
+- **Sign up takes the one jade fill** under the Primary Action Surface rule. Since 2026-10-13 a
+  bare signed-out launch opens the Polar landing (`/landing`) rather than this screen, and the
+  landing's Sign in leads here — so this screen is reached by choosing, by somebody with no account
   on this device, and sign-up is the action that moves their anonymous planning onto one through
   `claimAnonymousOwner`.
 - **The mode switch is deleted, not moved.** You arrived by choosing, so **back** is the switch.

@@ -20,7 +20,7 @@ import vernazzaBlueHour from '@/assets/images/scenes/vernazza-blue-hour.webp';
 
 /**
  * The four beats, and the photography they carry — lifted whole from the web app's
- * `src/components/blue-hour/sceneBeats.ts`.
+ * `src/lib/sceneBeats.ts`.
  *
  * **The pairings are not mine to remix, and that file says why**: each photograph was chosen to
  * state its own beat rather than to gesture at its topic, and its docstring records what each one

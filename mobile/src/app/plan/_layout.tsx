@@ -1,9 +1,9 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useGlobalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { Colors } from '@/constants/theme';
-import { PlanDraftProvider } from '@/lib/planDraft';
+import { PlanDraftProvider, type PlanPrefillParams } from '@/lib/planDraft';
 
 /**
  * The way out of the wizard, on the two screens that would otherwise have none.
@@ -42,8 +42,11 @@ function CloseButton() {
 }
 
 export default function PlanLayout() {
+  // A link into the wizard — the landing's "Plan one like it" and its closing form — carries the
+  // fields it can speak for as params on /plan/basics. The provider reads them once, at mount.
+  const params = useGlobalSearchParams<PlanPrefillParams>();
   return (
-    <PlanDraftProvider>
+    <PlanDraftProvider prefill={params}>
       <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
         <Stack.Screen name="basics" options={{ headerLeft: () => <CloseButton /> }} />
         <Stack.Screen name="own" options={{ headerLeft: () => <CloseButton /> }} />

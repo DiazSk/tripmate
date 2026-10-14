@@ -5,7 +5,7 @@ import Image from "next/image";
 import { gsap } from "@/lib/gsap";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
-import { sceneBeats } from "./sceneBeats";
+import { sceneBeats } from "@/lib/sceneBeats";
 import SectionOpener from "./SectionOpener";
 
 // Alternates the ground and the one slate so a beat without a photograph yet still reads as part
