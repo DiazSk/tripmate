@@ -34,10 +34,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LENSES, petraPrefill, petraSampleDate, type LensId } from '@shared/petraDay';
 import { toPrefill, type PlanPrefill } from '@shared/planExamples';
+import { DateField } from '@/components/form';
 import { Polar, PolarFonts, PolarRadius, PolarSpace, PolarType } from '@/constants/polar';
+import { crossFieldProblem } from '@/lib/formGap';
 import { BEATS, DESTS, FACTS, FOOT_PHOTO, PLANS, STEPS, type LandingPlan } from './content';
-import { DayOnMap } from './day-on-map';
+import { DayStory, OpenDaySheet, PlanMap, TickContext, Ways, type Tick } from './imagine';
 import { Scrim } from './scrim';
 
 /**
@@ -46,25 +49,34 @@ import { Scrim } from './scrim';
  *
  * **It hands off rather than mocks.** Every "plan" here opens the real wizard at `/plan/basics`,
  * prefilled through route params where it knows what to say (`draftFromPrefill`): a sample plan's
- * where, dates, budget and party, or the closing form's where, a month's first week, travellers and
- * an optional budget. Signing in is offered, never required — the soft gate `authGate.ts` describes.
+ * where, dates, budget and party; the Petra day's dates and travellers; or the closing form's where
+ * and dates, with no budget or party because it did not ask. Signing in is offered, never required.
  */
-type Section = 'plans' | 'day' | 'knows' | 'plan';
-type Mark = Section | 'intro' | 'quote';
+type Section = 'day' | 'ways' | 'map' | 'plans' | 'knows' | 'plan';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const isoDay = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+/** Today on the traveller's own calendar, as `YYYY-MM-DD` — the day the native picker calls today. */
 const todayISO = () => {
   const now = new Date();
   return isoDay(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
 };
+const addDays = (iso: string, n: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return isoDay(d);
+};
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "Wed 14 Apr 2027", read in UTC like every date-only value here. By hand rather than through
+ *  `toLocaleDateString`, whose separators differ between ICU builds. */
+function sampleLabel(iso: string) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
 
-/** Into the wizard, with whatever this landing can honestly fill in. */
-function openWizard(prefill?: PlanPrefill) {
-  if (!prefill) {
-    router.push('/plan/basics');
-    return;
-  }
+/** Into the wizard, with whatever this landing can honestly fill in. Absent is not zero. */
+function openWizard(prefill: PlanPrefill) {
   router.push({
     pathname: '/plan/basics',
     params: {
@@ -83,29 +95,29 @@ function openWizard(prefill?: PlanPrefill) {
 // white-desert.com's scroll vocabulary on Reanimated. Every effect is a pure function of the scroll
 // offset — the reference's `scrub: true, ease: "none"` — so it tracks the finger exactly and never
 // overshoots. Section tops arrive by onLayout into shared values: nothing re-renders on scroll.
-type Motion = { y: SharedValue<number>; vh: number; reduce: boolean; base: Record<Mark, SharedValue<number>> };
+type Motion = { y: SharedValue<number>; vh: number; reduce: boolean; base: Record<Section, SharedValue<number>> };
 const MotionContext = createContext<Motion | null>(null);
 const useMotion = () => useContext(MotionContext)!;
 const REVEAL = Easing.bezier(0.16, 1, 0.3, 1);
+const ROTATE_MS = 6000;
 
 /**
- * Rises into place as it comes up the screen. With `fade` its text also comes in from 10% — the
- * phone's stand-in for the web's line-by-line mask, which would need a native masked view the app
- * does not ship. Must be a direct child of the section `at` names, so its onLayout y is local to it.
+ * Rises into place as it comes up the screen. Must be a direct child of the section `at` names, so
+ * its onLayout y is local to it.
  */
-function Rise({ at, distance = 40, fade, style, children }: { at: Mark; distance?: number; fade?: boolean; style?: StyleProp<ViewStyle>; children: ReactNode }) {
+function Rise({ at, distance = 40, style, children }: { at: Section; distance?: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
   const { y, vh, reduce, base } = useMotion();
   const top = useSharedValue(0);
   const a = useAnimatedStyle(() => {
     if (reduce) return {};
     const p = interpolate(base[at].value + top.value - y.value, [vh * 0.92, vh * 0.55], [0, 1], Extrapolation.CLAMP);
-    return { opacity: fade ? 0.1 + 0.9 * p : 1, transform: [{ translateY: (1 - p) * distance }] };
+    return { transform: [{ translateY: (1 - p) * distance }] };
   });
   return (
     <Animated.View
       style={[style, a]}
       onLayout={(e) => {
-        top.value = e.nativeEvent.layout.y;
+        top.set(e.nativeEvent.layout.y);
       }}>
       {children}
     </Animated.View>
@@ -119,22 +131,43 @@ export function PolarLandingScreen() {
   const y = useScrollOffset(scroll);
   const reduce = useReducedMotion();
   const offsets = useRef<Partial<Record<Section, number>>>({});
-  const intro = useSharedValue(0);
-  const plans = useSharedValue(0);
   const day = useSharedValue(0);
-  const quote = useSharedValue(0);
+  const ways = useSharedValue(0);
+  const mapTop = useSharedValue(0);
+  const plans = useSharedValue(0);
   const knows = useSharedValue(0);
   const plan = useSharedValue(0);
-  const motion = useMemo<Motion>(() => ({ y, vh: height, reduce, base: { intro, plans, day, quote, knows, plan } }), [y, height, reduce, intro, plans, day, quote, knows, plan]);
+  const motion = useMemo<Motion>(
+    () => ({ y, vh: height, reduce, base: { day, ways, map: mapTop, plans, knows, plan } }),
+    [y, height, reduce, day, ways, mapTop, plans, knows, plan],
+  );
+  // Sections whose *state* follows the scroll (the lit beat, the globe's first flight) listen here.
+  const [ticks] = useState(() => new Set<Tick>());
+  const tick = useMemo(
+    () => ({
+      add: (f: Tick) => {
+        ticks.add(f);
+        return () => {
+          ticks.delete(f);
+        };
+      },
+    }),
+    [ticks],
+  );
   const [showBar, setShowBar] = useState(false);
   const [pastHero, setPastHero] = useState(false);
   const [menu, setMenu] = useState(false);
   const [how, setHow] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const [lens, setLens] = useState<LensId>('slow');
+  const [hot, setHot] = useState<string | null>(null);
+  const [today] = useState(todayISO);
+  const dateLabel = sampleLabel(petraSampleDate(today));
 
   // Written from the layout event itself, never from render — the compiler lint's ref rule.
-  const record = (s: Mark, e: LayoutChangeEvent) => {
+  const record = (s: Section, e: LayoutChangeEvent) => {
     const at = e.nativeEvent.layout.y;
-    if (s !== 'intro' && s !== 'quote') offsets.current[s] = at;
+    offsets.current[s] = at;
     // `.set()`, Reanimated's React-Compiler-safe write: the shared value went through useMemo.
     motion.base[s].set(at);
   };
@@ -145,23 +178,24 @@ export function PolarLandingScreen() {
     },
     [insets.top, scroll],
   );
-  const startPlan = useCallback((prefill?: PlanPrefill) => {
-    setMenu(false);
-    setHow(false);
+  const startPlan = useCallback((prefill: PlanPrefill) => {
+    setSheet(false);
     openWizard(prefill);
   }, []);
-  const signIn = useCallback(() => {
-    setMenu(false);
-    router.push('/signin');
-  }, []);
+  const signIn = useCallback(() => router.push('/signin'), []);
+  const openStop = (id: string) => {
+    setLens('slow');
+    setHot(id);
+    go('map');
+  };
 
   // **Set imperatively, and again after every modal.** Presenting an RN `Modal` on iOS resets the
   // status bar, and a mounted <StatusBar> never re-asserts itself afterwards — measured here: dark
-  // before the How-it-works sheet opened, white over a white page for good once it closed. Both
-  // modals sit on dark ground, so they get light; the page gets whatever it is scrolled to.
+  // before the How-it-works sheet opened, white over a white page for good once it closed. The
+  // modals sit on dark scrims, so they get light; the page gets whatever it is scrolled to.
   useEffect(() => {
-    setStatusBarStyle(menu || how || !pastHero ? 'light' : 'dark', true);
-  }, [menu, how, pastHero]);
+    setStatusBarStyle(menu || how || sheet || !pastHero ? 'light' : 'dark', true);
+  }, [menu, how, sheet, pastHero]);
   // iOS can reset it again when the dismissal *finishes*, after the effect above has run.
   const restoreStatusBar = () => setStatusBarStyle(pastHero ? 'dark' : 'light', true);
 
@@ -169,123 +203,141 @@ export function PolarLandingScreen() {
   // The motion reads the same scroll through `useScrollOffset`, on the UI thread.
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const at = e.nativeEvent.contentOffset.y;
+    ticks.forEach((f) => f(at, height));
     setShowBar(at > height * 0.85 && at < (offsets.current.plan ?? Infinity) - height * 0.6);
-    // Past the photograph the page is white, and white clock-and-battery on white disappears —
-    // so the bar goes dark and gets a frosted ground to sit on instead of the page's text.
+    // Past the photograph white clock-and-battery on a white page disappears, so the bar goes
+    // dark and gets a frosted ground to sit on instead of the page's text.
     setPastHero(at > Math.max(height, 640) - insets.top);
   };
 
+  const menuItems: [Section, string][] = [
+    ['day', 'A day in Petra'],
+    ['ways', 'Four ways'],
+    ['map', 'The plan'],
+    ['plans', 'More journeys'],
+    ['knows', 'What a plan knows'],
+    ['plan', 'Plan a trip'],
+  ];
+
   return (
     <MotionContext.Provider value={motion}>
-      <View style={styles.screen}>
-        <Animated.ScrollView ref={scroll} style={styles.flex} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="never" automaticallyAdjustKeyboardInsets>
-          <Hero height={height} width={width} onMenu={() => setMenu(true)} onPlan={() => startPlan()} onWatch={() => go('day')} />
-          <View onLayout={(e) => record('intro', e)}>
-            <Intro />
-          </View>
-          <View onLayout={(e) => record('plans', e)}>
-            <Plans width={width} onPlan={(p) => startPlan(toPrefill(p, todayISO()))} />
-          </View>
-          <View onLayout={(e) => record('day', e)}>
-            <DayOnMap width={width} />
-          </View>
-          <View onLayout={(e) => record('quote', e)}>
-            <Quote />
-          </View>
-          <View onLayout={(e) => record('knows', e)}>
-            <Knows width={width} />
-          </View>
-          <View onLayout={(e) => record('plan', e)}>
-            <PlanFooter width={width} bottom={insets.bottom} onPlan={startPlan} onHow={() => setHow(true)} onGo={go} onSignIn={signIn} />
-          </View>
-        </Animated.ScrollView>
-
-        {pastHero && <BlurView intensity={70} tint="light" style={[styles.statusGround, { height: insets.top }]} pointerEvents="none" />}
-
-        {showBar && (
-          <View style={[styles.barWrap, { bottom: insets.bottom + 6 }]} pointerEvents="box-none">
-            <BlurView intensity={60} tint="dark" style={styles.bar}>
-              <Pressable onPress={() => setHow(true)} style={({ pressed }) => [styles.barQuiet, pressed && styles.dim]} accessibilityRole="button">
-                <Text style={styles.barQuietText}>How it works</Text>
-              </Pressable>
-              <Pressable onPress={() => startPlan()} style={({ pressed }) => [styles.signal, styles.flex, pressed && styles.signalPressed]} accessibilityRole="button">
-                <Text style={styles.signalText}>Plan a trip</Text>
-              </Pressable>
-            </BlurView>
-          </View>
-        )}
-
-        <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)} onDismiss={restoreStatusBar} statusBarTranslucent>
-          <BlurView intensity={80} tint="dark" style={[StyleSheet.absoluteFill, { paddingTop: insets.top + PolarSpace.s3, paddingHorizontal: PolarSpace.pad }]}>
-            <View style={styles.menuHead}>
-              <Wordmark light />
-              <Pressable onPress={() => setMenu(false)} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Close menu">
-                <Text style={styles.glassText}>Close</Text>
-              </Pressable>
+      <TickContext.Provider value={tick}>
+        <View style={styles.screen}>
+          <Animated.ScrollView ref={scroll} style={styles.flex} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="never" automaticallyAdjustKeyboardInsets>
+            <Hero height={height} width={width} onMenu={() => setMenu(true)} onPlan={() => go('plan')} onWatch={() => go('day')} />
+            <View onLayout={(e) => record('day', e)}>
+              <DayStory top={day} width={width} onOpenStop={openStop} onWays={() => go('ways')} />
             </View>
-            <View style={styles.menuList}>
-              {(
-                [
-                  ['plans', 'Sample plans'],
-                  ['day', 'A day on the map'],
-                  ['knows', 'What a plan knows'],
-                ] as [Section, string][]
-              ).map(([k, label], i) => (
-                <Pressable key={k} onPress={() => go(k)} style={({ pressed }) => [styles.menuRow, pressed && styles.dim]} accessibilityRole="link">
-                  <Text style={styles.menuN}>{pad(i + 1)}</Text>
-                  <Text style={styles.menuLabel}>{label}</Text>
+            <View onLayout={(e) => record('ways', e)}>
+              <Ways lens={lens} setLens={setLens} width={width} />
+            </View>
+            <View onLayout={(e) => record('map', e)}>
+              <PlanMap top={mapTop} width={width} lens={lens} setLens={setLens} hot={hot} setHot={setHot} dateLabel={dateLabel} onOpen={() => setSheet(true)} />
+            </View>
+            <View onLayout={(e) => record('plans', e)}>
+              <Plans width={width} today={today} onPlan={(p) => startPlan(toPrefill(p, today))} />
+            </View>
+            <View onLayout={(e) => record('knows', e)}>
+              <Knows width={width} />
+            </View>
+            <View onLayout={(e) => record('plan', e)}>
+              <PlanFooter
+                width={width}
+                bottom={insets.bottom}
+                today={today}
+                carry={`Petra · ${dateLabel} · ${LENSES[lens].name}. Or start from your own idea below.`}
+                onPlan={startPlan}
+                onOpenDay={() => setSheet(true)}
+                onHow={() => setHow(true)}
+                onGo={go}
+                onSignIn={signIn}
+              />
+            </View>
+          </Animated.ScrollView>
+
+          {pastHero && <BlurView intensity={70} tint="light" style={[styles.statusGround, { height: insets.top }]} pointerEvents="none" />}
+
+          {showBar && (
+            <View style={[styles.barWrap, { bottom: insets.bottom + 6 }]} pointerEvents="box-none">
+              <BlurView intensity={60} tint="dark" style={styles.bar}>
+                <Pressable onPress={() => setHow(true)} style={({ pressed }) => [styles.barQuiet, pressed && styles.dim]} accessibilityRole="button">
+                  <Text style={styles.barQuietText}>How it works</Text>
                 </Pressable>
-              ))}
+                <Pressable onPress={() => go('plan')} style={({ pressed }) => [styles.signal, styles.flex, pressed && styles.signalPressed]} accessibilityRole="button">
+                  <Text style={styles.signalText}>Plan a trip</Text>
+                </Pressable>
+              </BlurView>
+            </View>
+          )}
+
+          <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)} onDismiss={restoreStatusBar} statusBarTranslucent>
+            <BlurView intensity={80} tint="dark" style={[StyleSheet.absoluteFill, { paddingTop: insets.top + PolarSpace.s3, paddingHorizontal: PolarSpace.pad }]}>
+              <View style={styles.menuHead}>
+                <Wordmark light />
+                <Pressable onPress={() => setMenu(false)} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Close menu">
+                  <Text style={styles.glassText}>Close</Text>
+                </Pressable>
+              </View>
+              <View style={styles.menuList}>
+                {menuItems.map(([k, label], i) => (
+                  <Pressable key={k} onPress={() => go(k)} style={({ pressed }) => [styles.menuRow, pressed && styles.dim]} accessibilityRole="link">
+                    <Text style={styles.menuN}>{pad(i + 1)}</Text>
+                    <Text style={styles.menuLabel}>{label}</Text>
+                  </Pressable>
+                ))}
+                <Pressable
+                  onPress={() => {
+                    setMenu(false);
+                    setHow(true);
+                  }}
+                  style={({ pressed }) => [styles.menuRow, pressed && styles.dim]}
+                  accessibilityRole="button">
+                  <Text style={styles.menuN}>{pad(menuItems.length + 1)}</Text>
+                  <Text style={styles.menuLabel}>How it works</Text>
+                </Pressable>
+              </View>
+              <Text style={[PolarType.coord, styles.menuCoord, { marginBottom: insets.bottom + PolarSpace.s6 }]}>[ 42º 20’ 23” N, 71º 05’ 22” W ]</Text>
+            </BlurView>
+          </Modal>
+
+          {/* A fade modal with the sheet sliding inside it: `animationType="slide"` would slide the
+              scrim up with the sheet, which reads as a second page arriving rather than a sheet. */}
+          <Modal visible={how} transparent animationType="fade" onRequestClose={() => setHow(false)} onDismiss={restoreStatusBar} statusBarTranslucent>
+            <Pressable style={styles.scrim} onPress={() => setHow(false)} accessibilityLabel="Close" />
+            <Animated.View entering={SlideInDown.duration(450)} exiting={SlideOutDown.duration(300)} style={[styles.sheet, { paddingBottom: insets.bottom + PolarSpace.s3 }]}>
+              <View style={styles.grabber} />
+              <View style={styles.sheetHead}>
+                <Text style={[PolarType.eyebrow, { color: Polar.ink }]} accessibilityRole="header">
+                  How it works
+                </Text>
+                <Pressable onPress={() => setHow(false)} style={({ pressed }) => [styles.quiet, pressed && styles.dim]} accessibilityRole="button">
+                  <Text style={styles.quietText}>Close</Text>
+                </Pressable>
+              </View>
+              <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+                {STEPS.map((s) => (
+                  <View key={s.n} style={styles.step}>
+                    <Text style={styles.stepN}>{s.n}.</Text>
+                    <Text style={styles.stepTitle}>{s.title}</Text>
+                    <Text style={[PolarType.bodyS, { color: Polar.charcoal }]}>{s.prose}</Text>
+                  </View>
+                ))}
+              </ScrollView>
               <Pressable
                 onPress={() => {
-                  setMenu(false);
-                  setHow(true);
+                  setHow(false);
+                  go('plan');
                 }}
-                style={({ pressed }) => [styles.menuRow, pressed && styles.dim]}
+                style={({ pressed }) => [styles.signal, styles.signalLg, pressed && styles.signalPressed]}
                 accessibilityRole="button">
-                <Text style={styles.menuN}>04</Text>
-                <Text style={styles.menuLabel}>How it works</Text>
+                <Text style={styles.signalText}>Plan a trip</Text>
               </Pressable>
-              <Pressable onPress={signIn} style={({ pressed }) => [styles.menuRow, pressed && styles.dim]} accessibilityRole="button">
-                <Text style={styles.menuN}>05</Text>
-                <Text style={styles.menuLabel}>Sign in</Text>
-              </Pressable>
-            </View>
-            <Pressable onPress={() => startPlan()} style={({ pressed }) => [styles.signal, styles.signalLg, styles.menuCta, { marginBottom: insets.bottom + PolarSpace.s4 }, pressed && styles.signalPressed]} accessibilityRole="button">
-              <Text style={styles.signalText}>Plan a trip</Text>
-            </Pressable>
-          </BlurView>
-        </Modal>
+            </Animated.View>
+          </Modal>
 
-        {/* A fade modal with the sheet sliding inside it: `animationType="slide"` would slide the
-            scrim up with the sheet, which reads as a second page arriving rather than a sheet. */}
-        <Modal visible={how} transparent animationType="fade" onRequestClose={() => setHow(false)} onDismiss={restoreStatusBar} statusBarTranslucent>
-          <Pressable style={styles.scrim} onPress={() => setHow(false)} accessibilityLabel="Close" />
-          <Animated.View entering={SlideInDown.duration(450)} exiting={SlideOutDown.duration(300)} style={[styles.sheet, { paddingBottom: insets.bottom + PolarSpace.s3 }]}>
-            <View style={styles.grabber} />
-            <View style={styles.sheetHead}>
-              <Text style={[PolarType.eyebrow, { color: Polar.ink }]} accessibilityRole="header">
-                How it works
-              </Text>
-              <Pressable onPress={() => setHow(false)} style={({ pressed }) => [styles.quiet, pressed && styles.dim]} accessibilityRole="button">
-                <Text style={styles.quietText}>Close</Text>
-              </Pressable>
-            </View>
-            <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
-              {STEPS.map((s) => (
-                <View key={s.n} style={styles.step}>
-                  <Text style={styles.stepN}>{s.n}.</Text>
-                  <Text style={styles.stepTitle}>{s.title}</Text>
-                  <Text style={[PolarType.bodyS, { color: Polar.charcoal }]}>{s.prose}</Text>
-                </View>
-              ))}
-            </ScrollView>
-            <Pressable onPress={() => startPlan()} style={({ pressed }) => [styles.signal, styles.signalLg, pressed && styles.signalPressed]} accessibilityRole="button">
-              <Text style={styles.signalText}>Plan a trip</Text>
-            </Pressable>
-          </Animated.View>
-        </Modal>
-      </View>
+          <OpenDaySheet visible={sheet} lens={lens} dateLabel={dateLabel} onClose={() => setSheet(false)} onDismiss={restoreStatusBar} onOpen={(adults) => startPlan(petraPrefill(today, adults))} />
+        </View>
+      </TickContext.Provider>
     </MotionContext.Provider>
   );
 }
@@ -295,20 +347,38 @@ export function PolarLandingScreen() {
 function Hero({ height, width, onMenu, onPlan, onWatch }: { height: number; width: number; onMenu: () => void; onPlan: () => void; onWatch: () => void }) {
   const insets = useSafeAreaInsets();
   const [destId, setDestId] = useState('petra');
+  // Bumped by every tap, so picking the place already showing still restarts its clock.
+  const [picks, setPicks] = useState(0);
   const dest = DESTS.find((d) => d.id === destId)!;
   const size = Math.min(width * 0.27, 150);
   const H = Math.max(height, 640);
   const { y, reduce } = useMotion();
 
+  // Moves on every ROTATE_MS; picking a place restarts the clock; reduced motion never rotates.
+  // The active chip fills along its bottom edge over the interval, on the UI thread.
+  const fill = useSharedValue(0);
+  useEffect(() => {
+    if (reduce) return;
+    fill.set(0);
+    fill.set(withTiming(1, { duration: ROTATE_MS, easing: Easing.linear }));
+    const t = setTimeout(() => {
+      const i = DESTS.findIndex((d) => d.id === destId);
+      setDestId(DESTS[(i + 1) % DESTS.length].id);
+    }, ROTATE_MS);
+    return () => clearTimeout(t);
+  }, [destId, picks, reduce, fill]);
+  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: fill.value }] }));
+
   // The reference's [data-reveal]: 1.4s on its reveal curve, out of the hero's clipped bottom edge.
   const rise = useSharedValue(reduce ? 1 : 0);
   useEffect(() => {
     if (reduce) return;
-    rise.value = 0;
-    rise.value = withTiming(1, { duration: 1400, easing: REVEAL });
+    rise.set(0);
+    rise.set(withTiming(1, { duration: 1400, easing: REVEAL }));
   }, [destId, reduce, rise]);
-  // The photograph is carried down at exactly scroll speed, so it holds still while the intro rises
-  // over it like a curtain, dimming to 60% on the way out; the monument travels at 60% in front.
+  // The photograph is carried down at exactly scroll speed, so it holds still while the next
+  // section rises over it like a curtain, dimming to 60% on the way out; the monument travels at
+  // 60% in front.
   const media = useAnimatedStyle(() => (reduce ? {} : { transform: [{ translateY: Math.min(Math.max(y.value, 0), H) }] }));
   const veil = useAnimatedStyle(() => ({ opacity: reduce ? 0 : interpolate(y.value, [0, H], [0, 0.6], Extrapolation.CLAMP) }));
   const lead = useAnimatedStyle(() =>
@@ -332,7 +402,6 @@ function Hero({ height, width, onMenu, onPlan, onWatch }: { height: number; widt
           <Pressable onPress={onMenu} style={({ pressed }) => [styles.glass, pressed && styles.dim]} accessibilityRole="button" accessibilityLabel="Open menu">
             <Text style={styles.glassText}>Menu</Text>
           </Pressable>
-          {/* The landing's one "Plan a trip" above the fold, in the bar, as on the web. */}
           <Pressable onPress={onPlan} style={({ pressed }) => [styles.signal, pressed && styles.signalPressed]} accessibilityRole="button">
             <Text style={styles.signalText}>Plan a trip</Text>
           </Pressable>
@@ -342,18 +411,27 @@ function Hero({ height, width, onMenu, onPlan, onWatch }: { height: number; widt
       <View style={styles.heroFoot}>
         <Animated.View style={[styles.heroFoot, lead]}>
           <View style={styles.heroMid}>
-            <Text style={[PolarType.lead, styles.heroLead]}>A trip planned against your real dates, budget and weather.</Text>
+            <Text style={[PolarType.lead, styles.heroLead]}>Be there before the day arrives. Imagine it first and TripMate plans the rest.</Text>
             <Pressable onPress={onWatch} style={({ pressed }) => [styles.ghost, pressed && styles.dim]} accessibilityRole="button">
-              <Text style={styles.ghostText}>Watch a day play</Text>
-              <Text style={styles.ghostText}>▸</Text>
+              <Text style={styles.ghostText}>Picture a day in Petra</Text>
+              <Text style={styles.ghostText}>↓</Text>
             </Pressable>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} accessibilityRole="radiogroup" accessibilityLabel="Destination">
             {DESTS.map((d) => {
               const on = d.id === destId;
               return (
-                <Pressable key={d.id} onPress={() => setDestId(d.id)} style={[styles.chip, on && styles.chipOn]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                <Pressable
+                  key={d.id}
+                  onPress={() => {
+                    setDestId(d.id);
+                    setPicks((n) => n + 1);
+                  }}
+                  style={[styles.chip, on && styles.chipOn]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: on }}>
                   <Text style={[styles.chipText, on && { color: Polar.ink }]}>{d.word}</Text>
+                  {on && !reduce && <Animated.View style={[styles.chipFill, fillStyle]} />}
                 </Pressable>
               );
             })}
@@ -380,41 +458,7 @@ function Wordmark({ light }: { light?: boolean }) {
   );
 }
 
-/* ───────────────────────── Intro / Quote ───────────────────────── */
-
-function Intro() {
-  return (
-    <View style={styles.intro}>
-      <Text style={[PolarType.kicker, { color: Polar.ink }]}>The plan that already knows</Text>
-      <Rise at="intro" fade>
-        <Text style={styles.statement}>Forecast, holidays, opening hours and travel times go in first, before a single word of your plan is written.</Text>
-      </Rise>
-      <View style={styles.rule} />
-      <Text style={[PolarType.eyebrow, { color: Polar.ink }]}>How a plan is made</Text>
-      <Text style={[PolarType.body, { color: Polar.charcoal }]}>
-        Tell TripMate where, when, how much and who is going. It fetches the real conditions for your dates, writes the days, then runs a second pass that critiques the plan against your budget and pace. Every pin is corrected against OpenStreetMap.
-      </Text>
-    </View>
-  );
-}
-
-function Quote() {
-  return (
-    <View style={styles.quote}>
-      <Text style={styles.quoteMark}>“</Text>
-      {/* The app's own claim. The canvas had "a target to hit, not a ceiling"; the planner does the
-          opposite and says so everywhere else. */}
-      <Rise at="quote" fade>
-        <Text style={styles.quoteText}>The budget is a ceiling, not a target. Say what you can spend, and the plan stays inside it rather than spending up to it.</Text>
-      </Rise>
-      <Text style={styles.quoteDash}>-</Text>
-      <Text style={[PolarType.ui, { color: Polar.ink }]}>How TripMate plans</Text>
-      <Text style={[PolarType.caption, { color: Polar.charcoal }]}>Step 01 · You set the constraints</Text>
-    </View>
-  );
-}
-
-/* ───────────────────────── Sample plans ───────────────────────── */
+/* ───────────────────────── Sample journeys ───────────────────────── */
 
 /** "Sep 12–20, 2027", or across months "Feb 27 – Mar 4, 2027", in UTC like every date here. */
 function formatSpan(start: string, end: string) {
@@ -429,17 +473,17 @@ const spanLabel = (days: number) => `${days} days, ${Math.max(days - 1, 0)} ${da
 const partyLabel = (adults: number, children: number) =>
   `${adults} ${adults === 1 ? 'adult' : 'adults'}${children > 0 ? `, ${children} ${children === 1 ? 'child' : 'children'}` : ''}`;
 
-function Plans({ width, onPlan }: { width: number; onPlan: (p: LandingPlan) => void }) {
+function Plans({ width, today, onPlan }: { width: number; today: string; onPlan: (p: LandingPlan) => void }) {
   const cardW = width - PolarSpace.pad * 2 - 26;
   const step = cardW + PolarSpace.gutter;
   const [page, setPage] = useState(0);
   const ref = useRef<ScrollView>(null);
-  const today = todayISO();
   return (
     <View style={styles.plans}>
       <View style={styles.sectionHead}>
+        <Text style={[PolarType.kicker, styles.center, { color: Polar.ink }]}>Sample journeys</Text>
         <Text style={[PolarType.display, styles.center, { color: Polar.ink }]} accessibilityRole="header">
-          Sample plans
+          More journeys to imagine
         </Text>
       </View>
       <Rise at="plans" distance={60}>
@@ -526,45 +570,36 @@ function Knows({ width }: { width: number }) {
   );
 }
 
-/* ───────────────────────── Footer — Variant B "Monument" ───────────────────────── */
-
-function nextMonths(n: number) {
-  const now = new Date();
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i + 1, 1));
-    return { key: isoDay(d).slice(0, 7), label: d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' }) };
-  });
-}
-
-/** A month picked here opens the wizard on its first week — dates the traveller then sees and edits. */
-function monthPrefill(where: string, month: string, adults: number, budget: number | null): PlanPrefill {
-  const start = new Date(`${month}-01T00:00:00Z`);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  return { destination: where.trim(), startDate: isoDay(start), endDate: isoDay(end), adults, children: 0, ...(budget ? { budgetUsd: budget } : {}) };
-}
+/* ───────────────────────── Footer: Variant B "Monument" ───────────────────────── */
 
 function PlanFooter({
   width,
   bottom,
+  today,
+  carry,
   onPlan,
+  onOpenDay,
   onHow,
   onGo,
   onSignIn,
 }: {
   width: number;
   bottom: number;
-  onPlan: (prefill?: PlanPrefill) => void;
+  today: string;
+  /** The line under "Open this day in the planner": which day, and which way of it. */
+  carry: string;
+  onPlan: (prefill: PlanPrefill) => void;
+  onOpenDay: () => void;
   onHow: () => void;
   onGo: (s: Section) => void;
   onSignIn: () => void;
 }) {
-  const months = useMemo(() => nextMonths(6), []);
   const [where, setWhere] = useState('');
-  const [month, setMonth] = useState<string | null>(null);
-  const [party, setParty] = useState(2);
-  const [budget, setBudget] = useState('');
-  const [errors, setErrors] = useState<{ where?: string; month?: string }>({});
+  // A native picker always draws *some* date, so the fields start on the wizard's own defaults (a
+  // month out, for six nights) rather than pretending to be empty.
+  const [start, setStart] = useState(() => addDays(today, 30));
+  const [end, setEnd] = useState(() => addDays(today, 36));
+  const [errors, setErrors] = useState<{ where?: string; dates?: string }>({});
   const size = Math.min(width * 0.25, 160);
   const { y, vh, reduce, base } = useMotion();
   const h = useSharedValue(0);
@@ -577,29 +612,26 @@ function PlanFooter({
   );
 
   function submit() {
-    const e: typeof errors = {};
-    if (!where.trim()) e.where = 'Tell us where you’re going.';
-    if (!month) e.month = 'Pick the month you’ll travel.';
+    const e = { where: where.trim() ? undefined : 'Tell us where you’re going.', dates: crossFieldProblem(start, end) };
     setErrors(e);
-    if (e.where || e.month || !month) return;
-    const amount = Number(budget);
-    onPlan(monthPrefill(where, month, party, budget && amount > 0 ? amount : null));
+    if (e.where || e.dates) return;
+    onPlan({ destination: where.trim(), startDate: start, endDate: end });
   }
 
   const links: [string, () => void][] = [
     ['How it works', onHow],
-    ['Sample plans', () => onGo('plans')],
-    ['A day on the map', () => onGo('day')],
-    ['What a plan knows', () => onGo('knows')],
+    ['A day in Petra', () => onGo('day')],
+    ['Four ways', () => onGo('ways')],
+    ['The plan', () => onGo('map')],
+    ['More journeys', () => onGo('plans')],
     ['Sign in', onSignIn],
-    ['Memories', () => router.push('/(tabs)/trips')],
   ];
 
   return (
     <View
       style={styles.fb}
       onLayout={(e) => {
-        h.value = e.nativeEvent.layout.height;
+        h.set(e.nativeEvent.layout.height);
       }}>
       <Animated.View style={[styles.fbPhoto, photo]} pointerEvents="none">
         <Image source={FOOT_PHOTO} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -608,7 +640,7 @@ function PlanFooter({
 
       <View style={styles.fbInner}>
         <View style={styles.fbTop}>
-          <Text style={[PolarType.kicker, { color: Polar.ice }]}>Where to next?</Text>
+          <Text style={[PolarType.kicker, { color: Polar.ice }]}>Let’s make yours.</Text>
           <Text style={[PolarType.coord, { color: Polar.nightText2 }]}>[ 29º 35’ N, 35º 25’ E ] · Wadi Rum</Text>
         </View>
 
@@ -619,12 +651,23 @@ function PlanFooter({
           <Text style={styles.fbSub}>Free · no account needed · drafts until you keep them</Text>
         </View>
 
+        <View style={styles.fbCarry}>
+          <Pressable onPress={onOpenDay} style={({ pressed }) => [styles.signal, styles.signalLg, pressed && styles.signalPressed]} accessibilityRole="button">
+            <Text style={styles.signalText}>Open this day in the planner</Text>
+            <Text style={styles.signalText}>→</Text>
+          </Pressable>
+          <Text style={[PolarType.caption, { color: Polar.nightText2 }]}>{carry}</Text>
+        </View>
+
         <BlurView intensity={60} tint="dark" style={styles.card}>
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Where</Text>
             <TextInput
               value={where}
-              onChangeText={setWhere}
+              onChangeText={(t) => {
+                setWhere(t);
+                setErrors(({ dates }) => ({ dates }));
+              }}
               placeholder="A city, region or country"
               placeholderTextColor={Polar.nightText2}
               autoCapitalize="words"
@@ -636,41 +679,39 @@ function PlanFooter({
             {errors.where && <Text style={styles.err}>{errors.where}</Text>}
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>When</Text>
-            {/* `handled`, like the page: a nested scroller defaults to `never`, so with the keyboard up
-                the first tap on a month only dismissed it and the choice was lost. */}
-            <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} accessibilityRole="radiogroup" accessibilityLabel="Month">
-              {months.map((m) => {
-                const on = m.key === month;
-                return (
-                  <Pressable key={m.key} onPress={() => setMonth(m.key)} style={[styles.monthChip, on && styles.monthChipOn, !!errors.month && !month && styles.inputErr]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
-                    <Text style={[styles.monthText, on && { color: Polar.ink }]}>{m.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            {errors.month && <Text style={styles.err}>{errors.month}</Text>}
+          {/* The platform's own pickers, the wizard's own fields: the same rule (`crossFieldProblem`)
+              is checked here and again at /plan/basics, so the hand-off can never carry a range the
+              next screen refuses. */}
+          <View style={[styles.dates, !!errors.dates && styles.inputErr]}>
+            <DateField
+              label="Arriving"
+              value={start}
+              minimumDate={today}
+              style={styles.dateRow}
+              labelStyle={styles.fieldLabel}
+              accentColor={Polar.signal}
+              onChange={(d) => {
+                setStart(d);
+                // Keep the range whole: a departure before the new arrival moves to the day after.
+                if (end < d) setEnd(addDays(d, 1));
+                setErrors(({ where: w }) => ({ where: w }));
+              }}
+            />
+            <View style={styles.dateRule} />
+            <DateField
+              label="Leaving"
+              value={end}
+              minimumDate={start}
+              style={styles.dateRow}
+              labelStyle={styles.fieldLabel}
+              accentColor={Polar.signal}
+              onChange={(d) => {
+                setEnd(d);
+                setErrors(({ where: w }) => ({ where: w }));
+              }}
+            />
           </View>
-
-          <View style={styles.row2}>
-            <Stepper label="Travellers" value={party} min={1} max={12} onChange={setParty} />
-            {/* Budget rather than a tier toggle: the planner derives the tier from the budget, so a
-                tier picked here would be a question nothing listens to. */}
-            <View style={[styles.field, styles.flex]}>
-              <Text style={styles.fieldLabel}>Budget</Text>
-              <TextInput
-                value={budget}
-                onChangeText={(t) => setBudget(t.replace(/[^\d]/g, ''))}
-                placeholder="US $, optional"
-                placeholderTextColor={Polar.nightText2}
-                keyboardType="number-pad"
-                maxLength={7}
-                style={styles.input}
-                accessibilityLabel="Budget in US dollars, optional"
-              />
-            </View>
-          </View>
+          {errors.dates && <Text style={styles.err}>{errors.dates}</Text>}
 
           <Pressable onPress={submit} style={({ pressed }) => [styles.signal, styles.signalLg, pressed && styles.signalPressed]} accessibilityRole="button">
             <Text style={styles.signalText}>Plan my trip</Text>
@@ -694,7 +735,7 @@ function PlanFooter({
             </Pressable>
           ))}
         </View>
-        <Text style={[PolarType.caption, { color: Polar.nightText2 }]}>Photography via Pexels and Unsplash</Text>
+        <Text style={[PolarType.caption, { color: Polar.nightText2 }]}>Photography via Pexels and Unsplash · every journey here is a sample</Text>
       </View>
 
       <Animated.View style={mon}>
@@ -710,23 +751,6 @@ function PlanFooter({
   );
 }
 
-function Stepper({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (n: number) => void }) {
-  return (
-    <View style={[styles.field, styles.flex]}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.stepper} accessibilityRole="adjustable" accessibilityLabel={`${label}: ${value}`}>
-        <Pressable onPress={() => onChange(Math.max(min, value - 1))} disabled={value <= min} style={({ pressed }) => [styles.stepBtn, pressed && styles.stepPressed]} accessibilityLabel={`Fewer ${label.toLowerCase()}`}>
-          <Text style={[styles.stepSign, value <= min && styles.off]}>−</Text>
-        </Pressable>
-        <Text style={styles.stepValue}>{value}</Text>
-        <Pressable onPress={() => onChange(Math.min(max, value + 1))} disabled={value >= max} style={({ pressed }) => [styles.stepBtn, pressed && styles.stepPressed]} accessibilityLabel={`More ${label.toLowerCase()}`}>
-          <Text style={[styles.stepSign, value >= max && styles.off]}>+</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 /* ───────────────────────── Styles ───────────────────────── */
 
 const NIGHT_FIELD = 'rgba(9,11,16,0.35)';
@@ -736,10 +760,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  row2: { flexDirection: 'row', gap: PolarSpace.s3 },
   selfStart: { alignSelf: 'flex-start' },
   dim: { opacity: 0.72 },
-  off: { opacity: 0.35 },
 
   glass: { height: 36, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, backgroundColor: Polar.veil20, borderWidth: 1, borderColor: Polar.frost20 },
   glassText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.ice },
@@ -749,7 +771,7 @@ const styles = StyleSheet.create({
   signalText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ink },
   quiet: { height: 36, paddingHorizontal: 14, justifyContent: 'center', borderRadius: PolarRadius.hairline, backgroundColor: Polar.veil05 },
   quietText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ink },
-  ghost: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: 190, paddingVertical: 10, paddingHorizontal: 2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: Polar.frost20 },
+  ghost: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: 210, paddingVertical: 10, paddingHorizontal: 2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: Polar.frost20 },
   ghostText: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.ice },
 
   hero: { overflow: 'hidden', backgroundColor: Polar.ink, justifyContent: 'space-between' },
@@ -759,22 +781,15 @@ const styles = StyleSheet.create({
   peak: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderBottomWidth: 10, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   wordmarkText: { fontFamily: PolarFonts.condensed, fontSize: 17, letterSpacing: 1.2, textTransform: 'uppercase' },
   heroMid: { paddingHorizontal: PolarSpace.pad, gap: PolarSpace.s3, marginBottom: PolarSpace.s3 },
-  heroLead: { color: Polar.ice, maxWidth: 260, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 12 },
+  heroLead: { color: Polar.ice, maxWidth: 280, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 12 },
   heroFoot: { gap: PolarSpace.s2 },
   chips: { paddingHorizontal: PolarSpace.pad, gap: 6 },
-  chip: { height: 32, paddingHorizontal: 13, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: 'rgba(9,11,16,0.22)' },
+  chip: { height: 32, paddingHorizontal: 13, justifyContent: 'center', borderRadius: PolarRadius.hairline, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: 'rgba(9,11,16,0.22)', overflow: 'hidden' },
   chipOn: { backgroundColor: Polar.ice, borderColor: Polar.ice },
   chipText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ice },
+  chipFill: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: Polar.signal, transformOrigin: 'left' },
   heroCoord: { color: Polar.ice, paddingHorizontal: PolarSpace.pad },
   monument: { color: Polar.ice, textAlign: 'center', marginTop: PolarSpace.s2 },
-
-  intro: { paddingHorizontal: PolarSpace.pad, paddingTop: PolarSpace.s12, paddingBottom: PolarSpace.s10, gap: PolarSpace.s4 },
-  statement: { fontFamily: PolarFonts.display, fontSize: 28, lineHeight: 29, textTransform: 'uppercase', color: Polar.ink },
-  rule: { height: 1, backgroundColor: Polar.rule, marginTop: PolarSpace.s3 },
-  quote: { paddingHorizontal: PolarSpace.s5, paddingVertical: PolarSpace.s12, gap: PolarSpace.s2 },
-  quoteMark: { fontFamily: PolarFonts.display, fontSize: 48, lineHeight: 52, height: 30, color: Polar.ink },
-  quoteText: { fontFamily: PolarFonts.displayItalic, fontSize: 24, lineHeight: 29, color: Polar.ink },
-  quoteDash: { fontFamily: PolarFonts.sans, fontSize: 14, color: Polar.ink, marginTop: PolarSpace.s3 },
 
   sectionHead: { alignItems: 'center', gap: PolarSpace.s2, paddingHorizontal: PolarSpace.pad, marginBottom: PolarSpace.s6 },
   plans: { paddingTop: PolarSpace.s8, paddingBottom: PolarSpace.s8 },
@@ -805,22 +820,19 @@ const styles = StyleSheet.create({
   fbInner: { gap: PolarSpace.s5, paddingTop: PolarSpace.s6, paddingHorizontal: PolarSpace.pad, paddingBottom: PolarSpace.s3 },
   fbTop: { gap: 6, paddingBottom: PolarSpace.s3, borderBottomWidth: 1, borderColor: Polar.frost20 },
   fbLine: { gap: PolarSpace.s2 },
+  fbCarry: { gap: PolarSpace.s2, alignItems: 'flex-start' },
   fbTitle: { fontFamily: PolarFonts.display, fontSize: 54, lineHeight: 56, textTransform: 'uppercase', color: Polar.ice },
   fbSub: { fontFamily: PolarFonts.displayItalic, fontSize: 17, lineHeight: 21, color: Polar.nightText2 },
   card: { gap: PolarSpace.s4, padding: PolarSpace.s4, borderRadius: PolarRadius.card, borderWidth: 1, borderColor: Polar.frost10, overflow: 'hidden' },
   field: { gap: 7 },
-  fieldLabel: { fontFamily: PolarFonts.displayItalic, fontSize: 17, color: Polar.ice },
+  fieldLabel: { fontFamily: PolarFonts.displayItalic, fontSize: 17, lineHeight: 21, letterSpacing: 0, textTransform: 'none', color: Polar.ice },
   input: { height: 46, paddingHorizontal: 13, borderRadius: PolarRadius.sm, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: NIGHT_FIELD, fontFamily: PolarFonts.sans, fontSize: 16, color: Polar.ice },
   inputErr: { borderColor: Polar.alertNight },
-  err: { fontFamily: PolarFonts.sansSemi, fontSize: 12, color: Polar.alertNight },
-  monthChip: { height: 40, paddingHorizontal: 13, justifyContent: 'center', borderRadius: PolarRadius.sm, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: NIGHT_FIELD },
-  monthChipOn: { backgroundColor: Polar.ice, borderColor: Polar.ice },
-  monthText: { fontFamily: PolarFonts.sansSemi, fontSize: 13, color: Polar.ice },
-  stepper: { flexDirection: 'row', alignItems: 'center', height: 46, borderRadius: PolarRadius.sm, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: NIGHT_FIELD, overflow: 'hidden' },
-  stepBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  stepPressed: { backgroundColor: Polar.frost10 },
-  stepSign: { fontFamily: PolarFonts.sans, fontSize: 19, color: Polar.ice },
-  stepValue: { flex: 1, textAlign: 'center', fontFamily: PolarFonts.sansSemi, fontSize: 15, color: Polar.ice },
+  err: { fontFamily: PolarFonts.sansSemi, fontSize: 12, color: Polar.alertNight, marginTop: -2 },
+  // The wizard's trough, on night ground: two rows of label and native chip, one hairline between.
+  dates: { borderRadius: PolarRadius.sm, borderWidth: 1, borderColor: Polar.frost20, backgroundColor: NIGHT_FIELD, overflow: 'hidden' },
+  dateRow: { paddingHorizontal: 13 },
+  dateRule: { height: StyleSheet.hairlineWidth, backgroundColor: Polar.frost20, marginLeft: 13 },
   fbFacts: { gap: PolarSpace.s3 },
   fbFact: { gap: 4, paddingLeft: PolarSpace.s2, borderLeftWidth: 1, borderColor: Polar.frost20 },
   fbLinks: { flexDirection: 'row', flexWrap: 'wrap', columnGap: PolarSpace.s4, rowGap: PolarSpace.s2, paddingTop: PolarSpace.s3, borderTopWidth: 1, borderColor: Polar.frost10 },
@@ -837,7 +849,7 @@ const styles = StyleSheet.create({
   menuRow: { flexDirection: 'row', alignItems: 'baseline', gap: 14, paddingVertical: 14, borderTopWidth: 1, borderColor: Polar.frost10 },
   menuN: { fontFamily: PolarFonts.sansSemi, fontSize: 12, color: Polar.nightText2 },
   menuLabel: { fontFamily: PolarFonts.display, fontSize: 30, lineHeight: 34, textTransform: 'uppercase', color: Polar.ice },
-  menuCta: { marginTop: 'auto' },
+  menuCoord: { color: Polar.nightText2, marginTop: 'auto' },
   scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(31,42,68,0.5)' },
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '86%', backgroundColor: Polar.ice, borderTopLeftRadius: 14, borderTopRightRadius: 14, paddingHorizontal: PolarSpace.pad, gap: PolarSpace.s3 },
   grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: Polar.beige, marginTop: 8 },

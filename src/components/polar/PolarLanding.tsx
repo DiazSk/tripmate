@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -8,25 +8,30 @@ import "./PolarLanding.css";
 import { useScrollContainer } from "@/lib/scrollContainer";
 import { planExamples, toPrefill, formatExampleParty, formatExampleSpan, resolveExampleDates, type PlanPrefill } from "@/lib/planExamples";
 import { sceneBeats } from "@/lib/sceneBeats";
-import { scrollToTarget, useLandingMotion } from "./motion";
+import { LENSES, petraPrefill, petraSampleDate, type LensId } from "@/lib/petraDay";
 import { PLAN_EVENT } from "@/lib/planIntent";
+import { scrollToTarget, useLandingMotion } from "./motion";
+import { Day, OpenSheet, useReveal, Ways } from "./ImagineDay";
+import { DateRangeFields, shortDate, todayISO } from "./DateRangeFields";
 
-// The night map pulls in MapLibre, which the landing's first viewport never needs.
-const NightMap = dynamic(() => import("./NightMap"), { ssr: false, loading: () => <div className="nm nm-pending" id="day" /> });
+// The plan's globe pulls in MapLibre, which the landing's first viewport never needs.
+const PlanGlobe = dynamic(() => import("./PlanGlobe"), { ssr: false });
 
 /**
- * The landing, on Polar Interior — the "TripMate — Polar Landing" design on the MagicPath canvas,
- * built into the app. It replaces the Blue Hour scroll story and hands off the same way: every
- * "plan" here calls `onPlan`, which is HomeView's `startPlanning`, so the wizard is unchanged.
+ * The landing, on Polar Interior: the "TripMate Polar Landing" design on the MagicPath canvas,
+ * built into the app. Every "plan" here calls `onPlan`, which is HomeView's `startPlanning`, so the
+ * wizard is unchanged.
+ *
+ * The page imagines one day before it plans anything: a destination hero, then a sample day in
+ * Petra told as a story (ImagineDay `Day`), the same day four ways (`Ways`), and the plan behind it
+ * on a night globe (`PlanGlobe`), all from `src/lib/petraDay.ts`. Then more sample journeys, what a
+ * plan knows, and a closing form.
  *
  * **Light, by opting in.** The root carries `data-appearance="light"`, the Polar Light scope in
- * globals.css; the night map and the footer are night by their own backgrounds. Everything else in
- * the app stays on Polar Night until its screen is redesigned.
+ * globals.css; the globe and the footer are night by their own backgrounds.
  *
- * **Copy and data are the app's, not the canvas's.** The plans, their photographs and their
- * prefill come from `planExamples`, the four beats from `sceneBeats`. One canvas line said the
- * budget is "a target to hit, not a ceiling"; the planner does the opposite and says so on every
- * other surface, so the quote here is the app's own claim.
+ * **Copy and data are the app's.** The journeys, their photographs and their prefill come from
+ * `planExamples`, the four beats from `sceneBeats`.
  */
 
 type Dest = { id: string; word: string; coord: string; img: string };
@@ -37,8 +42,9 @@ const DESTS: Dest[] = [
   { id: "jaipur", word: "Jaipur", coord: "[ 26º 54’ 45” N, 75º 47’ 14” E ]", img: "/scenes/jaipur-amber-fort-elephant.webp" },
   { id: "sinaia", word: "Sinaia", coord: "[ 45º 21’ 00” N, 25º 33’ 00” E ]", img: "/scenes/peles-castle-romania-snow.webp" },
 ];
+const ROTATE_MS = 6000;
 
-// The four plans' seasons, as the strip prints them. Presentation copy, keyed by the plan's id.
+// The four journeys' seasons, as the strip prints them. Presentation copy, keyed by the plan's id.
 const SEASON: Record<string, string> = { tuscany: "Early autumn", jaipur: "Cool season", sinaia: "Deep winter", "wadi-rum": "Spring" };
 
 // The same four steps HowItWorks states, in the same words.
@@ -57,27 +63,6 @@ const FACTS = [
 
 const FOOT_PHOTO = "/scenes/wadi-rum-desert.webp";
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const isoDay = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-const todayISO = () => isoDay(new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())));
-
-// The footer's "When": the next six months, keyed YYYY-MM, built in UTC so no timezone shifts one.
-function nextMonths(n: number) {
-  const now = new Date();
-  return Array.from({ length: n }, (_, k) => {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + k + 1, 1));
-    return { key: isoDay(d).slice(0, 7), label: d.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }) };
-  });
-}
-
-/** A month picked in the footer opens the wizard on its first week — dates the traveller then sees and edits. */
-function monthPrefill(where: string, month: string, adults: number, budget: number | null): PlanPrefill {
-  const start = new Date(`${month}-01T00:00:00Z`);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  return { destination: where.trim(), startDate: isoDay(start), endDate: isoDay(end), adults, children: 0, ...(budget ? { budgetUsd: budget } : {}) };
-}
-
 export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefill) => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLElement>(null);
@@ -85,17 +70,26 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
   // True only in the browser, without a setState-in-effect: the portal target is document.body.
   const inBrowser = useSyncExternalStore(noopSubscribe, () => true, () => false);
   useLandingMotion(rootRef, scroller);
+  useReveal([]);
+
+  const [today] = useState(todayISO);
+  // The sample day is a season, not a date: the next Wednesday after 12 April (petraDay.ts).
+  const sampleDay = shortDate(petraSampleDate(today));
 
   const [destId, setDestId] = useState("petra");
+  const [heroPaused, setHeroPaused] = useState(false);
   const [plan, setPlan] = useState(0);
   const [howOpen, setHowOpen] = useState(false);
   const dest = DESTS.find((d) => d.id === destId)!;
 
-  const [months] = useState(() => nextMonths(6));
+  // The day: how it is travelled, the stop in focus, and the "open this day" sheet.
+  const [lens, setLens] = useState<LensId>("slow");
+  const [hot, setHot] = useState<string | null>(null);
+  const [sheet, setSheet] = useState(false);
+  const closeSheet = useCallback(() => setSheet(false), []);
+
   const [where, setWhere] = useState("");
-  const [month, setMonth] = useState("");
-  const [party, setParty] = useState(2);
-  const [budget, setBudget] = useState("");
+  const [dates, setDates] = useState({ start: "", end: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // The navbar's "Plan a trip" (and its phone menu's) can't reach HomeView, so it asks here.
@@ -105,6 +99,18 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
     return () => window.removeEventListener(PLAN_EVENT, plan);
   }, [onPlan]);
 
+  // The hero moves on every ROTATE_MS. Picking a place restarts the clock; resting on the hero, or
+  // tabbing into it, holds it; a hidden tab or reduced motion never rotates at all.
+  useEffect(() => {
+    if (heroPaused || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const t = window.setTimeout(() => {
+      if (document.hidden) return;
+      const i = DESTS.findIndex((d) => d.id === destId);
+      setDestId(DESTS[(i + 1) % DESTS.length].id);
+    }, ROTATE_MS);
+    return () => window.clearTimeout(t);
+  }, [destId, heroPaused]);
+
   useEffect(() => {
     if (!howOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setHowOpen(false);
@@ -112,15 +118,22 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
     return () => window.removeEventListener("keydown", onKey);
   }, [howOpen]);
 
+  /** "See this stop in the plan": the slow way, that stop in focus, its row a third of the way down. */
+  function openStop(stop: string) {
+    setLens("slow");
+    setHot(stop);
+    requestAnimationFrame(() => scrollToTarget(document.getElementById(`stop-${stop}`), -window.innerHeight / 3));
+  }
+
   function submit(e: FormEvent) {
     e.preventDefault();
     const next: Record<string, string> = {};
     if (!where.trim()) next.where = "Tell us where you’re going.";
-    if (!month) next.month = "Pick a month.";
-    const amount = budget.trim() ? Number(budget) : null;
-    if (amount !== null && (!Number.isFinite(amount) || amount <= 0)) next.budget = "A budget in US dollars, or leave it blank.";
+    if (!dates.start) next.start = "When do you arrive?";
+    else if (!dates.end) next.end = "When do you leave?";
     setErrors(next);
-    if (Object.keys(next).length === 0) onPlan(monthPrefill(where, month, party, amount));
+    // Where and when only: money and party were not asked, so they are not sent (see PlanPrefill).
+    if (Object.keys(next).length === 0) onPlan({ destination: where.trim(), startDate: dates.start, endDate: dates.end });
   }
 
   const toForm = () => scrollToTarget(formRef.current);
@@ -137,7 +150,16 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
         </div>
 
         {/* ───── Hero ───── */}
-        <section className="tm-hero" aria-label="TripMate" data-nav-theme="photo">
+        <section
+          className={`tm-hero${heroPaused ? " is-paused" : ""}`}
+          aria-label="TripMate"
+          data-nav-theme="photo"
+          style={{ "--rotate-ms": `${ROTATE_MS}ms` } as CSSProperties}
+          onPointerEnter={(e) => e.pointerType === "mouse" && setHeroPaused(true)}
+          onPointerLeave={() => setHeroPaused(false)}
+          onFocus={() => setHeroPaused(true)}
+          onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setHeroPaused(false)}
+        >
           <div className="tm-hero-media" aria-hidden="true">
             {DESTS.map((d) => (
               <Image key={d.id} src={d.img} alt="" fill sizes="100vw" priority={d.id === "petra"} className={`tm-hero-img${d.id === destId ? " is-on" : ""}`} />
@@ -147,13 +169,11 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           </div>
 
           <div className="tm-hero-mid">
-            <p className="tm-hero-lead">A trip planned against your real dates, budget and weather.</p>
+            <p className="tm-hero-lead">Be there before the day arrives. Imagine it first and TripMate plans the rest.</p>
             {/* No "Plan a trip" here: the navbar carries the page's one, above the fold. */}
-            <div className="tm-hero-actions">
-              <button type="button" className="tm-ghost" onClick={() => scrollToTarget(document.getElementById("day"))}>
-                Watch a day play <span aria-hidden="true">▸</span>
-              </button>
-            </div>
+            <button type="button" className="tm-ghost" onClick={() => scrollToTarget(document.getElementById("day"))}>
+              Picture a day in Petra <span aria-hidden="true">↓</span>
+            </button>
           </div>
 
           <div className="tm-hero-foot">
@@ -174,35 +194,29 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           </div>
         </section>
 
-        {/* ───── Intro ───── */}
-        <section className="tm-intro" data-nav-theme="light">
-          <p className="tm-kicker">The plan that already knows</p>
-          <p className="tm-statement tm-scroll-fade">
-            Forecast, holidays, opening hours and travel times go in first, before a single word of your plan is written.
-          </p>
-          <div className="tm-intro-cols">
-            <div>
-              <h2 className="tm-eyebrow">How a plan is made</h2>
-            </div>
-            <p className="tm-body">
-              Tell TripMate where, when, how much and who is going. It fetches the real conditions for your dates, writes the days, then
-              runs a second pass that critiques the finished plan against your budget and pace, and rewrites the days it finds fault with.
-              Every pin is corrected against OpenStreetMap.
-            </p>
+        {/* ───── A day you can imagine: the day, four ways, the plan behind it ───── */}
+        <div className="pl">
+          <Day onOpenStop={openStop} />
+          <Ways lens={lens} setLens={setLens} />
+          {/* A stable box for the motion to hold: PlanGlobe is a lazy import, so the element it
+              renders arrives after the scroll effects (and the navbar's section observer) are bound. */}
+          <div className="tm-night" id="the-plan" data-nav-theme="photo">
+            <PlanGlobe lens={lens} setLens={setLens} hot={hot} setHot={setHot} when={sampleDay} onOpen={() => setSheet(true)} />
           </div>
-        </section>
+        </div>
 
-        {/* ───── Sample plans ───── */}
+        {/* ───── More journeys ───── */}
         <section className="tm-plans" id="plans" data-nav-theme="light">
           <div className="tm-section-title">
-            <h2 className="tm-display">Sample plans</h2>
+            <p className="tm-kicker">Sample journeys</p>
+            <h2 className="tm-display">More journeys to imagine</h2>
           </div>
           {/* The rows only apply below 760px, where the strip is a grid; on desktop it is flex and
               this declaration is inert. */}
           <div className="tm-strip" style={{ gridTemplateRows: planExamples.map((_, i) => (i === plan ? "34em" : "4.5em")).join(" ") }}>
             {planExamples.map((p, i) => {
               const open = i === plan;
-              const { startDate, endDate } = resolveExampleDates(p.startMonthDay, p.days, todayISO());
+              const { startDate, endDate } = resolveExampleDates(p.startMonthDay, p.days, today);
               return (
                 // A mouse opens a plan by resting on it; touch and keyboard open it with a tap or focus.
                 <article key={p.id} className={`tm-strip-item${open ? " is-open" : ""}`} onPointerEnter={(e) => e.pointerType === "mouse" && setPlan(i)}>
@@ -237,7 +251,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
                           <dd>{formatExampleParty(p.adults, p.children)}</dd>
                         </div>
                       </dl>
-                      <button type="button" className="tm-signal" tabIndex={open ? 0 : -1} onClick={() => onPlan(toPrefill(p, todayISO()))}>
+                      <button type="button" className="tm-signal" tabIndex={open ? 0 : -1} onClick={() => onPlan(toPrefill(p, today))}>
                         <span className="tm-signal-label">Plan one like it</span>
                       </button>
                     </div>
@@ -246,32 +260,6 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
               );
             })}
           </div>
-        </section>
-
-        {/* ───── A day on the map ───── */}
-        {/* A stable box for the motion to hold: NightMap is a lazy import, so the element it renders
-            replaces its loading placeholder after the scroll effects are already bound. */}
-        <div className="tm-night" data-nav-theme="photo">
-          <NightMap />
-        </div>
-
-        {/* ───── Quote ───── */}
-        <section className="tm-quote" data-nav-theme="light">
-          <figure>
-            <span className="tm-quote-mark" aria-hidden="true">
-              “
-            </span>
-            <blockquote className="tm-scroll-fade">
-              The budget is a ceiling, not a target. Say what you can spend, and the plan stays inside it rather than spending up to it.
-            </blockquote>
-            <figcaption>
-              <span className="tm-dash" aria-hidden="true">
-                -
-              </span>
-              <span className="tm-ui">How TripMate plans</span>
-              <span className="tm-caption">Step 01 · You set the constraints</span>
-            </figcaption>
-          </figure>
         </section>
 
         {/* ───── What a plan knows ───── */}
@@ -296,7 +284,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
           </div>
         </section>
 
-        {/* ───── Footer — Variant B "Monument" ───── */}
+        {/* ───── Footer: Variant B "Monument" ───── */}
         <footer className="tm-fb" ref={formRef} id="plan" data-nav-theme="photo">
           <div className="tm-fb-photo" aria-hidden="true">
             <Image src={FOOT_PHOTO} alt="" fill sizes="100vw" />
@@ -305,7 +293,7 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
 
           <div className="tm-fb-inner">
             <div className="tm-fb-top">
-              <p className="tm-kicker">Where to next?</p>
+              <p className="tm-kicker">Let’s make yours.</p>
               <span className="tm-coord tm-on-dark">[ 29º 35’ 00” N, 35º 25’ 00” E ] · Wadi Rum</span>
             </div>
 
@@ -317,43 +305,31 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
                 <span className="tm-fb-sub">Free · no account needed · drafts until you keep them</span>
               </div>
 
+              <div className="tm-fb-carry">
+                <button type="button" className="tm-signal" onClick={() => setSheet(true)}>
+                  <span className="tm-signal-label">
+                    Open this day in the planner <span aria-hidden="true">→</span>
+                  </span>
+                </button>
+                <span className="tm-caption tm-on-dark-2">
+                  Petra · {sampleDay} · {LENSES[lens].name}. Or start from your own idea below.
+                </span>
+              </div>
+
               <form className="tm-fb-glass tm-fb-form" onSubmit={submit} noValidate>
-                <label className={`tm-fb-field${errors.where ? " has-err" : ""}`}>
+                <label className={`tm-fb-field tm-fb-where${errors.where ? " has-err" : ""}`}>
                   <span>Where</span>
                   <input className="tm-fb-input" value={where} onChange={(e) => setWhere(e.target.value)} placeholder="A city, region or country" aria-invalid={!!errors.where} maxLength={120} />
                   {errors.where && <em>{errors.where}</em>}
                 </label>
-                <label className={`tm-fb-field${errors.month ? " has-err" : ""}`}>
-                  <span>When</span>
-                  <select className="tm-fb-input tm-fb-select" value={month} onChange={(e) => setMonth(e.target.value)} aria-invalid={!!errors.month}>
-                    <option value="">Choose a month</option>
-                    {months.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.month && <em>{errors.month}</em>}
-                </label>
-                <div className="tm-fb-field">
-                  <span id="tm-fb-party">Travellers</span>
-                  <div className="tm-stepper" role="group" aria-labelledby="tm-fb-party">
-                    <button type="button" aria-label="Fewer travellers" onClick={() => setParty((p) => Math.max(1, p - 1))} disabled={party <= 1}>
-                      −
-                    </button>
-                    <output aria-live="polite">{party}</output>
-                    <button type="button" aria-label="More travellers" onClick={() => setParty((p) => Math.min(12, p + 1))} disabled={party >= 12}>
-                      +
-                    </button>
-                  </div>
-                </div>
-                {/* Budget rather than a tier toggle: the planner derives the tier from the budget
-                    (`closestTier`), so a tier picked here would be a question nothing listens to. */}
-                <label className={`tm-fb-field${errors.budget ? " has-err" : ""}`}>
-                  <span>Budget</span>
-                  <input className="tm-fb-input" value={budget} onChange={(e) => setBudget(e.target.value.replace(/[^\d]/g, ""))} placeholder="US $, optional" inputMode="numeric" aria-invalid={!!errors.budget} />
-                  {errors.budget && <em>{errors.budget}</em>}
-                </label>
+                <DateRangeFields
+                  value={dates}
+                  onChange={(d) => {
+                    setDates(d);
+                    setErrors(({ start, end, ...rest }) => ({ ...rest, ...(d.start ? {} : { start }), ...(d.end ? {} : { end }) }));
+                  }}
+                  errors={errors}
+                />
                 <button className="tm-signal tm-fb-go" type="submit">
                   Plan my trip <span className="tm-fb-arrow" aria-hidden="true">→</span>
                 </button>
@@ -373,23 +349,23 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
               <button type="button" className="tm-fb-link" onClick={() => setHowOpen(true)}>
                 How it works
               </button>
-              <a className="tm-fb-link" href="#plans">
-                Sample plans
-              </a>
               <a className="tm-fb-link" href="#day">
-                A day on the map
+                A day in Petra
               </a>
-              <a className="tm-fb-link" href="#knows">
-                What a plan knows
+              <a className="tm-fb-link" href="#ways">
+                Four ways
+              </a>
+              <a className="tm-fb-link" href="#the-plan">
+                The plan
+              </a>
+              <a className="tm-fb-link" href="#plans">
+                More journeys
+              </a>
+              <a className="tm-fb-link" href="/signin">
+                Sign in
               </a>
               <span className="tm-fb-spacer" />
-              <a className="tm-fb-link" href="/trips">
-                Memories
-              </a>
-              <a className="tm-fb-link" href="/profile">
-                Profile
-              </a>
-              <span className="tm-caption tm-on-dark-2">Photography via Pexels and Unsplash</span>
+              <span className="tm-caption tm-on-dark-2">Photography via Pexels and Unsplash · every journey here is a sample</span>
             </nav>
           </div>
 
@@ -397,6 +373,8 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
             TripMate
           </p>
         </footer>
+
+        {sheet && <OpenSheet lens={lens} when={sampleDay} onClose={closeSheet} onOpen={(adults) => onPlan(petraPrefill(today, adults))} />}
 
         {/* ───── How it works sheet ───── */}
         <button type="button" className="tm-tab" onClick={() => setHowOpen(true)} aria-haspopup="dialog" aria-expanded={howOpen}>
@@ -409,35 +387,35 @@ export default function PolarLanding({ onPlan }: { onPlan: (prefill?: PlanPrefil
         {inBrowser &&
           createPortal(
             <div className="tm tm-layer" data-appearance="light">
-        <div className={`tm-sheet-scrim${howOpen ? " is-on" : ""}`} onClick={() => setHowOpen(false)} aria-hidden="true" />
-        <aside data-lenis-prevent className={`tm-sheet${howOpen ? " is-on" : ""}`} role="dialog" aria-modal="true" aria-label="How it works" aria-hidden={!howOpen}>
-          <div className="tm-sheet-head">
-            <h2 className="tm-eyebrow">How it works</h2>
-            <button type="button" className="tm-quiet" onClick={() => setHowOpen(false)} tabIndex={howOpen ? 0 : -1}>
-              Close
-            </button>
-          </div>
-          <ol className="tm-steps">
-            {STEPS.map((s) => (
-              <li key={s.n}>
-                <span className="tm-step-n">{s.n}.</span>
-                <h3 className="tm-step-title">{s.title}</h3>
-                <p className="tm-body">{s.prose}</p>
-              </li>
-            ))}
-          </ol>
-          <button
-            type="button"
-            className="tm-signal tm-signal-lg"
-            tabIndex={howOpen ? 0 : -1}
-            onClick={() => {
-              setHowOpen(false);
-              toForm();
-            }}
-          >
-            <span className="tm-signal-label">Plan a trip</span>
-          </button>
-        </aside>
+              <div className={`tm-sheet-scrim${howOpen ? " is-on" : ""}`} onClick={() => setHowOpen(false)} aria-hidden="true" />
+              <aside data-lenis-prevent className={`tm-sheet${howOpen ? " is-on" : ""}`} role="dialog" aria-modal="true" aria-label="How it works" aria-hidden={!howOpen}>
+                <div className="tm-sheet-head">
+                  <h2 className="tm-eyebrow">How it works</h2>
+                  <button type="button" className="tm-quiet" onClick={() => setHowOpen(false)} tabIndex={howOpen ? 0 : -1}>
+                    Close
+                  </button>
+                </div>
+                <ol className="tm-steps">
+                  {STEPS.map((s) => (
+                    <li key={s.n}>
+                      <span className="tm-step-n">{s.n}.</span>
+                      <h3 className="tm-step-title">{s.title}</h3>
+                      <p className="tm-body">{s.prose}</p>
+                    </li>
+                  ))}
+                </ol>
+                <button
+                  type="button"
+                  className="tm-signal tm-signal-lg"
+                  tabIndex={howOpen ? 0 : -1}
+                  onClick={() => {
+                    setHowOpen(false);
+                    toForm();
+                  }}
+                >
+                  <span className="tm-signal-label">Plan a trip</span>
+                </button>
+              </aside>
             </div>,
             document.body
           )}

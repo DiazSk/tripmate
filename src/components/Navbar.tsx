@@ -21,8 +21,10 @@ const MENU_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 // as bare words with a `+` in front, and so does the footer — nothing was lost, because the label
 // was always the thing being read.
 const MENU_ITEMS = [
-  { id: "plans", label: "Sample plans", kind: "anchor" as const },
-  { id: "day", label: "A day on the map", kind: "anchor" as const },
+  { id: "day", label: "A day in Petra", kind: "anchor" as const },
+  { id: "ways", label: "Four ways", kind: "anchor" as const },
+  { id: "the-plan", label: "The plan", kind: "anchor" as const },
+  { id: "plans", label: "More journeys", kind: "anchor" as const },
   { id: "knows", label: "What a plan knows", kind: "anchor" as const },
   { id: "trips", label: "My memories", kind: "link" as const, href: "/trips" },
   { id: "profile", label: "Profile", kind: "link" as const, href: "/profile" },
@@ -74,13 +76,17 @@ const navLinkBase =
  */
 const navLink = (active = false) => `${navLinkBase}${active ? " is-current" : ""}`;
 
-// Landing-only: the two beats worth a direct jump to.
-// The Polar landing's two bands worth a direct jump: the sample plans, and the day played on the
-// night map. Still two: five items in a bar this size is a menu, not wayfinding — the landing's own
-// footer carries the rest.
+// Landing-only: the Polar landing's sections, in page order. All five do not fit the bar's left
+// column until a wide screen, so each carries the breakpoint it appears at (a wrapper class, since
+// the chip's own `inline-flex` would outrank an appended `hidden`): the day and the journeys from
+// `sm`, the four ways and the plan from `xl`, what a plan knows from 1400px. The phone menu and the
+// landing's footer carry every one.
 const SECTION_LINKS = [
-  { id: "plans", label: "Sample plans" },
-  { id: "day", label: "A day on the map" },
+  { id: "day", label: "A day in Petra", show: "sm:inline-flex" },
+  { id: "ways", label: "Four ways", show: "xl:inline-flex" },
+  { id: "the-plan", label: "The plan", show: "xl:inline-flex" },
+  { id: "plans", label: "More journeys", show: "md:inline-flex" },
+  { id: "knows", label: "What a plan knows", show: "min-[1400px]:inline-flex" },
 ];
 
 /**
@@ -194,8 +200,13 @@ function useNavChrome(pathname: string): { theme: NavTheme; hidden: boolean } {
     // effect itself.
     frame = requestAnimationFrame(read);
     el.addEventListener("scroll", onScroll, { passive: true });
+    // A band can change its own theme without a scroll: the landing's day story goes dark on its
+    // night beat a moment after the scroll that reached it has already been read.
+    const themes = new MutationObserver(onScroll);
+    themes.observe(el, { subtree: true, attributeFilter: ["data-nav-theme"] });
     return () => {
       el.removeEventListener("scroll", onScroll);
+      themes.disconnect();
       cancelAnimationFrame(frame);
     };
   }, [container, pathname]);
@@ -299,15 +310,16 @@ export default function Navbar() {
         {isHome && (
           <div className="hidden items-center gap-1.5 sm:flex">
             {SECTION_LINKS.map((link) => (
-              <a
-                key={link.id}
-                href={`#${link.id}`}
-                onClick={(e) => scrollToSection(e, link.id)}
-                aria-current={activeSection === link.id ? "location" : undefined}
-                className={navLink(activeSection === link.id)}
-              >
-                {link.label}
-              </a>
+              <span key={link.id} className={`hidden ${link.show}`}>
+                <a
+                  href={`#${link.id}`}
+                  onClick={(e) => scrollToSection(e, link.id)}
+                  aria-current={activeSection === link.id ? "location" : undefined}
+                  className={navLink(activeSection === link.id)}
+                >
+                  {link.label}
+                </a>
+              </span>
             ))}
           </div>
         )}

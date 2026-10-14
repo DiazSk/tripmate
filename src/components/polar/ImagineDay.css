@@ -1,0 +1,146 @@
+/* "A day you can imagine" (ImagineDay.tsx, PlanGlobe.tsx): the day story, the four ways and the
+   plan behind them. Tailwind utilities lay these sections out; this file holds the tokens they
+   reference as `var(--ink)` etc., the type registers, and the motion. It nests inside `.tm`, whose
+   reset sits in `@layer base` so these utilities keep their padding and margins. */
+.pl {
+  --ice: #ffffff;
+  --paper: #f3f1ec;
+  --beige: #dcd8cc;
+  --ink: #1f2a44;
+  --charcoal: #535353;
+  --night: #090b10;
+  --night-2: #a8acb3;
+  --signal: #ff7e15;
+  --signal-pressed: #e86f0c;
+  --signal-text: #a64c09;
+  --rule: rgba(31, 42, 68, 0.12);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  font-family: var(--font-sans-stack), system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--ink);
+  overflow-x: clip;
+  position: relative;
+  z-index: 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+.pl-display {
+  font-family: var(--font-display-stack), Georgia, serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+}
+.pl-serif {
+  font-family: var(--font-display-stack), Georgia, serif;
+  font-weight: 400;
+}
+.pl-lead {
+  font-family: var(--font-display-stack), Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+}
+.pl-label {
+  font-family: var(--font-condensed-stack), 'Arial Narrow', sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.pl-eyebrow {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+.pl-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.pl :focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
+
+/* ---- buttons ---- */
+.pl-cta {
+  background: var(--signal);
+  color: var(--ink);
+  font-weight: 600;
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 200ms var(--ease), transform 200ms var(--ease);
+}
+.pl-cta:hover { background: var(--signal-pressed); }
+.pl-cta:active { transform: translateY(1px); }
+.pl-ghost {
+  border: 1px solid currentColor;
+  border-radius: var(--wd-radius-hairline);
+  font-weight: 600;
+  transition: background-color 200ms var(--ease), color 200ms var(--ease);
+}
+
+@keyframes pl-fade { to { opacity: 1; } }
+
+/* ---- scroll reveal ---- */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 1000ms var(--ease), transform 1000ms var(--ease);
+  transition-delay: var(--d, 0ms);
+}
+[data-reveal].is-in { opacity: 1; transform: none; }
+
+/* ---- the day ---- */
+.pl-sky { transition: background-color 1400ms var(--ease), color 1400ms var(--ease); }
+.pl-frame-img {
+  opacity: 0;
+  transform: scale(1.07);
+  transition: opacity 1300ms var(--ease), transform 3200ms var(--ease);
+}
+.pl-frame-img.is-on { opacity: 1; transform: scale(1); }
+.pl-beat { transition: opacity 700ms var(--ease); }
+@media (min-width: 900px) {
+  .pl-beat { opacity: 0.32; }
+  .pl-beat.is-on { opacity: 1; }
+}
+.pl-tick { transition: background-color 600ms var(--ease), transform 600ms var(--ease); transform-origin: left; }
+
+/* ---- lenses ---- */
+.pl-lens {
+  transition: border-color 300ms var(--ease), background-color 300ms var(--ease);
+}
+.pl-lens img { transition: transform 1400ms var(--ease); }
+.pl-lens:hover img { transform: scale(1.05); }
+.pl-swap { animation: pl-swap 700ms var(--ease); }
+@keyframes pl-swap {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- plan ---- */
+.pl-row { transition: background-color 250ms var(--ease); }
+.pl-seg {
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 900ms var(--ease), background-color 250ms var(--ease);
+  transition-delay: var(--d, 0ms);
+}
+.is-in .pl-seg { transform: scaleX(1); }
+
+/* ---- sheet ---- */
+.pl-scrim { animation: pl-fade 300ms var(--ease) forwards; opacity: 0; }
+.pl-sheet { animation: pl-sheet 500ms var(--ease); }
+@keyframes pl-sheet {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pl *, .pl *::before, .pl *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+}

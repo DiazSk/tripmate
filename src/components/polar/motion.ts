@@ -28,11 +28,12 @@ let lenis: Lenis | null = null;
 const expoInOut = (t: number) =>
   t === 0 ? 0 : t === 1 ? 1 : t < 0.5 ? 2 ** (20 * t - 10) / 2 : (2 - 2 ** (-20 * t + 10)) / 2;
 
-/** Every in-page jump goes through here so it rides the smooth scroll instead of fighting it. */
-export function scrollToTarget(el: Element | null) {
+/** Every in-page jump goes through here so it rides the smooth scroll instead of fighting it.
+ *  `offset` is in pixels from the element's top; without Lenis a non-zero one centres it instead. */
+export function scrollToTarget(el: Element | null, offset = 0) {
   if (!el) return;
-  if (lenis) lenis.scrollTo(el as HTMLElement, { duration: 1.4, easing: expoInOut });
-  else el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+  if (lenis) lenis.scrollTo(el as HTMLElement, { offset, duration: 1.4, easing: expoInOut });
+  else el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: offset ? "center" : "start" });
 }
 
 export function useLandingMotion(
@@ -100,12 +101,6 @@ function build(root: HTMLElement, scroller: HTMLElement) {
     gsap.to(q(".tm-monument-wrap"), { y: () => hero.offsetHeight * 0.6, ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
     gsap.to(all(".tm-hero-mid, .tm-hero-foot"), { opacity: 0, y: "-3em", ease: "none", scrollTrigger: scrub(hero, "top top", "40% top") });
   }
-
-  // Text that writes itself in as you read: a gradient mask whose edge is a CSS variable, scrubbed
-  // from -40 to 100 (the reference's text-scroll-fade, same range and window).
-  all(".tm-scroll-fade").forEach((el) => {
-    gsap.fromTo(el, { "--mask-position": -40 }, { "--mask-position": 100, ease: "none", scrollTrigger: scrub(el, "top 80%", "bottom 60%") });
-  });
 
   gsap.matchMedia().add(DESKTOP, () => {
     // Full-bleed sections arrive as an inset card and open to the edges (has-inset-effect).

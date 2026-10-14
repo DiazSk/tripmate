@@ -1,6 +1,7 @@
 import type { ImageSource } from 'expo-image';
 
 import { planExamples, type PlanExample } from '@shared/planExamples';
+import type { PetraPhoto } from '@shared/petraDay';
 import { sceneBeats, type SceneBeat } from '@shared/sceneBeats';
 
 /**
@@ -56,41 +57,15 @@ export const FACTS = [
   ['Critiqued', 'A second pass against your budget and pace'],
 ] as const;
 
-/** `lat`/`lng`, not `latitude`/`longitude`: the shape `regionForStops` and `legBearingRad` take. */
-export type DayStop = { time: string; name: string; note: string; lat: number; lng: number; tagLeft?: boolean };
-export type DayCity = { id: string; name: string; country: string; day: string; lat: number; lng: number; labelLeft?: boolean; stops: DayStop[] };
-
-// Illustrative days. The places and coordinates are real; the times are an example.
-export const CITIES: DayCity[] = [
-  {
-    id: 'jaipur', name: 'Jaipur', country: 'India', day: 'Day 2 of 7', lat: 26.95, lng: 75.835,
-    stops: [
-      { time: '08:30', name: 'Amber Fort', note: 'Before the heat and the coaches', lat: 26.9855, lng: 75.8513 },
-      { time: '10:45', name: 'Panna Meena ka Kund', note: 'Stepwell, a short walk below the fort', lat: 26.9876, lng: 75.8556, tagLeft: true },
-      { time: '13:00', name: 'Hawa Mahal', note: 'Old city, lunch nearby', lat: 26.9239, lng: 75.8267, tagLeft: true },
-      { time: '15:15', name: 'Jantar Mantar', note: 'Open-air instruments, mostly shade-free', lat: 26.9248, lng: 75.8246 },
-      { time: '18:10', name: 'Nahargarh Fort', note: 'The blue hour over the Pink City', lat: 26.9373, lng: 75.8155 },
-    ],
-  },
-  {
-    // Val d'Orcia and Sinaia are ~1,100 km apart — a few points on a globe. One label mirrors.
-    id: 'orcia', name: "Val d'Orcia", country: 'Italy', day: 'Day 3 of 9', lat: 43.055, lng: 11.6, labelLeft: true,
-    stops: [
-      { time: '08:00', name: 'Cappella di Vitaleta', note: 'Mist still in the valley', lat: 43.0606, lng: 11.6403 },
-      { time: '10:00', name: 'Pienza', note: 'Pecorino, the walls, the view south', lat: 43.0766, lng: 11.6789 },
-      { time: '13:00', name: 'Bagno Vignoni', note: 'Lunch beside the thermal pool', lat: 43.0278, lng: 11.6175 },
-      { time: '15:30', name: "San Quirico d'Orcia", note: 'Horti Leonini, slow afternoon', lat: 43.0587, lng: 11.6053 },
-      { time: '18:30', name: 'Montalcino', note: 'Last light from the fortress', lat: 43.0581, lng: 11.489 },
-    ],
-  },
-  {
-    id: 'sinaia', name: 'Sinaia', country: 'Romania', day: 'Day 1 of 6', lat: 45.352, lng: 25.54,
-    stops: [
-      { time: '09:00', name: 'Peleș Castle', note: 'First tour of the day', lat: 45.3599, lng: 25.5427 },
-      { time: '11:00', name: 'Pelișor Castle', note: 'Next door, quieter', lat: 45.3586, lng: 25.541, tagLeft: true },
-      { time: '13:00', name: 'Sinaia Monastery', note: 'Warm lunch in town after', lat: 45.3539, lng: 25.5513 },
-      { time: '15:00', name: 'Cota 1400', note: 'Cable car, only if the wind allows', lat: 45.3423, lng: 25.5196 },
-      { time: '17:30', name: 'Casino Sinaia', note: 'Park walk as the lamps come on', lat: 45.3508, lng: 25.5527 },
-    ],
-  },
-];
+/** `PETRA_PHOTOS`'s keys, bundled. Metro needs a literal `require` per file, so the shared module
+ *  names each photo and this maps the name to the file of the same name in `assets/images/scenes`. */
+export const PETRA_IMG: Record<PetraPhoto, ImageSource> = {
+  coffee: require('@/assets/images/scenes/petra-cardamom-coffee.webp'),
+  siq: require('@/assets/images/scenes/petra-siq-morning.webp'),
+  tea: require('@/assets/images/scenes/petra-tea-pour.webp'),
+  above: require('@/assets/images/scenes/petra-above-ad-deir.webp'),
+  candles: require('@/assets/images/scenes/petra-by-night-candles.webp'),
+  fire: require('@/assets/images/scenes/petra-fire-coffee.webp'),
+  overlook: require('@/assets/images/scenes/petra-treasury-from-above.webp'),
+  bench: require('@/assets/images/scenes/petra-monastery-bench.webp'),
+};

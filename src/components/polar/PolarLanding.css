@@ -65,6 +65,10 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* In the base layer, so the Tailwind utilities in the day sections (ImagineDay, PlanGlobe) win
+   over it, while the unlayered .tm-* rules below still do. Unlayered, `margin: 0` here silently beat
+   every `mt-*`, and `padding: 0` every `px-*`. */
+@layer base {
 .tm :where(*, *::before, *::after) {
   box-sizing: border-box;
 }
@@ -92,6 +96,7 @@
   display: block;
   max-width: 100%;
 }
+}
 .tm :focus-visible {
   outline: 2px solid var(--wd-signal);
   outline-offset: 3px;
@@ -113,10 +118,15 @@
   border-right: 1px solid var(--wd-gridline);
 }
 .tm > section,
-.tm > footer,
-.tm > .tm-night {
+.tm > footer {
   position: relative;
   z-index: 1;
+}
+/* The stable box PlanGlobe (a lazy import) renders into: it holds the section's height while
+   MapLibre's chunk loads, so the scroll effects bound around it do not shift. */
+.tm-night {
+  min-height: clamp(44em, 94vh, 62em);
+  background: var(--wd-night);
 }
 
 /* ── Text ── */
@@ -418,51 +428,6 @@
   }
 }
 
-/* Text that writes itself in as it is read — the reference's text-scroll-fade. The edge of the
-   mask is --mask-position (scrubbed -40 → 100 by motion.ts); 100 is the finished state, so without
-   the script the text simply shows. */
-.tm-scroll-fade {
-  --mask-position: 100;
-  -webkit-mask-image: linear-gradient(#000 calc(var(--mask-position) * 1%), rgba(0, 0, 0, 0.9) calc((var(--mask-position) + 5) * 1%), rgba(0, 0, 0, 0.8) calc((var(--mask-position) + 10) * 1%), rgba(0, 0, 0, 0.6) calc((var(--mask-position) + 20) * 1%), rgba(0, 0, 0, 0.4) calc((var(--mask-position) + 30) * 1%), rgba(0, 0, 0, 0.2) calc((var(--mask-position) + 35) * 1%), rgba(0, 0, 0, 0.1) calc((var(--mask-position) + 40) * 1%));
-  mask-image: linear-gradient(#000 calc(var(--mask-position) * 1%), rgba(0, 0, 0, 0.9) calc((var(--mask-position) + 5) * 1%), rgba(0, 0, 0, 0.8) calc((var(--mask-position) + 10) * 1%), rgba(0, 0, 0, 0.6) calc((var(--mask-position) + 20) * 1%), rgba(0, 0, 0, 0.4) calc((var(--mask-position) + 30) * 1%), rgba(0, 0, 0, 0.2) calc((var(--mask-position) + 35) * 1%), rgba(0, 0, 0, 0.1) calc((var(--mask-position) + 40) * 1%));
-}
-
-/* ── Intro ── */
-.tm-intro {
-  padding: var(--wd-space-12) var(--wd-pad) var(--wd-space-10);
-  display: grid;
-  gap: var(--wd-space-5);
-}
-.tm-intro .tm-kicker,
-.tm-statement,
-.tm-intro-cols {
-  margin-left: auto;
-  margin-right: auto;
-  width: min(100%, 58em);
-}
-.tm-statement {
-  font-family: var(--wd-font-display);
-  font-weight: 400;
-  text-transform: uppercase;
-  font-size: clamp(1.6em, 3.4vw, 2.625em);
-  line-height: 1.02;
-  text-indent: 18%;
-}
-.tm-intro-cols {
-  display: grid;
-  gap: var(--wd-space-3);
-  padding-top: var(--wd-space-4);
-}
-@media (min-width: 800px) {
-  .tm-intro-cols {
-    grid-template-columns: 1fr 1.6fr;
-  }
-}
-.tm-intro-cols .tm-body {
-  color: var(--wd-charcoal);
-  max-width: 54ch;
-}
-
 /* ── Sample plans ── */
 .tm-plans {
   padding: var(--wd-space-8) var(--wd-pad) var(--wd-space-10);
@@ -598,42 +563,6 @@
 }
 .tm-facts dd {
   font-size: 0.85em;
-}
-
-/* ── Quote ── */
-.tm-quote {
-  padding: var(--wd-space-12) var(--wd-pad);
-  display: grid;
-  place-items: center;
-}
-.tm-quote figure {
-  width: min(100%, 36em);
-  display: grid;
-  gap: var(--wd-space-3);
-}
-.tm-quote-mark {
-  font-family: var(--wd-font-display);
-  font-size: 3em;
-  line-height: 0.4;
-}
-.tm-quote blockquote {
-  font-family: var(--wd-font-display);
-  font-style: italic;
-  font-weight: 500;
-  font-size: clamp(1.3em, 2.2vw, 1.75em);
-  line-height: 1.2;
-  text-indent: 3em;
-}
-.tm-quote figcaption {
-  display: grid;
-  gap: 0.2em;
-  margin-top: var(--wd-space-3);
-}
-.tm-quote .tm-caption {
-  color: var(--wd-charcoal);
-}
-.tm-dash {
-  margin-bottom: var(--wd-space-2);
 }
 
 /* ── What a plan knows ── */
@@ -806,7 +735,7 @@
 }
 .tm-fb-form {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 0.9fr 1.3fr auto;
+  grid-template-columns: 1.6fr 1fr 1fr auto;
   gap: 1em;
   align-items: end;
 }
@@ -833,16 +762,6 @@
   appearance: none;
   transition: border-color 0.3s var(--wd-ease-out), box-shadow 0.3s var(--wd-ease-out);
 }
-.tm-fb-select {
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 1.2em) 52%, calc(100% - 0.9em) 52%;
-  background-size: 0.3em 0.3em;
-  background-repeat: no-repeat;
-  padding-right: 2em;
-}
-.tm-fb-select option {
-  color: var(--wd-ink);
-}
 .tm-fb-input::placeholder {
   color: var(--wd-night-text-2);
 }
@@ -865,32 +784,6 @@
   font-size: 0.76em;
   font-weight: 600;
   color: #ff6b6b;
-}
-.tm-fb .tm-stepper {
-  display: grid;
-  grid-template-columns: 2.9em 1fr 2.9em;
-  height: 2.9em;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--wd-frost-20);
-  border-radius: var(--wd-radius-sm);
-  overflow: hidden;
-}
-.tm-fb .tm-stepper button {
-  font-size: 1.05em;
-  transition: background-color 0.3s var(--wd-ease-out);
-}
-.tm-fb .tm-stepper button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-}
-.tm-fb .tm-stepper button:disabled {
-  color: rgba(255, 255, 255, 0.3);
-}
-.tm-fb .tm-stepper output {
-  display: grid;
-  place-items: center;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  border-inline: 1px solid var(--wd-frost-20);
 }
 .tm-fb-go {
   height: 2.9em;
@@ -962,7 +855,8 @@
   .tm-fb-form {
     grid-template-columns: 1fr 1fr;
   }
-  .tm-fb-go {
+  .tm-fb-go,
+  .tm-fb-where {
     grid-column: 1 / -1;
   }
 }
@@ -1102,9 +996,6 @@
   .tm-hide-sm {
     display: none;
   }
-  .tm-statement {
-    text-indent: 0;
-  }
   /* A stacked accordion on a phone: the strip becomes a grid and its rows animate (the open plan
      34em, the rest 4.5em, written inline from the component), rather than each item animating its
      own height. Opening one still moves the plans below it — that is what an accordion does — but
@@ -1160,3 +1051,155 @@
 .lenis.lenis-smooth iframe {
   pointer-events: none;
 }
+
+/* ── Footer: carry the day from the page into the planner, above the start-your-own form ── */
+.tm-fb-carry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wd-space-2) var(--wd-space-4);
+  margin-bottom: var(--wd-space-4);
+}
+
+/* ── Hero rotation: the chosen place's chip fills over the interval, and holds while the hero is
+   paused (pointer resting on it, or focus inside). Keyed to the chip, so a new pick restarts it. ── */
+.tm-dest {
+  position: relative;
+  overflow: hidden;
+}
+.tm-dest[aria-checked='true']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--wd-signal);
+  transform-origin: left;
+  animation: tm-dest-fill var(--rotate-ms, 6000ms) linear both;
+}
+.tm-hero.is-paused .tm-dest[aria-checked='true']::after {
+  animation-play-state: paused;
+}
+@keyframes tm-dest-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tm-dest[aria-checked='true']::after {
+    display: none;
+  }
+}
+
+/* ── Arriving / Leaving fields and the range calendar (DateRangeFields) ── */
+.tm-fb-date {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  text-align: left;
+  cursor: pointer;
+}
+.tm-fb-date svg { width: 1em; height: 1em; flex: none; opacity: 0.8; }
+.tm-fb-date span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-fb-date .tm-fb-placeholder { color: rgba(255, 255, 255, 0.62); }
+.tm-fb-date.is-open { border-color: #fff; background: rgba(255, 255, 255, 0.12); }
+
+/* In a portalled .tm-layer (the footer clips), so it carries its own type and colours. */
+.drp {
+  position: fixed;
+  padding: 16px;
+  background: #fff;
+  color: var(--wd-ink);
+  border-radius: var(--wd-radius-card);
+  box-shadow: 0 24px 64px rgba(9, 11, 16, 0.45), 0 0 0 1px rgba(31, 42, 68, 0.08);
+  font-family: var(--wd-font-sans);
+  font-weight: 500;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  animation: drp-in 260ms var(--wd-ease-reveal);
+}
+@keyframes drp-in { from { opacity: 0; transform: translateY(6px); } }
+.drp :focus-visible { outline: 2px solid var(--wd-signal); outline-offset: 2px; }
+.drp button:disabled { cursor: not-allowed; }
+.drp-head { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.drp-edge {
+  display: grid;
+  gap: 2px;
+  padding: 7px 12px;
+  text-align: left;
+  border: 1px solid rgba(31, 42, 68, 0.14);
+  border-radius: var(--wd-radius-sm);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.drp-edge:hover:not(:disabled) { border-color: var(--wd-ink); }
+.drp-edge[aria-pressed='true'] { border-color: var(--wd-ink); box-shadow: inset 0 0 0 1px var(--wd-ink); }
+.drp-edge:disabled { opacity: 0.55; }
+.drp-edge-k { font-family: var(--wd-font-condensed); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; color: var(--wd-charcoal); }
+.drp-edge-v { font-family: var(--wd-font-display); font-size: 20px; line-height: 1.1; }
+.drp-months { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 28px; }
+.drp-nav {
+  position: absolute;
+  top: -4px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: var(--wd-radius-sm);
+  transition: background-color 0.2s;
+}
+.drp-nav:hover:not(:disabled) { background: var(--wd-paper); }
+.drp-nav:disabled { opacity: 0.3; }
+.drp-prev { left: -4px; }
+.drp-next { right: -4px; }
+.drp-title { margin: 0 0 6px; text-align: center; font-family: var(--wd-font-display); font-size: 20px; line-height: 24px; }
+.drp-row { display: grid; grid-template-columns: repeat(7, 1fr); }
+.drp-wd { padding: 6px 0; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--wd-charcoal); }
+.drp-cell { position: relative; display: grid; place-items: center; height: 36px; }
+/* The band joins the two edges; half-cells on the edges so it starts and ends under the day. */
+.drp-cell.is-between,
+.drp-cell.is-start-edge::before,
+.drp-cell.is-end-edge::before { background: var(--wd-paper); }
+.drp-cell.is-start-edge::before,
+.drp-cell.is-end-edge::before { content: ''; position: absolute; inset: 0; }
+.drp-cell.is-start-edge::before { left: 50%; }
+.drp-cell.is-end-edge::before { right: 50%; }
+.drp-day {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--wd-radius-sm);
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.drp-day:hover:not(:disabled):not(.is-edge) { box-shadow: inset 0 0 0 1px var(--wd-ink); }
+.drp-day:disabled { color: #bdbab3; text-decoration: line-through; text-decoration-color: rgba(31, 42, 68, 0.2); }
+.drp-day.is-today::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--wd-signal);
+}
+.drp-day.is-edge { background: var(--wd-ink); color: #fff; font-weight: 600; }
+.drp-day.is-edge.is-preview { background: #fff; color: var(--wd-ink); box-shadow: inset 0 0 0 1.5px var(--wd-ink); }
+.drp-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wd-rule);
+}
+.drp-note { margin: 0 auto 0 0; font-size: 13px; color: var(--wd-charcoal); }
+.drp-clear { padding: 9px 12px; font-weight: 600; border-radius: var(--wd-radius-sm); }
+.drp-clear:hover:not(:disabled) { background: var(--wd-paper); }
+.drp-clear:disabled { opacity: 0.4; }
+.drp-done { padding: 9px 16px; font-weight: 600; border-radius: var(--wd-radius-hairline); background: var(--wd-signal); color: var(--wd-ink); }
+.drp-done:hover { background: var(--wd-signal-hover); }
+@media (prefers-reduced-motion: reduce) { .drp { animation: none; } }

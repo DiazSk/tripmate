@@ -11,6 +11,7 @@ import {
   View,
   type StyleProp,
   type TextInputProps,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 
@@ -60,14 +61,24 @@ export function FieldTrough({ children }: { children: React.ReactNode }) {
  */
 const STACK_ABOVE_SCALE = 1.2;
 
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldRow({
+  label,
+  children,
+  style,
+  labelStyle,
+}: {
+  label: string;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  labelStyle?: StyleProp<TextStyle>;
+}) {
   // `fontScale` here rather than `PixelRatio.getFontScale()`: this one re-renders when the
   // reader changes the setting, instead of holding whatever it was at mount.
   const { fontScale } = useWindowDimensions();
   const stacked = fontScale > STACK_ABOVE_SCALE;
   return (
-    <View style={[styles.row, stacked && styles.rowStacked]}>
-      <ThemedText type="label" themeColor="muted" style={styles.rowLabel}>
+    <View style={[styles.row, stacked && styles.rowStacked, style]}>
+      <ThemedText type="label" themeColor="muted" style={[styles.rowLabel, labelStyle]}>
         {label}
       </ThemedText>
       <View style={[styles.rowControl, stacked && styles.rowControlStacked]}>{children}</View>
@@ -138,12 +149,19 @@ export function DateField({
   value,
   minimumDate,
   onChange,
+  style,
+  labelStyle,
+  accentColor = Colors.accent,
 }: {
   label: string;
   /** `YYYY-MM-DD`, or empty for unset. */
   value: string;
   minimumDate?: string;
   onChange: (iso: string) => void;
+  /** For a field outside a trough, such as the landing's footer on night ground. */
+  style?: StyleProp<ViewStyle>;
+  labelStyle?: StyleProp<TextStyle>;
+  accentColor?: string;
 }) {
   // `maxFontSizeMultiplier` is a React Native Text prop and reaches nothing inside a SwiftUI or
   // Compose view, so this chip keeps growing after every label around it has stopped at 1.6x.
@@ -154,7 +172,7 @@ export function DateField({
   const wide = fontScale > STACK_ABOVE_SCALE;
 
   return (
-    <FieldRow label={label}>
+    <FieldRow label={label} style={style} labelStyle={labelStyle}>
       <View style={[styles.dateWrap, wide && styles.dateWrapWide]}>
         {/* An explicit size, because a native view does not report a usable intrinsic one to
             yoga: left to size itself the chip overflows the row and the trough's `overflow:
@@ -164,7 +182,7 @@ export function DateField({
           value={toDate(value)}
           minimumDate={minimumDate ? toDate(minimumDate) : undefined}
           mode="date"
-          accentColor={Colors.accent}
+          accentColor={accentColor}
           themeVariant="dark"
           onChange={(event, date) =>
             onChange(toIso(date ?? new Date(event.nativeEvent.timestamp)))
