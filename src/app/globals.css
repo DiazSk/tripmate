@@ -48,106 +48,95 @@ html {
 }
 
 :root {
-  /* "Kiln" — a warm near-neutral near-black, one surface a shade lighter, warm off-white at a
-     handful of alphas, and three named colour roles.
+  /* "Polar Interior" — the system on the canvas's "White Desert — Design Tokens" sheet, mapped
+     role-by-role on "Polar — Token Mapping". Two appearances, one set of names:
 
-     Two predecessors, and the difference between them is the point. Before this the palette was
-     a teal-black (canvas #091b20, surface 13 46 55, amber #fb9826) whose values were measured off
-     an external reference site and adopted wholesale — they were not derived from anything this
-     product is or does. Before *that* it was a slate-900 (canvas #0b0f19, surface 15 23 42,
-     amber #ffb340).
+     - **Polar Night**, here on :root: the default, and what every screen over the map wears. It
+       is the closest to the "Kiln" palette it replaces, which is why it is the default — about
+       190 sites still paint frosted glass as literal white-on-dark (`bg-white/10`,
+       `text-white`), and they stay coherent on night until their screen is redesigned.
+     - **Polar Light**, `[data-appearance="light"]` below: ice and paper for the pages that are
+       not over the map. A screen opts in when it is rebuilt; nothing is light by accident.
 
-     The ground is near-neutral on purpose, and that was the correction that mattered. A warm
-     *brown* ground was built and rejected on sight: it composites the card to rgb(32,24,20), a
-     12-point spread between channels, and a gold money figure printed on a brown surface is two
-     neighbouring hues with nowhere to separate. This ground composites the card to rgb(26,24,22)
-     — a 4-point spread — so gold, jade and coral each get clean air while the whole thing still
-     reads warm rather than clinical.
+     What changed in meaning, not just in value: money no longer has a hue. Action is orange,
+     and a gold figure beside an orange button is the neighbouring-hue collision Kiln's own notes
+     warned about. Figures carry the distinction in type instead — tabular Inter Tight — and over
+     budget is still alert.
 
-     Every role is measured against that composited card ground: body 16.27:1, descriptions
-     8.41:1, times and micro-labels 4.84:1, money 9.36:1, alert 4.78:1, accent 7.04:1. All AA,
-     including the dimmest. The system this replaced did not clear that bar and said so in its own
-     comments. Keep it cleared. */
+     Every role is measured against the composited card ground (surface-deep at 60% over canvas,
+     #0c0f15): body 19.18:1, muted 8.42:1, accent 7.53:1, alert 6.91:1, chips 13.44:1. All AA.
+     Keep it cleared. */
 
-  /* Every surface in this app is dark. Without this the UA renders native controls in
-     its light scheme — the date field's calendar indicator and the number field's
-     spinners paint as dark glyphs on the near-black inputs, which is where three of the
-     four trip-form fields live. */
+  /* Every surface on night is dark. Without this the UA renders native controls in its light
+     scheme — the date field's calendar indicator and the number field's spinners paint as dark
+     glyphs on the near-black inputs. The light scope sets its own. */
   color-scheme: dark;
 
   /* The canvas behind the globe. GlobeBackground reads this at Viewer init for
      Cesium's own scene.backgroundColor, so the WebGL clear colour and the DOM
      around it cannot drift apart and show a seam at the canvas edge. */
-  --canvas: #121110;
+  --canvas: #090b10;
 
-  /* #0d2e37, as channels so alpha can vary. The frosted panels, the map control pills, the
-     itinerary header band and the photo scrims are all this one colour at different alphas —
-     that shared origin is what makes them read as one material instead of four similar greys.
-     Was slate-900 (15 23 42); this is the reference's own surface, one step up from canvas. */
-  --surface-deep-rgb: 28 26 24;
+  /* Polar's "deep", as channels so alpha can vary. The frosted panels, the map control pills,
+     the itinerary header band and the photo scrims are all this one colour at different alphas —
+     that shared origin is what makes them read as one material instead of four similar greys. */
+  --surface-deep-rgb: 14 17 24;
   --surface-deep: rgb(var(--surface-deep-rgb));
 
   --background: var(--canvas);
-  --foreground: #f7f5f2;
-  /* White at 60%, not a sampled grey. The reference builds every secondary tone out of white
-     at .1/.2/.4/.5/.6 over the one ground, which is what stops the greys drifting apart —
-     a fixed hex tuned for one surface is wrong on the next one. Measured 9.4:1 on canvas. */
-  --muted: rgba(247, 245, 242, 0.62);
+  --foreground: #ffffff;
+  /* Polar's night-text-2. A solid grey rather than white at an alpha: the reference sets every
+     secondary line on night in this one value. 8.42:1 on the card, 8.64:1 on canvas. */
+  --muted: #a8acb3;
 
-  /* --- The three semantic roles ---------------------------------------------
-     This palette has three named colours and each one means exactly one thing.
-     That is the correction to the system this replaced, which had a single
-     accent doing five jobs at once: on one screen of /trip/[id] it was the
-     primary button, a "DAY 1 OF 3" label, the budget-bar fill, the download
-     control and the selected day tab — 55 painted elements, one hue, no way to
-     tell an action from a readout. Money-on-plan and please-click-me must not
-     be the same paint, and amber for both made a healthy budget read as a
-     warning.
-
-     Every role is measured against the composited card ground rgb(26,24,22):
-     accent 7.04:1, money 9.36:1, alert 4.78:1 — all AA. Keep it that way. */
+  /* --- The semantic roles ---------------------------------------------------
+     Each named colour means exactly one thing. The rule this palette inherited from Kiln, and
+     keeps: money-on-plan and please-click-me must never be the same paint. */
 
   /* ACTION, and only action: buttons, the selected day, focus rings, the
      hovered stop on the globe. Never a label, never a figure, never a fill that
      merely reports a number. Note it is a *light* colour, so its foreground is
      dark — do NOT reuse --accent-foreground to mean "text over something dark",
-     that is --on-deep. Conflating the two is what this palette had to untangle. */
-  --accent: #28b981;
-  --accent-hover: #34cb90;
-  /* Dark ink on the accent, drawn from the accent's own hue rather than from the
-     canvas, so a filled control reads as a solid object and not as a hole
-     punched through to the page behind it. 6.55:1 on --accent. */
-  --accent-foreground: #06241a;
+     that is --on-deep. */
+  --accent: #ff7e15;
+  --accent-hover: #ff9440;
+  /* Polar ink on the signal fill, in both appearances: 5.6:1. */
+  --accent-foreground: #1f2a44;
+  /* Action set as *text* — a selected tab's label, an inline link. On night the fill itself
+     reads (7.53:1); on light it cannot (2.55:1 on ice), so the light scope deepens it to ember.
+     Use this, never --accent, for type. */
+  --accent-text: #ff7e15;
 
-  /* MONEY: costs, totals, the on-plan portion of the budget bar. A figure is
-     information, not an invitation, so it never borrows the action colour. */
-  --money: #e9b44c;
-  --money-soft: rgba(233, 180, 76, 0.18);
+  /* MONEY: costs, totals, the on-plan portion of the budget bar. No hue under Polar — the
+     figure is information, set in the figure face, and carries no colour an action could be
+     mistaken for. --money-soft is the bar's fill. */
+  --money: #ffffff;
+  --money-soft: rgba(255, 255, 255, 0.14);
 
-  /* ALERT: over budget, failed requests, destructive confirmation. Was a set of
-     `text-alert`/`border-alert/30` Tailwind literals scattered across a
-     dozen components, none of them tokens, because the old one-accent rule left
-     nowhere else for a warning to live. */
-  --alert: #e4553f;
-  --alert-soft: rgba(228, 85, 63, 0.16);
+  /* ALERT: over budget, failed requests, destructive confirmation. 6.91:1 on the card. */
+  --alert: #ff6b6b;
+  --alert-soft: rgba(255, 107, 107, 0.16);
 
-  /* Text over any dark surface: header band, photo overlays, scrims, the map. */
-  --on-deep: #f7f5f2;
+  /* Text over any dark surface: header band, photo overlays, scrims, the map. Never moves with
+     appearance — a photograph is dark in both. */
+  --on-deep: #ffffff;
 
-  --card-border: rgba(247, 245, 242, 0.12);
+  /* Polar's frost-20, the hairline the reference draws on night. */
+  --card-border: rgba(255, 255, 255, 0.2);
 
-  /* Chips read as glass chrome rather than warm paper. With three real roles the
-     positive chip gets its green back — under the previous single-accent rule it
-     had to give it up, and a positive and a neutral chip were indistinguishable. */
-  --tag-neutral-bg: rgba(247, 245, 242, 0.11);
-  --tag-neutral-fg: #dcd7d1;
-  --tag-positive-bg: rgba(40, 185, 129, 0.16);
-  --tag-positive-fg: #6fd3a9;
-  --tag-highlight-bg: rgba(233, 180, 76, 0.18);
-  --tag-highlight-fg: #f0c97a;
-  /* Neutral so the amber Total tile is the only one that pops. */
-  --tile: rgba(247, 245, 242, 0.08);
-  --tile-foreground: #dcd7d1;
+  /* Chips read as glass chrome. Positive takes Polar's route cyan — its one cool colour, and
+     the only hue left that no other role owns. Highlight (the Total tile's chip) inverts, ice
+     on night, which is how the reference marks a selected chip; it pops by contrast rather than
+     by borrowing gold. */
+  --tag-neutral-bg: rgba(255, 255, 255, 0.1);
+  --tag-neutral-fg: #d6d8dc;
+  --tag-positive-bg: rgba(106, 240, 255, 0.12);
+  --tag-positive-fg: #6af0ff;
+  --tag-highlight-bg: #ffffff;
+  --tag-highlight-fg: #1f2a44;
+  /* Neutral so the inverted Total tile is the only one that pops. */
+  --tile: rgba(255, 255, 255, 0.08);
+  --tile-foreground: #d6d8dc;
 
   /* --- Map-native (tertiary) ------------------------------------------------
      The route's own palette. These are NOT part of the interface
@@ -174,7 +163,7 @@ html {
      punched in the photography while a cool near-black reads as depth. Shared
      with the label chips (--map-glass) so the route and its labels are
      obviously the same material. */
-  --route-casing: #0a0806;
+  --route-casing: #090b10;
 
   /* --- The day palette pool -------------------------------------------------
      Per-day route colours, cycling every five days (DAY_PALETTES in
@@ -273,7 +262,7 @@ html {
      over anything the tiles can put behind it, which no text-shadow alone can
      promise over a white plaza at noon. Kept out of the interface palette on
      purpose: this is a chip drawn *in the world*, not a surface in the UI. */
-  --map-glass: 18 16 15;
+  --map-glass: 9 11 16;
   --map-glass-edge: rgb(255 255 255 / 0.16);
 
   /* The destination's administrative outline. Map-native like the day ramp and bound by the same
@@ -321,6 +310,44 @@ html {
   --nav-h: 3.5rem;
 }
 
+/* Polar Light — ice and paper, for the pages that are not over the map. Opt-in, per screen:
+   set `data-appearance="light"` on the screen's root and every token below it re-points. Only the
+   values that differ from night are here; map-native tokens (route, casing, glass over the globe)
+   are deliberately absent, because the map does not change appearance with the page.
+
+   Measured against the composited light card (paper at 60% over ice, #f8f7f4): body 13.31:1,
+   muted 7.18:1, accent-text 5.36:1, alert 5.18:1, chips 11.17:1, positive 6.22:1. */
+[data-appearance="light"] {
+  color-scheme: light;
+  --canvas: #ffffff;
+  --surface-deep-rgb: 243 241 236;
+  /* Re-declared, not inherited: a custom property's var() resolves where it is declared, so
+     :root's --surface-deep and --background arrive here already computed from night's values. */
+  --surface-deep: rgb(var(--surface-deep-rgb));
+  --background: var(--canvas);
+  --foreground: #1f2a44;
+  /* Charcoal, not ink at an alpha: ink at 62% measures 4.24:1 on ice and fails. */
+  --muted: #535353;
+  /* Ember, deepened one step from the reference's #b4530a (4.45:1 on paper) to clear AA on both
+     grounds: 5.74:1 on ice, 5.08:1 on paper. */
+  --accent-text: #a64c09;
+  --money: #1f2a44;
+  --money-soft: rgba(31, 42, 68, 0.1);
+  --alert: #d10f0f;
+  --alert-soft: rgba(209, 15, 15, 0.1);
+  --card-border: rgba(31, 42, 68, 0.12);
+  --tag-neutral-bg: rgba(31, 42, 68, 0.06);
+  --tag-neutral-fg: #2c374b;
+  --tag-positive-bg: rgba(14, 102, 112, 0.1);
+  --tag-positive-fg: #0e6670;
+  --tag-highlight-bg: #1f2a44;
+  --tag-highlight-fg: #ffffff;
+  --tile: rgba(31, 42, 68, 0.05);
+  --tile-foreground: #2c374b;
+  background: var(--canvas);
+  color: var(--foreground);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -328,6 +355,7 @@ html {
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-text: var(--accent-text);
   --color-on-deep: var(--on-deep);
   --color-canvas: var(--canvas);
   --color-surface-deep: var(--surface-deep);
@@ -364,8 +392,10 @@ html {
      shrinks. Melodrama is a high-contrast serif and needs *less* negative tracking than the low
      contrast grotesk it replaces — its own thick-thin modulation already does the work that
      tightening was faking, so `--tracking-display` is -0.018em where the old face ran -0.076em. */
-  --tracking-display: -0.018em;
-  --tracking-heading: -0.012em;
+  /* Polar's own values: Cormorant opens very slightly at display sizes (+0.005em, the
+     reference's display step) where Melodrama wanted closing, and headings sit at zero. */
+  --tracking-display: 0.005em;
+  --tracking-heading: 0em;
   --tracking-body: 0em;
   --tracking-label: 0.18em;
 
@@ -382,7 +412,16 @@ html {
   --font-sans: var(--font-sans-stack), ui-sans-serif, system-ui, sans-serif;
   /* Money, times, distances, counts. `tabular-nums` was already on 38 sites across 16 files
      before this face existed — that set *is* the figure surface, and it needed no hunting. */
-  --font-mono: var(--font-mono-stack), ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Polar sets figures in the text face with tabular figures rather than in a mono face of their
+     own (see layout.tsx). The name stays so the `font-mono` sites need no edit; the tnum rule just
+     below this block is what makes them line up. */
+  --font-mono: var(--font-sans-stack), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Not a font-family rule, so it does not collide with Tailwind's layered `.font-mono` utility the
+   way an unlayered `.font-display` once did — it only adds the property the utility lacks. */
+.font-mono {
+  font-variant-numeric: tabular-nums;
 }
 
 body {
@@ -2675,9 +2714,9 @@ html[data-story-mode="true"] .marker-day-label {
    usages directly under a dark dashboard <main> (not wrapped in their own glass card) read
    correctly too, e.g. loading/empty states. */
 .dashboard-page {
-  --foreground: #f7f5f2;
-  --muted: rgba(247, 245, 242, 0.58);
-  --card-border: rgba(247, 245, 242, 0.12);
+  --foreground: #ffffff;
+  --muted: rgba(255, 255, 255, 0.58);
+  --card-border: rgba(255, 255, 255, 0.12);
 }
 
 /* Blue Hour Expedition — scoped to the pre-generation flow only (the landing scroll
@@ -3437,14 +3476,14 @@ html[data-story-mode="true"] .marker-day-label {
   backdrop-filter: blur(56px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  --foreground: #f7f5f2;
+  --foreground: #ffffff;
   /* Slate-300, not slate-400 — slate-400 only clears 4.5:1 against a dark backdrop,
      and this panel is translucent enough that a bright backdrop pushes it under.
      (The specific ratios that used to be quoted here were computed against the old
      alpha 0.70; they no longer hold at 0.62, and the lower alpha is a deliberate
      trade — recompute before relying on a number.) */
-  --muted: rgba(247, 245, 242, 0.72);
-  --card-border: rgba(247, 245, 242, 0.12);
+  --muted: rgba(255, 255, 255, 0.72);
+  --card-border: rgba(255, 255, 255, 0.12);
 }
 
 
@@ -3466,7 +3505,7 @@ html[data-story-mode="true"] .marker-day-label {
   border-radius: 8px;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
   z-index: 50;
-  --foreground: #f7f5f2;
+  --foreground: #ffffff;
   /* Slate-400, not `.glass-itinerary`'s slate-300: that panel sits at 0.62 alpha, translucent
      enough for bright terrain to push a lighter grey under 4.5:1, which is why it needed the
      lighter tone. This box is 0.95 — near-opaque, the same regime `.dashboard-page`'s solid
@@ -3474,7 +3513,7 @@ html[data-story-mode="true"] .marker-day-label {
      against this box's own resolved background (not assumed from the `.dashboard-page`
      precedent): 5.6:1, clearing AA with margin, on both dropdowns that share this class — the
      destination suggestions and the (96-row) time picker alike. */
-  --muted: rgba(247, 245, 242, 0.58);
+  --muted: rgba(255, 255, 255, 0.58);
 }
 
 /* App-wide "TripMate" / "My memories" header — floats directly over the globe
@@ -3906,9 +3945,9 @@ html[data-story-mode="true"] .marker-day-label {
   will-change: transform;
   /* Children inherit the dark-surface values, the way `.glass-itinerary` hands them down, so
      `text-muted` and `border-card-border` inside the card mean what they look like. */
-  --foreground: #f7f5f2;
-  --muted: rgba(247, 245, 242, 0.72);
-  --card-border: rgba(247, 245, 242, 0.12);
+  --foreground: #ffffff;
+  --muted: rgba(255, 255, 255, 0.72);
+  --card-border: rgba(255, 255, 255, 0.12);
   color: var(--foreground);
 }
 

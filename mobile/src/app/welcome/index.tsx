@@ -19,7 +19,7 @@ export default function WelcomeIntro() {
       <View style={styles.promises}>
         {PROMISES.map((p) => (
           <View key={p} style={styles.promise}>
-            <SymbolView name={{ ios: 'checkmark', android: 'check' }} tintColor={Colors.accent} size={14} fallback={<Text style={styles.tick}>+</Text>} />
+            <SymbolView name={{ ios: 'checkmark', android: 'check' }} tintColor={Colors.accentText} size={14} fallback={<Text style={styles.tick}>+</Text>} />
             <Text style={styles.promiseText}>{p}</Text>
           </View>
         ))}
@@ -32,6 +32,6 @@ const styles = StyleSheet.create({
   promises: { gap: 10 },
   promise: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   promiseText: { color: Colors.muted, fontSize: 15, flex: 1 },
-  tick: { color: Colors.accent, fontSize: 14 },
+  tick: { color: Colors.accentText, fontSize: 14 },
   fine: { color: Colors.muted, fontSize: 12, textAlign: 'center' },
 });

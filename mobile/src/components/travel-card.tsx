@@ -96,7 +96,7 @@ const INK = '#2a2420';
 const SOFT = '#7a6f63';
 const styles = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: 9, overflow: 'hidden', borderWidth: BORDER, borderColor: 'transparent', paddingTop: 11, paddingLeft: 24, paddingRight: 16, backgroundColor: '#ece5d8', shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 16, shadowOffset: { width: 0, height: 10 } },
-  complete: { borderColor: 'rgba(40,185,129,0.7)' },
+  complete: { borderColor: 'rgba(255,126,21,0.7)' },
   head: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(42,36,32,0.25)', paddingBottom: 6, marginBottom: 8 },
   title: { fontFamily: Fonts.display, fontSize: 17, color: INK },
   titleSmall: { fontFamily: undefined, fontSize: 8.5, fontWeight: '600', letterSpacing: 1.6, color: SOFT },

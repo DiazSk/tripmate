@@ -1,29 +1,30 @@
 ---
 name: TripMate
-description: A warm near-black ground under frosted glass, three colours that each mean exactly one thing, and a live globe behind it all.
+description: Polar Interior — night under frosted glass over a live globe, ice and paper away from it, signal orange for action and nothing else.
 colors:
-  canvas: "#121110"
-  surface-deep: "rgb(28 26 24)"
-  foreground: "#f7f5f2"
-  muted: "rgba(247, 245, 242, 0.62)"
-  on-deep: "#f7f5f2"
-  accent: "#28b981"
-  accent-hover: "#34cb90"
-  accent-foreground: "#06241a"
-  money: "#e9b44c"
-  money-soft: "rgba(233, 180, 76, 0.18)"
-  alert: "#e4553f"
-  alert-soft: "rgba(228, 85, 63, 0.16)"
-  card-border: "rgba(247, 245, 242, 0.12)"
-  tag-neutral-bg: "rgba(247, 245, 242, 0.11)"
-  tag-neutral-fg: "#dcd7d1"
-  tag-positive-bg: "rgba(40, 185, 129, 0.16)"
-  tag-positive-fg: "#6fd3a9"
-  tag-highlight-bg: "rgba(233, 180, 76, 0.18)"
-  tag-highlight-fg: "#f0c97a"
-  tile: "rgba(247, 245, 242, 0.08)"
-  tile-foreground: "#dcd7d1"
-  route-casing: "#0a0806"
+  canvas: "#090b10"
+  surface-deep: "rgb(14 17 24)"
+  foreground: "#ffffff"
+  muted: "#a8acb3"
+  on-deep: "#ffffff"
+  accent: "#ff7e15"
+  accent-hover: "#ff9440"
+  accent-foreground: "#1f2a44"
+  accent-text: "#ff7e15"
+  money: "#ffffff"
+  money-soft: "rgba(255, 255, 255, 0.14)"
+  alert: "#ff6b6b"
+  alert-soft: "rgba(255, 107, 107, 0.16)"
+  card-border: "rgba(255, 255, 255, 0.2)"
+  tag-neutral-bg: "rgba(255, 255, 255, 0.1)"
+  tag-neutral-fg: "#d6d8dc"
+  tag-positive-bg: "rgba(106, 240, 255, 0.12)"
+  tag-positive-fg: "#6af0ff"
+  tag-highlight-bg: "#ffffff"
+  tag-highlight-fg: "#1f2a44"
+  tile: "rgba(255, 255, 255, 0.08)"
+  tile-foreground: "#d6d8dc"
+  route-casing: "#090b10"
   shadow-hairline: "rgb(0 0 0 / 0.32)"
   shadow-control: "rgb(0 0 0 / 0.4)"
   shadow-control-soft: "rgb(0 0 0 / 0.37)"
@@ -47,7 +48,7 @@ colors:
   route-day-4-glow: "#a6bf89"
   route-day-5: "#7b77ae"
   route-day-5-glow: "#a6a2d0"
-  map-glass: "rgb(18 16 15)"
+  map-glass: "rgb(9 11 16)"
   map-glass-edge: "rgb(255 255 255 / 0.16)"
   city-boundary: "#ece6de"
 typography:
@@ -61,49 +62,49 @@ typography:
     label: "0.18em"
     note: "Four tokens, replacing 20 literals. Tracking belongs to the face, so every literal in the codebase was invalidated the day the face changed — the display negatives were still at -0.085em/-0.106em, tuned for Wix Madefor. Three literals survive on purpose and are documented at their declaration: 0.02em and 0.05em on map labels over imagery, -0.005em on .price-display."
   hero:
-    fontFamily: "Melodrama, ui-serif, Georgia, serif"
+    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
     fontSize: "clamp(2.5rem, 6.2vw, 5.25rem)"
     fontWeight: 400
     lineHeight: 1.04
     letterSpacing: "var(--tracking-display)"
   display:
-    fontFamily: "Melodrama, ui-serif, Georgia, serif"
+    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
     fontSize: "clamp(2rem, 5vw, 3.75rem)"
     fontWeight: 400
     lineHeight: 1.08
     letterSpacing: "var(--tracking-display)"
   display-quiet:
-    fontFamily: "Melodrama, ui-serif, Georgia, serif"
+    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
     fontSize: "clamp(1.75rem, 3.6vw, 2.75rem)"
     fontWeight: 400
     lineHeight: 1.08
     letterSpacing: "var(--tracking-display)"
     note: "`.font-scene-display.is-quiet` — the second display step, so four consecutive landing bands do not all open at the same size. A class rather than a `text-[...]` utility, because `.font-scene-display` is unlayered and carries its own font-size; an arbitrary utility would be emitted inside @layer utilities and lose to it. Carried by the two quiet bands (HowItWorks, DestinationMap)."
   display-xl:
-    fontFamily: "Melodrama, ui-serif, Georgia, serif"
+    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
     fontWeight: 400
     lineHeight: 1.04
     letterSpacing: "var(--tracking-display)"
     note: "`.font-display-xl` — the serif at whatever size the caller sets (the /trips and /profile mastheads). Declares no font-size, so a `text-*` utility beside it is live; it DOES declare line-height, so a `leading-*` utility beside it is dead."
   headline:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "var(--tracking-heading)"
     note: "`.font-display` — the SANS heading class, despite the name. It and `.font-display-xl` were one class until Melodrama landed and the 20px navbar wordmark came out spindly in a display serif. Declares no font-size: `text-base` through `text-2xl` beside it are live."
   title:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.125rem"
     fontWeight: 600
     lineHeight: 1.3
   body:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.625
   standfirst:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.0625rem"
     fontSizeSm: "1.125rem"
     fontWeight: 500
@@ -111,56 +112,56 @@ typography:
     maxWidth: "46ch"
     note: "Hero.tsx only — the one line under the hero, and the only body step above `prose`. It steps up at `sm` because the hero headline steps up with the viewport and the gap between them has to stay readable; every other body role holds a stable size. 46ch, not 58ch: this sits under a 5.25rem headline capped at 18ch and a longer measure under it reads as two unrelated blocks."
   prose:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.65
     maxWidth: "58ch"
     note: "`.scene-prose` carries the size as well as the leading, so a standfirst cannot pick its own. 58ch is the one measure value in the system — HowItWorks, /trips and the print page all use it; nothing else runs uncapped."
   field:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1rem"
     fontWeight: 500
     lineHeight: 1.4
     note: "16px is a floor, not a step: below it iOS Safari zooms the viewport on focus."
   label:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.6875rem"
     fontWeight: 600
     letterSpacing: "var(--tracking-label)"
     note: "Uppercase. THE label step — one size, one tracking, one spelling (`text-[0.6875rem]`). Replaced six sizes in a 3px range (9.92/10/11/11.2/12/13px) written four ways, at four tracking values. Section openers, entry-capsule cells, map day badges, the DAY n OF m stamp."
   caption:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 400
     note: "12px, and deliberately distinct from `label`: no uppercase, no tracking. dl keys, footnotes, third-party chrome. The smallest step that sets real words rather than a tracked-out label."
   price:
-    fontFamily: "Melodrama, ui-serif, Georgia, serif"
+    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
     fontWeight: 400
     fontFeature: "proportional-nums lining-nums"
     letterSpacing: "-0.005em"
     note: "`.price-display`, landing prices and the export's day total. The currency mark is a child span at 0.42em / 60% opacity / translateY(-0.62em), so the figure is what gets read. Proportional, not tabular — nothing is being compared in a column here."
   figure:
-    fontFamily: "Tabular, ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontFamily: "Inter Tight (tabular figures), ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 600
     fontFeature: "tabular-nums"
     note: "Values compared IN A COLUMN, and nothing else — five sites: the dl columns, the stop-time gutter, the day totals, the budget readout, the how-it-works step numbers. Only the last is on a landing route and it sits in the third band, so the face ships preload: false rather than competing with the first viewport. Never a sentence, never a stamp, never a price meant to be felt."
   cardTitle:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.75rem"
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "var(--tracking-heading)"
     note: "Plan-card titles on the landing's featured row. A step above `headline` and below the section display."
   map-day-label:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.8125rem"
     fontWeight: 700
     letterSpacing: "var(--tracking-label)"
     note: "`.marker-day-label` only — uppercase day badges standing on the globe. The product's own text face: there is no map-native typeface any more."
   map-stop-label:
-    fontFamily: "Switzer, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.9375rem"
     fontWeight: 600
     letterSpacing: "0.02em"
@@ -255,6 +256,15 @@ components:
     padding: "0.34rem 0.7rem 0.36rem"
     typography: "{typography.map-day-label}"
 ---
+> **Polar Interior — tokens landed, screens in progress (2026-10-13, branch `feat/polar-redesign`).**
+> The frontmatter above now carries the Polar Night values the app ships (`:root` in
+> `src/app/globals.css`, `Dark` in `mobile/src/constants/palette.ts`). Polar Light lives in the
+> `[data-appearance="light"]` scope and `Light`, and a screen opts in when it is redesigned. The prose
+> below still describes **Kiln** — its reasoning about roles, glass and the globe mostly carries over,
+> but where it quotes a hex value, a contrast ratio, Melodrama, Switzer or Tabular, the frontmatter and
+> the canvas's "Polar — Token Mapping" sheet are current and the prose is not. It gets rewritten from
+> the built app when the screens are done, the way this file was written the first time.
+
 
 # Design System: TripMate
 

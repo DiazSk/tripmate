@@ -21,64 +21,40 @@ import "./globals.css";
 const SHOW_LLM_TRACES = process.env.NODE_ENV === "development";
 
 /**
- * Three faces, each with exactly one job — and, unlike the set they replace, chosen rather than
- * arrived at.
+ * Two faces, from the Polar Interior system on the canvas ("White Desert — Design Tokens").
  *
- * Wix Madefor Display / Text / Sometype Mono got here by elimination: avoid the training-default
- * faces, avoid Geist because Vercel was the named craft bar, ship. Competent, and it read as
- * well-made SaaS. The bar is now luxury travel and quiet-luxury retail, and that is a different
- * problem — one these faces could not solve by being set better.
+ * **Cormorant Garamond for display, Inter Tight for everything read or pressed.** Cormorant stands
+ * in for the reference's Cardinal Classic Long, a commercial face; it keeps the high-contrast
+ * didone voice — at weight 400 the thick-thin modulation does the work bold type would only fake —
+ * and its italic carries the reference's kicker lines, so both cuts ship. Inter Tight is the
+ * reference's own text face. Oswald, the reference's third face, sets only full-width monuments on
+ * photographs; it arrives with the first screen that draws one.
  *
- * **The mechanism is contrast in the face, not weight in the type.** A bold grotesk is loud; a
- * light didone is expensive. Melodrama carries high thick-to-thin modulation at weight 400, which
- * is the couture move and the thing no amount of extra weight buys. Everything dense stays in a
- * neutral grotesk, because a display serif in a day row is a costume.
+ * **Figures no longer have a face of their own.** Kiln preloaded a whole mono family for the
+ * columns that compare values; Polar sets them in Inter Tight with tabular figures, which line up
+ * just as well without a second register. `--font-mono` in globals.css now resolves to the text
+ * face, so the five `font-mono` sites keep working unchanged.
  *
- * Self-hosted from `public/fonts` via `next/font/local`, not `next/font/google` — these are
- * Fontshare faces (Indian Type Foundry). Licence checked directly before committing them: free for
- * personal and commercial use, self-hosting explicitly permitted.
- *
- * **Payload went down, not up.** Three variable files totalling 108KB, against roughly 115KB for
- * the three Google families they replace — and the single Archivo file still committed for the
- * export is 90KB on its own.
+ * Self-hosted from `public/fonts` via `next/font/local`, not `next/font/google`, so a build never
+ * reaches the network — the Latin variable files as Google Fonts serves them, both under the SIL
+ * Open Font License, which permits self-hosting. Melodrama and Switzer stay in `public/fonts` for
+ * the itinerary export, which inlines them and has not been redesigned yet.
  */
 const displayFace = localFont({
-  src: "../../public/fonts/melodrama-variable.woff2",
+  src: [
+    { path: "../../public/fonts/cormorant-garamond-variable.woff2", style: "normal" },
+    { path: "../../public/fonts/cormorant-garamond-italic-variable.woff2", style: "italic" },
+  ],
   variable: "--font-display-stack",
   weight: "300 700",
   display: "swap",
 });
 
 const textFace = localFont({
-  src: "../../public/fonts/switzer-variable.woff2",
+  src: "../../public/fonts/inter-tight-variable.woff2",
   variable: "--font-sans-stack",
   weight: "100 900",
   display: "swap",
-});
-
-/**
- * Figures, and only in a column.
- *
- * This is the rule that changed. The previous system said "mono for every figure" and a census
- * found it honoured in about a quarter of cases: 5 of 19 money renders, and **no date, time,
- * duration or temperature anywhere**. A whole variable family was being preloaded on every route
- * for eight spans.
- *
- * So the rule is narrower and now actually true: **tabular mono where values are compared** — the
- * dl columns, the stop-time gutter, the day totals, the budget readout. A price a visitor is meant
- * to feel rather than compare is set in the display face at display scale, which is what a menu or
- * a lot listing does and what a monospace can never do. Never prose.
- */
-const monoFace = localFont({
-  src: "../../public/fonts/tabular-variable.woff2",
-  variable: "--font-mono-stack",
-  weight: "300 700",
-  display: "swap",
-  // Five sites: the dl columns, the stop-time gutter, the day totals, the budget readout, and the
-  // how-it-works step numbers. Only the last is on a landing route, and it is in the third band —
-  // so the face is still fetched there, just not in the preload that competes with the hero
-  // photograph and the two faces the first viewport actually paints.
-  preload: false,
 });
 
 
@@ -127,7 +103,7 @@ export const metadata: Metadata = {
 // Matches --canvas in globals.css. manifest.ts's own theme_color covers the installed app; this
 // covers the browser chrome (address bar / status bar tint) before it's installed.
 export const viewport: Viewport = {
-  themeColor: "#121110",
+  themeColor: "#090b10",
 };
 
 /**
@@ -140,39 +116,31 @@ export const viewport: Viewport = {
  * `grep 02f66ad0` over the built output is the audit.
  */
 const DIRECTION_CONTRACT = `<!--
-KILN · direction seed 02f66ad0
+POLAR INTERIOR · supersedes KILN (direction seed 02f66ad0)
 
-THESIS: A travel planner that shows you the real ground and the real price at the finish level of a
-shipped consumer product. It refuses the awwwards move of one enormous word posing over a stock
-mountain; the first viewport does work.
+THESIS: A travel planner that shows you the real ground and the real price, set with the restraint
+of an expedition outfitter rather than a dashboard. Kiln refused "one enormous word over a
+mountain"; Polar takes that move on purpose, on photographs of real places, and keeps the first
+viewport working: the word names the destination you are about to plan.
 
-OWN-WORLD: Warm near-neutral near-black (#121110), card #1C1A18, warm off-white type. Three named
-roles, each meaning one thing: jade #28B981 action, gold #E9B44C money, coral #E4553F alert. Wix
-Madefor Display / Text with Sometype Mono for every figure. Round what you touch, square what you
-read — pills on controls, 5-8px on surfaces. One light surface in the whole product: the hero's
-entry capsule.
+OWN-WORLD: Two appearances under one set of names. Polar Night (default, and everything over the
+map): canvas #090B10, deep #0E1118, white type, night-text-2 #A8ACB3. Polar Light (opt-in per
+screen, data-appearance="light"): ice #FFFFFF, paper #F3F1EC, ink #1F2A44, charcoal #535353.
+Roles, each meaning one thing: signal #FF7E15 is action and only action, a fill with ink on it;
+ember #A64C09 is action set as text on light; alert #D10F0F / #FF6B6B; money has no hue — tabular
+figures in ink or white. Cormorant Garamond for display, Inter Tight for everything else, Oswald
+for monuments. Nearly square: 2px controls, 6px cards — depth comes from blur over photography,
+not from rounding.
 
-THE WORLD ON THE GLOBE: three faces, no exceptions. Orbitron and Rajdhani are gone, and so is the
-five-hue neon route ramp they belonged to — a finish review named them a surviving foreign register
-on the product's core screen and the user funded the re-derivation. The day ramp is now five earth
-pigments (--route-day-1..5) at a tight luminance band, none of which falls inside the accent's hue
-band, and the day badge is printed rather than lit: no coloured bloom, no inner glow, one offset
-shadow. Route colour is still map-native and still must never appear in a panel, chip or button;
-interface colour still stays off the globe, with --accent marking a hovered or selected stop as the
-one documented exception.
+THE WORLD ON THE GLOBE: unchanged. The five earth-pigment day pairs stay map-native and never
+appear in a panel, chip or button; interface colour stays off the globe, with --accent marking a
+hovered or selected stop as the one documented exception. Day 3's core (22.3deg) now sits inside
+the accent's band (10-45deg), and emphasisColorFor swaps its hover tint to white.
 
-STORY: The visitor sees a real place, understands within seconds that this plans a costed
-day-by-day trip against real weather, and starts entering their trip without leaving the first
-viewport.
+MOTION: white-desert.com's vocabulary — scroll-scrubbed curtains, reveals on cubic-bezier(.16,1,.3,1),
+expedition moves on (.76,0,.24,1) — and prefers-reduced-motion leaves the finished layout.
 
-FIRST VIEWPORT: One full-bleed photograph on a scroll parallax, a two-line proposition, and a
-destination-plus-dates capsule that opens the wizard already filled in.
-
-FORM: The category standard, taken as the standing exit from direction seed 02f66ad0, executed at
-the craft level of Airbnb and Vercel.
-
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the
-verdict, and DESIGN.md.
+FINISH: unreviewed and undocumented is unfinished; each screen ends with its review and DESIGN.md.
 -->`;
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -197,7 +165,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${displayFace.variable} ${textFace.variable} ${monoFace.variable} h-full antialiased`}
+      className={`${displayFace.variable} ${textFace.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         {/* Clerk's hooks and its middleware throw without keys, so the provider is only mounted

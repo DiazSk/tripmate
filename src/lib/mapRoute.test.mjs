@@ -69,34 +69,37 @@ test("consecutive days never share a palette", () => {
 /** Cesium's Color, near enough for `emphasisColorFor` — it reads red/green/blue only. */
 const rgb = (red, green, blue) => ({ red, green, blue });
 
-/** The live accent, jade #28b981 at hue 156.8. The band it owns is 135-180. */
-const ACCENT = rgb(0.157, 0.725, 0.506);
+/** The live accent, Polar's signal #ff7e15 at hue 26.9. The band it owns is 10-45. */
+const ACCENT = rgb(1, 0.494, 0.082);
 const WHITE = rgb(1, 1, 1);
 
-test("no shipped day palette falls inside the accent's hue band", () => {
-  // The regression this replaced a narrower test with. Under the previous neon ramp exactly one
-  // day (Verdant Drift, 155.4 degrees) collided with the accent and relied on `emphasisColorFor`
-  // swapping to white. The re-derived earth-pigment ramp is spaced so that none of the five does:
-  // 190.4, 318.9, 22.3, 89.0, 244.4, against a band of 135-180. That is strictly better than a
-  // handled collision, and it is the property worth guarding — if a future ramp edit walks a day
-  // into the band, the mitigation still fires but it has exactly one fallback colour to spend.
-  for (const core of [
+test("exactly one shipped day falls inside the accent's band, and it is day 3", () => {
+  // Under Kiln's jade accent none of the five did. Polar's signal orange moves the band back into
+  // the warm range, and day 3's terracotta core (22.3 degrees) lands in it — a handled collision
+  // rather than an avoided one, which is the case the white swap exists for. If a ramp edit walks
+  // a second day in, this fails: the mitigation has exactly one fallback colour to spend.
+  const cores = [
     rgb(0.306, 0.549, 0.6),   // --route-day-1 #4e8c99  190.4
     rgb(0.643, 0.431, 0.576), // --route-day-2 #a46e93  318.9
     rgb(0.769, 0.471, 0.294), // --route-day-3 #c4784b   22.3
     rgb(0.494, 0.612, 0.369), // --route-day-4 #7e9c5e   89.0
     rgb(0.482, 0.467, 0.682), // --route-day-5 #7b77ae  244.4
-  ]) {
-    assert.equal(emphasisColorFor(core, ACCENT, WHITE), ACCENT);
-  }
+  ];
+  const tints = cores.map((core) => emphasisColorFor(core, ACCENT, WHITE));
+  assert.deepEqual(
+    tints.map((t) => (t === WHITE ? "white" : "accent")),
+    ["accent", "accent", "white", "accent", "accent"]
+  );
 });
 
 test("the guard still fires for a colour inside the band", () => {
-  // Kept as a live test even though no shipped palette reaches it: it is the mitigation, and a
-  // mitigation nothing exercises is a mitigation nobody notices breaking. A day drawn near the
+  // Independent of the shipped ramp, so it keeps guarding the mitigation even if day 3 is ever
+  // re-hued out of the band. A day drawn near the
   // accent's own hue would tint on hover to a colour it is already drawn in, so the feedback would
   // read as nothing happening; white is the fallback and there is only one of it.
-  assert.equal(emphasisColorFor(rgb(0.247, 0.639, 0.478), ACCENT, WHITE), WHITE);
+  assert.equal(emphasisColorFor(rgb(0.9, 0.55, 0.2), ACCENT, WHITE), WHITE);
+  // And outside it, the accent itself.
+  assert.equal(emphasisColorFor(rgb(0.2, 0.55, 0.9), ACCENT, WHITE), ACCENT);
 });
 
 test("the accent's own hue sits inside the band it owns", () => {

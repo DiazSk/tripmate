@@ -320,10 +320,10 @@ export function MapControls({
                 chrome that is always on screen is spending it on nothing. */}
             <SymbolView
               name={{ ios: 'location.fill', android: 'my_location' }}
-              tintColor={locating ? Colors.accent : ink}
+              tintColor={locating ? Colors.accentText : ink}
               size={22}
               fallback={
-                <Text style={[styles.glyphFallback, { color: locating ? Colors.accent : ink }]}>
+                <Text style={[styles.glyphFallback, { color: locating ? Colors.accentText : ink }]}>
                   Here
                 </Text>
               }
@@ -421,7 +421,7 @@ export function MapControls({
                     </View>
                     <ThemedText
                       type="caption"
-                      themeColor={chosen ? 'accent' : 'muted'}
+                      themeColor={chosen ? 'accentText' : 'muted'}
                       numberOfLines={1}>
                       {mode.label}
                     </ThemedText>
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
     // into near-nothing and defeated the whole reason the sheet sits at the bottom, which is that
     // you can compare a thumbnail against the thing it is a thumbnail of. The one slate at 35%
     // darkens in both appearances, which is what Darken-Never-Lighten asks for over a map.
-    backgroundColor: '#1C1A1859',
+    backgroundColor: '#0E111859',
   },
   sheet: {
     backgroundColor: Colors.surfaceDeep,
@@ -663,5 +663,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.pill,
   },
-  glyphFallback: { color: Colors.accent, fontSize: 11 },
+  glyphFallback: { color: Colors.accentText, fontSize: 11 },
 });

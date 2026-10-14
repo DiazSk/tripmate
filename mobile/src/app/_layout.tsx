@@ -6,9 +6,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ShareIntentProvider } from 'expo-share-intent';
 
-import MelodramaRegular from '../../assets/fonts/Melodrama-Regular.ttf';
-import TabularMedium from '../../assets/fonts/Tabular-Medium.ttf';
-import TabularSemiBold from '../../assets/fonts/Tabular-SemiBold.ttf';
+import { CormorantGaramond_400Regular } from '@expo-google-fonts/cormorant-garamond';
+import { InterTight_500Medium, InterTight_600SemiBold } from '@expo-google-fonts/inter-tight';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { APPEARANCE } from '@/constants/appearance';
@@ -41,12 +40,12 @@ export const unstable_settings = { anchor: '(tabs)' };
 // router.push('/trip/...') would silently no-op. The (tabs) group keeps that filtering scoped to
 // just index/trips/profile, while trip/[id] mounts as an ordinary sibling Stack screen.
 export default function RootLayout() {
-  // Static cuts instanced from the Swift app's variable TTFs, each keyed by its own family name.
-  // The keys here ARE the family names RN resolves, so they must match `Fonts` in constants/theme.
+  // Polar's faces, one static cut per family name as @expo-google-fonts registers them. The keys
+  // here ARE the family names RN resolves, so they must match `Fonts` in constants/theme.
   const [fontsLoaded] = useFonts({
-    'Melodrama-Regular': MelodramaRegular,
-    'Tabular-Medium': TabularMedium,
-    'Tabular-SemiBold': TabularSemiBold,
+    CormorantGaramond_400Regular,
+    InterTight_500Medium,
+    InterTight_600SemiBold,
   });
 
   // **Nothing draws until the faces are in.** `useFonts` loads asynchronously, and a screen that
@@ -55,7 +54,7 @@ export default function RootLayout() {
   // plain sans. The splash is still up at this point, so holding here costs nothing visible.
   if (!fontsLoaded) return null;
 
-  // **The app's own preference, never the system scheme.** Kiln is one system with two
+  // **The app's own preference, never the system scheme.** Polar is one system with two
   // appearances and the reader picks; following the OS would hand somebody a light app the
   // moment their phone dimmed at dusk, on a surface whose whole argument is that it was
   // composed. `APPEARANCE` is resolved once at module load — see `constants/appearance.ts`.

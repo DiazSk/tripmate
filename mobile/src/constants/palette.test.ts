@@ -4,17 +4,19 @@ import { Dark, DiscInk, Light, OverPhotograph, composite, contrast, lightness } 
  * **These numbers are the point of the file, not decoration.**
  *
  * A contrast helper that is quietly wrong blesses every value it is asked about, and the failure
- * is invisible — a light palette would ship looking plausible and measuring 3:1. So the first
- * block reproduces the *dark* appearance's published figures from `DESIGN.md`, which were
- * measured independently and long before any of this. A helper that cannot reproduce those
- * cannot be trusted about the light ones.
+ * is invisible — a palette would ship looking plausible and measuring 3:1. So the first block
+ * reproduces the figures on the canvas's "Polar — Token Mapping" sheet, which were computed by a
+ * separate implementation from the hex values. A helper that cannot reproduce those cannot be
+ * trusted about anything else here.
  */
 describe('the helpers', () => {
-  it('reproduces the dark appearance’s published figures', () => {
-    expect(contrast(Dark.accent, Dark.canvas)).toBeCloseTo(7.5, 1);
-    expect(contrast(Dark.money, Dark.canvas)).toBeCloseTo(9.97, 1);
-    expect(contrast(Dark.alert, Dark.canvas)).toBeCloseTo(5.09, 1);
-    expect(contrast(Dark.foreground, Dark.canvas)).toBeCloseTo(17.33, 1);
+  it('reproduces the token sheet’s published figures', () => {
+    expect(contrast(Dark.accent, Dark.canvas)).toBeCloseTo(7.73, 1);
+    expect(contrast(Dark.foreground, Dark.canvas)).toBeCloseTo(19.68, 1);
+    expect(contrast(Dark.alert, Dark.canvas)).toBeCloseTo(7.09, 1);
+    expect(contrast(Light.foreground, Light.canvas)).toBeCloseTo(14.26, 1);
+    expect(contrast(Light.accentText, Light.canvas)).toBeCloseTo(5.74, 1);
+    expect(contrast(Light.accentForeground, Light.accent)).toBeCloseTo(5.6, 1);
   });
 
   it('fails the pair it is supposed to fail', () => {
@@ -32,22 +34,25 @@ describe('the helpers', () => {
   });
 });
 
-describe('the light appearance', () => {
-  it('carries every role at AA on its own ground', () => {
-    expect(contrast(Light.foreground, Light.canvas)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(Light.accent, Light.canvas)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(Light.money, Light.canvas)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(Light.alert, Light.canvas)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(Light.accentForeground, Light.accent)).toBeGreaterThanOrEqual(4.5);
+describe('both appearances', () => {
+  it.each([
+    ['night', Dark],
+    ['light', Light],
+  ] as const)('%s carries every text role at AA on its canvas and its paper', (_name, palette) => {
+    for (const ground of [palette.canvas, palette.surfaceDeep]) {
+      for (const role of ['foreground', 'muted', 'accentText', 'money', 'alert'] as const) {
+        expect(contrast(palette[role], ground)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    expect(contrast(palette.accentForeground, palette.accent)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('inverts to exactly the ink/paper ratio dark ships', () => {
-    // Not a coincidence worth hiding: the two appearances are the same two colours swapped, so
-    // the figure has to be identical. If it drifts, somebody sampled a new grey.
-    expect(contrast(Light.foreground, Light.canvas)).toBeCloseTo(
-      contrast(Dark.foreground, Dark.canvas),
-      5,
-    );
+  it('keeps action a fill on light, which is why accentText exists', () => {
+    // The negative control for the one role that splits. Signal is the action fill in both
+    // appearances and reads as text on night; on ice it measures 2.55:1. If this ever passes,
+    // the light fill has been darkened and `accentText` is doing nothing.
+    expect(contrast(Light.accent, Light.canvas)).toBeLessThan(3);
+    expect(Dark.accentText).toBe(Dark.accent);
   });
 });
 
@@ -115,13 +120,14 @@ describe('the soft tints', () => {
  * whole reason one token survives here.
  */
 describe('over the map', () => {
-  it('keeps the emphasised disc readable, which the action colour would not', () => {
-    // The regression this group exists to stop, stated as the two numbers. Light's `accent` is
-    // correct as an ink on paper and wrong as a fill under `DiscInk`; both facts are true at
-    // once, which is why the disc needed its own token rather than a different jade.
+  it('keeps the emphasised disc readable', () => {
+    // The disc carries a stop number in `DiscInk` on the action fill. Kiln split this token out
+    // because its light accent darkened to 2.49:1 under that ink; Polar's fill is the same in both
+    // appearances, so the token and the fill agree — and the number still has to clear AA.
     const ink = (fill: string) => composite(DiscInk.slice(0, 7), 0xeb / 255, fill);
     expect(contrast(ink(OverPhotograph.accentDisc), OverPhotograph.accentDisc)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(ink(Light.accent), Light.accent)).toBeLessThan(3);
+    expect(OverPhotograph.accentDisc).toBe(Dark.accent);
+    expect(OverPhotograph.accentDisc).toBe(Light.accent);
   });
 
   it('keeps one ink over a photograph in both appearances', () => {
@@ -134,21 +140,27 @@ describe('over the map', () => {
 });
 
 describe('the surface ladder', () => {
-  it('mirrors dark’s perceptual steps rather than its alphas', () => {
-    // Mirroring the alpha instead would collapse the ramp to nothing near white: 62% slate over
-    // paper is a dark grey card, not a surface one step in.
+  it('keeps the ladder in the same order in both appearances', () => {
+    // Kiln mirrored dark's perceptual steps into light. Polar does not — paper is meant to be a
+    // visible step from ice, as it is on the reference — but the order has to hold, or a pressed
+    // control could read as quieter than a resting one.
     const step = (palette: typeof Dark, surface: string) =>
       Math.abs(lightness(palette.canvas) - lightness(flatten(surface, palette.canvas)));
 
-    for (const key of ['control', 'panel', 'bar', 'pressed', 'surfaceDeep'] as const) {
-      expect(step(Light, Light[key])).toBeCloseTo(step(Dark, Dark[key]), 0);
+    for (const palette of [Dark, Light]) {
+      const steps = (['control', 'panel', 'bar', 'pressed', 'surfaceDeep'] as const).map((k) => step(palette, palette[k]));
+      for (let i = 1; i < steps.length; i++) expect(steps[i]).toBeGreaterThan(steps[i - 1]);
     }
   });
 
-  it('keeps every surface one slate, never a sampled grey', () => {
-    for (const palette of [Dark, Light]) {
+  it('keeps every surface one slate per appearance, never a sampled grey', () => {
+    // Polar's deep on night and Polar's ink as a veil on light.
+    for (const [palette, slate] of [
+      [Dark, '#0E1118'],
+      [Light, '#1F2A44'],
+    ] as const) {
       for (const key of ['panel', 'control', 'bar', 'pressed'] as const) {
-        expect(palette[key].slice(0, 7).toUpperCase()).toBe('#1C1A18');
+        expect(palette[key].slice(0, 7).toUpperCase()).toBe(slate);
       }
     }
   });

@@ -10,14 +10,15 @@ import { budgetSegments, formatMoney, spendSplit, tripSpend } from '@/lib/spend'
 const TRACK_HEIGHT = 6;
 
 /**
- * Gold at 62%, for the days you are not reading.
+ * Money at 62%, for the days you are not reading — ink on light, white on night, since Polar
+ * gives money no hue.
  *
  * The same alpha the palette uses to step `foreground` down to `muted`, rather than a second
  * sampled colour: it stays correct over any surface instead of being tuned for one. Money is one
  * hue here by rule, so the days are told apart by weight and by the hairlines between them, never
  * by giving each its own colour.
  */
-const SEGMENT_DIM = '#E9B44C9E';
+const SEGMENT_DIM = `${Colors.money}9E`;
 
 /**
  * Spend against the trip's budget, cut into one span per day.

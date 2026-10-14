@@ -214,15 +214,14 @@ export function dayGlowToken(dayIndex: number): string {
  *  failure is silent: `emphasisColorFor` keeps returning a colour, hover keeps firing, the
  *  feedback simply stops being visible on one day.
  *
- *  Accent is `#28b981` at **156.8°**. The band is 135-180 — wide enough to cover it plus the
- *  distance at which two saturated greens stop being told apart at a glance over photography.
+ *  Accent is Polar's signal `#ff7e15` at **26.9°**. The band is 10-45 — the accent plus the
+ *  distance at which two saturated oranges stop being told apart at a glance over photography.
  *
- *  It used to read `[0, 50]`, sized for the previous amber accent (`#fb9826`, ~32°) *and* for
- *  `--map-pin-red` at ~4°. Half that width was therefore justified by a token that has never
- *  existed: `--map-pin-red` is referenced in three comments and defined nowhere, and the real
- *  destination pin carries its `#FF3B30` as a literal in `mapRenderer.ts`/`maplibreRenderer.ts`.
- *  The band no longer pretends otherwise — it covers the accent, and only the accent. */
-const ACCENT_HUE_BAND: readonly [number, number] = [135, 180];
+ *  It read `[135, 180]` under Kiln's jade accent (156.8°), and before that `[0, 50]` under the
+ *  amber one. The move back into the warm band puts route day 3 (`#c4784b`, 22.3°) inside it, which
+ *  is the case `emphasisColorFor` exists for: that day's hover tint becomes white. The destination
+ *  pin's `#FF3B30` (~3.5°) stays outside, and the band does not pretend to cover it. */
+const ACCENT_HUE_BAND: readonly [number, number] = [10, 45];
 
 /** A colour's hue in degrees, 0-360. Grey returns 0, which is harmless here: a desaturated
  *  colour cannot be confused with a saturated accent whatever its hue says. */

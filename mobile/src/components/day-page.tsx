@@ -523,7 +523,7 @@ function CostEntry({
               accessibilityRole="button"
               accessibilityState={{ selected: state === kind, disabled }}
               style={[styles.costKind, state === kind && styles.costKindOn]}>
-              <ThemedText type="caption" themeColor={state === kind ? 'accent' : 'muted'}>
+              <ThemedText type="caption" themeColor={state === kind ? 'accentText' : 'muted'}>
                 {kind === 'booked' ? 'Booked' : 'Paid'}
               </ThemedText>
             </Pressable>

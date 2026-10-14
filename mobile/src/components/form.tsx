@@ -450,8 +450,8 @@ export function PillButton({
           ? 'muted'
           : tone === 'primary'
             ? 'accentForeground'
-            : tone === 'quiet'
-              ? 'accent'
+            : tone === 'quiet' || tone === 'accent'
+              ? 'accentText'
               : tone
       }>
       {title}
@@ -476,7 +476,7 @@ export function PillButton({
       ]}
       android_ripple={disabled ? undefined : { color: Colors.pressed }}>
       {busy ? (
-        <ActivityIndicator color={tone === 'primary' ? Colors.accentForeground : Colors.accent} />
+        <ActivityIndicator color={tone === 'primary' ? Colors.accentForeground : Colors.accentText} />
       ) : icon ? (
         <View style={styles.pillLabelRow}>
           {icon}

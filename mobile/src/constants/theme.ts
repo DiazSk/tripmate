@@ -41,9 +41,8 @@ import { Dark, DiscInk, Light, OverPhotograph, type Palette } from '@/constants/
  *
  * RN parses `#RRGGBBAA` natively, and the whole system uses five alphas — a runtime call per
  * style to avoid five string constants is a worse trade. The One Slate Rule says every panel,
- * pill, badge and scrim is this one colour at some alpha; it never becomes a second grey, and
- * that survives the light appearance literally: the same `#1C1A18`, at a ramp mirrored by
- * perceptual step.
+ * pill, badge and scrim is one colour at some alpha, and never becomes a second grey — one slate
+ * per appearance under Polar: deep `#0E1118` on night, ink `#1F2A44` as a veil on light.
  *
  * **Selected once, at module load.** `Colors` stays a plain object, so none of the 184 call
  * sites and none of the 34 `StyleSheet.create` blocks know an appearance exists. See
@@ -219,9 +218,12 @@ export const Fonts = {
    * its own family name means no weight selection ever happens. Never pair these with
    * `fontWeight`.
    */
-  display: 'Melodrama-Regular',
-  money: 'Tabular-Medium',
-  moneyBold: 'Tabular-SemiBold',
+  // Polar Interior: Cormorant Garamond for display, Inter Tight for figures (tabular figures come
+  // from `fontVariant: ['tabular-nums']` at the call site, as before). Body stays the system face —
+  // see below. Registered by @expo-google-fonts under exactly these names, one family per cut.
+  display: 'CormorantGaramond_400Regular',
+  money: 'InterTight_500Medium',
+  moneyBold: 'InterTight_600SemiBold',
 
   /** The system sans carries all body and UI text. That is what buys Dynamic Type on iOS and
    *  font scaling on Android — see DESIGN.md's third boundary. */

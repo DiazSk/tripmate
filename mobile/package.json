@@ -5,6 +5,9 @@
   "dependencies": {
     "@clerk/expo": "^4.10.1",
     "@clerk/expo-google-signin": "^1.0.4",
+    "@expo-google-fonts/cormorant-garamond": "^0.4.1",
+    "@expo-google-fonts/inter-tight": "^0.4.2",
+    "@expo-google-fonts/oswald": "^0.4.2",
     "@expo/ui": "~57.0.19",
     "expo": "~57.0.24",
     "expo-apple-authentication": "~57.0.2",

@@ -34,7 +34,7 @@ export default function WelcomeWho() {
 const styles = StyleSheet.create({
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   tile: { width: '48%', borderRadius: 18, borderWidth: 1, borderColor: Colors.cardBorder, padding: 16, gap: 6 },
-  tileOn: { borderColor: Colors.accent, backgroundColor: 'rgba(40,185,129,0.10)' },
+  tileOn: { borderColor: Colors.accent, backgroundColor: Colors.accentWash },
   tileTitle: { color: Colors.foreground, fontSize: 16, fontWeight: '600' },
   tileHint: { color: Colors.muted, fontSize: 12.5 },
 });

@@ -49,7 +49,7 @@ export function Invitation({ title, body, note }: { title: string; body?: string
 
 /** Jade, because loading is the one moment the screen is genuinely doing something. */
 export function Loading() {
-  return <ActivityIndicator color={Colors.accent} style={styles.loading} />;
+  return <ActivityIndicator color={Colors.accentText} style={styles.loading} />;
 }
 
 const styles = StyleSheet.create({

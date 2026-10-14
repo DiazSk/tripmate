@@ -496,7 +496,7 @@ function PlaceFacts({ place }: { place: FoundPlace }) {
           </ThemedText>
           <ThemedText
             type="detail"
-            themeColor={row.href ? 'accent' : 'foreground'}
+            themeColor={row.href ? 'accentText' : 'foreground'}
             style={styles.grow}>
             {row.value}
           </ThemedText>

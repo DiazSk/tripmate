@@ -803,7 +803,7 @@ function ShareButton({
           // Jade only while the plan is actually out there. This is the one place the accent
           // reports a state rather than inviting a press, and it is still an action colour on an
           // action — the trip being shared is what the press is about.
-          tintColor={offline ? Colors.muted : trip.shared ? Colors.accent : Colors.foreground}
+          tintColor={offline ? Colors.muted : trip.shared ? Colors.accentText : Colors.foreground}
           size={20}
           fallback={
             <ThemedText type="label" themeColor={offline ? 'muted' : 'foreground'}>

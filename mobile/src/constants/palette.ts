@@ -5,13 +5,15 @@
  * small functions over them — which is what makes the contrast figures genuinely testable rather
  * than asserted by eye. `theme.ts` is where this becomes `Colors`.
  *
- * **The light appearance is the dark one's two anchors swapped, not a second design.** Paper is
- * dark's `foreground`; ink is dark's `canvas`. Every surface is still the one slate `#1C1A18`,
- * at an alpha ramp mirrored by *perceptual step* rather than by alpha — mirroring the alpha
- * would put a 62% slate over paper, which is a dark grey card rather than a surface one step in.
- * The three roles keep their meaning and their hue; only their lightness moves, because jade,
- * gold and coral as shipped measure 2.15, 1.62 and 3.17 against paper and none of them is
- * readable.
+ * **Polar Interior, in two appearances under one set of names** — the system on the MagicPath
+ * canvas, mapped role by role on "Polar — Token Mapping", and the same values the web carries in
+ * `src/app/globals.css`. `Dark` is Polar Night; `Light` is Polar Light. Kiln's light appearance was
+ * dark's two anchors swapped; Polar's is not — ice, paper and ink are the reference's own values,
+ * and each role is measured on its own ground rather than mirrored.
+ *
+ * Two meanings moved. Action is signal orange and is a *fill*, with ink on it in both appearances;
+ * set as text on a light ground it measures 2.55:1, so text that means "action" takes
+ * `accentText`. And money has no hue: a figure is ink or white, carried by the figure face.
  */
 
 export interface Palette {
@@ -38,15 +40,22 @@ export interface Palette {
   photoBorder: string;
   accent: string;
   /**
-   * The ink drawn ON a jade fill.
+   * The ink drawn ON the action fill: Polar ink on signal, 5.6:1, in both appearances.
    *
-   * **The rule is the relationship, not the polarity.** In dark this is near-black on jade; in
-   * light it has to go the other way, and it must not simply be paper — paper-coloured letters
-   * on a jade fill standing on a paper canvas are letters the colour of the page behind them.
-   * So it is a jade-tinted near-white: the fill's own hue, carried into its ink.
+   * **The rule is the relationship, not the polarity.** Under Kiln the light appearance darkened
+   * the fill and had to flip this ink to a near-white; Polar keeps one fill and one ink, because
+   * signal is light enough to carry dark type on paper and on night alike.
    */
   accentForeground: string;
   accentWash: string;
+  /**
+   * **Action set as text** — a selected label, a link, a glyph that means "do this".
+   *
+   * Night can use the fill itself (7.73:1). Light cannot: signal on ice is 2.55:1, so the light
+   * appearance deepens it to ember, the reference's #B4530A taken one step darker to clear AA on
+   * paper as well as ice.
+   */
+  accentText: string;
   money: string;
   /**
    * **`moneySoft` is a fill, not a state tint**, which is why it ships heavier than the others
@@ -58,68 +67,63 @@ export interface Palette {
 }
 
 export const Dark: Palette = {
-  canvas: '#121110',
-  surfaceDeep: '#1C1A18',
-  panel: '#1C1A189E',
-  control: '#1C1A188C',
-  bar: '#1C1A18B8',
-  pressed: '#1C1A18D1',
+  canvas: '#090B10',
+  surfaceDeep: '#0E1118',
+  // Polar's deep at Kiln's alphas: one slate per appearance, so the glass reads as one material.
+  panel: '#0E11189E',
+  control: '#0E11188C',
+  bar: '#0E1118B8',
+  pressed: '#0E1118D1',
 
-  foreground: '#F7F5F2',
-  muted: '#F7F5F29E',
-  cardBorder: '#FFFFFF1F',
+  foreground: '#FFFFFF',
+  // night-text-2: a solid grey, as the reference sets every secondary line on night.
+  muted: '#A8ACB3',
+  // frost-20.
+  cardBorder: '#FFFFFF33',
 
-  onDeep: '#F7F5F2',
-  onDeepMuted: '#F7F5F29E',
+  onDeep: '#FFFFFF',
+  onDeepMuted: '#FFFFFF9E',
   photoBorder: '#FFFFFF24',
 
-  accent: '#28B981',
-  accentForeground: '#06241A',
-  accentWash: '#28B98117',
-
-  money: '#E9B44C',
-  moneySoft: '#E9B44C2E',
-
-  alert: '#E4553F',
-  alertSoft: '#E4553F29',
+  accent: '#FF7E15',
+  accentForeground: '#1F2A44',
+  accentWash: '#FF7E151F',
+  accentText: '#FF7E15',
+  money: '#FFFFFF',
+  moneySoft: '#FFFFFF24',
+  alert: '#FF6B6B',
+  alertSoft: '#FF6B6B1F',
 };
 
 export const Light: Palette = {
-  canvas: '#F7F5F2',
-  // Opaque, like dark's, and the furthest step from the ground — a capsule standing on a card
-  // needs a fill that does not composite back into what it stands on.
-  surfaceDeep: '#EBE9E6',
-  // 3.5% / 2.7% / 3.9% / 4.7%. Effectively opaque over paper, which is the "warm opaque
-  // surfaces" the fourth review asked for, arrived at without leaving One Slate.
-  panel: '#1C1A1809',
-  control: '#1C1A1807',
-  bar: '#1C1A180A',
-  pressed: '#1C1A180C',
+  canvas: '#FFFFFF',
+  // Paper: opaque, the reference's one step in from ice.
+  surfaceDeep: '#F3F1EC',
+  // Ink veils, the reference's glass on light, at Kiln's light steps: 3.5% / 2.7% / 3.9% / 4.7%.
+  panel: '#1F2A4409',
+  control: '#1F2A4407',
+  bar: '#1F2A440A',
+  pressed: '#1F2A440C',
 
-  foreground: '#121110',
-  // The ink at 62%, the same discipline Muted Paper uses: an alpha rather than a sampled grey,
-  // so it stays correct on every surface step instead of being tuned for one.
-  muted: '#1211109E',
-  // Black at 12%, dark's white-at-12% mirrored.
-  cardBorder: '#0000001F',
+  foreground: '#1F2A44',
+  // Charcoal, not ink at an alpha: ink at 62% is 4.24:1 on ice and fails.
+  muted: '#535353',
+  // The rule: ink at 12%.
+  cardBorder: '#1F2A441F',
 
-  onDeep: '#F7F5F2',
-  onDeepMuted: '#F7F5F29E',
+  onDeep: '#FFFFFF',
+  onDeepMuted: '#FFFFFF9E',
   photoBorder: '#FFFFFF24',
 
-  // Darkened cuts, hues intact: 157.2° / 38.4° / 8.8° against dark's 156.8° / 39.7° / 8.0°.
-  // Jade stays inside `ACCENT_HUE_BAND`, so nothing the map does is affected.
-  accent: '#245E48',
-  accentForeground: '#EAFAF4',
-  money: '#886019',
-  alert: '#AE3F2C',
-
-  // **The tints keep the shipped hex and take a new alpha**, so "no new accent colours" holds
-  // literally. Over paper the bright role reads as a wash exactly as the bright role over
-  // near-black does; what changes is how much of it is needed.
-  accentWash: '#28B9812D',
-  moneySoft: '#E9B44C5A',
-  alertSoft: '#E4553F2F',
+  // The same fill as night, with the same ink on it (5.6:1).
+  accent: '#FF7E15',
+  accentForeground: '#1F2A44',
+  accentWash: '#FF7E1521',
+  accentText: '#A64C09',
+  money: '#1F2A44',
+  moneySoft: '#1F2A441A',
+  alert: '#D10F0F',
+  alertSoft: '#D10F0F14',
 };
 
 /**
@@ -135,22 +139,24 @@ export const Light: Palette = {
  *
  * What survives is the thing that is genuinely map-native: the emphasised stop disc. It is the
  * one mark that borrows the action colour, and `DiscInk` is measured against the lightness of
- * the four day cores it stands beside — which do not move. Under the light appearance
- * `Colors.accent` darkens to `#245E48` and near-black ink on it measures **2.49:1**, against
- * 7.50 in dark: a number on a pin nobody can read.
+ * the four day cores it stands beside — which do not move. It was split out when Kiln's light
+ * appearance darkened the accent until near-black ink on it measured 2.49:1; under Polar both
+ * appearances share the signal fill, so today the two values agree.
  *
  * The ink half of "over a photograph" lives in the palette as `onDeep` / `onDeepMuted`, because
  * `ThemedText` takes a `ThemeColor` and a text colour has to be one.
  *
  * **`money` joined it the same way the disc did: by failing on the device.** The stop card draws
- * a cost on glass over imagery, and `Colors.money` under the light appearance is `#886019`, a
- * cut darkened until it reads on paper. On a dark card it is an olive smudge. Same shape of
- * mistake as the disc, same answer — the figure is standing on the map, so it takes the map's
- * value, which is the bright cut both appearances started from.
+ * a cost on glass over imagery, and `Colors.money` under the light appearance is ink — correct on
+ * paper, invisible on dark glass over a city. Same shape of mistake as the disc, same answer: the
+ * figure is standing on the map, so it takes the map's value, white.
  */
 export const OverPhotograph = {
-  accentDisc: '#28B981',
-  money: '#E9B44C',
+  // Polar's action fill is the same in both appearances, so the disc no longer needs a cut of its
+  // own. It stays a separate token because the disc is a map mark, and the map does not follow
+  // the page.
+  accentDisc: '#FF7E15',
+  money: '#FFFFFF',
 } as const;
 
 /**
