@@ -128,3 +128,41 @@ test("a write is never widened to the legacy bucket", () => {
   assert.ok(getTrip(legacy.id), "a legacy row must survive a stranger's delete");
   assert.equal(setTripShareToken(legacy.id, "tok-legacy", stranger), false);
 });
+
+/* --- many processes opening one fresh database at once --- */
+
+// `next build` collects page data with about nine worker processes, and every one of them imports
+// this module, which migrates the schema at import time. On a fresh file two of them could both see
+// a column missing and both add it; the second died with "duplicate column name: run_id" and failed
+// the build (a rerun passed, the columns existing by then, so it only bit a clean checkout or CI).
+// The window is a few microseconds wide, so this catches a regression in some runs, not every one:
+// measured on the old code, about one round in seven collided. It can never fail on correct code.
+test("parallel processes can migrate one fresh database file without colliding", async () => {
+  const { spawn } = await import("node:child_process");
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(path.join(tmpdir(), "tripmate-db-race-"));
+  try {
+    for (let round = 0; round < 5; round++) {
+      const file = path.join(dir, `race-${round}.db`);
+      // Node boots slowly enough that processes merely started together reach the migration spread
+      // out and seldom collide, so each loads the driver first and waits for one shared moment.
+      const startAt = Date.now() + 1000;
+      const code = `await import("libsql"); while (Date.now() < ${startAt}); await import("./src/lib/db.ts");`;
+      const open = () =>
+        new Promise((resolve) => {
+          const child = spawn(process.execPath, ["--import", "./scripts/ts-resolve.mjs", "--input-type=module", "-e", code], {
+            env: { ...process.env, DB_PATH: file },
+            stdio: ["ignore", "ignore", "pipe"],
+          });
+          let err = "";
+          child.stderr.on("data", (d) => (err += d));
+          child.on("close", (exit) => resolve({ exit, err }));
+        });
+      const failed = (await Promise.all(Array.from({ length: 8 }, open))).filter((r) => r.exit !== 0);
+      assert.equal(failed.length, 0, failed.map((r) => r.err.match(/\w*Error: .*/)?.[0] ?? r.err).join("\n"));
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

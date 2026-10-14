@@ -277,9 +277,16 @@ function hasColumn(table: string, column: string): boolean {
   return cols.some((c) => c.name === column);
 }
 
+// The PRAGMA check alone is not enough when several processes open one fresh file at once, which is
+// what `next build` does with its page-data workers: two of them both see the column missing and the
+// second ALTER fails with "duplicate column name", failing the build. The column existing is the
+// outcome we wanted, so only that error is swallowed, and only once the column is confirmed there.
 function addColumnIfMissing(table: string, column: string, ddlType: string): void {
-  if (!hasColumn(table, column)) {
+  if (hasColumn(table, column)) return;
+  try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddlType}`);
+  } catch (e) {
+    if (!/duplicate column name/i.test((e as Error).message) || !hasColumn(table, column)) throw e;
   }
 }
 
