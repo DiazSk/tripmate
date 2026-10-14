@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { clerkClientConfigured } from "@/lib/clerkConfig";
 import SignInForm from "./SignInForm";
+import { SignInPassFrame } from "./SignInPassFrame";
 
 export const metadata: Metadata = {
   title: "Sign in · TripMate",
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
  * page "/signin"` — rather than degrading, which is the one good thing about this particular
  * mistake: it cannot reach production silently.
  *
- * The fallback is the page's own frame with the form's space held, so the shell renders
+ * The fallback is the page's own frame (the night photograph and a pass), so the shell renders
  * immediately and nothing jumps when the client half arrives.
  */
 export default function SignInPage() {
@@ -27,29 +28,27 @@ export default function SignInPage() {
   // key exists. That key, not the runtime-only secret, because this page is prerendered at build. Say so plainly instead of crashing: accounts are optional here, planning is not gated.
   if (!clerkClientConfigured()) {
     return (
-      <main className="map-chrome-hidden min-h-full px-5 pt-[calc(var(--nav-h)+1.25rem)] pb-16 sm:px-6 sm:pt-[calc(var(--nav-h)+1.5rem)] sm:pb-24">
-        <div className="pointer-events-auto mx-auto w-full max-w-sm">
-          <h1 className="font-display text-2xl font-semibold text-foreground">Accounts aren&apos;t set up</h1>
-          <p className="pt-2 text-sm text-muted">
-            Accounts aren&apos;t set up on this server yet. You can keep planning without one.
-          </p>
-          <p className="pt-5 text-sm">
-            <Link href="/" className="font-medium text-foreground underline underline-offset-4">
+      <SignInPassFrame>
+        <div className="sp-plain">
+          <h1 className="sp-title">Accounts aren&apos;t set up</h1>
+          <p className="sp-lead">Accounts aren&apos;t set up on this server yet. You can keep planning without one.</p>
+          <p>
+            <Link href="/" className="sp-link">
               Back to planning
             </Link>
           </p>
         </div>
-      </main>
+      </SignInPassFrame>
     );
   }
   return (
     <Suspense
       fallback={
-        <main className="map-chrome-hidden min-h-full px-5 pt-[calc(var(--nav-h)+1.25rem)] pb-16 sm:px-6 sm:pt-[calc(var(--nav-h)+1.5rem)] sm:pb-24">
-          <div className="mx-auto w-full max-w-sm">
-            <h1 className="font-display text-2xl font-semibold text-foreground">Welcome back</h1>
+        <SignInPassFrame>
+          <div className="sp-plain" aria-busy="true">
+            <h1 className="sp-title">Welcome back</h1>
           </div>
-        </main>
+        </SignInPassFrame>
       }
     >
       <SignInForm />

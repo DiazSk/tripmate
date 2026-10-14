@@ -210,6 +210,8 @@ export interface TripSummary {
   /** Absent on payloads built before drafts existed; every reader treats a missing value as
    *  `"saved"`, matching the column's own backfill. */
   status?: TripStatus;
+  /** When the row was written (ISO). The memories wall counts a draft's days left from it. */
+  createdAt?: string;
 }
 
 export interface Trip extends TripSummary {

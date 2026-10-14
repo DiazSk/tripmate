@@ -1,0 +1,361 @@
+/* My memories, as the canvas design "My memories · A Postcard wall" draws it: the next trip full
+   bleed with its city as the monument, then the wall on paper, a postcard per trip. Under the app's
+   own Polar nav, which reads each band's data-nav-theme. */
+
+.tm.ma {
+  min-height: 100dvh;
+  color: var(--wd-ink);
+  background: var(--wd-paper);
+  pointer-events: auto;
+}
+
+/* The first screen: the next trip */
+.ma-hero {
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  align-content: end;
+  overflow: hidden;
+  container-type: inline-size;
+  padding: 0 var(--wd-pad);
+  background: var(--wd-night);
+}
+.ma-hero-img {
+  object-fit: cover;
+  animation: tm-reveal-opacity 0.8s both, ma-settle 2.4s var(--wd-ease-reveal) both;
+}
+@keyframes ma-settle {
+  from {
+    transform: scale(1.06);
+  }
+}
+.ma-hero-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(9, 11, 16, 0.5) 0%,
+    rgba(9, 11, 16, 0) 22%,
+    rgba(9, 11, 16, 0) 38%,
+    rgba(9, 11, 16, 0.55) 62%,
+    rgba(9, 11, 16, 0.85) 100%
+  );
+}
+.ma-hero-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.6em;
+  max-width: 44em;
+  padding-bottom: var(--wd-space-3);
+}
+.ma-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  font-size: 0.72em;
+}
+.ma-dot {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: var(--wd-signal);
+  box-shadow: 0 0 0 0.25em rgba(255, 126, 21, 0.25);
+}
+.ma-line {
+  font-size: clamp(1.25em, 1.8vw, 1.6em);
+}
+/* The size is set inline from the name's real Oswald width (monumentEms). */
+.tm .ma-monument {
+  text-align: left;
+  opacity: 0.94;
+}
+
+.ma-empty {
+  min-height: 82dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--wd-space-3);
+  max-width: 40em;
+  margin: 0 auto;
+  padding: calc(var(--nav-h) + var(--wd-space-8)) var(--wd-pad) var(--wd-space-8);
+  text-align: center;
+}
+
+/* The wall */
+.ma-wall {
+  display: grid;
+  gap: var(--wd-space-4);
+  padding: var(--wd-space-8) var(--wd-pad) var(--wd-space-6);
+}
+.ma-empty + .ma-wall {
+  padding-top: 0;
+}
+.ma-wall-head {
+  display: grid;
+  gap: var(--wd-space-3);
+  max-width: 46em;
+}
+.ma-wall-head:empty,
+.ma-receipt:empty {
+  display: none;
+}
+.ma-error {
+  padding: 0.75em 0.9em;
+  font-size: 0.88em;
+  color: var(--wd-alert-text);
+  background: rgba(209, 15, 15, 0.05);
+  border-left: 2px solid currentColor;
+}
+.ma-tabs {
+  display: inline-flex;
+  gap: 0.25em;
+  justify-self: start;
+  padding: 0.25em;
+  background: var(--wd-veil-05);
+  border-radius: var(--wd-radius-sm);
+}
+.ma-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  min-height: 2.75em;
+  padding: 0 1em;
+  font-size: 0.88em;
+  font-weight: 600;
+  color: var(--wd-charcoal);
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.25s, color 0.25s;
+}
+.ma-tabs button span {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  opacity: 0.7;
+}
+.ma-tabs button[aria-pressed="true"] {
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  box-shadow: 0 1px 2px rgba(31, 42, 68, 0.12);
+}
+.ma-note {
+  max-width: 40em;
+}
+.ma-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--wd-space-5) var(--wd-gutter);
+}
+.ma-cards li {
+  animation: tm-reveal-opacity 0.7s both, ma-rise 0.9s var(--wd-ease-reveal) both;
+  animation-delay: calc(var(--i) * 70ms);
+}
+@keyframes ma-rise {
+  from {
+    transform: translateY(1.2em);
+  }
+}
+
+/* A postcard. A container, so the delete control can sit level with the caption's first line: the
+   photo is 4:3, so the caption starts 75% of the card's width down. */
+.ma-card {
+  position: relative;
+  container-type: inline-size;
+}
+.ma-card-link {
+  display: grid;
+  gap: 0.9em;
+  border-radius: var(--wd-radius-card);
+}
+.ma-card-link:focus-visible {
+  outline: 2px solid var(--wd-signal);
+  outline-offset: 4px;
+}
+.ma-photo {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  container-type: inline-size;
+  background: var(--wd-night);
+  border-radius: var(--wd-radius-card);
+}
+.ma-photo-img {
+  object-fit: cover;
+  animation: tm-reveal-opacity 0.6s both;
+  transition: transform 1.2s var(--wd-ease-reveal);
+}
+.ma-card-link:hover .ma-photo-img {
+  transform: scale(1.04);
+}
+.ma-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(9, 11, 16, 0.25) 0%,
+    rgba(9, 11, 16, 0) 30%,
+    rgba(9, 11, 16, 0) 55%,
+    rgba(9, 11, 16, 0.6) 100%
+  );
+  pointer-events: none;
+}
+/* No photograph: the place's initial, large, on the night ground. Never a grey box. */
+.ma-photo-type {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 90% at 30% 20%, rgba(106, 240, 255, 0.08), transparent 60%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 8.33%),
+    var(--wd-deep);
+}
+.ma-photo-type span {
+  font-family: var(--wd-font-display);
+  font-size: 46cqw;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.14);
+}
+.ma-stamp {
+  position: absolute;
+  left: 0.55em;
+  bottom: 0.1em;
+  z-index: 1;
+  max-width: calc(100% - 1.1em);
+  overflow: hidden;
+  font-family: var(--wd-font-condensed);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: clip;
+  line-height: 1;
+  font-size: min(18cqw, 4.4em);
+  color: #fff;
+  opacity: 0.95;
+}
+/* The postmark: a ring with the month and year, the one stamp a postcard always carries. */
+.ma-postmark {
+  position: absolute;
+  top: 0.75em;
+  right: 0.75em;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  width: 4.1em;
+  height: 4.1em;
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  transform: rotate(-12deg);
+  line-height: 1;
+}
+.ma-postmark em {
+  font-style: normal;
+  font-family: var(--wd-font-condensed);
+  font-size: 1.05em;
+  letter-spacing: 0.06em;
+}
+.ma-postmark b {
+  font-weight: 600;
+  font-size: 0.62em;
+  letter-spacing: 0.14em;
+  margin-top: 0.2em;
+}
+.ma-flag {
+  position: absolute;
+  top: 0.9em;
+  left: 0.9em;
+  z-index: 1;
+  padding: 0.35em 0.65em;
+  font-size: 0.68em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wd-ink);
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: var(--wd-radius-hairline);
+}
+.ma-flag.is-draft {
+  background: var(--wd-signal);
+}
+.ma-caption {
+  display: grid;
+  gap: 0.25em;
+  padding: 0 3.25em 0 0.1em;
+}
+.ma-dest {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  flex-wrap: wrap;
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  font-size: 1.6em;
+  line-height: 1.1;
+}
+.ma-dest span {
+  font-family: var(--wd-font-sans);
+  font-size: 0.5em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wd-charcoal);
+}
+.ma-meta {
+  font-size: 0.86em;
+  color: var(--wd-charcoal);
+  font-variant-numeric: tabular-nums;
+}
+.ma-clears {
+  font-size: 0.8em;
+  color: var(--wd-ember);
+}
+/* On paper, in the caption, level with the destination: always visible, quiet until it is meant.
+   2.75em is the 44px target the one control that destroys data has to meet. */
+.ma-delete {
+  position: absolute;
+  top: calc(75cqw + 0.3em);
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 2.75em;
+  height: 2.75em;
+  color: var(--wd-charcoal);
+  border: 1px solid var(--wd-rule);
+  border-radius: 50%;
+  transition: color 0.25s, border-color 0.25s, background-color 0.25s;
+}
+.ma-delete:hover {
+  color: #fff;
+  background: var(--wd-alert-text);
+  border-color: var(--wd-alert-text);
+}
+.ma-delete:focus-visible {
+  outline: 2px solid var(--wd-signal);
+  outline-offset: 2px;
+}
+.ma-foot {
+  padding: var(--wd-space-5) var(--wd-pad);
+  border-top: 1px solid var(--wd-rule);
+}
+
+@media (max-width: 1100px) {
+  .ma-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 680px) {
+  .ma-cards {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ma-hero-img,
+  .ma-cards li {
+    animation: none;
+  }
+}

@@ -3,7 +3,7 @@
 import { devLabel } from "@/lib/devInspector";
 import { GroupType } from "@/lib/types";
 
-const GROUP_TYPES: { id: GroupType; label: string }[] = [
+export const GROUP_TYPES: { id: GroupType; label: string }[] = [
   { id: "solo", label: "Solo" },
   { id: "couple", label: "Couple" },
   { id: "family_with_kids", label: "Family with kids" },

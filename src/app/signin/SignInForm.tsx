@@ -5,13 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSignIn, useSignUp } from "@clerk/nextjs";
 
-import ErrorNote from "@/components/ErrorNote";
 import GoogleMark from "@/components/GoogleMark";
+import { SignInPassFrame } from "./SignInPassFrame";
 import { clerkMessage, unsupportedStepMessage } from "@/lib/clerkError";
 import { safeNextPath } from "@/lib/safeNext";
-
-const FIELD =
-  "w-full rounded-md border border-card-border bg-white/10 px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/25";
 
 /**
  * The shortest password Clerk accepts — this instance's own setting, mirrored so the browser can say
@@ -30,7 +27,8 @@ const CODE_COPY: Record<CodePurpose, string> = {
 };
 
 /**
- * Sign in, make an account, or get back in — one screen, a mode toggle and a code step.
+ * Sign in, make an account, or get back in — one screen, a mode toggle and a code step, drawn as
+ * the canvas design "Sign in · B Boarding pass" (`SignInPassFrame`, `polar/SignInPass.css`).
  *
  * **Nothing here is a gate.** Every path ends at `/signin/finish`, which claims what this browser
  * made signed out and routes on; see `FinishSignIn`.
@@ -168,157 +166,261 @@ export default function SignInForm() {
     );
   }
 
-  const LINK = "min-h-11 text-sm font-medium text-foreground underline underline-offset-4";
-  const SUBMIT =
-    "w-full rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-60";
-  const SECONDARY =
-    "inline-flex w-full items-center justify-center gap-2 rounded-full border border-card-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/10 disabled:opacity-60";
+  // The name only counts while making an account, the one mode that asks for it.
+  const passenger = (creating && name.trim()) || email.trim().split("@")[0] || "You";
+  const stage = purpose ? "At the gate" : creating ? "Check-in" : "Boarding";
+  const title = purpose ? "Check your email" : creating ? "Make an account" : "Welcome back";
+  const lead = purpose
+    ? `${CODE_COPY[purpose]} (${email})`
+    : creating
+      ? "Your trips and travel profile stay with you, on this browser and on your phone."
+      : "Sign in to find your trips wherever you are.";
 
   return (
-    <main className="map-chrome-hidden min-h-full px-5 pt-[calc(var(--nav-h)+1.25rem)] pb-16 sm:px-6 sm:pt-[calc(var(--nav-h)+1.5rem)] sm:pb-24">
-      {/* `pointer-events-auto`: AppShell's scroll container is `pointer-events-none` so the globe
-          stays draggable; without opting back in, clicks would reach the canvas, not the form. */}
-      <div className="pointer-events-auto mx-auto w-full max-w-sm">
-        <h1 className="font-display text-2xl font-semibold text-foreground">
-          {purpose ? "Check your email" : creating ? "Make an account" : "Welcome back"}
-        </h1>
-        <p className="pt-2 text-sm text-muted">
-          {purpose
-            ? `${CODE_COPY[purpose]} (${email})`
-            : creating
-              ? "Your trips and travel profile stay with you, on this browser and on your phone."
-              : "Sign in to find your trips wherever you are."}
-        </p>
-
-        {purpose ? (
-          <form onSubmit={submitCode} className="space-y-3 pt-7">
-            <div>
-              <label htmlFor="code" className="block pb-1.5 text-xs font-medium text-muted">Code</label>
-              <input
-                id="code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                required
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                className={FIELD}
-              />
-            </div>
-            {purpose === "reset" && (
-              <div>
-                <label htmlFor="new-password" className="block pb-1.5 text-xs font-medium text-muted">New password</label>
-                <input
-                  id="new-password"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={PASSWORD_MIN}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={FIELD}
-                />
+    <SignInPassFrame>
+      <article className="sp-pass" aria-labelledby="sp-title">
+        <section className="sp-main">
+          <header className="sp-head">
+            <p className="tm-eyebrow sp-stage-word">{stage}</p>
+            {/* Two toggle buttons in a named group, as `/trips` does: no tab keyboard contract is
+                implemented, so the tab roles are not claimed. */}
+            {!purpose && (
+              <div className="sp-switch" role="group" aria-label="Sign in or make an account">
+                {(["in", "up"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={mode === m}
+                    onClick={() => {
+                      setMode(m);
+                      setError(null);
+                    }}
+                  >
+                    {m === "in" ? "Sign in" : "New account"}
+                  </button>
+                ))}
               </div>
             )}
-            {error && <ErrorNote>{error}</ErrorNote>}
-            <button type="submit" disabled={busy} className={SUBMIT}>
-              {busy ? "One moment…" : "Continue"}
-            </button>
-            <button
-              type="button"
-              className={LINK}
-              onClick={() => {
-                setPurpose(null);
-                setCode("");
-                setError(null);
-              }}
-            >
-              Use a different email
-            </button>
-          </form>
-        ) : (
-          <>
-            <form onSubmit={submitPassword} className="space-y-3 pt-7">
-              {creating && (
-                <div>
-                  <label htmlFor="name" className="block pb-1.5 text-xs font-medium text-muted">Name</label>
-                  <input id="name" type="text" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" className={FIELD} />
+          </header>
+          <h1 id="sp-title" className="sp-title">
+            {title}
+          </h1>
+          <p className="sp-lead">{lead}</p>
+
+          {purpose ? (
+            <form onSubmit={submitCode} className="sp-fields">
+              <div className="sp-field">
+                <label htmlFor="code" className="sp-label">
+                  Code
+                </label>
+                <div className="sp-code">
+                  <input
+                    id="code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    required
+                    autoFocus
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  />
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <span key={i} aria-hidden="true" className={`sp-cell${i === code.length ? " is-next" : ""}${code[i] ? " has" : ""}`}>
+                      {code[i] ?? ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {purpose === "reset" && (
+                <div className="sp-field">
+                  <label htmlFor="new-password" className="sp-label">
+                    New password
+                  </label>
+                  <input
+                    id="new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={PASSWORD_MIN}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="sp-input"
+                  />
+                  <p className="sp-hint">At least {PASSWORD_MIN} characters.</p>
                 </div>
               )}
-              <div>
-                <label htmlFor="email" className="block pb-1.5 text-xs font-medium text-muted">Email</label>
-                <input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={FIELD} />
-              </div>
-              <div>
-                <label htmlFor="password" className="block pb-1.5 text-xs font-medium text-muted">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  // The browser needs telling which of the two this is, or it offers to fill a new
-                  // password into a sign-in box and to autofill an old one into a sign-up box.
-                  autoComplete={creating ? "new-password" : "current-password"}
-                  minLength={PASSWORD_MIN}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={FIELD}
-                />
-                {creating && <p className="pt-1.5 text-xs text-muted">At least {PASSWORD_MIN} characters.</p>}
-              </div>
-              {!creating && (
-                <div className="flex flex-wrap gap-x-4">
-                  <button type="button" className={LINK} onClick={emailMeACode} disabled={busy}>Email me a code instead</button>
-                  <button type="button" className={LINK} onClick={forgotPassword} disabled={busy}>Forgot password?</button>
-                </div>
+              {error && (
+                <p className="sp-error" role="alert">
+                  {error}
+                </p>
               )}
-              {error && <ErrorNote>{error}</ErrorNote>}
-              <button type="submit" disabled={busy} className={SUBMIT}>
-                {busy ? "One moment…" : creating ? "Create account" : "Sign in"}
+              <button type="submit" disabled={busy} className="tm-signal tm-signal-lg sp-wide">
+                {busy ? "One moment…" : "Continue"}
               </button>
-            </form>
-            {/* Clerk's bot protection mounts here for custom sign-up flows. */}
-            {creating && <div id="clerk-captcha" />}
-
-            {/* The same "or" rule the phone draws: Apple and Google are another way to do this
-                form's one job, so they sit under it rather than beside it. */}
-            <div className="flex items-center gap-3 pt-5" aria-hidden="true">
-              <span className="h-px flex-1 bg-card-border" />
-              <span className="text-xs text-muted">or</span>
-              <span className="h-px flex-1 bg-card-border" />
-            </div>
-            <div className="space-y-2 pt-3">
-              <button type="button" className={SECONDARY} onClick={() => social("oauth_apple")}>Continue with Apple</button>
-              <button type="button" className={SECONDARY} onClick={() => social("oauth_google")}>
-                <GoogleMark />
-                Continue with Google
-              </button>
-            </div>
-
-            <p className="pt-5 text-sm text-muted">
-              {creating ? "Already have an account?" : "New here?"}{" "}
               <button
                 type="button"
+                className="sp-link"
                 onClick={() => {
-                  setMode(creating ? "in" : "up");
+                  setPurpose(null);
+                  setCode("");
                   setError(null);
                 }}
-                className="min-h-11 font-medium text-foreground underline underline-offset-4"
               >
-                {creating ? "Sign in" : "Make one"}
+                Use a different email
               </button>
-            </p>
-          </>
-        )}
+            </form>
+          ) : (
+            <>
+              <form onSubmit={submitPassword} className="sp-fields">
+                {creating && (
+                  <div className="sp-field">
+                    <label htmlFor="name" className="sp-label">
+                      Name <span className="sp-optional">Optional</span>
+                    </label>
+                    <input id="name" type="text" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="sp-input" />
+                  </div>
+                )}
+                <div className="sp-field">
+                  <label htmlFor="email" className="sp-label">
+                    Email
+                  </label>
+                  <input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="sp-input" />
+                </div>
+                <div className="sp-field">
+                  <label htmlFor="password" className="sp-label">
+                    Password
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    required
+                    // The browser needs telling which of the two this is, or it offers to fill a new
+                    // password into a sign-in box and to autofill an old one into a sign-up box.
+                    autoComplete={creating ? "new-password" : "current-password"}
+                    minLength={PASSWORD_MIN}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="sp-input"
+                  />
+                  {creating ? (
+                    <p className="sp-hint">At least {PASSWORD_MIN} characters. A sentence you will remember works well.</p>
+                  ) : (
+                    <div className="sp-links">
+                      <button type="button" className="sp-link" onClick={emailMeACode} disabled={busy}>
+                        Email me a code instead
+                      </button>
+                      <button type="button" className="sp-link" onClick={forgotPassword} disabled={busy}>
+                        Forgot password?
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {error && (
+                  <p className="sp-error" role="alert">
+                    {error}
+                  </p>
+                )}
+                <button type="submit" disabled={busy} className="tm-signal tm-signal-lg sp-wide">
+                  {busy ? "One moment…" : creating ? "Create account" : "Sign in"}
+                </button>
+              </form>
+              {/* Clerk's bot protection mounts here for custom sign-up flows. */}
+              {creating && <div id="clerk-captcha" />}
 
-        <p className="pt-2 text-sm text-muted">
-          Or{" "}
-          <Link href="/" className="font-medium text-foreground underline underline-offset-4">
-            keep planning without an account
-          </Link>
-          .
-        </p>
-      </div>
-    </main>
+              {/* The same "or" rule the phone draws: Apple and Google are another way to do this
+                  form's one job, so they sit under it rather than beside it. */}
+              <div className="sp-or" aria-hidden="true">
+                <span />
+                <em>or</em>
+                <span />
+              </div>
+              <div className="sp-social">
+                <button type="button" className="sp-apple" onClick={() => social("oauth_apple")}>
+                  <AppleMark />
+                  Continue with Apple
+                </button>
+                <button type="button" className="sp-google" onClick={() => social("oauth_google")}>
+                  <GoogleMark />
+                  Continue with Google
+                </button>
+              </div>
+
+              <p className="sp-switch-line">
+                {creating ? "Already have an account?" : "New here?"}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode(creating ? "in" : "up");
+                    setError(null);
+                  }}
+                  className="sp-link"
+                >
+                  {creating ? "Sign in" : "Make one"}
+                </button>
+              </p>
+            </>
+          )}
+        </section>
+
+        {/* The stub fills in from what is typed: the traveller as the passenger, this browser as
+            where the trips come from, every device as where they go. At the code step it becomes
+            the gate code, in the monument's own face. */}
+        <aside className="sp-stub" aria-label="Your pass">
+          <div className="sp-perf" aria-hidden="true" />
+          <dl className="sp-rows">
+            <div>
+              <dt>Passenger</dt>
+              <dd className="sp-passenger">{passenger}</dd>
+            </div>
+            <div>
+              <dt>From</dt>
+              <dd>This browser</dd>
+            </div>
+            <div>
+              <dt>To</dt>
+              <dd>Your phone and any browser</dd>
+            </div>
+            <div>
+              <dt>Carrying</dt>
+              <dd>Your trips and travel profile</dd>
+            </div>
+          </dl>
+          {purpose ? (
+            <div className="sp-gate">
+              <p className="tm-eyebrow">Gate code</p>
+              <p className="sp-gate-code" aria-hidden="true">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <span key={i}>{code[i] ?? "·"}</span>
+                ))}
+              </p>
+              <p className="tm-caption sp-gate-note">{CODE_COPY[purpose]}</p>
+            </div>
+          ) : (
+            <div className="sp-gate">
+              <p className="tm-eyebrow">Seat</p>
+              <p className="sp-seat">ANY</p>
+              <p className="tm-caption sp-gate-note">No account is needed to plan. This only keeps what you plan.</p>
+            </div>
+          )}
+        </aside>
+      </article>
+
+      <p className="tm-caption tm-on-dark sp-below">
+        Anything you planned on this browser comes with you.{" "}
+        <Link href="/">Keep planning without an account</Link>
+      </p>
+    </SignInPassFrame>
+  );
+}
+
+function AppleMark() {
+  return (
+    <svg width="17" height="20" viewBox="0 0 17 20" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M14.1 10.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9C3.6 4.8 1.9 5.8 1 7.4c-1.9 3.3-.5 8.1 1.3 10.8.9 1.3 2 2.7 3.4 2.7 1.3-.1 1.9-.9 3.5-.9s2.1.9 3.5.8c1.4 0 2.4-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-2.9-1.1-2.9-4.3zM11.5 3c.7-.9 1.2-2 1.1-3.2-1 0-2.3.7-3 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3-1.5z"
+      />
+    </svg>
   );
 }

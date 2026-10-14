@@ -16,13 +16,13 @@ import { DiscoveryPreference, PacePreference } from "@/lib/types";
  * gone, because nothing should be able to ask the conflated question any more.
  */
 
-const PACES: { id: PacePreference; label: string; hint: string }[] = [
+export const PACES: { id: PacePreference; label: string; hint: string }[] = [
   { id: "relaxed", label: "Relaxed", hint: "2–3 stops a day, room to breathe" },
   { id: "balanced", label: "Balanced", hint: "4 stops a day" },
   { id: "packed", label: "Packed", hint: "4–5 stops a day, tight schedule" },
 ];
 
-const DISCOVERIES: { id: DiscoveryPreference; label: string; hint: string }[] = [
+export const DISCOVERIES: { id: DiscoveryPreference; label: string; hint: string }[] = [
   { id: "iconic", label: "Iconic", hint: "The headline attractions" },
   { id: "local", label: "Off the beaten path", hint: "Local spots over headline attractions" },
   { id: "mix", label: "A bit of both", hint: "A balance of iconic and local" },

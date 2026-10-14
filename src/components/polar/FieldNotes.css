@@ -1,0 +1,599 @@
+.pf-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+.pf-choices.is-lined {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.pf-choice {
+  display: grid;
+  gap: 0.2em;
+  align-content: center;
+  min-height: 2.75em;
+  padding: 0.55em 1em;
+  text-align: left;
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-sm);
+  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+.pf-choice:hover {
+  border-color: var(--wd-ink);
+}
+.pf-choice[aria-checked='true'] {
+  border-color: var(--wd-ink);
+  box-shadow: inset 0 0 0 1px var(--wd-ink);
+}
+.pf-choice-label {
+  font-size: 0.9em;
+  font-weight: 600;
+}
+.pf-choice-line {
+  font-size: 0.78em;
+  line-height: 1.35;
+  color: var(--wd-charcoal);
+}
+.pf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+.pf-chip {
+  display: inline-flex;
+  align-items: stretch;
+  height: 3.2em;
+  font-size: 0.86em;
+  background: var(--wd-ice);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: 999px;
+  overflow: hidden;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.pf-chip.is-on {
+  color: #fff;
+  background: var(--wd-ink);
+  border-color: var(--wd-ink);
+}
+.pf-chip.is-star {
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+  border-color: var(--wd-signal);
+}
+.pf-chip-plain {
+  align-items: center;
+  padding: 0 1em;
+  font-weight: 600;
+}
+.pf-chip-main {
+  padding: 0 0.4em 0 1em;
+  font-weight: 600;
+}
+.pf-chip-star {
+  padding: 0 0.85em 0 0.35em;
+  font-size: 1.05em;
+  opacity: 0.7;
+}
+.pf-chip-star:disabled {
+  opacity: 0.25;
+}
+.pf-chip-star[aria-pressed='true'] {
+  opacity: 1;
+}
+.pf-hint {
+  font-size: 0.8em;
+  line-height: 1.45;
+  color: var(--wd-charcoal);
+}
+.pf-stars-left {
+  width: 100%;
+  margin-top: 0.3em;
+}
+.pf-diet {
+  display: grid;
+  gap: 0.8em;
+}
+.pf-note,
+.pf-home-search {
+  display: grid;
+  gap: 0.35em;
+}
+.pf-note span {
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wd-charcoal);
+}
+.pf-note input,
+.pf-home-search input {
+  height: 2.8em;
+  padding: 0 0.85em;
+  font-size: 0.92em;
+  background: var(--wd-ice);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-sm);
+  outline: none;
+}
+.pf-note input:focus,
+.pf-home-search input:focus {
+  border-color: var(--wd-signal);
+  box-shadow: 0 0 0 1px var(--wd-signal);
+}
+.pf-home {
+  display: grid;
+  gap: 0.6em;
+}
+.pf-home-now {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  font-family: var(--wd-font-display);
+  font-size: 1.35em;
+}
+.pf-pin {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--wd-signal);
+  box-shadow: 0 0 0 0.25em rgba(255, 126, 21, 0.2);
+}
+.pf-home-search {
+  position: relative;
+}
+.pf-home-list {
+  position: absolute;
+  top: calc(100% + 0.3em);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  list-style: none;
+  margin: 0;
+  padding: 0.3em;
+  background: var(--wd-ice);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-sm);
+  box-shadow: 0 1em 2em -1em rgba(31, 42, 68, 0.3);
+}
+.pf-home-list button {
+  width: 100%;
+  padding: 0.6em 0.7em;
+  text-align: left;
+  font-size: 0.9em;
+  border-radius: var(--wd-radius-hairline);
+}
+.pf-home-list button:hover,
+.pf-home-list button:focus-visible {
+  background: var(--wd-snow);
+}
+
+/* Save */
+.pf-save {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  flex-wrap: wrap;
+}
+.pf-save-state {
+  font-size: 0.86em;
+  color: var(--wd-charcoal);
+}
+.pf-save-actions {
+  display: flex;
+  gap: 0.4em;
+}
+
+@media (max-width: 720px) {
+  .pf-choices.is-lined {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Profile, as the canvas design "Profile · B Field notes" draws it: the latest trip's photograph
+   under the first name, the profile said back as one sentence, then an index of the eight answers
+   beside the controls that change them. Under the app's own Polar nav. */
+.tm.pb {
+  min-height: 100dvh;
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  pointer-events: auto;
+}
+
+/* The masthead */
+.tm .pb-mast {
+  position: relative;
+  min-height: 72dvh;
+  display: grid;
+  align-content: end;
+  padding-top: var(--nav-h);
+  overflow: hidden;
+  color: #fff;
+  background: var(--wd-night);
+  container-type: inline-size;
+}
+.pb-mast-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 60%;
+  animation: tm-reveal-opacity 0.8s both;
+}
+.pb-mast-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(9, 11, 16, 0.55) 0%, rgba(9, 11, 16, 0.1) 24%, rgba(9, 11, 16, 0.5) 52%, rgba(9, 11, 16, 0.9) 100%);
+}
+.pb-mast-foot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--wd-space-2);
+  padding: 0 var(--wd-pad);
+}
+.pb-who {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--wd-space-3);
+  flex-wrap: wrap;
+}
+.pb-who > :first-child {
+  flex-shrink: 0;
+}
+.pb-who-text {
+  display: grid;
+  gap: 0.35em;
+  min-width: 0;
+  flex: 1;
+}
+.pb-who-text .tm-eyebrow {
+  font-size: 0.68em;
+}
+.pb-fullname {
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  font-size: clamp(1.8em, 2.6vw, 2.4em);
+  line-height: 1.05;
+}
+.pb-out {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75em;
+  margin-left: 0.8em;
+  font-weight: 600;
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+.pb-out:disabled {
+  opacity: 0.6;
+}
+.pb-figures {
+  display: flex;
+  gap: var(--wd-space-5);
+  margin: 0;
+}
+.pb-figures dt {
+  font-size: 0.66em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wd-night-text-2);
+}
+.pb-figures dd {
+  margin: 0.15em 0 0;
+  font-family: var(--wd-font-condensed);
+  font-size: 2.6em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+/* The size is set inline from the name's real Oswald width (monumentEms). */
+.tm .pb-monument {
+  text-align: left;
+  opacity: 0.94;
+}
+
+/* The sentence */
+.tm .pb-sentence {
+  display: grid;
+  gap: 0.8em;
+  padding: var(--wd-space-6) var(--wd-pad) var(--wd-space-5);
+  border-bottom: 1px solid var(--wd-rule);
+}
+.pb-receipt:empty {
+  display: none;
+}
+.pb-receipt {
+  max-width: 40em;
+}
+.pb-sentence .tm-eyebrow {
+  font-size: 0.7em;
+  color: var(--wd-ember);
+}
+.pb-line {
+  max-width: 34em;
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(1.6em, 2.6vw, 2.35em);
+  line-height: 1.22;
+  animation: tm-reveal-opacity 0.6s both;
+}
+
+/* The index and the fields */
+.pb-body {
+  display: grid;
+  grid-template-columns: minmax(18em, 4fr) minmax(0, 8fr);
+  gap: var(--wd-space-6);
+  padding: 0 var(--wd-pad) var(--wd-space-10);
+}
+.pb-index {
+  position: sticky;
+  top: calc(var(--nav-h) + var(--wd-space-2));
+  align-self: start;
+  padding-top: var(--wd-space-4);
+  display: grid;
+  gap: var(--wd-space-3);
+}
+.pb-index ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--wd-ink);
+}
+.pb-index a {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0.6em;
+  padding: 0.7em 0.4em;
+  border-bottom: 1px solid var(--wd-rule);
+  transition: background-color 0.25s;
+}
+.pb-index a:hover {
+  background: var(--wd-snow);
+}
+.pb-index a.is-on {
+  background: var(--wd-paper);
+  box-shadow: inset 2px 0 0 var(--wd-signal);
+}
+.pb-index-n {
+  grid-row: span 2;
+  font-family: var(--wd-font-condensed);
+  font-size: 1.05em;
+  color: var(--wd-stone);
+  font-variant-numeric: tabular-nums;
+}
+.pb-index-t {
+  font-size: 0.82em;
+  font-weight: 600;
+}
+.pb-index-a {
+  font-size: 0.78em;
+  color: var(--wd-charcoal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pb-save {
+  display: grid;
+  gap: 0.6em;
+  padding: 1em;
+  background: var(--wd-snow);
+  border-radius: var(--wd-radius-sm);
+  border: 1px solid transparent;
+}
+.pb-save.is-up {
+  border-color: var(--wd-signal);
+  background: rgba(255, 126, 21, 0.06);
+}
+.pb-save .pf-save-actions {
+  justify-content: flex-end;
+}
+.pb-fields {
+  display: grid;
+  gap: 0;
+}
+.pb-field {
+  display: grid;
+  gap: 0.5em;
+  padding: var(--wd-space-5) 0;
+  border-bottom: 1px solid var(--wd-rule);
+  scroll-margin-top: calc(var(--nav-h) + 1em);
+}
+.pb-field-title {
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  font-size: 1.85em;
+  line-height: 1.1;
+}
+.pb-field-control {
+  margin-top: 0.5em;
+  max-width: 46em;
+}
+
+/* Kept from your trips */
+.pb-kept {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--wd-space-5);
+  padding-top: var(--wd-space-6);
+}
+.pb-kept-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1em;
+  padding-bottom: 0.5em;
+  margin-bottom: 0.8em;
+  border-bottom: 1px solid var(--wd-ink);
+}
+.pb-kept-head .tm-eyebrow {
+  font-size: 0.7em;
+}
+.pb-kept-head a {
+  font-size: 0.8em;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+.pb-kept-head span {
+  font-size: 0.8em;
+  color: var(--wd-charcoal);
+}
+.pb-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6em;
+}
+.pb-strip a {
+  display: grid;
+  gap: 0.25em;
+}
+/* No photograph: the place's initial on the night ground, never a grey box; a hit fades in over it. */
+.pb-strip-photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--wd-deep);
+  border-radius: var(--wd-radius-sm);
+}
+.pb-strip-photo > span {
+  font-family: var(--wd-font-display);
+  font-size: 3em;
+  color: rgba(255, 255, 255, 0.16);
+}
+.pb-strip-photo img {
+  object-fit: cover;
+  animation: tm-reveal-opacity 0.6s both;
+}
+.pb-strip b {
+  margin-top: 0.3em;
+  font-family: var(--wd-font-display);
+  font-weight: 500;
+  font-size: 1.1em;
+  line-height: 1.1;
+}
+.pb-strip span {
+  font-size: 0.72em;
+  color: var(--wd-charcoal);
+}
+.pb-places {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pb-places li {
+  display: grid;
+  gap: 0.1em;
+  padding: 0.55em 0;
+  border-bottom: 1px solid var(--wd-rule);
+}
+.pb-places b {
+  font-size: 0.9em;
+  font-weight: 600;
+}
+.pb-places span {
+  font-size: 0.78em;
+  color: var(--wd-charcoal);
+}
+
+.pb-foot {
+  padding: var(--wd-space-5) var(--wd-pad);
+  border-top: 1px solid var(--wd-rule);
+}
+
+@media (max-width: 960px) {
+  .pb-body {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .pb-index {
+    position: sticky;
+    top: auto;
+    bottom: 0;
+    margin: 0 calc(-1 * var(--wd-pad));
+    padding: 0.6em var(--wd-pad);
+    border-top: 1px solid var(--wd-rule);
+    z-index: 5;
+    order: 2;
+    background: var(--wd-ice);
+  }
+  .pb-index ol {
+    display: none;
+  }
+  .pb-kept {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .pb-figures {
+    gap: var(--wd-space-3);
+  }
+  .pb-figures dd {
+    font-size: 1.9em;
+  }
+  .pb-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.pf-save-state.is-error {
+  color: var(--wd-alert-text);
+}
+
+/* The home-city search is the shared one (the welcome uses it on the night ground), so its paper
+   look is set here rather than in it. Unlayered, so it outranks its Tailwind utilities. */
+.pf-home input {
+  height: 2.8em;
+  padding: 0 0.85em;
+  font-size: 0.92em;
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-sm);
+  outline: none;
+  box-shadow: none;
+}
+.pf-home input:focus {
+  border-color: var(--wd-signal);
+  box-shadow: 0 0 0 1px var(--wd-signal);
+}
+.pf-home [role="option"] {
+  min-height: 2.75em;
+  padding: 0.6em 0.7em;
+  font-size: 0.9em;
+  color: var(--wd-ink);
+  border-radius: var(--wd-radius-hairline);
+}
+.pf-home [role="option"] span + span {
+  color: var(--wd-charcoal);
+}
+.pf-home [role="option"]:hover,
+.pf-home [role="option"]:focus-visible,
+.pf-home [role="option"][aria-selected="true"] {
+  background: var(--wd-snow);
+}
+.pf-choice:focus-visible,
+.pf-chip button:focus-visible,
+.pf-chip-plain:focus-visible,
+.pb-index a:focus-visible {
+  outline: 2px solid var(--wd-signal);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pb-mast-img,
+  .pb-line,
+  .pb-strip-photo img {
+    animation: none;
+  }
+}

@@ -3685,40 +3685,6 @@ html[data-story-mode="true"] .marker-day-label {
   }
 }
 
-/* The delete affordance. Hidden at rest so a wall of trips isn't a wall of
-   trash icons, revealed when the card is hovered or anything inside it takes focus.
-   `:focus-within` on the wrapper is what keeps it keyboard-reachable — tabbing to the
-   button reveals the button. */
-.memory-card-delete {
-  opacity: 0;
-  transition:
-    opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* **This pair is what reveals the button, including for the keyboard.** The button used to also
-   carry a focus-visible opacity utility, which was dead — `opacity: 0` above is unlayered and
-   outranks any layered utility — so the reveal has always come from `:focus-within` here. The
-   utility is gone now rather than left looking load-bearing: delete this rule trusting it and the
-   control becomes permanently invisible to anyone not using a pointer.
-
-   Named in words, not written as a class token: Tailwind's scanner reads comments, and now that no
-   element carries that utility, spelling it out here would put the dead rule straight back into the
-   stylesheet. */
-.memory-card-slot:hover .memory-card-delete,
-.memory-card-slot:focus-within .memory-card-delete {
-  opacity: 1;
-}
-
-/* A hover-only control is unreachable on a touch screen — there is no hover state to
-   enter, and the card itself is a link, so long-press does nothing useful either. On any
-   device whose primary pointer can't hover, the button is simply always visible. */
-@media (hover: none) {
-  .memory-card-delete {
-    opacity: 1;
-  }
-}
-
 /* --- Generation progress: the flight-path strip -------------------------------------------
    Segment widths come from STAGE_SECONDS, not from an even split, because the five stages are
    nowhere near equal — `generate` alone is ~95 of the ~150 nominal seconds. Split evenly the
@@ -3748,34 +3714,13 @@ html[data-story-mode="true"] .marker-day-label {
    this app is not, and the craft floor bans that shadow outside one. The geometry is the part
    worth having; the material is this system's own glass. */
 
-/* My Memories used to be paper: an opaque cream surface (`--postcard-paper` #f4f1ea) with its
-   own dark-ink token pair, each card rotated a degree or two off true and dropped on a heavy
-   shadow, a dashed postage stamp in the photo's corner. It was defended here as a scoped
-   material exception on the grounds that a physical postcard cannot be frosted glass — which
-   is true, and beside the point. It made this route the third visual language in a product
-   that should have one: glass over the globe on `/` and `/trip/[id]`, a cobalt scene on the
-   landing, and light paper objects here. A visitor arriving from a trip detail crossed from
-   dark translucent slate to tilted cream stationery in a single click, and read it as a
-   different application rather than as a different room of the same one.
-
-   The cards are `.glass-itinerary` now, like every other surface in the app. What made this
-   route feel like a collection was never the paper — it was the photographs, and they are
-   untouched. `.memory-card` carries only what glass does not: the resting shadow and the
-   hover lift. */
-.memory-card {
-  transition:
-    transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
 /* `.glass-itinerary` with the frost taken off, for the surfaces that have no globe behind them.
    A 56px blur of a flat `--canvas` is a blur of nothing — the argument `.scene-photo-frame` and
    TierPicker's price badge already make from the other side — and it is not free: each one is a
    render surface, and on `/trips` there was one per saved trip.
 
-   Three call sites, all of them routes where `globeWanted` is false, the canvas is
-   `visibility: hidden`, AND nothing else is painted behind the card: `/trips`' memory cards and
-   the two dead-end cards (`/trip/latest` with an empty database, and `/trip/[id]`'s not-found).
+   Two call sites, both routes where `globeWanted` is false, the canvas is
+   `visibility: hidden`, AND nothing else is painted behind the card: the two dead-end cards (`/trip/latest` with an empty database, and `/trip/[id]`'s not-found).
    `.glass-itinerary` itself is deliberately untouched — `/` result, `/trip/[id]` and the
    generation loader still sit over a real aerial map and still need the real thing.
 
@@ -3793,32 +3738,12 @@ html[data-story-mode="true"] .marker-day-label {
    apply, so #cbd5e1 lands at 12.1:1 and white at 18:1. `--surface-deep` is *lighter* than
    `--canvas`, so an opaque fill is the lift the blur used to be, not a flattening.
 
-   `ConfirmDialog` deliberately does NOT take this, even on `/trips`. Its panel sits over its own
+   `ConfirmDialog` deliberately does NOT take this. Its panel sits over its own
    `::backdrop` — 55% black plus a 4px blur over the live page — so there is something behind it
    to frost. Blur over a dimmed page is not blur over nothing. */
 .glass-itinerary.is-opaque {
   background: rgb(var(--surface-deep-rgb));
   backdrop-filter: none;
-}
-
-/* Keeps a bright photo's edge from bleeding into the card's own translucent border. Was a
-   black inset against cream; white at a low alpha is the same job on the far side of the
-   palette. */
-.memory-card-photo {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-}
-
-/* A lift, not a straighten — there is no tilt left to undo. Kept off `:focus-visible`,
-   unlike the old rule: `.glass-itinerary`'s box-shadow is plain unlayered CSS and outranks
-   any `@layer`-emitted utility, so a shared rule setting box-shadow here would silently
-   overwrite a focus ring. Focus uses `outline` on the element itself for that reason. */
-.memory-card:hover,
-.memory-card:focus-visible {
-  transform: translateY(-3px);
-}
-
-.memory-card:hover {
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
 }
 
 /* Print. Three rules here are load-bearing and none of the three failures is visible on screen.

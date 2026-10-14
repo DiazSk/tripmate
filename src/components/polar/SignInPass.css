@@ -1,0 +1,424 @@
+/* Sign in, as the canvas design "Sign in · B Boarding pass" draws it: Wadi Rum at night, full bleed,
+   and one ice pass over it. The form is the pass; the perforated stub beside it fills in as you go.
+   Under the app's own Polar nav (photo theme), so the design's copy of the nav is not drawn. */
+
+.tm.sp {
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  color: #fff;
+  background: var(--wd-night);
+  pointer-events: auto;
+}
+.sp-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.sp-bg img {
+  object-fit: cover;
+}
+.sp-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(120% 90% at 50% 45%, rgba(9, 11, 16, 0.25), rgba(9, 11, 16, 0.8));
+}
+.sp-stage,
+.sp-foot {
+  position: relative;
+  z-index: 1;
+}
+.sp-stage {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--wd-space-3);
+  padding: calc(var(--nav-h) + var(--wd-space-3)) var(--wd-pad) var(--wd-space-5);
+}
+
+/* The pass */
+.sp-pass {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 15.5em;
+  width: min(100%, 56em);
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  border-radius: var(--wd-radius-card);
+  box-shadow: 0 2.5em 5em -2em rgba(0, 0, 0, 0.55);
+  animation: sp-arrive 0.9s var(--wd-ease-reveal) both;
+}
+@keyframes sp-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(1.5em) rotate(-0.6deg);
+  }
+}
+.sp-main {
+  display: grid;
+  align-content: start;
+  gap: var(--wd-space-2);
+  padding: var(--wd-space-5) var(--wd-space-5) var(--wd-space-4);
+}
+.sp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+}
+.sp-stage-word {
+  font-size: 0.72em;
+  color: var(--wd-ember);
+}
+.sp-switch {
+  display: inline-flex;
+  padding: 0.2em;
+  background: var(--wd-veil-05);
+  border-radius: var(--wd-radius-sm);
+}
+.sp-switch button {
+  min-height: 2.4em;
+  padding: 0 0.9em;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--wd-charcoal);
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.25s, color 0.25s;
+}
+.sp-switch button[aria-pressed="true"] {
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  box-shadow: 0 1px 2px rgba(31, 42, 68, 0.12);
+}
+.sp-title {
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  font-size: clamp(2em, 3vw, 2.6em);
+  line-height: 1.05;
+}
+.sp-lead {
+  font-size: 0.92em;
+  line-height: 1.5;
+  color: var(--wd-charcoal);
+}
+.sp-fields {
+  display: grid;
+  gap: var(--wd-space-3);
+  margin-top: var(--wd-space-2);
+}
+.sp-field {
+  display: grid;
+  gap: 0.45em;
+}
+.sp-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wd-charcoal);
+}
+.sp-optional {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.sp-input {
+  width: 100%;
+  height: 2.9em;
+  padding: 0 0.8em;
+  font-size: 1em;
+  color: var(--wd-ink);
+  background: var(--wd-snow);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-sm);
+  outline: none;
+  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+.sp-input:focus {
+  background: var(--wd-ice);
+  border-color: var(--wd-signal);
+  box-shadow: 0 0 0 1px var(--wd-signal);
+}
+.sp-hint {
+  font-size: 0.78em;
+  line-height: 1.4;
+  color: var(--wd-charcoal);
+}
+.sp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.2em;
+}
+.sp-link {
+  min-height: 2.75em;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--wd-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  text-decoration-thickness: 1px;
+  justify-self: start;
+}
+.sp-link:disabled {
+  opacity: 0.5;
+}
+.sp-error {
+  padding: 0.7em 0.85em;
+  font-size: 0.85em;
+  line-height: 1.4;
+  color: var(--wd-alert-text);
+  background: rgba(209, 15, 15, 0.05);
+  border-left: 2px solid currentColor;
+}
+.sp-wide {
+  width: 100%;
+}
+.sp-or {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.9em;
+  font-size: 0.8em;
+}
+.sp-or span {
+  height: 1px;
+  background: var(--wd-rule);
+}
+.sp-or em {
+  font-family: var(--wd-font-display);
+  font-size: 1.15em;
+}
+.sp-social {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6em;
+}
+.sp-apple,
+.sp-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  min-height: 2.9em;
+  font-size: 0.9em;
+  font-weight: 600;
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.3s var(--wd-ease-out), border-color 0.3s var(--wd-ease-out);
+}
+.sp-apple {
+  color: #fff;
+  background: var(--wd-night);
+}
+.sp-apple:hover {
+  background: var(--wd-ash);
+}
+.sp-google {
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  border: 1px solid var(--wd-veil-15);
+}
+.sp-google:hover {
+  border-color: var(--wd-ink);
+}
+.sp-switch-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.88em;
+  color: var(--wd-charcoal);
+}
+
+/* Six cells over one real input, so typing, pasting and one-time-code autofill all work. */
+.sp-code {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5em;
+}
+.sp-code input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  font-size: 16px;
+  cursor: text;
+}
+.sp-cell {
+  display: grid;
+  place-items: center;
+  height: 3.2em;
+  font-family: var(--wd-font-condensed);
+  font-size: 1.35em;
+  background: var(--wd-snow);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-sm);
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.sp-cell.has {
+  background: var(--wd-ice);
+  border-color: var(--wd-ink);
+}
+.sp-code:focus-within .sp-cell.is-next {
+  border-color: var(--wd-signal);
+  box-shadow: 0 0 0 1px var(--wd-signal);
+}
+
+/* The stub: perforated from the pass, filling in as you go. */
+.sp-stub {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: var(--wd-space-4);
+  padding: var(--wd-space-5) var(--wd-space-4) var(--wd-space-4);
+  background: var(--wd-paper);
+  border-radius: 0 var(--wd-radius-card) var(--wd-radius-card) 0;
+}
+.sp-perf {
+  position: absolute;
+  top: 0.9em;
+  bottom: 0.9em;
+  left: -1px;
+  border-left: 2px dashed rgba(31, 42, 68, 0.22);
+}
+.sp-perf::before,
+.sp-perf::after {
+  content: "";
+  position: absolute;
+  left: -0.9em;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: rgba(9, 11, 16, 0.92);
+}
+.sp-perf::before {
+  top: -1.75em;
+}
+.sp-perf::after {
+  bottom: -1.75em;
+}
+.sp-rows {
+  display: grid;
+  align-content: start;
+  gap: 1.1em;
+  margin: 0;
+}
+.sp-rows dt {
+  font-size: 0.66em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wd-charcoal);
+}
+.sp-rows dd {
+  margin: 0.2em 0 0;
+  font-size: 0.92em;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sp-rows .sp-passenger {
+  font-family: var(--wd-font-condensed);
+  font-size: 1.5em;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+}
+.sp-gate {
+  display: grid;
+  gap: 0.35em;
+  padding-top: var(--wd-space-3);
+  border-top: 1px solid var(--wd-rule);
+}
+.sp-gate .tm-eyebrow {
+  font-size: 0.66em;
+  color: var(--wd-charcoal);
+}
+.sp-gate-code {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--wd-font-condensed);
+  font-size: 2.1em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.sp-seat {
+  font-family: var(--wd-font-condensed);
+  font-size: 2.6em;
+  line-height: 1;
+}
+.sp-gate-note {
+  color: var(--wd-charcoal);
+}
+.sp-below {
+  max-width: 40em;
+  text-align: center;
+  text-shadow: 0 1px 12px rgba(9, 11, 16, 0.6);
+}
+.sp-below a {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+.sp-foot {
+  padding: 0 var(--wd-pad) var(--wd-pad);
+}
+
+/* The quiet page for a server with no accounts set up, on the same night ground. */
+.sp-plain {
+  display: grid;
+  gap: var(--wd-space-2);
+  width: min(100%, 30em);
+  padding: var(--wd-space-5);
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  border-radius: var(--wd-radius-card);
+}
+
+@media (max-width: 860px) {
+  .sp-pass {
+    grid-template-columns: 1fr;
+  }
+  .sp-main {
+    padding: var(--wd-space-4) var(--wd-pad);
+  }
+  .sp-social {
+    grid-template-columns: 1fr;
+  }
+  .sp-stub {
+    border-radius: 0 0 var(--wd-radius-card) var(--wd-radius-card);
+    padding: var(--wd-space-4) var(--wd-pad);
+  }
+  .sp-rows {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sp-perf {
+    top: -1px;
+    right: 0.9em;
+    bottom: auto;
+    left: 0.9em;
+    border-top: 2px dashed rgba(31, 42, 68, 0.22);
+    border-left: 0;
+  }
+  .sp-perf::before,
+  .sp-perf::after {
+    top: -0.9em;
+    bottom: auto;
+  }
+  .sp-perf::before {
+    left: -1.75em;
+  }
+  .sp-perf::after {
+    right: -1.75em;
+    left: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sp-pass {
+    animation: none;
+  }
+}
