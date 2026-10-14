@@ -29,7 +29,7 @@ export function buildSketchPrompt(p: {
   return `Sketch a ${p.dates.length}-day trip to ${p.destination}: only the shape, not the stops.
 Days: ${p.dates.join(", ")}
 ${p.priorities.length ? `What matters to them: ${p.priorities.join(", ")}\n` : ""}${p.weather.length ? `Weather:\n${formatWeather(p.weather)}\n` : ""}${formatAnchors(p.anchors)}
-For each day give: a "theme" of 2-5 evocative words (e.g. "Old Tokyo, slowly"), the one "area" the day centres on, and the traveler's places ("anchors", exact names from the list) that belong on that day. Group places that are near each other; put outdoor places on the better-weather days. ${NO_EM_DASH_RULE}
+For each day give: a "theme" of 2-5 evocative words about that day in ${p.destination} (a place or neighbourhood of ${p.destination} and how the day feels, never a place from anywhere else), the one "area" the day centres on, and the traveler's places ("anchors", exact names from the list) that belong on that day. Group places that are near each other; put outdoor places on the better-weather days. ${NO_EM_DASH_RULE}
 
 Respond with ONLY valid JSON, no code fences:
 {"days":[{"date":"YYYY-MM-DD","theme":"2-5 words","area":"neighbourhood or town","anchors":["exact name"]}]}`;

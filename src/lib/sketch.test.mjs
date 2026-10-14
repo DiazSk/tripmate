@@ -16,6 +16,15 @@ test("the sketch prompt names the days, the musts and the ask", () => {
   assert.match(p, /"theme"/);
 });
 
+// The theme's guidance used to be one real example, "Old Tokyo, slowly", and a Lisbon plan came back
+// with a day titled "Old Tokyo, slowly (local, unhurried)". The ask now describes the shape against
+// the trip's own destination, so there is no other city in the prompt for the model to borrow.
+test("the sketch prompt ties each theme to this destination and borrows no other place", () => {
+  const p = buildSketchPrompt({ destination: "Lisbon, Portugal", dates: DATES, priorities: [], weather: [], anchors: [] });
+  assert.match(p, /"theme" of 2-5 evocative words about that day in Lisbon, Portugal/);
+  assert.doesNotMatch(p, /Tokyo|e\.g\./);
+});
+
 test("parseSketch keeps one entry per requested date, in order", () => {
   const raw = JSON.stringify({ days: [
     { date: "2026-10-07", theme: "Bay and art", area: "Odaiba", anchors: ["teamLab Planets"] },
