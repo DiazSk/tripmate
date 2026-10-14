@@ -692,7 +692,7 @@ export default function MapSearchPanel({
   return (
     // Under the Map/Satellite toggle, sharing its gutter — the two are the same kind of control
     // (this is what the map can do) and belong in the same column.
-    <div className="pointer-events-none fixed top-[calc(var(--nav-h)+4.5rem)] left-6 z-20 hidden sm:block print:hidden">
+    <div className="map-search-panel pointer-events-none fixed top-[calc(var(--nav-h)+4.5rem)] left-6 z-20 hidden sm:block print:hidden">
       {!isOpen ? (
         <motion.button
           layoutId={SEARCH_LAYOUT_ID}

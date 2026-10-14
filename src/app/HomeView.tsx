@@ -87,6 +87,8 @@ const PlaceDetailPanel = dynamic(() => import("@/components/PlaceDetailPanel"), 
 const GenerationScreen = dynamic(() => import("@/components/GenerationScreen"), {
   ssr: false,
 });
+// Behind its own boundary for the same reason: it is only on stage while a plan is being written.
+const WritingThePlan = dynamic(() => import("@/components/polar/WritingThePlan"), { ssr: false });
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -432,7 +434,7 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
     detailLoading,
     detailError,
   } = useTripCamera(destination);
-  const { resetToHome, showTripRoute, setRouteConnectorsHidden } = useMapCamera();
+  const { resetToHome, showTripRoute, setRouteConnectorsHidden, setNightLens } = useMapCamera();
   // The camera for the length of a run. Holds `showTripRoute`'s own per-stop framing and moves
   // once per day instead, when that day's real coordinates land — see `useStreamingCamera`.
   useStreamingCamera(generating || refining, draftItinerary, coordsDay);
@@ -608,6 +610,14 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
   // `refining` is deliberately absent: refine is only reachable from `result`, where this is
   // already true.
   useGlobeOnScreen(generating || step === "result");
+
+  // The night lens for the length of a generate (WritingThePlan's ground), lifting as the plan opens.
+  // A refine runs from the result view on the day map, so it is not lit. Off on the way out, too.
+  const nightLens = generating && !refining;
+  useEffect(() => {
+    setNightLens(nightLens);
+  }, [nightLens, setNightLens]);
+  useEffect(() => () => setNightLens(false), [setNightLens]);
 
   const preResult = step !== "result";
 
@@ -1766,9 +1776,26 @@ export default function HomeView({ initialProfile }: { initialProfile: TravelerP
           behind a dynamic() boundary now, and an unconditionally-rendered dynamic component
           fetches its chunk on first render — i.e. on the landing, which is the one thing the
           boundary exists to prevent. */}
-      {(generating || refining) && (
+      {/* A generate is written on the live map under the Polar screen (the canvas design "Live map,
+          writing the plan · C Monument"); a refine, from the result view, keeps the foot band. */}
+      {generating && !refining && (
+        <WritingThePlan
+          stages={stages}
+          facts={destinationFacts}
+          destination={destination}
+          coords={destinationCoords}
+          dateRange={startDate && endDate ? formatDateRange(startDate, endDate) : null}
+          tripDays={days}
+          tierName={TIERS.find((t) => t.id === tier)?.name ?? null}
+          budget={budget}
+          rawFetch={rawFetch}
+          draft={draftItinerary}
+          onCancel={cancelGeneration}
+        />
+      )}
+      {refining && (
         <GenerationScreen
-          mode={refining ? "refine" : "generate"}
+          mode="refine"
           stages={stages}
           facts={destinationFacts}
           destination={destination}

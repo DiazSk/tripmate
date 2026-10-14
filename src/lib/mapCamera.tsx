@@ -193,6 +193,14 @@ interface MapCameraContextValue {
    * both the elevated arc and the draped line.
    */
   setRouteConnectorsHidden: (hidden: boolean) => void;
+  /**
+   * The night lens (`MapRenderer.setNightLens`): the basemap taken down to night under a plan that
+   * is being written, lifted when it opens. Held here and re-applied to any renderer that becomes
+   * live, so an engine toggle or a late boot mid-run still comes up in the right light.
+   */
+  setNightLens: (on: boolean) => void;
+  /** `MapRenderer.setViewPadding`, held and re-applied to any renderer that becomes live. */
+  setViewPadding: (insets: { left: number; bottom: number } | null) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   /** `motion` is a story beat's facing and pacing; every other caller omits it and stays north-up.
    *  See the implementation for why they are deliberately not the same. */
@@ -551,6 +559,8 @@ export function MapCameraProvider({
    */
   const routeFramingSuspendedRef = useRef(false);
   const connectorsHiddenRef = useRef(false);
+  const nightLensRef = useRef(false);
+  const viewPaddingRef = useRef<{ left: number; bottom: number } | null>(null);
   /** Every stop of every day, flattened, each carrying its own `day`. Flat rather than nested
    *  because `hoveredIndex`/`activeIndex` index into it and always have — keeping one index
    *  space means StopMarkerLayer, Story mode and the peek logic needed no reworking when the
@@ -1169,6 +1179,9 @@ export function MapCameraProvider({
       // seven effects tear down and re-subscribe for nothing.
       if (renderer !== previous) setReady((n) => (renderer ? n + 1 : 0));
       if (!renderer) return;
+      // Both ways: a renderer toggled away from while the lens was on must come back in day light.
+      renderer.setNightLens(nightLensRef.current);
+      renderer.setViewPadding(viewPaddingRef.current);
 
       // The view the outgoing engine was showing. Restored before the geometry is replayed so the
       // first frame the traveler sees is already in the right place rather than over Africa.
@@ -1534,6 +1547,18 @@ export function MapCameraProvider({
     connectorsHiddenRef.current = hidden;
   }, []);
 
+  const setNightLens = useCallback((on: boolean) => {
+    nightLensRef.current = on;
+    const renderer = rendererRef.current;
+    if (renderer?.isAlive()) renderer.setNightLens(on);
+  }, []);
+
+  const setViewPadding = useCallback((insets: { left: number; bottom: number } | null) => {
+    viewPaddingRef.current = insets;
+    const renderer = rendererRef.current;
+    if (renderer?.isAlive()) renderer.setViewPadding(insets);
+  }, []);
+
   const resetToHome = useCallback(() => {
     cancelPeek();
     const renderer = rendererRef.current;
@@ -1593,6 +1618,8 @@ export function MapCameraProvider({
       setPeekSuspended,
       setRouteFramingSuspended,
       setRouteConnectorsHidden,
+      setNightLens,
+      setViewPadding,
       flyToDestination,
       flyToPlace,
       flyToSearchResult,
@@ -1651,6 +1678,8 @@ export function MapCameraProvider({
       setHoveredIndex,
       setRouteFramingSuspended,
       setRouteConnectorsHidden,
+      setNightLens,
+      setViewPadding,
     ]
   );
 

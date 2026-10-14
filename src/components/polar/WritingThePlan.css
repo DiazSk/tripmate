@@ -1,0 +1,292 @@
+/* The live map while a plan is written (WritingThePlan.tsx), from the canvas design "Live map,
+   writing the plan · C Monument". Over the live map, under the navbar, passing pointers through. */
+
+.tm.wtp {
+  --wd-frost-10: rgba(255, 255, 255, 0.1);
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  background: transparent;
+  color: #fff;
+  overflow: hidden;
+}
+.wtp-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(9, 11, 16, 0.86) 0%, rgba(9, 11, 16, 0.45) 30%, rgba(9, 11, 16, 0) 46%),
+    linear-gradient(180deg, rgba(9, 11, 16, 0) 52%, rgba(9, 11, 16, 0.92) 100%);
+  animation: tm-in 1.2s var(--wd-ease-reveal) both;
+}
+
+/* The hero's standfirst, over the map. `.tm.wtp` in front of each panel: the landing's
+   `.tm > section { position: relative }` would otherwise win. */
+.tm.wtp .wtp-lede {
+  position: absolute;
+  top: calc(var(--nav-h) + 2em);
+  left: var(--wd-pad);
+  width: min(30em, calc(100% - 2 * var(--wd-pad)));
+  display: grid;
+  gap: 1em;
+}
+.wtp-fact {
+  margin: 0.4em 0 0;
+  min-height: 3.6em;
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: clamp(1.4em, 2.2vw, 2em);
+  line-height: 1.18;
+  text-shadow: 0 2px 18px rgba(9, 11, 16, 0.6);
+  animation: tm-in 0.7s var(--wd-ease-reveal) both;
+}
+.wtp-days {
+  list-style: none;
+  margin: 0.4em 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3em;
+  max-height: 16.5em;
+  overflow: hidden;
+}
+/* The hero's destination chips, one per day, lighting as the stream reaches them. */
+.wtp-day {
+  display: grid;
+  grid-template-columns: 1.8em minmax(0, 1fr) 1.4em;
+  align-items: center;
+  gap: 0.6em;
+  height: 2.3em;
+  padding: 0 0.8em;
+  font-size: 0.82em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  background: var(--wd-veil-20);
+  border: 1px solid var(--wd-frost-10);
+  border-radius: var(--wd-radius-sm);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  transition: color 0.3s, border-color 0.3s, background-color 0.3s;
+}
+.wtp-day.has {
+  color: #fff;
+}
+.wtp-day.is-now {
+  border-color: rgba(106, 240, 255, 0.4);
+  background: rgba(9, 11, 16, 0.55);
+}
+.wtp-day-n {
+  font-variant-numeric: tabular-nums;
+}
+.wtp-day-count {
+  text-align: right;
+  color: var(--wd-night-text-2);
+}
+.wtp-ghost {
+  display: inline-block;
+  width: 60%;
+  height: 0.8em;
+  border-radius: var(--wd-radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  animation: wtp-breathe 1.6s ease-in-out infinite;
+}
+@keyframes wtp-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* A stop arriving, beside its own pin. Positioned by useAnchoredToMap (a translate from 0,0). */
+.wtp-arrival {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 15.5em;
+  will-change: transform;
+}
+.wtp-arrival-in {
+  padding: 0.65em 0.85em;
+  background: rgba(9, 11, 16, 0.72);
+  border: 1px solid var(--wd-frost-10);
+  border-radius: var(--wd-radius-card);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: tm-in 0.5s var(--wd-ease-reveal) both;
+}
+.wtp-arrival-in p {
+  margin: 0;
+}
+.wtp-arrival-day {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.68em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wd-night-text-2);
+}
+.wtp-arrival-dot {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+}
+.wtp-arrival-name {
+  margin-top: 0.25em !important;
+  font-family: var(--wd-font-display);
+  font-size: 1.25em;
+  line-height: 1.1;
+}
+.wtp-arrival-note {
+  font-size: 0.78em;
+  color: var(--wd-night-text-2);
+}
+
+/* The foot: the instruments on one hairline, then the monument. */
+.tm.wtp .wtp-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.wtp-strip {
+  margin: 0 var(--wd-pad);
+  display: grid;
+  gap: 0.75em;
+  pointer-events: auto;
+}
+.wtp-progress {
+  position: relative;
+  height: 2px;
+  background: var(--wd-frost-20);
+  overflow: hidden;
+}
+/* Scaled, not resized: the bar is written ten times a second over a moving map, and a width change
+   is a layout each time (GenerationScreen's bar does the same). */
+.wtp-progress > span {
+  position: absolute;
+  inset: 0;
+  background: var(--wd-signal);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s linear;
+}
+.wtp-strip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75em 2em;
+}
+.wtp-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em 1.6em;
+  font-size: 0.84em;
+}
+.wtp-stages li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+.wtp-stages li.is-waiting,
+.wtp-stages li.is-failed {
+  color: rgba(255, 255, 255, 0.45);
+}
+.wtp-n {
+  font-size: 0.85em;
+  color: var(--wd-night-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.wtp-word {
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wd-night-text-2);
+}
+.wtp-word.is-active {
+  color: var(--wd-route);
+  animation: wtp-breathe 1.6s ease-in-out infinite;
+}
+.wtp-forecast {
+  margin: 0 0 0 auto;
+  font-size: 0.8em;
+  color: var(--wd-night-text-2);
+}
+.wtp-now {
+  margin: -0.2em 0 0;
+}
+/* The one action on the screen. `tm-glass` is a 20% veil with no edge, made for photographs, and over
+   the night map it all but vanished; this is the night panel's own glass with a hairline you can see,
+   anchored to the strip's right end whether or not a forecast line sits before it. */
+.wtp-cancel,
+.wtp-end {
+  margin-left: auto;
+}
+.wtp-forecast + .wtp-cancel,
+.wtp-forecast + .wtp-end {
+  margin-left: 0;
+}
+.wtp-cancel {
+  display: inline-flex;
+  align-items: center;
+  height: 2.6em;
+  padding: 0 1.25em;
+  font: inherit;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(9, 11, 16, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: var(--wd-radius-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+  animation: tm-in 0.5s var(--wd-ease-reveal) both;
+}
+.wtp-cancel:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #fff;
+}
+.wtp-cancel:focus-visible {
+  outline: 2px solid var(--wd-signal);
+  outline-offset: 2px;
+}
+/* Line-height 1, which is what keeps Oswald's capitals whole: the landing's own `.tm-monument` note
+   measures it. Left there, the letters stood 0.07em (16px at 1394x946) clear of the screen's foot,
+   the space under the baseline, and read as floating. Pulled down 0.05em, which scales with the size
+   and leaves ~0.02em: below the baseline only the round letters (S, O) dip, by about that much, so
+   nothing is cut. The canvas design pulled it 0.16em and cropped the foot of every letter. The size
+   is set inline, fitted to the word's length so a long city shrinks rather than overflows. */
+.tm.wtp .wtp-monument {
+  margin: 0 0 -0.05em;
+  padding: 0 var(--wd-pad) 0.02em;
+  line-height: 1;
+  opacity: 0.92;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+@media (max-width: 760px) {
+  .tm.wtp .wtp-lede {
+    top: calc(var(--nav-h) + 1em);
+  }
+  .wtp-days {
+    display: none;
+  }
+  .wtp-forecast {
+    margin-left: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tm.wtp *,
+  .tm.wtp *::before,
+  .tm.wtp *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

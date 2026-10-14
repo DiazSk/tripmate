@@ -470,6 +470,16 @@ body {
   display: none;
 }
 
+/* While a plan is being written (`WritingThePlan`, which sets this on <html>), the map's own chrome
+   stands down: the Map / Satellite switch, the search and the zoom stack sit exactly where that
+   screen's standfirst and monument go. Same lever shape as `data-story-mode` below. The map is still
+   the thing being watched, so the stop markers stay. */
+html[data-writing-plan] .map-controls,
+html[data-writing-plan] .map-search-panel,
+html[data-writing-plan] .map-engine-toggle {
+  display: none;
+}
+
 /* --- Day and night on the globe ----------------------------------------------------------
 
    The world lights itself for whichever stop is selected: click a 9 PM dinner and the city goes

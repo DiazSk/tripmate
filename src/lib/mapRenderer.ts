@@ -36,6 +36,25 @@ export interface MapRenderer {
   isAlive(): boolean;
 
   /**
+   * The night lens: the basemap taken down to the landing's night while a plan is being written,
+   * with the plan itself (routes, stops) left exactly as bright as it was. On, it eases in; off, it
+   * eases back to the day map, which is the moment the finished plan opens. Only what is *under*
+   * the plan changes, so it must never touch a route or a marker: a CSS filter on the canvas would
+   * have darkened the route tubes with the ground. A renderer with nothing to darken no-ops.
+   */
+  setNightLens(on: boolean): void;
+
+  /**
+   * Keep the camera's subject clear of screen furniture: every later framing centres in the area
+   * these CSS-pixel insets leave. Applies from the next camera command rather than moving the camera
+   * itself, since a move here would cancel a flight already under way. Null clears them. The plan
+   * panel's own clearance is separate and horizontal (`frameRouteBesidePanel`); this is for a screen
+   * that covers the foot and the left, as the generation screen's standfirst and monument do. A
+   * renderer without camera padding no-ops.
+   */
+  setViewPadding(insets: { left: number; bottom: number } | null): void;
+
+  /**
    * Ask for one frame.
    *
    * Load-bearing on Cesium, which runs in `requestRenderMode` and will otherwise not repaint a

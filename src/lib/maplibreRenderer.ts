@@ -100,6 +100,11 @@ const LEG_SOURCE_ID = "tripmate-legs";
  *  or non-panel caller — `MapSearchPanel` always resolves one from `searchPalette.ts`. */
 const SEARCH_PIN_FALLBACK_COLOR = "#f1f5f9";
 const BUILDINGS_LAYER_ID = "tripmate-buildings";
+/** How long the night lens takes to come up or lift (`setNightLens`). */
+const NIGHT_LENS_MS = 1200;
+/** MapLibre types paint names as a closed union; the lens builds its `-transition` names from them. */
+type PaintKey = Parameters<MapLibreMap["setPaintProperty"]>[1];
+type PaintValue = Parameters<MapLibreMap["setPaintProperty"]>[2];
 
 /**
  * MapLibre's zoom is defined against a 512px world tile, so this is the width of the whole world
@@ -801,6 +806,65 @@ export class MapLibreRenderer implements MapRenderer {
     return this.alive && !!this.map.getCanvas();
   }
 
+  /** Screen furniture to frame around (`setViewPadding`), added to every camera command's padding. */
+  private viewInsets = { left: 0, bottom: 0 };
+
+  setViewPadding(insets: { left: number; bottom: number } | null) {
+    // Stored, not applied. Every camera command here passes its own `padding` (`panelPadding`, or
+    // `frameRoute`'s), which would overwrite one set directly, and an ease to it is a camera move
+    // that cancels a flight already under way (measured: a cold boot stayed on the landing pose over
+    // the Sahara). The next framing reads it; while a plan is written that is every day's.
+    this.viewInsets = { left: Math.max(0, insets?.left ?? 0), bottom: Math.max(0, insets?.bottom ?? 0) };
+  }
+
+  /** Each touched paint property's day value, read before the first night change and put back exactly. */
+  private dayPaint: { layer: string; prop: string; value: PaintValue }[] | null = null;
+
+  setNightLens(on: boolean) {
+    if (!this.isAlive()) return;
+    const map = this.map;
+    // Everything under the plan, onto the landing's night (NightMap.css): the tint this style already
+    // lays over the land, deepened to `--wd-night`; the extruded buildings to slate; the labels light
+    // on a dark halo so they still read. Routes and stops are layers above all of these and are not
+    // in the list, which is the point.
+    const night: [string, string, PaintValue][] = [
+      [BASEMAP_TINT_LAYER_ID, "background-color", "#090b10"],
+      [BASEMAP_TINT_LAYER_ID, "background-opacity", 0.8],
+      [BUILDINGS_LAYER_ID, "fill-extrusion-color", "#1a2130"],
+      // The ambient highways are the city's shape, not the plan: amber on the day map, hairlines at
+      // night, the way the canvas design draws its avenues.
+      [HIGHWAY_LAYER_ID, "line-color", "rgba(255, 255, 255, 0.24)"],
+      [`${HIGHWAY_LAYER_ID}-casing`, "line-color", "rgba(9, 11, 16, 0.6)"],
+    ];
+    for (const layer of map.getStyle()?.layers ?? []) {
+      if (!layer.id || layer.id.startsWith("tripmate-")) continue;
+      if (layer.type === "symbol") {
+        night.push([layer.id, "text-color", "#a8acb3"], [layer.id, "text-halo-color", "rgba(9, 11, 16, 0.85)"]);
+        // Road shields are bright plates that read as lights on a night map.
+        if (/shield/.test(layer.id)) night.push([layer.id, "icon-opacity", 0.35]);
+      } else if (layer.type === "line" && /road|highway|bridge|tunnel|street|path/.test(layer.id)) {
+        // Liberty draws some roads above the tint, in amber and white; at night they are hairlines.
+        night.push([layer.id, "line-color", "rgba(255, 255, 255, 0.12)"]);
+      }
+    }
+    const present = night.filter(([layer]) => !!map.getLayer(layer));
+    if (on) {
+      if (!this.dayPaint) this.dayPaint = present.map(([layer, prop]) => ({ layer, prop, value: map.getPaintProperty(layer, prop as PaintKey) as PaintValue }));
+      for (const [layer, prop, value] of present) {
+        map.setPaintProperty(layer, `${prop}-transition` as PaintKey, { duration: NIGHT_LENS_MS, delay: 0 });
+        map.setPaintProperty(layer, prop as PaintKey, value);
+      }
+      return;
+    }
+    if (!this.dayPaint) return;
+    for (const { layer, prop, value } of this.dayPaint) {
+      if (!map.getLayer(layer)) continue;
+      map.setPaintProperty(layer, `${prop}-transition` as PaintKey, { duration: NIGHT_LENS_MS, delay: 0 });
+      map.setPaintProperty(layer, prop as PaintKey, value);
+    }
+    this.dayPaint = null;
+  }
+
   requestRender() {
     if (this.isAlive()) this.map.triggerRepaint();
   }
@@ -1440,8 +1504,8 @@ export class MapLibreRenderer implements MapRenderer {
     const panelInset = Math.max(0, width - visibleMapWidthPx(width));
     return {
       top: 120,
-      bottom: 80,
-      left: 80,
+      bottom: 80 + this.viewInsets.bottom,
+      left: 80 + this.viewInsets.left,
       right: Math.max(80, panelInset),
     };
   }
@@ -1489,15 +1553,23 @@ export class MapLibreRenderer implements MapRenderer {
       -biasM * Math.sin(heading)
     );
 
+    // Screen furniture (`setViewPadding`): centre in the area it leaves, pulled back so the route still
+    // fits in it. Capped, like the panel's fit scale, so a tall foot never sends the camera to orbit.
+    const { left: insetLeft, bottom: insetBottom } = this.viewInsets;
+    const insetFit = Math.min(
+      1.6,
+      Math.max(viewWidth / Math.max(1, viewWidth - insetLeft), viewHeight / Math.max(1, viewHeight - insetBottom))
+    );
+
     this.map.flyTo({
       center: centre as LngLatLike,
-      zoom: this.rangeToZoom(Math.max(MIN_RANGE_M, rangeM), centreLat),
+      zoom: this.rangeToZoom(Math.max(MIN_RANGE_M, rangeM * insetFit), centreLat),
       bearing: headingDeg,
       pitch: toMapLibrePitch(ROUTE_FRAME_PITCH_DEG),
-      // Explicitly zero, not omitted. `flyTo` *retains* whatever padding the last camera command
-      // set, so a stop flight's right-padding would otherwise still be in force here and compound
-      // with the metre bias this function already applied — biasing the route twice.
-      padding: { top: 0, bottom: 0, left: 0, right: 0 },
+      // Zero but for the screen furniture, not omitted. `flyTo` *retains* whatever padding the last
+      // camera command set, so a stop flight's right-padding would otherwise still be in force here
+      // and compound with the metre bias this function already applied — biasing the route twice.
+      padding: { top: 0, bottom: insetBottom, left: insetLeft, right: 0 },
       duration: (durationS ?? 2.0) * 1000,
       essential: true,
     });

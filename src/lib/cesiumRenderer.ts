@@ -102,6 +102,12 @@ export class CesiumRenderer implements MapRenderer {
     return !this.viewer.isDestroyed();
   }
 
+  /** Photogrammetry has no basemap layer under the plan to darken, so the lens is MapLibre's only. */
+  setNightLens() {}
+
+  /** Cesium's camera has no padding to set; its framing keeps to the plan panel's bias alone. */
+  setViewPadding() {}
+
   requestRender() {
     if (this.isAlive()) this.viewer.scene.requestRender();
   }
