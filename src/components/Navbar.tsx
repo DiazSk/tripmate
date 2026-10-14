@@ -7,6 +7,7 @@ import LogoMark from "@/components/LogoMark";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { useScrollContainer } from "@/lib/scrollContainer";
 import { requestPlan } from "@/lib/planIntent";
+import { useHomeScreen } from "@/lib/homeScreen";
 
 // Same ease every other motion in this app already uses for a "smooth, not
 // snappy" settle (--marker-transition, --scene-hover, the *-in keyframes).
@@ -76,17 +77,15 @@ const navLinkBase =
  */
 const navLink = (active = false) => `${navLinkBase}${active ? " is-current" : ""}`;
 
-// Landing-only: the Polar landing's sections, in page order. All five do not fit the bar's left
-// column until a wide screen, so each carries the breakpoint it appears at (a wrapper class, since
-// the chip's own `inline-flex` would outrank an appended `hidden`): the day and the journeys from
-// `sm`, the four ways and the plan from `xl`, what a plan knows from 1400px. The phone menu and the
-// landing's footer carry every one.
+// Landing-only: three of the Polar landing's sections, in page order. All five made the bar crowded
+// at every width, so it keeps the three that carry the page (the day, the plan behind it, the other
+// journeys) and the phone menu and the landing's footer carry all five. Each carries the breakpoint
+// it appears at (a wrapper class, since the chip's own `inline-flex` would outrank an appended
+// `hidden`): the day from `sm`, the journeys from `md`, the plan from `lg`.
 const SECTION_LINKS = [
   { id: "day", label: "A day in Petra", show: "sm:inline-flex" },
-  { id: "ways", label: "Four ways", show: "xl:inline-flex" },
-  { id: "the-plan", label: "The plan", show: "xl:inline-flex" },
+  { id: "the-plan", label: "The plan", show: "lg:inline-flex" },
   { id: "plans", label: "More journeys", show: "md:inline-flex" },
-  { id: "knows", label: "What a plan knows", show: "min-[1400px]:inline-flex" },
 ];
 
 /**
@@ -219,6 +218,14 @@ export default function Navbar() {
   const isHome = pathname === "/";
   const isTripDetail = pathname.startsWith("/trip/");
   const isProfile = pathname === "/profile";
+  /* `/` is three screens, and each gets only what it needs. The landing: three of its sections,
+     My memories, Profile and Plan a trip (the other two sections stay in the phone menu). The
+     planner: My memories, the way out, and nothing else while a form is half filled in. A plan on
+     the map: My memories and Profile. Section links, Plan a trip and the phone menu are landing-only
+     because that is the only screen where their targets and their listener exist. */
+  const screen = useHomeScreen();
+  const onLanding = isHome && screen === "landing";
+  const showProfile = !isHome || screen !== "plan";
   /* **There is no route predicate here any more, and that is the point.**
    *
    *  This used to be `isUserFacing = isHome || "/trips" || isTripDetail || isProfile`, gating both
@@ -307,7 +314,7 @@ export default function Navbar() {
       } ${hidden && !menuOpen ? "is-hidden" : ""}`}
     >
       <div className="flex min-w-0 items-center gap-1.5">
-        {isHome && (
+        {onLanding && (
           <div className="hidden items-center gap-1.5 sm:flex">
             {SECTION_LINKS.map((link) => (
               <span key={link.id} className={`hidden ${link.show}`}>
@@ -348,29 +355,33 @@ export default function Navbar() {
       <div className="flex items-center justify-end gap-1.5">
         {/* Breakpoints ride on wrappers: the chip's own `inline-flex` outranks an appended
             `hidden`, the trap the old bar's comments measured. */}
+        {/* The landing's phone menu carries My memories; off the landing it is the bar's way out. */}
         {isHome && (
-          <span className="hidden sm:inline-flex">
+          <span className={onLanding ? "hidden sm:inline-flex" : "inline-flex"}>
             <Link href="/trips" className={navLink()}>
               My memories
             </Link>
           </span>
         )}
-        {/* On a phone `/` moves Profile into the menu panel, where MENU_ITEMS carries it. */}
-        <span className={isHome ? "hidden sm:inline-flex" : "inline-flex"}>
-          <Link href="/profile" aria-current={isProfile ? "page" : undefined} className={navLink(isProfile)}>
-            Profile
-          </Link>
-        </span>
+        {/* On a phone the landing moves Profile into the menu panel, where MENU_ITEMS carries it, and a
+            plan on the map keeps the bar to My memories so the two chips do not crowd the wordmark. */}
+        {showProfile && (
+          <span className={isHome ? "hidden sm:inline-flex" : "inline-flex"}>
+            <Link href="/profile" aria-current={isProfile ? "page" : undefined} className={navLink(isProfile)}>
+              Profile
+            </Link>
+          </span>
+        )}
         {/* The landing's one "Plan a trip" above the fold; the hero carries none. Hidden on a phone,
             where the bar is the wordmark and the menu, and the menu's own button takes over. */}
-        {isHome && (
+        {onLanding && (
           <span className="hidden sm:inline-flex">
             <button type="button" onClick={requestPlan} className="polar-nav-cta">
               Plan a trip
             </button>
           </span>
         )}
-        {isHome && (
+        {onLanding && (
           <button
             ref={toggleRef}
             type="button"
@@ -403,7 +414,7 @@ export default function Navbar() {
           </button>
         )}
       </div>
-      {isHome && (
+      {onLanding && (
         /**
          * The menu, full-bleed below the bar.
          *
