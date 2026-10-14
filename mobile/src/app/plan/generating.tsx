@@ -1,35 +1,61 @@
+import { CormorantGaramond_400Regular, CormorantGaramond_500Medium_Italic } from '@expo-google-fonts/cormorant-garamond';
+import { InterTight_400Regular, InterTight_500Medium, InterTight_600SemiBold } from '@expo-google-fonts/inter-tight';
+import { Oswald_400Regular } from '@expo-google-fonts/oswald';
+import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
-import { createTripDraft, generateTrip, getTrip, saveProfile, updateTripItinerary } from '@/api/tripMateApi';
-import type { GenerationStage, Itinerary, SketchEvent, StreamedStop } from '@/api/types';
+import { createTripDraft, generateTrip, getTrip, placePhoto, saveProfile, tripFetch, updateTripItinerary } from '@/api/tripMateApi';
+import type { Itinerary, SketchEvent, StreamedStop } from '@/api/types';
 import { PrimaryButton } from '@/components/form';
 import { Meridian } from '@/components/meridian';
 import { Notice } from '@/components/states';
-import { ThemedText } from '@/components/themed-text';
-import { Colors, Spacing, dayCore } from '@/constants/theme';
-import { formatDateline } from '@/lib/dayDisplay';
+import { WritingThePlan } from '@/components/writing-the-plan';
+import { Polar } from '@/constants/polar';
+import { Colors, Spacing } from '@/constants/theme';
+import { tierName, tripDays } from '@/lib/tiers';
+import { assembleDays, type DayCoords } from '@/lib/writingPlan';
+import { buildDestinationFacts } from '@shared/destinationFacts';
+import { formatDateRange } from '@shared/format';
+import { STAGE_ORDER, type StageProgress } from '@shared/generationStages';
 import { meriForGeneration } from '@shared/meri';
+import type { RawFetch } from '@shared/types';
 import { toGenerateRequest, toTravelerProfile, toUserAnswers, usePlanDraft } from '@/lib/planDraft';
 
-/** Stage copy ported from the Swift wizard's `waitingLabel`. */
-const STAGE_LABEL: Record<GenerationStage, string> = {
-  geocode: 'Finding the place…',
-  context: 'Reading up on it…',
-  generate: 'Writing the days…',
-  critique: 'Checking the plan…',
-  placing: 'Putting it on the map…',
-};
-
+/**
+ * The wait, drawn as the live map writing the plan (`components/writing-the-plan.tsx`).
+ *
+ * **The Polar faces load here, as on `/landing`**: the root loads the display cut and the two
+ * figure cuts every screen uses, and the italic, Inter Tight Regular and Oswald belong to the
+ * Polar screens alone. Nothing renders until they are in, because a missing family is not an
+ * error in RN; the night ground holds the frame meanwhile.
+ */
 export default function Generating() {
   const router = useRouter();
   const { draft } = usePlanDraft();
+  const [fontsLoaded] = useFonts({
+    CormorantGaramond_400Regular,
+    CormorantGaramond_500Medium_Italic,
+    InterTight_400Regular,
+    InterTight_500Medium,
+    InterTight_600SemiBold,
+    Oswald_400Regular,
+  });
 
-  const [stage, setStage] = useState<GenerationStage>('geocode');
+  const [stages, setStages] = useState<StageProgress[]>(() => STAGE_ORDER.map((stage) => ({ stage, status: 'pending' })));
   const [stops, setStops] = useState<StreamedStop[]>([]);
   const [sketch, setSketch] = useState<SketchEvent['days']>([]);
+  const [coords, setCoords] = useState<DayCoords>({});
   const [failure, setFailure] = useState<string | undefined>();
+  // The trip-fetch bundle (forecast, calendar, the city's centre) and the place's Wikipedia line,
+  // for the facts. Both are already cached by the wizard's own calls for these dates.
+  const [raw, setRaw] = useState<RawFetch | null>(null);
+  const [wikiExtract, setWikiExtract] = useState<string | null>(null);
+  /** Cancel's lever: closes the stream. The route has no cancellation token (see `generateTrip`). */
+  const abort = useRef<AbortController | null>(null);
+  /** False once the traveller has left, by Cancel or by unmounting; every handler checks it. */
+  const live = useRef(true);
 
   // A generation is 60-246 seconds of billed work. Under React 19's development double-invoke
   // this effect runs twice, which would start two of them; the ref makes it start exactly once.
@@ -48,16 +74,25 @@ export default function Generating() {
     started.current = true;
 
     const { destination, startDate, endDate, budget } = draft;
-    let cancelled = false;
+    const controller = new AbortController();
+    abort.current = controller;
+
+    void tripFetch(destination, startDate, endDate).then((bundle) => {
+      if (live.current) setRaw(bundle);
+    });
+    void placePhoto(destination).then((photo) => {
+      if (live.current) setWikiExtract(photo?.extract ?? null);
+    });
 
     generateTrip(
       toGenerateRequest(draft),
       {
         onStage: (event) => {
-          if (!cancelled && event.status === 'start') setStage(event.stage);
+          if (!live.current) return;
+          setStages((prev) => prev.map((s) => (s.stage === event.stage ? { ...s, status: event.status } : s)));
         },
         onStop: (event) => {
-          if (cancelled) return;
+          if (!live.current) return;
           // Replace by position rather than append: a stop can be re-sent as the model revises
           // its own line, and appending would show it twice.
           setStops((prev) => {
@@ -71,10 +106,13 @@ export default function Generating() {
           });
         },
         onSketch: (event) => {
-          if (!cancelled) setSketch(event.days);
+          if (live.current) setSketch(event.days);
+        },
+        onDayCoords: (event) => {
+          if (live.current) setCoords((prev) => ({ ...prev, [event.dayIndex]: event.coords }));
         },
         onPlan: async (result) => {
-          if (cancelled) return;
+          if (!live.current) return;
           // A row exists the moment a plan does, as a draft — so a back press cannot throw away
           // four minutes of work. Keep promotes this same row later.
           const id = await createTripDraft({
@@ -92,7 +130,7 @@ export default function Generating() {
           // The durable half of the draft becomes the traveller profile. Unawaited: a plan is
           // not worth blocking on a preference write, and the Profile tab reads it next time.
           void saveProfile(toTravelerProfile(draft));
-          if (cancelled) return;
+          if (!live.current) return;
           if (!id) {
             setFailure('The plan was written, but saving it failed. Try generating again.');
             return;
@@ -104,7 +142,7 @@ export default function Generating() {
         /**
          * The reviewed plan, landing after this screen is gone.
          *
-         * **Deliberately not guarded by `cancelled`.** Every other callback here is, because they
+         * **Deliberately not guarded by `live`.** Every other callback here is, because they
          * write component state; this one runs precisely *because* the screen was left, and
          * dropping it would put us back to keeping the un-reviewed draft forever.
          *
@@ -126,17 +164,36 @@ export default function Generating() {
           if (!current || !sameItinerary(current.itinerary, row.itinerary)) return;
           await updateTripItinerary(row.id, result.itinerary);
         },
-      }
+      },
+      controller.signal
     ).then((error) => {
-      if (!cancelled && error) setFailure(error.message);
+      if (live.current && error) setFailure(error.message);
     });
 
     return () => {
-      cancelled = true;
+      live.current = false;
     };
     // params is a fresh object each render; the ref above is what actually guards re-entry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const planDays = useMemo(() => assembleDays(sketch, stops, coords, tripDays(draft.startDate, draft.endDate)), [sketch, stops, coords, draft.startDate, draft.endDate]);
+  const facts = useMemo(
+    () =>
+      buildDestinationFacts({
+        destination: draft.destination,
+        rawFetch: raw,
+        wikiExtract,
+        viewerUtcOffsetMinutes: -new Date().getTimezoneOffset(),
+      }),
+    [draft.destination, raw, wikiExtract]
+  );
+  /**
+   * Review, with every answer as it was: the draft lives in the wizard's layout, which this does not
+   * leave. `replace`, not `back` — every step reaches this screen with `replace`, so Review is not
+   * underneath it and `back` would leave the wizard altogether.
+   */
+  const backToReview = () => router.replace('/plan/review');
 
   // `complete` is always false here: the screen hands off to the trip the moment the plan is saved,
   // so the plan opening is the success. A sketch alone is not streaming — only a real stop is.
@@ -152,71 +209,37 @@ export default function Generating() {
           </View>
           <Notice>{failure}</Notice>
           <View style={styles.retry}>
-            <PrimaryButton title="Back to the details" onPress={() => router.back()} />
+            <PrimaryButton title="Back to the details" onPress={backToReview} />
           </View>
         </View>
       </View>
     );
   }
 
-  const byDay = groupByDay(stops);
+  if (!fontsLoaded) return <View style={styles.night} />;
 
+  const request = toGenerateRequest(draft);
+  const days = tripDays(draft.startDate, draft.endDate);
   return (
-    <View style={styles.screen}>
-      <Stack.Screen
-        options={{ title: '', headerBackButtonDisplayMode: 'minimal', gestureEnabled: false }}
+    <>
+      <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
+      <WritingThePlan
+        destination={draft.destination}
+        dateRange={draft.startDate && draft.endDate ? formatDateRange(draft.startDate, draft.endDate) : null}
+        tripDays={days}
+        tierName={tierName(request.tier)}
+        budget={draft.budget}
+        stages={stages}
+        days={planDays}
+        facts={facts}
+        raw={raw}
+        onCancel={() => {
+          live.current = false;
+          abort.current?.abort();
+          backToReview();
+        }}
       />
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.meri}>
-          <Meridian state={meri} size={56} />
-        </View>
-        <ThemedText type="label" themeColor="muted">
-          {draft.destination}
-        </ThemedText>
-        <ThemedText type="display" style={styles.stage}>
-          {STAGE_LABEL[stage]}
-        </ThemedText>
-        <ThemedText type="detail" themeColor="muted">
-          This takes a few minutes. The days appear as they are written.
-        </ThemedText>
-
-        {/* The sketch arrives before any stop does — a day-by-day outline worth showing on its
-            own while the detail is still being written. */}
-        {sketch.length > 0 ? (
-          <View style={styles.sketch}>
-            {sketch.map((day, index) => (
-              <ThemedText key={day.date || index} type="detail" themeColor="muted">
-                {`Day ${index + 1}: ${day.theme}`}
-              </ThemedText>
-            ))}
-          </View>
-        ) : null}
-
-        {byDay.map(({ dayIndex, date, items }) => (
-          <View key={dayIndex} style={styles.day}>
-            <View style={styles.dayHead}>
-              <ThemedText type="label" themeColor="muted">
-                {`Day ${dayIndex + 1}`}
-              </ThemedText>
-              <View style={styles.rule} />
-            </View>
-            {date ? (
-              <ThemedText type="heading" style={styles.dayDate}>
-                {formatDateline(date)}
-              </ThemedText>
-            ) : null}
-            {items.map((item) => (
-              <View key={`${item.dayIndex}:${item.stopIndex}`} style={styles.stop}>
-                <View style={[styles.disc, { backgroundColor: dayCore(dayIndex) }]} />
-                <ThemedText type="body" style={styles.stopName}>
-                  {item.stop?.name ?? ''}
-                </ThemedText>
-              </View>
-            ))}
-          </View>
-        ))}
-      </ScrollView>
-    </View>
+    </>
   );
 }
 
@@ -253,30 +276,10 @@ function sameItinerary(a: Itinerary, b: Itinerary): boolean {
   });
 }
 
-function groupByDay(stops: StreamedStop[]) {
-  const days = new Map<number, { dayIndex: number; date: string; items: StreamedStop[] }>();
-  for (const stop of stops) {
-    const existing = days.get(stop.dayIndex);
-    if (existing) existing.items.push(stop);
-    else days.set(stop.dayIndex, { dayIndex: stop.dayIndex, date: stop.date, items: [stop] });
-  }
-  return [...days.values()].sort((a, b) => a.dayIndex - b.dayIndex);
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.canvas },
-  content: { padding: Spacing.read, paddingBottom: Spacing.regular * 2, gap: Spacing.hair },
-  stage: { marginTop: Spacing.tight, marginBottom: Spacing.hair },
-  meri: { marginBottom: Spacing.compact },
+  night: { flex: 1, backgroundColor: Polar.night },
   meriFailed: { paddingHorizontal: Spacing.read },
   failure: { paddingTop: Spacing.regular, gap: Spacing.read },
-  sketch: { marginTop: Spacing.tight, gap: Spacing.hair },
   retry: { paddingHorizontal: Spacing.read },
-  day: { marginTop: Spacing.compact },
-  dayHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
-  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder },
-  dayDate: { marginTop: Spacing.hair, marginBottom: Spacing.tight },
-  stop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows, paddingVertical: 5 },
-  disc: { width: 8, height: 8, borderRadius: 4 },
-  stopName: { flex: 1 },
 });

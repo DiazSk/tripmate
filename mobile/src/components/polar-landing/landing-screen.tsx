@@ -448,7 +448,7 @@ function Hero({ height, width, onMenu, onPlan, onWatch }: { height: number; widt
   );
 }
 
-function Wordmark({ light }: { light?: boolean }) {
+export function Wordmark({ light }: { light?: boolean }) {
   const color = light ? Polar.ice : Polar.ink;
   return (
     <View style={styles.wordmark} accessibilityRole="header" accessibilityLabel="TripMate">

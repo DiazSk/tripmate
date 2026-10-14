@@ -457,6 +457,16 @@ export interface SketchEvent {
   days: { date: string; theme: string; area: string; anchors: string[] }[];
 }
 
+/**
+ * The `day-coords` stream event: one day's stops moved to where Overpass found them, keyed by the
+ * stop's trimmed name. The model writes coordinates from memory and has been measured 11km out.
+ * **`lon`, not `lng`** — alone on this wire, and transcribing it as `lng` reads `undefined`.
+ */
+export interface DayCoordsEvent {
+  dayIndex: number;
+  coords: Record<string, { lat: number; lon: number }>;
+}
+
 /** A stop as it is parsed out of the model's token stream, before the plan is complete. */
 export interface StreamedStop {
   dayIndex: number;
@@ -497,6 +507,7 @@ export interface GenerateHandlers {
   onStage?: (event: StageEvent) => void;
   onStop?: (event: StreamedStop) => void;
   onSketch?: (event: SketchEvent) => void;
+  onDayCoords?: (event: DayCoordsEvent) => void;
   onPlan: (result: GenerationResult) => void;
   /**
    * The reviewed plan, ~150s after `onPlan`.

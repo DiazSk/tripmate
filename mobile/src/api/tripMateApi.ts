@@ -11,6 +11,7 @@ import type {
   GenerationResult,
   GeocodedPlace,
   CompletePlanRequest,
+  DayCoordsEvent,
   DayPlan,
   ImportItem,
   ImportResult,
@@ -33,6 +34,7 @@ import type {
   TravelerProfile,
   TripStatus,
 } from "./types";
+import type { RawFetch } from "@shared/types";
 
 export async function listTrips(status: TripStatus = "saved"): Promise<TripSummary[] | undefined> {
   try {
@@ -377,12 +379,16 @@ export async function discardTrip(id: string): Promise<boolean> {
  * 3. **`error` is only a failure if no plan landed.** The route cannot currently emit one after
  *    `plan`, but the Swift client guards it anyway and so does this: a late failure must never
  *    tear down something already on screen.
- * 4. **`day-coords` spells it `lon`**, alone on this wire. Not consumed here, noted so the next
- *    reader does not transcribe `lng` and silently get `undefined`.
+ * 4. **`day-coords` spells it `lon`**, alone on this wire. Passed through as it arrives
+ *    (`onDayCoords`); the plan-writing screen moves each day's pins with it.
+ *
+ * `signal` is Cancel. It stops this client reading and nothing else: the route has no
+ * cancellation token, so the model call it started finishes on the server either way.
  */
 export async function generateTrip(
   request: GenerateRequest,
-  handlers: GenerateHandlers
+  handlers: GenerateHandlers,
+  signal?: AbortSignal
 ): Promise<GenerateFailure | undefined> {
   let response: Response;
   try {
@@ -390,6 +396,7 @@ export async function generateTrip(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify(request),
+      signal,
     });
   } catch {
     return { kind: 'failed', message: GENERIC_FAILURE };
@@ -430,6 +437,9 @@ export async function generateTrip(
         break;
       case 'sketch':
         if (!planned) handlers.onSketch?.(payload as SketchEvent);
+        break;
+      case 'day-coords':
+        if (!planned) handlers.onDayCoords?.(payload as DayCoordsEvent);
         break;
       case 'plan':
         if (planned) break;
@@ -525,20 +535,29 @@ export async function candidatePois(
   startDate: string,
   endDate: string
 ): Promise<{ available: boolean; pois: CandidatePoi[] }> {
+  const found = (await tripFetch(destination, startDate, endDate))?.candidatePois;
+  return { available: found?.available ?? false, pois: found?.pois ?? [] };
+}
+
+/**
+ * `POST /api/trip-fetch`, the whole bundle: forecast, calendar, holidays, the place's coordinates.
+ * `null` is "could not fetch it"; each source inside still carries its own `available` flag.
+ *
+ * Cached server-side, and the wizard's POI picker has usually already asked for these dates, so
+ * the plan-writing screen asking again for its facts and forecast is a cache hit, not a refetch.
+ */
+export async function tripFetch(destination: string, startDate: string, endDate: string): Promise<RawFetch | null> {
   try {
     const res = await fetchWithSession('/api/trip-fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ destination, startDate, endDate }),
     });
-    if (!res.ok) return { available: false, pois: [] };
-    const body = (await res.json()) as {
-      rawFetch?: { candidatePois?: { available?: boolean; pois?: CandidatePoi[] } };
-    };
-    const found = body.rawFetch?.candidatePois;
-    return { available: found?.available ?? false, pois: found?.pois ?? [] };
+    if (!res.ok) return null;
+    const body = (await res.json()) as { rawFetch?: RawFetch };
+    return body.rawFetch ?? null;
   } catch {
-    return { available: false, pois: [] };
+    return null;
   }
 }
 
