@@ -16,7 +16,6 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 
-import type { MapType } from 'react-native-maps';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 import {
@@ -118,8 +117,6 @@ export default function TripDetail() {
    */
   const [filming, setFilming] = useState(false);
   const faceBefore = useRef<'list' | 'map'>('list');
-  /** What the map is drawing, so the film's panel takes the right material over imagery. */
-  const [mapType, setMapType] = useState<MapType>('mutedStandard');
   /** The film sheet's height, which the map pads by so nothing it must show sits under the sheet. */
   const [sheetHeight, setSheetHeight] = useState(0);
   /**
@@ -625,7 +622,6 @@ export default function TripDetail() {
                   emphasis={stopIndexFor(emphasis, day)}
                   onEmphasise={(stop) => setEmphasis(stop === null ? null : `${day}:${stop}`)}
                   film={filming ? { stop: film.stop, inset: sheetHeight } : undefined}
-                  onMapType={setMapType}
                 />
               </MapFace>
             ) : null}
@@ -637,10 +633,9 @@ export default function TripDetail() {
                 day={days[day]}
                 dayIndex={day}
                 dayCount={days.length}
-                mapType={mapType}
                 onClose={closeFilm}
                 onNextDay={() => setDay(day + 1)}
-                onLayout={(event) => setSheetHeight(event.nativeEvent.layout.height)}
+                onInset={setSheetHeight}
               />
             ) : null}
           </View>

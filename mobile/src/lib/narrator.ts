@@ -46,7 +46,13 @@ function watchdogMs(sentence: string): number {
 
 export function speakBeat(
   text: string,
-  handlers: { onEnd: () => void; onError: () => void; onWord?: () => void },
+  handlers: {
+    onEnd: () => void;
+    onError: () => void;
+    onWord?: () => void;
+    /** A sentence is about to be said: the subtitle shows one at a time. */
+    onSentence?: (index: number, count: number) => void;
+  },
   options: { speech: SpeechLike; voice?: string },
 ): { cancel(): void } {
   const { speech, voice } = options;
@@ -76,6 +82,7 @@ export function speakBeat(
     if (done) return;
     if (index >= chunks.length) return finish(handlers.onEnd);
     const chunk = chunks[index];
+    handlers.onSentence?.(index, chunks.length);
     let settled = false;
     const next = () => {
       if (done || settled) return;
@@ -135,4 +142,29 @@ export function pickNarrator(voices: NarratorVoice[], locale: string): string | 
   if (usable.length === 0) return undefined;
   const score = (v: NarratorVoice) => (v.quality === 'Enhanced' ? 100 : 0) + (norm(v.language) === norm(locale) ? 10 : 0);
   return usable.reduce((best, v) => (score(v) > score(best) ? v : best), usable[0]).identifier;
+}
+
+/**
+ * A voice that says nothing, at the narrator's pace: each sentence lasts its `estimateDurationMs`,
+ * its words are reported evenly across it, and it starts at once.
+ *
+ * What a muted film and a film whose voice failed are spoken with. Through `speakBeat` like the real
+ * engine, so the pauses between sentences, the subtitle's sentence-at-a-time and the lighting of
+ * each word all come from one code path rather than a second, timed one that could drift from it.
+ */
+export function silentSpeech(): SpeechLike {
+  let timers: ReturnType<typeof setTimeout>[] = [];
+  return {
+    speak(text, options) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const ms = estimateDurationMs(text);
+      timers.push(setTimeout(() => options.onStart?.(), 0));
+      words.forEach((_, i) => timers.push(setTimeout(() => options.onBoundary?.(), (ms * i) / words.length)));
+      timers.push(setTimeout(() => options.onDone?.(), ms));
+    },
+    stop() {
+      timers.forEach(clearTimeout);
+      timers = [];
+    },
+  };
 }

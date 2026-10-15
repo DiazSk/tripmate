@@ -1,4 +1,4 @@
-import type { StoryScript } from '@shared/storyScript';
+import type { StoryBeat, StoryScript } from '@shared/storyScript';
 import { legBearingRad } from '@shared/tourPacing';
 
 import type { Stop } from '@/api/types';
@@ -25,6 +25,9 @@ export interface FilmState {
   /** A pause asked for while the script was still being written — the app went to the
    *  background — so the film arrives paused instead of speaking behind another app. */
   holdOnLoad: boolean;
+  /** The narrator is silenced; the film keeps the voice's pace, read from the subtitle. Kept across
+   *  a reset, so a muted film stays muted on the next day. */
+  muted: boolean;
 }
 
 export type FilmAction =
@@ -34,14 +37,19 @@ export type FilmAction =
   | { type: 'prev' }
   | { type: 'toggle' }
   | { type: 'pause' }
-  | { type: 'voiceError' };
+  | { type: 'voiceError' }
+  | { type: 'mute' }
+  /** Jump to a beat: the chapters and the scrubber. Plays from that beat's start. */
+  | { type: 'seek'; beat: number };
 
-export const initialFilm: FilmState = { phase: 'loading', beat: 0, count: 0, voiceBroken: false, holdOnLoad: false };
+export const initialFilm: FilmState = { phase: 'loading', beat: 0, count: 0, voiceBroken: false, holdOnLoad: false, muted: false };
 
 export function filmReducer(state: FilmState, action: FilmAction): FilmState {
   switch (action.type) {
     case 'reset':
-      return initialFilm;
+      return { ...initialFilm, muted: state.muted };
+    case 'mute':
+      return { ...state, muted: !state.muted };
     case 'loaded':
       return action.count > 0
         ? { ...state, phase: state.holdOnLoad ? 'paused' : 'playing', beat: 0, count: action.count, holdOnLoad: false }
@@ -62,6 +70,8 @@ export function filmReducer(state: FilmState, action: FilmAction): FilmState {
       return state.phase === 'ended'
         ? { ...state, beat: state.count - 1, phase: 'playing' }
         : { ...state, beat: Math.max(0, state.beat - 1), phase: 'playing' };
+    case 'seek':
+      return state.count > 0 ? { ...state, beat: Math.max(0, Math.min(state.count - 1, action.beat)), phase: 'playing' } : state;
     case 'toggle':
       if (state.phase === 'ended') return state.count > 0 ? { ...state, beat: 0, phase: 'playing' } : state;
       return { ...state, phase: state.phase === 'playing' ? 'paused' : 'playing' };
@@ -98,4 +108,21 @@ export function filmCameraFor(
     center: { latitude: stop.lat, longitude: stop.lng },
     heading: bearing === null ? 0 : (bearing * 180) / Math.PI,
   };
+}
+
+/**
+ * What a beat is called in the subtitle's eyebrow, the bar and the chapters: its place, or what
+ * kind of moment it is. The web's `beatTitle` in `StoryStage.tsx`, named per kind in the same way,
+ * so an unknown kind gets no name rather than another kind's.
+ */
+export function filmBeatTitle(beat: StoryBeat | undefined, stops: { name: string }[], dayIndex: number): string {
+  if (!beat) return '';
+  if (beat.kind === 'stop') return (typeof beat.stopIndex === 'number' && stops[beat.stopIndex]?.name) || '';
+  if (beat.kind === 'opening') return `Day ${dayIndex + 1}`;
+  if (beat.kind === 'closing') return 'End of the day';
+  if (beat.kind === 'travel') {
+    const to = typeof beat.legIndex === 'number' ? stops[beat.legIndex + 1]?.name : undefined;
+    return to ? `On to ${to}` : 'On the way';
+  }
+  return '';
 }

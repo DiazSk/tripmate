@@ -1,7 +1,7 @@
 import type { StoryScript } from '@shared/storyScript';
 
 import type { Stop } from '@/api/types';
-import { filmCameraFor, filmReducer, filmStopFor, initialFilm, type FilmState } from './storyFilm';
+import { filmBeatTitle, filmCameraFor, filmReducer, filmStopFor, initialFilm, type FilmState } from './storyFilm';
 
 const at = (s: Partial<FilmState>): FilmState => ({ ...initialFilm, ...s });
 
@@ -106,5 +106,34 @@ describe('filmCameraFor', () => {
     // Review Focus 2.
     expect(filmCameraFor([day[0], stop('Nowhere', 0, 0), day[2]], 1)).toBeNull();
     expect(filmCameraFor(day, 9)).toBeNull();
+  });
+});
+
+describe('filmReducer · subtitles player', () => {
+  it('seeks to a beat and plays it, clamped to the day, and not while the script is written', () => {
+    const film = at({ phase: 'paused', beat: 1, count: 5 });
+    expect(filmReducer(film, { type: 'seek', beat: 3 })).toEqual(at({ phase: 'playing', beat: 3, count: 5 }));
+    expect(filmReducer(film, { type: 'seek', beat: 99 }).beat).toBe(4);
+    expect(filmReducer(at({ phase: 'ended', beat: 4, count: 5 }), { type: 'seek', beat: 0 }).phase).toBe('playing');
+    expect(filmReducer(initialFilm, { type: 'seek', beat: 2 })).toBe(initialFilm);
+  });
+
+  it('mutes and unmutes, and a muted film stays muted on the next day', () => {
+    const muted = filmReducer(at({ phase: 'playing', count: 5 }), { type: 'mute' });
+    expect(muted.muted).toBe(true);
+    expect(filmReducer(muted, { type: 'reset' })).toEqual(at({ muted: true }));
+    expect(filmReducer(muted, { type: 'mute' }).muted).toBe(false);
+  });
+});
+
+describe('filmBeatTitle', () => {
+  const stops = [{ name: 'Coffee in Alfama' }, { name: 'São Jorge Castle' }];
+  it('names a stop by its place, the way between by where it goes, and the day at either end', () => {
+    expect(filmBeatTitle({ kind: 'stop', stopIndex: 1, text: '' }, stops, 2)).toBe('São Jorge Castle');
+    expect(filmBeatTitle({ kind: 'travel', legIndex: 0, text: '' }, stops, 2)).toBe('On to São Jorge Castle');
+    expect(filmBeatTitle({ kind: 'travel', legIndex: 5, text: '' }, stops, 2)).toBe('On the way');
+    expect(filmBeatTitle({ kind: 'opening', text: '' }, stops, 2)).toBe('Day 3');
+    expect(filmBeatTitle({ kind: 'closing', text: '' }, stops, 2)).toBe('End of the day');
+    expect(filmBeatTitle(undefined, stops, 2)).toBe('');
   });
 });

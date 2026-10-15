@@ -1,6 +1,6 @@
 import { estimateDurationMs, LEAD_IN_MS } from '@shared/storyPacing';
 
-import { pickNarrator, speakBeat, START_GUARD_MS, type SpeakOptions, type SpeechLike } from './narrator';
+import { pickNarrator, silentSpeech, speakBeat, START_GUARD_MS, type SpeakOptions, type SpeechLike } from './narrator';
 
 function fakeSpeech() {
   const calls: { text: string; options: SpeakOptions }[] = [];
@@ -172,5 +172,43 @@ describe('pickNarrator', () => {
   });
   it('leaves it to the system when nothing speaks English', () => {
     expect(pickNarrator([v('fr', 'Thomas', 'fr-FR')], 'fr-FR')).toBeUndefined();
+  });
+});
+
+describe('subtitles', () => {
+  it('reports each sentence as it begins, so the subtitle shows one at a time', () => {
+    const { speech, calls } = fakeSpeech();
+    const onSentence = jest.fn();
+    speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn(), onSentence }, { speech });
+    jest.advanceTimersByTime(LEAD_IN_MS);
+    expect(onSentence).toHaveBeenLastCalledWith(0, 3);
+    calls[0].options.onStart?.();
+    calls[0].options.onDone?.();
+    jest.advanceTimersByTime(700);
+    expect(onSentence).toHaveBeenLastCalledWith(1, 3);
+  });
+
+  it('the silent voice keeps the narrator\'s pace: words across each sentence, then the end', () => {
+    const onEnd = jest.fn();
+    const onWord = jest.fn();
+    const onSentence = jest.fn();
+    speakBeat(BEAT, { onEnd, onError: jest.fn(), onWord, onSentence }, { speech: silentSpeech() });
+    jest.advanceTimersByTime(LEAD_IN_MS + estimateDurationMs('Here is the castle.') - 1);
+    expect(onWord).toHaveBeenCalledTimes(4);
+    expect(onEnd).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(60_000);
+    expect(onSentence).toHaveBeenCalledTimes(3);
+    expect(onWord).toHaveBeenCalledTimes(4 + 3 + 2);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('stopping the silent voice stops its words', () => {
+    const onWord = jest.fn();
+    const handle = speakBeat(BEAT, { onEnd: jest.fn(), onError: jest.fn(), onWord }, { speech: silentSpeech() });
+    jest.advanceTimersByTime(LEAD_IN_MS + 1);
+    handle.cancel();
+    const said = onWord.mock.calls.length;
+    jest.advanceTimersByTime(60_000);
+    expect(onWord).toHaveBeenCalledTimes(said);
   });
 });
