@@ -16,10 +16,12 @@ import { prefersReducedMotion } from "@/lib/reducedMotion";
  * overflow-hidden` and the document never scrolls (see `scrollContainer.ts`), so Lenis is built on
  * that element and its first child, and ScrollTrigger is told the same element as its scroller.
  *
- * **Smooth scroll exists only while the landing is mounted.** AppShell's note on the overlay says
- * its scrolling is native and compositor-owned on purpose, and on every other route it still is:
- * this Lenis is created on mount and destroyed on unmount, so the wizard, trips and the trip view
- * scroll exactly as before. Reduced motion skips all of it and the page is its finished layout.
+ * **Smooth scroll exists only while a page that asks for it is mounted.** AppShell's note on the
+ * overlay says its scrolling is native and compositor-owned on purpose, and everywhere else it still
+ * is: each Lenis is created on mount and destroyed on unmount. The landing, My memories and Profile
+ * ask (`useSmoothScroll`), being long pages that open on a photograph; Sign in is one screen, the
+ * planner is a form a step at a time, and the trip page and the plan being written sit over the map,
+ * whose wheel is the camera's. Reduced motion skips all of it and the page is its finished layout.
  */
 const DESKTOP = "(min-width: 769px)";
 
@@ -36,9 +38,47 @@ export function scrollToTarget(el: Element | null, offset = 0) {
   else el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: offset ? "center" : "start" });
 }
 
+type Build = (root: HTMLElement, scroller: HTMLElement) => void;
+
+/** Adds `.is-in` to `[data-reveal]` / `[data-reveal-group]` inside `scope` as they scroll into view
+ *  (the landing's `.pl`, My memories' `.ma`). Re-run with `deps` when keyed children remount and need
+ *  observing again. What `.is-in` does is each page's own CSS. */
+export function useReveal(deps: unknown[], scope = ".pl") {
+  useEffect(() => {
+    const els = document.querySelectorAll<HTMLElement>(`${scope} [data-reveal]:not(.is-in), ${scope} [data-reveal-group]:not(.is-in)`);
+    if (!("IntersectionObserver" in window)) {
+      els.forEach((el) => el.classList.add("is-in"));
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) =>
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("is-in");
+            io.unobserve(e.target);
+          }
+        }),
+      { rootMargin: "0px 0px -12% 0px" }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
 export function useLandingMotion(
   root: RefObject<HTMLElement | null>,
   scroller: RefObject<HTMLDivElement | null> | null
+) {
+  useSmoothScroll(root, scroller, build);
+}
+
+/** Lenis on AppShell's overlay for as long as the page is mounted, and `build`'s scrubbed tweens
+ *  against it. `build` must be a stable function (module scope), or the scroll is rebuilt per render. */
+export function useSmoothScroll(
+  root: RefObject<HTMLElement | null>,
+  scroller: RefObject<HTMLDivElement | null> | null,
+  build: Build
 ) {
   useEffect(() => {
     const wrapper = scroller?.current;
@@ -53,12 +93,25 @@ export function useLandingMotion(
       wrapper,
       content,
       autoRaf: false,
-      anchors: { duration: 1.4, easing: expoInOut },
       syncTouch: true,
       syncTouchLerp: 0.075,
     });
     lenis = instance;
     instance.on("scroll", ScrollTrigger.update);
+
+    // In-page links (Profile's index). Lenis 1.3.4 handles `anchors` only when it scrolls the window,
+    // and here it scrolls the overlay, where a native hash jump is also lost to it: the URL changed
+    // and the page did not move. So they ride the smooth scroll, landing at the target's own
+    // `scroll-margin-top`, and the hash is written without a history entry, keeping Next's state.
+    const onAnchor = (e: MouseEvent) => {
+      const link = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>('a[href^="#"]') : null;
+      const target = link && link.hash.length > 1 ? document.getElementById(decodeURIComponent(link.hash.slice(1))) : null;
+      if (!target) return;
+      e.preventDefault();
+      scrollToTarget(target, -(parseFloat(getComputedStyle(target).scrollMarginTop) || 0));
+      history.replaceState(history.state, "", link!.hash);
+    };
+    wrapper.addEventListener("click", onAnchor);
     const tick = (time: number) => instance.raf(time * 1000);
     gsap.ticker.add(tick);
     gsap.ticker.lagSmoothing(0);
@@ -68,39 +121,53 @@ export function useLandingMotion(
     const late = window.setTimeout(() => ScrollTrigger.refresh(), 1200);
     return () => {
       window.clearTimeout(late);
+      wrapper.removeEventListener("click", onAnchor);
       ctx.revert();
       gsap.ticker.remove(tick);
       gsap.ticker.lagSmoothing(500, 33);
       instance.destroy();
       if (lenis === instance) lenis = null;
     };
-  }, [root, scroller]);
+  }, [root, scroller, build]);
 }
+
+const scrubFor = (scroller: HTMLElement) => (trigger: Element, start: string, end: string) => ({
+  trigger,
+  scroller,
+  start,
+  end,
+  scrub: true,
+  invalidateOnRefresh: true,
+});
+
+/**
+ * The reference's hero-banner, for any first screen built like the landing's: `.tm-hero-media` (the
+ * photograph, its scrim and a `.tm-hero-veil`) is carried down at exactly scroll speed, so it holds
+ * still while the page rises over it like a curtain, and blurs to 10px and dims on the way out; the
+ * `.tm-monument-wrap` is carried at 60% of scroll speed, so it reads as standing in front; `copy`
+ * lifts and fades over the first 40%. Wrappers, not the image or the word themselves, because both
+ * run CSS entrances on `transform`, and a CSS animation outranks the inline style a tween writes.
+ */
+export function heroParallax(hero: HTMLElement | null, scroller: HTMLElement, copy: string) {
+  const media = hero?.querySelector<HTMLElement>(".tm-hero-media");
+  if (!hero || !media) return;
+  const scrub = scrubFor(scroller);
+  gsap.to(media, { yPercent: 100, ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
+  gsap.fromTo(media, { filter: "blur(0px)" }, { filter: "blur(10px)", ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
+  gsap.fromTo(hero.querySelector(".tm-hero-veil"), { opacity: 0 }, { opacity: 0.6, ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
+  gsap.to(hero.querySelector(".tm-monument-wrap"), { y: () => hero.offsetHeight * 0.6, ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
+  gsap.to(Array.from(hero.querySelectorAll(copy)), { opacity: 0, y: "-3em", ease: "none", scrollTrigger: scrub(hero, "top top", "40% top") });
+}
+
+/** My memories and Profile: the hero, and nothing else scrubbed. Their pages are a wall and a form. */
+export const buildHeroOnly: Build = (root, scroller) => heroParallax(root.querySelector("[data-hero]"), scroller, "[data-hero-copy]");
 
 function build(root: HTMLElement, scroller: HTMLElement) {
   const q = (s: string) => root.querySelector<HTMLElement>(s);
   const all = (s: string) => Array.from(root.querySelectorAll<HTMLElement>(s));
-  const scrub = (trigger: Element, start: string, end: string) => ({
-    trigger,
-    scroller,
-    start,
-    end,
-    scrub: true,
-    invalidateOnRefresh: true,
-  });
+  const scrub = scrubFor(scroller);
 
-  // Hero — the reference's hero-banner: the photograph is carried down at exactly scroll speed, so
-  // it holds still while the white intro rises over it like a curtain; it blurs to 10px and dims on
-  // the way out. The monument is carried at 60% of scroll speed, so it reads as standing in front.
-  const hero = q(".tm-hero");
-  const media = q(".tm-hero-media");
-  if (hero && media) {
-    gsap.to(media, { yPercent: 100, ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
-    gsap.fromTo(media, { filter: "blur(0px)" }, { filter: "blur(10px)", ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
-    gsap.fromTo(q(".tm-hero-veil"), { opacity: 0 }, { opacity: 0.6, ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
-    gsap.to(q(".tm-monument-wrap"), { y: () => hero.offsetHeight * 0.6, ease: "none", scrollTrigger: scrub(hero, "top top", "bottom top") });
-    gsap.to(all(".tm-hero-mid, .tm-hero-foot"), { opacity: 0, y: "-3em", ease: "none", scrollTrigger: scrub(hero, "top top", "40% top") });
-  }
+  heroParallax(q(".tm-hero"), scroller, ".tm-hero-mid, .tm-hero-foot");
 
   gsap.matchMedia().add(DESKTOP, () => {
     // Full-bleed sections arrive as an inset card and open to the edges (has-inset-effect).

@@ -16,30 +16,8 @@ import { dayCost, LENS_ORDER, LENSES, PETRA_BEATS, PETRA_PHOTOS, type LensId, ty
 const photo = (k: PetraPhoto) => `/scenes/${PETRA_PHOTOS[k]}`;
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties;
 
-/** Adds `.is-in` to `[data-reveal]` / `[data-reveal-group]` inside `.pl` as they scroll into view.
- *  Re-run with `deps` when keyed children remount and need observing again. */
-export function useReveal(deps: unknown[]) {
-  useEffect(() => {
-    const els = document.querySelectorAll<HTMLElement>(".pl [data-reveal]:not(.is-in), .pl [data-reveal-group]:not(.is-in)");
-    if (!("IntersectionObserver" in window)) {
-      els.forEach((el) => el.classList.add("is-in"));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) =>
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("is-in");
-            io.unobserve(e.target);
-          }
-        }),
-      { rootMargin: "0px 0px -12% 0px" }
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-}
+// The scroll reveal lives with the rest of the page motion now; PolarLanding and PlanGlobe import it from here.
+export { useReveal } from "./motion";
 
 /* ---------------------------------------------------------- picture a day */
 

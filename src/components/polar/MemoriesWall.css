@@ -153,6 +153,10 @@
   animation: tm-reveal-opacity 0.7s both, ma-rise 0.9s var(--wd-ease-reveal) both;
   animation-delay: calc(var(--i) * 70ms);
 }
+/* Held on its first frame until it scrolls into view (`useReveal` adds `.is-in`). */
+.ma-cards li[data-reveal-group]:not(.is-in) {
+  animation-play-state: paused;
+}
 @keyframes ma-rise {
   from {
     transform: translateY(1.2em);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { TripSummary } from "@/lib/types";
@@ -12,6 +12,8 @@ import { DRAFT_TTL_DAYS } from "@/lib/drafts";
 import { tripDays } from "@/lib/tiers";
 import { monumentEms } from "@/lib/monumentFit";
 import { city, clearsIn, country, featured, phase, phaseLine, postmark, rememberedLine } from "@/lib/memories";
+import { useScrollContainer } from "@/lib/scrollContainer";
+import { buildHeroOnly, useReveal, useSmoothScroll } from "@/components/polar/motion";
 
 import "@/components/polar/PolarLanding.css";
 import "@/components/polar/MemoriesWall.css";
@@ -30,10 +32,14 @@ function Hero({ trips }: { trips: TripSummary[] }) {
   if (!hero) return null;
   const word = city(hero);
   return (
-    <section className="ma-hero" aria-labelledby="ma-title" data-nav-theme="photo">
-      {photo && <Image key={photo} src={photo} alt="" fill priority sizes="100vw" className="ma-hero-img" />}
-      <div className="ma-hero-scrim" aria-hidden="true" />
-      <div className="ma-hero-copy">
+    <section className="ma-hero" aria-labelledby="ma-title" data-nav-theme="photo" data-hero>
+      {/* The landing's hero motion (`heroParallax`): the media holds still as the wall rises over it. */}
+      <div className="tm-hero-media" aria-hidden="true">
+        {photo && <Image key={photo} src={photo} alt="" fill priority sizes="100vw" className="ma-hero-img" />}
+        <div className="ma-hero-scrim" />
+        <div className="tm-hero-veil" />
+      </div>
+      <div className="ma-hero-copy" data-hero-copy>
         <p className="tm-eyebrow tm-on-dark ma-next">
           <span className="ma-dot" aria-hidden="true" />
           {phase(hero) === "past" ? "Most recent" : "Next"}: {word} · {phaseLine(hero)}
@@ -48,13 +54,15 @@ function Hero({ trips }: { trips: TripSummary[] }) {
       </div>
       {/* Sized in the font-size itself, where an em is still the parent's: the gutter is the hero's
           padding, not a margin on this element, whose own em is the word's size. */}
-      <p
-        className="tm-monument tm-on-dark ma-monument"
-        style={{ fontSize: `min(calc((100cqw - 2 * var(--wd-pad)) / ${monumentEms(word).toFixed(3)}), 34vh)` }}
-        aria-hidden="true"
-      >
-        {word}
-      </p>
+      <div className="tm-monument-wrap">
+        <p
+          className="tm-monument tm-on-dark ma-monument"
+          style={{ fontSize: `min(calc((100cqw - 2 * var(--wd-pad)) / ${monumentEms(word).toFixed(3)}), 34vh)` }}
+          aria-hidden="true"
+        >
+          {word}
+        </p>
+      </div>
     </section>
   );
 }
@@ -198,9 +206,15 @@ export default function TripsView({
   const activeTab: TripsTab = showTabs ? tab : "memories";
   const shown = activeTab === "drafts" ? drafts : trips;
 
+  // The landing's smooth scroll and hero, and postcards that arrive as they scroll into view rather
+  // than on load, under a full-screen hero where nobody sees them.
+  const rootRef = useRef<HTMLElement>(null);
+  useSmoothScroll(rootRef, useScrollContainer(), buildHeroOnly);
+  useReveal([activeTab, shown.length], ".ma");
+
   // `map-chrome-hidden`: nothing on this page is a map being read, so the globe's controls stand down.
   return (
-    <main className="tm ma map-chrome-hidden" data-nav-theme="light">
+    <main ref={rootRef} className="tm ma map-chrome-hidden" data-nav-theme="light">
       {trips.length > 0 ? (
         <Hero trips={trips} />
       ) : (
@@ -258,7 +272,8 @@ export default function TripsView({
           {shown.length > 0 ? (
             <ul className="ma-cards">
               {shown.map((trip, i) => (
-                <li key={trip.id} style={{ ["--i" as string]: Math.min(i, 8) }}>
+                // Staggered across a row (the wall is three wide), since each row now arrives on its own.
+                <li key={trip.id} data-reveal-group style={{ ["--i" as string]: i % 3 }}>
                   <Postcard trip={trip} onDelete={() => setPendingDelete(trip)} />
                 </li>
               ))}

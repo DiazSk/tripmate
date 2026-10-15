@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -23,6 +23,8 @@ import { NO_ACCESSIBILITY_NEEDS } from "@/lib/travelerProfile";
 import type { TravelerProfile } from "@/lib/travelerProfile";
 import type { ProfileStats } from "@/lib/profileStats";
 import type { DiscoveryPreference, PacePreference, TripSummary } from "@/lib/types";
+import { useScrollContainer } from "@/lib/scrollContainer";
+import { buildHeroOnly, useSmoothScroll } from "@/components/polar/motion";
 
 import "@/components/polar/PolarLanding.css";
 import "@/components/polar/FieldNotes.css";
@@ -130,11 +132,15 @@ function Masthead({
   const photo = !lead || found === null ? FALLBACK_PHOTO : found;
   const first = name?.trim().split(/\s+/)[0] || "Traveller";
   return (
-    <section className="pb-mast" aria-labelledby="pb-name" data-nav-theme="photo">
-      {photo && <Image key={photo} src={photo} alt="" fill priority sizes="100vw" className="pb-mast-img" />}
-      <div className="pb-mast-scrim" aria-hidden="true" />
+    <section className="pb-mast" aria-labelledby="pb-name" data-nav-theme="photo" data-hero>
+      {/* The landing's hero motion (`heroParallax`): the media holds still as the form rises over it. */}
+      <div className="tm-hero-media" aria-hidden="true">
+        {photo && <Image key={photo} src={photo} alt="" fill priority sizes="100vw" className="pb-mast-img" />}
+        <div className="pb-mast-scrim" />
+        <div className="tm-hero-veil" />
+      </div>
       <div className="pb-mast-foot">
-        <div className="pb-who">
+        <div className="pb-who" data-hero-copy>
           {/* Signed in: the traveller's own face, editable. `router.refresh()` re-reads the session
               so the server-rendered page carries the new `user.image` too. */}
           <Avatar userId={id} name={name} image={image} size={88} editable={!!id} onChange={() => router.refresh()} />
@@ -172,13 +178,15 @@ function Masthead({
         </div>
         {/* Sized in the font-size itself, where an em is still the parent's; the gutter is the
             foot's padding, not this element's, whose own em is the word's size. */}
-        <p
-          className="tm-monument tm-on-dark pb-monument"
-          style={{ fontSize: `min(calc((100cqw - 2 * var(--wd-pad)) / ${monumentEms(first).toFixed(3)}), 28vh)` }}
-          aria-hidden="true"
-        >
-          {first}
-        </p>
+        <div className="tm-monument-wrap">
+          <p
+            className="tm-monument tm-on-dark pb-monument"
+            style={{ fontSize: `min(calc((100cqw - 2 * var(--wd-pad)) / ${monumentEms(first).toFixed(3)}), 28vh)` }}
+            aria-hidden="true"
+          >
+            {first}
+          </p>
+        </div>
       </div>
     </section>
   );
@@ -268,6 +276,10 @@ export default function ProfileForm({
   savedPlaces: { id: string; name: string; city: string | null }[];
   savedPlaceCount: number;
 }) {
+  // The landing's smooth scroll and hero. Only the hero is scrubbed: the rest is a form somebody is
+  // editing, where fields sliding into place would be in the way.
+  const rootRef = useRef<HTMLElement>(null);
+  useSmoothScroll(rootRef, useScrollContainer(), buildHeroOnly);
   // Seeded from the server read; `DEFAULTS` is the right answer for a profile never saved.
   const [baseline, setBaseline] = useState<TravelerProfile>(initialProfile ?? DEFAULTS);
   const [profile, setProfile] = useState<TravelerProfile>(baseline);
@@ -457,7 +469,7 @@ export default function ProfileForm({
 
   // `map-chrome-hidden`: a settings page, not a map being read.
   return (
-    <main className="tm pb map-chrome-hidden" data-nav-theme="light">
+    <main ref={rootRef} className="tm pb map-chrome-hidden" data-nav-theme="light">
       <Masthead id={accountId} name={accountName} email={accountEmail} image={accountImage} lead={recentTrips[0]} stats={stats} />
 
       <section className="pb-sentence" aria-labelledby="pb-sentence-title">
