@@ -300,7 +300,11 @@ export default function TripView({
       frame = 0;
       const foot = document.querySelector<HTMLElement>(story.active ? ".story-player .sp-bar" : ".trip-board, .tb-shut");
       const side = document.querySelector<HTMLElement>(".trip-drawer, .split-editor");
-      const bottom = foot ? Math.max(0, Math.round(window.innerHeight - foot.getBoundingClientRect().top + 16)) : 0;
+      // Where the foot comes to rest, not where its entrance has it this frame: the board rises 2rem
+      // into place over 0.5s (`tb-rise`), and a rect read mid-rise put the map's controls 32px short
+      // until a re-measure jumped them up at 560ms. The transform's own offset is taken back out.
+      const restTop = foot ? foot.getBoundingClientRect().top - new DOMMatrixReadOnly(getComputedStyle(foot).transform).m42 : 0;
+      const bottom = foot ? Math.max(0, Math.round(window.innerHeight - restTop + 16)) : 0;
       // The open map search covers the top; what it finds is framed below it.
       const bar = document.querySelector<HTMLElement>(".trip-spotlight");
       const top = bar ? Math.round(bar.getBoundingClientRect().bottom) : 0;
@@ -315,8 +319,6 @@ export default function TripView({
       if (!frame) frame = requestAnimationFrame(measure);
     };
     schedule();
-    // Once more after the board's own 0.5s rise, which a rect read mid-transform gets wrong.
-    const settle = window.setTimeout(schedule, 560);
     window.addEventListener("resize", schedule);
     // The search grows and shrinks with its results.
     const bar = document.querySelector<HTMLElement>(".trip-spotlight");
@@ -324,7 +326,6 @@ export default function TripView({
     if (bar) observer.observe(bar);
     return () => {
       cancelAnimationFrame(frame);
-      window.clearTimeout(settle);
       window.removeEventListener("resize", schedule);
       observer.disconnect();
     };
