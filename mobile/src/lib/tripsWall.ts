@@ -1,7 +1,7 @@
 import type { TripSummary } from '@/api/types';
 
 /**
- * How the trips wall arranges itself.
+ * How the Trips tab arranges itself: coming up in a carousel, remembered in a grid.
  *
  * The tab was called Memories and held both a trip to Jaipur that happened and a trip to Lisbon
  * that has not — a future trip is not a memory. So the wall is "Trips", split by whether the
@@ -19,16 +19,20 @@ export const todayISO = () => new Date().toISOString().slice(0, 10);
 export const isUpcoming = (trip: TripSummary, today: string) => trip.endDate >= today;
 
 /**
- * The wall's order: upcoming first, soonest at the top; then past, most recent at the top. One
- * column of postcards, so there are no section headers to pad: each card's own flag says where it
- * stands ("In 30 days", "Happening now"), and a past one carries none.
+ * The two shelves, each in its own order: upcoming soonest first, so the next trip leads the
+ * carousel; past most recent first, so the grid opens on the trip you just came back from.
  */
-export function wallOrder(trips: TripSummary[], today: string): TripSummary[] {
-  const upcoming = trips
-    .filter((trip) => isUpcoming(trip, today))
-    .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const past = trips
-    .filter((trip) => !isUpcoming(trip, today))
-    .sort((a, b) => b.endDate.localeCompare(a.endDate));
-  return [...upcoming, ...past];
+export function tripShelves(trips: TripSummary[], today: string): { upcoming: TripSummary[]; past: TripSummary[] } {
+  return {
+    upcoming: trips.filter((trip) => isUpcoming(trip, today)).sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    past: trips.filter((trip) => !isUpcoming(trip, today)).sort((a, b) => b.endDate.localeCompare(a.endDate)),
+  };
+}
+
+/** The search bar's rule: any part of the destination, or the month and year it starts ("nov 2026"). */
+export function matchesQuery(trip: TripSummary, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const month = new Date(`${trip.startDate}T00:00:00Z`).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toLowerCase();
+  return trip.destination.toLowerCase().includes(q) || month.includes(q) || month.replace(/(\w{3})\w*/, '$1').includes(q);
 }

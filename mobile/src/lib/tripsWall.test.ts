@@ -1,6 +1,6 @@
 import type { TripSummary } from '@/api/types';
 
-import { isUpcoming, wallOrder } from './tripsWall';
+import { isUpcoming, matchesQuery, tripShelves } from './tripsWall';
 
 const trip = (id: string, startDate: string, endDate: string): TripSummary => ({
   id,
@@ -24,7 +24,18 @@ test('a trip counts as upcoming until the day after it ends', () => {
   expect(isUpcoming(lisbon, '2026-10-29')).toBe(false);
 });
 
-test('upcoming comes first soonest-first, past follows most-recent-first', () => {
-  expect(wallOrder([jaipur, kyoto, porto, lisbon], TODAY).map((t) => t.id)).toEqual(['lisbon', 'kyoto', 'porto', 'jaipur']);
-  expect(wallOrder([], TODAY)).toEqual([]);
+test('upcoming is soonest-first, past is most-recent-first', () => {
+  const { upcoming, past } = tripShelves([jaipur, kyoto, porto, lisbon], TODAY);
+  expect(upcoming.map((t) => t.id)).toEqual(['lisbon', 'kyoto']);
+  expect(past.map((t) => t.id)).toEqual(['porto', 'jaipur']);
+  expect(tripShelves([], TODAY)).toEqual({ upcoming: [], past: [] });
+});
+
+test('search matches the destination, or the month and year it starts', () => {
+  expect(matchesQuery(kyoto, 'KYO')).toBe(true);
+  expect(matchesQuery(kyoto, 'somewhere')).toBe(true);
+  expect(matchesQuery(kyoto, 'december 2026')).toBe(true);
+  expect(matchesQuery(kyoto, 'dec 2026')).toBe(true);
+  expect(matchesQuery(kyoto, 'november')).toBe(false);
+  expect(matchesQuery(kyoto, '  ')).toBe(true);
 });
