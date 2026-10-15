@@ -48,3 +48,30 @@ export function accessibilityValue(needs: AccessibilityNeeds): string {
   if (set.length > 0) return set.join(', ');
   return needs.note.trim() ? 'A note' : 'Nothing noted';
 }
+
+/**
+ * `Food, Culture & History` · `4 chosen` · `None chosen`.
+ *
+ * The starred ones when there are any, because they are what drives the plan; otherwise a count,
+ * since an unstarred list of six would not fit the row and none of it outranks the rest.
+ */
+export function interestsValue(profile: Pick<TravelerProfile, 'priorities' | 'topPriorities'>): string {
+  if (profile.topPriorities.length) return profile.topPriorities.join(', ');
+  return profile.priorities.length ? `${profile.priorities.length} chosen` : 'None chosen';
+}
+
+/**
+ * The passport page's name fields and its machine-readable line, from the account's name.
+ *
+ * The MRZ follows the real document's shape (`P<`, an issuer, `SURNAME<<GIVEN`, padded to 44 with
+ * `<`) because it reads as a passport only if it looks like one; it encodes nothing. A one-word
+ * name is a given name with no surname, and no name at all is the traveller the app calls you.
+ */
+export function passportLines(name: string | null | undefined): { surname: string | null; given: string; mrz: string } {
+  const words = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  const given = words[0] ?? 'Traveller';
+  const surname = words.length > 1 ? words.slice(1).join(' ') : null;
+  const clean = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, '').trim().replace(/\s+/g, '<');
+  const mrz = `P<TPM${clean(surname ?? 'TripMate')}<<${clean(given)}`.padEnd(44, '<').slice(0, 44);
+  return { surname, given, mrz };
+}

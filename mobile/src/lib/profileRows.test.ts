@@ -1,6 +1,6 @@
 import type { TravelerProfile } from '@/api/types';
 
-import { accessibilityValue, dietaryValue } from './profileRows';
+import { accessibilityValue, dietaryValue, interestsValue, passportLines } from './profileRows';
 
 const profile = (overrides: Partial<TravelerProfile> = {}): TravelerProfile => ({
   group: 'solo',
@@ -61,4 +61,24 @@ describe('access needs', () => {
       'Nothing noted'
     );
   });
+});
+
+test('interests say the starred ones, else how many are chosen', () => {
+  expect(interestsValue(profile({ priorities: ['Food', 'Nightlife'], topPriorities: ['Food'] }))).toBe('Food');
+  expect(interestsValue(profile({ priorities: ['Food', 'Nightlife'] }))).toBe('2 chosen');
+  expect(interestsValue(profile())).toBe('None chosen');
+});
+
+test('the passport splits a name into given and surname, and pads the line to 44', () => {
+  const { surname, given, mrz } = passportLines('Sam de la Rivera');
+  expect(given).toBe('Sam');
+  expect(surname).toBe('de la Rivera');
+  expect(mrz).toBe('P<TPMDE<LA<RIVERA<<SAM'.padEnd(44, '<'));
+  expect(mrz).toHaveLength(44);
+});
+
+test('a one-word or missing name still makes a page', () => {
+  expect(passportLines('Zoë')).toEqual({ surname: null, given: 'Zoë', mrz: 'P<TPMTRIPMATE<<ZOE'.padEnd(44, '<') });
+  expect(passportLines(null).given).toBe('Traveller');
+  expect(passportLines('   ').surname).toBeNull();
 });
