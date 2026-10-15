@@ -64,7 +64,10 @@ export default function EditChatPanel({
   onDaysModified,
   onBusyChange,
   initialMessage,
+  polar = false,
 }: {
+  /** Drawn in Polar on ice, inside FocusEditMode's Polar look. */
+  polar?: boolean;
   trip: TripSummary;
   userAnswers?: UserAnswers | null;
   itinerary: Itinerary;
@@ -236,25 +239,28 @@ export default function EditChatPanel({
     }
   }
 
+  /** The glass classes, or the Polar drawer's. */
+  const k = (glass: string, polarClass: string) => (polar ? polarClass : glass);
+
   return (
     // Fills whatever pane it is placed in — Focus Mode owns the framing, header and dimensions
     // now, so this component no longer positions itself.
-    <div className="flex h-full min-h-0 flex-col" {...devLabel("EditChatPanel")}>
+    <div className={k("flex h-full min-h-0 flex-col", "td-chat")} {...devLabel("EditChatPanel")}>
       {/* Who is replying, and whether they are. This replaces the "Thinking…" line that used to sit
           at the foot of the transcript. */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-card-border px-4 py-3">
-        <Meridian size={28} state={meriForChat({ replying: busy, failure: error, justReplied })} />
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">TripMate</p>
+      <div className={k("flex shrink-0 items-center gap-3 border-b border-card-border px-4 py-3", "td-chat-who")}>
+        <Meridian size={polar ? 22 : 28} state={meriForChat({ replying: busy, failure: error, justReplied })} />
+        <div className={k("min-w-0", "td-chat-who-text")}>
+          <p className={k("text-sm font-medium text-foreground", "")}>TripMate</p>
           {busy ? (
-            <p className="text-xs text-foreground/80">
+            <p className={k("text-xs text-foreground/80", "")}>
               <span aria-hidden="true" className="text-accent">
                 ●
               </span>{" "}
               Replying
             </p>
           ) : (
-            <p className="text-xs text-muted">Ask for a change</p>
+            <p className={k("text-xs text-muted", "")}>Ask for a change</p>
           )}
         </div>
         {/* The only announcement: that a reply is coming. The visible header would re-read "TripMate"
@@ -263,26 +269,26 @@ export default function EditChatPanel({
           {busy ? "TripMate is replying" : ""}
         </p>
       </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <div className={k("min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3", "td-chat-log")}>
         {loadingHistory && messages.length === 0 && (
-          <p className="text-sm text-muted">Loading your conversation…</p>
+          <p className={k("text-sm text-muted", "td-muted")}>Loading your conversation…</p>
         )}
 
         {!loadingHistory && messages.length === 0 && (
-          <div className="space-y-3">
-            <p className="text-sm text-muted">
+          <div className={k("space-y-3", "td-chat-empty")}>
+            <p className={k("text-sm text-muted", "")}>
               Ask for changes, or just think out loud. Everything you don&apos;t mention stays as
               it is.
             </p>
             {/* Suggestions carry most of the discovery load: people rarely guess that an editor
                 like this will answer questions as well as take orders. */}
-            <div className="flex flex-wrap gap-1.5">
+            <div className={k("flex flex-wrap gap-1.5", "td-chips")}>
               {SUGGESTIONS.map((sug) => (
                 <button
                   key={sug}
                   type="button"
                   onClick={() => send(sug)}
-                  className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-muted transition-colors hover:bg-white/20 hover:text-foreground"
+                  className={k("rounded-full bg-white/10 px-2.5 py-1 text-xs text-muted transition-colors hover:bg-white/20 hover:text-foreground", "")}
                 >
                   {sug}
                 </button>
@@ -292,26 +298,27 @@ export default function EditChatPanel({
         )}
 
         {messages.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "text-right" : ""}>
+          <div key={i} className={k(m.role === "user" ? "text-right" : "", `td-turn is-${m.role}`)}>
             <div
-              className={`inline-block max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
-                m.role === "user"
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-white/10 text-foreground"
-              }`}
+              className={k(
+                `inline-block max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
+                  m.role === "user" ? "bg-accent text-accent-foreground" : "bg-white/10 text-foreground"
+                }`,
+                "td-bubble"
+              )}
             >
               {m.content}
             </div>
             {/* The shown delta — the persisted itinerary is updated silently behind this. */}
             {m.role === "assistant" && m.daysModified && m.daysModified.length > 0 && (
-              <p className="mt-1.5 text-xs font-medium text-foreground/70">
+              <p className={k("mt-1.5 text-xs font-medium text-foreground/70", "td-turn-head")}>
                 Updated {formatDays(m.daysModified)}
               </p>
             )}
             {m.role === "assistant" && m.changes && m.changes.length > 0 && (
-              <ul className="mt-1 space-y-0.5">
+              <ul className={k("mt-1 space-y-0.5", "td-changes")}>
                 {m.changes.map((c, ci) => (
-                  <li key={ci} className="text-xs text-muted">
+                  <li key={ci} className={k("text-xs text-muted", "")}>
                     · {c}
                   </li>
                 ))}
@@ -320,23 +327,23 @@ export default function EditChatPanel({
             {/* Guardrails read louder than the change list they qualify: the point of the alert is
                 that the plan is now something the traveler might not have intended. */}
             {m.role === "assistant" && m.warnings && m.warnings.length > 0 && (
-              <ul className="mt-1.5 space-y-1">
+              <ul className={k("mt-1.5 space-y-1", "td-findings")}>
                 {m.warnings.map((w, wi) => (
                   <li
                     key={wi}
-                    className="flex gap-1.5 rounded-lg bg-alert-soft px-2 py-1.5 text-xs text-alert/75"
+                    className={k("flex gap-1.5 rounded-lg bg-alert-soft px-2 py-1.5 text-xs text-alert/75", "")}
                   >
-                    <span aria-hidden="true">⚠️</span>
+                    {!polar && <span aria-hidden="true">⚠️</span>}
                     <span>{w}</span>
                   </li>
                 ))}
               </ul>
             )}
             {m.role === "assistant" && m.knockOn && (
-              <p className="mt-1 text-xs text-alert/75">Also: {m.knockOn}</p>
+              <p className={k("mt-1 text-xs text-alert/75", "td-alert-line")}>Also: {m.knockOn}</p>
             )}
             {m.role === "assistant" && m.rejected && m.rejected.length > 0 && (
-              <p className="mt-1 text-xs text-alert/80">
+              <p className={k("mt-1 text-xs text-alert/80", "td-alert-line")}>
                 {m.rejected.length === 1 ? "1 change" : `${m.rejected.length} changes`} couldn&rsquo;t
                 be applied ({m.rejected.join("; ")}). Ask again to retry.
               </p>
@@ -344,14 +351,14 @@ export default function EditChatPanel({
             {/* Tap-to-answer. The model is told to supply these whenever it asks something, so
                 a question costs a tap rather than a sentence. Typing still works. */}
             {m.role === "assistant" && m.options && m.options.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className={k("mt-2 flex flex-wrap gap-1.5", "td-chips is-options")}>
                 {m.options.map((opt) => (
                   <button
                     key={opt}
                     type="button"
                     onClick={() => send(opt)}
                     disabled={busy}
-                    className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent/20 disabled:opacity-40"
+                    className={k("rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent/20 disabled:opacity-40", "")}
                   >
                     {opt}
                   </button>
@@ -362,14 +369,21 @@ export default function EditChatPanel({
         ))}
 
         {error && (
-          <p role="alert" className="text-xs text-alert">
+          <p role="alert" className={k("text-xs text-alert", "td-alert-line")}>
             {error}
           </p>
+        )}
+        {polar && busy && (
+          <div className="td-bubble is-typing" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
         )}
         <div ref={endRef} />
       </div>
 
-      <div className="flex items-end gap-2 border-t border-card-border p-3">
+      <div className={k("flex items-end gap-2 border-t border-card-border p-3", "td-compose")}>
         <textarea
           ref={textareaRef}
           value={input}
@@ -382,16 +396,22 @@ export default function EditChatPanel({
           }}
           rows={2}
           placeholder="What would you like to change?"
-          className="flex-1 resize-none rounded-xl border border-card-border bg-white/10 p-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+          className={k("flex-1 resize-none rounded-xl border border-card-border bg-white/10 p-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25", "")}
         />
         <button
           type="button"
           onClick={() => send()}
           disabled={!input.trim() || busy}
           aria-label="Send"
-          className="rounded-full bg-accent p-2.5 text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+          className={k("rounded-full bg-accent p-2.5 text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40", "td-send")}
         >
-          <Send className="h-4 w-4" />
+          {polar ? (
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
         </button>
       </div>
     </div>

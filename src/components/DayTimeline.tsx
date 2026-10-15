@@ -7,6 +7,7 @@ import { GripVertical } from "lucide-react";
 import { DayPlan, Stop } from "@/lib/types";
 import { stopDragId } from "@/lib/dragDrop";
 import { devLabel } from "@/lib/devInspector";
+import { dayColorToken } from "@/lib/mapRoute";
 
 /** Stops that appeared/changed on the last AI turn, so the preview shows *what moved* rather than
  *  silently redrawing. Keyed by name because indices shift when a stop is inserted or removed. */
@@ -19,6 +20,7 @@ function TimelineRow({
   changed,
   isLast,
   draggable,
+  polar,
 }: {
   stop: Stop;
   dayIndex: number;
@@ -27,6 +29,7 @@ function TimelineRow({
   isLast: boolean;
   /** Adds the grip and enrolls the row in the enclosing SortableContext. */
   draggable?: boolean;
+  polar?: boolean;
 }) {
   const {
     attributes,
@@ -37,6 +40,32 @@ function TimelineRow({
     transition,
     isDragging,
   } = useSortable({ id: stopDragId(dayIndex, index), disabled: !draggable });
+
+  // Polar (the trip page's drawer): one ruled line per stop, as the canvas's preview reads: the
+  // time, the day's colour, the name, and an "updated" tag on what the last turn moved.
+  if (polar) {
+    return (
+      <li
+        ref={draggable ? setNodeRef : undefined}
+        style={draggable ? { transform: CSS.Transform.toString(transform), transition } : undefined}
+        className={`td-mini-row${changed ? " is-changed" : ""}${isDragging ? " is-dragging" : ""}`}
+      >
+        {draggable ? (
+          <button type="button" ref={setActivatorNodeRef} {...attributes} {...listeners} aria-label={`Reorder ${stop.name}`} title="Drag to reorder" className="td-grip">
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <span />
+        )}
+        <span className="td-mini-time">{stop.time}</span>
+        <span className="td-mini-dot" style={{ background: `var(${dayColorToken(dayIndex)})` }} />
+        <span className="td-mini-name">
+          {stop.name}
+          {changed && <em>updated</em>}
+        </span>
+      </li>
+    );
+  }
 
   return (
     <li
@@ -105,7 +134,9 @@ export default function DayTimeline({
   changed,
   busy,
   draggable,
+  polar,
 }: {
+  polar?: boolean;
   day: DayPlan;
   dayIndex: number;
   changed: ChangedStops;
@@ -114,6 +145,41 @@ export default function DayTimeline({
    *  owns the draft these rows are rearranging. */
   draggable?: boolean;
 }) {
+  if (polar) {
+    return (
+      <div className="td-mini" aria-busy={busy} {...devLabel("DayTimeline")}>
+        {day.stops.length === 0 ? (
+          <p className="td-muted">No stops on this day yet.</p>
+        ) : (
+          <ol>
+            <SortableContext items={day.stops.map((_, i) => stopDragId(dayIndex, i))} strategy={verticalListSortingStrategy} disabled={!draggable}>
+              {day.stops.map((stop, i) => (
+                <TimelineRow
+                  key={`${stop.name}-${i}`}
+                  stop={stop}
+                  dayIndex={dayIndex}
+                  index={i}
+                  draggable={draggable}
+                  changed={changed.has(stop.name)}
+                  isLast={i === day.stops.length - 1}
+                  polar
+                />
+              ))}
+            </SortableContext>
+          </ol>
+        )}
+        {day.lodging && (
+          <p className="td-stay">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M2 13V5.5L8 2l6 3.5V13M5.5 13V9h5v4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            </svg>
+            Staying · {day.lodging.name}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`h-full overflow-y-auto px-4 py-3 transition-opacity duration-200 ${busy ? "opacity-60" : ""}`}

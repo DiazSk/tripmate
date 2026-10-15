@@ -1,102 +1,81 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  AudioLines,
-  Bike,
-  Car,
-  Footprints,
-  RotateCcw,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
-  X,
-} from "lucide-react";
+import { Bike, Car, Footprints } from "lucide-react";
 
-import { PauseIcon, PlayIcon } from "@/components/icons";
-import { beatOpacity, type StoryBeat } from "@/lib/storyScript";
 import { takeHandoffOrigin } from "@/lib/controlHandoff";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { usePlacePhoto } from "@/lib/usePlacePhoto";
 import { useStoryPlayback, type StoryPlayback } from "@/lib/storyMode";
+import { beatAt, beatDurations, beatTicks, clockLabel, elapsedMs, subtitleAt } from "@/lib/storyTimeline";
 import { devLabel } from "@/lib/devInspector";
 import { useRouteProfile } from "@/lib/dayRoutes";
+import type { StoryBeat } from "@/lib/storyScript";
 import type { DayPlan, Stop } from "@/lib/types";
-import { StopAvatar } from "./StopList";
 import { meriForStory } from "@/lib/meri";
 import Meridian from "./Meridian";
 
-/**
- * The stage's arrival and its departure, and they are deliberately not mirror images.
- *
- * Arriving is the house curve at the house duration — it is the film opening, and the panel is
- * what the eye should follow. Leaving is shorter and takes an `ease-in` (`0.4, 0, 1, 1`): a
- * dismissal should get out of the way rather than linger, and the thing worth watching on the way
- * out is the map the panel was covering. Both are plain tweens with a bezier, which is what lets
- * Framer run them through the Web Animations API rather than its own rAF loop — see the note on
- * the transport row about why that matters here specifically.
- */
-const STAGE_ENTER = { duration: 0.28, ease: [0.16, 1, 0.3, 1] as const };
-const STAGE_EXIT = { duration: 0.18, ease: [0.4, 0, 1, 1] as const };
+import "@/components/polar/PolarLanding.css";
+import "@/components/polar/StoryPlayer.css";
 
 /**
- * Story mode's one piece of interface — the narration, in the docked column, directly under the
- * collapsed plan panel's capsule.
+ * Story mode's interface: a now-playing bar docked along the foot of the map, the way a music
+ * player's is, and the two panels it opens over the map: the narration as lyrics, and Up next.
  *
- * **Where it sits is the design.** The capsule is the trip's single clean line (photo, destination,
- * length, day in focus), so this panel deliberately repeats **none** of it: no city, no day badge.
- * It is the "and here is the part being narrated" section beneath it, which is why its geometry is
- * copied from `DockedPanel`'s collapsed state rather than invented — same `right`/`left` insets,
- * same `sm:w-96` / `sm:max-w-[520px]`, offset down by the capsule's own `h-14` plus a gap. The two
- * read as one stack in the place the plan panel already occupies. An earlier revision floated this
- * bottom-centre over the map, which put the film's controls nowhere near the control that started
- * it and covered the ground the camera had just flown to.
+ * **Along the foot, because the map is the picture.** The film flies the camera down to each stop;
+ * the controls belong where a player keeps them, out of the frame's middle, and the lines being
+ * spoken sit on the map's left where the camera leaves room. The bar replaces the panel that used
+ * to dock under the plan's capsule: the trip page's plan is a board along the foot that stands down
+ * while a film runs, so a column on the right was guarding nothing.
  *
- * **Play is the capsule's until it is pressed, and then it is this panel's.** The capsule carries
- * it while there is no film, because that is the one thing worth reaching for while the plan is
- * shut. The moment there *is* a film, a play button up there and a transport row down here are two
- * different ideas of where the controls live — so the button leaves the capsule and takes its post
- * between Previous and Next, which is where every transport it has ever resembled puts it. It
- * travels rather than teleports: see `flyPlayIntoPlace` below.
+ * **The scrubber is the day's film, estimated.** A beat lasts as long as its sentence takes to say
+ * and only the voice knows when that is, so the bar runs on `estimateDurationMs` (the same estimate
+ * the controller times a muted beat with, see `storyTimeline.ts`) and snaps to the real boundary
+ * when a beat advances. A seek lands on a beat's start: a sentence is spoken from its beginning.
  *
- * Mounted once in `AppShell`, beside the map chrome rather than inside the scrolling content
- * overlay, for the same reason `StopMarkerLayer` is: the page underneath is whatever route the
- * traveller was on, and the film is not part of it. Renders nothing until a story is running.
- *
- * **The Apple Music lyric ramp.** Only the line being spoken is at full weight; the next is legible
- * but plainly not it, and everything beyond that is a suggestion of text. The list does not scroll
- * — the inner column is translated so the spoken line sits at the top of the window and the lines
- * to come rise into it. That is a `transform`, so the whole animation is compositor work over a map
- * that is flying at the same time; a scrolling container would relayout every frame, and every
- * frame here also re-blurs this panel's own `backdrop-filter`.
+ * Mounted once in `AppShell`, beside the map chrome, for the reason `StopMarkerLayer` is: the page
+ * underneath is whatever route the traveller was on, and the film is not part of it. Renders nothing
+ * until a story is running.
  */
+const ENTER = { duration: 0.32, ease: [0.16, 1, 0.3, 1] as const };
+const EXIT = { duration: 0.18, ease: [0.4, 0, 1, 1] as const };
+
 export default function StoryStage() {
   const playback = useStoryPlayback();
   const request = playback?.request ?? null;
   const day = request ? request.itinerary.days[request.dayIndex] : undefined;
 
   /**
-   * The presence gate, and the only reason this component is split in two.
-   *
-   * `exit()` clears the request synchronously — it has to, because `ItineraryCard`'s route effect
-   * depends on `story.active` and the day's arcs must come back with the panel's framing. So there
-   * is nothing left to draw by the time an exit animation would want to run. `AnimatePresence`
-   * holds the *element it was last given*, props and all, which is exactly the frame the film
-   * ended on; the body below therefore takes a non-null request as a prop rather than reading a
-   * context that has already been emptied.
+   * The presence gate, and the only reason this component is split in two. `exit()` clears the
+   * request synchronously (the plan's route effect depends on `story.active`), so nothing would be
+   * left to draw by the time an exit animation runs. `AnimatePresence` holds the element it was last
+   * given, props and all, which is exactly the frame the film ended on.
    */
   return (
     <AnimatePresence>
-      {playback && request && day && (
-        <StoryStageBody key="story-stage" playback={playback} request={request} day={day} />
-      )}
+      {playback && request && day && <StoryPlayerBody key="story-player" playback={playback} request={request} day={day} />}
     </AnimatePresence>
   );
 }
 
-function StoryStageBody({
+const stopOf = (beat: StoryBeat | undefined, day: DayPlan): Stop | undefined =>
+  beat?.kind === "stop" && beat.stopIndex !== undefined ? day.stops[beat.stopIndex] : undefined;
+
+/** What a beat is called in the bar and the queue: its place, or what kind of moment it is. */
+function beatTitle(beat: StoryBeat | undefined, day: DayPlan, dayIndex: number): string {
+  if (!beat) return "";
+  if (beat.kind === "stop") return stopOf(beat, day)?.name ?? "";
+  if (beat.kind === "opening") return `Day ${dayIndex + 1}`;
+  if (beat.kind === "closing") return "End of the day";
+  if (beat.kind === "travel") {
+    const to = beat.legIndex !== undefined ? day.stops[beat.legIndex + 1]?.name : undefined;
+    return to ? `On to ${to}` : "On the way";
+  }
+  return "";
+}
+
+function StoryPlayerBody({
   playback,
   request,
   day,
@@ -105,76 +84,86 @@ function StoryStageBody({
   request: NonNullable<StoryPlayback["request"]>;
   day: DayPlan;
 }) {
-  const listRef = useRef<HTMLDivElement>(null);
-  const playRef = useRef<HTMLButtonElement>(null);
-  const playSlotRef = useRef<HTMLSpanElement>(null);
-
+  const { phase, muted, silentPlatform, voiceBroken, naturalStatus, naturalProgress, next, prev, seek, toggleMute, playDay, exit, volume, setVolume, openStop } = playback;
   const script = playback.script;
-  const beatIndex = playback.beatIndex;
+  const beats = useMemo(() => script?.beats ?? [], [script]);
+  const beatIndex = Math.min(playback.beatIndex, Math.max(0, beats.length - 1));
+  const ended = phase === "ended";
+  const dayIndex = request.dayIndex;
+  const hasNextDay = dayIndex + 1 < request.itinerary.days.length;
+  const durations = useMemo(() => beatDurations(beats), [beats]);
+  const total = durations.reduce((sum, d) => sum + d, 0);
+  const [subs, setSubs] = useState(true);
+  const [chapters, setChapters] = useState(false);
+  const [peek, setPeek] = useState<number | null>(null);
+  // C shows or hides the subtitles, as a player's caption key does. The controller owns Space, the
+  // arrows and Esc; this is the stage's own.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== "c") return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable='true']")) return;
+      setSubs((on) => !on);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Time into the current beat, ticked from the clock while playing and keyed by beat, so a pause
+  // holds where it stopped and a new beat starts from nothing. A resumed beat is re-spoken from its
+  // start (see `togglePlay` in the controller), which is why resuming restarts the count.
+  const [clock, setClock] = useState({ beat: -1, ms: 0 });
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const start = performance.now();
+    const id = window.setInterval(() => setClock({ beat: beatIndex, ms: performance.now() - start }), 250);
+    return () => window.clearInterval(id);
+  }, [phase, beatIndex, script]);
+  const within = clock.beat === beatIndex ? clock.ms : 0;
+  const elapsed = script ? elapsedMs(durations, beatIndex, within, ended) : 0;
+  const fraction = total > 0 ? elapsed / total : 0;
+
+  const current = beats[beatIndex];
+  const currentStop = stopOf(current, day);
+  const playLabel = phase === "playing" ? "Pause the story" : ended ? "Play the day again" : "Resume the story";
+
+  // The scrubber: click or drag anywhere to land on the beat that point falls in.
+  const track = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const seekFrom = (clientX: number) => {
+    const box = track.current?.getBoundingClientRect();
+    if (!box || !script) return;
+    seek(beatAt(durations, (clientX - box.left) / box.width));
+  };
+  useEffect(() => {
+    if (!dragging) return;
+    const move = (e: PointerEvent) => seekFrom(e.clientX);
+    const up = () => setDragging(false);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  });
 
   /**
-   * Put the play button in its slot, and — if it was just pressed up in the capsule — fly it down
-   * from there.
-   *
-   * **The slot is read off `offsetLeft`/`offsetTop`, not off a rect.** The card is mid-entrance at
-   * this exact moment and the stage is a few pixels low; a `getBoundingClientRect()` here would
-   * bake that transient offset into the button's resting place and leave it a hair high forever.
-   * Offsets are layout, and layout does not know about transforms.
-   *
-   * The flight itself is `Element.animate` rather than a transition or a Framer `layoutId`. A
-   * transition needs the from-state painted first, and `layoutId` — which this codebase does use
-   * for the map search morph — is symmetric, which this hand-off must not be: the capsule is
-   * clipped (`.docked-panel` and `.docked-panel-capsule` both carry `overflow-hidden`, and the
-   * collapsed panel's fold depends on it), so a return flight would spend most of its path behind
-   * that clip and the rest sliding across the trip's own name. Leaving is a journey; coming back
-   * is a cut. See `src/lib/controlHandoff.ts`.
-   *
-   * Layout effect, not `useEffect`: after paint the button would already have been drawn in its
-   * slot for a frame, and the flight would start by throwing it back up to the capsule. Safe
-   * without an isomorphic wrapper — `AppShell` imports this `ssr: false`, so no server pass ever
-   * calls the hook.
+   * If Play was just pressed on the plan, fly the play disc down from there. One-way, as before
+   * (`src/lib/controlHandoff.ts`): the button leaves the plan and takes its post in the bar.
+   * Layout effect, so the disc is never painted in its slot for a frame first.
    */
+  const playRef = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     const button = playRef.current;
-    const slot = playSlotRef.current;
-    if (!button || !slot) return;
-    button.style.left = `${slot.offsetLeft}px`;
-    button.style.top = `${slot.offsetTop}px`;
-
     const from = takeHandoffOrigin();
-    if (!from || prefersReducedMotion()) return;
+    if (!button || !from || prefersReducedMotion()) return;
     const to = button.getBoundingClientRect();
-    // Centre to centre, so the 44px capsule control and the 44px transport control agree about
-    // what "the same button" means even if one of those sizes ever changes.
     const dx = from.left + from.width / 2 - (to.left + to.width / 2);
     const dy = from.top + from.height / 2 - (to.top + to.height / 2);
-    // Opacity rides along, and on a cold script it is doing real work. The button is `disabled`
-    // until there are words to play — the same gate Prev/Next/Mute sit behind — so its resting
-    // state on arrival is `disabled:opacity-40`, and without this it would leave the capsule by
-    // *dimming*, which is the one thing that reads as "a different button". Instead it leaves at
-    // full strength and settles into not-yet-ready. A warm script resolves this to 1 → 1.
-    const settled = getComputedStyle(button).opacity;
-    // **Promoted for the length of the flight, and on this screen that is the difference between
-    // an animation and a stutter.** Measured on Cesium, the first 2.5s of a film is ~1.2s of
-    // long tasks — the photorealistic tileset decoding a burst of new tiles on the main thread as
-    // the camera dives. A main-thread animation freezes solid through a 160ms task of that kind;
-    // a composited one keeps running. `will-change` is what guarantees the layer, and it is
-    // cleared the moment the flight ends, because a permanent one is a permanent layer.
-    button.style.willChange = "transform, opacity";
-    const flight = button.animate(
-      [
-        { transform: `translate(${dx}px, ${dy}px)`, opacity: "1" },
-        { transform: "translate(0px, 0px)", opacity: settled },
-      ],
-      // `ease-in-out`, not the house `cubic-bezier(0.16, 1, 0.3, 1)` — and for exactly the reason
-      // `DockedPanel` gives for the same swap on its own fold. That curve is enormously
-      // front-loaded, which is what makes it right on a 12px nudge and wrong here: measured on
-      // this flight, it was **84% of the way across at a third of the duration**, so a 267px
-      // journey read as a snap with a long soft landing rather than as the button travelling.
-      // 420ms, so it arrives just after the card behind it has finished its own 260ms `value-in`
-      // — the stage materialises, then the control takes its post in it.
-      { duration: 420, easing: "ease-in-out" }
-    );
+    button.style.willChange = "transform";
+    const flight = button.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }], {
+      duration: 420,
+      easing: "ease-in-out",
+    });
     const release = () => {
       button.style.willChange = "";
     };
@@ -182,499 +171,350 @@ function StoryStageBody({
     return () => flight.cancel();
   }, []);
 
-  /**
-   * Lift the beat column so the line being spoken sits at the top of the window.
-   *
-   * Measured from the DOM rather than computed from a row height: a beat is two to five lines of
-   * wrapped prose and no two rows are the same height. Written straight onto the element rather
-   * than through state, for the reason the collapsing itinerary header gives for the same choice —
-   * this is one property write against the compositor, and a `useState` here would re-render the
-   * whole stage (and re-run its measurement) to move a transform the browser was going to
-   * interpolate anyway.
-   */
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const row = list.querySelector<HTMLElement>(`[data-beat="${beatIndex}"]`);
-    list.style.transform = `translateY(${-(row?.offsetTop ?? 0)}px)`;
-    // `script` is a dependency as well as `beatIndex`: a new day's first beat is at offset 0, but
-    // so is the old one's, so without it the column would keep the previous day's lift.
-  }, [beatIndex, script]);
+  const voiceLine =
+    naturalStatus === "loading"
+      ? `Natural voice ${Math.round(naturalProgress * 100)}%`
+      : naturalStatus === "ready"
+        ? "Natural voice"
+        : silentPlatform
+          ? "No voice here"
+          : "Device voice";
+  const voiceTitle =
+    naturalStatus === "loading"
+      ? "Fetching a better narrator: 88 MB, kept for next time; 326 MB on a GPU, which comes down each session. The story plays in this device's own voice meanwhile."
+      : naturalStatus === "unavailable" && !silentPlatform
+        ? "The natural voice couldn't load, so it's staying with this device's own voice."
+        : silentPlatform
+          ? "No voice is available here, so the story plays without sound."
+          : "Narrated by the natural voice.";
 
-  const {
-    phase,
-    muted,
-    silentPlatform,
-    voiceBroken,
-    naturalStatus,
-    naturalProgress,
-    next,
-    prev,
-    toggleMute,
-    playDay,
-    exit,
-  } = playback;
-  const dayCount = request.itinerary.days.length;
-  const hasNextDay = request.dayIndex + 1 < dayCount;
-  const beats = script?.beats ?? [];
-  const position = phase === "ended" ? beats.length : beatIndex + 1;
-  const playLabel =
-    phase === "playing" ? "Pause the story" : phase === "ended" ? "Play the day again" : "Resume the story";
+  const hasDayAfter = hasNextDay ? request.itinerary.days[dayIndex + 1] : undefined;
+  const sub = current ? subtitleAt(current.text, durations[beatIndex] ? within / durations[beatIndex] : 0) : null;
+  const nextBeat = beats[beatIndex + 1];
+  const nextStop = stopOf(nextBeat, day);
+  const starts = durations.map((_, i) => durations.slice(0, i).reduce((a, b) => a + b, 0));
 
   return (
-    // Geometry mirrored from `DockedPanel`'s collapsed branch, plus its `h-14` and a 0.75rem gap.
-    // `z-10` matches the panel's, so this sits over the canvas and the marker cards exactly as the
-    // capsule above it does.
-    //
-    // **The rise lives here and the fade lives on the card, and the split is deliberate.** This
-    // element is the flying play button's ancestor, so an opacity animation on it would dim the
-    // button through the first third of its journey — exactly the stretch where the eye has to
-    // believe it is the same object that just left the capsule. A `transform` does not: the button
-    // simply rides up with the row it is landing in, so the two stay aligned the whole way.
-    // Leaving is the one time the whole thing may fade, because the button is leaving with it.
     <motion.div
-      initial={{ y: 6 }}
-      animate={{ y: 0 }}
-      exit={{ y: 4, opacity: 0, transition: STAGE_EXIT }}
-      transition={STAGE_ENTER}
-      className="pointer-events-auto fixed top-[calc(var(--nav-h)+5.5rem)] right-4 left-4 z-10 sm:top-[calc(var(--nav-h)+5.75rem)] sm:right-6 sm:left-auto sm:w-96 sm:max-w-[520px]"
+      className={`tm story-player${chapters ? " has-chapters" : ""}`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: EXIT }}
+      transition={ENTER}
       {...devLabel("StoryStage")}
     >
-      {/* The film's play/pause — and a **sibling** of the card rather than a child of the row it
-          appears to sit in, which is the one structural oddity here and is load-bearing. The card
-          fades itself in with `value-in`, and an ancestor's opacity applies to every descendant:
-          inside it, this button would leave the capsule solid and then dissolve for the first
-          260ms of its flight, which is exactly the stretch where the eye has to believe it is the
-          same object. Absolute positioning does not care about DOM parentage — only about the
-          nearest positioned ancestor, which is the fixed container — so it can be a sibling and
-          still land in the gap the row leaves for it.
+      {/* The night that holds the words: no box over the shot, a rise from the foot. */}
+      {subs && <div className="sp-scrim" aria-hidden="true" />}
 
-          First in the DOM, so the primary control is also first in the tab order; `z-10` because
-          the card's `backdrop-filter` gives it a stacking context of its own and tree order would
-          otherwise paint this behind it. */}
-      <button
-        ref={playRef}
-        type="button"
-        onClick={playback.togglePlay}
-        disabled={!script}
-        aria-label={playLabel}
-        title={playLabel}
-        className="absolute z-10 inline-flex h-11 w-11 items-center justify-center rounded-full text-accent transition-colors hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none disabled:opacity-40"
-      >
-        {phase === "playing" ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
-      </button>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={STAGE_ENTER}
-        className="glass-itinerary rounded-[18px] px-4 py-3.5"
-      >
-        {/* Transport. Prev/Next are the traveller's own way through the day, Play/Pause between
-            them is the film's own clock, and Mute and Close are the way out. */}
-        {/* Tighter below `sm`: with Meri at its head the row is ~19px over a 360px phone's panel, which
-            wrapped "10 of 12" onto three lines. */}
-        <div className="flex items-center gap-0.5 sm:gap-1">
-          {/* The narrator, at the head of the controls. The panel's live region already says
-              what is happening, so Meri is decorative to assistive tech. */}
-          <Meridian
-            size={32}
-            state={meriForStory({ phase, voiceBroken, muted, silentPlatform })}
-            className="sm:mr-1.5"
-          />
-          <TransportButton label="Previous place" onClick={prev} disabled={!script}>
-            <SkipBack className="h-4 w-4" strokeWidth={2} />
-          </TransportButton>
-          {/* Play's place in the row, kept open for the sibling above. 44px rather than the 40 of
-              its neighbours: it is both the primary control here and the same size it was in the
-              capsule, so the flight is a move and not also a resize. */}
-          <span ref={playSlotRef} aria-hidden="true" className="h-11 w-11 shrink-0" />
-          <TransportButton label="Next place" onClick={next} disabled={!script}>
-            <SkipForward className="h-4 w-4" strokeWidth={2} />
-          </TransportButton>
-          <TransportButton
-            label={muted ? "Unmute narration" : "Mute narration"}
-            onClick={toggleMute}
-            disabled={silentPlatform}
-          >
-            {muted || silentPlatform ? (
-              <VolumeX className="h-4 w-4" strokeWidth={2} />
-            ) : (
-              <Volume2 className="h-4 w-4" strokeWidth={2} />
-            )}
-          </TransportButton>
-
-          {/* Beats, not minutes: nobody knows how long a narration is, and everybody understands
-              "four of eleven". */}
-          <span className="ml-0.5 flex-1 whitespace-nowrap text-xs tabular-nums text-muted sm:ml-1">
-            {beats.length > 0 ? `${position} of ${beats.length}` : "…"}
-          </span>
-
-          <TransportButton label="Leave story mode" onClick={exit}>
-            <X className="h-4 w-4" strokeWidth={2} />
-          </TransportButton>
-        </div>
-
-        {beats.length > 0 && (
-          <div
-            className="mt-2.5 h-px w-full overflow-hidden rounded-full bg-white/15"
-            role="progressbar"
-            aria-valuemin={1}
-            aria-valuemax={beats.length}
-            aria-valuenow={Math.min(position, beats.length)}
-            aria-label="Story progress"
-          >
-            {/* `scaleX`, not `width`. Width is a layout property: the browser cannot hand it to
-                the compositor, so a 500ms width transition relaid out and repainted this row on
-                every frame — inside a panel whose `backdrop-filter` re-blurs on every one of
-                those, on a screen where the tileset is already spending ~1.2s of the film's first
-                2.5s on the main thread. A transform is free by comparison, and the bar is a
-                1px rule whose only job is to be the right length. */}
-            <div
-              className="h-full w-full origin-left bg-accent transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-              style={{ transform: `scaleX(${position / beats.length})` }}
-            />
-          </div>
-        )}
-
-        {/* The lyric window. A fixed height, so the panel does not jump as beats of different
-            lengths take the spotlight — the column moves, the frame does not. 15rem rather than
-            13: a four-sentence beat is five lines at this width and filled a 13rem window on its
-            own, leaving nothing of the line coming next, and the line coming next is half of what
-            the ramp is for. */}
-        <div className="relative mt-3 h-[15rem] overflow-hidden">
+      {/* The subtitle stands on whatever is under it: the bar, or the chapters when they are open. */}
+      <div className="sp-stack">
+      {subs && (
+        <section className="sp-subs" aria-label="Narration">
+          <button type="button" className="sp-icon sp-subs-x" aria-label="Hide the subtitles" title="Hide the subtitles (C)" onClick={() => setSubs(false)}>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
           {!script ? (
-            <p className="animate-pulse text-sm text-muted">
-              Writing the story of day {request.dayIndex + 1}…
-            </p>
-          ) : (
-            <div ref={listRef} className="relative" style={{ transition: "transform 620ms cubic-bezier(0.16, 1, 0.3, 1)" }}>
-              {beats.map((beat, index) => (
-                <BeatRow
-                  key={index}
-                  beat={beat}
-                  index={index}
-                  activeIndex={beatIndex}
-                  // Keyed on `kind`, not on `stopIndex` being present. `stopIndex` is documented
-                  // as living on stop beats and only stop beats, but reading it that way made
-                  // this component the second, quieter definition of what a stop beat is — and
-                  // one that would disagree with `normaliseScript`'s (which filters on `kind`)
-                  // the moment any other beat carried an index.
-                  stop={beat.kind === "stop" && beat.stopIndex !== undefined ? day.stops[beat.stopIndex] : undefined}
-                  dayIndex={request.dayIndex}
-                />
-              ))}
+            <p className="sp-wait">Writing the story of day {dayIndex + 1}…</p>
+          ) : ended ? (
+            <div className="sp-end">
+              <p className="sp-sub-line is-done">Day {dayIndex + 1} is done.</p>
+              <div className="sp-end-actions">
+                <button type="button" className="sp-pill" onClick={() => playDay(dayIndex)}>
+                  <ReplayIcon /> Again
+                </button>
+                {hasDayAfter && (
+                  <button type="button" className="sp-pill is-go" onClick={() => playDay(dayIndex + 1)}>
+                    Day {dayIndex + 2}
+                    {hasDayAfter.title || hasDayAfter.theme ? ` · ${hasDayAfter.title || hasDayAfter.theme}` : ""} ▸
+                  </button>
+                )}
+              </div>
             </div>
+          ) : (
+            <>
+              <p className="sp-sub-eyebrow">
+                {beatTitle(current, day, dayIndex)}
+                {currentStop?.time ? ` · ${currentStop.time}` : ""}
+              </p>
+              {/* One sentence at a time, its words lighting as the voice reaches them. */}
+              <p className="sp-sub-line" key={`${beatIndex}-${sub?.index}`}>
+                {sub?.words.map((word, i) => (
+                  <span key={i} className={i < sub.said ? "is-said" : undefined}>
+                    {word}{" "}
+                  </span>
+                ))}
+              </p>
+              {nextBeat && (
+                <p className="sp-sub-next">
+                  Next · {beatTitle(nextBeat, day, dayIndex)}
+                  {nextStop?.time && <span>{nextStop.time}</span>}
+                </p>
+              )}
+            </>
           )}
-          {/* The window's own fade-out, so the lines still to come dissolve into the panel instead
-              of being cut off by its edge. */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-12"
-            style={{
-              background: "linear-gradient(to top, rgb(var(--surface-deep-rgb) / 0.62), transparent)",
-            }}
-          />
+          {script?.source === "fallback" && <p className="sp-note">Read from your plan. The storyteller wasn&rsquo;t reachable this time.</p>}
+        </section>
+      )}
+
+      {/* Up next, as chapters: every beat of the day in a strip above the bar. */}
+      {chapters && (
+        <section className="sp-chapters" aria-label="Up next">
+          <header>
+            <b>Chapters · Day {dayIndex + 1}</b>
+            <span>{day.title || day.theme}</span>
+            <button type="button" className="sp-icon" aria-label="Close chapters" onClick={() => setChapters(false)}>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          </header>
+          {!script ? (
+            <p className="sp-wait is-small">Writing the story of day {dayIndex + 1}…</p>
+          ) : (
+            <ol>
+              {beats.map((beat, i) => {
+                const stop = stopOf(beat, day);
+                const on = i === beatIndex && !ended;
+                return (
+                  <li key={i}>
+                    <button type="button" className={`sp-chapter${on ? " is-on" : i < beatIndex || ended ? " is-past" : ""}`} onClick={() => seek(i)} aria-current={on ? "true" : undefined}>
+                      <NowArt stop={stop} beat={beat} dayIndex={dayIndex} />
+                      <span className="sp-chapter-n">{String(i + 1).padStart(2, "0")}</span>
+                      <b>{beatTitle(beat, day, dayIndex)}</b>
+                      <span>{[stop?.time, clockLabel(durations[i] ?? 0)].filter(Boolean).join(" · ")}</span>
+                    </button>
+                  </li>
+                );
+              })}
+              {hasDayAfter && (
+                <li>
+                  <button type="button" className="sp-chapter is-day" onClick={() => playDay(dayIndex + 1)}>
+                    <span className="sp-chapter-n">Then</span>
+                    <b>Day {dayIndex + 2}</b>
+                    <span>{hasDayAfter.title || hasDayAfter.theme || "Next day"} ▸</span>
+                  </button>
+                </li>
+              )}
+            </ol>
+          )}
+        </section>
+      )}
+      </div>
+
+      <motion.section
+        className="sp-bar"
+        aria-label={`Day ${dayIndex + 1} as a story`}
+        initial={{ y: 24 }}
+        animate={{ y: 0 }}
+        exit={{ y: 16, transition: EXIT }}
+        transition={ENTER}
+      >
+        {/* Now playing */}
+        <div className="sp-now">
+          <NowArt stop={currentStop} beat={current} dayIndex={dayIndex} />
+          <div className="sp-now-text">
+            <b>{!script ? `Writing day ${dayIndex + 1}…` : ended ? `Day ${dayIndex + 1} is done` : beatTitle(current, day, dayIndex)}</b>
+            <span>
+              {request.destination.split(",")[0]} · Day {dayIndex + 1}
+              {day.title || day.theme ? ` · ${day.title || day.theme}` : ""}
+            </span>
+          </div>
+          {/* Where a page can show a stop (the trip page's drawer), the place being narrated opens
+              beside the film: the camera stays on the beat, the sheet stands above the bar. */}
+          {openStop && currentStop && !ended && (
+            <button type="button" className="sp-icon sp-details" aria-label={`Open ${currentStop.name}`} title="Open this stop" onClick={() => openStop(currentStop)}>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
 
-        <BeatPlate beats={beats} beatIndex={beatIndex} day={day} />
+        {/* Transport and the day's scrubber */}
+        <div className="sp-center">
+          <div className="sp-transport">
+            <button type="button" className="sp-icon" aria-label="Play the day again" title="Again" onClick={() => playDay(dayIndex)} disabled={!script}>
+              <ReplayIcon />
+            </button>
+            <button type="button" className="sp-icon" aria-label="Previous place" title="Previous place" onClick={prev} disabled={!script}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <path d="M12.5 3.5L6 8l6.5 4.5zM3.5 3v10" fill="currentColor" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button ref={playRef} type="button" className="sp-play" aria-label={playLabel} title={playLabel} onClick={playback.togglePlay} disabled={!script}>
+              {phase === "playing" ? (
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <path d="M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <path d="M5 3v10l8.5-5z" fill="currentColor" />
+                </svg>
+              )}
+            </button>
+            <button type="button" className="sp-icon" aria-label="Next place" title="Next place" onClick={next} disabled={!script}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <path d="M3.5 3.5L10 8l-6.5 4.5zM12.5 3v10" fill="currentColor" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {hasNextDay ? (
+              <button type="button" className="sp-icon sp-nextday" aria-label={`Play day ${dayIndex + 2}`} title={`Day ${dayIndex + 2}`} onClick={() => playDay(dayIndex + 1)}>
+                D{dayIndex + 2}
+              </button>
+            ) : (
+              <span className="sp-icon-gap" />
+            )}
+          </div>
+          <div className="sp-scrub">
+            <span className="sp-time">{clockLabel(elapsed)}</span>
+            <div
+              ref={track}
+              className={`sp-track${dragging ? " is-drag" : ""}`}
+              role="slider"
+              tabIndex={0}
+              aria-label="Position in the day's story"
+              aria-valuemin={0}
+              aria-valuemax={Math.round(total / 1000)}
+              aria-valuenow={Math.round(elapsed / 1000)}
+              aria-valuetext={`${clockLabel(elapsed)} of ${clockLabel(total)}${current ? `, ${beatTitle(current, day, dayIndex)}` : ""}`}
+              onPointerDown={(e) => {
+                seekFrom(e.clientX);
+                setDragging(true);
+              }}
+              onPointerMove={(e) => {
+                if (!script || e.pointerType === "touch") return;
+                const box = e.currentTarget.getBoundingClientRect();
+                setPeek(beatAt(durations, (e.clientX - box.left) / box.width));
+              }}
+              onPointerLeave={() => setPeek(null)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  next();
+                } else if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  prev();
+                }
+              }}
+            >
+              <span className="sp-fill" style={{ width: `${fraction * 100}%` }} />
+              {beatTicks(durations).map((at, i) => (
+                <i key={i} className="sp-tick" style={{ left: `${at * 100}%` }} />
+              ))}
+              <span className="sp-knob" style={{ left: `${fraction * 100}%` }} />
+              {/* The chapter under the pointer, as a video scrubber previews a frame. */}
+              {peek !== null && beats[peek] && total > 0 && (
+                <span className="sp-peek" style={{ left: `${((starts[peek] + (durations[peek] ?? 0) / 2) / total) * 100}%` }} aria-hidden="true">
+                  <NowArt stop={stopOf(beats[peek], day)} beat={beats[peek]} dayIndex={dayIndex} />
+                  <b>{beatTitle(beats[peek], day, dayIndex)}</b>
+                  <span>{stopOf(beats[peek], day)?.time ?? clockLabel(durations[peek] ?? 0)}</span>
+                </span>
+              )}
+            </div>
+            <span className="sp-time">{script ? clockLabel(total) : "…"}</span>
+          </div>
+        </div>
 
-        {/* The end of the day, and the only place the film offers to go anywhere. */}
-        {phase === "ended" && (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+        {/* Voice, subtitles, chapters, volume, and back to the plan */}
+        <div className="sp-right">
+          {/* Meri, beside the voice it is speaking in: its motion is the film's state. */}
+          <span className={`sp-voice${naturalStatus === "ready" ? " is-ready" : ""}`} title={voiceTitle}>
+            <Meridian size={14} state={meriForStory({ phase, voiceBroken, muted, silentPlatform })} />
+            {voiceLine}
+          </span>
+          <button type="button" className={`sp-icon${subs ? " is-on" : ""}`} aria-pressed={subs} aria-label="Subtitles" title="Subtitles (C)" onClick={() => setSubs(!subs)}>
+            <svg viewBox="0 0 18 16" width="17" height="15" aria-hidden="true">
+              <rect x="1.5" y="2.5" width="15" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M7.6 6.4a2 2 0 1 0 0 3.2M13 6.4a2 2 0 1 0 0 3.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button type="button" className={`sp-icon${chapters ? " is-on" : ""}`} aria-pressed={chapters} aria-label="Up next" title="Chapters" onClick={() => setChapters(!chapters)}>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M2.5 3.5h11M2.5 7.5h11M2.5 11.5h6M11 10v4l3-2z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <div className="sp-vol">
             <button
               type="button"
-              onClick={() => playDay(request.dayIndex)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-card-border bg-white/10 px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-white/20"
+              className="sp-icon"
+              aria-label={muted || volume === 0 ? "Unmute narration" : "Mute narration"}
+              title={muted || volume === 0 ? "Unmute narration" : "Mute narration"}
+              // Unmuting a slider dragged to nothing brings the level back up, or the button does nothing.
+              onClick={() => (volume === 0 ? setVolume(1) : toggleMute())}
+              disabled={silentPlatform}
             >
-              <RotateCcw className="h-4 w-4" strokeWidth={2} />
-              Again
+              {muted || silentPlatform || volume === 0 ? (
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <path d="M3 6h2.5L9 3v10L5.5 10H3zM11 6l3 4M14 6l-3 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <path d="M3 6h2.5L9 3v10L5.5 10H3zM11.5 5.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
             </button>
-            {hasNextDay && (
-              <button
-                type="button"
-                onClick={() => playDay(request.dayIndex + 1)}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-3.5 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover active:scale-[0.98]"
-              >
-                Day {request.dayIndex + 2}
-                <SkipForward className="h-4 w-4" strokeWidth={2} />
-              </button>
-            )}
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round((muted || silentPlatform ? 0 : volume) * 100)}
+              onChange={(e) => setVolume(Number(e.target.value) / 100)}
+              disabled={silentPlatform}
+              aria-label="Narration volume"
+              style={{ ["--v" as string]: `${(muted || silentPlatform ? 0 : volume) * 100}%` }}
+            />
           </div>
-        )}
+          {/* Leaving is how the plan comes back: the board returns the moment the film ends. */}
+          <button type="button" className="sp-plan" onClick={exit} aria-label="Leave story mode and show the plan" title="Back to the plan (Esc)">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <rect x="2" y="8.5" width="12" height="5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M5 5.5L8 2.5l3 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Plan
+          </button>
+        </div>
+      </motion.section>
 
-        {/* Things the traveller is owed rather than left to wonder about.
-            *
-            * There was a toggle here, and the good voice is the only voice now — so what was the
-            * control's job falls to this line. It keeps the **percentage**, which the toggle
-            * carried for a documented reason: a minute of unexplained waiting on a phone reads as
-            * broken. It matters more here than it did there, because nobody pressed anything to
-            * start this download. */}
-        {naturalStatus === "loading" && (
-          <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted/80">
-            <AudioLines className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" />
-            <span>
-              Fetching a better narrator: {Math.round(naturalProgress * 100)}%. 88 MB, kept for
-              next time; 326 MB on a GPU, which is too big for the browser to keep, so it comes
-              down each session. The story is playing in this device&rsquo;s own voice meanwhile.
-            </span>
-          </p>
-        )}
-        {naturalStatus === "unavailable" && !silentPlatform && (
-          <p className="mt-2 text-[11px] text-muted/80">
-            The natural voice couldn&rsquo;t load, so it&rsquo;s staying with this device&rsquo;s own voice.
-          </p>
-        )}
-        {script?.source === "fallback" && (
-          <p className="mt-2 text-xs text-muted/80">
-            Read from your plan. The storyteller wasn&rsquo;t reachable this time.
-          </p>
-        )}
-        {silentPlatform && (
-          <p className="mt-1 text-xs text-muted/80">
-            No voice is available here, so the story plays without sound.
-          </p>
-        )}
+      <p className="sp-keys">Space to pause · ← → to move · C for subtitles · Esc for the plan</p>
 
-        {/* Inside the panel, not under it. Outside it this line sat directly on the map and was
-            measured unreadable over pale terrain — and it is the panel's own instructions. */}
-        <p className="mt-2 text-[11px] text-muted/70">
-          Space to pause · arrows to move · Esc to leave
-        </p>
-      </motion.div>
-
-      {/* The line being spoken, once, for a screen reader. */}
+      {/* The beat being spoken, once, for a screen reader: the subtitle changes word by word. */}
       <div className="sr-only" aria-live="polite">
-        {script ? beats[beatIndex]?.text : `Writing the story of day ${request.dayIndex + 1}`}
+        {script ? beats[beatIndex]?.text : `Writing the story of day ${dayIndex + 1}`}
       </div>
     </motion.div>
   );
 }
 
-/**
- * The place the film is looking at, as a photograph.
- *
- * **Why one picture and not a carousel.** The ask was 3-4 per stop. There is no free source for
- * the second one, and the repo had already measured that: `placePhotos.ts` records 2 of 8 Siena
- * names resolving and 0 of 4 museums, and 0%/0%/1% `wikidata`/`wikimedia_commons`/`image` across
- * 60 named cafés. `/api/place-photo` returns Wikipedia's single lead image by design — `imageUrl`
- * and `thumbnailUrl` are two sizes of it, not two pictures. The two obvious ways to get more were
- * tested and both fail on the material rather than on the plumbing: an article's own image list is
- * alphabetical and uncurated (Jardin du Luxembourg's first four are a photo, an Edelfelt painting,
- * a boat basin and a postcard; Capitol Hill's include a *map*, inside a film whose whole premise is
- * a map), and Commons geosearch at a stop's coordinates returns whatever was photographed nearby —
- * for "Lunch around Saint-Germain-des-Prés", four portraits of strangers.
- *
- * **And why the pictures cannot pace the film.** The other half of the ask was to hold a stop until
- * its pictures had played. That is the fixed interval `useStopTour` was deleted for: the beat is the
- * clock, and a second one means the sentence and the slideshow disagree about when to leave. So this
- * has no duration of its own — it shows whatever the beat being spoken is about, and changes when
- * the beat does.
- *
- * **Outside the lyric column, deliberately.** The obvious home is `BeatRow`'s existing `StopAvatar`,
- * grown. It cannot go there: the column is positioned by a *measured*
- * `translateY(-row.offsetTop)` computed once per beat, and an image inside a row changes every
- * following row's `offsetTop` asynchronously as it decodes — after that measurement has run. The
- * ramp would drift with no error anywhere.
- *
- * **It grows; it is not reserved. That is the correction the built version forced.** The first cut
- * held a fixed 112px band open at the top of the card, on the lyric window's own reasoning that the
- * panel must not jump between beats. Then coverage was measured across a 20-stop Paris trip and it
- * is **3 in 20**, not the half that was assumed — Musée d'Orsay, Sacré-Cœur and Luxembourg Gardens
- * all miss, the last because `resolveTitle`'s containment check will not accept "Jardin du
- * Luxembourg" for it. A band reserved for a picture that arrives one beat in seven is a hole, which
- * is the exact thing `placePhotos.ts` says not to build, and on screen it read as an image that had
- * failed to load.
- *
- * So the band opens only when there is something in it, and it sits **below the lyric window** so
- * that opening moves nothing anyone is using: the transport row, the play button's measured slot
- * and the narration all hold their positions, and only the voice toggle and the keyboard hint below
- * are pushed down. A beat with no picture is then exactly the panel that shipped before this
- * existed — the feature costs nothing when it has nothing to say.
- *
- * `sm:` and up. On a 667px phone the panel already leaves ~118px of map and the `ended` state
- * spends 52 of it, and there the map is the scarcer thing. Same line the full map-control set
- * already draws.
- */
-/** `mt-3` (12px) plus the plate's own `h-28` (112px). Written out because `height: auto` cannot
- *  be interpolated, so the open state has to state a number. */
-const PLATE_BOX_PX = 124;
-
-function BeatPlate({
-  beats,
-  beatIndex,
-  day,
-}: {
-  beats: StoryBeat[];
-  beatIndex: number;
-  day: DayPlan;
-}) {
-  // Keyed on `kind`, the same rule `BeatRow` follows and for the same reason — `stopIndex` being
-  // present is a second, quieter definition of a stop beat that would eventually disagree.
-  const stopOf = (beat?: StoryBeat) =>
-    beat?.kind === "stop" && beat.stopIndex !== undefined ? day.stops[beat.stopIndex] : undefined;
-
-  /**
-   * `"thumb"`, not `"full"`, and that is the whole prefetch strategy.
-   *
-   * This started as `"full"` with an `Image()` warm one stop ahead, on the reasoning that a decode
-   * should not land on the frame the camera is diving on. Measured, the originals are 989x1961 for
-   * Sainte-Chapelle and **3840x1613** for the Louvre — six megapixels, decoded to be drawn 350px
-   * wide. The thumbnail is 330px, which is the size of this box, and every `BeatRow` below has
-   * *already* fetched and decoded exactly that image for its own `StopAvatar` the moment the stage
-   * mounted. So there is nothing left to warm: the picture is in the browser before the film starts.
-   *
-   * (Neither the warm nor the full original was measurable against Cesium's noise on this screen —
-   * six beat advances came out at 44 dropped frames with the plate and 44 with it deleted. It is
-   * removed for being obviously wasteful, not because it showed up.)
-   */
-  const photo = usePlacePhoto(stopOf(beats[beatIndex])?.name ?? "");
-  const [failed, setFailed] = useState<string | null>(null);
-  const shown = photo && photo !== failed ? photo : null;
-
+function ReplayIcon() {
   return (
-    // Decorative: the narration names the place, and the beat row above it names it again in text.
-    // A screen reader gets nothing new from this and an `alt` would be a third repetition.
-    //
-    // `height` is a layout property and this is the one place in the film's chrome that animates
-    // one — deliberately, and it is affordable where the progress bar's `width` was not. That ran
-    // for 500ms on *every* beat; this runs on the handful that have a picture, and it is a real
-    // reflow either way because the panel genuinely changes size. An explicit 124px rather than
-    // `auto` so the value is interpolable at all.
-    <div
-      aria-hidden="true"
-      className="hidden overflow-hidden transition-[height,opacity] duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] sm:block"
-      style={{ height: shown ? PLATE_BOX_PX : 0, opacity: shown ? 1 : 0 }}
-    >
-      <div className="relative mt-3 h-28 overflow-hidden rounded-lg bg-white/5">
-        {shown && (
-          // Keyed on the URL so each stop's picture is its own element and arrives on `value-in` —
-          // the same 260ms settle `StopAvatar` uses when its own lookup lands, so the two
-          // photographs of one place appear the same way.
-          //
-          // eslint-disable-next-line @next/next/no-img-element -- arbitrary external Wikipedia originals; next/image *throws* on an unconfigured host, which once took the whole of /trip/[id] down
-          <img
-            key={shown}
-            src={shown}
-            alt=""
-            onError={() => setFailed(shown)}
-            className="value-in absolute inset-0 h-full w-full object-cover"
-          />
-        )}
-      </div>
-    </div>
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+      <path d="M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.5h2.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
-/**
- * One beat: the place it is about, and the line being said about it.
- *
- * The stop's avatar, time and name are the panel's own row vocabulary — reused rather than
- * restyled (`StopAvatar` comes straight from `StopList`), because the film is showing the same
- * itinerary and a second visual language for the same object would read as a different plan. What
- * is new is the narration line under it, and the ramp that fades it.
- */
-function BeatRow({
-  beat,
-  index,
-  activeIndex,
-  stop,
-  dayIndex,
-}: {
-  beat: StoryBeat;
-  index: number;
-  activeIndex: number;
-  stop?: Stop;
-  dayIndex: number;
-}) {
-  const isActive = index === activeIndex;
-  // Both of these used to be `beat.kind === "opening" ? … : <the closing's>`, so every kind that
-  // was not the opening claimed to be the end of the day — a beat this component had never heard
-  // of rendered as "★ End of the day" in the middle of a film. Named per kind instead, with an
-  // unknown one falling through to no mark and no label: it still gets its narration, and the row
-  // says nothing about what it is rather than saying something false.
-  const mark = beat.kind === "opening" ? dayIndex + 1 : beat.kind === "closing" ? "★" : null;
-  const label = beat.kind === "opening" ? `Day ${dayIndex + 1}` : beat.kind === "closing" ? "End of the day" : null;
-  // A travel beat is the going, not a place — so it gets the mode's glyph rather than a photograph
-  // or the day's mark, and no title line at all. The sentence is the whole content, and a label
-  // above it would only repeat what the row already looks like.
-  const travelling = beat.kind === "travel";
+/** The bar's artwork: the stop's photograph, the day's number on the opening, ★ at the close, the
+ *  mode's glyph on the way between. Never a grey box. */
+function NowArt({ stop, beat, dayIndex }: { stop?: Stop; beat?: StoryBeat; dayIndex: number }) {
+  const photo = usePlacePhoto(stop?.name ?? "");
   return (
-    <div
-      data-beat={index}
-      // 620ms, matching the column's own lift, so the line arriving at the top and the line
-      // brightening are one movement rather than two.
-      className="flex gap-3 pb-5"
-      style={{
-        opacity: beatOpacity(index, activeIndex),
-        transition: "opacity 620ms cubic-bezier(0.16, 1, 0.3, 1)",
-      }}
-      aria-current={isActive ? "true" : undefined}
-    >
-      <span className="w-10 shrink-0">
-        {travelling ? (
-          <span className="flex h-10 w-10 items-center justify-center">
-            <TravelGlyph />
-          </span>
-        ) : stop ? (
-          <StopAvatar name={stop.name} category={stop.category} />
-        ) : (
-          // The opening and the closing are about the day, so they get the day's own mark rather
-          // than a place's photograph.
-          mark !== null && (
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">
-              {mark}
-            </span>
-          )
-        )}
-      </span>
-      <span className="min-w-0 flex-1">
-        {stop ? (
-          <span className="flex flex-wrap items-baseline gap-x-2">
-            <span className="font-medium text-foreground">{stop.name}</span>
-            {stop.time && <span className="text-xs text-muted">{stop.time}</span>}
-          </span>
-        ) : (
-          label !== null && (
-            <span className="text-xs font-semibold tracking-wide text-muted uppercase">{label}</span>
-          )
-        )}
-        {/* The narration itself, italic because it is being spoken rather than listed. */}
-        <span
-          className={`mt-0.5 block text-sm leading-relaxed italic ${
-            isActive ? "text-foreground" : "text-foreground/90"
-          }`}
-        >
-          {beat.text}
-        </span>
-      </span>
-    </div>
+    <span className="sp-art" aria-hidden="true">
+      {stop && photo ? (
+        // eslint-disable-next-line @next/next/no-img-element -- arbitrary Wikipedia originals; next/image throws on an unconfigured host
+        <img key={photo} src={photo} alt="" className="value-in" />
+      ) : beat?.kind === "travel" ? (
+        <TravelGlyph />
+      ) : (
+        <b>{beat?.kind === "closing" ? "★" : stop ? stop.name.slice(0, 1) : dayIndex + 1}</b>
+      )}
+    </span>
   );
 }
 
-/** The mode glyph on a travel beat. Muted, and smaller than a stop's avatar, because the beat is
- *  the connective tissue between two places rather than a place of its own. */
 function TravelGlyph() {
   const profile = useRouteProfile();
   const Icon = profile === "bike" ? Bike : profile === "drive" ? Car : Footprints;
-  return <Icon className="h-4 w-4 text-muted" aria-hidden="true" />;
-}
-
-/** A round icon control in the film's chrome. */
-function TransportButton({
-  label,
-  children,
-  ...rest
-}: { label: string } & React.ComponentPropsWithoutRef<"button">) {
-  return (
-    <button
-      type="button"
-      {...rest}
-      aria-label={label}
-      title={label}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40"
-    >
-      {children}
-    </button>
-  );
+  return <Icon className="h-4 w-4" aria-hidden="true" />;
 }

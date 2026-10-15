@@ -165,7 +165,7 @@ Pressing Play on a day narrates it: the camera flies to each stop while a voice 
 script and the matching line lights up. `src/lib/storyMode.tsx` is the controller, `StoryStage.tsx`
 the only thing that draws it, both mounted in `AppShell` beside the map chrome.
 
-**The plan panel stays; it shuts to its capsule.** That single clean line — photo, destination,
+**On `/trip/[id]` the film's controls are a bottom media-player bar with the narration as subtitles above it** (`StoryStage` over `polar/StoryPlayer.css`, canvas design "Story mode · 1 Subtitles", branch `feat/polar-redesign`), the trip page's board (`polar/trip/TripBoard.tsx`) hiding while it plays; the capsule hand-off below still describes the `/` result view's `ItineraryCard`, though the stage it hands to is now that same bar. **The plan panel stays; it shuts to its capsule.** That single clean line — photo, destination,
 length, day in focus — *is* the film's header. Its action slot carries Play only while there is no
 film: the moment one starts, the button **leaves** for `StoryStage`'s transport row, between
 Previous and Next, and the capsule keeps only the trip. It travels rather than teleports —

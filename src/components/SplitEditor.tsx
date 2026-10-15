@@ -78,11 +78,15 @@ export default function SplitEditor({
   itinerary,
   onItineraryChange,
   onClose,
+  appearance,
 }: {
   trip: TripSummary;
   itinerary: Itinerary;
   onItineraryChange: (next: Itinerary) => void;
   onClose: () => void;
+  /** `"light"` on the trip page, where the plan is Polar ice and this opens as its right-hand
+   *  drawer: the editor's tokens re-point through `[data-appearance="light"]`. */
+  appearance?: "light";
 }) {
   // The same cache key `ItineraryCard` and the /trips collage already use, so the picture is
   // usually resolved before this opens and costs no request.
@@ -234,12 +238,15 @@ export default function SplitEditor({
   };
 
   const visibleDays = activeDay === null ? itinerary.days.map((_, i) => i) : [activeDay];
+  /** The trip page draws the editor in Polar (canvas "Trip page · B"); light is only ever that. */
+  const polar = appearance === "light";
 
   const panel = (
     <div
       role="dialog"
       aria-modal="false"
       aria-label="Edit itinerary"
+      data-appearance={appearance}
       // **The itinerary result page's own box, to the pixel.** `DockedPanel`'s open geometry at
       // its default (non-`wide`) width, in `.glass-itinerary`, with the same rounding and the same
       // inset from the nav — because editing a plan and reading one are the same plan, and a
@@ -250,7 +257,7 @@ export default function SplitEditor({
       // Not `inset-0`: the strip the panel leaves is left alone so the map stays visible *and*
       // clickable — clicking a pin is one of this editor's inputs, and a full-screen overlay would
       // eat it.
-      className="glass-itinerary fixed z-[70] flex flex-col overflow-hidden rounded-none sm:rounded-2xl top-[calc(var(--nav-h)+1.25rem)] right-0 left-0 h-[calc(100dvh-var(--nav-h)-1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:h-[calc(100dvh-var(--nav-h)-3rem)] sm:w-[40%] sm:max-w-[520px]"
+      className={`split-editor glass-itinerary${polar ? " tm is-polar" : ""} fixed z-[70] flex flex-col overflow-hidden rounded-none sm:rounded-2xl top-[calc(var(--nav-h)+1.25rem)] right-0 left-0 h-[calc(100dvh-var(--nav-h)-1.25rem)] sm:top-[calc(var(--nav-h)+1.5rem)] sm:right-6 sm:left-auto sm:h-[calc(100dvh-var(--nav-h)-3rem)] sm:w-[40%] sm:max-w-[520px]`}
       {...devLabel("SplitEditor")}
     >
       {/* The result page's header, not a dialog's.
@@ -258,7 +265,19 @@ export default function SplitEditor({
           the same `BlurredPhotoLayer` treatment, the same 5rem band, the same type. It does not
           collapse on scroll the way the card's does: that behaviour is driven by `--hero-p` off
           the card's own scroller, and here the scroller is the day list below a fixed head. */}
-      <div className="relative shrink-0 overflow-hidden border-b border-card-border">
+      {polar ? (
+        // The canvas's head: the signal "Editing" tag, the trip in the display face, Done.
+        <div className="td-edit-head">
+          <span className="td-pill">Editing</span>
+          <h2>
+            {trip.destination.split(",")[0]}: {itinerary.days.length} day{itinerary.days.length > 1 ? "s" : ""}
+          </h2>
+          <button type="button" onClick={onClose} className="td-signal">
+            Done
+          </button>
+        </div>
+      ) : (
+      <div className="split-editor-head relative shrink-0 overflow-hidden border-b border-card-border">
         {headerPhoto && (
           <BlurredPhotoLayer
             photo={headerPhoto}
@@ -288,6 +307,7 @@ export default function SplitEditor({
           </button>
         </div>
       </div>
+      )}
 
       {/* The same budget bar the result page carries, reading the same numbers off the same
           itinerary — so a stop deleted here moves the bar the traveller was watching there. */}
@@ -304,11 +324,11 @@ export default function SplitEditor({
           screen. */}
       <div className="flex shrink-0 items-center gap-1.5 border-b border-card-border px-5 py-2.5 sm:px-6">
         <div className="scrollbar-none flex flex-1 gap-1.5 overflow-x-auto">
-          <DayTab active={activeDay === null} onClick={() => setActiveDay(null)} first>
+          <DayTab active={activeDay === null} onClick={() => setActiveDay(null)} first polar={polar}>
             All Days
           </DayTab>
           {itinerary.days.map((day, i) => (
-            <DayTab key={i} active={activeDay === i} onClick={() => setActiveDay(i)} day={i}>
+            <DayTab key={i} active={activeDay === i} onClick={() => setActiveDay(i)} day={i} polar={polar}>
               Day {i + 1}
             </DayTab>
           ))}
@@ -446,13 +466,23 @@ function DayTab({
   day,
   first,
   children,
+  polar,
 }: {
   active: boolean;
   onClick: () => void;
   day?: number;
   first?: boolean;
   children: React.ReactNode;
+  polar?: boolean;
 }) {
+  if (polar) {
+    return (
+      <button type="button" onClick={onClick} aria-pressed={active} className="td-daytab">
+        {day !== undefined && <i aria-hidden="true" style={{ background: `var(${dayColorTokenFor(day)})` }} />}
+        {children}
+      </button>
+    );
+  }
   const clipPath = first
     ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
     : "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%)";

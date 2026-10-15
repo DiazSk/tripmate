@@ -176,6 +176,13 @@ self.onmessage = async (event) => {
 let worker: Worker | null = null;
 let loading: Promise<boolean> | null = null;
 let audioContext: AudioContext | null = null;
+/** Every sentence plays through this, so the player's volume reaches one already playing. */
+let gainNode: GainNode | null = null;
+let naturalVolume = 1;
+export function setNaturalVolume(volume: number): void {
+  naturalVolume = volume;
+  if (gainNode) gainNode.gain.value = volume;
+}
 let nextRequestId = 0;
 /** In-flight `generate` calls, keyed by the id sent to the worker. */
 const pending = new Map<
@@ -367,6 +374,12 @@ export function speakNatural(
   // pressed. The `resume()` below covers a tab that was backgrounded anyway.
   audioContext ??= new AudioContext();
   const context = audioContext;
+  if (!gainNode) {
+    gainNode = context.createGain();
+    gainNode.gain.value = naturalVolume;
+    gainNode.connect(context.destination);
+  }
+  const output = gainNode;
 
   let done = false;
   let index = 0;
@@ -424,7 +437,7 @@ export function speakNatural(
 
     source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(context.destination);
+    source.connect(output);
     source.onended = () => {
       if (done) return;
       const pause = pauseAfter(chunks[index], index, chunks.length);

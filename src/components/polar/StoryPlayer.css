@@ -1,0 +1,706 @@
+/* Story mode as the canvas design "Story mode · 1 Subtitles": the film as cinema. The map is the
+   picture; the line being spoken is a subtitle set directly above the transport, so the eye reads the
+   words and the place in one look; a slim player bar runs edge to edge along the foot; Up next is a
+   strip of chapters that slides up above it. Night, ice type, signal for what is playing.
+
+   No backdrop-filter anywhere here: every frame the film's camera moves would re-run it. The words
+   hold on any ground through a gradient rising from the foot instead of a box over the shot.
+
+   The root is a fixed, click-through layer over the whole shell; only the bar, the subtitles and the
+   chapters take the pointer, so the map stays draggable around them. */
+html[data-story-mode="true"] {
+  --story-bar-h: 4.75rem;
+}
+.tm.story-player {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  width: auto;
+  min-height: 0;
+  background: none;
+  color: #fff;
+  pointer-events: none;
+}
+.tm.story-player > * {
+  pointer-events: auto;
+}
+.tm.story-player > .sp-scrim,
+.tm.story-player > .sp-keys,
+.tm.story-player .sr-only {
+  pointer-events: none;
+}
+
+/* The night that holds the words */
+.story-player .sp-scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 46%;
+  /* Dense through the lower half, where the words sit, so they hold on the daytime style too. */
+  background: linear-gradient(0deg, rgba(9, 11, 16, 0.92) 0%, rgba(9, 11, 16, 0.8) 50%, rgba(9, 11, 16, 0) 100%);
+  animation: tp-fade 0.5s ease both;
+  transition: height 0.45s var(--wd-ease-reveal);
+}
+/* A stop's sheet open beside the film stays ice: the night ends at its edge, and the key hint,
+   which would sit under it, goes. */
+html:has(.trip-page.has-drawer) .story-player .sp-scrim {
+  right: calc(var(--trip-drawer-w, 0px) + 1.25rem);
+}
+html:has(.trip-page.has-drawer) .story-player .sp-keys {
+  display: none;
+}
+/* With the chapters open the subtitle stands higher, and the night rises with it. */
+.story-player.has-chapters .sp-scrim {
+  height: 74%;
+}
+
+/* The subtitle and the chapters, one column on the bar. Beside a drawer the column stops at it, so
+   the subtitle centres over the map the drawer leaves and the chapters end where it begins. */
+.story-player .sp-stack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--story-bar-h);
+  z-index: 22;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.story-player .sp-stack > * {
+  pointer-events: auto;
+}
+html:has(.trip-page.has-drawer) .story-player .sp-stack {
+  right: calc(var(--trip-drawer-w, 0px) + 2.5rem);
+}
+/* The subtitle, directly above the transport. */
+.story-player .sp-subs {
+  position: relative;
+  margin-bottom: 1.6rem;
+  width: min(54rem, calc(100% - 4rem));
+  display: grid;
+  justify-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 2.75rem;
+  text-align: center;
+}
+.story-player.has-chapters .sp-subs {
+  margin-bottom: 1rem;
+}
+.sp-subs-x {
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 0.55;
+}
+.sp-subs:hover .sp-subs-x,
+.sp-subs-x:focus-visible {
+  opacity: 1;
+}
+.sp-sub-eyebrow {
+  margin: 0;
+  font-family: var(--wd-font-condensed);
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wd-signal);
+  text-shadow: 0 1px 10px rgba(9, 11, 16, 0.9);
+}
+.sp-sub-line {
+  margin: 0;
+  font-family: var(--wd-font-display);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 2.2vw, 2.05rem);
+  line-height: 1.2;
+  text-wrap: balance;
+  text-shadow: 0 2px 22px rgba(9, 11, 16, 0.9);
+  animation: tp-in 0.35s var(--wd-ease-reveal) both;
+}
+/* The words the voice has not reached yet sit back; each lights as it is said. */
+.sp-sub-line span {
+  color: rgba(255, 255, 255, 0.42);
+  transition: color 0.25s;
+}
+.sp-sub-line span.is-said,
+.sp-sub-line.is-done {
+  color: #fff;
+}
+.sp-sub-next {
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--wd-night-text-2);
+  text-shadow: 0 1px 10px rgba(9, 11, 16, 0.9);
+}
+.sp-sub-next span {
+  margin-left: 0.4em;
+  font-family: var(--wd-font-condensed);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+.sp-wait {
+  margin: 0;
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  color: var(--wd-night-text-2);
+  animation: sp-breathe 1.6s ease-in-out infinite;
+}
+.sp-wait.is-small {
+  font-size: 1.05rem;
+}
+@keyframes sp-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+.sp-note {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--wd-night-text-2);
+}
+.sp-end {
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+}
+.sp-end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.sp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  min-height: 2.6rem;
+  padding: 0 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+}
+.sp-pill:hover {
+  border-color: #fff;
+}
+.sp-pill.is-go {
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+  border-color: var(--wd-signal);
+}
+.sp-pill.is-go:hover {
+  background: var(--wd-signal-hover);
+}
+
+/* Chapters: Up next, as a strip above the bar */
+.story-player .sp-chapters {
+  align-self: stretch;
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.8rem 1.25rem 0.9rem;
+  background: rgba(9, 11, 16, 0.94);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  animation: sp-up 0.4s var(--wd-ease-reveal) both;
+}
+.sp-chapters header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.sp-chapters header b {
+  font-size: 0.9rem;
+}
+.sp-chapters header span {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1rem;
+  color: var(--wd-night-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-chapters ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+.sp-chapters li {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+}
+.sp-chapter {
+  position: relative;
+  width: 12.5rem;
+  height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 0.2rem;
+  padding: 0.35rem 0.35rem 0.5rem;
+  text-align: left;
+  border-radius: var(--wd-radius-card);
+  transition: background-color 0.2s;
+}
+.sp-chapter:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.sp-chapter.is-on {
+  background: rgba(255, 126, 21, 0.14);
+}
+.sp-chapter.is-past {
+  opacity: 0.6;
+}
+.sp-chapter .sp-art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 0.25rem;
+}
+.sp-chapter-n {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.1em 0.4em;
+  font-family: var(--wd-font-condensed);
+  font-size: 0.72rem;
+  color: var(--wd-ink);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: var(--wd-radius-hairline);
+}
+.sp-chapter.is-on .sp-chapter-n {
+  background: var(--wd-signal);
+}
+.sp-chapter b {
+  font-size: 0.86rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-chapter > span:last-child {
+  font-size: 0.72rem;
+  color: var(--wd-night-text-2);
+}
+.sp-chapter.is-day {
+  min-height: 9.5rem;
+  align-content: end;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+}
+.sp-chapter.is-day .sp-chapter-n {
+  position: static;
+  justify-self: start;
+  padding: 0;
+  color: #fff;
+  background: transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* The bar: slim, edge to edge */
+.story-player .sp-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 23;
+  height: var(--story-bar-h);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0 1.25rem;
+  background: rgba(9, 11, 16, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+@keyframes sp-up {
+  from {
+    transform: translateY(1rem);
+    opacity: 0;
+  }
+}
+.sp-art {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+  overflow: hidden;
+  color: var(--wd-night-text-2);
+  background: var(--wd-deep);
+  border-radius: var(--wd-radius-sm);
+}
+.sp-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sp-art b {
+  font-family: var(--wd-font-display);
+  font-weight: 500;
+  font-size: 1.25rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+.sp-now {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.sp-now-text {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.sp-now-text b {
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-now-text span {
+  font-size: 0.72rem;
+  color: var(--wd-night-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--wd-night-text-2);
+  border-radius: 50%;
+  transition: color 0.2s, background-color 0.2s;
+}
+.sp-icon:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+}
+.sp-icon:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.sp-icon.is-on {
+  position: relative;
+  color: var(--wd-signal);
+}
+.sp-icon.is-on::after {
+  content: "";
+  position: absolute;
+  bottom: 0.25rem;
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.sp-icon-gap {
+  width: 2.5rem;
+}
+.sp-nextday {
+  font-family: var(--wd-font-condensed);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+}
+.sp-center {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.sp-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+/* The one solid object on the bar: an ice disc, ink glyph. */
+.sp-play {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  color: var(--wd-ink);
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+.sp-play:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+.sp-play:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.sp-play:disabled {
+  opacity: 0.5;
+}
+.sp-scrub {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr) 2.4rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+.sp-time {
+  font-family: var(--wd-font-condensed);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: var(--wd-night-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.sp-track {
+  position: relative;
+  height: 1rem;
+  cursor: pointer;
+  touch-action: none;
+}
+.sp-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  translate: 0 -50%;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: var(--wd-radius-hairline);
+}
+.sp-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 3px;
+  translate: 0 -50%;
+  background: #fff;
+  border-radius: var(--wd-radius-hairline);
+}
+.sp-track:hover .sp-fill,
+.sp-track.is-drag .sp-fill,
+.sp-track:focus-visible .sp-fill {
+  background: var(--wd-signal);
+}
+/* A tick where each line begins, so the bar reads as the day's chapters, not one long song. */
+.sp-tick {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 7px;
+  translate: -1px -50%;
+  background: rgba(9, 11, 16, 0.95);
+}
+.sp-knob {
+  position: absolute;
+  top: 50%;
+  width: 0.75rem;
+  height: 0.75rem;
+  translate: -50% -50%;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sp-track:hover .sp-knob,
+.sp-track.is-drag .sp-knob,
+.sp-track:focus-visible .sp-knob {
+  opacity: 1;
+}
+/* The chapter under the pointer, as a video scrubber previews a frame. */
+.sp-peek {
+  position: absolute;
+  bottom: 1.4rem;
+  translate: -50% 0;
+  width: 9.5rem;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.3rem 0.3rem 0.45rem;
+  text-align: left;
+  pointer-events: none;
+  background: rgba(9, 11, 16, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--wd-radius-card);
+  box-shadow: 0 1em 2em -1em rgba(0, 0, 0, 0.8);
+}
+.sp-peek .sp-art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 0.2rem;
+}
+.sp-peek b {
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-peek span {
+  font-family: var(--wd-font-condensed);
+  font-size: 0.7rem;
+  color: var(--wd-night-text-2);
+}
+.sp-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.sp-details {
+  margin-left: 0.1rem;
+}
+.sp-voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-right: 0.4rem;
+  padding: 0.25em 0.65em 0.25em 0.45em;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--wd-night-text-2);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.sp-voice.is-ready {
+  color: var(--wd-signal);
+  border-color: rgba(255, 126, 21, 0.4);
+}
+/* Volume: the mute and a slider, as a player's are. */
+.sp-vol {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.sp-vol input {
+  width: 5.5rem;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: linear-gradient(90deg, #fff var(--v), rgba(255, 255, 255, 0.18) var(--v));
+  border-radius: var(--wd-radius-hairline);
+  cursor: pointer;
+}
+.sp-vol input:hover:not(:disabled),
+.sp-vol input:focus-visible {
+  background: linear-gradient(90deg, var(--wd-signal) var(--v), rgba(255, 255, 255, 0.18) var(--v));
+}
+.sp-vol input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.sp-vol input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0;
+}
+.sp-vol input:hover::-webkit-slider-thumb,
+.sp-vol input:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+.sp-vol input::-moz-range-thumb {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+/* Back to the plan: the one labelled control, since it is the way out. */
+.sp-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  min-height: 2.5rem;
+  margin-left: 0.4rem;
+  padding: 0 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--wd-ink);
+  background: #fff;
+  border-radius: var(--wd-radius-hairline);
+}
+.sp-plan:hover {
+  background: var(--wd-snow);
+}
+.story-player .sp-keys {
+  position: absolute;
+  right: 1.25rem;
+  bottom: calc(var(--story-bar-h) + 0.6rem);
+  margin: 0;
+  font-size: 0.66rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+.story-player.has-chapters .sp-keys {
+  display: none;
+}
+.story-player :focus-visible {
+  outline: 2px solid var(--wd-signal);
+  outline-offset: 2px;
+}
+
+/* The Polar entrances the player and the trip page's drawer share. */
+@keyframes tp-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5em);
+  }
+}
+@keyframes tp-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 960px) {
+  html[data-story-mode="true"] {
+    --story-bar-h: 8.25rem;
+  }
+  .story-player .sp-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    padding: 0.7rem 0.9rem;
+    row-gap: 0.4rem;
+  }
+  .sp-center {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .sp-voice,
+  .sp-vol input,
+  .sp-details,
+  .story-player .sp-keys {
+    display: none;
+  }
+  .story-player .sp-subs {
+    width: calc(100% - 1.5rem);
+    padding: 0.5rem 2.5rem;
+  }
+  .sp-sub-line {
+    font-size: 1.3rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-player .sp-scrim,
+  .story-player .sp-chapters,
+  .sp-sub-line,
+  .sp-wait {
+    animation: none;
+  }
+}

@@ -9,7 +9,7 @@ import {
 // `kokoroVoice` takes its pacing from `storyPacing` and only a type from here, so there is no
 // runtime cycle. Keeping the seam in one file is worth it — every caller above imports `speakOn`
 // and nothing else knows there are two engines.
-import { naturalVoiceReady, speakNatural } from "./kokoroVoice";
+import { naturalVoiceReady, setNaturalVolume, speakNatural } from "./kokoroVoice";
 
 // Re-exported so the web's callers (and `storyVoice.test.mjs`) keep importing pacing from here.
 export { estimateDurationMs, pauseAfter, rateFor, splitForSpeech };
@@ -174,6 +174,16 @@ export interface SpeakHandle {
  * `START_GUARD_MS` catches that by deadline on `onstart` and reports it as an error, which is how
  * the controller learns to fall back to timed beats for the rest of the film.
  */
+/** The narration's volume, 0 to 1, for both voices: the player bar's slider. Module state rather
+ *  than an argument, so a drag changes the voice that is talking without restarting its beat. The
+ *  platform voice takes it at the next sentence (an utterance's volume is fixed once spoken); the
+ *  natural voice at once, through its gain. */
+let narrationVolume = 1;
+export function setNarrationVolume(volume: number): void {
+  narrationVolume = Math.max(0, Math.min(1, volume));
+  setNaturalVolume(narrationVolume);
+}
+
 export function speak(
   text: string,
   handlers: { onEnd?: () => void; onError?: () => void } = {}
@@ -221,6 +231,7 @@ export function speak(
     }
     utterance.rate = rateFor(index, chunks.length);
     utterance.pitch = 1;
+    utterance.volume = narrationVolume;
 
     // The start guard applies to the first chunk only. Once a voice has spoken once it is not
     // going to turn out to be mute, and re-arming it per sentence would risk cancelling a live

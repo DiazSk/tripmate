@@ -1,0 +1,696 @@
+/* The trip page's drawer and editor in Polar, ported from the canvas design "Trip page · B"
+   (its Bodies.css): a stop's detail, Refine with AI (the chat beside a preview of the day) and the
+   editor, on ice. The components are the app's own (`PlaceDetailPanel`, `FocusEditMode` with
+   `EditChatPanel` and `DayTimeline`, `SplitEditor`), each switched to these classes by its `polar`
+   prop, so what they do is unchanged. `td-` so nothing here meets the board's `tb-` names. */
+
+/* ── The drawer ── */
+.tm.trip-drawer {
+  position: fixed;
+  /* Restated over `.tm`'s own width and height, which would otherwise win on load order. */
+  width: min(30rem, 36%);
+  min-height: 0;
+  padding: var(--wd-pad);
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  border-radius: var(--wd-radius-card);
+}
+/* During a film the stop's sheet stands above the player bar, which runs the full width. */
+html[data-story-mode="true"] .tm.trip-drawer {
+  bottom: calc(var(--story-bar-h, 4.75rem) + 0.75rem);
+}
+.tm.trip-drawer.is-wide {
+  width: min(44rem, 50%);
+}
+.tm.trip-drawer .trip-drawer-body {
+  display: flex;
+  flex-direction: column;
+}
+.tm.trip-drawer .trip-drawer-body > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Shared ── */
+.td-eyebrow {
+  margin: 0;
+  font-size: 0.68em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wd-ember);
+}
+.td-sub {
+  margin: 0.2em 0 0;
+  font-size: 0.8em;
+  color: var(--wd-charcoal);
+}
+.td-sub em {
+  font-style: normal;
+  color: var(--wd-ember);
+}
+.td-muted {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--wd-charcoal);
+}
+.td-signal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  min-height: 2.6em;
+  padding: 0 1.1em;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.2s;
+}
+.td-signal:hover:not(:disabled) {
+  background: var(--wd-signal-hover);
+}
+.td-signal:disabled {
+  opacity: 0.4;
+}
+.td-quiet {
+  min-height: 2.6em;
+  padding: 0 0.9em;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--wd-ink);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-hairline);
+}
+.td-quiet:hover {
+  border-color: var(--wd-ink);
+}
+.td-danger {
+  min-height: 2.6em;
+  padding: 0 0.9em;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: #fff;
+  background: var(--wd-alert-text);
+  border-radius: var(--wd-radius-hairline);
+}
+.td-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2.6em;
+  height: 2.6em;
+  color: var(--wd-ink);
+  border-radius: var(--wd-radius-sm);
+  transition: background-color 0.2s;
+}
+.td-icon:hover:not(:disabled) {
+  background: var(--wd-veil-05);
+}
+.td-icon:disabled {
+  opacity: 0.3;
+}
+.td-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.6em 0.8em;
+  font-size: 0.85em;
+  background: var(--wd-paper);
+  border-left: 2px solid var(--wd-alert-text);
+}
+.td-strip > p {
+  flex: 1;
+  min-width: 12em;
+  margin: 0;
+  font-weight: 600;
+}
+.td-strip.is-good {
+  border-left-color: var(--wd-signal);
+}
+.td-strip-actions {
+  display: flex;
+  gap: 0.4em;
+}
+.td-findings {
+  list-style: none;
+  display: grid;
+  gap: 0.35em;
+  margin: 0.6em 0 0;
+  padding: 0;
+}
+.td-findings li {
+  padding: 0.45em 0.65em;
+  font-size: 0.78em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--wd-alert-text);
+  background: var(--alert-soft);
+  border-left: 2px solid currentColor;
+}
+.td-alert-line {
+  margin: 0.4em 0 0;
+  font-size: 0.78em;
+  color: var(--wd-alert-text);
+}
+
+/* ── Detail ── */
+.td-detail {
+  display: grid;
+  align-content: start;
+  gap: 0.6em;
+  animation: tp-in 0.4s var(--wd-ease-reveal) both;
+}
+.td-back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-height: 2.4em;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+.td-detail .rounded-lg {
+  border-radius: var(--wd-radius-sm);
+}
+.td-detail > .mt-4,
+.td-detail > .grid {
+  margin-top: 0;
+}
+.td-title {
+  margin: 0;
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  font-size: 2.1em;
+  line-height: 1.05;
+}
+/* Focus lands on the title when the sheet opens, as a reading position rather than a control. */
+.tm.trip-drawer .td-title:focus-visible {
+  outline: none;
+}
+.td-note {
+  margin: 0;
+  font-size: 0.9em;
+  line-height: 1.5;
+  color: var(--wd-ash);
+}
+.td-prov {
+  margin: 0;
+  font-size: 0.66em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wd-charcoal);
+}
+.td-tabs {
+  position: sticky;
+  top: calc(-1 * var(--wd-pad));
+  z-index: 2;
+  display: flex;
+  gap: 1.2em;
+  margin-top: 0.4em;
+  overflow-x: auto;
+  background: var(--wd-ice);
+  border-bottom: 1px solid var(--wd-rule);
+}
+.td-tabs button {
+  flex-shrink: 0;
+  min-height: 2.75em;
+  margin-bottom: -1px;
+  font-size: 0.85em;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--wd-charcoal);
+  border-bottom: 2px solid transparent;
+}
+.td-tabs button[aria-selected="true"] {
+  color: var(--wd-ink);
+  border-color: var(--wd-signal);
+}
+.td-prose {
+  padding-top: 0.4em;
+  font-size: 0.92em;
+  line-height: 1.55;
+}
+.tm.trip-drawer .td-prose:focus-visible {
+  outline: none;
+}
+
+/* ── Refine ── */
+.td-refine {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+  height: 100%;
+  min-height: 0;
+}
+.td-refine-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1em;
+}
+.td-refine-head h3 {
+  margin: 0;
+}
+.td-refine-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+.td-panes {
+  display: flex;
+  gap: 0.3em;
+}
+/* Side by side from lg, as FocusEditMode lays the panes out, so no switch. Restated here because
+   this sheet is unlayered and would otherwise beat the component's own `lg:hidden`. */
+@media (width >= 64rem) {
+  .td-panes {
+    display: none;
+  }
+}
+.td-panes button {
+  min-height: 2.4em;
+  padding: 0 0.9em;
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--wd-charcoal);
+  border-radius: var(--wd-radius-hairline);
+}
+.td-panes button[aria-pressed="true"] {
+  color: #fff;
+  background: var(--wd-ink);
+}
+.td-refine-split {
+  gap: 1em;
+}
+.td-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  height: 100%;
+  min-height: 0;
+}
+.td-chat-who {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.85em;
+}
+.td-chat-who-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+.td-chat-who-text p {
+  margin: 0;
+}
+.td-chat-who-text p:first-child {
+  font-weight: 700;
+}
+.td-chat-who-text p + p {
+  color: var(--wd-charcoal);
+}
+.td-chat-log {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.6em;
+  overflow: auto;
+  padding-right: 0.2em;
+}
+.td-chat-empty > p {
+  margin: 0 0 0.8em;
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1.15em;
+  line-height: 1.3;
+}
+.td-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+.td-chips.is-options {
+  margin-top: 0.5em;
+}
+.td-chips button {
+  min-height: 2.4em;
+  padding: 0 0.8em;
+  font-size: 0.8em;
+  font-weight: 600;
+  border: 1px solid var(--wd-veil-15);
+  border-radius: 999px;
+}
+.td-chips button:hover:not(:disabled) {
+  border-color: var(--wd-ink);
+}
+.td-chips button:disabled {
+  opacity: 0.4;
+}
+.td-turn {
+  display: grid;
+  justify-items: start;
+}
+.td-turn.is-user {
+  justify-items: end;
+}
+.td-bubble {
+  max-width: 92%;
+  padding: 0.65em 0.85em;
+  font-size: 0.88em;
+  line-height: 1.5;
+  border-radius: var(--wd-radius-card);
+  animation: tp-in 0.3s var(--wd-ease-reveal) both;
+}
+.td-turn.is-user .td-bubble {
+  color: var(--wd-ink);
+  background: rgba(255, 126, 21, 0.16);
+}
+.td-turn.is-assistant .td-bubble,
+.td-bubble.is-typing {
+  background: var(--wd-snow);
+}
+.td-turn-head {
+  margin: 0.5em 0 0;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--wd-ember);
+}
+.td-changes {
+  list-style: none;
+  margin: 0.2em 0 0;
+  padding: 0;
+  font-size: 0.78em;
+  color: var(--wd-charcoal);
+}
+.td-changes li::before {
+  content: "· ";
+}
+.td-bubble.is-typing {
+  justify-self: start;
+  display: flex;
+  gap: 0.3em;
+}
+.td-bubble.is-typing span {
+  width: 0.4em;
+  height: 0.4em;
+  border-radius: 50%;
+  background: var(--wd-charcoal);
+  animation: td-dot 1s ease-in-out infinite;
+}
+.td-bubble.is-typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.td-bubble.is-typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes td-dot {
+  50% {
+    opacity: 0.25;
+  }
+}
+.td-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4em;
+  padding: 0.4em;
+  background: var(--wd-snow);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: var(--wd-radius-sm);
+}
+.td-compose:focus-within {
+  border-color: var(--wd-signal);
+}
+.td-compose textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  /* 16px, or iOS Safari zooms the viewport on focus. */
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--wd-ink);
+}
+.td-compose textarea::placeholder {
+  color: var(--wd-stone);
+}
+.td-send {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2.75em;
+  height: 2.75em;
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+  border-radius: var(--wd-radius-hairline);
+}
+.td-send:disabled {
+  opacity: 0.35;
+}
+.td-preview {
+  gap: 0.6em;
+  padding: 0.8em;
+  background: var(--wd-paper);
+  border-radius: var(--wd-radius-card);
+  transition: opacity 0.3s;
+}
+.td-preview.is-busy {
+  opacity: 0.6;
+}
+.td-preview-head .flex {
+  gap: 0.2em;
+}
+.td-chip {
+  flex-shrink: 0;
+  min-width: 2.2em;
+  height: 2.2em;
+  padding: 0 0.5em;
+  font-family: var(--wd-font-condensed);
+  font-size: 0.85em;
+  color: var(--wd-charcoal);
+  border-radius: 999px;
+  transition: background-color 0.2s, color 0.2s;
+}
+.td-chip:hover {
+  color: var(--wd-ink);
+  background: var(--wd-veil-05);
+}
+.td-chip[aria-current="true"] {
+  color: #fff;
+  background: var(--wd-ink);
+}
+.td-chip[data-dragging] {
+  box-shadow: inset 0 0 0 1px rgba(255, 126, 21, 0.4);
+}
+.td-chip[data-over] {
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+}
+.td-preview-line {
+  margin: 0.3em 0 0;
+  font-size: 0.8em;
+  text-align: center;
+  color: var(--wd-charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.td-preview-line b {
+  color: var(--wd-ink);
+}
+.td-hint {
+  color: var(--wd-ember);
+}
+.td-mini ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.td-mini-row {
+  display: grid;
+  grid-template-columns: 1.2em 4.6em 0.6em minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.5em;
+  padding: 0.55em 0;
+  font-size: 0.85em;
+  border-bottom: 1px solid var(--wd-rule);
+  background: var(--wd-paper);
+}
+.td-mini-row.is-dragging {
+  opacity: 0.4;
+}
+.td-grip {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+  color: var(--wd-stone);
+}
+.td-grip:hover {
+  color: var(--wd-ink);
+}
+.td-grip:active {
+  cursor: grabbing;
+}
+.td-mini-time {
+  font-family: var(--wd-font-condensed);
+  color: var(--wd-charcoal);
+  font-variant-numeric: tabular-nums;
+}
+.td-mini-dot {
+  align-self: center;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+}
+.td-mini-name {
+  font-weight: 600;
+}
+.td-mini-name em {
+  margin-left: 0.5em;
+  padding: 0.1em 0.45em;
+  font-style: normal;
+  font-size: 0.75em;
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+  border-radius: var(--wd-radius-hairline);
+}
+.td-stay {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0.7em 0 0;
+  font-size: 0.8em;
+  color: var(--wd-charcoal);
+}
+.td-drag {
+  padding: 0.5em 0.8em;
+  font-family: var(--wd-font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--wd-ink);
+  background: #fff;
+  border-left: 2px solid var(--wd-signal);
+  border-radius: var(--wd-radius-sm);
+  box-shadow: 0 1em 2em -0.8em rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+/* ── Edit: `SplitEditor` in the drawer's box ── */
+.tm.split-editor.is-polar {
+  position: fixed;
+  top: calc(var(--nav-h) + 1rem);
+  right: 1.25rem;
+  bottom: 1.25rem;
+  left: auto;
+  width: min(30rem, 36%);
+  max-width: none;
+  height: auto;
+  min-height: 0;
+  color: var(--wd-ink);
+  background: var(--wd-ice);
+  backdrop-filter: none;
+  border: 0;
+  border-radius: var(--wd-radius-card);
+  box-shadow: 0 2em 4em -1.5em rgba(0, 0, 0, 0.7);
+  animation: trip-drawer-in 0.4s var(--wd-ease-reveal) both;
+}
+.td-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  padding: var(--wd-pad) var(--wd-pad) 0.8em;
+  border-bottom: 1px solid var(--wd-rule);
+}
+.td-edit-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  font-size: 1.6em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.td-pill {
+  flex-shrink: 0;
+  padding: 0.3em 0.6em;
+  font-size: 0.66em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wd-ink);
+  background: var(--wd-signal);
+  border-radius: var(--wd-radius-hairline);
+}
+.td-daytab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  flex-shrink: 0;
+  min-height: 2.4em;
+  padding: 0 0.75em;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--wd-charcoal);
+  border-radius: var(--wd-radius-hairline);
+  transition: background-color 0.2s, color 0.2s;
+}
+.td-daytab:hover {
+  color: var(--wd-ink);
+  background: var(--wd-veil-05);
+}
+.td-daytab[aria-pressed="true"] {
+  color: #fff;
+  background: var(--wd-ink);
+}
+.td-daytab i {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+}
+/* The editor's own rows keep their markup; on ice they square up to the Polar radii. */
+.split-editor.is-polar .rounded-xl {
+  border-radius: var(--wd-radius-sm);
+}
+
+.tm.trip-drawer :focus-visible,
+.tm.split-editor.is-polar :focus-visible {
+  outline: 2px solid var(--wd-signal);
+  outline-offset: 2px;
+}
+
+@media (max-width: 960px) {
+  .tm.trip-drawer,
+  .tm.trip-drawer.is-wide {
+    width: auto;
+  }
+  .tm.split-editor.is-polar {
+    top: calc(var(--nav-h) + 0.75rem);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    border-radius: var(--wd-radius-card) var(--wd-radius-card) 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .td-detail,
+  .td-bubble,
+  .tm.split-editor.is-polar {
+    animation: none;
+  }
+  .td-bubble.is-typing span {
+    animation: none;
+  }
+}

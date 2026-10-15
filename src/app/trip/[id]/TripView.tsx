@@ -1,26 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { TriangleAlert } from "lucide-react";
-import ItineraryCard from "@/components/ItineraryCard";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { fitMessage } from "@/components/AnchorReceipt";
 import { useStoryControls } from "@/lib/storyMode";
-import { PlayIcon } from "@/components/icons";
 import FocusEditMode from "@/components/FocusEditMode";
+import SplitEditor from "@/components/SplitEditor";
 import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
-import { DayEditUpdates } from "@/components/DayHeader";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import DockedPanel from "@/components/DockedPanel";
-import ErrorNote from "@/components/ErrorNote";
+import TripBoard, { type BoardShape } from "@/components/polar/trip/TripBoard";
 import { Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
-import { useGlobeOnScreen } from "@/lib/mapCamera";
+import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
 import { dayPlanned, daySpend, findStopLocation, upcomingStopsAfter } from "@/lib/itinerary";
-import { formatMoney } from "@/lib/format";
 import { devLabel } from "@/lib/devInspector";
 import { clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
-import { DRAFT_TTL_DAYS } from "@/lib/drafts";
+
+import "@/components/polar/PolarLanding.css";
+import "@/components/polar/trip/TripBoard.css";
+import "@/components/polar/trip/TripDrawer.css";
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -29,7 +27,7 @@ function errorMessage(e: unknown, fallback: string): string {
 
 type ActualCostTarget = "lodging" | number;
 
-/** When the itinerary has stops, ItineraryCard's own effect frames the day's route — so the
+/** When the itinerary has stops, TripBoard's own effect frames the day's route — so the
  *  destination flight must be suppressed or it lands second and clobbers that framing. */
 const hasStops = (itinerary?: Itinerary | null) =>
   !!itinerary?.days.some((d) => d.stops.length > 0);
@@ -52,10 +50,11 @@ export default function TripView({
   // Owned here, not inside ItineraryCard: opening a stop's detail unmounts the card, so local
   // state there would reset the view to Day 1 on the way back.
   const [activeDayIndex, setActiveDayIndex] = useState(0);
-  /** Shut on arrival, same as the result view: a saved trip opens on its own clustered map and
-   *  the plan is one click away. Owned here because `ItineraryCard` reads it too — see the
-   *  `panelCollapsed` prop. */
-  const [planCollapsed, setPlanCollapsed] = useState(true);
+  /** The board shut to its ticket: the map then shows the whole trip, each day in its colour. The
+   *  board opens on arrival, because it sits along the foot and leaves the map above it clear. */
+  const [planShut, setPlanShut] = useState(false);
+  /** The full editor, open as the right-hand drawer. */
+  const [editOpen, setEditOpen] = useState(false);
   // Story mode, for the capsule's Play button. Read from context rather than owned here — there
   // is one film at a time and it belongs to the app (`storyMode.tsx`), so this and the card's own
   // Play button are the same control reached from two places.
@@ -83,6 +82,14 @@ export default function TripView({
     detailLoading,
     detailError,
   } = useTripCamera(trip?.destination ?? "", trip?.id);
+
+  // While a film plays, the player bar's "Open this stop" shows the stop in the drawer, leaving the
+  // film's camera where the beat put it.
+  const { setStopOpener } = story;
+  useEffect(() => {
+    setStopOpener((stop) => selectStop(stop, { stayPut: true }));
+    return () => setStopOpener(null);
+  }, [setStopOpener, selectStop]);
 
   // This route is the globe, for its whole life. `not-found.tsx` and `/trip/latest`'s empty-DB
   // card are separate components that never mount this one — which is exactly why the gate is a
@@ -208,15 +215,6 @@ export default function TripView({
     persist(next).catch((e) => setError(errorMessage(e, "That change didn't save.")));
   }
 
-  function handleEditDay(dayIndex: number, updates: DayEditUpdates) {
-    if (!itinerary) return;
-    const updated: Itinerary = structuredClone(itinerary);
-    Object.assign(updated.days[dayIndex], updates);
-    setItinerary(updated);
-    setError(null);
-    persist(updated).catch((e) => setError(errorMessage(e, "That change didn't save.")));
-  }
-
   function handleStopActualCostChange(value: number | undefined) {
     if (!itinerary || !selectedStop) return;
     const loc = findStopLocation(itinerary, selectedStop);
@@ -272,232 +270,183 @@ export default function TripView({
   const overspendDayIndex = itinerary
     ? itinerary.days.findIndex((day, i) => !dismissedDays.has(i) && daySpend(day) > dayPlanned(day))
     : -1;
-  const hasOverspend = overspendDayIndex !== -1;
-  const overspendRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (hasOverspend) overspendRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [hasOverspend]);
+
+  /**
+   * One drawer at a time on the right, and the order is the order of intent: a refine in progress
+   * outranks the editor, and either outranks a stop's detail (a marker clicked mid-edit should not
+   * pull the chat away).
+   */
+  const drawer: "refine" | "edit" | "detail" | null =
+    focus.target && focus.draft ? "refine" : editOpen ? "edit" : selectedStop ? "detail" : null;
+  const shape: BoardShape = story.active ? "hidden" : drawer ? "strip" : planShut ? "ticket" : "board";
+
+  /**
+   * Tell the map how much of the screen is the plan's. The board along the foot is a bottom inset
+   * (`setViewPadding`, honoured by MapLibre; Cesium centres in the full view and draws the day
+   * partly behind the board, see docs/frontend.md), and the drawer is found by the camera itself
+   * through its `.docked-panel` class (`panelLeftEdgePx`). The same two numbers move the map's own
+   * controls clear of both, through `--trip-board-h` and `--trip-drawer-w` (globals.css).
+   */
+  const { setViewPadding } = useMapCamera();
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const foot = document.querySelector<HTMLElement>(story.active ? ".story-player .sp-bar" : ".trip-board, .tb-shut");
+      const side = document.querySelector<HTMLElement>(".trip-drawer, .split-editor");
+      const bottom = foot ? Math.max(0, Math.round(window.innerHeight - foot.getBoundingClientRect().top + 16)) : 0;
+      setViewPadding({ left: 0, bottom });
+      root.style.setProperty("--trip-board-h", `${bottom}px`);
+      root.style.setProperty("--trip-drawer-w", side ? `${Math.round(side.getBoundingClientRect().width)}px` : "0px");
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    schedule();
+    // Once more after the board's own 0.5s rise, which a rect read mid-transform gets wrong.
+    const settle = window.setTimeout(schedule, 560);
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [shape, drawer, story.active, setViewPadding]);
+  useEffect(
+    () => () => {
+      setViewPadding(null);
+      document.documentElement.style.removeProperty("--trip-board-h");
+      document.documentElement.style.removeProperty("--trip-drawer-w");
+    },
+    [setViewPadding]
+  );
+
+  async function saveRefine() {
+    const committed = focus.save();
+    if (!committed) return;
+    setSavingFocus(true);
+    setItinerary(committed);
+    setError(null);
+    try {
+      await persist(committed);
+    } catch (e) {
+      setError(errorMessage(e, "That change didn't save."));
+    } finally {
+      setSavingFocus(false);
+    }
+  }
 
   return (
-    <main className="dashboard-page min-h-full">
-      {/* Same bounded, right-docked panel the home page's result view uses — keeps
-          every "content over the globe" surface visually consistent. */}
-      <DockedPanel
-        collapsible
-        // The panel stays on screen through the film, shut to its capsule — that single clean line
-        // is the film's own header (destination, length, day), and `StoryStage` docks directly
-        // beneath it. Its body is already `display: none` while collapsed, so there is nothing to
-        // hide.
-        capsuleAction={
-          // Gone while the film runs: the button does not sit here and there, it *leaves* — see
-          // the note on `StoryStage`'s own copy of it, which is the one it flies into.
-          itinerary?.days.length && !story.active
-            ? {
-                label: `Play day ${activeDayIndex + 1} as a story`,
-                onClick: () =>
-                  trip &&
-                  itinerary &&
-                  story.start({
-                    itinerary,
-                    dayIndex: activeDayIndex,
-                    destination: trip.destination,
-                    tripId: trip.id,
-                  }),
-                icon: <PlayIcon className="h-4 w-4" />,
-              }
-            : undefined
-        }
-        wide={!!focus.target}
-        collapsed={planCollapsed}
-        // Opening the plan mid-film ends the film. The two are alternatives for the same column,
-        // and a full itinerary sliding over a camera that is still flying is neither.
-        onCollapsedChange={(next) => {
-          if (!next && story.active) story.exit();
-          setPlanCollapsed(next);
-        }}
-        // What the capsule carries while the panel is shut — the trip at a glance, so
-        // "which day was I reading" survives a look at the map.
-        capsule={
-          trip
-            ? {
-                title: trip.destination,
-                subtitle: itinerary?.days.length
-                  ? `${itinerary.days.length} ${itinerary.days.length === 1 ? "day" : "days"}`
-                  : undefined,
-                step: itinerary?.days.length ? `Day ${activeDayIndex + 1}` : undefined,
-              }
-            : undefined
-        }
-      >
-        <div className="space-y-4" {...devLabel("ResultPanel")}>
-          {error && <ErrorNote>{error}</ErrorNote>}
-          {!trip && !error && <p className="text-sm text-muted">Loading…</p>}
+    <main className={`trip-page${drawer ? " has-drawer" : ""}`} {...devLabel("TripPage")}>
+      {error && (
+        <p className="tm trip-error" role="alert">
+          {error}
+        </p>
+      )}
+      {!trip && !error && <p className="tm trip-loading">Loading…</p>}
 
-          {/* Above the overspend banner and everything else in the panel, because it is the one
-              thing on this page with a deadline. Every edit made here is already persisted to the
-              draft row — this asks only whether to keep it past the sweep. */}
-          {trip?.status === "draft" && (
-            <div className="glass-itinerary flex flex-col items-start justify-between gap-3 rounded-2xl p-4 text-sm sm:flex-row sm:items-center">
-              <div>
-                <p className="font-semibold text-foreground">This plan is still a draft.</p>
-                <p className="text-muted">
-                  Your changes are saved as you make them, but unkept drafts are cleared after{" "}
-                  {DRAFT_TTL_DAYS} days.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={keepTrip}
-                disabled={keeping}
-                className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-accent px-4 text-sm font-medium text-accent-foreground shadow-sm transition-all duration-150 hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:scale-[0.98] disabled:opacity-50"
-              >
-                {keeping ? "Keeping…" : "Keep this trip"}
-              </button>
-            </div>
-          )}
-
-          {hasOverspend && itinerary && (
-            <div
-              ref={overspendRef}
-              role="status"
-              className="glass-itinerary flex flex-col items-start justify-between gap-3 rounded-2xl border p-4 text-sm sm:flex-row sm:items-center"
-              style={{ borderColor: "rgba(239, 68, 68, 0.3)" }}
-            >
-              <div className="flex items-start gap-3">
-                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-alert" strokeWidth={2} />
-                <div>
-                  <p className="font-semibold text-alert tabular-nums">
-                    Day {overspendDayIndex + 1} ran{" "}
-                    {formatMoney(
-                      daySpend(itinerary.days[overspendDayIndex]) -
-                        dayPlanned(itinerary.days[overspendDayIndex])
-                    )}{" "}
-                    over plan
-                  </p>
-                  <p className="text-muted">Rebalance the rest of the trip?</p>
-                </div>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDismissedDays((prev) => new Set(prev).add(overspendDayIndex))}
-                  disabled={rebalancingDay === overspendDayIndex}
-                  className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-alert transition-colors hover:bg-alert-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-alert/60 disabled:opacity-50"
-                >
-                  Dismiss
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleRebalance(overspendDayIndex)}
-                  disabled={rebalancingDay === overspendDayIndex}
-                  className="inline-flex min-h-11 items-center rounded-full bg-alert px-3 text-sm font-medium text-white transition-all duration-150 hover:bg-alert/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-alert/60 active:scale-[0.98] disabled:opacity-50"
-                >
-                  {rebalancingDay === overspendDayIndex ? "Rebalancing…" : "Rebalance"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Focus Mode replaces the result card entirely — the standard view's budget bar, day
-              tabs and cost footers simply aren't rendered while editing. */}
-          {trip && focus.target && focus.draft && (
-            <FocusEditMode
-              trip={trip}
-              userAnswers={trip.userAnswers ?? null}
-              draft={focus.draft}
-              dayIndex={focus.target.dayIndex}
-              scope={focus.target.scope}
-              tripId={trip.id}
-              sessionId={trip.chatSessionId ?? null}
-              initialMessage={focus.target.initialMessage}
-              dirty={focus.dirty}
-              saving={savingFocus}
-              onDaysModified={(days) =>
-                setUnseenChangedDays((prev) =>
-                  markUnseenDays(days, focus.target?.dayIndex ?? activeDayIndex, prev)
-                )
-              }
-              onDraftChange={focus.applyDraft}
-              onCancel={focus.cancel}
-              onSave={async () => {
-                const committed = focus.save();
-                if (!committed) return;
-                setSavingFocus(true);
-                setItinerary(committed);
-                setError(null);
-                try {
-                  await persist(committed);
-                } catch (e) {
-                  setError(errorMessage(e, "That change didn't save."));
-                } finally {
-                  setSavingFocus(false);
+      {trip && itinerary && (
+        <TripBoard
+          trip={trip}
+          itinerary={itinerary}
+          dayIndex={activeDayIndex}
+          onDayChange={(next) => {
+            setActiveDayIndex(next);
+            // Looking at the day is what marks it read.
+            setUnseenChangedDays((prev) => clearUnseenDay(prev, next));
+          }}
+          shape={shape}
+          unseenChangedDays={unseenChangedDays}
+          drawerOpen={!!drawer}
+          onSelectStop={selectStop}
+          // One chat surface with day navigation, starting on the day it was opened from.
+          onRefine={(dayIndex) => {
+            closeDetail();
+            setEditOpen(false);
+            focus.open(dayIndex, "trip");
+          }}
+          onEdit={() => {
+            closeDetail();
+            setEditOpen(true);
+          }}
+          onFitAnchor={(name) => focus.open(activeDayIndex, "trip", fitMessage(name))}
+          onShut={() => setPlanShut(true)}
+          onOpen={() => setPlanShut(false)}
+          onKeep={keepTrip}
+          keeping={keeping}
+          // Re-read the row rather than toggling a local copy of `shared`, so the control cannot
+          // end up disagreeing with the database after a failed request.
+          onShareChange={() => {
+            fetch(`/api/trips/${id}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((next) => next && setTrip(next))
+              .catch(() => {});
+          }}
+          onLodgingActualCost={(dayIndex, value) => handleActualCostChange(dayIndex, "lodging", value)}
+          overspend={
+            overspendDayIndex !== -1 && itinerary
+              ? {
+                  dayIndex: overspendDayIndex,
+                  amount: daySpend(itinerary.days[overspendDayIndex]) - dayPlanned(itinerary.days[overspendDayIndex]),
+                  rebalancing: rebalancingDay === overspendDayIndex,
+                  onRebalance: () => handleRebalance(overspendDayIndex),
+                  onDismiss: () => setDismissedDays((prev) => new Set(prev).add(overspendDayIndex)),
                 }
-              }}
-            />
-          )}
+              : null
+          }
+        />
+      )}
 
-          {/* Kept mounted (not unmounted) behind the stop-detail panel below, so the active day
-              and this panel's scroll position both survive the round trip instead of resetting
-              when ItineraryCard remounts. */}
-          {!focus.target && (
-            <div className={selectedStop ? "hidden" : "space-y-4"}>
-              {trip && itinerary && (
-                <ItineraryCard
-                  itinerary={itinerary}
-                  budget={trip.budget}
-                  destination={trip.destination}
-                  onSelectStop={selectStop}
-                  editable
-                  onLodgingActualCostChange={(dayIndex, value) =>
-                    handleActualCostChange(dayIndex, "lodging", value)
-                  }
-                  activeDayIndex={activeDayIndex}
-                  unseenChangedDays={unseenChangedDays}
-                  onActiveDayChange={(next) => {
-                    setActiveDayIndex(next);
-                    // Looking at the day is what marks it read.
-                    setUnseenChangedDays((prev) => clearUnseenDay(prev, next));
-                  }}
-                  onEditDay={handleEditDay}
-                  // Same window "Refine with AI" opens, just starting on the day whose icon was
-                  // clicked: one chat surface with day navigation, rather than a second
-                  // day-locked variant that looked identical but couldn't reach other days.
-                  onChatDay={(dayIndex) => focus.open(dayIndex, "trip")}
-                  onFitAnchor={(name) => focus.open(activeDayIndex, "trip", fitMessage(name))}
-                  onItineraryChange={handleRearrange}
-                  trip={trip}
-                  // Re-read the row rather than toggling a local copy of `shared`: the control
-                  // already knows what it did, and a second source of that truth is how the
-                  // button ends up disagreeing with the database after a failed request.
-                  onShareChange={() => {
-                    fetch(`/api/trips/${id}`)
-                      .then((r) => (r.ok ? r.json() : null))
-                      .then((next) => next && setTrip(next))
-                      .catch(() => {});
-                  }}
-                  panelCollapsed={planCollapsed}
-                  onMinimize={() => setPlanCollapsed(true)}
-                />
-              )}
+      {/* The drawer: a stop's detail, or Refine with AI, on Polar ice. `.docked-panel` is what the
+          camera measures to aim beside it, and what keeps the overlay click-through around it. */}
+      {/* A stop's detail may open during a film, from the player bar; Refine and Edit cannot. */}
+      {trip && itinerary && (drawer === "detail" || (drawer === "refine" && !story.active)) && (
+        <aside className={`tm docked-panel trip-drawer${drawer === "refine" ? " is-wide" : ""}`} data-appearance="light" aria-label={drawer === "refine" ? "Refine with AI" : "About this stop"}>
+          <div className="trip-drawer-body">
+            {drawer === "refine" && focus.target && focus.draft && (
+              <FocusEditMode
+                polar
+                trip={trip}
+                userAnswers={trip.userAnswers ?? null}
+                draft={focus.draft}
+                dayIndex={focus.target.dayIndex}
+                scope={focus.target.scope}
+                tripId={trip.id}
+                sessionId={trip.chatSessionId ?? null}
+                initialMessage={focus.target.initialMessage}
+                dirty={focus.dirty}
+                saving={savingFocus}
+                onDaysModified={(days) =>
+                  setUnseenChangedDays((prev) => markUnseenDays(days, focus.target?.dayIndex ?? activeDayIndex, prev))
+                }
+                onDraftChange={focus.applyDraft}
+                onCancel={focus.cancel}
+                onSave={saveRefine}
+              />
+            )}
+            {drawer === "detail" && selectedStop && (
+              <PlaceDetailPanel
+                polar
+                stop={selectedStop}
+                detail={detail}
+                loading={detailLoading}
+                error={detailError}
+                onBack={() => closeDetail({ stayPut: story.active })}
+                actualCost={selectedStop.actualCost}
+                onActualCostChange={handleStopActualCostChange}
+                upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
+                onSelectUpcoming={(stop) => selectStop(stop, { stayPut: story.active })}
+              />
+            )}
+          </div>
+        </aside>
+      )}
 
-            </div>
-          )}
-
-          {trip && itinerary && selectedStop && (
-            <PlaceDetailPanel
-              stop={selectedStop}
-              detail={detail}
-              loading={detailLoading}
-              error={detailError}
-              onBack={closeDetail}
-              actualCost={selectedStop.actualCost}
-              onActualCostChange={handleStopActualCostChange}
-              upcomingStops={upcomingStopsAfter(itinerary, selectedStop)}
-              onSelectUpcoming={selectStop}
-            />
-          )}
-        </div>
-      </DockedPanel>
+      {/* The full editor is its own fixed panel in the same place; it portals itself out. */}
+      {trip && itinerary && drawer === "edit" && !story.active && (
+        <SplitEditor trip={trip} itinerary={itinerary} onItineraryChange={handleRearrange} onClose={() => setEditOpen(false)} appearance="light" />
+      )}
     </main>
   );
 }

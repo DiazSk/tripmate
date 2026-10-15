@@ -75,7 +75,10 @@ export default function PlaceDetailPanel({
   onActualCostChange,
   upcomingStops,
   onSelectUpcoming,
+  polar = false,
 }: {
+  /** Drawn in Polar on ice (the trip page's drawer, canvas "Trip page · B"). Same tabs, same content. */
+  polar?: boolean;
   stop: Stop;
   detail: PlaceDetail | null;
   loading: boolean;
@@ -170,6 +173,71 @@ export default function PlaceDetailPanel({
 
   const meta = [stop.time, stop.durationLabel, stop.category].filter(Boolean);
 
+  const tabList = (className: string, tabClass: (on: boolean) => string) => (
+    <div role="tablist" aria-label={`About ${stop.name}`} aria-orientation="horizontal" className={className}>
+      {tabs.map(([id, label], i) => (
+        <button
+          key={id}
+          ref={(el) => {
+            tabRefs.current[i] = el;
+          }}
+          type="button"
+          role="tab"
+          id={`place-tab-${id}`}
+          aria-selected={active === id}
+          aria-controls="place-tabpanel"
+          tabIndex={active === id ? 0 : -1}
+          onClick={() => setActive(id)}
+          onKeyDown={onTabKeyDown}
+          className={tabClass(active === id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  const tabPanel = (className: string) => (
+    <div id="place-tabpanel" role="tabpanel" aria-labelledby={`place-tab-${active}`} tabIndex={-1} className={className}>
+      {active === "overview" && <Overview stop={stop} detail={detail} loading={loading} error={error} gallery={gallery} />}
+      {active === "verdict" && detail && <Verdict detail={detail} />}
+      {active === "practical" && <Practical gallery={gallery} stop={stop} />}
+      {active === "plan" && (
+        <InYourPlan
+          stop={stop}
+          actualCost={actualCost}
+          onActualCostChange={onActualCostChange}
+          numberFieldClass={numberFieldClass}
+          upcomingStops={upcomingStops}
+          onSelectUpcoming={onSelectUpcoming}
+        />
+      )}
+    </div>
+  );
+
+  // The canvas's order: back, the photographs, the when, the name in the display face, where the
+  // pin stands, then the tabs on a hairline with the signal under the open one.
+  if (polar) {
+    return (
+      <div className="td-detail" {...devLabel("PlaceDetailPanel")}>
+        <button type="button" className="td-back" onClick={onBack}>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Back to itinerary
+        </button>
+        <PlaceMosaic gallery={gallery} name={stop.name} />
+        {meta.length > 0 && <p className="td-eyebrow">{meta.join(" · ")}</p>}
+        <h1 ref={headingRef} tabIndex={-1} className="td-title">
+          {stop.name}
+        </h1>
+        {stop.note && <p className="td-note">{stop.note}</p>}
+        {locationNote(stop.located) && <p className="td-prov">{locationNote(stop.located)!.value}</p>}
+        {tabList("td-tabs", () => "")}
+        {tabPanel("td-prose")}
+      </div>
+    );
+  }
+
   return (
     // No `overflow-hidden` anywhere on this card, and the photo mosaic is inset rather than bled to
     // the corners *because* of that: the tab bar below is `position: sticky`, and an `overflow` on
@@ -222,61 +290,14 @@ export default function PlaceDetailPanel({
           the panel had no sticky anything before this, and the back button scrolled away with
           everything else. `.docked-panel-body` is the scroller this sticks inside. */}
       <div className="glass-itinerary sticky top-0 z-10 mt-5 border-b border-card-border px-5 sm:px-6">
-        <div
-          role="tablist"
-          aria-label={`About ${stop.name}`}
-          aria-orientation="horizontal"
-          className="scrollbar-none -mb-px flex gap-1 overflow-x-auto"
-        >
-          {tabs.map(([id, label], i) => (
-            <button
-              key={id}
-              ref={(el) => {
-                tabRefs.current[i] = el;
-              }}
-              type="button"
-              role="tab"
-              id={`place-tab-${id}`}
-              aria-selected={active === id}
-              aria-controls="place-tabpanel"
-              tabIndex={active === id ? 0 : -1}
-              onClick={() => setActive(id)}
-              onKeyDown={onTabKeyDown}
-              className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset ${
-                active === id
-                  ? "border-accent text-foreground"
-                  : "border-transparent text-muted hover:text-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {tabList("scrollbar-none -mb-px flex gap-1 overflow-x-auto", (on) =>
+          `min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset ${
+            on ? "border-accent text-foreground" : "border-transparent text-muted hover:text-foreground"
+          }`
+        )}
       </div>
 
-      <div
-        id="place-tabpanel"
-        role="tabpanel"
-        aria-labelledby={`place-tab-${active}`}
-        tabIndex={-1}
-        className="px-5 pt-5 pb-5 text-sm focus-visible:outline-none sm:px-6 sm:pb-6"
-      >
-        {active === "overview" && (
-          <Overview stop={stop} detail={detail} loading={loading} error={error} gallery={gallery} />
-        )}
-        {active === "verdict" && detail && <Verdict detail={detail} />}
-        {active === "practical" && <Practical gallery={gallery} stop={stop} />}
-        {active === "plan" && (
-          <InYourPlan
-            stop={stop}
-            actualCost={actualCost}
-            onActualCostChange={onActualCostChange}
-            numberFieldClass={numberFieldClass}
-            upcomingStops={upcomingStops}
-            onSelectUpcoming={onSelectUpcoming}
-          />
-        )}
-      </div>
+      {tabPanel("px-5 pt-5 pb-5 text-sm focus-visible:outline-none sm:px-6 sm:pb-6")}
     </div>
   );
 }

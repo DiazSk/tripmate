@@ -24,6 +24,7 @@ import { evaluateItinerary } from "@/lib/guardrails";
 import { insertionIndexByTime, moveStop } from "@/lib/schedule";
 import { dayDropId, dropCollision, parseDragId, useDayDwellSwitch } from "@/lib/dragDrop";
 import { devLabel } from "@/lib/devInspector";
+import { formatItineraryDate } from "@/lib/itinerary";
 
 /** Stops the last turn added OR edited in place. Name alone isn't enough: a turn that shifts a
  *  stop's time or rewrites its note changes nothing about the name, and that edit still needs to
@@ -67,11 +68,13 @@ function DayStepButton({
   label,
   onClick,
   children,
+  polar,
 }: {
   disabled: boolean;
   label: string;
   onClick: () => void;
   children: React.ReactNode;
+  polar?: boolean;
 }) {
   return (
     <button
@@ -80,7 +83,7 @@ function DayStepButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="shrink-0 rounded-full p-1.5 text-muted transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-30"
+      className={polar ? "td-icon" : "shrink-0 rounded-full p-1.5 text-muted transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-30"}
     >
       {children}
     </button>
@@ -100,12 +103,14 @@ function DayDropChip({
   isActive,
   dragging,
   onClick,
+  polar,
 }: {
   dayIndex: number;
   date: string;
   isActive: boolean;
   dragging: boolean;
   onClick: () => void;
+  polar?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: dayDropId(dayIndex) });
   return (
@@ -115,7 +120,9 @@ function DayDropChip({
       onClick={onClick}
       aria-current={isActive ? "true" : undefined}
       title={dragging ? `Hold to open day ${dayIndex + 1}, or drop to move it here` : `Day ${dayIndex + 1}, ${date}`}
-      className={`h-7 min-w-7 shrink-0 rounded-full px-2 text-xs font-medium transition-all ${
+      data-over={isOver || undefined}
+      data-dragging={dragging || undefined}
+      className={polar ? "td-chip" : `h-7 min-w-7 shrink-0 rounded-full px-2 text-xs font-medium transition-all ${
         isOver
           ? "bg-accent text-accent-foreground ring-2 ring-accent"
           : isActive
@@ -155,7 +162,10 @@ export default function FocusEditMode({
   onSave,
   onCancel,
   initialMessage,
+  polar = false,
 }: {
+  /** Drawn in Polar on ice (the trip page's drawer, canvas "Trip page · B"); the glass card otherwise. */
+  polar?: boolean;
   trip: TripSummary;
   userAnswers?: UserAnswers | null;
   draft: Itinerary;
@@ -223,6 +233,9 @@ export default function FocusEditMode({
 
   if (!day) return null;
 
+  /** The glass card's classes, or the Polar drawer's. Same elements, same behaviour. */
+  const k = (glass: string, polarClass: string) => (polar ? polarClass : glass);
+
   /** Reorder inside the previewed day, or hand the stop to another day via the stepper arrows. */
   const onDragEnd = (event: DragEndEvent) => {
     dwell.clear();
@@ -271,19 +284,19 @@ export default function FocusEditMode({
 
   return (
     <section
-      className="glass-itinerary pointer-events-auto flex h-[min(78vh,760px)] flex-col overflow-hidden rounded-2xl"
+      className={k("glass-itinerary pointer-events-auto flex h-[min(78vh,760px)] flex-col overflow-hidden rounded-2xl", "td-refine")}
       aria-label={scope === "trip" ? "Refining the whole trip" : `Editing day ${dayIndex + 1}`}
       {...devLabel("FocusEditMode")}
     >
-      <header className="flex items-center justify-between gap-3 border-b border-card-border px-4 py-3">
+      <header className={k("flex items-center justify-between gap-3 border-b border-card-border px-4 py-3", "td-refine-head")}>
         <div className="min-w-0">
           {/* In trip scope this used to read "Editing Day 1" no matter which day a turn actually
               changed, which made a whole-trip refine look day-scoped. */}
-          <h3 className="truncate font-display text-base font-semibold text-foreground">
+          <h3 className={k("truncate font-display text-base font-semibold text-foreground", "td-eyebrow")}>
             {scope === "trip" ? (
               <>
                 Refining your trip
-                <span className="font-normal text-muted">
+                <span className={k("font-normal text-muted", "")}>
                   {" "}
                   · {dayCount} day{dayCount > 1 ? "s" : ""}
                 </span>
@@ -291,23 +304,23 @@ export default function FocusEditMode({
             ) : (
               <>
                 Editing Day {dayIndex + 1}
-                <span className="font-normal text-muted"> · {day.date}</span>
+                <span className={k("font-normal text-muted", "")}> · {day.date}</span>
               </>
             )}
           </h3>
-          <p className="mt-0.5 text-xs text-muted">
+          <p className={k("mt-0.5 text-xs text-muted", "td-sub")}>
             {scope === "trip"
               ? `Any day · showing day ${previewIndex + 1} of ${dayCount}`
               : "Changes stay on this day"}
-            {dirty && <span className="text-accent"> · unsaved changes</span>}
+            {dirty && <em className={k("not-italic text-accent", "")}> · unsaved changes</em>}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className={k("flex shrink-0 items-center gap-2", "td-refine-actions")}>
           <button
             type="button"
             onClick={onSave}
-            disabled={saving}
-            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            disabled={saving || (polar && !dirty)}
+            className={k("rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50", "td-signal")}
           >
             {saving ? "Saving…" : "Save changes"}
           </button>
@@ -316,7 +329,7 @@ export default function FocusEditMode({
             onClick={() => (dirty ? setConfirmingCancel(true) : onCancel())}
             aria-label="Cancel editing"
             title={dirty ? "Discard changes" : "Close"}
-            className="rounded-md p-1.5 text-muted transition-colors hover:bg-white/10 hover:text-foreground"
+            className={k("rounded-md p-1.5 text-muted transition-colors hover:bg-white/10 hover:text-foreground", "td-icon")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -325,22 +338,22 @@ export default function FocusEditMode({
 
       {/* Discarding real work should take a deliberate second action, not a stray click on ✕. */}
       {confirmingCancel && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-alert/30 bg-alert-soft px-4 py-2.5">
-          <p className="text-sm text-foreground">
+        <div className={k("flex flex-wrap items-center justify-between gap-2 border-b border-alert/30 bg-alert-soft px-4 py-2.5", "td-strip")}>
+          <p className={k("text-sm text-foreground", "")}>
             Discard the changes you made to {scope === "trip" ? "this trip" : "this day"}?
           </p>
-          <div className="flex gap-2">
+          <div className={k("flex gap-2", "td-strip-actions")}>
             <button
               type="button"
               onClick={() => setConfirmingCancel(false)}
-              className="rounded-full px-3 py-1.5 text-xs font-medium text-muted hover:bg-white/10"
+              className={k("rounded-full px-3 py-1.5 text-xs font-medium text-muted hover:bg-white/10", "td-quiet")}
             >
               Keep editing
             </button>
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-full bg-alert/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-alert"
+              className={k("rounded-full bg-alert/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-alert", "td-danger")}
             >
               Discard
             </button>
@@ -351,15 +364,15 @@ export default function FocusEditMode({
       {/* "Are you done?" — surfaced only once something has actually changed, so the answer is
           always meaningful. Saving from here is the same action as the header button. */}
       {dirty && !confirmingCancel && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-accent/25 bg-accent/10 px-4 py-2.5">
-          <p className="text-sm text-foreground">
+        <div className={k("flex flex-wrap items-center justify-between gap-2 border-b border-accent/25 bg-accent/10 px-4 py-2.5", "td-strip is-good")}>
+          <p className={k("text-sm text-foreground", "")}>
             {scope === "trip" ? "Trip" : "Day"} updated. Happy with it?
           </p>
           <button
             type="button"
             onClick={onSave}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-90 disabled:opacity-50"
+            className={k("inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-90 disabled:opacity-50", "td-signal")}
           >
             <Check className="h-3.5 w-3.5" />
             {saving ? "Saving…" : "Yes, save it"}
@@ -368,16 +381,19 @@ export default function FocusEditMode({
       )}
 
       {/* Pane switcher, small screens only. */}
-      <div className="flex gap-1 border-b border-card-border px-3 py-2 lg:hidden">
+      <div className={k("flex gap-1 border-b border-card-border px-3 py-2 lg:hidden", "td-panes lg:hidden")}>
         {(["chat", "preview"] as const).map((pane) => (
           <button
             key={pane}
             type="button"
             onClick={() => setMobilePane(pane)}
             aria-pressed={mobilePane === pane}
-            className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
-              mobilePane === pane ? "bg-accent text-accent-foreground" : "bg-white/10 text-muted"
-            }`}
+            className={k(
+              `rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
+                mobilePane === pane ? "bg-accent text-accent-foreground" : "bg-white/10 text-muted"
+              }`,
+              ""
+            )}
           >
             {pane}
           </button>
@@ -404,9 +420,10 @@ export default function FocusEditMode({
         }}
         onDragEnd={onDragEnd}
       >
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-white/10">
+      <div className={k("grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-white/10", "td-refine-split grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]")}>
         <div className={`min-h-0 ${mobilePane === "chat" ? "" : "hidden"} lg:block`}>
           <EditChatPanel
+            polar={polar}
             trip={trip}
             userAnswers={userAnswers}
             itinerary={draft}
@@ -427,17 +444,18 @@ export default function FocusEditMode({
             }}
           />
         </div>
-        <div className={`flex min-h-0 flex-col ${mobilePane === "preview" ? "" : "hidden"} lg:flex`}>
+        <div className={`${k("", "td-preview ")}flex min-h-0 flex-col ${mobilePane === "preview" ? "" : "hidden"} lg:flex${polar && busy ? " is-busy" : ""}`}>
           {/* A whole-trip refine can change any day, so the preview has to reach any day. Without
               this the pane was pinned to the day the user happened to open from. The arrows double
               as drop targets while a stop is in flight. */}
           {canBrowseDays && (
-            <div className="border-b border-card-border px-3 py-2">
+            <div className={k("border-b border-card-border px-3 py-2", "td-preview-head")}>
               <div className="flex items-center gap-2">
                 <DayStepButton
                   disabled={previewIndex === 0}
                   label="Preview previous day"
                   onClick={() => setPreviewDayIndex(Math.max(0, previewIndex - 1))}
+                  polar={polar}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </DayStepButton>
@@ -454,6 +472,7 @@ export default function FocusEditMode({
                       isActive={i === previewIndex}
                       dragging={dragging !== null}
                       onClick={() => setPreviewDayIndex(i)}
+                      polar={polar}
                     />
                   ))}
                 </div>
@@ -461,15 +480,20 @@ export default function FocusEditMode({
                   disabled={previewIndex === dayCount - 1}
                   label="Preview next day"
                   onClick={() => setPreviewDayIndex(Math.min(dayCount - 1, previewIndex + 1))}
+                  polar={polar}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </DayStepButton>
               </div>
               {/* Always rendered, whatever it says: swapping this line in and out mid-drag would
                   change the header's height and shift every drop target above the list. */}
-              <p className="mt-1 truncate text-center text-[0.6875rem] text-muted/80">
+              <p className={k("mt-1 truncate text-center text-[0.6875rem] text-muted/80", "td-preview-line")}>
                 {dragging !== null ? (
-                  <span className="text-accent">Hold over a day to open it, then drop where you want</span>
+                  <span className={k("text-accent", "td-hint")}>Hold over a day to open it, then drop where you want</span>
+                ) : polar ? (
+                  <>
+                    <b>Day {previewIndex + 1} preview</b> · {formatItineraryDate(day.date)}
+                  </>
                 ) : (
                   <>
                     Day {previewIndex + 1} of {dayCount} · {day.date}
@@ -485,17 +509,18 @@ export default function FocusEditMode({
               changed={changed}
               busy={busy}
               draggable={!busy}
+              polar={polar}
             />
 
             {/* Guardrails on the draft, so a drag is judged before it is ever saved. */}
             {findings.length > 0 && (
-              <ul className="space-y-1.5 px-4 pb-3">
+              <ul className={k("space-y-1.5 px-4 pb-3", "td-findings")}>
                 {findings.map((finding, i) => (
                   <li
                     key={i}
-                    className="flex gap-1.5 rounded-lg bg-alert-soft px-2.5 py-2 text-xs text-alert/75"
+                    className={k("flex gap-1.5 rounded-lg bg-alert-soft px-2.5 py-2 text-xs text-alert/75", "")}
                   >
-                    <span aria-hidden="true">⚠️</span>
+                    {!polar && <span aria-hidden="true">⚠️</span>}
                     <span>{finding.message}</span>
                   </li>
                 ))}
@@ -508,7 +533,7 @@ export default function FocusEditMode({
       {/* Portalled so the dragged row isn't clipped by the preview pane's own scroll box. */}
       <DragOverlay dropAnimation={null}>
         {dragging && (
-          <div className="pointer-events-none rounded-lg border border-accent/40 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-1.5 text-sm font-medium text-foreground shadow-2xl">
+          <div className={k("pointer-events-none rounded-lg border border-accent/40 bg-[color:var(--surface-deep,#1c1a18)] px-3 py-1.5 text-sm font-medium text-foreground shadow-2xl", "td-drag")}>
             {dragging.stop.name}
           </div>
         )}

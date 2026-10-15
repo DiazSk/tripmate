@@ -39,6 +39,7 @@ import { loadNaturalVoice, naturalVoiceReady, naturalVoiceSupported } from "@/li
 import {
   estimateDurationMs,
   silence,
+  setNarrationVolume,
   speakOn,
   speechAvailable,
   warmVoices,
@@ -46,7 +47,7 @@ import {
   type VoiceEngine,
 } from "@/lib/storyVoice";
 import type { MapRenderer } from "@/lib/mapRenderer";
-import type { DayPlan, Itinerary } from "@/lib/types";
+import type { DayPlan, Itinerary, Stop } from "@/lib/types";
 
 /**
  * Story mode — the itinerary played as a film.
@@ -114,6 +115,11 @@ interface StoryControls {
   prefetch: (request: StoryRequest) => void;
   exit: () => void;
   togglePlay: () => void;
+  /**
+   * A page that can show a stop's detail registers how (the trip page's drawer), and the player
+   * bar offers "Open this stop" only while one is registered. Pass null on the way out.
+   */
+  setStopOpener: (open: ((stop: Stop) => void) | null) => void;
 }
 
 export interface StoryPlayback {
@@ -148,10 +154,19 @@ export interface StoryPlayback {
   naturalProgress: number;
   next: () => void;
   prev: () => void;
+  /** Jump to a beat — the player bar's scrubber and its queue. Plays from that beat's start. */
+  seek: (beatIndex: number) => void;
   togglePlay: () => void;
   toggleMute: () => void;
   /** Narrate a different day without leaving the film — the "next day" offer at the end. */
   playDay: (dayIndex: number) => void;
+  /** The narration's volume, 0 to 1, separate from `muted` the way a player's slider and its mute
+   *  are: muting keeps the level to come back to. */
+  volume: number;
+  /** Moves the level live, without restarting the beat; raising it from a mute unmutes. */
+  setVolume: (volume: number) => void;
+  /** What the page registered through `setStopOpener`, or null where no page shows a stop. */
+  openStop: ((stop: Stop) => void) | null;
   exit: () => void;
 }
 
@@ -397,6 +412,7 @@ const IDLE_CONTROLS: StoryControls = {
   prefetch: () => {},
   exit: () => {},
   togglePlay: () => {},
+  setStopOpener: () => {},
 };
 
 export function StoryModeProvider({ children }: { children: ReactNode }) {
@@ -417,6 +433,8 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<StoryPhase>("loading");
   const [beatIndex, setBeatIndex] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolumeState] = useState(1);
+  const [stopOpener, setStopOpenerState] = useState<((stop: Stop) => void) | null>(null);
   /**
    * Whether this browser can speak, decided once in a lazy initialiser.
    *
@@ -891,6 +909,20 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   }, [script, beatIndex, phase]);
 
   /**
+   * Jump to a beat. Same move as Next and Previous, from anywhere: the effect above re-runs for the
+   * new index, which cancels the sentence in progress and flies the camera, and a seek plays — like
+   * Next while paused, it is a request to hear that place, not a paused view of it.
+   */
+  const seek = useCallback(
+    (target: number) => {
+      if (!script) return;
+      setBeatIndex(Math.max(0, Math.min(script.beats.length - 1, target)));
+      setPhase("playing");
+    },
+    [script]
+  );
+
+  /**
    * Pause, resume, or replay from the top once the film has ended.
    *
    * Resuming **re-speaks the current beat from its beginning** rather than picking up mid-sentence.
@@ -908,6 +940,16 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
   }, [phase]);
 
   const toggleMute = useCallback(() => setMuted((m) => !m), []);
+  const setVolume = useCallback(
+    (next: number) => {
+      setNarrationVolume(next);
+      setVolumeState(next);
+      if (next > 0 && muted) setMuted(false);
+    },
+    [muted]
+  );
+  // A function in state has to be set through the updater form, or React calls it.
+  const setStopOpener = useCallback((open: ((stop: Stop) => void) | null) => setStopOpenerState(() => open), []);
 
   /**
    * Publish "a film is running" on the document element.
@@ -962,8 +1004,9 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       prefetch,
       exit,
       togglePlay,
+      setStopOpener,
     }),
-    [request, phase, start, prefetch, exit, togglePlay]
+    [request, phase, start, prefetch, exit, togglePlay, setStopOpener]
   );
 
   const playback = useMemo<StoryPlayback>(
@@ -979,10 +1022,14 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       naturalProgress,
       next,
       prev,
+      seek,
       togglePlay,
       toggleMute,
       playDay,
       exit,
+      volume,
+      setVolume,
+      openStop: stopOpener,
     }),
     [
       request,
@@ -996,10 +1043,14 @@ export function StoryModeProvider({ children }: { children: ReactNode }) {
       naturalProgress,
       next,
       prev,
+      seek,
       togglePlay,
       toggleMute,
       playDay,
       exit,
+      volume,
+      setVolume,
+      stopOpener,
     ]
   );
 

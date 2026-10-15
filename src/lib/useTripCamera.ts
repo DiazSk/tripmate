@@ -177,7 +177,9 @@ export function useTripCamera(destination: string, tripId?: string) {
   const detailRequestRef = useRef(0);
 
   const selectStop = useCallback(
-    async (stop: Stop) => {
+    /** `stayPut` opens the stop without touching the camera: a film is flying it (story mode's
+     *  "Open this stop"), and the film's own framing of the place is the one to keep. */
+    async (stop: Stop, { stayPut = false }: { stayPut?: boolean } = {}) => {
       setSelectedStop(stop);
       // Mark it selected on the globe as well, which a click on the *marker* has always done
       // (StopMarkerLayer sets the index directly) and a click on the itinerary row never did.
@@ -200,7 +202,7 @@ export function useTripCamera(destination: string, tripId?: string) {
       // Clearing rather than moving the pin is the intended behaviour of a labelless flight (see
       // `flyTo`), and it is what a marker click has always done. A destination pin comes back on
       // the way out: `closeDetail` flies to `destinationCoords` with its name.
-      flyToPlace(stop.lat, stop.lng);
+      if (!stayPut) flyToPlace(stop.lat, stop.lng);
       setDetail(null);
       setDetailError(null);
       setDetailLoading(true);
@@ -250,8 +252,9 @@ export function useTripCamera(destination: string, tripId?: string) {
     [flyToPlace, setActiveStop, destination, tripId]
   );
 
-  const closeDetail = useCallback(() => {
+  const closeDetail = useCallback(({ stayPut = false }: { stayPut?: boolean } = {}) => {
     setSelectedStop(null);
+    if (stayPut) return;
     // Back to the day that is drawn, not out to the city. Flying to `destinationCoords` was the
     // original behaviour and it put the camera 15km up over the whole destination at nadir —
     // which passed for "back out" only while a day's framing looked roughly the same. A day now

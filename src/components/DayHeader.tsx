@@ -79,10 +79,13 @@ function readProse(weather: string): WeatherRead {
 /** Everything the badge knows is printed in it. The rain chance and the typical-weather
  *  caveat used to live only in a `title` on a non-focusable span, which is to say nowhere
  *  for anyone on a keyboard or a phone. */
-function WeatherBadge({ day }: { day: DayPlan }) {
-  const { Icon, temp, label, rain, typical } = day.weatherDetail
-    ? readForecast(day.weatherDetail)
-    : readProse(day.weather);
+/** The day's weather as the badge reads it: the forecast when there is one, else the model's prose. */
+export function readWeather(day: DayPlan): WeatherRead {
+  return day.weatherDetail ? readForecast(day.weatherDetail) : readProse(day.weather);
+}
+
+export function WeatherBadge({ day }: { day: DayPlan }) {
+  const { Icon, temp, label, rain, typical } = readWeather(day);
   if (!temp && !label) return null;
 
   return (

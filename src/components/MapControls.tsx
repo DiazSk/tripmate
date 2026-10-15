@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useMapCamera } from "@/lib/mapCamera";
 import { ROUTE_FRAME_PITCH_DEG } from "@/lib/mapRenderer";
 
@@ -56,6 +57,9 @@ export default function MapControls() {
   /** Range the in-flight zoom is heading for, so held/repeated presses compound. Null when idle. */
   const pendingRangeRef = useRef<number | null>(null);
   const zoomSeqRef = useRef(0);
+  // The trip page draws the map's controls in Polar (canvas "Trip page · B"): four square night
+  // buttons, no tilt slider, since 2D/3D is the one tilt the design offers.
+  const polar = usePathname()?.startsWith("/trip/") ?? false;
 
   // Live readout of the camera. Compass angle and slider position are DOM properties, so they
   // get written directly rather than through state — that keeps the steady-state re-render count
@@ -133,6 +137,34 @@ export default function MapControls() {
 
   // Transform is transitioned alongside the fill so a press eases in and releases back out,
   // rather than snapping between two states the way transition-colors alone did.
+  if (polar) {
+    return (
+      <div className="map-controls tp-controls pointer-events-none fixed hidden sm:grid" role="group" aria-label="Map controls">
+        <button type="button" onClick={() => zoom(1)} aria-label="Zoom in">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button type="button" onClick={() => zoom(-1)} aria-label="Zoom out">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button type="button" className="tp-dim" onClick={toggleFlat} aria-label={flat ? "Switch to 3D view" : "Switch to 2D view"}>
+          {flat ? "3D" : "2D"}
+        </button>
+        <button type="button" onClick={resetNorth} aria-label="Reset map to face north">
+          <span ref={needleRef} className="block will-change-transform">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M8 2l3 7H5z" fill="#ff7e15" />
+              <path d="M8 14l3-5H5z" fill="currentColor" opacity=".5" />
+            </svg>
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   const buttonShape =
     "flex h-11 w-11 items-center justify-center text-white/90 transition-[background-color,transform] duration-200 ease-out active:scale-[0.92]";
 

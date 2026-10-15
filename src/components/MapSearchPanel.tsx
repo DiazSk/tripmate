@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { usePathname } from "next/navigation";
 import { Check, ChevronLeft, Clock, Loader2, MapPin, Search, Sparkles, X } from "lucide-react";
 import { useMapCamera } from "@/lib/mapCamera";
 import { metresBetween } from "@/lib/peekRange";
@@ -119,6 +120,8 @@ export default function MapSearchPanel({
   const { engine, rendererRef, ready, globeWanted, flyToSearchResult } = useMapCamera();
   const active = useActiveItinerary();
   const toast = useToast();
+  // On the trip page the open panel is drawn on ice, as the canvas's "Trip page · B" search is.
+  const polar = usePathname()?.startsWith("/trip/") ?? false;
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -723,6 +726,7 @@ export default function MapSearchPanel({
           layoutId={SEARCH_LAYOUT_ID}
           transition={morphed ? RESIZE_SPRING : SEARCH_SPRING}
           onLayoutAnimationComplete={() => setMorphed(true)}
+          data-appearance={polar ? "light" : undefined}
           className="glass-control pointer-events-auto flex max-h-[min(70vh,640px)] w-[22rem] flex-col overflow-hidden rounded-2xl"
         >
           {/* **`layout="position"` is the scale correction, and without it everything in here is
