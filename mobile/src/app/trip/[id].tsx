@@ -31,6 +31,7 @@ import type { ChatTurn, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
 import { lastRequestReachedServer } from '@/api/session';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { AnchorReceipt } from '@/components/anchor-receipt';
+import { AskBar } from '@/components/ask-bar';
 import { BudgetSheet } from '@/components/budget-sheet';
 import { ChatSheet } from '@/components/chat-sheet';
 import { DayMap } from '@/components/day-map';
@@ -50,6 +51,7 @@ import { type ItineraryDiff, daysUpdatedLabel, diffItineraries } from '@/lib/iti
 import { tripHealth, type Guardrail } from '@/lib/health';
 import { importNoteLines, showsHealthOnOpen } from '@/lib/importNotes';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
+import { proposalRows } from '@/lib/proposalRows';
 import { useStoryFilm } from '@/lib/useStoryFilm';
 import { surenessFields, tripSpend, type Sureness } from '@/lib/spend';
 import { loadTrip } from '@/lib/tripCache';
@@ -160,16 +162,16 @@ export default function TripDetail() {
    * inherit the last stop asked about.
    */
   const [probe, setProbe] = useState<{ lat: number; lng: number; name: string } | null>(null);
-  const chat = useChat(id, trip, setTrip, opensOnAsk);
-  /** What "Fit it anyway" seeds the chat composer with, or undefined for a plain "Ask". Cleared on
-   *  the plain path so an earlier fit request doesn't linger into an unrelated question. */
-  const [chatSeed, setChatSeed] = useState<string | undefined>(undefined);
-  /** The scope a seeded opening arrives with: a day index, or null for the whole trip. */
-  const [chatScope, setChatScope] = useState<number | null>(opensOnAsk ? askedDay : null);
-  /** Bumped on every open, and fed to `ChatSheet` as its `key` — `initialDraft` only seeds a fresh
-   *  mount, so without this a second "Fit it anyway" for a different place would leave the first
-   *  place's text sitting in the composer. */
-  const [chatOpenId, setChatOpenId] = useState(0);
+  const chat = useChat(id, trip, setTrip, opensOnAsk ? askedDay : null, (diff) => {
+    // A proposal is drawn on the day it changes, so show one it changes, and show it as a list —
+    // the map face has no rows to draw a change on.
+    if (!diff.days.includes(day)) setChosen(diff.days[0] ?? day);
+    setFace('list');
+  });
+  /** The whole conversation, which the bar's "N messages" opens. */
+  const [history, setHistory] = useState(false);
+  // Back while asking folds the bar into the toolbar rather than leaving the trip.
+  usePreventRemove(chat.visible && !chat.pending && !filming, chat.close);
   /**
    * The whole plan checked once, above the early returns so the hook order never depends on
    * whether the trip has loaded.
@@ -214,10 +216,7 @@ export default function TripDetail() {
    * request — so it opens on the whole trip. Either can be changed before sending.
    */
   function askWith(message: string, scope: number | null = null) {
-    setChatSeed(message);
-    setChatScope(scope);
-    setChatOpenId((n) => n + 1);
-    chat.open();
+    chat.open(message, scope);
   }
 
 
@@ -453,14 +452,9 @@ export default function TripDetail() {
                 {/* The strip alone now: which day you are reading is navigation, and everything
                     that acts on the day moved to the toolbar at the thumb. That also leaves the
                     strip the row's whole width, which is the constraint a fortnight needs. */}
-                <DayStrip days={days} current={day} onSelect={setDay} />
+                <DayStrip days={days} current={day} onSelect={setDay} marked={chat.pending?.diff.days ?? []} />
               </View>
 
-              {/* A parked proposal is invisible behind a closed sheet, and an approved one is easy
-                  to regret once you see it in the plan rather than in a list. One bar answers both,
-                  because they are the same question — "something just happened to this plan, and
-                  here is the way back" — and two bars competing for the same slot would be a state
-                  machine nobody asked for. */}
               {/* Says which copy this is, once, above everything it explains. Each disabled control
                   below goes grey without repeating the reason — eight copies of "no connection" is
                   a screen shouting, and the state is a property of the screen rather than of any
@@ -494,25 +488,21 @@ export default function TripDetail() {
                   next write that succeeds clears it, and a tap dismisses it in the meantime. The live
                   region is what makes it reach a screen reader at all — the value the traveller just
                   typed snaps back somewhere further down the page, and nothing else announces. */}
-              {saveError ? (
+              {saveError || (!chat.visible && !chat.pending && chat.failure) ? (
                 <Pressable
                   style={styles.stale}
-                  onPress={() => setSaveError(null)}
+                  onPress={() => {
+                    setSaveError(null);
+                    chat.dismissFailure();
+                  }}
                   accessibilityRole="button"
                   accessibilityLiveRegion="polite"
                   accessibilityHint="Dismisses this message">
                   <ThemedText type="detail" themeColor="alert">
-                    {saveError}
+                    {saveError ?? chat.failure}
                   </ThemedText>
                 </Pressable>
               ) : null}
-
-              <EditBar
-                pending={chat.pending !== null && !chat.visible}
-                onReview={chat.open}
-                undoable={chat.undoable}
-                onUndo={chat.undo}
-              />
 
               {trip && importNoteLines(trip.itinerary).length > 0 ? (
                 // Inset to the same edge as the PlanHealth card beneath it, so the two read as one block.
@@ -552,6 +542,7 @@ export default function TripDetail() {
               repairs={repairs}
               onRepair={applyRepair}
               offline={offline}
+              proposal={chat.pending ? { itinerary: chat.pending.itinerary, diff: chat.pending.diff } : null}
             />
 
             {mapBuilt ? (
@@ -581,27 +572,66 @@ export default function TripDetail() {
             ) : null}
           </View>
 
-          {filming ? null : (
-            <TripToolbar
-              face={face}
-              onFace={setFace}
-              canPlay={canPlay}
-              onPlay={startFilm}
-              offline={offline}
-              onAsk={() => {
-                setChatSeed(undefined);
-                // The plain Ask is not about the day you happen to be reading — see the scope note
-                // in `chat-sheet.tsx`.
-                setChatScope(null);
-                setChatOpenId((n) => n + 1);
-                chat.open();
-              }}
-              onAdd={() => setAdding(true)}
-              spent={tripSpend(days)}
-              budget={trip.budget}
-              onBudget={() => setBudgetSheet('trip')}
+          {filming ? null : chat.visible || chat.pending ? (
+            <AskBar
+              mode={chat.pending ? 'decide' : 'ask'}
+              draft={chat.draft}
+              onDraft={chat.setDraft}
+              scope={chat.scope}
+              onScope={chat.setScope}
+              currentDay={day}
+              days={days}
+              replying={chat.replying}
+              failure={chat.failure}
+              asked={chat.asked}
+              reply={chat.reply}
+              turns={chat.turns.length}
+              onHistory={() => setHistory(true)}
+              pending={chat.pending?.diff ?? null}
+              applying={chat.applying}
+              onApply={chat.apply}
+              onKeep={chat.discard}
+              onSend={chat.send}
+              onClose={chat.close}
               onHeight={setToolbarHeight}
             />
+          ) : (
+            <>
+              {/* An approved change is easiest to regret once it is in the plan, so the way back
+                  sits right above the control that made it, until the next ask replaces it. */}
+              {chat.undoable ? (
+                <View pointerEvents="box-none" style={[styles.undoDock, { bottom: toolbarHeight + Spacing.tight }]}>
+                  <Pressable
+                    onPress={chat.undo}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${daysUpdatedLabel(chat.undoable.days)}. Undo`}
+                    style={({ pressed }) => [styles.undo, pressed && styles.pressedRow]}>
+                    <SymbolView name={{ ios: 'checkmark', android: 'check' }} tintColor={Colors.muted} size={12} />
+                    <ThemedText type="detail" themeColor="muted">
+                      {daysUpdatedLabel(chat.undoable.days)}
+                    </ThemedText>
+                    <ThemedText type="detail" themeColor="accentText" style={styles.undoAction}>
+                      Undo
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              ) : null}
+              <TripToolbar
+                face={face}
+                onFace={setFace}
+                canPlay={canPlay}
+                onPlay={startFilm}
+                offline={offline}
+                // The plain Ask is about the trip, not the day you happen to be reading. Whatever
+                // was left in the box when it last closed is still there.
+                onAsk={() => chat.open(undefined, null)}
+                onAdd={() => setAdding(true)}
+                spent={tripSpend(days)}
+                budget={trip.budget}
+                onBudget={() => setBudgetSheet('trip')}
+                onHeight={setToolbarHeight}
+              />
+            </>
           )}
         </>
       )}
@@ -645,21 +675,12 @@ export default function TripDetail() {
       />
 
       <ChatSheet
-        key={chatOpenId}
-        visible={chat.visible}
-        onClose={chat.close}
+        visible={history}
+        onClose={() => setHistory(false)}
         turns={chat.turns}
         replying={chat.replying}
         failure={chat.failure}
-        onSend={chat.send}
-        initialDraft={chatSeed}
         days={days}
-        initialScope={chatScope}
-        currentDay={day}
-        pending={chat.pending?.diff ?? null}
-        applying={chat.applying}
-        onApply={chat.apply}
-        onDiscard={chat.discard}
       />
     </View>
   );
@@ -802,11 +823,32 @@ function useChat(
   id: string,
   trip: Trip | null | undefined,
   setTrip: React.Dispatch<React.SetStateAction<Trip | null | undefined>>,
-  /** Open straight away — the screen was entered from Today's "Plans changed?". */
-  openOnMount = false
+  /** A day to open straight away on — the screen was entered from Today's "Plans changed?". */
+  openOnDay: number | null,
+  /** A proposal has landed: the screen shows a day it changes. */
+  onProposal: (diff: ItineraryDiff) => void
 ) {
-  const [visible, setVisible] = useState(openOnMount);
+  /** Whether the toolbar is open into the box. */
+  const [visible, setVisible] = useState(openOnDay !== null);
   const [turns, setTurns] = useState<ChatTurn[]>([]);
+  /**
+   * What is in the box. Here rather than in the bar, because the bar comes and goes with the
+   * toolbar and the words should not: closing it is not deleting them, and a seeded opening —
+   * "Fit it anyway", a stop's "Fix this" — has to set them from outside.
+   */
+  const [draft, setDraft] = useState('');
+  /**
+   * What the next message may change: a day index, or null for the whole trip.
+   *
+   * **Whole trip is the default, and that is a decision rather than an omission.** The Swift app
+   * scope-locked every conversation to whatever day was on screen, so "move the market to day 3"
+   * came back refused with nothing having said it would be. So the scope is stated before you ask,
+   * it starts wide, and narrowing it is a thing you do rather than a side effect of where you were
+   * standing. Per turn, not per conversation: the prompt carries it on every message.
+   */
+  const [scope, setScope] = useState<number | null>(openOnDay);
+  /** How many turns there were when the box opened: the bar answers only what was asked since. */
+  const [openedAt, setOpenedAt] = useState(0);
   const [replying, setReplying] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   /** A change the model has proposed and nobody has approved. At most one: see `send`. */
@@ -833,19 +875,32 @@ function useChat(
     if (!visible || restored.current || !trip) return;
     restored.current = true;
     session.current.id = trip.chatSessionId;
-    chatTurns(id).then((saved) => saved.length && setTurns(saved));
+    chatTurns(id).then((saved) => {
+      if (!saved.length) return;
+      setTurns(saved);
+      setOpenedAt(saved.length);
+    });
   }, [visible, trip, id]);
 
-  function open() {
+  /** `seed` replaces the box's words — never sends them; undefined leaves whatever was there. */
+  function open(seed?: string, at?: number | null) {
+    if (seed !== undefined) setDraft(seed);
+    if (at !== undefined) setScope(at);
+    setOpenedAt(turns.length);
+    setFailure(null);
     setVisible(true);
   }
 
-  async function send(text: string, dayIndex?: number): Promise<boolean> {
-    if (!trip) return false;
+  async function send(text: string): Promise<boolean> {
+    const body = text.trim();
+    if (!trip || !body || replying) return false;
+    const dayIndex = scope ?? undefined;
+    // Out of the box the moment it goes, and back into it if it does not arrive — nobody retypes.
+    setDraft('');
     // Stamped with the scope it goes out under, matching what `/api/trip-edit` writes to the
     // transcript — so a live turn and a restored one carry the same label and the sheet never
     // shows the stamp appearing on reload.
-    setTurns((prior) => [...prior, { role: 'user', content: text, scope: dayIndex ?? null }]);
+    setTurns((prior) => [...prior, { role: 'user', content: body, scope: dayIndex ?? null }]);
     setReplying(true);
     setFailure(null);
     // Undoing the *previous* approval once a newer ask is in flight would restore a plan two
@@ -866,7 +921,7 @@ function useChat(
         // the route falls back to rebuilding the full prompt from these when the session is gone.
         messages: [
           ...turns.map(({ role, content }) => ({ role, content })),
-          { role: 'user' as const, content: text },
+          { role: 'user' as const, content: body },
         ],
         tripId: trip.id,
         userAnswers: trip.userAnswers,
@@ -880,6 +935,7 @@ function useChat(
         // Dropped, not left greyed out: this array mirrors the conversation the *server* has, and
         // after a failure it has nothing. The sheet keeps the text so nothing is retyped.
         setTurns((prior) => prior.slice(0, -1));
+        setDraft(body);
         setFailure("That didn't reach the planner. Check your connection and try again.");
         return false;
       }
@@ -914,6 +970,7 @@ function useChat(
         return true;
       }
       setPending({ itinerary: edit.itinerary, sessionId: edit.sessionId, diff });
+      onProposal(diff);
       return true;
     } finally {
       setReplying(false);
@@ -941,6 +998,8 @@ function useChat(
       setTrip({ ...trip, itinerary: proposal.itinerary });
       setUndoable({ itinerary: previous, days: proposal.diff.days });
       setPending(null);
+      // Folds back into the toolbar, with Undo just above it.
+      setVisible(false);
       // Persisted after the plan is on screen, and NOT rolled back if this fails. The edit is
       // one the traveler just approved, and a plan that reverts under you is worse than one
       // that needs saving again — the same bargain the unconditional swap used to make.
@@ -960,6 +1019,7 @@ function useChat(
    */
   function discard() {
     setPending(null);
+    setVisible(false);
     session.current.hash = null;
   }
 
@@ -973,10 +1033,19 @@ function useChat(
     if (!saved) setFailure("Undone here, but saving that failed. It may not survive a reopen.");
   }
 
+  const since = turns.slice(openedAt);
   return {
     visible,
     open,
     close: () => setVisible(false),
+    draft,
+    setDraft,
+    scope,
+    setScope,
+    /** The planner's latest answer since the box opened. */
+    reply: [...since].reverse().find((turn) => turn.role === 'assistant') ?? null,
+    /** What is being worked on, while it is. */
+    asked: replying ? ([...since].reverse().find((turn) => turn.role === 'user')?.content ?? null) : null,
     turns,
     replying,
     failure,
@@ -988,6 +1057,7 @@ function useChat(
     discard,
     undoable,
     undo,
+    dismissFailure: () => setFailure(null),
   };
 }
 
@@ -1024,6 +1094,7 @@ function DayPager({
   repairs,
   onRepair,
   offline,
+  proposal,
 }: {
   trip: Trip;
   day: number;
@@ -1042,6 +1113,8 @@ function DayPager({
   onRepair: (days: DayPlan[], label: string) => void;
   /** Serving a copy from disk, so nothing below may write — see `DayPage`. */
   offline: boolean;
+  /** A change waiting for approval, drawn on each day it touches. */
+  proposal: { itinerary: Itinerary; diff: ItineraryDiff } | null;
 }) {
   // `useWindowDimensions`, not `Dimensions.get()` — this one re-renders on rotation, and a page
   // whose width disagrees with the pager's by even a point drifts out of alignment by day 8.
@@ -1095,49 +1168,21 @@ function DayPager({
             onAsk={onAsk}
             repairs={repairs}
             onRepair={onRepair}
+            preview={
+              proposal?.diff.days.includes(index)
+                ? {
+                    rows: proposalRows(dayPlan, proposal.itinerary.days[index], index, proposal.diff),
+                    dayName: (i) => {
+                      const chip = formatDayChip(days[i]?.date ?? '');
+                      return chip ? `Day ${i + 1} · ${chip.weekday} ${chip.dayOfMonth}` : `Day ${i + 1}`;
+                    },
+                  }
+                : null
+            }
           />
         </View>
       ))}
     </ScrollView>
-  );
-}
-
-/**
- * One slim line for the two things that happen around an edit.
- *
- * Pending outranks undoable: a change waiting for an answer is a question, and a change already
- * made is only an offer. Neither is a toast — nothing here disappears on a timer, because both
- * are things a traveler may want after reading a screenful, and a control that leaves while you
- * are still deciding is worse than one that stays a little too long.
- *
- * Jade on the label, because both are actions. The bar renders nothing at all when there is
- * neither, rather than reserving the space.
- */
-function EditBar({
-  pending,
-  onReview,
-  undoable,
-  onUndo,
-}: {
-  pending: boolean;
-  onReview: () => void;
-  undoable: { days: number[] } | null;
-  onUndo: () => void;
-}) {
-  if (!pending && !undoable) return null;
-  const waiting = pending;
-  return (
-    <Pressable
-      onPress={waiting ? onReview : onUndo}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.editBar, pressed && styles.editBarPressed]}>
-      <ThemedText type="detail" themeColor="muted" style={styles.grow}>
-        {waiting ? 'A change is waiting' : daysUpdatedLabel(undoable?.days ?? [])}
-      </ThemedText>
-      <ThemedText type="detail" themeColor="accent">
-        {waiting ? 'Review' : 'Undo'}
-      </ThemedText>
-    </Pressable>
   );
 }
 
@@ -1155,10 +1200,13 @@ function DayStrip({
   days,
   current,
   onSelect,
+  marked,
 }: {
   days: DayPlan[];
   current: number;
   onSelect: (day: number) => void;
+  /** Days a waiting proposal would change: a dot, so a change landing off-screen is not missed. */
+  marked: number[];
 }) {
   const count = days.length;
   const strip = useRef<ScrollView>(null);
@@ -1189,8 +1237,9 @@ function DayStrip({
             accessibilityState={{ selected: active }}
             // The chip shows a date; the label still says which day of how many, because that
             // is the thing a screen-reader user cannot get from the strip's shape.
-            accessibilityLabel={`Day ${index + 1} of ${count}`}
+            accessibilityLabel={`Day ${index + 1} of ${count}${marked.includes(index) ? ', changes here' : ''}`}
             style={[styles.chip, active && styles.chipActive]}>
+            {marked.includes(index) ? <View style={styles.chipMark} /> : null}
             <ThemedText type="money" themeColor={active ? 'foreground' : 'muted'}>
               {chip?.dayOfMonth ?? index + 1}
             </ThemedText>
@@ -1332,20 +1381,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.tight,
     gap: Spacing.tight,
   },
-  editBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.tight,
-    marginHorizontal: Spacing.read,
-    marginBottom: Spacing.tight,
-    paddingHorizontal: Spacing.rows,
-    minHeight: 44,
-    borderRadius: Radius.read,
-    backgroundColor: Colors.surfaceDeep,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-  },
-  editBarPressed: { backgroundColor: Colors.pressed },
   grow: { flex: 1 },
   faces: { flex: 1 },
   // `flexGrow` + `space-between` is the whole alignment fix: seven fixed-width chips came to
@@ -1421,6 +1456,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipWeekday: { marginTop: -1 },
+  chipMark: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.accent,
+  },
+  undoDock: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  undo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingLeft: Spacing.rows,
+    paddingRight: Spacing.hair,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surfaceDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
+  undoAction: {
+    fontWeight: '600',
+    paddingHorizontal: Spacing.rows,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+    backgroundColor: Colors.control,
+  },
   chipActive: {
     backgroundColor: Colors.surfaceDeep,
     borderWidth: StyleSheet.hairlineWidth,

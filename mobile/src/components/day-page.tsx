@@ -1,14 +1,14 @@
 import type { Repair } from '@shared/guardrailFixes';
 import { groupStopsByTimeOfDay } from '@shared/timeOfDay';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { DayPlan, Stop } from '@/api/types';
 import { MoneyBand } from '@/components/budget-sheet';
 import { PlacePhoto } from '@/components/place-photo';
 import { TravelSegment } from '@/components/travel-segment';
-import { StopDisc } from '@/components/stop-disc';
+import { DISC_SIZE, StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
 import { stopParticulars, weatherLine } from '@/lib/dayDisplay';
@@ -18,6 +18,7 @@ import { locationNote } from '@shared/evidence';
 import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
 import { SURENESS_LABEL, anyActualSpend, daySpend, formatMoney, spendShares, surenessOf, type Sureness } from '@/lib/spend';
 import { emptyDayFindings } from '@/lib/importNotes';
+import type { ProposalRow } from '@/lib/proposalRows';
 
 /**
  * One day of a trip, read as a page.
@@ -43,6 +44,7 @@ export function DayPage({
   onBudget,
   footer,
   offline,
+  preview,
 }: {
   day: DayPlan;
   dayIndex: number;
@@ -91,8 +93,17 @@ export function DayPage({
    *  route, which is what the button then does. */
   repairs: (finding: Guardrail) => Repair[];
   onRepair: (days: DayPlan[], label: string) => void;
+  /**
+   * A proposal from the chat, drawn on this day: the proposed stops marked with what the edit does
+   * to them, and a ghost for each stop that leaves. Read-only while it is up — nothing here has
+   * changed yet, and a cost edited on a row that might be about to move is a second edit.
+   */
+  preview?: { rows: ProposalRow[]; dayName: (index: number) => string } | null;
 }) {
   const stops = day.stops ?? [];
+  const scroller = useRef<ScrollView>(null);
+  /** Where the preview list starts in the scroll, so its first change can be brought into view. */
+  const listY = useRef(0);
   /**
    * The day, cut into Morning / Afternoon / Evening.
    *
@@ -111,10 +122,23 @@ export function DayPage({
 
   return (
     <ScrollView
+      ref={scroller}
       contentContainerStyle={[styles.content, { paddingBottom: footer + Spacing.regular }]}
       showsVerticalScrollIndicator={false}>
       <DayHead day={day} dayIndex={dayIndex} dayCount={dayCount} destination={destination} />
 
+      {preview ? (
+        <View style={styles.section} onLayout={(e) => (listY.current = e.nativeEvent.layout.y)}>
+          <SectionRule label="Preview · nothing has changed yet" />
+          <ProposalList
+            rows={preview.rows}
+            dayIndex={dayIndex}
+            dayName={preview.dayName}
+            // The first change, under the day strip rather than under the reply card at the foot.
+            onFirstChange={(y) => scroller.current?.scrollTo({ y: Math.max(0, listY.current + y - Spacing.regular), animated: true })}
+          />
+        </View>
+      ) : (
       <View style={styles.section}>
         <SectionRule label={`The day · ${stops.length} ${stops.length === 1 ? 'stop' : 'stops'}`} />
 
@@ -156,6 +180,7 @@ export function DayPage({
           </View>
         ))}
       </View>
+      )}
 
       {day.lodging ? (
         <View style={[styles.section, styles.stay]}>
@@ -279,6 +304,91 @@ function DayTotal({ day, dayIndex, onOpen }: { day: DayPlan; dayIndex: number; o
 
 function Glyph({ name, size, color }: { name: SymbolViewProps['name']; size: number; color: string }) {
   return <SymbolView name={name} size={size} tintColor={color} />;
+}
+
+/**
+ * The day as the proposal would leave it.
+ *
+ * Changed rows carry the accent's wash and an edge, which is the one place orange is spent on the
+ * day: it marks what the decision at the thumb is about. A stop that leaves stays where it was,
+ * struck through and dimmed, with where it is going; a stop that only changes time keeps its row
+ * and shows the old time crossed out beside the new one.
+ */
+function ProposalList({
+  rows,
+  dayIndex,
+  dayName,
+  onFirstChange,
+}: {
+  rows: ProposalRow[];
+  dayIndex: number;
+  dayName: (index: number) => string;
+  onFirstChange: (y: number) => void;
+}) {
+  const first = rows.findIndex((row) => row.kind !== 'same');
+  const isGhost = (row: ProposalRow) => row.kind === 'leaving' || row.kind === 'removed';
+  // The disc numbers count the stops the day would have, so a ghost takes no number of its own.
+  const ordinals = rows.map((_, i) => rows.slice(0, i + 1).filter((row) => !isGhost(row)).length);
+  return (
+    <View>
+      {rows.map((row, i) => {
+        const ghost = isGhost(row);
+        const { stop } = row;
+        const line =
+          row.kind === 'leaving'
+            ? `To ${dayName(row.toDay)}, ${row.toTime}`
+            : row.kind === 'removed'
+              ? 'Dropped from the day'
+              : row.kind === 'arriving'
+                ? `From ${dayName(row.fromDay)}, was ${row.was}`
+                : row.kind === 'added'
+                  ? 'New'
+                  : row.kind === 'retimed'
+                    ? // The time is already on the line, struck and new; the rest of the particulars follow it.
+                      stopParticulars({ ...stop, time: undefined })
+                    : [stopParticulars(stop), surenessOf(stop) !== 'estimate' ? SURENESS_LABEL[surenessOf(stop)] : null]
+                        .filter(Boolean)
+                        .join('  ·  ');
+        return (
+          <View
+            key={`${row.kind}-${stop.name}-${i}`}
+            onLayout={i === first ? (e) => onFirstChange(e.nativeEvent.layout.y) : undefined}
+            // A stop that leaves is not what the decision adds to this day, so it is dimmed rather than lit.
+            style={[styles.stop, ghost ? styles.ghost : row.kind !== 'same' && styles.changed]}
+            accessibilityLabel={`${stop.name}. ${row.kind === 'same' ? '' : `${row.kind}. `}${line}`}>
+            {ghost ? <View style={styles.ghostDisc} /> : <StopDisc ordinal={ordinals[i]} color={dayCore(dayIndex)} />}
+            <View style={styles.grow}>
+              <ThemedText type="heading" style={ghost && styles.struck}>
+                {stop.name}
+              </ThemedText>
+              {row.kind === 'same' ? null : (
+                <Text>
+                  {row.kind === 'retimed' ? (
+                    <ThemedText type="detail" themeColor="muted" style={styles.struck}>
+                      {`${row.was}  `}
+                    </ThemedText>
+                  ) : null}
+                  {row.kind === 'retimed' || row.kind === 'arriving' || row.kind === 'added' ? (
+                    <ThemedText type="detail" style={styles.strong}>
+                      {`${stop.time}  ·  `}
+                    </ThemedText>
+                  ) : null}
+                  <ThemedText type="detail" themeColor={row.kind === 'added' ? 'accentText' : ghost ? 'foreground' : 'muted'}>
+                    {line}
+                  </ThemedText>
+                </Text>
+              )}
+              {row.kind === 'same' && line ? (
+                <ThemedText type="detail" themeColor="muted">
+                  {line}
+                </ThemedText>
+              ) : null}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 /** A stop is a row, never a card. The system draws rules rather than boxing things. */
@@ -744,6 +854,11 @@ const styles = StyleSheet.create({
   // A light step of the ink, not a slate: the section is already the slate, and a darker one on
   // it measured identical to the page. In light it is ink at the same step.
   stopExpanded: { backgroundColor: LIFT },
+  // The edge eats into the inset rather than pushing the row, so a changed row stays aligned.
+  changed: { backgroundColor: Colors.accentWash, borderLeftWidth: 3, borderLeftColor: Colors.accent, paddingLeft: Spacing.read - 3 },
+  ghost: { opacity: 0.6 },
+  ghostDisc: { width: DISC_SIZE, height: DISC_SIZE, borderRadius: DISC_SIZE / 2, borderWidth: 1.5, borderStyle: 'dashed', borderColor: Colors.muted },
+  struck: { textDecorationLine: 'line-through' },
   stopHead: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
   particularsRow: {
     flexDirection: 'row',
