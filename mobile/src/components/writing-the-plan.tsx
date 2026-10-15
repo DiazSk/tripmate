@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,49 +7,53 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Meridian } from '@/components/meridian';
 import { Wordmark } from '@/components/polar-landing/landing-screen';
 import { Scrim } from '@/components/polar-landing/scrim';
-import { Polar, PolarFonts, PolarRadius, PolarSpace, PolarType } from '@/constants/polar';
+import { Polar, PolarFonts, PolarSpace, PolarType } from '@/constants/polar';
 import { dayCore } from '@/constants/theme';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
-import { coordLine, forecastLine, groupFills, latestStop, monumentSize, nowLine, time12, type PlanDay } from '@/lib/writingPlan';
 import { formatMoney } from '@shared/format';
-import { STEP_GROUPS, TYPICAL_WAIT_PHRASE, generationProgress, isStepTerminal, stepGroupState, type StageProgress } from '@shared/generationStages';
+import { HANDOFF_SECONDS, forecastLine, handoffFraction, latestStop, nowLine, waitPhrase, type PlanDay } from '@/lib/writingPlan';
+import { STEP_GROUPS, generationProgress, isStepTerminal, stepGroupState, type StageProgress } from '@shared/generationStages';
 import { meriForGeneration } from '@shared/meri';
 import type { RawFetch } from '@shared/types';
 
 /**
- * The live map while a plan is written: the canvas design "Live map, writing the plan · C Monument
- * (phone)", and the phone's counterpart of the web's `WritingThePlan`. The night city fills the
- * screen; the fact is the standfirst in the display face; the days light up as the stream reaches
- * them; each new stop arrives as a small card beside its own pin; and the city's name is the
- * monument across the foot, under the four step ticks, the forecast and Cancel.
+ * The wait while a plan is written: canvas design "Phone generating · 2 At night, a Live
+ * Activity", with the fixes its critique asked for.
  *
- * **The camera frames into the band the standfirst and the foot leave open**, by `mapPadding`
- * measured off both, and keeps the latest pin left of the band's middle so its card fits to the
- * right. `fitToCoordinates` lands flat and north-up, as `DayMap`'s day framing does.
+ * **Three zones, one of them live.** The fact about the place at the top, in the display face, is
+ * the screen's resting point and changes every few seconds at most. The night map in the middle
+ * draws each day's route as its stops arrive. The card at the foot is the only thing to read for
+ * status, and it says it once: one sentence (the day being written and the stop just added), one
+ * bar, and one estimate in words. It used to say it four ways at once — a ring, "2/4", a segmented
+ * bar and a step label — which made the calmest-looking screen the busiest to read.
+ *
+ * **Place names arrive one at a time.** Only the stop just added is named, in the card; the map's
+ * pins carry no labels. Reading a list of stops while it is still being written is the reveal
+ * spent early, and the strain the traveller asked to be spared.
+ *
+ * **Orange is not spent here.** Progress is white and the pins keep their day colours, because
+ * orange means "press this" and nothing on a wait is an invitation except Cancel, which is glass.
+ *
+ * **The ending is the map, not a cut to black.** When the plan is saved the host sets `ready`: the
+ * bar fills, Meri turns to success and the card says so, over the same map, for a beat before the
+ * trip opens.
  */
 
 /** ~150s of waiting at this interval is ~21 facts, under `destinationFacts`' cap. The web's. */
 const FACT_INTERVAL_MS = 7000;
 /** Cancel waits this long, as on the web: a stray tap in the first seconds is not a decision. */
 const CANCEL_AFTER_MS = 10_000;
-const CARD_W = 152;
-/** The card's gap from its pin. */
-const CARD_GAP = 14;
 /**
  * The least ground a day is framed at, about 2.2km. `regionForStops`' 400m floor suits the day map,
  * where you read one day; here a two-stop day at that floor filled the screen with a single block.
  */
 const MIN_FRAME_DEG = 0.02;
-/** A new day's first card waits for MapKit's own re-frame, since its pin starts off-screen. */
-const REFRAME_MS = 600;
 /** Before any stop, the city: about 7km by 9km round the geocoded centre. */
 const CITY_SPAN = { lat: 0.06, lng: 0.1 };
 /**
- * The night lens, as the web's: Apple's dark muted map still draws parks green and water blue, and
- * its labels fight the standfirst. A view over the map cannot dim it without dimming the pins and
- * the card too, since they are the map's own annotations. A polygon is an overlay, drawn over the
- * tiles and their labels but under every annotation, so it takes the ground down and nothing else.
- * Three degrees each way covers any city the camera frames.
+ * The night lens: Apple's dark muted map still draws parks green and water blue, and its labels
+ * fight the standfirst. A polygon is an overlay, drawn over the tiles and their labels but under
+ * every annotation, so it takes the ground down and nothing else.
  */
 const LENS_DEG = 3;
 const LENS_FILL = 'rgba(9,11,16,0.5)';
@@ -64,6 +68,7 @@ export function WritingThePlan({
   days,
   facts,
   raw,
+  ready = false,
   onCancel,
 }: {
   destination: string;
@@ -76,49 +81,57 @@ export function WritingThePlan({
   facts: string[];
   /** The trip-fetch bundle: the city's coordinates and the forecast. Null until it lands. */
   raw: RawFetch | null;
+  /** The plan is saved and the trip is about to open: the card says so over the same map. */
+  ready?: boolean;
   onCancel: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
   const reduce = useReducedMotion();
   const map = useRef<MapView>(null);
-  const [ready, setReady] = useState(false);
-  const [ledeBottom, setLedeBottom] = useState(320);
-  const [footH, setFootH] = useState(260);
+  const [mapReady, setMapReady] = useState(false);
+  const [ledeBottom, setLedeBottom] = useState(300);
+  const [cardH, setCardH] = useState(200);
   const [factIndex, setFactIndex] = useState(0);
   const [cancelReady, setCancelReady] = useState(false);
 
-  const city = destination.split(',')[0]?.trim() || destination.trim() || 'Your trip';
+  const city = destination.split(',')[0]?.trim() || destination.trim() || 'your trip';
   const centre = raw?.destination.resolved && raw.destination.lat !== null && raw.destination.lon !== null ? { lat: raw.destination.lat, lon: raw.destination.lon } : null;
   const latest = latestStop(days);
   const active = STEP_GROUPS.find((g) => stepGroupState(g, stages) === 'active') ?? null;
   // Between steps nothing is running; the step about to start is the one worth naming.
   const current = active ?? STEP_GROUPS.find((g) => !isStepTerminal(stepGroupState(g, stages))) ?? null;
   const lensAt = centre ?? (latest ? { lat: latest.stop.lat, lon: latest.stop.lng } : null);
-  const complete = STEP_GROUPS.every((g) => isStepTerminal(stepGroupState(g, stages)));
   const streaming = days.some((d) => d.stops.length > 0);
+
+  // The forecast is one more thing worth knowing about the place, so it joins the facts rather
+  // than taking a line of its own.
+  const forecast = forecastLine(raw);
+  const pool = forecast ? [...facts, `The forecast: ${forecast}.`] : facts;
 
   useEffect(() => {
     const id = setTimeout(() => setCancelReady(true), CANCEL_AFTER_MS);
     return () => clearTimeout(id);
   }, []);
   useEffect(() => {
-    if (facts.length < 2) return;
-    const id = setInterval(() => setFactIndex((i) => (i + 1) % facts.length), FACT_INTERVAL_MS);
+    if (pool.length < 2) return;
+    const id = setInterval(() => setFactIndex((i) => (i + 1) % pool.length), FACT_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [facts.length]);
-  // VoiceOver hears each step as it starts; the screen itself is mostly a map, which says nothing.
+  }, [pool.length]);
+  // VoiceOver hears each step as it starts, and the arrival; the rotating fact is not announced.
   useEffect(() => {
     if (active) AccessibilityInfo.announceForAccessibility(`Building your ${city} itinerary: ${active.label}.`);
   }, [active, city]);
+  useEffect(() => {
+    if (ready) AccessibilityInfo.announceForAccessibility(`Your ${city} trip is ready.`);
+  }, [ready, city]);
 
   // The camera follows the stream: the city while it is read, then the day the latest stop belongs
   // to, re-framed as each stop lands and again when Overpass corrects the day's positions.
   const latestDay = latest ? days[latest.dayIndex].stops : null;
   const frameKey = latestDay ? `${latest!.dayIndex}:${latestDay.map((s) => `${s.lat},${s.lng}`).join(';')}` : centre ? `city:${centre.lat},${centre.lon}` : '';
   useEffect(() => {
-    if (!ready || !frameKey) return;
-    const edgePadding = { top: 24, bottom: 20, left: 34, right: latest ? CARD_W + CARD_GAP + 22 : 34 };
+    if (!mapReady || !frameKey) return;
+    const edgePadding = { top: 24, bottom: 20, left: 34, right: 34 };
     const fitted = latestDay ? regionForStops(latestDay) : centre ? { latitude: centre.lat, longitude: centre.lon, latitudeDelta: CITY_SPAN.lat, longitudeDelta: CITY_SPAN.lng } : null;
     if (!fitted) return;
     const region = { ...fitted, latitudeDelta: Math.max(fitted.latitudeDelta, MIN_FRAME_DEG), longitudeDelta: Math.max(fitted.longitudeDelta, MIN_FRAME_DEG) };
@@ -128,12 +141,17 @@ export function WritingThePlan({
     ];
     map.current?.fitToCoordinates(corners, { edgePadding, animated: !reduce });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, frameKey, ledeBottom, footH]);
+  }, [mapReady, frameKey, ledeBottom, cardH]);
 
-  const summary = [dateRange, `${tripDays} ${tripDays === 1 ? 'day' : 'days'}`, tierName, budget > 0 ? formatMoney(budget) : null].filter(Boolean).join(' · ');
-  const forecast = forecastLine(raw);
-  const word = city.toUpperCase();
-  const size = monumentSize(word, width, height, PolarSpace.pad);
+  const title = ready ? 'Your trip is ready' : nowLine(days, current?.label ?? null);
+  const subtitle = ready
+    ? 'Opening it now'
+    : latest
+      ? `Just added ${latest.stop.name}`
+      : days.some((d) => d.theme)
+        ? 'The first stop is on its way'
+        : // Before anything has streamed, the trip being planned: the reassurance that it is yours.
+          [dateRange, `${tripDays} ${tripDays === 1 ? 'day' : 'days'}`, tierName, budget > 0 ? formatMoney(budget) : null].filter(Boolean).join(' · ');
 
   return (
     <View style={styles.screen}>
@@ -148,11 +166,10 @@ export function WritingThePlan({
         showsCompass={false}
         rotateEnabled={false}
         pitchEnabled={false}
-        // The band between the standfirst and the foot is the map's working area: Apple's logo and
-        // legal mark (which must stay legible) ride above the foot instead of under the monument,
-        // and every framing below centres in the band.
-        mapPadding={{ top: ledeBottom, right: 0, bottom: footH, left: 0 }}
-        onMapReady={() => setReady(true)}>
+        // The band between the standfirst and the card is the map's working area: Apple's logo and
+        // legal mark (which must stay legible) ride above the card, and every framing centres there.
+        mapPadding={{ top: ledeBottom, right: 0, bottom: cardH, left: 0 }}
+        onMapReady={() => setMapReady(true)}>
         {/* Order is z-order: Apple Maps ignores an overlay's zIndex (see day-map.tsx), so the lens
             goes first and every line is drawn over it. */}
         {lensAt ? (
@@ -184,154 +201,102 @@ export function WritingThePlan({
             );
           })
         )}
-        {latest && drawableStops([latest.stop]).length > 0 && (
-          <Marker key={`card-${latest.dayIndex}-${latest.stop.name}`} coordinate={{ latitude: latest.stop.lat, longitude: latest.stop.lng }} 
-            // `anchor` is Google's and Apple Maps ignores it; `centerOffset` is Apple's. Both put the
-            // card's left edge on the pin, so it reads beside the stop rather than over it.
-            anchor={{ x: 0, y: 0.5 }}
-            centerOffset={{ x: (CARD_W + CARD_GAP) / 2, y: 0 }}
-            zIndex={1000}>
-            <Animated.View entering={FadeIn.delay(latest.first ? REFRAME_MS : 0).duration(500)} style={styles.card}>
-              <View style={styles.cardDayRow}>
-                <View style={[styles.dot, { backgroundColor: dayCore(latest.dayIndex) }]} />
-                <Text style={styles.cardDay}>
-                  Day {latest.dayIndex + 1} · {time12(latest.stop.time)}
-                </Text>
-              </View>
-              <Text style={styles.cardName} numberOfLines={2}>
-                {latest.stop.name}
-              </Text>
-              {latest.stop.durationLabel ? <Text style={[PolarType.caption, styles.dim]}>{latest.stop.durationLabel}</Text> : null}
-            </Animated.View>
-          </Marker>
-        )}
       </MapView>
 
       {/* Deeper than the web's: Apple Maps draws its place names above every overlay, the lens
           included, and under the standfirst they read as a second, competing line of text. */}
-      <Scrim stops={[[0, Polar.night, 0.96], [0.3, Polar.night, 0.86], [0.4, Polar.night, 0.55], [0.52, Polar.night, 0]]} />
-      <Scrim stops={[[0.56, Polar.night, 0], [0.78, Polar.night, 0.75], [1, Polar.night, 0.95]]} />
+      <Scrim stops={[[0, Polar.night, 0.96], [0.3, Polar.night, 0.86], [0.4, Polar.night, 0.5], [0.5, Polar.night, 0]]} />
+      <Scrim stops={[[0.62, Polar.night, 0], [0.8, Polar.night, 0.7], [1, Polar.night, 0.95]]} />
 
-      <View style={[styles.header, { marginTop: insets.top }]} pointerEvents="none">
+      <View style={[styles.header, { marginTop: insets.top }]} pointerEvents="box-none">
         <Wordmark light />
+        {/* Nothing here until Cancel can be pressed: the card already says how long, and a second
+            estimate up here was a second number to reconcile. */}
+        {cancelReady && !ready ? (
+          <Animated.View entering={FadeIn.duration(400)}>
+            <Pressable
+              onPress={onCancel}
+              style={({ pressed }) => [styles.cancel, pressed && styles.cancelPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel, and go back to the planner">
+              <Text style={styles.cancelText}>Cancel</Text>
+            </Pressable>
+          </Animated.View>
+        ) : null}
       </View>
 
-      {/* The standfirst. */}
+      {/* The standfirst: where, and one thing about it. */}
       <View
-        style={[styles.lede, { top: insets.top + 44 + PolarSpace.s2 }]}
+        style={[styles.lede, { top: insets.top + 52 }]}
         pointerEvents="none"
-        accessibilityLiveRegion="polite"
         onLayout={(e) => setLedeBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
-        <View style={styles.row}>
-          <Meridian state={meriForGeneration({ complete, streaming })} size={36} />
+        <Text style={[PolarType.eyebrow, styles.dim]}>{`Planning ${city}`}</Text>
+        <Animated.Text key={factIndex} entering={reduce ? undefined : FadeIn.duration(600)} style={styles.fact} numberOfLines={4}>
+          {pool[factIndex] ?? `Reading everything we can find about ${city}.`}
+        </Animated.Text>
+      </View>
+
+      {/* The card: the one place status is said. */}
+      <View
+        style={[styles.card, { bottom: Math.max(insets.bottom, PolarSpace.s3) }]}
+        onLayout={(e) => setCardH(e.nativeEvent.layout.height + Math.max(insets.bottom, PolarSpace.s3) + PolarSpace.s3)}
+        accessible
+        accessibilityLiveRegion="polite"
+        accessibilityLabel={`${title}. ${subtitle}.`}>
+        <View style={styles.cardRow}>
+          <Meridian state={meriForGeneration({ complete: ready, streaming })} size={40} />
           <View style={styles.flex}>
-            <Text style={[PolarType.eyebrow, { color: Polar.ice }]}>{`Planning ${city}`}</Text>
-            <Text style={[PolarType.caption, styles.dim, styles.tabular]} numberOfLines={1}>
-              {summary}
+            <Text style={styles.title} numberOfLines={2}>
+              {title}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={2}>
+              {subtitle}
             </Text>
           </View>
         </View>
-        <Animated.Text key={factIndex} entering={FadeIn.duration(500)} style={styles.fact} numberOfLines={4}>
-          {facts[factIndex] ?? `Reading everything we can find about ${city}.`}
-        </Animated.Text>
-        {centre ? <Text style={[PolarType.coord, styles.dim]}>{coordLine(centre.lat, centre.lon)}</Text> : null}
-        <View style={styles.days} accessibilityLabel="The days">
+        <Progress stages={stages} ready={ready} />
+        {/* The days as dots: filled once a day has a stop, the one being written a step larger. Not
+            letters or counts — those were seven more things to decode for a fact the sentence above
+            already says. */}
+        <View style={styles.dots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {days.map((d, i) => (
-            <View key={i} style={[styles.day, d.stops.length > 0 && styles.dayHas, latest?.dayIndex === i && styles.dayNow]}>
-              <Text style={[styles.dayN, { color: dayCore(i) }]}>{String(i + 1).padStart(2, '0')}</Text>
-              <Text style={[styles.dayCount, d.stops.length > 0 && { color: Polar.ice }]}>{d.stops.length || ''}</Text>
-            </View>
+            <View key={i} style={[styles.dot, d.stops.length > 0 && styles.dotOn, latest?.dayIndex === i && !ready && styles.dotNow]} />
           ))}
         </View>
-      </View>
-
-      {/* The foot: the step ticks, the instruments, then the monument. */}
-      <View style={styles.foot} pointerEvents="box-none" onLayout={(e) => setFootH(e.nativeEvent.layout.height)}>
-        <View style={styles.strip}>
-          <Ticks stages={stages} />
-          <StageLine stages={stages} />
-          <View style={styles.instrumentRow}>
-            <View style={[styles.flex, styles.instrumentText]}>
-              <Text style={[PolarType.bodyS, { color: Polar.ice }]} numberOfLines={1}>
-                {nowLine(days, current?.label ?? null)}
-              </Text>
-              {forecast ? (
-                <Text style={[PolarType.caption, styles.dim, styles.tabular]} numberOfLines={1}>
-                  {forecast}
-                </Text>
-              ) : null}
-            </View>
-            {cancelReady ? (
-              <Animated.View entering={FadeIn.duration(500)}>
-                <Pressable
-                  onPress={onCancel}
-                  style={({ pressed }) => [styles.cancel, pressed && styles.cancelPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel, and go back to Review">
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </Pressable>
-              </Animated.View>
-            ) : (
-              <Text style={[PolarType.caption, styles.dim, styles.wait]}>{`Usually about\n${TYPICAL_WAIT_PHRASE}.`}</Text>
-            )}
-          </View>
-        </View>
-        {/* Line height 1: Oswald's baseline then sits ~0.05em above the box, so nothing is cropped.
-            The margin keeps the word just clear of the home indicator rather than floating above it. */}
-        <Text
-          style={[PolarType.monument, styles.monument, { fontSize: size, lineHeight: size, marginBottom: Math.round(insets.bottom * 0.35) }]}
-          numberOfLines={1}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants">
-          {word}
-        </Text>
       </View>
     </View>
   );
 }
 
 /**
- * The four steps as the planner's ticks: done in white, the running one filling in route blue by
- * the bar's own weights. Its own clock, so the easing between frames re-renders four bars, not the
- * map and every pin on it.
+ * The bar and its one estimate.
+ *
+ * Its own clock, so the easing between frames re-renders a bar and a phrase, not the map and every
+ * pin on it. **The estimate only ever comes down**: `waitPhrase` is coarse, and holding the lowest
+ * value seen means a slow stretch reads as a pause rather than as the wait getting longer.
  */
-function Ticks({ stages }: { stages: StageProgress[] }) {
-  const [progress, setProgress] = useState(0);
-  const last = useRef(0);
+function Progress({ stages, ready }: { stages: StageProgress[]; ready: boolean }) {
+  const [shown, setShown] = useState({ fraction: 0, secondsLeft: HANDOFF_SECONDS });
+  /** Carried across stage changes, which restart the clock below, so the bar never steps back. */
+  const overall = useRef(0);
   useEffect(() => {
     const start = Date.now();
     const tick = () => {
-      last.current = generationProgress(stages, Date.now() - start, last.current);
-      setProgress(last.current);
+      overall.current = generationProgress(stages, Date.now() - start, overall.current);
+      const fraction = handoffFraction(stages, overall.current);
+      setShown((prev) => ({ fraction, secondsLeft: Math.min(prev.secondsLeft, (1 - fraction) * HANDOFF_SECONDS) }));
     };
     tick();
     const id = setInterval(tick, 250);
     return () => clearInterval(id);
   }, [stages]);
+  const fraction = ready ? 1 : shown.fraction;
   return (
-    <View style={styles.ticks} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {groupFills(stages, progress).map(({ state, fill }, i) => (
-        <View key={STEP_GROUPS[i].id} style={styles.tick}>
-          <View style={[styles.tickFill, { width: `${fill * 100}%`, backgroundColor: state === 'done' ? Polar.ice : state === 'failed' ? Polar.nightText2 : Polar.route }]} />
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function StageLine({ stages }: { stages: StageProgress[] }) {
-  const states = STEP_GROUPS.map((g) => stepGroupState(g, stages));
-  const running = states.indexOf('active');
-  const i = running >= 0 ? running : Math.max(0, states.findIndex((s) => !isStepTerminal(s)));
-  const state = states[i];
-  const word = state === 'active' ? 'Now' : state === 'done' ? 'Done' : state === 'failed' ? 'Not run' : 'Next';
-  return (
-    <View style={styles.stageLine} accessible accessibilityLabel={`Step ${i + 1} of 4, ${STEP_GROUPS[i].label}, ${word}`}>
-      <Text style={[PolarType.coord, styles.dim, styles.tabular]}>{`${String(i + 1).padStart(2, '0')} / 04`}</Text>
-      <Text style={[PolarType.ui, styles.flex, { color: Polar.ice }]} numberOfLines={1}>
-        {STEP_GROUPS[i].label}
-      </Text>
-      <Text style={[styles.stateWord, { color: state === 'active' ? Polar.route : Polar.nightText2 }]}>{word}</Text>
+    <View style={styles.progress}>
+      <View style={styles.track} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <View style={[styles.fill, { width: `${Math.round(fraction * 100)}%` }]} />
+      </View>
+      <Text style={styles.left}>{ready ? 'Done' : waitPhrase(shown.secondsLeft)}</Text>
     </View>
   );
 }
@@ -339,83 +304,61 @@ function StageLine({ stages }: { stages: StageProgress[] }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Polar.night, overflow: 'hidden' },
   flex: { flex: 1, minWidth: 0 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: PolarSpace.s2 },
   dim: { color: Polar.nightText2 },
-  tabular: { fontVariant: ['tabular-nums'] },
 
-  header: { height: 44, justifyContent: 'center', paddingHorizontal: PolarSpace.pad },
-  lede: { position: 'absolute', left: PolarSpace.pad, right: PolarSpace.pad, gap: PolarSpace.s2 + 2 },
+  header: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: PolarSpace.pad },
+  lede: { position: 'absolute', left: PolarSpace.pad, right: PolarSpace.pad, gap: PolarSpace.s2 },
+  // The largest thing on the screen, deliberately: it is the one thing here worth reading slowly,
+  // and the eye needs somewhere to rest that is not the progress.
   fact: {
     fontFamily: PolarFonts.displayItalic,
-    fontSize: 23,
-    lineHeight: 27,
+    fontSize: 26,
+    lineHeight: 31,
     color: Polar.ice,
-    minHeight: 81,
+    // Four lines reserved, so a short fact after a long one does not pull the map up and down.
+    minHeight: 124,
     textShadowColor: 'rgba(9,11,16,0.6)',
     textShadowRadius: 14,
     textShadowOffset: { width: 0, height: 2 },
   },
-  days: { flexDirection: 'row', gap: 5, marginTop: 2 },
-  day: {
-    flex: 1,
-    height: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 7,
-    borderRadius: PolarRadius.sm,
-    // Near-opaque rather than the web's glass: Apple's place names show through a veil.
-    backgroundColor: 'rgba(9,11,16,0.84)',
-    borderWidth: 1,
-    borderColor: Polar.frost10,
-    opacity: 0.6,
-  },
-  dayHas: { opacity: 1 },
-  dayNow: { borderColor: 'rgba(106,240,255,0.45)', backgroundColor: 'rgba(9,11,16,0.6)' },
-  dayN: { fontFamily: PolarFonts.sansSemi, fontSize: 11, fontVariant: ['tabular-nums'] },
-  dayCount: { fontFamily: PolarFonts.sansSemi, fontSize: 11, color: Polar.nightText2, fontVariant: ['tabular-nums'] },
 
   pin: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: Polar.night },
   pinLatest: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: Polar.ice },
-  // A solid night card rather than a blur: a marker's view is snapshotted on some paths, and a
-  // backdrop blur inside one has nothing behind it to blur.
-  card: {
-    width: CARD_W,
-    marginLeft: CARD_GAP,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    gap: 3,
-    borderRadius: PolarRadius.card,
-    borderWidth: 1,
-    borderColor: Polar.frost10,
-    backgroundColor: 'rgba(9,11,16,0.86)',
-  },
-  cardDayRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 7, height: 7, borderRadius: 4 },
-  cardDay: { fontFamily: PolarFonts.sansSemi, fontSize: 10, letterSpacing: 1.3, textTransform: 'uppercase', color: Polar.nightText2, fontVariant: ['tabular-nums'] },
-  cardName: { fontFamily: PolarFonts.display, fontSize: 19, lineHeight: 21, color: Polar.ice },
 
-  foot: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  strip: { marginHorizontal: PolarSpace.pad, gap: PolarSpace.s2 },
-  ticks: { flexDirection: 'row', gap: 4 },
-  tick: { flex: 1, height: 2, backgroundColor: Polar.frost20, overflow: 'hidden' },
-  tickFill: { height: 2 },
-  stageLine: { flexDirection: 'row', alignItems: 'baseline', gap: PolarSpace.s2 },
-  stateWord: { fontFamily: PolarFonts.sansSemi, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase' },
-  instrumentRow: { flexDirection: 'row', alignItems: 'center', gap: PolarSpace.s3, minHeight: 42 },
-  instrumentText: { gap: 3 },
-  wait: { textAlign: 'right' },
-  // The one action on the screen: the night panel's glass with a hairline you can see over the map.
+  // Near-opaque deep slate, DESIGN.md's band: a thinner glass lets Apple's place names through.
+  card: {
+    position: 'absolute',
+    left: PolarSpace.s2,
+    right: PolarSpace.s2,
+    gap: PolarSpace.s3,
+    padding: PolarSpace.s3,
+    borderRadius: 28,
+    backgroundColor: 'rgba(14,17,24,0.92)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Polar.frost20,
+  },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: PolarSpace.s2 + 1 },
+  title: { fontFamily: PolarFonts.sansSemi, fontSize: 17, lineHeight: 22, color: Polar.ice },
+  subtitle: { fontFamily: PolarFonts.sans, fontSize: 15, lineHeight: 20, color: Polar.nightText2 },
+  progress: { flexDirection: 'row', alignItems: 'center', gap: PolarSpace.s2 + 1 },
+  track: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: Polar.frost20 },
+  fill: { height: '100%', borderRadius: 3, backgroundColor: Polar.ice },
+  // The figure a waiting person glances for, at reading size rather than as a footnote.
+  left: { fontFamily: PolarFonts.sansSemi, fontSize: 15, color: Polar.ice, fontVariant: ['tabular-nums'] },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Polar.frost20 },
+  dotOn: { backgroundColor: Polar.nightText2 },
+  dotNow: { width: 9, height: 9, borderRadius: 5, backgroundColor: Polar.ice },
+
   cancel: {
-    height: 42,
-    paddingHorizontal: 20,
+    height: 38,
+    paddingHorizontal: 18,
     justifyContent: 'center',
-    borderRadius: PolarRadius.sm,
-    backgroundColor: 'rgba(9,11,16,0.62)',
-    borderWidth: 1,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.32)',
   },
-  cancelPressed: { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: Polar.ice },
-  cancelText: { fontFamily: PolarFonts.sansSemi, fontSize: 14, color: Polar.ice },
-  monument: { color: Polar.ice, opacity: 0.92, paddingHorizontal: PolarSpace.pad, marginTop: PolarSpace.s2 },
+  cancelPressed: { backgroundColor: 'rgba(255,255,255,0.24)' },
+  cancelText: { fontFamily: PolarFonts.sansSemi, fontSize: 15, color: Polar.ice },
 });

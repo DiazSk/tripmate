@@ -1,7 +1,7 @@
 import type { Stop, StreamedStop } from '@/api/types';
 import { STAGE_ORDER, type StageProgress } from '@shared/generationStages';
 import type { RawFetch } from '@shared/types';
-import { assembleDays, forecastLine, groupFills, latestStop, monumentSize, nowLine, time12 } from './writingPlan';
+import { assembleDays, forecastLine, groupFills, handoffFraction, latestStop, nowLine, waitPhrase } from './writingPlan';
 
 const stop = (name: string, lat = 38.7, lng = -9.14): Stop =>
   ({ name, lat, lng, cost: 0, note: '', time: '10:00', durationLabel: '1h' }) as Stop;
@@ -66,25 +66,19 @@ test('the forecast reads the trip calendar in UTC and says when it is last year'
     dateContext: { tripDays: 2, leadTimeDays: 30, season: 'fall', days: [{ date: '2026-11-03', dayOfWeek: 'Tuesday' }] },
     weather: { available: true, historical: true, days: [{ date: '2025-11-03', tempMinC: 13.6, tempMaxC: 19.2 }] },
   } as unknown as RawFetch;
-  expect(forecastLine(raw)).toBe('Tue 3 14 to 19º · same dates last year');
+  expect(forecastLine(raw)).toBe('Tue 3, 14 to 19° · same dates last year');
   expect(forecastLine(null)).toBeNull();
 });
 
-test('times read on a 12-hour clock; anything the model wrote in words stays as written', () => {
-  expect(time12('14:00')).toBe('2:00 PM');
-  expect(time12('0:30')).toBe('12:30 AM');
-  expect(time12('Late morning')).toBe('Late morning');
+test('the bar reaches the end when the wait does: the review after the hand-off does not count', () => {
+  const all = stages({ geocode: 'done', context: 'done', generate: 'done', critique: 'pending', placing: 'pending' });
+  expect(handoffFraction(all, 0.5)).toBe(1);
+  expect(handoffFraction(stages({}), 0)).toBe(0);
 });
 
-test('the monument fills the measure without running past it, wide letters included', () => {
-  // Rendered widths in ems on the web's monument (same Oswald 400): what each name really takes.
-  for (const [word, ems] of [['LISBON', 2.679], ['ROME', 2.102], ['WARSAW', 3.345]] as const) {
-    // A tall screen, so the width is what binds; the height cap is checked on its own below.
-    const size = monumentSize(word, 390, 2000, 19);
-    expect(size * ems).toBeLessThanOrEqual(390 - 38);
-    expect(size * ems).toBeGreaterThan((390 - 38) * 0.95);
-  }
-  expect(monumentSize('KOTA KINABALU', 390, 844, 19)).toBeLessThan(65);
-  // A short screen caps it by height instead.
-  expect(monumentSize('ROME', 390, 400, 19)).toBeCloseTo(68, 0);
+test('the estimate is said in words, coarsely', () => {
+  expect(waitPhrase(160)).toBe('About 3 min');
+  expect(waitPhrase(120)).toBe('About 2 min');
+  expect(waitPhrase(60)).toBe('About a minute');
+  expect(waitPhrase(10)).toBe('Almost there');
 });

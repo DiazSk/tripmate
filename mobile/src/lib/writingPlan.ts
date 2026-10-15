@@ -1,6 +1,5 @@
 import type { SketchEvent, Stop, StreamedStop } from '@/api/types';
 import { STAGE_SECONDS, STEP_GROUPS, stepGroupState, type StageProgress, type StepState } from '@shared/generationStages';
-import { monumentEms } from '@shared/monumentFit';
 import type { RawFetch } from '@shared/types';
 
 /**
@@ -85,35 +84,39 @@ export function forecastLine(raw: RawFetch | null): string | null {
   const calendar = raw.dateContext.days;
   const line = raw.weather.days
     .slice(0, 3)
-    .map((d, i) => `${dayLabel(calendar[i]?.date ?? d.date)} ${Math.round(d.tempMinC)} to ${Math.round(d.tempMaxC)}º`)
+    // A degree sign and a comma, so a run of numbers parses: "Fri 6, 16 to 28°". It was the
+    // ordinal indicator º, which is a different character that only looks like one.
+    .map((d, i) => `${dayLabel(calendar[i]?.date ?? d.date)}, ${Math.round(d.tempMinC)} to ${Math.round(d.tempMaxC)}°`)
     .join(' · ');
   return raw.weather.historical ? `${line} · same dates last year` : line;
 }
 
-function dms(v: number, pos: string, neg: string) {
-  const a = Math.abs(v);
-  const d = Math.floor(a);
-  const m = Math.floor((a - d) * 60);
-  const s = Math.round(((a - d) * 60 - m) * 60);
-  return `${d}º ${String(m).padStart(2, '0')}’ ${String(s).padStart(2, '0')}” ${v >= 0 ? pos : neg}`;
-}
-export function coordLine(lat: number, lon: number): string {
-  return `[ ${dms(lat, 'N', 'S')}, ${dms(lon, 'E', 'W')} ]`;
-}
-
-/** "14:00" → "2:00 PM"; anything else (a model's "Late morning") is shown as written. */
-export function time12(t: string): string {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(t);
-  if (!m) return t;
-  const h = Number(m[1]);
-  return `${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
-}
 
 /**
- * The monument's point size: the word across the measure, capped by the screen's height. Sized from
- * Oswald's own capital widths (`monumentEms`, shared with the web), not a flat per-letter average,
- * which under-measured Rome or Warsaw and cut their last letter off.
+ * How far the wait has come, 0 to 1, over the part of it the traveller actually sits through.
+ *
+ * The screen hands off to the trip the moment the plan is saved, so "Checking it over" and
+ * "Placing every stop" run after it has gone. Weighting the bar over all four steps would leave it
+ * half full at the hand-off; this weights the first two by their expected seconds instead, so the
+ * bar reaches the end when the wait does.
  */
-export function monumentSize(word: string, width: number, height: number, pad: number): number {
-  return Math.min(height * 0.17, (width - pad * 2) / monumentEms(word));
+export function handoffFraction(stages: readonly StageProgress[], progress: number): number {
+  const fills = groupFills(stages, progress);
+  const weight = (i: number) => STEP_GROUPS[i].stages.reduce((sum, id) => sum + STAGE_SECONDS[id], 0);
+  const total = weight(0) + weight(1);
+  return total ? (fills[0].fill * weight(0) + fills[1].fill * weight(1)) / total : 0;
+}
+
+/** The expected wait, in seconds, that `handoffFraction` counts down from. */
+export const HANDOFF_SECONDS = 150;
+
+/**
+ * The one estimate on screen, in words. Coarse on purpose: a figure that ticks by the second
+ * promises a precision the model does not have, and the caller keeps it from ever going back up.
+ */
+export function waitPhrase(secondsLeft: number): string {
+  if (secondsLeft > 150) return 'About 3 min';
+  if (secondsLeft > 90) return 'About 2 min';
+  if (secondsLeft > 40) return 'About a minute';
+  return 'Almost there';
 }

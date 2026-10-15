@@ -4,7 +4,8 @@ import { Oswald_400Regular } from '@expo-google-fonts/oswald';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { createTripDraft, generateTrip, getTrip, placePhoto, saveProfile, tripFetch, updateTripItinerary } from '@/api/tripMateApi';
 import type { Itinerary, SketchEvent, StreamedStop } from '@/api/types';
@@ -13,7 +14,7 @@ import { Meridian } from '@/components/meridian';
 import { Notice } from '@/components/states';
 import { WritingThePlan } from '@/components/writing-the-plan';
 import { Polar } from '@/constants/polar';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { tierName, tripDays } from '@/lib/tiers';
 import { assembleDays, type DayCoords } from '@/lib/writingPlan';
 import { buildDestinationFacts } from '@shared/destinationFacts';
@@ -48,6 +49,11 @@ export default function Generating() {
   const [sketch, setSketch] = useState<SketchEvent['days']>([]);
   const [coords, setCoords] = useState<DayCoords>({});
   const [failure, setFailure] = useState<string | undefined>();
+  /** The plan is saved: the card says so over the map for a beat, then the trip opens. */
+  const [ready, setReady] = useState(false);
+  /** Bumped by Try again, which runs the same answers again from the top. */
+  const [attempt, setAttempt] = useState(0);
+  const reduce = useReducedMotion();
   // The trip-fetch bundle (forecast, calendar, the city's centre) and the place's Wikipedia line,
   // for the facts. Both are already cached by the wizard's own calls for these dates.
   const [raw, setRaw] = useState<RawFetch | null>(null);
@@ -58,8 +64,8 @@ export default function Generating() {
   const live = useRef(true);
 
   // A generation is 60-246 seconds of billed work. Under React 19's development double-invoke
-  // this effect runs twice, which would start two of them; the ref makes it start exactly once.
-  const started = useRef(false);
+  // this effect runs twice, which would start two of them; the ref makes each attempt start once.
+  const started = useRef(-1);
   /**
    * The row this screen wrote, so the reviewed plan arriving ~150s later knows what to correct.
    *
@@ -70,8 +76,9 @@ export default function Generating() {
   const written = useRef<{ id: string; itinerary: Itinerary } | null>(null);
 
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
+    if (started.current === attempt) return;
+    started.current = attempt;
+    live.current = true;
 
     const { destination, startDate, endDate, budget } = draft;
     const controller = new AbortController();
@@ -136,8 +143,11 @@ export default function Generating() {
             return;
           }
           written.current = { id, itinerary: result.itinerary };
-          // Replace, not push: the wait is not somewhere to come back to.
-          router.replace(`/trip/${id}`);
+          // The ending is the map, not a cut: the card fills and says "ready" over the day the
+          // traveller just watched being drawn, then the trip opens. Replace, not push: the wait is
+          // not somewhere to come back to.
+          setReady(true);
+          setTimeout(() => router.replace(`/trip/${id}`), reduce ? 200 : 1100);
         },
         /**
          * The reviewed plan, landing after this screen is gone.
@@ -175,7 +185,17 @@ export default function Generating() {
     };
     // params is a fresh object each render; the ref above is what actually guards re-entry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
+
+  /** The same answers, from the top. Everything the last run streamed is cleared first. */
+  function tryAgain() {
+    setStages(STAGE_ORDER.map((stage) => ({ stage, status: 'pending' })));
+    setStops([]);
+    setSketch([]);
+    setCoords({});
+    setFailure(undefined);
+    setAttempt((n) => n + 1);
+  }
 
   const planDays = useMemo(() => assembleDays(sketch, stops, coords, tripDays(draft.startDate, draft.endDate)), [sketch, stops, coords, draft.startDate, draft.endDate]);
   const facts = useMemo(
@@ -195,9 +215,8 @@ export default function Generating() {
    */
   const backToReview = () => router.replace('/plan/basics');
 
-  // `complete` is always false here: the screen hands off to the trip the moment the plan is saved,
-  // so the plan opening is the success. A sketch alone is not streaming — only a real stop is.
-  const meri = meriForGeneration({ complete: false, streaming: stops.length > 0, failed: !!failure });
+  // A sketch alone is not streaming — only a real stop is.
+  const meri = meriForGeneration({ complete: ready, streaming: stops.length > 0, failed: !!failure });
 
   if (failure) {
     return (
@@ -208,8 +227,13 @@ export default function Generating() {
             <Meridian state={meri} size={56} />
           </View>
           <Notice>{failure}</Notice>
+          {/* Try again first: the answers were fine, the run was not, so the likeliest next step is
+              the same plan again. Changing something is the second way out. */}
           <View style={styles.retry}>
-            <PrimaryButton title="Back to the details" onPress={backToReview} />
+            <PrimaryButton title="Try again" onPress={tryAgain} />
+            <Pressable onPress={backToReview} accessibilityRole="button" style={styles.back}>
+              <Text style={styles.backText}>Back to the details</Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -233,6 +257,7 @@ export default function Generating() {
         days={planDays}
         facts={facts}
         raw={raw}
+        ready={ready}
         onCancel={() => {
           live.current = false;
           abort.current?.abort();
@@ -281,5 +306,7 @@ const styles = StyleSheet.create({
   night: { flex: 1, backgroundColor: Polar.night },
   meriFailed: { paddingHorizontal: Spacing.read },
   failure: { paddingTop: Spacing.regular, gap: Spacing.read },
-  retry: { paddingHorizontal: Spacing.read },
+  retry: { paddingHorizontal: Spacing.read, gap: Spacing.tight },
+  back: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  backText: { fontFamily: Fonts.sans, fontSize: 16, fontWeight: '600', color: Colors.accentText },
 });
