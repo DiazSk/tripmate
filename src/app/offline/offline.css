@@ -1,0 +1,246 @@
+/* /offline, from the canvas design "Offline · 1 Out of range": on the night, OFFLINE in outline as the
+   monument along the foot. Tokens and the buttons are the landing's (PolarLanding.css). */
+.tm.ofl {
+  min-height: 100dvh;
+  pointer-events: auto;
+  display: grid;
+  /* minmax(0, 1fr): an unbroken monument would otherwise widen the one column past the viewport. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(120% 70% at 50% 120%, rgba(31, 42, 68, 0.55) 0%, rgba(9, 11, 16, 0) 60%),
+    var(--wd-night);
+}
+.ofl-main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: var(--wd-space-8);
+  align-items: center;
+  width: 100%;
+  max-width: 82rem;
+  margin: 0 auto;
+  padding: calc(var(--nav-h) + var(--wd-space-6)) var(--wd-pad) var(--wd-space-4);
+}
+
+/* What happened */
+.ofl-say {
+  display: grid;
+  gap: var(--wd-space-3);
+  max-width: 38rem;
+  animation: ofl-in 0.9s var(--wd-ease-reveal) both;
+}
+@keyframes ofl-in {
+  from {
+    opacity: 0;
+    transform: translateY(1.2rem);
+  }
+}
+.ofl-meri {
+  margin-bottom: var(--wd-space-1);
+}
+.ofl-eyebrow {
+  color: var(--wd-night-text-2);
+}
+.ofl-title {
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  font-size: clamp(2.8rem, 5.4vw, 5rem);
+  line-height: 0.98;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+.ofl-body {
+  max-width: 34em;
+  font-size: 1.05em;
+  line-height: 1.55;
+  color: var(--wd-night-text-2);
+}
+.ofl-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  min-height: 2.4em;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+/* The pip: grey and still offline, a slow ring while checking, signal once back. */
+.ofl-pip {
+  position: relative;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--wd-stone);
+}
+.ofl-pip.is-checking {
+  background: var(--wd-signal);
+}
+.ofl-pip.is-checking::after {
+  content: '';
+  position: absolute;
+  inset: -0.35em;
+  border: 1px solid var(--wd-signal);
+  border-radius: 50%;
+  animation: ofl-ring 1.2s var(--wd-ease-out) infinite;
+}
+@keyframes ofl-ring {
+  from {
+    opacity: 1;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+.ofl-pip.is-back {
+  background: var(--wd-signal);
+}
+.ofl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wd-space-4);
+  margin-top: var(--wd-space-2);
+}
+
+/* What this device kept */
+.ofl-kept {
+  display: grid;
+  gap: var(--wd-space-2);
+  animation: ofl-in 0.9s 0.15s var(--wd-ease-reveal) both;
+}
+.ofl-kept-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: var(--wd-space-2);
+  color: var(--wd-night-text-2);
+  border-bottom: 1px solid var(--wd-frost-20);
+}
+.ofl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ofl-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9rem 1.5rem;
+  align-items: center;
+  gap: var(--wd-space-3);
+  width: 100%;
+  min-height: 5rem;
+  padding: 0 0.25rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background-color 0.3s var(--wd-ease-out);
+}
+.ofl-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.ofl-place {
+  display: grid;
+  gap: 0.2em;
+  min-width: 0;
+}
+.ofl-place b {
+  font-family: var(--wd-font-condensed);
+  font-weight: 400;
+  font-size: 1.85em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ofl-place span,
+.ofl-saved {
+  font-size: 0.78em;
+  line-height: 1.35;
+  color: var(--wd-night-text-2);
+}
+.ofl-saved {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ofl-go {
+  display: grid;
+  place-items: center;
+  color: var(--wd-signal);
+  transition: transform 0.45s var(--wd-ease-expedition);
+}
+.ofl-row:hover .ofl-go {
+  transform: translateX(0.3em);
+}
+.ofl-empty {
+  padding: var(--wd-space-4) 0;
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1.35em;
+  line-height: 1.35;
+  color: #fff;
+}
+.ofl-note {
+  min-height: 2.8em;
+  font-size: 0.8em;
+  line-height: 1.45;
+  color: var(--wd-night-text-2);
+}
+
+/* OFFLINE, in outline, across the foot and centred on it: the word is there, the signal is not.
+   Online, it fills. */
+.ofl-monument {
+  position: relative;
+  z-index: 0;
+  margin: 0;
+  /* rem, never the page's em-based gutter: this element's em is the word's own size, and 1.25em of
+     a 300px word was 383px a side, squeezing the box until the word spilled out to the right. */
+  padding: 0 1.25rem;
+  pointer-events: none;
+  font-family: var(--wd-font-condensed);
+  font-weight: 400;
+  text-transform: uppercase;
+  font-size: clamp(6rem, 22vw, 21rem);
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.34);
+  transition: color 1.2s var(--wd-ease-reveal), -webkit-text-stroke-color 1.2s var(--wd-ease-reveal);
+  animation: tm-reveal-opacity 1.4s both, tm-reveal-rise 1.4s var(--wd-ease-reveal) both;
+}
+.ofl[data-conn='checking'] .ofl-monument {
+  -webkit-text-stroke-color: rgba(255, 126, 21, 0.7);
+}
+.ofl[data-conn='back'] .ofl-monument {
+  color: #fff;
+  -webkit-text-stroke-color: #fff;
+}
+
+@media (max-width: 900px) {
+  .ofl-main {
+    grid-template-columns: 1fr;
+    gap: var(--wd-space-6);
+  }
+}
+@media (max-width: 520px) {
+  .ofl-row {
+    grid-template-columns: minmax(0, 1fr) 1.5rem;
+  }
+  .ofl-saved {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ofl-say,
+  .ofl-kept,
+  .ofl-monument,
+  .ofl-pip.is-checking::after {
+    animation: none;
+  }
+}

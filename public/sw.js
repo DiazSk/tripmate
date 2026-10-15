@@ -15,10 +15,26 @@ const STATIC_CACHE = `tripmate-static-${SW_VERSION}`;
 const PAGES_CACHE = `tripmate-pages-${SW_VERSION}`;
 const OFFLINE_URL = "/offline";
 
+// The offline page and everything it needs to draw and run. Its HTML alone is not enough: the page
+// is shown to somebody who may never have opened it online, so its own CSS and JS chunks would never
+// have been cached by `cacheFirst`, and it would arrive unstyled with no saved trips and no Try again.
+// So the static files its HTML names are cached with it, into the same cache `cacheFirst` reads, and
+// the page is only kept if it is the real page, never an error.
+async function precacheOffline() {
+  const response = await fetch(OFFLINE_URL, { cache: "reload" });
+  if (!response.ok) throw new Error(`offline page: ${response.status}`);
+  const html = await response.clone().text();
+  await (await caches.open(PAGES_CACHE)).put(OFFLINE_URL, response);
+  // Backslash excluded: the same paths also appear JSON-escaped (`\"/_next/...\"`) in the inline
+  // script data, and would otherwise be caught with a trailing `\`.
+  const assets = [...new Set(html.match(/\/_next\/static\/[^"'\\\s)<>]+/g) ?? [])];
+  const statics = await caches.open(STATIC_CACHE);
+  // One failed chunk must not cost the whole install; the page still has its HTML.
+  await Promise.allSettled(assets.map((url) => statics.add(url)));
+}
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(PAGES_CACHE).then((cache) => cache.addAll([OFFLINE_URL])).then(() => self.skipWaiting()),
-  );
+  event.waitUntil(precacheOffline().then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
