@@ -1,6 +1,16 @@
 import type { DayPlan, Stop, StopCategory } from '@/api/types';
 
-import { anyActualSpend, budgetSegments, daySpend, spendShares, tripSpend } from './spend';
+import {
+  anyActualSpend,
+  budgetSegments,
+  daySpend,
+  spendShares,
+  surenessFields,
+  surenessOf,
+  surenessSplit,
+  tripShares,
+  tripSpend,
+} from './spend';
 
 const stop = (name: string, cost: number, category: StopCategory, actualCost?: number): Stop => ({
   name,
@@ -155,4 +165,26 @@ describe('whether any real spend has been entered', () => {
   test('an actual of zero is an answer, not an absence', () => {
     expect(anyActualSpend([day([stop('Park', 10, 'entry', 0)])])).toBe(true);
   });
+});
+
+test('booked and locked read as one: a fixed stop is booked before any figure is entered', () => {
+  expect(surenessOf(stop('Ryokan', 100, 'other'))).toBe('estimate');
+  expect(surenessOf({ ...stop('Fort', 12, 'entry'), timeFlexibility: 'FIXED' })).toBe('booked');
+  expect(surenessOf({ ...stop('Dinner', 30, 'food'), costState: 'spent' })).toBe('paid');
+});
+
+test('choosing a sureness writes the lock with it, and an estimate releases it', () => {
+  expect(surenessFields('booked')).toEqual({ costState: 'booked', timeFlexibility: 'FIXED' });
+  expect(surenessFields('paid')).toEqual({ costState: 'spent', timeFlexibility: 'FIXED' });
+  expect(surenessFields('estimate')).toEqual({ costState: undefined, timeFlexibility: 'PREFERRED' });
+});
+
+test('the trip splits by sureness and by category, and both add up to what it costs', () => {
+  const d1 = day([{ ...stop('Fort', 12, 'entry'), timeFlexibility: 'FIXED' }, stop('Lunch', 18, 'food')], { cost: 210 });
+  const d2 = day([{ ...stop('Dinner', 30, 'food', 35), costState: 'spent' }]);
+  expect(surenessSplit([d1, d2])).toEqual({ estimate: 228, booked: 12, paid: 35 });
+  const shares = tripShares([d1, d2]);
+  expect(shares.map((s) => [s.label, s.amount])).toEqual([['Stay', 210], ['Food', 53], ['Entry', 12]]);
+  expect(shares.reduce((sum, s) => sum + s.percent, 0)).toBe(100);
+  expect(tripSpend([d1, d2])).toBe(275);
 });

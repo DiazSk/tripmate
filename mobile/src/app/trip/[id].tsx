@@ -27,20 +27,20 @@ import {
   unshareTrip,
   updateTripItinerary,
 } from '@/api/tripMateApi';
-import type { ChatTurn, CostState, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
+import type { ChatTurn, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
 import { lastRequestReachedServer } from '@/api/session';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { AnchorReceipt } from '@/components/anchor-receipt';
-import { BudgetBar } from '@/components/budget-bar';
+import { BudgetSheet } from '@/components/budget-sheet';
 import { ChatSheet } from '@/components/chat-sheet';
 import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
 import { OfflineScreen } from '@/components/offline-screen';
 import { StoryPanel } from '@/components/story-panel';
 import { PlanHealth } from '@/components/plan-health';
-import { PrimaryButton } from '@/components/form';
 import { Invitation, Loading, Notice } from '@/components/states';
 import { ThemedText } from '@/components/themed-text';
+import { TripToolbar } from '@/components/trip-toolbar';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { fitMessage } from '@/lib/anchors';
 import { type Repair, repairsFor } from '@shared/guardrailFixes';
@@ -51,6 +51,7 @@ import { tripHealth, type Guardrail } from '@/lib/health';
 import { importNoteLines, showsHealthOnOpen } from '@/lib/importNotes';
 import { drawableStops, regionForStops } from '@/lib/mapRegion';
 import { useStoryFilm } from '@/lib/useStoryFilm';
+import { surenessFields, tripSpend, type Sureness } from '@/lib/spend';
 import { loadTrip } from '@/lib/tripCache';
 import { todayInZone } from '@/lib/tripClock';
 import { openingDay } from '@/lib/tripPhase';
@@ -145,6 +146,11 @@ export default function TripDetail() {
   // and edge swipe the film hides.
   usePreventRemove(filming, closeFilm);
   const [adding, setAdding] = useState(false);
+  /** The Budget sheet, and which tab it opens on: the ring asks about the trip, a day's total
+   *  about that day. */
+  const [budgetSheet, setBudgetSheet] = useState<'trip' | 'day' | null>(null);
+  /** How much of the screen's foot the floating toolbar covers; the faces keep clear of it. */
+  const [toolbarHeight, setToolbarHeight] = useState(0);
   /**
    * The stop being asked "what else is near this?", or null when the sheet was opened by +.
    *
@@ -273,31 +279,26 @@ export default function TripDetail() {
   }
 
   /**
-   * Mark a stop booked, or release it.
+   * What a stop really cost, how sure that is, and — in the same write — whether it is locked.
+   *
+   * **Booked and locked are one fact now.** A cost marked Booked or Paid fixes the stop, and
+   * Estimate releases it (`surenessFields`). They were two controls, and a stop could read Booked,
+   * Unlock and Estimate at once. This is also the ONLY way the lock is ever cleared — `applyPatch`
+   * refuses an op that would, because a planner able to unlock a stop could unlock it and move it
+   * in one turn.
    *
    * Optimistic then rolled back, the same bargain `onAdd` strikes below and for the same reason:
    * the write is a whole-itinerary overwrite with no server-side undo, so the only honest recovery
-   * is to put back the object we replaced. This is also the ONLY way the flag is ever cleared —
-   * `applyPatch` refuses an op that would, because a planner able to unlock a stop could unlock it
-   * and move it in one turn.
-   */
-  /**
-   * What a stop really cost, and which kind of real that is.
+   * is to put back the object we replaced.
    *
-   * The same shape as `toggleLock` below, deliberately: optimistic write, one persist, roll back
-   * the whole itinerary if the save fails. A second pattern for editing a stop is how two edits
-   * start disagreeing about what "saved" means.
-   *
-   * `undefined` for both clears the figure and returns the stop to the planner's estimate —
-   * which is different from `0`, a real answer meaning it turned out to be free.
+   * An `undefined` cost clears the figure and returns the stop to the planner's estimate — which is
+   * different from `0`, a real answer meaning it turned out to be free.
    */
-  async function setCost(
-    dayIndex: number,
-    stopIndex: number,
-    cost: number | undefined,
-    costState: CostState | undefined
-  ) {
+  async function setCost(dayIndex: number, stopIndex: number, cost: number | undefined, sureness: Sureness) {
     if (!trip || offline) return;
+    // Read before the map below changes it, so the message names what was asked for.
+    const wasFixed = trip.itinerary.days[dayIndex]?.stops[stopIndex]?.timeFlexibility === 'FIXED';
+    const fields = surenessFields(sureness);
     const next: Itinerary = {
       ...trip.itinerary,
       days: trip.itinerary.days.map((plan, di) =>
@@ -306,41 +307,13 @@ export default function TripDetail() {
           : {
               ...plan,
               stops: plan.stops.map((stop, si) =>
-                si !== stopIndex ? stop : { ...stop, actualCost: cost, costState }
+                si !== stopIndex ? stop : { ...stop, actualCost: cost, ...fields }
               ),
             }
       ),
     };
-    await commit(next, 'That cost');
-  }
-
-  async function toggleLock(dayIndex: number, stopIndex: number) {
-    if (!trip || offline) return;
-    // Read before the map below flips it, so the message names what was asked for rather than
-    // what the rolled-back plan ended up holding.
-    const wasBooked = trip.itinerary.days[dayIndex]?.stops[stopIndex]?.timeFlexibility === 'FIXED';
-    const next: Itinerary = {
-      ...trip.itinerary,
-      days: trip.itinerary.days.map((plan, di) =>
-        di !== dayIndex
-          ? plan
-          : {
-              ...plan,
-              stops: plan.stops.map((stop, si) =>
-                si !== stopIndex
-                  ? stop
-                  : {
-                      ...stop,
-                      // Written out rather than deleted. Absent already reads as PREFERRED, but a
-                      // present value says somebody decided, which is what a later reader needs.
-                      timeFlexibility:
-                        stop.timeFlexibility === 'FIXED' ? ('PREFERRED' as const) : ('FIXED' as const),
-                    }
-              ),
-            }
-      ),
-    };
-    await commit(next, wasBooked ? 'Unlocking that stop' : 'Marking that stop booked');
+    const locking = fields.timeFlexibility === 'FIXED';
+    await commit(next, locking === wasFixed ? 'That cost' : locking ? 'Marking that stop booked' : 'Unlocking that stop');
   }
 
   function closeSheet() {
@@ -477,78 +450,10 @@ export default function TripDetail() {
                 <ThemedText type="label" themeColor="muted">
                   {formatRange(trip.startDate, trip.endDate)}
                 </ThemedText>
-                {/* Two rows, because these are two kinds of thing. Which day you are reading is
-                    navigation; List/Map and Ask/+ act on the day you landed on. Sharing one row made
-                    them one group of controls of equal weight, and it also capped the strip at
-                    whatever width the other three left — which is the wrong constraint on a
-                    fourteen-day trip, where the strip is the control that needs the room. */}
+                {/* The strip alone now: which day you are reading is navigation, and everything
+                    that acts on the day moved to the toolbar at the thumb. That also leaves the
+                    strip the row's whole width, which is the constraint a fortnight needs. */}
                 <DayStrip days={days} current={day} onSelect={setDay} />
-                <View style={styles.chromeRow}>
-                  <FaceToggle face={face} onChange={setFace} />
-                  <View style={styles.spacer} />
-              {/* Play narrates the day shown, so it sits with Ask and +, which act on that day
-                  too. Muted like Ask: + keeps the screen's one jade fill. It works offline — the
-                  film reads the plan when TripMate cannot write the story. */}
-              <Pressable
-                onPress={startFilm}
-                disabled={!canPlay}
-                accessibilityRole="button"
-                accessibilityLabel={`Play day ${day + 1}`}
-                accessibilityState={{ disabled: !canPlay }}
-                style={({ pressed }) => [styles.ask, pressed && styles.askPressed]}>
-                <SymbolView
-                  name={{ ios: 'play.fill', android: 'play_arrow' }}
-                  tintColor={canPlay ? Colors.foreground : Colors.muted}
-                  size={14}
-                  fallback={
-                    <ThemedText type="label" themeColor={canPlay ? 'foreground' : 'muted'}>
-                      Play
-                    </ThemedText>
-                  }
-                />
-              </Pressable>
-                  {/* Beside + for the reason + is here: the trailing end of this row is the toolbar,
-                      and both act on the plan below it — the same pairing `TripHeaderRow` makes in the
-                      Swift app. Muted rather than jade, also copied from there: two filled jade
-                      targets side by side read as two primary actions, and adding one stop is the
-                      ordinary one. These two stay out of the nav bar's `headerRight` because they act
-                      on the day below them rather than on the trip — `headerRight` now carries Share,
-                      which does act on the whole trip. (The original reason was Expo Go's floating dev
-                      button parking on that slot and swallowing every tap. It no longer binds:
-                      `expo-share-intent` is not one of Expo Go's bundled modules, so this app has
-                      required a development build since it was added and can no longer run there.) */}
-                  <Pressable
-                    onPress={() => {
-                      setChatSeed(undefined);
-                      // The plain Ask button is not about the day you happen to be reading — see
-                      // the scope note in `chat-sheet.tsx`.
-                      setChatScope(null);
-                      setChatOpenId((n) => n + 1);
-                      chat.open();
-                    }}
-                    disabled={offline}
-                    accessibilityRole="button"
-                    accessibilityLabel="Ask for a change"
-                    accessibilityState={{ disabled: offline }}
-                    style={({ pressed }) => [styles.ask, pressed && styles.askPressed]}>
-                    <ThemedText type="label" themeColor={offline ? 'muted' : 'foreground'}>
-                      Ask
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setAdding(true)}
-                    disabled={offline}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add a stop"
-                    accessibilityState={{ disabled: offline }}
-                    style={[styles.add, offline && styles.addOff]}>
-                    <ThemedText
-                      type="heading"
-                      themeColor={offline ? 'muted' : 'accentForeground'}>
-                      +
-                    </ThemedText>
-                  </Pressable>
-                </View>
               </View>
 
               {/* A parked proposal is invisible behind a closed sheet, and an approved one is easy
@@ -561,11 +466,23 @@ export default function TripDetail() {
                   a screen shouting, and the state is a property of the screen rather than of any
                   one button. */}
               {offline ? (
-                <View style={styles.stale}>
-                  <ThemedText type="detail" themeColor="muted">
-                    {`Saved copy${clockAt(cachedAt) ? ` from ${clockAt(cachedAt)}` : ''}. No connection, so nothing can be changed until you are back.`}
-                  </ThemedText>
+                <View style={styles.status} accessibilityLiveRegion="polite">
+                  <SymbolView name={{ ios: 'icloud.slash', android: 'cloud_off' }} tintColor={Colors.muted} size={18} />
+                  <View style={styles.grow}>
+                    <ThemedText type="detail" style={{ fontWeight: '600' }}>
+                      {`Offline${clockAt(cachedAt) ? ` · saved ${clockAt(cachedAt)}` : ''}`}
+                    </ThemedText>
+                    <ThemedText type="detail" themeColor="muted">
+                      Changes wait until you are back.
+                    </ThemedText>
+                  </View>
                 </View>
+              ) : null}
+
+              {/* Up here rather than as a shelf at the foot: the foot is the toolbar's now, and an
+                  unkept plan is a fact about the trip that belongs with the other one, offline. */}
+              {trip.status === 'draft' ? (
+                <KeepShelf trip={trip} onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })} />
               ) : null}
 
               {/* **A refused write, said out loud.** Coral, because this is the alert sense the One
@@ -596,11 +513,6 @@ export default function TripDetail() {
                 undoable={chat.undoable}
                 onUndo={chat.undo}
               />
-
-              {/* Below the chrome and outside it, so the bar spans the width rather than sitting in
-                  the row with the controls. Shown on the map face too: it is a fact about the trip,
-                  not about the list, and hiding it there would make the face swap jump. */}
-              <BudgetBar days={days} budget={trip.budget} activeDayIndex={day} />
 
               {trip && importNoteLines(trip.itinerary).length > 0 ? (
                 // Inset to the same edge as the PlanHealth card beneath it, so the two read as one block.
@@ -633,8 +545,9 @@ export default function TripDetail() {
               onEmphasise={setEmphasis}
               onFindNearby={findNearby}
               findings={findings}
-              onToggleLock={toggleLock}
               onSetCost={setCost}
+              onBudget={() => setBudgetSheet('day')}
+              footer={filming ? 0 : toolbarHeight}
               onAsk={(message: string) => askWith(message, day)}
               repairs={repairs}
               onRepair={applyRepair}
@@ -649,6 +562,7 @@ export default function TripDetail() {
                   emphasis={stopIndexFor(emphasis, day)}
                   onEmphasise={(stop) => setEmphasis(stop === null ? null : `${day}:${stop}`)}
                   film={filming ? { stop: film.stop, inset: sheetHeight } : undefined}
+                  lift={filming ? 0 : toolbarHeight}
                 />
               </MapFace>
             ) : null}
@@ -666,8 +580,45 @@ export default function TripDetail() {
               />
             ) : null}
           </View>
+
+          {filming ? null : (
+            <TripToolbar
+              face={face}
+              onFace={setFace}
+              canPlay={canPlay}
+              onPlay={startFilm}
+              offline={offline}
+              onAsk={() => {
+                setChatSeed(undefined);
+                // The plain Ask is not about the day you happen to be reading — see the scope note
+                // in `chat-sheet.tsx`.
+                setChatScope(null);
+                setChatOpenId((n) => n + 1);
+                chat.open();
+              }}
+              onAdd={() => setAdding(true)}
+              spent={tripSpend(days)}
+              budget={trip.budget}
+              onBudget={() => setBudgetSheet('trip')}
+              onHeight={setToolbarHeight}
+            />
+          )}
         </>
       )}
+
+      <BudgetSheet
+        visible={budgetSheet !== null}
+        initial={budgetSheet ?? 'trip'}
+        days={days}
+        budget={trip.budget}
+        dayIndex={day}
+        offline={offline}
+        onDay={setDay}
+        onSureness={(dayIndex, stopIndex, sureness) =>
+          setCost(dayIndex, stopIndex, days[dayIndex]?.stops[stopIndex]?.actualCost, sureness)
+        }
+        onClose={() => setBudgetSheet(null)}
+      />
 
       <AddPlaceSheet
         visible={adding}
@@ -710,13 +661,6 @@ export default function TripDetail() {
         onApply={chat.apply}
         onDiscard={chat.discard}
       />
-
-      {trip.status === 'draft' ? (
-        <KeepShelf
-          trip={trip}
-          onKept={(endDate) => setTrip({ ...trip, status: 'saved', endDate })}
-        />
-      ) : null}
     </View>
   );
 }
@@ -1073,8 +1017,9 @@ function DayPager({
   onEmphasise,
   onFindNearby,
   findings,
-  onToggleLock,
   onSetCost,
+  onBudget,
+  footer,
   onAsk,
   repairs,
   onRepair,
@@ -1088,13 +1033,10 @@ function DayPager({
   onFindNearby: (stop: Stop) => void;
   /** Every finding for the whole trip; each day takes its own slice below. */
   findings: Guardrail[];
-  onToggleLock: (dayIndex: number, stopIndex: number) => void;
-  onSetCost: (
-    dayIndex: number,
-    stopIndex: number,
-    cost: number | undefined,
-    state: CostState | undefined
-  ) => void;
+  onSetCost: (dayIndex: number, stopIndex: number, cost: number | undefined, sureness: Sureness) => void;
+  onBudget: () => void;
+  /** The floating toolbar's height — see `DayPage`. */
+  footer: number;
   onAsk: (message: string) => void;
   repairs: (finding: Guardrail) => Repair[];
   onRepair: (days: DayPlan[], label: string) => void;
@@ -1146,8 +1088,9 @@ function DayPager({
             onEmphasise={(stop) => onEmphasise(stop === null ? null : `${index}:${stop}`)}
             onFindNearby={onFindNearby}
             findings={findings.filter((f) => f.dayIndex === index)}
-            onToggleLock={(stopIndex) => onToggleLock(index, stopIndex)}
-            onSetCost={(stopIndex, cost, state) => onSetCost(index, stopIndex, cost, state)}
+            onSetCost={(stopIndex, cost, sureness) => onSetCost(index, stopIndex, cost, sureness)}
+            onBudget={onBudget}
+            footer={footer}
             offline={offline}
             onAsk={onAsk}
             repairs={repairs}
@@ -1288,44 +1231,6 @@ function MapFace({ visible, children }: { visible: boolean; children: React.Reac
   );
 }
 
-/**
- * List or map, for the trip.
- *
- * A two-up control rather than a card flip: neither platform ships a flip — it is iOS 6-era
- * skeuomorphism Apple removed, and Material has no equivalent — and a flip would also force both
- * faces to stay mounted for backface-visibility, keeping a live map behind the list forever.
- *
- * The selected side is paper on slate, not jade. Jade means action, and which view you are
- * looking at is not an action.
- */
-function FaceToggle({
-  face,
-  onChange,
-}: {
-  face: 'list' | 'map';
-  onChange: (face: 'list' | 'map') => void;
-}) {
-  return (
-    <View style={styles.toggle}>
-      {(['list', 'map'] as const).map((option) => {
-        const active = face === option;
-        return (
-          <Pressable
-            key={option}
-            onPress={() => onChange(option)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            style={[styles.toggleHalf, active && styles.toggleHalfActive]}>
-            <ThemedText type="label" themeColor={active ? 'foreground' : 'muted'}>
-              {option === 'list' ? 'List' : 'Map'}
-            </ThemedText>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 /** The middle of a day's stops, reusing the map's own framing maths. */
 function centreOf(stops: { lat: number; lng: number }[]): { lat: number; lng: number } | null {
   const region = regionForStops(stops);
@@ -1375,21 +1280,38 @@ function KeepShelf({ trip, onKept }: { trip: Trip; onKept: (endDate: string) => 
   }
 
   return (
-    <View style={styles.shelf}>
-      {failed ? (
-        <ThemedText type="detail" themeColor="alert" style={styles.shelfError}>
-          That didn&rsquo;t go through. Try again.
-        </ThemedText>
-      ) : (
-        <ThemedText type="detail" themeColor="muted" style={styles.shelfError}>
-          Not kept yet. It won&rsquo;t appear under Trips until you do.
-        </ThemedText>
-      )}
-      <PrimaryButton title="Keep this trip" onPress={keep} busy={busy === 'keep'} disabled={!!busy} />
-      <Pressable onPress={discard} disabled={!!busy} style={styles.discard}>
+    <View style={styles.status}>
+      <SymbolView name={{ ios: 'doc.text', android: 'description' }} tintColor={Colors.muted} size={18} />
+      <View style={styles.grow}>
+        <ThemedText type="detail" style={{ fontWeight: '600' }}>Draft</ThemedText>
+        {failed ? (
+          <ThemedText type="detail" themeColor="alert">
+            That didn&rsquo;t go through. Try again.
+          </ThemedText>
+        ) : (
+          <ThemedText type="detail" themeColor="muted">
+            Not under Trips until you keep it.
+          </ThemedText>
+        )}
+      </View>
+      <Pressable onPress={discard} disabled={!!busy} accessibilityRole="button" hitSlop={8}>
         <ThemedText type="detail" themeColor="muted">
           {busy === 'discard' ? 'Discarding…' : 'Discard'}
         </ThemedText>
+      </Pressable>
+      <Pressable
+        onPress={keep}
+        disabled={!!busy}
+        accessibilityRole="button"
+        accessibilityLabel="Keep this trip"
+        style={({ pressed }) => [styles.keep, pressed && styles.pressedRow]}>
+        {busy === 'keep' ? (
+          <ActivityIndicator color={Colors.accentForeground} />
+        ) : (
+          <ThemedText type="detail" style={{ color: Colors.accentForeground, fontWeight: '600' }}>
+            Keep
+          </ThemedText>
+        )}
       </Pressable>
     </View>
   );
@@ -1410,10 +1332,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.tight,
     gap: Spacing.tight,
   },
-  chromeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
-  // Pushes Ask and + to the trailing end, so the row reads as "view here, actions there"
-  // rather than as four controls in a queue.
-  spacer: { flex: 1 },
   editBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1460,42 +1378,31 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     flexGrow: 1,
   },
-  toggle: {
-    flexDirection: 'row',
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.control,
-    padding: 3,
-    gap: 2,
-  },
-  toggleHalf: {
-    paddingHorizontal: Spacing.rows,
-    paddingVertical: 7,
-    borderRadius: Radius.pill,
-  },
-  toggleHalfActive: { backgroundColor: Colors.surfaceDeep },
-  // The face toggle's pill, since this reads as the third control in that group rather than a
-  // second + — its height comes from the same 3pt padding plus a `label` line.
-  ask: {
-    height: 40,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.control,
-    paddingHorizontal: Spacing.rows,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  askPressed: { backgroundColor: Colors.pressed },
-  add: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Jade is the colour of a thing you can press. A control that cannot be pressed must not wear
-  // it, or the palette stops meaning anything.
-  addOff: { backgroundColor: Colors.control },
   stale: { paddingHorizontal: Spacing.read, paddingBottom: Spacing.tight },
+  /** A fact about the whole trip — offline, or not kept yet — said once, above the faces it
+   *  applies to: a neutral slate card with its icon, never a tint on the page. */
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.rows,
+    marginHorizontal: Spacing.read,
+    marginBottom: Spacing.tight,
+    paddingHorizontal: Spacing.rows,
+    paddingVertical: Spacing.tight,
+    borderRadius: Radius.surface,
+    backgroundColor: Colors.surfaceDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
+  keep: {
+    minHeight: 36,
+    minWidth: 64,
+    paddingHorizontal: Spacing.read,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.foreground,
+  },
   // No fixed height: two lines of text at the accessibility sizes need the room, and a chip
   // that clips its weekday is worse than a taller strip. `read` rather than `pill`, because a
   // two-line pill is a lozenge.
@@ -1520,17 +1427,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
   },
 
-  shelf: {
-    backgroundColor: Colors.bar,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.cardBorder,
-    paddingHorizontal: Spacing.read,
-    paddingTop: Spacing.rows,
-    paddingBottom: Spacing.regular,
-    gap: Spacing.rows,
-  },
-  shelfError: { textAlign: 'center' },
-  discard: { alignItems: 'center', paddingVertical: Spacing.tight },
   // The keep shelf's material, but left-aligned and without its centred, decision-shaped
   // emphasis: keeping a plan is the step that gates the trip, and sharing one is a thing you may
   // never do. Same gutters so the two occupy the same slot without the page shifting.

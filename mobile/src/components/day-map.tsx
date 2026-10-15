@@ -83,6 +83,7 @@ export function DayMap({
   onEmphasise,
   film,
   onMapType,
+  lift = 0,
 }: {
   stops: Stop[];
   dayIndex: number;
@@ -97,6 +98,12 @@ export function DayMap({
   /** What the map is actually drawing, for a panel standing on it that must pick its material by
    *  whether the ground is a photograph (`chrome()`). The film's panel is that panel. */
   onMapType?: (type: MapType) => void;
+  /**
+   * How much of the map's foot something floating over it covers — the trip's toolbar. The map
+   * still runs underneath (it is the ground, not a panel), but its padding, Apple's marks, the
+   * controls and the stop card all rise by this much, the way they already rise for a film's sheet.
+   */
+  lift?: number;
 }) {
   const map = useRef<MapView>(null);
   const reduceMotion = useReducedMotion();
@@ -487,7 +494,7 @@ export function DayMap({
         // During a film the sheet covers the foot of the map, so the padding grows to its height:
         // MapKit keeps Apple's logo and Legal link inside the padded area — a licence condition, so
         // they must stay visible — and centres every dive in the map that is left.
-        mapPadding={film ? { ...MAP_INSET, bottom: film.inset ?? 0 } : MAP_INSET}
+        mapPadding={film ? { ...MAP_INSET, bottom: film.inset ?? 0 } : { ...MAP_INSET, bottom: lift }}
         // Defaults to white, and would flash against the near-black canvas on every first draw.
         loadingBackgroundColor={Colors.canvas}
         // Android otherwise puts Google's own directions buttons over the map on a marker press.
@@ -573,6 +580,9 @@ export function DayMap({
           sheet and covered the thumbnails' labels. Nothing here uses `zIndex` — source order is
           what the rest of this file relies on too (Apple Maps ignores a Polyline's `zIndex`
           outright). */}
+      {/* The card and the controls are measured from this box's foot, so lifting the box lifts
+          both by exactly the toolbar's height and every number inside them stays as it was. */}
+      <View style={[StyleSheet.absoluteFill, { bottom: lift }]} pointerEvents="box-none">
       {shown && !film ? (
         <StopCard
           stop={shown}
@@ -605,6 +615,7 @@ export function DayMap({
           region={region}
         />
       )}
+      </View>
 
       {/* What the map cannot draw. A route is visibly a shape and invisibly a cost, and the
           cost is the half somebody is deciding on — "is this the day I do Belém" is a question

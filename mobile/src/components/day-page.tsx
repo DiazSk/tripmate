@@ -1,22 +1,22 @@
 import type { Repair } from '@shared/guardrailFixes';
 import { groupStopsByTimeOfDay } from '@shared/timeOfDay';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import type { CostState, DayPlan, Stop } from '@/api/types';
-import { PillButton } from '@/components/form';
+import type { DayPlan, Stop } from '@/api/types';
+import { MoneyBand } from '@/components/budget-sheet';
 import { PlacePhoto } from '@/components/place-photo';
 import { TravelSegment } from '@/components/travel-segment';
-import { SpendBreakdown } from '@/components/spend-breakdown';
 import { StopDisc } from '@/components/stop-disc';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, PhotoScrim, Radius, Spacing, dayCore } from '@/constants/theme';
-import { formatDateline, stopParticulars, weatherLine } from '@/lib/dayDisplay';
+import { stopParticulars, weatherLine } from '@/lib/dayDisplay';
 import { directionsUrl } from '@/lib/directions';
 import { evidenceTags } from '@/lib/provenance';
 import { locationNote } from '@shared/evidence';
 import { fixMessage, isBlocking, type Guardrail } from '@/lib/health';
-import { formatMoney } from '@/lib/spend';
+import { SURENESS_LABEL, anyActualSpend, daySpend, formatMoney, spendShares, surenessOf, type Sureness } from '@/lib/spend';
 import { emptyDayFindings } from '@/lib/importNotes';
 
 /**
@@ -36,11 +36,12 @@ export function DayPage({
   onEmphasise,
   onFindNearby,
   findings,
-  onToggleLock,
   onSetCost,
   onAsk,
   repairs,
   onRepair,
+  onBudget,
+  footer,
   offline,
 }: {
   day: DayPlan;
@@ -62,11 +63,16 @@ export function DayPage({
    * separately is how they start disagreeing.
    */
   findings: Guardrail[];
-  /** Flip a stop between booked and ordinary. Booked is §0 rank 1 — the plan is re-planned around
-   *  it and the server's applier refuses to move it. */
-  onToggleLock: (stopIndex: number) => void;
-  /** What a stop really cost, and whether that money is committed or gone. */
-  onSetCost: (stopIndex: number, cost: number | undefined, state: CostState | undefined) => void;
+  /**
+   * What a stop really cost, and how sure that is. Booked and Paid also lock the stop — §0 rank 1,
+   * re-planned around and never moved by the server's applier — and Estimate releases it. See
+   * `surenessFields`: the lock and the cost's state are one control now, not two.
+   */
+  onSetCost: (stopIndex: number, cost: number | undefined, sureness: Sureness) => void;
+  /** Opens the Budget sheet on this day. */
+  onBudget: () => void;
+  /** How much of the foot the floating toolbar covers, so the last section scrolls clear of it. */
+  footer: number;
   /**
    * Serving a copy from disk, so nothing here may be written.
    *
@@ -104,177 +110,175 @@ export function DayPage({
   const showHeadings = groups.length > 1;
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <DayHead day={day} dayIndex={dayIndex} dayCount={dayCount} />
+    <ScrollView
+      contentContainerStyle={[styles.content, { paddingBottom: footer + Spacing.regular }]}
+      showsVerticalScrollIndicator={false}>
+      <DayHead day={day} dayIndex={dayIndex} dayCount={dayCount} destination={destination} />
 
-      {/* **No trailing total.** `spend-breakdown` prints `daySpend(day)` at the foot of this
-          same screen, and its own note has the argument: a day's total "is a summary of what you
-          have just read, so it cannot come before it." That copy also sat directly above the
-          first stop, which made it the gold mark competing hardest with the content. */}
-      <View style={styles.slot}>
-        <SectionRule label="The day" />
+      <View style={styles.section}>
+        <SectionRule label={`The day · ${stops.length} ${stops.length === 1 ? 'stop' : 'stops'}`} />
+
+        {/* An empty day has no rows for a finding to sit on, so its own "Fix this" goes here — the
+            same `Finding`, which with no repairs opens chat pre-filled. See `emptyDayFindings`. */}
+        {emptyDayFindings(day, findings).map((finding) => (
+          <Finding key={finding.message} finding={finding} repairs={[]} onRepair={onRepair} onAsk={onAsk} />
+        ))}
+
+        {groups.map((group, groupIndex) => (
+          <View key={group.label ?? `group-${groupIndex}`}>
+            {showHeadings && group.label ? <SectionRule label={group.label} /> : null}
+            {group.stops.map((entry, indexInGroup) => (
+              <View key={`${entry.stop.name}-${entry.index}`}>
+                {/* Only WITHIN a group, never across a heading. A leg spanning Morning to Afternoon
+                    is the day's long gap, where the minutes say least, and a segment drawn under a
+                    fresh heading reads as belonging to the heading rather than to the two stops. */}
+                {indexInGroup > 0 ? (
+                  <TravelSegment from={group.stops[indexInGroup - 1].stop} to={entry.stop} />
+                ) : null}
+                <StopRow
+                  stop={entry.stop}
+                  // The day's own numbering, not the group's — the stops stay 1..n down the page and
+                  // keep agreeing with the numbered discs on the map.
+                  ordinal={entry.index + 1}
+                  dayIndex={dayIndex}
+                  expanded={emphasis === entry.index}
+                  findings={findings.filter((f) => f.stopIndex === entry.index)}
+                  onPress={() => onEmphasise(emphasis === entry.index ? null : entry.index)}
+                  onFindNearby={() => onFindNearby(entry.stop)}
+                  onSetCost={(cost, sureness) => onSetCost(entry.index, cost, sureness)}
+                  onAsk={onAsk}
+                  repairs={repairs}
+                  onRepair={onRepair}
+                  offline={offline}
+                />
+              </View>
+            ))}
+          </View>
+        ))}
       </View>
 
-      {/* An empty day has no rows for a finding to sit on, so its own "Fix this" goes here — the
-          same `Finding`, which with no repairs opens chat pre-filled. See `emptyDayFindings`. */}
-      {emptyDayFindings(day, findings).map((finding) => (
-        <View key={finding.message} style={styles.slot}>
-          <Finding finding={finding} repairs={[]} onRepair={onRepair} onAsk={onAsk} />
-        </View>
-      ))}
-
-      {groups.map((group, groupIndex) => (
-        <View key={group.label ?? `group-${groupIndex}`}>
-          {showHeadings && group.label ? (
-            <View style={styles.slot}>
-              <SectionRule label={group.label} />
-            </View>
-          ) : null}
-          {group.stops.map((entry, indexInGroup) => (
-            <View key={`${entry.stop.name}-${entry.index}`}>
-              {/* Only WITHIN a group, never across a heading. A leg spanning Morning to Afternoon
-                  is the day's long gap, where the minutes say least, and a segment drawn under a
-                  fresh heading reads as belonging to the heading rather than to the two stops. */}
-              {indexInGroup > 0 ? (
-                <TravelSegment from={group.stops[indexInGroup - 1].stop} to={entry.stop} />
-              ) : null}
-              <StopRow
-                stop={entry.stop}
-                // The day's own numbering, not the group's — the stops stay 1..n down the page and
-                // keep agreeing with the numbered discs on the map.
-                ordinal={entry.index + 1}
-                dayIndex={dayIndex}
-                expanded={emphasis === entry.index}
-                findings={findings.filter((f) => f.stopIndex === entry.index)}
-                onPress={() => onEmphasise(emphasis === entry.index ? null : entry.index)}
-                onFindNearby={() => onFindNearby(entry.stop)}
-                onToggleLock={() => onToggleLock(entry.index)}
-                onSetCost={(cost, state) => onSetCost(entry.index, cost, state)}
-                onAsk={onAsk}
-                repairs={repairs}
-                onRepair={onRepair}
-                offline={offline}
-              />
-            </View>
-          ))}
-        </View>
-      ))}
-
       {day.lodging ? (
-        <View style={styles.lodging}>
-          <SectionRule label="Stay" />
-          <View style={styles.lodgingRow}>
-            <View style={styles.grow}>
-              <ThemedText type="heading">{day.lodging.name}</ThemedText>
-              {day.lodging.note ? (
-                <ThemedText type="detail" themeColor="muted">
-                  {day.lodging.note}
-                </ThemedText>
-              ) : null}
-            </View>
-            <Cost amount={day.lodging.actualCost ?? day.lodging.cost} />
+        <View style={[styles.section, styles.stay]}>
+          <View style={styles.stayIcon}>
+            <Glyph name={{ ios: 'bed.double', android: 'bed' }} size={17} color={Colors.foreground} />
           </View>
+          <View style={styles.grow}>
+            <ThemedText type="label" themeColor="muted">
+              Tonight
+            </ThemedText>
+            <ThemedText type="heading">{day.lodging.name}</ThemedText>
+            {day.lodging.note ? (
+              <ThemedText type="detail" themeColor="muted">
+                {day.lodging.note}
+              </ThemedText>
+            ) : null}
+          </View>
+          <Cost amount={day.lodging.actualCost ?? day.lodging.cost} />
         </View>
       ) : null}
 
-      <DayPlate day={day} destination={destination} />
-
-      <SpendBreakdown day={day} dayIndex={dayIndex} />
-
+      <DayTotal day={day} dayIndex={dayIndex} onOpen={onBudget} />
     </ScrollView>
   );
 }
 
 /**
- * What the day is, in as little height as it can be said in.
+ * The day's name over the destination's photograph, then what the day is for.
  *
- * **The photograph used to be here, and the first stop was the sixth thing on the screen.** The
- * trip chrome above this — title, date range, day chips, List/Map, the budget bar — already
- * runs to about 264pt on a 402pt device. A 16:9 full-bleed picture adds 226 more, and the
- * introduction another 70, so on the screen this app is read on in a street the first stop
- * arrived at roughly 600pt of an 874pt display: visible, barely, and only if nothing above it
- * wrapped. Three separate reviewers reported the day screen as chrome-first. It was.
+ * **The photograph was moved to the foot once, for a measured reason, and comes back with that
+ * reason gone.** The trip chrome above this used to run title, dates, day chips, a List/Map · Play ·
+ * Ask · + row and a budget bar, and a 16:9 picture under all of that put the first stop at about
+ * 600pt of an 874pt display. The action row and the budget bar have since left the top for the
+ * floating toolbar, which returns roughly the height a 21:9 band takes — and the day's name, which
+ * used to be a separate line, rides the picture instead of sitting under it. So the band costs the
+ * list nothing it did not already spend, and the photograph is where it says where you are.
  *
- * So the picture goes to the foot (`DayPlate`) and what stays is the part that is *operational*:
- * which day of how many, what the day is for, and the weather, which decides what you put on
- * before you leave. The date itself does not stay — the day chips directly above this carry it,
- * and `22 THU` under `OCT 22 – 28` is the same fact twice. That is the argument `Today`'s header
- * already makes about the clock.
+ * **The photograph is the destination's, and a per-day one was tried and measured away**: across
+ * every saved trip only 2 of 14 days had a picture for any stop they name (the model says
+ * "Fushimi Inari", the encyclopaedia says "Fushimi Inari-taisha", and a first stop is often a
+ * tram). What changes on a swipe is the day's name over it, and every row below.
  *
- * The weather comes out of its slate badge and becomes ordinary muted text, because the badge
- * existed to survive a photograph and there is no longer one under it.
+ * Only large type rides the picture — the Photograph-Is-Not-A-Surface rule. The weather is short
+ * enough to join the overline; the summary is reading, so it sits on the night beneath.
  */
-function DayHead({ day, dayIndex, dayCount }: { day: DayPlan; dayIndex: number; dayCount: number }) {
+function DayHead({
+  day,
+  dayIndex,
+  dayCount,
+  destination,
+}: {
+  day: DayPlan;
+  dayIndex: number;
+  dayCount: number;
+  destination: string;
+}) {
   const weather = weatherLine(day);
   return (
-    <View style={styles.head}>
-      <View style={styles.headLine}>
-        <ThemedText type="label" themeColor="muted">
-          {`Day ${dayIndex + 1} of ${dayCount}`}
-        </ThemedText>
-        {weather ? (
-          <ThemedText type="detail" themeColor="muted" numberOfLines={1} style={styles.headWeather}>
-            {weather}
+    <>
+      <PlacePhoto
+        name={destination}
+        aspectRatio={21 / 9}
+        // Square, because it touches both screen edges — a radius only reads as a corner when
+        // there is page beside it to be a corner against.
+        radius={0}
+        scrim={PhotoScrim}
+        style={styles.band}>
+        <View style={styles.bandText}>
+          {day.theme || day.title ? (
+            <ThemedText type="display" themeColor="onDeep" numberOfLines={2}>
+              {day.theme || day.title}
+            </ThemedText>
+          ) : null}
+          <ThemedText type="detail" themeColor="onDeep" numberOfLines={1} style={styles.bandLine}>
+            {[`Day ${dayIndex + 1} of ${dayCount}`, weather].filter(Boolean).join(' · ')}
           </ThemedText>
-        ) : null}
-      </View>
-
-      {day.theme ? <ThemedText type="title">{day.theme}</ThemedText> : null}
-
+        </View>
+      </PlacePhoto>
       {day.summary ? (
-        <ThemedText type="detail" themeColor="muted">
+        <ThemedText type="body" themeColor="muted" style={styles.summary}>
           {day.summary}
         </ThemedText>
       ) : null}
-    </View>
+    </>
   );
 }
 
 /**
- * The day's photograph, as a closing plate rather than a masthead.
+ * The day's money in one line, and the way into the rest of it.
  *
- * Only large type and tracked caps ride the picture — the Photograph-Is-Not-A-Surface rule, and
- * the dateline it carries is exactly that. It sits after the last thing you *do* with the day
- * and before the money, which is where atmosphere can be spent without costing anything: the
- * reader who came here to find their next stop has already found it.
- *
- * A band, not a frame: 21:9 rather than 16:9, so it closes the day rather than restating it at
- * the weight a masthead has.
- *
- * **The photograph is the destination's, and a per-day one was tried and measured away.** Paging
- * days made the repeated picture look inert — swipe, and the largest thing on screen does not
- * move — so it was switched to the day's first stop. Then the hit rate was measured across every
- * saved trip: **2 of 14 days**. Not close, and not random. The model names stops the way a person
- * would say them rather than the way an encyclopaedia titles them ("Fushimi Inari" against
- * "Fushimi Inari-taisha"), and a day's first stop is very often transit or a meal — "Tram 15E to
- * Belém", "Breakfast at Manteigaria" — which will never have an article. Widening to *any* stop
- * in the day scored identically: 12 of 14 days have no photograph for any stop they name.
- *
- * So the destination photograph stays, because it is the one that actually resolves. What changes
- * on a swipe is the dateline, and every row above it.
+ * The full breakdown used to close every page; it now lives in the Budget sheet, beside the
+ * trip's, so this is the total, the band, and a tap.
  */
-function DayPlate({ day, destination }: { day: DayPlan; destination: string }) {
+function DayTotal({ day, dayIndex, onOpen }: { day: DayPlan; dayIndex: number; onOpen: () => void }) {
+  const total = daySpend(day);
+  if (!(total > 0)) return null;
   return (
-    <PlacePhoto
-      name={destination}
-      aspectRatio={21 / 9}
-      // Square, because it touches both screen edges — a radius only reads as a corner when
-      // there is page beside it to be a corner against.
-      radius={0}
-      scrim={PhotoScrim}
-      style={styles.plate}>
-      <View style={styles.dateline}>
-        <ThemedText type="display" themeColor="onDeep" numberOfLines={2}>
-          {formatDateline(day.date)}
+    <Pressable
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`Day ${dayIndex + 1} costs ${formatMoney(total)}. Open the breakdown.`}
+      style={({ pressed }) => [styles.section, styles.total, pressed && styles.pressed]}>
+      <ThemedText type="label" themeColor="muted">
+        {`Day ${dayIndex + 1} · ${anyActualSpend([day]) ? 'confirmed' : 'projected'}`}
+      </ThemedText>
+      <View style={styles.totalRow}>
+        <ThemedText type="moneyLarge" style={[styles.grow, styles.figure]}>
+          {formatMoney(total)}
         </ThemedText>
-        {day.title ? (
-          <ThemedText type="detail" themeColor="onDeep" style={styles.datelineTitle}>
-            {day.title}
+        <View style={styles.sure}>
+          <ThemedText type="detail" themeColor="muted">
+            Breakdown
           </ThemedText>
-        ) : null}
+          <Glyph name={{ ios: 'chevron.right', android: 'chevron_right' }} size={11} color={Colors.muted} />
+        </View>
       </View>
-    </PlacePhoto>
+      <MoneyBand shares={spendShares(day)} />
+    </Pressable>
   );
+}
+
+function Glyph({ name, size, color }: { name: SymbolViewProps['name']; size: number; color: string }) {
+  return <SymbolView name={name} size={size} tintColor={color} />;
 }
 
 /** A stop is a row, never a card. The system draws rules rather than boxing things. */
@@ -286,7 +290,6 @@ function StopRow({
   findings,
   onPress,
   onFindNearby,
-  onToggleLock,
   onSetCost,
   onAsk,
   repairs,
@@ -303,13 +306,12 @@ function StopRow({
   onRepair: (days: DayPlan[], label: string) => void;
   onPress: () => void;
   onFindNearby: () => void;
-  onToggleLock: () => void;
-  onSetCost: (cost: number | undefined, state: CostState | undefined) => void;
+  onSetCost: (cost: number | undefined, sureness: Sureness) => void;
   onAsk: (message: string) => void;
   /** Serving a copy from disk — see the outer prop. */
   offline: boolean;
 }) {
-  const booked = stop.timeFlexibility === 'FIXED';
+  const sureness = surenessOf(stop);
   const where = locationNote(stop.located);
   // `Description:` rather than the field's own name, because the reader has just read a
   // sentence, not a `note`. Joined on one line: two grey qualifiers stacked read as a block of
@@ -321,18 +323,11 @@ function StopRow({
   ].filter(Boolean);
   // Shared with the map's stop card — see `stopParticulars`.
   const particulars = stopParticulars(stop);
-  const blocked = findings.some(isBlocking);
 
   return (
     <Pressable
       onPress={onPress}
-      // Blocked last, so it wins over the emphasis wash. Expanding a row is something you did;
-      // the day not working is something that is true whether or not you are looking at it.
-      style={[
-        styles.stop,
-        expanded && styles.stopExpanded,
-        blocked && styles.stopBlocked,
-      ]}
+      style={[styles.stop, expanded && styles.stopExpanded]}
       android_ripple={{ color: Colors.pressed }}>
       <StopDisc ordinal={ordinal} color={dayCore(dayIndex)} />
 
@@ -350,14 +345,16 @@ function StopRow({
               {particulars}
             </ThemedText>
           ) : null}
-          {/* A word, not a glyph. `plan/_layout.tsx` records that a bare SF symbol name renders
-              nothing at all on Android, and a padlock drawn two ways is a second thing to keep in
-              step for no gain — "Booked" also scales with Dynamic Type and reads to a screen
-              reader without a label of its own. */}
-          {booked ? (
-            <ThemedText type="detail" themeColor="foreground">
-              Booked
-            </ThemedText>
+          {/* A word, not only a glyph: a padlock alone reads to nobody with a screen reader, and
+              "Booked" or "Paid" scales with Dynamic Type. The lock beside it says what the word
+              now also means — the planner will not move this stop. */}
+          {sureness !== 'estimate' ? (
+            <View style={styles.sure}>
+              <Glyph name={{ ios: 'lock.fill', android: 'lock' }} size={10} color={Colors.muted} />
+              <ThemedText type="detail" themeColor="muted">
+                {SURENESS_LABEL[sureness]}
+              </ThemedText>
+            </View>
           ) : null}
         </View>
 
@@ -376,79 +373,49 @@ function StopRow({
 
         {expanded ? (
           <View style={styles.expanded}>
-            {stop.why ? <ThemedText type="detail">{stop.why}</ThemedText> : null}
+            {/* What the stop is, first and at reading size: it is the reason the row was opened.
+                The planner's note and the evidence step down beneath it. */}
+            {stop.why ? <ThemedText type="body">{stop.why}</ThemedText> : null}
             {stop.note ? (
               <ThemedText type="detail" themeColor="muted">
                 {stop.note}
               </ThemedText>
             ) : null}
 
-            {/* **What this stop is standing on, as a footer rather than a badge per line.**
-                Every fact here was in the same voice: a coordinate sometimes checked against a
-                real listing and sometimes not, a sentence that is the planner's on a generated
-                stop and the listing's own on a searched one, and a figure that is either an
-                estimate or a receipt. The reader could not tell by looking.
-
-                Only on the expanded stop — a caveat per row would put one on a list somebody is
-                scanning. Nothing at all where a plan predates the recording, because
-                "estimated" would claim a check failed when none ran.
-
-                `stopEvidence` decides all of it; this renders. It is the module's whole reason
-                for existing, and until now nothing called it. */}
-            {where ? (
+            {/* **What this stop is standing on, as a footer rather than a badge per line.** Only on
+                the expanded stop, and nothing at all where a plan predates the recording, because
+                "estimated" would claim a check failed when none ran. `stopEvidence` decides it. */}
+            {where || provenance.length > 0 ? (
               <ThemedText type="caption" themeColor="muted">
-                {where.value}
-              </ThemedText>
-            ) : null}
-            {provenance.length > 0 ? (
-              <ThemedText type="caption" themeColor="muted">
-                {provenance.join('  ·  ')}
+                {[where?.value, ...provenance].filter(Boolean).join('  ·  ')}
               </ThemedText>
             ) : null}
 
-            {/* What you can do about a stop, on the stop. "Near here" lives here rather than on
-                the map because a tap on open map points at nothing — a stop is a referent you
-                chose, and it carries the day and the arrival time with it. */}
-            <View style={styles.actions}>
-              <PillButton
-                compact
-                role="link"
-                title="Directions"
+            {/* **Three equal tiles in one row, icon over label**, the way Maps lays out a place.
+                They were three capsules that wrapped to two lines and a fourth control for the
+                lock; the lock is the cost's state now (below), and Ask is here because a question
+                about this one stop is the commonest reason to open it. Directions stays live
+                offline — it is a URL, and a map app is the one thing that still works
+                underground — and keeps the orange, being the thing you do with a stop. */}
+            <View style={styles.tiles}>
+              <Tile
+                label="Directions"
                 accessibilityLabel={`Directions to ${stop.name}`}
+                icon={{ ios: 'location.north.fill', android: 'navigation' }}
+                primary
                 onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})}
               />
-              <PillButton compact title="Find nearby" disabled={offline} onPress={onFindNearby} />
-              {/* The traveler's own §0 rank 1. Marking a stop booked is what stops the planner
-                  moving it on the next edit, and unlocking is deliberately only available here:
-                  a patch op that could clear the flag could clear it and move the stop in the
-                  same turn, which is the lock not existing.
-
-                  **Booked tints the capsule.** The only thing separating the two states was the
-                  verb, so the lock a traveller set read at a glance as another thing to press.
-                  `accentWash` is the same jade-at-9% this file already uses for the expanded
-                  row and the selected cost kind — a state, not a new colour. */}
-              <PillButton
-                compact
-                title={booked ? 'Unlock' : 'Mark booked'}
+              <Tile label="Nearby" icon={{ ios: 'magnifyingglass', android: 'search' }} disabled={offline} onPress={onFindNearby} />
+              <Tile
+                label="Ask"
+                accessibilityLabel={`Ask about ${stop.name}`}
+                icon={{ ios: 'sparkles', android: 'auto_awesome' }}
                 disabled={offline}
-                onPress={onToggleLock}
-                style={booked ? styles.bookedPill : undefined}
+                onPress={() => onAsk(`${stop.name}: `)}
               />
             </View>
 
-            {/* **The second money state was unreachable from the phone.** `actualCost` has existed
-                on the type and in the web client for as long as the budget bar has coalesced it,
-                and nothing here could write one — so every figure on every mobile screen was the
-                planner's estimate wearing whichever label the code guessed. This is the field
-                that makes the distinction real. The kind is optional: an amount with no kind is
-                already a state the model supports, and demanding a classification before
-                accepting a number would stop people entering the number. */}
-            <CostEntry
-              cost={stop.actualCost}
-              state={stop.costState}
-              disabled={offline}
-              onChange={onSetCost}
-            />
+            <CostLine stop={stop} sureness={sureness} disabled={offline} onChange={onSetCost} />
           </View>
         ) : null}
       </View>
@@ -457,80 +424,140 @@ function StopRow({
 }
 
 /**
- * What a stop really cost, and which kind of real that is.
+ * What a stop costs and how sure that is, as one line that opens to its editor.
  *
- * Committed on blur rather than per keystroke: every change is a write to the server through
- * `updateTripItinerary`, and a request per digit would be four requests to enter "35".
+ * Closed, it is the figure and its state — "Cost $12 · Booked" — because that is all a list being
+ * scanned needs. Open, the amount and Estimate / Booked / Paid. Choosing Booked or Paid also locks
+ * the stop, which is what "Mark booked" used to do from a fourth button; the two were one fact.
  *
- * **Clearing the field is a real action**, distinct from typing zero. Empty removes the figure
- * and puts the stop back to the planner's estimate; `0` says it turned out to be free, and
- * `spendSplit` counts it as settled money of zero. Both are answers somebody means.
+ * The amount commits on blur rather than per keystroke: every change is a whole-plan write, and a
+ * request per digit would be four requests to enter "35". **Clearing it is a real action**,
+ * distinct from typing zero: empty puts the planner's estimate back, `0` says it turned out free.
  */
-function CostEntry({
-  cost,
-  state,
+function CostLine({
+  stop,
+  sureness,
   disabled,
   onChange,
 }: {
-  cost?: number;
-  state?: CostState;
+  stop: Stop;
+  sureness: Sureness;
   disabled: boolean;
-  onChange: (cost: number | undefined, state: CostState | undefined) => void;
+  onChange: (cost: number | undefined, sureness: Sureness) => void;
 }) {
-  const [draft, setDraft] = useState(cost == null ? '' : String(cost));
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(stop.actualCost == null ? '' : String(stop.actualCost));
+  const shown = stop.actualCost ?? stop.cost;
 
   function commit(text: string) {
     const trimmed = text.trim();
-    if (trimmed === '') return onChange(undefined, undefined);
+    if (trimmed === '') return onChange(undefined, sureness);
     const value = Number(trimmed);
-    if (!Number.isFinite(value) || value < 0) return setDraft(cost == null ? '' : String(cost));
-    onChange(value, state);
+    if (!Number.isFinite(value) || value < 0) return setDraft(stop.actualCost == null ? '' : String(stop.actualCost));
+    onChange(value, sureness);
   }
 
   return (
-    <View style={styles.costRow}>
-      <ThemedText type="label" themeColor="muted">
-        What it cost
-      </ThemedText>
-      <View style={styles.costField}>
-        <ThemedText type="money" themeColor="muted">
-          $
+    <View style={styles.cost}>
+      <Pressable
+        onPress={() => setOpen((was) => !was)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`Cost ${shown ? formatMoney(shown) : 'free'}, ${SURENESS_LABEL[sureness]}. ${open ? 'Close' : 'Change'}.`}
+        style={({ pressed }) => [styles.costLine, pressed && styles.pressed]}>
+        <ThemedText type="detail" themeColor="muted">
+          Cost
         </ThemedText>
-        <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          onBlur={() => commit(draft)}
-          editable={!disabled}
-          keyboardType="decimal-pad"
-          returnKeyType="done"
-          placeholder="Add"
-          placeholderTextColor={Colors.muted}
-          selectionColor={Colors.accent}
-          maxFontSizeMultiplier={1.6}
-          accessibilityLabel="What this stop actually cost"
-          style={styles.costInput}
-        />
-      </View>
-      {/* Only once there is a figure to describe. An empty row offering to classify nothing is a
-          question about a number nobody has entered. */}
-      {cost != null ? (
-        <View style={styles.costKinds}>
-          {(['booked', 'spent'] as const).map((kind) => (
-            <Pressable
-              key={kind}
-              onPress={() => onChange(cost, state === kind ? undefined : kind)}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityState={{ selected: state === kind, disabled }}
-              style={[styles.costKind, state === kind && styles.costKindOn]}>
-              <ThemedText type="caption" themeColor={state === kind ? 'accentText' : 'muted'}>
-                {kind === 'booked' ? 'Booked' : 'Paid'}
-              </ThemedText>
-            </Pressable>
-          ))}
+        <ThemedText type="money" themeColor="money" style={styles.grow}>
+          {shown ? formatMoney(shown) : 'Free'}
+        </ThemedText>
+        <View style={styles.sure}>
+          {sureness === 'estimate' ? null : <Glyph name={{ ios: 'lock.fill', android: 'lock' }} size={10} color={Colors.foreground} />}
+          <ThemedText type="detail" themeColor={sureness === 'estimate' ? 'muted' : 'foreground'} style={styles.strong}>
+            {SURENESS_LABEL[sureness]}
+          </ThemedText>
+        </View>
+        <Glyph name={{ ios: open ? 'chevron.up' : 'chevron.right', android: open ? 'expand_less' : 'chevron_right' }} size={11} color={Colors.muted} />
+      </Pressable>
+
+      {open ? (
+        <View style={styles.editor}>
+          <View style={styles.amount}>
+            <ThemedText type="money" themeColor="muted">
+              $
+            </ThemedText>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              onBlur={() => commit(draft)}
+              editable={!disabled}
+              keyboardType="decimal-pad"
+              returnKeyType="done"
+              placeholder={String(stop.cost)}
+              placeholderTextColor={Colors.muted}
+              selectionColor={Colors.accent}
+              maxFontSizeMultiplier={1.6}
+              accessibilityLabel="What this stop actually cost"
+              style={styles.amountInput}
+            />
+          </View>
+          <View style={styles.states} accessibilityRole="radiogroup">
+            {(['estimate', 'booked', 'paid'] as const).map((kind) => {
+              const on = sureness === kind;
+              return (
+                <Pressable
+                  key={kind}
+                  onPress={() => onChange(stop.actualCost, kind)}
+                  disabled={disabled}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: on, disabled }}
+                  style={[styles.state, on && styles.stateOn]}>
+                  <ThemedText type="detail" style={[styles.strong, { color: on ? Colors.accentForeground : Colors.foreground }]}>
+                    {SURENESS_LABEL[kind]}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+          <ThemedText type="caption" themeColor="muted">
+            Booked and Paid stops are locked: the planner will not move them.
+          </ThemedText>
         </View>
       ) : null}
     </View>
+  );
+}
+
+/** One of a stop's three actions: a symbol over a short word, an equal share of the row. */
+function Tile({
+  label,
+  accessibilityLabel,
+  icon,
+  primary = false,
+  disabled = false,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel?: string;
+  icon: SymbolViewProps['name'];
+  primary?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const ink = disabled ? Colors.muted : primary ? Colors.accentForeground : Colors.foreground;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole={primary ? 'link' : 'button'}
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => [styles.tile, primary && !disabled && styles.tilePrimary, pressed && styles.tilePressed]}>
+      <Glyph name={icon} size={18} color={ink} />
+      <ThemedText type="caption" style={[styles.tileLabel, { color: ink }]}>
+        {label}
+      </ThemedText>
+    </Pressable>
   );
 }
 
@@ -581,15 +608,21 @@ function Finding({
             : `Ask TripMate to fix: ${finding.message}`
         }
         style={({ pressed }) => [styles.finding, pressed && styles.repairPressed]}>
-        <ThemedText
-          type="detail"
-          themeColor={isBlocking(finding) ? 'alert' : 'muted'}
-          style={styles.grow}>
-          {finding.message}
-        </ThemedText>
-        <ThemedText type="detail" themeColor="accent" style={styles.firm}>
-          {open ? 'Close' : 'Fix this'}
-        </ThemedText>
+        <Glyph
+          name={{ ios: 'exclamationmark.triangle', android: 'warning' }}
+          size={14}
+          color={isBlocking(finding) ? Colors.alert : Colors.muted}
+        />
+        <View style={styles.grow}>
+          <ThemedText type="detail">{finding.message}</ThemedText>
+          {/* Paper, not orange: orange is the stop's Directions and the toolbar's +, and a third
+              orange control on a screen is how a repair started reading as the thing to do first. */}
+          <View style={styles.fix}>
+            <ThemedText type="detail" style={[styles.strong, styles.fixLabel]}>
+              {open ? 'Close' : 'Fix this'}
+            </ThemedText>
+          </View>
+        </View>
       </Pressable>
 
       {open ? (
@@ -661,73 +694,57 @@ function Cost({ amount }: { amount: number }) {
   );
 }
 
+/** Washes over the slate section, from the ink so they read in either appearance. */
+const LIFT = `${Colors.foreground}0F`;
+const FILL = `${Colors.foreground}12`;
+
 const styles = StyleSheet.create({
-  content: { paddingBottom: Spacing.regular * 2 },
+  content: { gap: Spacing.rows },
 
-  head: { paddingHorizontal: Spacing.read, paddingTop: Spacing.read, gap: Spacing.hair },
-  // The overline and the weather share a line: they are the two facts you check before leaving,
-  // and stacked they were two more rows above the list this pass exists to raise.
-  headLine: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
-  // Truncates rather than wrapping — a long fallback must not push the day's name down.
-  headWeather: { flex: 1, textAlign: 'right' },
-  /**
-   * **No gutter of its own — the photograph is the one thing here that spans the device.**
-   * A frame inset 16pt each side and rounded is a picture *on* a page; edge to edge it is the
-   * page. Everything else on this screen keeps the gutter, so the inset still exists where it
-   * does work: holding a measure for reading.
-   */
-  plate: { justifyContent: 'flex-end', marginTop: Spacing.compact },
-  /**
-   * The page's gutter, not the picture's.
-   *
-   * This was `Spacing.rows` (12) while the photograph was inset 16 — so the dateline sat 28pt
-   * from the screen and read as type inside a frame. Full-bleed there is no frame, and 12 against
-   * the 16 the prose directly below uses is a four-point stagger on the same edge. Everything on
-   * this screen now starts on one line; the weather badge takes the same value for the same
-   * reason.
-   */
-  dateline: { padding: Spacing.read, gap: Spacing.hair },
-  datelineTitle: { opacity: 0.8 },
+  /** Full bleed: the photograph spans the device; the type on it keeps the page's 16pt gutter. */
+  band: { justifyContent: 'flex-end' },
+  bandText: { padding: Spacing.read, gap: Spacing.hair },
+  bandLine: { opacity: 0.86 },
+  summary: { paddingHorizontal: Spacing.read },
 
+  /**
+   * **A section runs edge to edge on the slate, ruled top and bottom.** It was a column of rows on
+   * the bare night with no edge at all, and the opened stop's controls had the width a card's
+   * margins and corners would otherwise take; full bleed gives them all of it, the way an iOS
+   * plain list does. Text keeps the gutter, which is what holds the measure.
+   */
+  section: {
+    backgroundColor: Colors.surfaceDeep,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+    paddingHorizontal: Spacing.read,
+    paddingVertical: Spacing.rows,
+  },
   sectionRule: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.tight,
-    marginTop: Spacing.compact,
+    marginTop: Spacing.hair,
     marginBottom: Spacing.hair,
   },
   rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder },
 
-  /** `SectionRule` carries no inset of its own — it inherits one from whichever block holds it
-   *  (the masthead, the stay). A time-of-day heading sits at the page's top level, so it brings
-   *  its own. */
-  slot: { paddingHorizontal: Spacing.read },
-
-  /**
-   * **No divider between rows, and this is the third hairline on this screen to go.**
-   *
-   * It was a `borderTopWidth` on this padded box, so it drew from 0.00pt to 401.67pt — the full
-   * device — while the `SectionRule` headings beside it run 17.67–385.67 and every word it
-   * separated is inset 16. A rule spanning more than the content it divides reads as a seam in
-   * the page rather than a break in a list, which is what kept getting reported.
-   *
-   * Insetting it to 16 was the other option and it is the wrong one here: a stop is already a
-   * numbered disc, a bold name and a muted meta line, with the leg between it and the last one
-   * saying "walk, about 7 min". The order is legible four ways over; a line is a fifth that only
-   * adds weight. The group headings stay, because those mark a real division — morning from
-   * afternoon — rather than repeating one the list already shows.
-   *
-   * Vertical space does the separating: 12pt below one row, the leg, 12pt above the next.
-   */
+  /** A stop is a row, never a card: no divider between rows — the disc, the bold name and the
+   *  leg between two stops already say where one ends. Its own wash runs the section's full width
+   *  when opened, so the negative margin undoes the section's gutter for it alone. */
   stop: {
     flexDirection: 'row',
     gap: 13,
     paddingVertical: Spacing.rows,
     paddingHorizontal: Spacing.read,
+    marginHorizontal: -Spacing.read,
     alignItems: 'flex-start',
   },
-  stopExpanded: { backgroundColor: Colors.accentWash },
-  stopBlocked: { backgroundColor: Colors.alertSoft },
+  // A light step of the ink, not a slate: the section is already the slate, and a darker one on
+  // it measured identical to the page. In light it is ink at the same step.
+  stopExpanded: { backgroundColor: LIFT },
+  stopHead: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
   particularsRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -735,6 +752,61 @@ const styles = StyleSheet.create({
     gap: Spacing.tight,
     marginTop: 3,
   },
+  sure: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  grow: { flex: 1 },
+  expanded: { marginTop: Spacing.tight, gap: Spacing.tight },
+
+  tiles: { flexDirection: 'row', gap: Spacing.tight, marginTop: Spacing.hair },
+  tile: {
+    flex: 1,
+    minHeight: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: Spacing.tight,
+    borderRadius: Radius.surface,
+    backgroundColor: FILL,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
+  tilePrimary: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  tilePressed: { opacity: 0.75 },
+  tileLabel: { fontWeight: '600' },
+  strong: { fontWeight: '600' },
+  figure: { fontSize: 30, lineHeight: 36 },
+
+  cost: { gap: Spacing.tight },
+  costLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.tight,
+    minHeight: 44,
+    paddingHorizontal: Spacing.rows,
+    borderRadius: Radius.surface,
+    backgroundColor: FILL,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
+  pressed: { backgroundColor: Colors.pressed },
+  editor: { gap: Spacing.tight },
+  amount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 44,
+    paddingHorizontal: Spacing.rows,
+    borderRadius: Radius.surface,
+    backgroundColor: FILL,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
+  },
+  amountInput: { flex: 1, color: Colors.foreground, paddingVertical: 8, fontSize: 17 },
+  /** The selected state is paper with ink on it, the day chip's own treatment, so it reads at
+   *  well over 3:1 against its track — the grey thumb it replaces measured 1.45:1. */
+  states: { flexDirection: 'row', padding: 3, gap: 3, borderRadius: Radius.surface, backgroundColor: FILL },
+  state: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.read },
+  stateOn: { backgroundColor: Colors.foreground },
+
   // No indent of its own: this sits inside the stop's content column, which is already inset,
   // and the options belong under the sentence they answer rather than stepped away from it.
   repairs: { marginTop: Spacing.tight, gap: Spacing.hair },
@@ -745,58 +817,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.rows,
     paddingVertical: Spacing.hair,
     borderRadius: Radius.read,
-    backgroundColor: Colors.surfaceDeep,
+    backgroundColor: FILL,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.cardBorder,
   },
-  repairPressed: { backgroundColor: Colors.pressed },
+  repairPressed: { opacity: 0.75 },
   repairNote: { paddingHorizontal: Spacing.rows, marginTop: Spacing.hair },
-  // A row-shaped pressable, so it takes the surface radius rather than the pill: a full pill on
-  // a box this wide renders as a lozenge. Same material as the repair options it opens.
+  // The alert's own soft fill, so a conflict reads as one before a word of it is read.
   finding: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.tight,
-    marginTop: Spacing.hair,
-    minHeight: 44,
-    paddingHorizontal: Spacing.rows,
-    paddingVertical: Spacing.hair,
-    borderRadius: Radius.read,
-    backgroundColor: Colors.surfaceDeep,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-  },
-  firm: { flexShrink: 0 },
-  bookedPill: { backgroundColor: Colors.accentWash },
-  stopHead: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.tight },
-  grow: { flex: 1 },
-  expanded: { marginTop: Spacing.tight, gap: Spacing.hair },
-  // Wraps: three capsules fit across at Default and go 2+1 by the 1.6x cap rather than
-  // truncating. `tight` between them, since a capsule carries its own edge.
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: Spacing.tight,
     marginTop: Spacing.tight,
+    padding: Spacing.rows,
+    borderRadius: Radius.surface,
+    backgroundColor: Colors.alertSoft,
   },
-  costRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight, marginTop: Spacing.tight },
-  costField: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  costInput: { color: Colors.foreground, minWidth: 56, paddingVertical: 4, fontSize: 15 },
-  costKinds: { flexDirection: 'row', gap: Spacing.hair },
-  costKind: {
-    paddingHorizontal: Spacing.tight,
-    paddingVertical: 3,
+  fix: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.tight,
+    paddingHorizontal: Spacing.read,
+    minHeight: 34,
+    justifyContent: 'center',
     borderRadius: Radius.pill,
-    backgroundColor: Colors.control,
+    backgroundColor: Colors.foreground,
   },
-  // Jade at 9% plus the jade word, which is how selection reads everywhere else here.
-  costKindOn: { backgroundColor: Colors.accentWash },
+  fixLabel: { color: Colors.accentForeground },
 
-  lodging: { paddingHorizontal: Spacing.read },
-  lodgingRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: Spacing.tight,
-    paddingVertical: Spacing.rows,
+  stay: { flexDirection: 'row', alignItems: 'center', gap: Spacing.rows },
+  stayIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: FILL,
   },
+  total: { gap: Spacing.hair },
+  totalRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.tight },
 });
