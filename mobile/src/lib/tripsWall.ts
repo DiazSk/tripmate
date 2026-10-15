@@ -36,3 +36,8 @@ export function matchesQuery(trip: TripSummary, query: string): boolean {
   const month = new Date(`${trip.startDate}T00:00:00Z`).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toLowerCase();
   return trip.destination.toLowerCase().includes(q) || month.includes(q) || month.replace(/(\w{3})\w*/, '$1').includes(q);
 }
+
+/** Whole days from `today` to `date`, both `YYYY-MM-DD`, compared at UTC midnight so no zone moves it. */
+export function daysUntil(date: string, today: string): number {
+  return Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+}

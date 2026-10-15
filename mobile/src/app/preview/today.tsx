@@ -3,13 +3,14 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 
-import { Today } from '@/components/today';
+import { TripWidgets } from '@/components/home-widgets';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import type { SavedPlace, Stop, Trip } from '@/api/types';
 
 /**
- * Today, every state, with no database and no device.
+ * Home's trip widgets (`TripWidgets`, which replaced `Today`), every state, with no database
+ * and no device.
  *
  * **A design loop, not a feature.** Looking at one state of this screen used to cost a row
  * inserted into the developer's own `tripmate.db`, a terminate, a relaunch and seventeen seconds
@@ -18,7 +19,7 @@ import type { SavedPlace, Stop, Trip } from '@/api/types';
  * simulator screenshots.
  *
  * Here the state is a press, the trip is a literal, and under `expo start --web` an edit to
- * `today.tsx` reloads in about a second. The real component is rendered — the same
+ * `home-widgets.tsx` reloads in about a second. The real component is rendered — the same
  * `todayState`, `leaveBy` and `dayLegs` the app runs — so what is being looked at is the
  * product's own arithmetic, not a mock of it.
  *
@@ -204,13 +205,12 @@ export default function TodayPreview() {
         <Switch label="Offline" on={offline} onPress={() => setOffline((v) => !v)} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <Today
+        <TripWidgets
           trip={tripFor(scenario)}
           today={BOOT.day}
           cachedAt={offline ? CACHED_AT : null}
           onOpenTrip={() => {}}
           onAsk={offline ? undefined : () => {}}
-          onPlanAnother={() => {}}
           saved={SAVED}
         />
       </ScrollView>
@@ -247,5 +247,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
   },
   switchOn: { backgroundColor: Colors.accent, borderColor: Colors.accent },
-  content: { padding: Spacing.read },
+  // Vertical only: the widgets carry their own 16pt gutters, as they do on Home.
+  content: { paddingVertical: Spacing.read, paddingBottom: 120 },
 });

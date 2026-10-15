@@ -1,68 +1,54 @@
+import { BlurView } from 'expo-blur';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { clearsIn } from '@shared/memories';
+
+import { useAccount } from '@/api/auth';
+import { usePlacePhoto } from '@/api/placePhotos';
 import { lastRequestReachedServer } from '@/api/session';
+import { listTrips } from '@/api/tripMateApi';
 import type { Trip, TripSummary } from '@/api/types';
+import { TripPhotoWidget, TripWidgets, Widget, WidgetGrid, WidgetIcon, widgetText } from '@/components/home-widgets';
 import { OfflineScreen } from '@/components/offline-screen';
-import { Today } from '@/components/today';
-import { PillButton, PrimaryButton } from '@/components/form';
-import { PlacePhoto } from '@/components/place-photo';
-import { Invitation, Loading, Notice } from '@/components/states';
-import { ThemedText } from '@/components/themed-text';
-import { BarHeight, Colors, PhotoScrim, Radius, Spacing } from '@/constants/theme';
+import { usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
+import { Polar, PolarFonts } from '@/constants/polar';
+import { BarHeight } from '@/constants/theme';
 import { formatRange } from '@/lib/dayDisplay';
+import { METHOD } from '@/lib/method';
 import { loadSavedPlaces, loadTrip, loadTrips, type Cached } from '@/lib/tripCache';
 import { todayInZone } from '@/lib/tripClock';
 import { pickCurrent } from '@/lib/tripPhase';
-import { todayISO } from '@/lib/tripsWall';
+import { daysUntil, todayISO, tripShelves } from '@/lib/tripsWall';
 import { useFocusedFetch, useFocusedFetchWithRetry } from '@/lib/useFocusedFetch';
 
-/**
- * Transcribed from `ios/TripMate/TripMate/Home/LandingContent.swift`. Static, and true today —
- * this is what the backend actually does when a plan is generated.
- *
- * **Step 02 no longer matches the Swift original, deliberately.** It said "forecast for your
- * actual dates" full stop, which for a trip a month out is a promise the product cannot keep:
- * `fetchWeatherBundle` only reaches the forecast endpoint inside `FORECAST_HORIZON_DAYS` and
- * falls back to the historical archive beyond it. This whole section is an argument about
- * honesty, and the sign-in screen already states the 16 days plainly — a vaguer claim here was
- * the section undercutting itself.
- */
-const METHOD = [
-  {
-    number: '01',
-    title: 'You set the constraints',
-    prose: 'Where, when, how much, and who is going. The budget is a ceiling: the plan stays inside it rather than spending up to it.',
-  },
-  {
-    number: '02',
-    title: 'Real data goes in first',
-    prose: 'A real forecast for your dates inside the 16-day window and seasonal norms beyond it, plus public holidays, opening hours and travel times, fetched before a single word is written.',
-  },
-  {
-    number: '03',
-    title: 'Written, then critiqued',
-    prose: 'A second pass reviews the finished plan against your budget and pace, and rewrites the days it finds fault with.',
-  },
-  {
-    number: '04',
-    title: 'Every place is checked',
-    prose: 'Coordinates are corrected against OpenStreetMap, so the pins land where the place actually is rather than where the model guessed.',
-  },
-];
 
+/**
+ * Home, as a page of widgets (canvas design "Phone home · 4 Widgets with a live next stop").
+ *
+ * **Two jobs, and the screen tells them apart.** Before a trip it is where you start one: the next
+ * trip counting down, the two ways in (plan one, bring your own), the draft you have not kept,
+ * what is later, and how TripMate plans. During one it is "what now" (`TripWidgets`): the next stop
+ * as a Live Activity, where you are, the weather, a saved place near you, the rest of the day.
+ *
+ * The greeting carries your name and folds into a glass bar as you scroll, with Plan a trip beside
+ * it. Offline is the case this screen most has to survive, since it is the one you open standing
+ * in a street: trips come through `loadTrips`, which falls back to what is on disk.
+ */
 export default function Home() {
   const router = useRouter();
-  /**
-   * On focus, not on mount — "Up next" has to notice a trip kept a moment ago in the wizard.
-   *
-   * Through `loadTrips`, so a failed request falls back to whatever is cached rather than
-   * showing a notice. Offline is the case this screen most has to survive: it is the one you
-   * open standing in a street somewhere. With nothing on disk and no way through, it is
-   * `'offline'`, and the whole screen becomes the offline one: planning needs the network too.
-   */
+  const fonts = usePolarFonts();
+  const insets = useSafeAreaInsets();
+  const { account } = useAccount();
+  const [folded, setFolded] = useState(false);
+  usePolarStatusBar(true);
+
+  /** On focus, not on mount: "Up next" has to notice a trip kept a moment ago in the wizard. */
   const { data: fetched, retry } = useFocusedFetchWithRetry(
     async () => (await loadTrips()) ?? (lastRequestReachedServer() === false ? ('offline' as const) : null)
   );
@@ -70,32 +56,17 @@ export default function Home() {
   const listed = unreachable ? null : fetched;
   const trips = listed === undefined ? undefined : (listed?.value ?? null);
   const offline = listed?.cachedAt != null;
+  // Drafts are a network nicety: nothing is cached for them, and a miss is simply no widget.
+  const drafts = useFocusedFetch(async () => (await listTrips('draft')) ?? []) ?? [];
 
   /**
-   * The trip you are on, if you are on one.
-   *
-   * Two reads rather than one, and only ever when a trip is actually running: the wall's
-   * summaries carry no itinerary, and Today is entirely about the stops inside one day.
+   * The trip you are on, if you are on one: two reads, and only while one is running, because the
+   * list's summaries carry no itinerary. Stamped with the id it was fetched for and matched at
+   * render, so a result for a trip you have moved off is simply not used.
    */
   const current = trips ? pickCurrent(trips, todayISO()) : null;
-  /**
-   * Stamped with the id it was fetched for, and matched at render.
-   *
-   * The obvious shape — clear the state when there is no current trip — is a synchronous
-   * `setState` inside an effect, which cascades a render and which this project's lint rule
-   * rejects on sight. Comparing ids instead means a result for a trip you have moved away from
-   * is simply not used, and nothing has to be cleared at all.
-   */
   const [loaded, setLoaded] = useState<{ id: string; hit: Cached<Trip> | null } | null>(null);
-  /**
-   * Re-read whenever the list is re-read, not only when the trip changes.
-   *
-   * Keying on the id alone left a reconnection half-applied: the list refetched and came back
-   * live, so the composer re-enabled, while the trip beneath it was still the copy from disk and
-   * went on saying "saved copy" indefinitely — the id had not changed, so nothing refetched it.
-   * `listed` is a fresh object per focus, so depending on it ties the two reads together and the
-   * screen recovers as one thing.
-   */
+  // Re-read whenever the list is, so a reconnection refreshes the trip beneath it too.
   useEffect(() => {
     const id = current?.id;
     if (!id) return;
@@ -106,44 +77,16 @@ export default function Home() {
     };
   }, [current?.id, listed]);
   const onTrip = current && loaded?.id === current.id ? loaded.hit : null;
-
-  /**
-   * Today where the *trip* is, which is not the same day as here.
-   *
-   * Measured: a device reading 21:07 on Sep 28 is Lisbon 05:07 on Sep 29. `pickCurrent` above
-   * has to use the device's date — it runs before any trip is chosen, so there is no zone to ask
-   * about yet — but once a trip is in hand its own day is the one that decides what `Today`
-   * draws. A trip with no zone on record falls back to the device date, which is also the only
-   * thing that let it be picked in the first place.
-   */
   const trip = onTrip?.value;
+  // Today where the trip is, which is not always the same day as here.
   const tripToday = (trip && todayInZone(trip.timezone)) ?? todayISO();
-
-  /**
-   * The saved pile. Read on every focus, unconditionally.
-   *
-   * **The obvious optimisation here is a bug, and it shipped in the first draft of this line.**
-   * Today is the only reader and only draws these in a free gap, so `trip ? load() : null` looks
-   * free — but `useFocusedFetch` runs its fetcher *on focus*, and Home is already the focused tab
-   * when the app launches, at which point `trip` is still undefined because the trips list has
-   * not landed. The guard therefore evaluated false exactly once and never ran again: on a cold
-   * launch straight into Home the list was permanently empty, and it only appeared after a tab
-   * switch away and back. Which is how it was tested, which is why it looked fine.
-   *
-   * So the read is unconditional. It costs one small request per focus beside the trips list
-   * Home already fetches, and `loadSavedPlaces` falls back to disk so a gap still has an answer
-   * underground.
-   */
-  const savedHit = useFocusedFetch(loadSavedPlaces);
-  const saved = savedHit?.value ?? undefined;
-
-  const featured = trips ? pickFeatured(trips) : undefined;
+  /** The saved pile, read on every focus unconditionally: a guard on `trip` here never re-ran on a cold launch. */
+  const saved = useFocusedFetch(loadSavedPlaces)?.value ?? undefined;
 
   if (unreachable) {
     return (
       <OfflineScreen
         bottomInset={BarHeight}
-        // A server that answers, even with an error, ends the offline screen: Home's own notice says the rest.
         retry={async () => {
           const { result, commit } = await retry();
           return result === 'offline' ? null : commit;
@@ -152,202 +95,281 @@ export default function Home() {
     );
   }
 
+  const tripPage = trip ? (
+    <TripWidgets
+      trip={trip}
+      today={tripToday}
+      cachedAt={onTrip?.cachedAt ?? null}
+      onOpenTrip={() => router.push(`/trip/${trip.id}`)}
+      onAsk={offline ? undefined : (dayIndex) => router.push(`/trip/${trip.id}?ask=${dayIndex}`)}
+      saved={saved}
+    />
+  ) : null;
+
+  const first = account?.name?.trim().split(/\s+/)[0];
+  const hello = greeting();
+  const title = trip ? 'Today' : first ? `${hello}, ${first}` : hello;
+  const dateLine = trip ? tripLine(trip, tripToday) : longDate();
+
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* **The masthead addresses the wrong reader on a running trip, and it is the first
-            thing on the screen.** The guard below already makes this argument about the Method
-            band and the plan button — "the reader is standing in Lisbon" — and it simply never
-            reached the two lines above it. Measured, the reading order on a trip was: TRIPMATE,
-            a 28pt serif marketing headline, the destination, "Today" in 28pt serif, the clock,
-            and only sixth the thing the app was opened for. Three independent reviews reported
-            the symptom; this is where it lives.
-
-            Off a trip it stays exactly as it was, because then it is what the screen is for. */}
-        {trip ? null : (
-          <>
-            <BandOpener label="TripMate" />
-            <ThemedText type="display" style={styles.headline}>
-              Days worth keeping, written for where you are going.
-            </ThemedText>
-          </>
-        )}
-
-        {/* **While a trip is running, Home is about that trip.** Everything below — the wall's
-            one featured card, the Method section — is for somebody who is not travelling. The
-            Method in particular is marketing copy, and the reader is standing in Lisbon.
-
-            The same argument reaches this button, which was the last thing on the screen still
-            addressing the wrong reader: a full-width jade bar above Today, inviting somebody
-            mid-trip to start a *different* trip, drawn louder than the stop they have to leave
-            for. On a trip it moves below Today and becomes a line of text; off one it stays
-            exactly as it was, because then it is genuinely what the screen is for. */}
-        {trip ? (
-          <View style={styles.band}>
-            <Today
-              trip={trip}
-              today={tripToday}
-              cachedAt={onTrip?.cachedAt ?? null}
-              onOpenTrip={() => router.push(`/trip/${trip.id}`)}
-              onAsk={
-                offline ? undefined : (dayIndex) => router.push(`/trip/${trip.id}?ask=${dayIndex}`)
-              }
-              saved={saved ?? undefined}
-              // Handed to Today rather than drawn under it: stacked beneath, this was a third
-              // full-width action in the reading order, and Today owns its own action row now.
-              onPlanAnother={() => router.push('/plan/basics')}
-            />
-          </View>
-        ) : (
-          <View style={styles.cta}>
-            <PrimaryButton title="Plan a trip" onPress={() => router.push('/plan/basics')} />
-            {/* The second door: a slate pill under the screen's one jade fill (Primary Action Surface),
-                at the same width and height so the two read as peers sharing an edge. */}
-            <PillButton
-              block
-              title="I already have a plan"
-              onPress={() => router.push('/plan/own')}
-              style={styles.secondDoor}
-            />
-          </View>
-        )}
-
-        {/* The only place Home spends a network call, and it reuses the Trips photo cache. */}
-        {trip ? null : (
-        <View style={styles.band}>
-          <BandOpener label={featured?.upcoming ? 'Up next' : 'Latest memory'} />
-          {trips === undefined ? (
-            <Loading />
-          ) : trips === null ? (
-            <Notice>Couldn&rsquo;t reach TripMate. Check your connection.</Notice>
-          ) : featured ? (
-            <Pressable
-              onPress={() => router.push(`/trip/${featured.trip.id}`)}
-              style={({ pressed }) => pressed && styles.pressed}
-              android_ripple={{ color: Colors.pressed }}>
-              <PlacePhoto
-                name={featured.trip.destination}
-                aspectRatio={16 / 10}
-                radius={Radius.read}
-                scrim={PhotoScrim}
-                style={styles.featured}>
-                {/* `onDeep`, not `foreground`. They are the same hex in dark and they are not
-                    the same token: this ink stands on a photograph, so it does not move when the
-                    appearance does. */}
-                <View style={styles.featuredCaption}>
-                  <ThemedText type="display" themeColor="onDeep" numberOfLines={2}>
-                    {featured.trip.destination}
-                  </ThemedText>
-                  <ThemedText type="money" themeColor="onDeep">
-                    {formatRange(featured.trip.startDate, featured.trip.endDate)}
-                  </ThemedText>
-                </View>
-              </PlacePhoto>
-            </Pressable>
-          ) : (
-            <Invitation
-              title="No trips kept yet"
-              body="Once you keep a plan, it opens here."
-            />
-          )}
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 52 }]}
+        scrollEventThrottle={32}
+        onScroll={(e) => setFolded(e.nativeEvent.contentOffset.y > 46)}>
+        <View style={styles.head}>
+          <Text style={styles.date}>{dateLine.toUpperCase()}</Text>
+          <Text style={[styles.title, fonts && styles.titleFont]} accessibilityRole="header" numberOfLines={2}>
+            {title}
+          </Text>
         </View>
-        )}
 
-        {trip ? null : (
-        <View style={styles.band}>
-          <BandOpener label="Method" />
-          <ThemedText type="title" style={styles.bandHeading}>
-            How it actually works
-          </ThemedText>
-          {METHOD.map((step, index) => (
-            <View key={step.number} style={[styles.step, index > 0 && styles.stepRuled]}>
-              {/* Tabular figures, but not gold: gold counts money and only money, and these are
-                  ordinals. Colouring a step number with the palette's price colour spends the one
-                  piece of vocabulary that teaches a reader "this costs something". */}
-              <ThemedText type="money" themeColor="muted" style={styles.stepNumber}>
-                {step.number}
-              </ThemedText>
-              <View style={styles.grow}>
-                <ThemedText type="heading">{step.title}</ThemedText>
-                <ThemedText type="detail" themeColor="muted" style={styles.stepProse}>
-                  {step.prose}
-                </ThemedText>
-              </View>
-            </View>
-          ))}
-        </View>
+        {tripPage ?? (
+          <Planning
+            trips={trips}
+            drafts={drafts}
+            onPlan={() => router.push('/plan/basics')}
+            onImport={() => router.push('/plan/own')}
+            onOpen={(id) => router.push(`/trip/${id}`)}
+            onMethod={() => router.push('/how-it-works')}
+            onTrips={() => router.push('/(tabs)/trips')}
+          />
         )}
-
-        <ThemedText type="detail" themeColor="muted" style={styles.closing}>
-          Every plan you keep is collected under Trips.
-        </ThemedText>
       </ScrollView>
-    </SafeAreaView>
-  );
-}
 
-/** A label against a bottom rule — how this system opens a section. */
-function BandOpener({ label }: { label: string }) {
-  return (
-    <View style={styles.opener}>
-      <ThemedText type="label" themeColor="muted">
-        {label}
-      </ThemedText>
+      <Bar folded={folded} title={title} top={insets.top} onPlan={() => router.push('/plan/basics')} />
     </View>
   );
 }
 
-/**
- * The soonest trip that has not ended, else the most recent one.
- *
- * Dates are compared as ISO strings rather than parsed: `2026-09-19` sorts correctly as text, and
- * building a `Date` from a date-only string is the UTC-midnight trap this codebase has already
- * shipped once.
- */
-function pickFeatured(trips: TripSummary[]): { trip: TripSummary; upcoming: boolean } | undefined {
-  if (trips.length === 0) return undefined;
-  const today = new Date().toISOString().slice(0, 10);
-  const upcoming = trips
-    .filter((trip) => trip.endDate >= today)
-    .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  if (upcoming.length > 0) return { trip: upcoming[0], upcoming: true };
-  const past = [...trips].sort((a, b) => b.endDate.localeCompare(a.endDate));
-  return { trip: past[0], upcoming: false };
+/** The glass bar the greeting folds into, with Plan a trip beside it, always. */
+function Bar({ folded, title, top, onPlan }: { folded: boolean; title: string; top: number; onPlan: () => void }) {
+  const plus = (
+    <Pressable onPress={onPlan} accessibilityRole="button" accessibilityLabel="Plan a trip" hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
+      {isLiquidGlassAvailable() ? (
+        <GlassView glassEffectStyle="regular" colorScheme="light" isInteractive style={styles.plus}>
+          <SymbolView name="plus" size={18} tintColor={Polar.ink} weight="semibold" />
+        </GlassView>
+      ) : (
+        <View style={[styles.plus, styles.plusFallback]}>
+          <SymbolView name="plus" size={18} tintColor={Polar.ink} weight="semibold" />
+        </View>
+      )}
+    </Pressable>
+  );
+  return (
+    <View style={[styles.bar, { paddingTop: top, height: top + 50 }]} pointerEvents="box-none">
+      {folded ? <BlurView intensity={60} tint="systemChromeMaterialLight" style={StyleSheet.absoluteFill} /> : null}
+      {folded ? <View style={styles.barRule} /> : null}
+      <Text style={[styles.barTitle, !folded && styles.hidden]} numberOfLines={1} accessibilityElementsHidden={!folded}>
+        {title}
+      </Text>
+      <View style={styles.barEnd}>{plus}</View>
+    </View>
+  );
 }
 
+function Planning({
+  trips,
+  drafts,
+  onPlan,
+  onImport,
+  onOpen,
+  onMethod,
+  onTrips,
+}: {
+  trips: TripSummary[] | null | undefined;
+  drafts: TripSummary[];
+  onPlan: () => void;
+  onImport: () => void;
+  onOpen: (id: string) => void;
+  onMethod: () => void;
+  onTrips: () => void;
+}) {
+  const today = todayISO();
+  const { upcoming, past } = tripShelves(trips ?? [], today);
+  const lead = upcoming[0] ?? past[0];
+  // Later: what is still to come after the lead, then the latest memory once something is ahead.
+  const later = [...upcoming.slice(1, 4), ...(upcoming.length ? past.slice(0, 1) : [])];
+  const draft = drafts[0];
+
+  return (
+    <>
+      <WidgetGrid>
+        {trips === undefined ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color={Polar.ink} />
+          </View>
+        ) : trips === null ? (
+          <Widget size="medium" tone="warn" label="Not loaded">
+            <Text style={widgetText.dim}>Couldn’t reach TripMate. Your trips show up here once it answers.</Text>
+          </Widget>
+        ) : lead ? (
+          <LeadWidget trip={lead} upcoming={upcoming[0] === lead} today={today} onPress={() => onOpen(lead.id)} />
+        ) : (
+          <Widget size="large" tone="paper" label="Your first trip" onPress={onPlan}>
+            <Text style={styles.first}>Days worth keeping, written for where you are going.</Text>
+            <Text style={widgetText.dim}>Tell TripMate where, when and how much. It writes the days and checks every place.</Text>
+            <View style={styles.firstCta}>
+              <SymbolView name="sparkles" size={15} tintColor={Polar.ink} />
+              <Text style={styles.firstCtaText}>Plan a trip</Text>
+            </View>
+          </Widget>
+        )}
+
+        <Widget size="small" tone="signal" label="New" onPress={onPlan} accessibilityLabel="Plan a trip">
+          <WidgetIcon name="sparkles" />
+          <Text style={widgetText.title}>Plan a trip</Text>
+          <Text style={[widgetText.dim, styles.onSignal]}>Where, when, how much.</Text>
+        </Widget>
+        <Widget size="small" label="Import" onPress={onImport} accessibilityLabel="Bring your own plan">
+          <WidgetIcon name="doc.text" color={Polar.ember} />
+          <Text style={widgetText.title}>Bring your plan</Text>
+          <Text style={widgetText.dim}>Paste it, or a photo.</Text>
+        </Widget>
+
+        {draft ? <DraftWidget draft={draft} more={drafts.length - 1} onPress={() => onOpen(draft.id)} onTrips={onTrips} /> : null}
+      </WidgetGrid>
+
+      {later.length ? (
+        <View style={styles.later}>
+          <Text style={styles.h} accessibilityRole="header">
+            Later
+          </Text>
+          <View style={styles.list}>
+            {later.map((t, i) => (
+              <LaterRow key={t.id} trip={t} today={today} memory={upcoming.length > 0 && t === past[0]} first={i === 0} onPress={() => onOpen(t.id)} />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.method}>
+        <WidgetGrid>
+          <Widget size="medium" label="How TripMate plans" onPress={onMethod}>
+            <View style={styles.steps}>
+              {METHOD.map((m) => (
+                <View key={m.number} style={styles.stepCell}>
+                  <Text style={styles.stepNum}>{m.number}</Text>
+                  <Text style={styles.stepTitle} numberOfLines={2}>
+                    {m.title}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Widget>
+        </WidgetGrid>
+      </View>
+    </>
+  );
+}
+
+function LeadWidget({ trip, upcoming, today, onPress }: { trip: TripSummary; upcoming: boolean; today: string; onPress: () => void }) {
+  const photo = usePlacePhoto(trip.destination);
+  const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
+  return <TripPhotoWidget label={upcoming ? 'Up next' : 'Latest memory'} trip={trip} photo={url} days={upcoming ? daysUntil(trip.startDate, today) : null} onPress={onPress} />;
+}
+
+function DraftWidget({ draft, more, onPress, onTrips }: { draft: TripSummary; more: number; onPress: () => void; onTrips: () => void }) {
+  const photo = usePlacePhoto(draft.destination);
+  const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
+  const clears = clearsIn(draft);
+  return (
+    <Widget size="medium" label={more > 0 ? `Not kept yet · ${more + 1}` : 'Not kept yet'} onPress={more > 0 ? onTrips : onPress} accessibilityLabel={`Your ${draft.destination} draft, not kept yet`}>
+      <View style={styles.draft}>
+        <View style={styles.draftThumb}>{url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}</View>
+        <View style={styles.draftText}>
+          <Text style={widgetText.big} numberOfLines={1}>
+            {draft.destination.split(',')[0].trim()}
+          </Text>
+          {clears ? <Text style={widgetText.ember}>{clears}</Text> : null}
+          {more > 0 ? <Text style={widgetText.dim}>{`and ${more} more under Trips`}</Text> : null}
+        </View>
+      </View>
+    </Widget>
+  );
+}
+
+function LaterRow({ trip, today, memory, first, onPress }: { trip: TripSummary; today: string; memory: boolean; first: boolean; onPress: () => void }) {
+  const photo = usePlacePhoto(trip.destination);
+  const url = photo?.imageUrl ?? photo?.thumbnailUrl ?? null;
+  const days = daysUntil(trip.startDate, today);
+  const when = memory ? 'your latest memory' : days === 1 ? 'tomorrow' : `in ${days} days`;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.row, !first && styles.rowRuled, pressed && styles.rowPressed]}>
+      <View style={styles.rowThumb}>{url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={trip.id} /> : null}</View>
+      <View style={styles.rowText}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {trip.destination.split(',')[0].trim()}
+        </Text>
+        <Text style={styles.rowMeta} numberOfLines={1}>{`${formatRange(trip.startDate, trip.endDate)} · ${when}`}</Text>
+      </View>
+      <SymbolView name="chevron.right" size={13} tintColor="rgba(60,60,67,0.3)" weight="semibold" />
+    </Pressable>
+  );
+}
+
+/** "Good morning", from the device clock, as Fitness and Health greet you. */
+function greeting(hour = new Date().getHours()): string {
+  return hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+}
+
+function longDate(): string {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+/** "Jaipur · Day 2 of 7", or "Jaipur · Tomorrow" on the eve. */
+function tripLine(trip: Trip, today: string): string {
+  const city = trip.destination.split(',')[0].trim();
+  const n = daysUntil(today, trip.startDate) + 1;
+  const total = trip.itinerary.days.length;
+  return n >= 1 && n <= total ? `${city} · Day ${n} of ${total}` : `${city} · Tomorrow`;
+}
+
+const GROUND = '#F2F2F7';
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Colors.canvas },
-  /** The tab bar floats over the content and its safe-area inset does not reach this scroll
-   *  view — the same correction `profile.tsx` already carries. Without it the last Method card
-   *  ends underneath the bar. */
-  content: { padding: Spacing.read, paddingBottom: BarHeight + Spacing.regular },
-  opener: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.cardBorder,
-    paddingBottom: Spacing.tight,
-    alignItems: 'flex-end',
-  },
-  headline: { marginTop: Spacing.read },
-  cta: { marginTop: Spacing.read, gap: Spacing.tight },
-  // PrimaryButton's height, so the slate door matches the jade one above it.
-  secondDoor: { minHeight: 52 },
-  // Same 44pt target as Today's own actions, and no wider than its words.
-  quietCta: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  band: { marginTop: Spacing.regular * 1.5 },
-  bandHeading: { marginTop: Spacing.rows, marginBottom: Spacing.hair },
-  featured: { marginTop: Spacing.rows, justifyContent: 'flex-end' },
-  featuredCaption: { padding: Spacing.rows, gap: Spacing.hair },
-  pressed: { opacity: 0.7 },
-  step: {
-    flexDirection: 'row',
-    gap: Spacing.rows,
-    paddingVertical: Spacing.rows,
-  },
-  stepRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder },
-  // A floor, not a fixed width: the figures are tabular so every step is the same width anyway,
-  // and a hard 22 made "01" wrap to two lines once the text scaled.
-  stepNumber: { minWidth: 22 },
-  stepProse: { marginTop: 2 },
-  grow: { flex: 1 },
-  closing: { marginTop: Spacing.regular * 1.5 },
+  screen: { flex: 1, backgroundColor: GROUND },
+  // Clears the floating tab bar, whose inset does not reach this scroll view.
+  content: { paddingBottom: BarHeight + 40 },
+  pressed: { opacity: 0.8 },
+  hidden: { opacity: 0 },
+  head: { paddingHorizontal: 20, marginBottom: 16 },
+  date: { fontSize: 13, fontWeight: '600', letterSpacing: 0.5, color: 'rgba(60,60,67,0.6)' },
+  title: { marginTop: 2, fontSize: 36, lineHeight: 42, color: Polar.ink },
+  titleFont: { fontFamily: PolarFonts.display, fontSize: 40, lineHeight: 44 },
+
+  bar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  barRule: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(60,60,67,0.22)' },
+  barTitle: { maxWidth: '70%', fontSize: 17, fontWeight: '600', color: '#000' },
+  barEnd: { position: 'absolute', right: 12, bottom: 3 },
+  plus: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  plusFallback: { backgroundColor: 'rgba(255,255,255,0.85)' },
+
+  loading: { width: '100%', height: 200, alignItems: 'center', justifyContent: 'center' },
+  first: { fontFamily: PolarFonts.display, fontSize: 32, lineHeight: 34, color: Polar.ink, marginBottom: 6 },
+  firstCta: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: 14, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 24, backgroundColor: Polar.signal },
+  firstCtaText: { fontSize: 16, fontWeight: '600', color: Polar.ink },
+  onSignal: { color: 'rgba(31,42,68,0.75)' },
+
+  draft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  draftThumb: { width: 72, height: 72, overflow: 'hidden', borderRadius: 14, backgroundColor: Polar.deep },
+  draftText: { flex: 1, gap: 3 },
+
+  later: { marginTop: 26, paddingHorizontal: 16 },
+  h: { marginHorizontal: 4, marginBottom: 8, fontSize: 20, fontWeight: '700', letterSpacing: -0.2, color: '#000' },
+  list: { overflow: 'hidden', borderRadius: 16, backgroundColor: '#fff' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingLeft: 10, paddingRight: 14 },
+  rowRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(60,60,67,0.22)' },
+  rowPressed: { backgroundColor: '#E5E5EA' },
+  rowThumb: { width: 52, height: 52, overflow: 'hidden', borderRadius: 10, backgroundColor: Polar.deep },
+  rowText: { flex: 1, gap: 1 },
+  rowTitle: { fontSize: 16, fontWeight: '600', color: '#000' },
+  rowMeta: { fontSize: 13, color: 'rgba(60,60,67,0.6)' },
+
+  method: { marginTop: 14 },
+  steps: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 8 },
+  stepCell: { width: '50%', flexDirection: 'row', gap: 6, paddingRight: 8 },
+  stepNum: { fontFamily: PolarFonts.condensed, fontSize: 13, lineHeight: 17, color: Polar.ember },
+  stepTitle: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 17, color: '#000' },
 });

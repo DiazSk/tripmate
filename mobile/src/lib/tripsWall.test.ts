@@ -1,6 +1,6 @@
 import type { TripSummary } from '@/api/types';
 
-import { isUpcoming, matchesQuery, tripShelves } from './tripsWall';
+import { daysUntil, isUpcoming, matchesQuery, tripShelves } from './tripsWall';
 
 const trip = (id: string, startDate: string, endDate: string): TripSummary => ({
   id,
@@ -38,4 +38,10 @@ test('search matches the destination, or the month and year it starts', () => {
   expect(matchesQuery(kyoto, 'dec 2026')).toBe(true);
   expect(matchesQuery(kyoto, 'november')).toBe(false);
   expect(matchesQuery(kyoto, '  ')).toBe(true);
+});
+
+test('days until counts calendar days, whatever the hour', () => {
+  expect(daysUntil('2026-11-06', '2026-10-14')).toBe(23);
+  expect(daysUntil('2026-10-15', '2026-10-14')).toBe(1);
+  expect(daysUntil('2026-10-14', '2026-10-14')).toBe(0);
 });
