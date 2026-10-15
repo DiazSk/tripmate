@@ -165,3 +165,20 @@ test("signed-in flag round-trips through the keychain", async () => {
   expect(await freshSession({ flag: "1" }).readSignedInFlag()).toBe(true);
   expect(await freshSession({ flag: null }).readSignedInFlag()).toBe(false);
 });
+
+test("a request that reaches the server is remembered as reached, even when it answers an error", async () => {
+  const { fetchWithSession, lastRequestReachedServer } = freshSession();
+  expect(lastRequestReachedServer()).toBeNull();
+  (globalThis.fetch as unknown as jest.Mock).mockResolvedValueOnce(new Response("{}", { status: 500 }));
+  await fetchWithSession("/api/trips");
+  expect(lastRequestReachedServer()).toBe(true);
+});
+
+test("a request that never gets through is remembered as unreached, and still throws", async () => {
+  const { fetchWithSession, lastRequestReachedServer } = freshSession();
+  (globalThis.fetch as unknown as jest.Mock).mockRejectedValueOnce(new TypeError("Network request failed"));
+  await expect(fetchWithSession("/api/trips")).rejects.toThrow("Network request failed");
+  expect(lastRequestReachedServer()).toBe(false);
+  await fetchWithSession("/api/trips");
+  expect(lastRequestReachedServer()).toBe(true);
+});

@@ -22,6 +22,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * safe under the React Compiler.
  */
 export function useFocusedFetch<T>(fetcher: () => Promise<T>): T | undefined {
+  return useFocusedFetchWithRetry(fetcher).data;
+}
+
+/**
+ * The same, plus a retry for the offline screen's Try again.
+ *
+ * **The retry does not apply what it read.** It hands the result back with a `commit`, because the
+ * offline screen wants a beat between "the connection is back" and the real screen replacing it
+ * (Meri's lift, the word filling in). Applying it at once would unmount that screen mid-sentence.
+ */
+export function useFocusedFetchWithRetry<T>(fetcher: () => Promise<T>): {
+  data: T | undefined;
+  retry: () => Promise<{ result: T; commit: () => void }>;
+} {
   const [data, setData] = useState<T | undefined>(undefined);
   const latest = useRef(fetcher);
   useEffect(() => {
@@ -41,5 +55,10 @@ export function useFocusedFetch<T>(fetcher: () => Promise<T>): T | undefined {
     }, [])
   );
 
-  return data;
+  const retry = useCallback(async () => {
+    const result = await latest.current();
+    return { result, commit: () => setData(result) };
+  }, []);
+
+  return { data, retry };
 }

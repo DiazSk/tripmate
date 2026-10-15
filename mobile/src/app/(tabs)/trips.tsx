@@ -22,15 +22,17 @@ import { city, clearsIn, country, featured, phase, phaseLine, postmark, remember
 
 import { useAccount } from '@/api/auth';
 import { usePlacePhoto } from '@/api/placePhotos';
+import { lastRequestReachedServer } from '@/api/session';
 import { discardTrip, listTrips } from '@/api/tripMateApi';
 import type { TripSummary } from '@/api/types';
+import { OfflineScreen } from '@/components/offline-screen';
 import { Scrim } from '@/components/polar-landing/scrim';
 import { PaperError, QuietLink, SignalButton, monumentFontSize, usePolarFonts, usePolarStatusBar } from '@/components/polar-ui';
 import { Polar, PolarFonts, PolarRadius, PolarSpace, PolarType } from '@/constants/polar';
 import { BarHeight } from '@/constants/theme';
 import { tripDays } from '@/lib/tiers';
 import { todayISO, wallOrder } from '@/lib/tripsWall';
-import { useFocusedFetch } from '@/lib/useFocusedFetch';
+import { useFocusedFetchWithRetry } from '@/lib/useFocusedFetch';
 
 type Loaded = { saved: TripSummary[]; drafts: TripSummary[] };
 type Tab = 'memories' | 'drafts';
@@ -51,12 +53,16 @@ export default function Trips() {
   const fonts = usePolarFonts();
   const { account } = useAccount();
   const { height } = useWindowDimensions();
-  // undefined = still loading, null = the fetch failed. Re-read on focus: a trip kept in the
-  // wizard has to show up here. Both lists at once, so the toggle never appears a beat late.
-  const loaded = useFocusedFetch<Loaded | null>(async () => {
+  // undefined = still loading, null = the server answered with a failure, 'offline' = it could not
+  // be reached at all. Re-read on focus: a trip kept in the wizard has to show up here. Both lists
+  // at once, so the toggle never appears a beat late.
+  const { data: fetched, retry } = useFocusedFetchWithRetry<Loaded | 'offline' | null>(async () => {
     const [saved, drafts] = await Promise.all([listTrips('saved'), listTrips('draft')]);
-    return saved ? { saved, drafts: drafts ?? [] } : null;
+    if (saved) return { saved, drafts: drafts ?? [] };
+    return lastRequestReachedServer() === false ? 'offline' : null;
   });
+  const offline = fetched === 'offline';
+  const loaded = offline ? null : fetched;
   // Deleted here, spliced locally until the next focus re-reads the server.
   const [gone, setGone] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>('memories');
@@ -72,7 +78,8 @@ export default function Trips() {
   const shown = activeTab === 'drafts' ? drafts : saved;
   const heroHeight = Math.round(height * 0.86);
   const hasHero = saved.length > 0;
-  usePolarStatusBar(!hasHero || pastHero);
+  // The offline screen is night all over, so the bar stays white over it.
+  usePolarStatusBar(!offline && (!hasHero || pastHero));
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setPastHero(e.nativeEvent.contentOffset.y > heroHeight - 60);
 
@@ -95,6 +102,19 @@ export default function Trips() {
           },
         },
       ],
+    );
+  }
+
+  if (offline) {
+    return (
+      <OfflineScreen
+        bottomInset={BarHeight}
+        // A server that answers, even with an error, ends the offline screen: its own notice says the rest.
+        retry={async () => {
+          const { result, commit } = await retry();
+          return result === 'offline' ? null : commit;
+        }}
+      />
     );
   }
 

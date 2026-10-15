@@ -164,6 +164,19 @@ async function ownerId(): Promise<string> {
  * requests cannot race into two different owners — which is the exact shape the trip-and-profile
  * pair had.
  */
+/**
+ * Whether the last request reached TripMate at all, or null before there has been one.
+ *
+ * Every call in `tripMateApi` answers `undefined` on any failure, which is right for the callers that
+ * only need "is there data", and not enough for the one screen that has to say *why* there is none:
+ * the offline screen says "you're out of range", which is a lie when the server answered with an
+ * error. A thrown `fetch` is the only failure that means the phone never got through; any response,
+ * a 500 included, means it did. Module state rather than a return value so no API signature changes;
+ * concurrent requests share a network, so whichever finished last tells the same story.
+ */
+let reached: boolean | null = null;
+export const lastRequestReachedServer = () => reached;
+
 export async function fetchWithSession(
   path: string,
   init: Omit<RequestInit, "headers"> & { headers?: Record<string, string> } = {},
@@ -171,6 +184,22 @@ export async function fetchWithSession(
   const owner = await ownerId();
   const token = await sessionToken();
 
+  try {
+    const response = await sendWithSession(path, init, owner, token);
+    reached = true;
+    return response;
+  } catch (error) {
+    reached = false;
+    throw error;
+  }
+}
+
+function sendWithSession(
+  path: string,
+  init: Omit<RequestInit, "headers"> & { headers?: Record<string, string> },
+  owner: string,
+  token: string | null,
+): Promise<Response> {
   return fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {

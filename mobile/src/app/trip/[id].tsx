@@ -28,12 +28,14 @@ import {
   updateTripItinerary,
 } from '@/api/tripMateApi';
 import type { ChatTurn, CostState, DayPlan, Itinerary, Stop, Trip } from '@/api/types';
+import { lastRequestReachedServer } from '@/api/session';
 import { AddPlaceSheet } from '@/components/add-place-sheet';
 import { AnchorReceipt } from '@/components/anchor-receipt';
 import { BudgetBar } from '@/components/budget-bar';
 import { ChatSheet } from '@/components/chat-sheet';
 import { DayMap } from '@/components/day-map';
 import { DayPage } from '@/components/day-page';
+import { OfflineScreen } from '@/components/offline-screen';
 import { StoryPanel } from '@/components/story-panel';
 import { PlanHealth } from '@/components/plan-health';
 import { PrimaryButton } from '@/components/form';
@@ -77,6 +79,7 @@ export default function TripDetail() {
   const opensOnAsk = ask !== undefined && Number.isInteger(askedDay) && askedDay >= 0;
 
   const [trip, setTrip] = useState<Trip | null | undefined>(undefined);
+  const router = useRouter();
   /** `dayIndex:stopIndex` of the one expanded stop, or null. One at a time, like the Swift app. */
   const [emphasis, setEmphasis] = useState<string | null>(null);
   /**
@@ -359,15 +362,29 @@ export default function TripDetail() {
    * connected is what arms it.
    */
   const [cachedAt, setCachedAt] = useState<string | null>(null);
+  /** No copy on disk and TripMate could not be reached at all: the offline screen, not a notice. */
+  const [unreachable, setUnreachable] = useState(false);
   useEffect(() => {
     let alive = true;
     loadTrip(id).then((hit) => {
       if (!alive) return;
       setTrip(hit?.value ?? null);
       setCachedAt(hit?.cachedAt ?? null);
+      setUnreachable(!hit && lastRequestReachedServer() === false);
     });
     return () => {
       alive = false;
+    };
+  }, [id]);
+
+  /** The offline screen's Try again: the same read, applied only when it got through. */
+  const retryLoad = useCallback(async () => {
+    const hit = await loadTrip(id);
+    if (!hit && lastRequestReachedServer() === false) return null;
+    return () => {
+      setTrip(hit?.value ?? null);
+      setCachedAt(hit?.cachedAt ?? null);
+      setUnreachable(false);
     };
   }, [id]);
 
@@ -399,6 +416,16 @@ export default function TripDetail() {
         <Stack.Screen options={{ title: '', headerBackButtonDisplayMode: 'minimal' }} />
         <Loading />
       </View>
+    );
+  }
+
+  if (trip === null && unreachable) {
+    return (
+      <>
+        {/* Its own Go back on the night, not the native header, which would sit over it in paper. */}
+        <Stack.Screen options={{ headerShown: false }} />
+        <OfflineScreen retry={retryLoad} exclude={id} onBack={router.canGoBack() ? router.back : undefined} />
+      </>
     );
   }
 

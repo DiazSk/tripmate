@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { lastRequestReachedServer } from '@/api/session';
 import type { Trip, TripSummary } from '@/api/types';
+import { OfflineScreen } from '@/components/offline-screen';
 import { Today } from '@/components/today';
 import { PillButton, PrimaryButton } from '@/components/form';
 import { PlacePhoto } from '@/components/place-photo';
@@ -15,7 +17,7 @@ import { loadSavedPlaces, loadTrip, loadTrips, type Cached } from '@/lib/tripCac
 import { todayInZone } from '@/lib/tripClock';
 import { pickCurrent } from '@/lib/tripPhase';
 import { todayISO } from '@/lib/tripsWall';
-import { useFocusedFetch } from '@/lib/useFocusedFetch';
+import { useFocusedFetch, useFocusedFetchWithRetry } from '@/lib/useFocusedFetch';
 
 /**
  * Transcribed from `ios/TripMate/TripMate/Home/LandingContent.swift`. Static, and true today —
@@ -58,9 +60,14 @@ export default function Home() {
    *
    * Through `loadTrips`, so a failed request falls back to whatever is cached rather than
    * showing a notice. Offline is the case this screen most has to survive: it is the one you
-   * open standing in a street somewhere.
+   * open standing in a street somewhere. With nothing on disk and no way through, it is
+   * `'offline'`, and the whole screen becomes the offline one: planning needs the network too.
    */
-  const listed = useFocusedFetch(async () => (await loadTrips()) ?? null);
+  const { data: fetched, retry } = useFocusedFetchWithRetry(
+    async () => (await loadTrips()) ?? (lastRequestReachedServer() === false ? ('offline' as const) : null)
+  );
+  const unreachable = fetched === 'offline';
+  const listed = unreachable ? null : fetched;
   const trips = listed === undefined ? undefined : (listed?.value ?? null);
   const offline = listed?.cachedAt != null;
 
@@ -131,6 +138,19 @@ export default function Home() {
   const saved = savedHit?.value ?? undefined;
 
   const featured = trips ? pickFeatured(trips) : undefined;
+
+  if (unreachable) {
+    return (
+      <OfflineScreen
+        bottomInset={BarHeight}
+        // A server that answers, even with an error, ends the offline screen: Home's own notice says the rest.
+        retry={async () => {
+          const { result, commit } = await retry();
+          return result === 'offline' ? null : commit;
+        }}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
