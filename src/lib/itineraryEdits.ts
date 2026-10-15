@@ -46,6 +46,19 @@ export function newStop(name: string, lat: number, lng: number): Stop {
 }
 
 /**
+ * A search category to one of the four a `Stop` has.
+ *
+ * The four exist to drive the day's spend tiles (`daySpendByCategory`), so this is really asking
+ * "what kind of money is this" — a café and a restaurant are both `food`, a museum charges
+ * `entry`, and a park costs nothing, which is `other` rather than a fifth category nobody totals.
+ */
+export function stopCategoryFor(category: string | undefined): Stop["category"] {
+  if (category === "cafe" || category === "restaurant" || category === "bar") return "food";
+  if (category === "sights") return "entry";
+  return "other";
+}
+
+/**
  * Append an empty day.
  *
  * Dated the day after the current last one, so the trip stays a contiguous run of dates — every

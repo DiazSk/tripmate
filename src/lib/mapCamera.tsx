@@ -30,6 +30,7 @@ import {
   type CameraState,
   type LegPathDrawRequest,
   type MapRenderer,
+  type ViewInsets,
 } from "@/lib/mapRenderer";
 import type { MapEngine } from "@/lib/mapEngine";
 
@@ -200,7 +201,7 @@ interface MapCameraContextValue {
    */
   setNightLens: (on: boolean) => void;
   /** `MapRenderer.setViewPadding`, held and re-applied to any renderer that becomes live. */
-  setViewPadding: (insets: { left: number; bottom: number } | null) => void;
+  setViewPadding: (insets: ViewInsets | null) => void;
   flyToDestination: (lat: number, lng: number, label?: string) => void;
   /** `motion` is a story beat's facing and pacing; every other caller omits it and stays north-up.
    *  See the implementation for why they are deliberately not the same. */
@@ -560,7 +561,7 @@ export function MapCameraProvider({
   const routeFramingSuspendedRef = useRef(false);
   const connectorsHiddenRef = useRef(false);
   const nightLensRef = useRef(false);
-  const viewPaddingRef = useRef<{ left: number; bottom: number } | null>(null);
+  const viewPaddingRef = useRef<ViewInsets | null>(null);
   /** Every stop of every day, flattened, each carrying its own `day`. Flat rather than nested
    *  because `hoveredIndex`/`activeIndex` index into it and always have — keeping one index
    *  space means StopMarkerLayer, Story mode and the peek logic needed no reworking when the
@@ -1553,7 +1554,7 @@ export function MapCameraProvider({
     if (renderer?.isAlive()) renderer.setNightLens(on);
   }, []);
 
-  const setViewPadding = useCallback((insets: { left: number; bottom: number } | null) => {
+  const setViewPadding = useCallback((insets: ViewInsets | null) => {
     viewPaddingRef.current = insets;
     const renderer = rendererRef.current;
     if (renderer?.isAlive()) renderer.setViewPadding(insets);

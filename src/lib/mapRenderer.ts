@@ -49,10 +49,10 @@ export interface MapRenderer {
    * these CSS-pixel insets leave. Applies from the next camera command rather than moving the camera
    * itself, since a move here would cancel a flight already under way. Null clears them. The plan
    * panel's own clearance is separate and horizontal (`frameRouteBesidePanel`); this is for a screen
-   * that covers the foot and the left, as the generation screen's standfirst and monument do. A
-   * renderer without camera padding no-ops.
+   * that covers the foot and the left, as the generation screen's standfirst and monument do, or the
+   * top, as the trip page's map search does. A renderer without camera padding no-ops.
    */
-  setViewPadding(insets: { left: number; bottom: number } | null): void;
+  setViewPadding(insets: ViewInsets | null): void;
 
   /**
    * Ask for one frame.
@@ -375,6 +375,14 @@ export interface ScreenPoint {
   y: number;
 }
 
+/** CSS pixels of screen furniture along three edges of the map. `top` is optional because only the
+ *  trip page's map search covers it. */
+export interface ViewInsets {
+  left: number;
+  bottom: number;
+  top?: number;
+}
+
 /** One searched-for place on the map. Deliberately smaller than `FoundPlace`: the renderer needs
  *  a position, a label and whether it is the one being pointed at, and nothing else. */
 export interface SearchPin {
@@ -398,6 +406,9 @@ export interface SearchPin {
    *  the traveler asks "which of these is that one". Distinct from `selected`, which is a choice
    *  that persists and survives the pointer leaving. */
   hovered?: boolean;
+  /** A short label drawn inside the pin, the result's number in the list beside it, so a row and its
+   *  pin can be matched by reading rather than by hovering. */
+  badge?: string;
 }
 
 export interface RouteDrawRequest {

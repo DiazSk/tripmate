@@ -387,7 +387,6 @@ html {
   color: #1f2a44;
   background: #fff;
 }
-.app-shell:has(.trip-page) .map-search-panel > button.glass-control,
 .tp-controls button {
   pointer-events: auto;
   display: grid;
@@ -402,7 +401,6 @@ html {
   box-shadow: none;
   transition: background-color 0.2s;
 }
-.app-shell:has(.trip-page) .map-search-panel > button.glass-control:hover,
 .tp-controls button:hover {
   background: rgba(31, 42, 68, 0.85);
 }
@@ -418,18 +416,9 @@ html {
   letter-spacing: 0.08em;
 }
 .tp-controls :focus-visible,
-.app-shell:has(.trip-page) .map-engine-toggle :focus-visible,
-.app-shell:has(.trip-page) .map-search-panel :focus-visible {
+.app-shell:has(.trip-page) .map-engine-toggle :focus-visible {
   outline: 2px solid #ff7e15;
   outline-offset: 2px;
-}
-/* The open search, on ice. */
-[data-appearance="light"].glass-control {
-  background: #fff;
-  backdrop-filter: none;
-  border: 0;
-  border-radius: 0.375rem;
-  box-shadow: 0 1.5em 3em -1em rgba(0, 0, 0, 0.6);
 }
 @media (width >= 40rem) {
   .app-shell:has(.trip-page) .map-engine-toggle {
@@ -437,13 +426,7 @@ html {
     right: 1.25rem;
     top: calc(var(--nav-h) + 1rem);
   }
-  .app-shell:has(.trip-page) .map-search-panel {
-    left: auto;
-    right: 1.25rem;
-    top: calc(var(--nav-h) + 4rem);
-  }
   .app-shell:has(.trip-page.has-drawer) .map-engine-toggle,
-  .app-shell:has(.trip-page.has-drawer) .map-search-panel,
   .app-shell:has(.trip-page.has-drawer) .map-controls {
     right: calc(var(--trip-drawer-w, 0px) + 2.25rem);
   }

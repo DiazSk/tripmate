@@ -347,6 +347,8 @@ Open-Meteo (geocoding, forecast, historical fallback beyond a 16-day horizon, su
 
 `src/lib/placeSearch.ts` is the one place with a **swappable** provider: Google Places when `GOOGLE_PLACES_API_KEY` is set, Overpass otherwise. It is also the only caller that fails across Overpass *mirrors* — a search box generates exactly the traffic a shared community instance rate-limits, and being turned away is the ordinary case rather than the exceptional one. It returns `available: false` for that, distinct from `[]` for "this neighbourhood has no cafés"; the UI says "search is busy" rather than lying about the neighbourhood.
 
+**Two search faces, one engine.** `src/lib/usePlaceSearch.ts` is the map search's engine (tiles first, then the route, re-asked as the view moves); `MapSearchPanel` (the map chrome's) and `polar/trip/TripSpotlight.tsx` (the trip page's, with the day's gaps in it, built on `src/lib/dayGaps.ts`) are only interfaces over it. Change how searching works there, not in either face. `MapSearchPanel` returns null on `/trip/` pages.
+
 ### Chat memory is reconstructed, not held
 
 The model holds no state between calls on either transport. What differs is where the transcript that gets replayed lives.

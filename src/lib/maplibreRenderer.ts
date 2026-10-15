@@ -42,6 +42,7 @@ import {
   ScreenPoint,
   SearchPin,
   STOP_MIN_RANGE_M,
+  ViewInsets,
   visibleMapWidthPx,
   ZoomStepOptions,
 } from "@/lib/mapRenderer";
@@ -615,7 +616,13 @@ function addTripLayers(map: MapLibreMap) {
       // palette — `searchPalette.ts` is what the row's own dot reads, and a pin that does not
       // match it is a pin the traveler has to match by position.
       "circle-color": ["get", "color"],
-      "circle-radius": ["case", ["get", "hovered"], 9.5, ["get", "selected"], 8, 5.5],
+      // A numbered pin is drawn bigger so its number fits inside it.
+      "circle-radius": [
+        "case",
+        ["!=", ["get", "badge"], ""],
+        ["case", ["get", "hovered"], 12, ["get", "selected"], 11.5, 9.5],
+        ["case", ["get", "hovered"], 9.5, ["get", "selected"], 8, 5.5],
+      ],
       // The highlight. Pointing at a row holds that pin at full strength and drops every other one
       // to a third — "darken this, lighten those" — so the map answers "which one is that" without
       // the traveler having to read a label. Opacity rather than a second colour: a dimmed pin has
@@ -634,6 +641,9 @@ function addTripLayers(map: MapLibreMap) {
     source: SEARCH_SOURCE_ID,
     layout: {
       "text-field": ["get", "name"],
+      // A font the basemap's glyph server has. Left unset, MapLibre asks OpenFreeMap for "Open Sans",
+      // which 404s for every glyph range and falls back to drawing each one locally.
+      "text-font": ["Noto Sans Regular"],
       // Grows as the camera comes in, the same direction the reveal below runs. A label that is
       // fading in at a fixed size reads as a thing switching on; one that fades *and* grows reads
       // as a thing you are approaching.
@@ -676,6 +686,26 @@ function addTripLayers(map: MapLibreMap) {
         // with the one being pointed at — which is the clutter the dimming was for.
         ["case", ["get", "dimmed"], 0.35, 1],
       ],
+    },
+  });
+
+  // The pin's number, when it carries one (`SearchPin.badge`): always drawn, never traded away for a
+  // street name, because it is how the row beside the map is matched to its pin.
+  map.addLayer({
+    id: `${SEARCH_SOURCE_ID}-badge`,
+    type: "symbol",
+    source: SEARCH_SOURCE_ID,
+    filter: ["!=", ["get", "badge"], ""],
+    layout: {
+      "text-field": ["get", "badge"],
+      "text-font": ["Noto Sans Bold"],
+      "text-size": 11,
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+    },
+    paint: {
+      "text-color": "#090b10",
+      "text-opacity": ["case", ["get", "dimmed"], 0.4, 1],
     },
   });
 
@@ -807,14 +837,18 @@ export class MapLibreRenderer implements MapRenderer {
   }
 
   /** Screen furniture to frame around (`setViewPadding`), added to every camera command's padding. */
-  private viewInsets = { left: 0, bottom: 0 };
+  private viewInsets = { left: 0, bottom: 0, top: 0 };
 
-  setViewPadding(insets: { left: number; bottom: number } | null) {
+  setViewPadding(insets: ViewInsets | null) {
     // Stored, not applied. Every camera command here passes its own `padding` (`panelPadding`, or
     // `frameRoute`'s), which would overwrite one set directly, and an ease to it is a camera move
     // that cancels a flight already under way (measured: a cold boot stayed on the landing pose over
     // the Sahara). The next framing reads it; while a plan is written that is every day's.
-    this.viewInsets = { left: Math.max(0, insets?.left ?? 0), bottom: Math.max(0, insets?.bottom ?? 0) };
+    this.viewInsets = {
+      left: Math.max(0, insets?.left ?? 0),
+      bottom: Math.max(0, insets?.bottom ?? 0),
+      top: Math.max(0, insets?.top ?? 0),
+    };
   }
 
   /** Each touched paint property's day value, read before the first night change and put back exactly. */
@@ -1125,6 +1159,7 @@ export class MapLibreRenderer implements MapRenderer {
           // Resolved by the caller (see `SearchPin.colorHex`). The `??` is the layer's only say in
           // the matter: a feature with no colour still has to paint as something.
           color: place.colorHex ?? SEARCH_PIN_FALLBACK_COLOR,
+          badge: place.badge ?? "",
         },
         geometry: { type: "Point", coordinates: [place.lng, place.lat] },
       })),
@@ -1503,7 +1538,8 @@ export class MapLibreRenderer implements MapRenderer {
     const { width } = this.viewSizePx();
     const panelInset = Math.max(0, width - visibleMapWidthPx(width));
     return {
-      top: 120,
+      // Furniture across the top (the trip page's map search) still leaves the label room above it.
+      top: Math.max(120, this.viewInsets.top + 60),
       bottom: 80 + this.viewInsets.bottom,
       left: 80 + this.viewInsets.left,
       right: Math.max(80, panelInset),
@@ -1555,10 +1591,10 @@ export class MapLibreRenderer implements MapRenderer {
 
     // Screen furniture (`setViewPadding`): centre in the area it leaves, pulled back so the route still
     // fits in it. Capped, like the panel's fit scale, so a tall foot never sends the camera to orbit.
-    const { left: insetLeft, bottom: insetBottom } = this.viewInsets;
+    const { left: insetLeft, bottom: insetBottom, top: insetTop } = this.viewInsets;
     const insetFit = Math.min(
       1.6,
-      Math.max(viewWidth / Math.max(1, viewWidth - insetLeft), viewHeight / Math.max(1, viewHeight - insetBottom))
+      Math.max(viewWidth / Math.max(1, viewWidth - insetLeft), viewHeight / Math.max(1, viewHeight - insetBottom - insetTop))
     );
 
     this.map.flyTo({
@@ -1569,7 +1605,7 @@ export class MapLibreRenderer implements MapRenderer {
       // Zero but for the screen furniture, not omitted. `flyTo` *retains* whatever padding the last
       // camera command set, so a stop flight's right-padding would otherwise still be in force here
       // and compound with the metre bias this function already applied — biasing the route twice.
-      padding: { top: 0, bottom: insetBottom, left: insetLeft, right: 0 },
+      padding: { top: insetTop, bottom: insetBottom, left: insetLeft, right: 0 },
       duration: (durationS ?? 2.0) * 1000,
       essential: true,
     });

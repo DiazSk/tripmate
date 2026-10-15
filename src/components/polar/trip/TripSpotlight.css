@@ -1,0 +1,726 @@
+/* The trip page's map search (canvas "Map search · 4 · Spotlight with the day"). Polar ice under
+   `.tm` for its tokens; `.tm.` raises each root over `.tm`'s own `width`/`min-height`/`position`. */
+
+.tm.trip-spotlight,
+.tm.tsl-closed {
+  position: fixed;
+  top: calc(var(--nav-h) + 0.75rem);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 25;
+  min-height: 0;
+  /* The trip page lets clicks through to the map; the bar takes its own back. */
+  pointer-events: auto;
+}
+.trip-spotlight kbd,
+.tsl-closed kbd {
+  padding: 0.12em 0.4em;
+  font-family: var(--wd-font-sans);
+  font-size: 0.72em;
+  font-weight: 600;
+  color: var(--wd-charcoal);
+  background: var(--wd-snow);
+  border: 1px solid var(--wd-veil-15);
+  border-bottom-width: 2px;
+  border-radius: var(--wd-radius-sm);
+}
+.tm.tsl-closed {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: min(32rem, calc(100% - 24rem));
+  height: 2.9rem;
+  padding: 0 0.6rem 0 1rem;
+  font-size: 0.9rem;
+  color: var(--wd-charcoal);
+  border-radius: var(--wd-radius-card);
+  box-shadow: 0 1em 2.5em -1em rgba(0, 0, 0, 0.7);
+  transition: box-shadow 0.2s;
+}
+.tm.tsl-closed:hover {
+  color: var(--wd-ink);
+}
+.tsl-closed span {
+  flex: 1;
+  overflow: hidden;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tm.trip-spotlight {
+  width: min(58rem, calc(100% - 22rem));
+  display: grid;
+  overflow: hidden;
+  color: var(--wd-ink);
+  border-radius: var(--wd-radius-card);
+  box-shadow: 0 2em 5em -1.5em rgba(0, 0, 0, 0.8);
+  animation: tsl-in 0.3s var(--wd-ease-reveal) both;
+}
+@keyframes tsl-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+}
+/* The trip page has no phone-width map search, as the map chrome's has none. */
+@media (width < 40rem) {
+  .tm.trip-spotlight,
+  .tm.tsl-closed,
+  .tsl-tag,
+  .tsl-reach {
+    display: none;
+  }
+}
+
+.tsl-swatch {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.55em;
+  height: 0.55em;
+  background: var(--c);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(9, 11, 16, 0.25);
+}
+
+.tsl-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-height: 3.4rem;
+  padding: 0.45rem 0.6rem 0.45rem 1.1rem;
+  border-bottom: 1px solid var(--wd-rule);
+}
+.tsl-field:focus-within {
+  box-shadow: inset 0 -2px 0 var(--wd-signal);
+}
+.tsl-field > svg {
+  color: var(--wd-charcoal);
+}
+.tsl-field input {
+  flex: 1;
+  min-width: 10rem;
+  height: 2.4rem;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 1.02rem;
+  color: var(--wd-ink);
+}
+/* The field's own underline is the focus mark; a second outline inside it reads as a mistake. */
+.tsl-field input:focus-visible {
+  outline: none;
+}
+.tsl-field input::placeholder {
+  color: var(--wd-stone);
+}
+.tsl-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-height: 2rem;
+  padding: 0 0.55em 0 0.65em;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--wd-snow);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: 999px;
+}
+.tm .tsl-token {
+  background: var(--wd-snow);
+  border: 1px solid var(--wd-veil-15);
+}
+.tsl-token span {
+  font-size: 1.1em;
+  color: var(--wd-charcoal);
+}
+.tm .tsl-token:hover {
+  border-color: var(--wd-ink);
+}
+.tm .tsl-token.is-gap {
+  font-family: var(--wd-font-condensed);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--wd-ember);
+  background: rgba(255, 126, 21, 0.12);
+  border-color: rgba(180, 83, 10, 0.35);
+}
+.tsl-spin {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--wd-veil-15);
+  border-top-color: var(--wd-signal);
+  border-radius: 50%;
+  animation: tsl-spin 0.8s linear infinite;
+}
+@keyframes tsl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.tsl-x {
+  display: grid;
+  place-items: center;
+  min-width: 2.75rem;
+  height: 2.75rem;
+}
+
+/* The day */
+.tsl-day {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1.1rem 0.6rem;
+  background: var(--wd-paper);
+  border-bottom: 1px solid var(--wd-rule);
+}
+.tsl-day-head {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.tsl-day-head b {
+  font-family: var(--wd-font-display);
+  font-weight: 500;
+  font-size: 1.15rem;
+}
+.tsl-day-head span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  color: var(--wd-charcoal);
+}
+.tsl-day-head span b {
+  color: var(--wd-ink);
+}
+.tsl-day-head button {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 2.2rem;
+  font-size: 1.15rem;
+  color: var(--wd-charcoal);
+  border-radius: var(--wd-radius-sm);
+}
+.tsl-day-head button:hover:not(:disabled) {
+  background: var(--wd-veil-05);
+}
+.tsl-day-head button:disabled {
+  opacity: 0.3;
+}
+.tsl-track {
+  position: relative;
+  height: 2.6rem;
+  margin-top: 0.7rem;
+  background: var(--wd-ice);
+  border-radius: var(--wd-radius-sm);
+  box-shadow: inset 0 0 0 1px var(--wd-rule);
+}
+.tsl-hour {
+  position: absolute;
+  top: -1rem;
+  translate: -50% 0;
+  font-family: var(--wd-font-condensed);
+  font-size: 0.64rem;
+  color: var(--wd-stone);
+}
+.tsl-stop,
+.tsl-gap,
+.tsl-new,
+.tsl-ghost {
+  position: absolute;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  border-radius: var(--wd-radius-hairline);
+}
+/* A hairline of ice between stops that run back to back, so a full morning still reads as stops. */
+.tsl-stop {
+  opacity: 0.85;
+  box-shadow: inset -1.5px 0 0 var(--wd-ice);
+}
+.tm .tsl-gap {
+  display: grid;
+  place-items: center;
+  background: repeating-linear-gradient(135deg, rgba(31, 42, 68, 0.06) 0 4px, transparent 4px 8px);
+  border: 1px dashed var(--wd-veil-20);
+  transition: background-color 0.2s, border-color 0.2s;
+}
+.tsl-gap span {
+  font-family: var(--wd-font-condensed);
+  font-size: 0.66rem;
+  color: var(--wd-charcoal);
+  white-space: nowrap;
+}
+.tm .tsl-gap:hover {
+  border-color: var(--wd-ink);
+}
+.tm .tsl-gap.is-on {
+  background: rgba(255, 126, 21, 0.12);
+  border: 1.5px solid var(--wd-signal);
+}
+.tsl-gap.is-on span {
+  color: var(--wd-ember);
+}
+.tsl-new {
+  top: 0.55rem;
+  bottom: 0.55rem;
+  background: var(--wd-signal);
+  pointer-events: none;
+}
+/* Where the highlighted place would go, moving as you move through the list. */
+.tsl-ghost {
+  top: 0.55rem;
+  bottom: 0.55rem;
+  background: rgba(255, 126, 21, 0.35);
+  border: 1.5px dashed var(--wd-signal);
+  pointer-events: none;
+  transition: left 0.3s var(--wd-ease-reveal), width 0.3s var(--wd-ease-reveal);
+}
+.tsl-cats {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.55rem 1.1rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--wd-rule);
+}
+.tm .tsl-cats button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-height: 2rem;
+  padding: 0 0.75em;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--wd-ash);
+  border: 1px solid var(--wd-veil-15);
+  border-radius: 999px;
+}
+.tsl-cats button em {
+  font-style: normal;
+  color: var(--wd-signal);
+}
+.tm .tsl-cats button:hover {
+  color: var(--wd-ink);
+  border-color: var(--wd-ink);
+}
+.tsl-h {
+  padding: 0.65rem 1.1rem 0.25rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wd-charcoal);
+}
+/* The list and the quick read on the highlighted place, side by side: wider, never taller. */
+.tsl-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+}
+/* Short on purpose: four rows, so the map below keeps the places it is showing. */
+.tsl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.2rem 0.6rem 0.5rem;
+  max-height: calc(4 * 3.35rem + 0.7rem);
+  overflow-y: auto;
+}
+.tsl-row {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3.35rem;
+  padding: 0 0.5rem;
+  border-radius: var(--wd-radius-sm);
+  cursor: pointer;
+}
+.tsl-row.is-on {
+  background: var(--wd-snow);
+  box-shadow: inset 2px 0 0 var(--c);
+}
+.tsl-row.is-out {
+  opacity: 0.55;
+}
+.tsl-n {
+  display: grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  font-family: var(--wd-font-condensed);
+  font-size: 0.76rem;
+  color: var(--wd-night);
+  background: var(--c);
+  border-radius: 50%;
+}
+.tsl-what {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+.tsl-what b {
+  font-size: 0.94rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tsl-what span {
+  font-size: 0.74rem;
+  color: var(--wd-charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tsl-fit {
+  max-width: 13rem;
+  overflow: hidden;
+  font-family: var(--wd-font-condensed);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: #0e6670;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tsl-fit.is-no {
+  font-family: var(--wd-font-sans);
+  font-size: 0.72rem;
+  color: var(--wd-charcoal);
+}
+.tm .tsl-add {
+  min-height: 2.3rem;
+  min-width: 5.6rem;
+  padding: 0 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--wd-paper);
+  border-radius: var(--wd-radius-hairline);
+}
+.tm .tsl-add:hover:not(:disabled) {
+  background: var(--wd-mushroom);
+}
+.tm .tsl-row.is-on .tsl-add:not(:disabled) {
+  background: var(--wd-signal);
+}
+.tm .tsl-add:disabled {
+  opacity: 0.4;
+}
+.tsl-done {
+  min-width: 5.6rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--wd-ember);
+}
+.tsl-idle {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem 1.1rem;
+}
+.tsl-idle p,
+.tsl-none {
+  font-family: var(--wd-font-display);
+  font-style: italic;
+  font-size: 1.15rem;
+  color: var(--wd-ash);
+}
+.tsl-none {
+  padding: 0.9rem 1.1rem;
+}
+.tsl-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.tsl-recent > span {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--wd-veil-15);
+  border-radius: 999px;
+}
+.tm .tsl-recent > span > button:first-child {
+  min-height: 2rem;
+  padding: 0 0.3rem 0 0.8rem;
+  font-size: 0.8rem;
+  color: var(--wd-ash);
+}
+.tm .tsl-rm {
+  width: 1.9rem;
+  height: 2rem;
+  color: var(--wd-stone);
+}
+.tm .tsl-rm:hover {
+  color: var(--wd-ink);
+}
+.tsl-alert {
+  margin: 0.8rem 1.1rem;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--wd-alert-text);
+  background: rgba(209, 15, 15, 0.08);
+  border-left: 2px solid currentColor;
+}
+.tsl-skel {
+  list-style: none;
+  margin: 0;
+  padding: 0.8rem 1.1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+.tsl-skel li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.tsl-skel span {
+  display: block;
+  height: 0.8em;
+  background: var(--wd-mushroom);
+  border-radius: var(--wd-radius-sm);
+  animation: tsl-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes tsl-pulse {
+  to {
+    opacity: 0.45;
+  }
+}
+.tsl-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.7rem;
+  color: var(--wd-charcoal);
+  background: var(--wd-snow);
+  border-top: 1px solid var(--wd-rule);
+}
+.tsl-foot kbd {
+  margin-right: 0.15em;
+}
+
+.tsl-preview {
+  max-height: calc(4 * 3.35rem + 0.7rem);
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  margin: 0.2rem 0.6rem 0.5rem 0;
+  padding: 0.75rem 0.9rem;
+  background: var(--wd-paper);
+  border-radius: var(--wd-radius-sm);
+}
+/* The tile beside the name, not above it, so the whole read fits the list's four rows. */
+.tsl-pv-head {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.15rem;
+}
+.tsl-pv-head > div:last-child {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.tsl-art {
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  color: var(--wd-night);
+  background: color-mix(in srgb, var(--c) 55%, var(--wd-ice));
+  border-radius: var(--wd-radius-sm);
+}
+.tsl-art b {
+  font-family: var(--wd-font-display);
+  font-weight: 500;
+  font-size: 1.6rem;
+}
+.tsl-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--wd-font-condensed);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wd-charcoal);
+}
+.tsl-preview h3 {
+  font-family: var(--wd-font-display);
+  font-weight: 400;
+  font-size: 1.4rem;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tsl-addr {
+  font-size: 0.8rem;
+  color: var(--wd-charcoal);
+}
+.tsl-preview dl {
+  margin: 0.15rem 0 0;
+  display: grid;
+}
+.tsl-preview dl div {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  gap: 0.6rem;
+  padding: 0.28rem 0;
+  font-size: 0.78rem;
+  border-top: 1px solid var(--wd-rule);
+}
+.tsl-preview dt {
+  font-weight: 600;
+  color: var(--wd-charcoal);
+}
+.tsl-preview dd {
+  overflow-wrap: anywhere;
+}
+.tsl-why {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--wd-ash);
+}
+.tm .tsl-link {
+  justify-self: start;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+/* On the map. Both are placed by transform from the top-left corner, each frame the camera moves. */
+.tsl-reach,
+.tm.tsl-tag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+.tsl-reach {
+  z-index: 14;
+  background: rgba(255, 126, 21, 0.035);
+  border: 1.2px dashed rgba(255, 126, 21, 0.55);
+  border-radius: 50%;
+}
+/* On the ring's near edge: its far edge is usually under the bar. */
+.tsl-reach span {
+  position: absolute;
+  bottom: -0.6rem;
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--font-sans-stack), ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: rgba(255, 166, 90, 0.95);
+  text-shadow: 0 0 3px rgba(9, 11, 16, 0.95), 0 0 6px rgba(9, 11, 16, 0.8);
+}
+.tm.tsl-tag {
+  z-index: 22;
+  width: 13.75rem;
+  min-height: 0;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.6rem 0.7rem 0.65rem;
+  font-size: 14px;
+  border-left: 3px solid var(--c);
+  border-radius: var(--wd-radius-sm);
+  box-shadow: 0 1em 2em -0.8em rgba(0, 0, 0, 0.75);
+}
+.tsl-tag::before {
+  content: "";
+  position: absolute;
+  top: calc(50% - 6px);
+  left: -9px;
+  border: 6px solid transparent;
+  border-right-color: var(--c);
+}
+.tm.tsl-tag[data-side="left"] {
+  border-left: 0;
+  border-right: 3px solid var(--c);
+}
+.tsl-tag[data-side="left"]::before {
+  left: auto;
+  right: -9px;
+  border-right-color: transparent;
+  border-left-color: var(--c);
+}
+.tsl-tag-kind {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--wd-font-condensed);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wd-charcoal);
+}
+.tsl-tag b {
+  font-family: var(--wd-font-display);
+  font-weight: 500;
+  font-size: 19px;
+  line-height: 1.1;
+}
+.tm.tsl-tag button {
+  justify-self: start;
+  margin-top: 0.25rem;
+  min-height: 30px;
+  padding: 0 0.7rem;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--wd-signal);
+  border-radius: var(--wd-radius-hairline);
+  pointer-events: auto;
+}
+.tm.tsl-tag button:hover {
+  background: var(--wd-signal-hover);
+}
+.tsl-tag em {
+  margin-top: 0.25rem;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+}
+.tsl-tag-done {
+  color: var(--wd-ember);
+}
+.tsl-tag-no {
+  color: var(--wd-charcoal);
+}
+
+@media (max-width: 900px) {
+  .tsl-split {
+    grid-template-columns: 1fr;
+  }
+  .tsl-preview {
+    display: none;
+  }
+  .tsl-day {
+    grid-template-columns: 1fr;
+  }
+  .tsl-fit,
+  .tsl-foot > span:first-child {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tm.trip-spotlight,
+  .tsl-spin,
+  .tsl-skel span {
+    animation: none;
+  }
+  .tsl-ghost {
+    transition: none;
+  }
+}

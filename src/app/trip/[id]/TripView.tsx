@@ -9,6 +9,7 @@ import { useFocusEdit } from "@/lib/useFocusEdit";
 import { usePublishItinerary } from "@/lib/activeItinerary";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import TripBoard, { type BoardShape } from "@/components/polar/trip/TripBoard";
+import TripSpotlight from "@/components/polar/trip/TripSpotlight";
 import { Itinerary, Trip } from "@/lib/types";
 import { useTripCamera } from "@/lib/useTripCamera";
 import { useGlobeOnScreen, useMapCamera } from "@/lib/mapCamera";
@@ -19,6 +20,7 @@ import { clearUnseenDay, markUnseenDays } from "@/lib/unseenChanges";
 import "@/components/polar/PolarLanding.css";
 import "@/components/polar/trip/TripBoard.css";
 import "@/components/polar/trip/TripDrawer.css";
+import "@/components/polar/trip/TripSpotlight.css";
 
 /** Fallback shown only when the thrown error carries no message of its own. */
 function errorMessage(e: unknown, fallback: string): string {
@@ -55,6 +57,9 @@ export default function TripView({
   const [planShut, setPlanShut] = useState(false);
   /** The full editor, open as the right-hand drawer. */
   const [editOpen, setEditOpen] = useState(false);
+  /** The map search open across the top. The board steps aside while it is, so the map between the
+   *  two is the results' rather than the plan's. */
+  const [searchOpen, setSearchOpen] = useState(false);
   // Story mode, for the capsule's Play button. Read from context rather than owned here — there
   // is one film at a time and it belongs to the app (`storyMode.tsx`), so this and the card's own
   // Play button are the same control reached from two places.
@@ -65,10 +70,9 @@ export default function TripView({
   const [unseenChangedDays, setUnseenChangedDays] = useState<number[]>([]);
   // Step 7 edit session. Unlike the pre-save view, every accepted edit here is persisted.
   const focus = useFocusEdit(itinerary);
-  // Publishes the plan to surfaces mounted outside this tree — today the map's search control,
-  // which lives with the map chrome in `AppShell` and needs somewhere to put a café it found.
-  // `handleRearrange` is the same commit path the card's drag-and-drop uses, so a place added from
-  // the map saves exactly the way a dragged stop does.
+  // Publishes the plan to surfaces mounted outside this tree. The map's own search now lives on this
+  // page (`TripSpotlight`, handed `handleRearrange` directly); this still feeds the search's area,
+  // which hugs the trip's stops. `handleRearrange` is the commit path the board's drag-and-drop uses.
   usePublishItinerary(itinerary, handleRearrange);
   const [savingFocus, setSavingFocus] = useState(false);
   const [keeping, setKeeping] = useState(false);
@@ -278,7 +282,8 @@ export default function TripView({
    */
   const drawer: "refine" | "edit" | "detail" | null =
     focus.target && focus.draft ? "refine" : editOpen ? "edit" : selectedStop ? "detail" : null;
-  const shape: BoardShape = story.active ? "hidden" : drawer ? "strip" : planShut ? "ticket" : "board";
+  const spotlight = searchOpen && !story.active;
+  const shape: BoardShape = story.active || spotlight ? "hidden" : drawer ? "strip" : planShut ? "ticket" : "board";
 
   /**
    * Tell the map how much of the screen is the plan's. The board along the foot is a bottom inset
@@ -296,8 +301,14 @@ export default function TripView({
       const foot = document.querySelector<HTMLElement>(story.active ? ".story-player .sp-bar" : ".trip-board, .tb-shut");
       const side = document.querySelector<HTMLElement>(".trip-drawer, .split-editor");
       const bottom = foot ? Math.max(0, Math.round(window.innerHeight - foot.getBoundingClientRect().top + 16)) : 0;
-      setViewPadding({ left: 0, bottom });
-      root.style.setProperty("--trip-board-h", `${bottom}px`);
+      // The open map search covers the top; what it finds is framed below it.
+      const bar = document.querySelector<HTMLElement>(".trip-spotlight");
+      const top = bar ? Math.round(bar.getBoundingClientRect().bottom) : 0;
+      setViewPadding({ left: 0, bottom, top });
+      // With nothing along the foot (the map search open) the controls stand clear of the corner's
+      // trace button (`LlmTraceFab`: 20px in, 48px tall) instead. `0px` would beat the CSS fallback
+      // and put them on the screen's edge, partly off it.
+      root.style.setProperty("--trip-board-h", `${bottom || 80}px`);
       root.style.setProperty("--trip-drawer-w", side ? `${Math.round(side.getBoundingClientRect().width)}px` : "0px");
     };
     const schedule = () => {
@@ -307,12 +318,17 @@ export default function TripView({
     // Once more after the board's own 0.5s rise, which a rect read mid-transform gets wrong.
     const settle = window.setTimeout(schedule, 560);
     window.addEventListener("resize", schedule);
+    // The search grows and shrinks with its results.
+    const bar = document.querySelector<HTMLElement>(".trip-spotlight");
+    const observer = new ResizeObserver(schedule);
+    if (bar) observer.observe(bar);
     return () => {
       cancelAnimationFrame(frame);
       window.clearTimeout(settle);
       window.removeEventListener("resize", schedule);
+      observer.disconnect();
     };
-  }, [shape, drawer, story.active, setViewPadding]);
+  }, [shape, drawer, story.active, spotlight, setViewPadding]);
   useEffect(
     () => () => {
       setViewPadding(null);
@@ -395,6 +411,25 @@ export default function TripView({
                 }
               : null
           }
+        />
+      )}
+
+      {trip && itinerary && !story.active && (
+        <TripSpotlight
+          itinerary={itinerary}
+          dayIndex={activeDayIndex}
+          onDayChange={setActiveDayIndex}
+          open={searchOpen}
+          onOpenChange={(next) => {
+            // One thing on the right at a time: opening the search puts the drawers away.
+            // `stayPut`: the search is about the view on screen, so opening it must not move it.
+            if (next) {
+              if (selectedStop) closeDetail({ stayPut: true });
+              setEditOpen(false);
+            }
+            setSearchOpen(next);
+          }}
+          onChange={handleRearrange}
         />
       )}
 

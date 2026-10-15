@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Itinerary, Stop } from "@/lib/types";
-import { newStop } from "@/lib/itineraryEdits";
+import { newStop, stopCategoryFor } from "@/lib/itineraryEdits";
 import { planSlot } from "@/lib/daySlotting";
 import type { TimeOfDay } from "@/lib/timeOfDay";
 
@@ -170,17 +170,4 @@ export function addPlaceToDay(
     ...itinerary,
     days: itinerary.days.map((d, i) => (i === dayIndex ? { ...d, stops } : d)),
   };
-}
-
-/**
- * A search category to one of the four a `Stop` has.
- *
- * The four exist to drive the day's spend tiles (`daySpendByCategory`), so this is really asking
- * "what kind of money is this" — a café and a restaurant are both `food`, a museum charges
- * `entry`, and a park costs nothing, which is `other` rather than a fifth category nobody totals.
- */
-function stopCategoryFor(category: string | undefined): Stop["category"] {
-  if (category === "cafe" || category === "restaurant" || category === "bar") return "food";
-  if (category === "sights") return "entry";
-  return "other";
 }
