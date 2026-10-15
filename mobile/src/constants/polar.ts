@@ -30,6 +30,8 @@ export const Polar = {
   veil20: 'rgba(31,42,68,0.20)',
   frost10: 'rgba(255,255,255,0.10)',
   frost20: 'rgba(255,255,255,0.20)',
+  /** Secondary text on glass over a photograph. */
+  frost68: 'rgba(255,255,255,0.68)',
   rule: 'rgba(31,42,68,0.12)',
 } as const;
 

@@ -5,7 +5,7 @@ import { isEndBeforeStart, isTripTooLong } from './tiers';
  *
  * **This is here rather than in the screens because the screens cannot be tested.** There is no
  * renderer in this repo's mobile test setup — `authGate.ts` records why — so logic reachable only
- * through a component is logic nothing checks. The same move `authMode.ts` and `fieldWidth.ts`
+ * through a component is logic nothing checks. The same move `emailFirst.ts` and `fieldWidth.ts`
  * made.
  *
  * It exists at all because the wizard stopped greying out its primary. DESIGN.md: *"Disabled:
@@ -69,15 +69,6 @@ export function planGap(draft: {
  * say so before the request rather than after. Change it with the dashboard, not on its own.
  */
 export const PASSWORD_MIN = 15;
-
-/** The same shape for the auth form, whose two fields are in the same top-to-bottom order. */
-export function authGap(email: string, password: string): Gap | null {
-  if (email.trim().length === 0) return { field: 'email', reason: 'Add your email address.' };
-  if (password.length < PASSWORD_MIN) {
-    return { field: 'password', reason: `Passwords are at least ${PASSWORD_MIN} characters.` };
-  }
-  return null;
-}
 
 /**
  * Whether the import composer has anything to work on.

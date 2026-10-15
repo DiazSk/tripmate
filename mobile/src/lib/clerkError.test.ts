@@ -1,4 +1,4 @@
-import { clerkMessage, isCancellation, unsupportedStepMessage } from './clerkError';
+import { clerkCode, clerkMessage, isCancellation, unsupportedStepMessage } from './clerkError';
 
 // unsupportedStepMessage warns for developers; keep that out of the test output.
 beforeEach(() => jest.spyOn(console, 'warn').mockImplementation(() => {}));
@@ -43,4 +43,11 @@ test('a second factor is called what it is', () => {
 
 test('anything else keeps the general sentence', () => {
   expect(unsupportedStepMessage({ status: 'needs_identifier' })).toBe("This account needs a sign-in step TripMate doesn't support yet.");
+});
+
+test("reads Clerk's error code off the API error or the error itself", () => {
+  expect(clerkCode({ errors: [{ code: 'form_identifier_not_found', message: "Couldn't find your account." }] })).toBe('form_identifier_not_found');
+  expect(clerkCode({ code: 'network_error' })).toBe('network_error');
+  expect(clerkCode(new Error('boom'))).toBeUndefined();
+  expect(clerkCode(null)).toBeUndefined();
 });

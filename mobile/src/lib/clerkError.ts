@@ -6,6 +6,13 @@ export function clerkMessage(error: unknown, fallback = "That didn't work. Try a
   return first?.longMessage || first?.message || e.longMessage || e.message || fallback;
 }
 
+/** Clerk's machine-readable reason (`form_identifier_not_found`, …), for branching rather than showing. */
+export function clerkCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const e = error as { errors?: { code?: string }[]; code?: unknown };
+  return e.errors?.[0]?.code ?? (typeof e.code === 'string' ? e.code : undefined);
+}
+
 /** The traveller closed the Apple or Google sheet. Not an error, and never shown as one. */
 const CANCEL_CODES = new Set(['ERR_REQUEST_CANCELED', 'SIGN_IN_CANCELLED', '-5']);
 export function isCancellation(error: unknown): boolean {

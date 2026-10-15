@@ -1,92 +1,67 @@
 import { useSignIn, useSignUp } from '@clerk/expo';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Pass, PassBelow, PassScreen, StubFoot, StubRows, passStyles } from '@/components/boarding-pass';
-import { PaperError, PaperInput, QuietLink, SignalButton } from '@/components/polar-ui';
-import { Polar, PolarFonts, PolarRadius, PolarSpace } from '@/constants/polar';
-import { clerkMessage, unsupportedStepMessage } from '@/lib/clerkError';
-import { PASSWORD_MIN } from '@/lib/formGap';
+import { Glass, GlassStep, Note, PlainButton, glassText, useClerkStep } from '@/components/glass-auth';
+import { Polar } from '@/constants/polar';
+import { unsupportedStepMessage } from '@/lib/clerkError';
 import { useFinishAuth } from '@/lib/useFinishAuth';
 
 type Purpose = 'verify-signup' | 'sign-in-code' | 'client-trust' | 'reset';
 
-const COPY: Record<Purpose, { title: string; blurb: string }> = {
-  'verify-signup': { title: 'Confirm your email', blurb: 'We sent a 6-digit code to' },
-  'sign-in-code': { title: 'Check your email', blurb: 'We sent a 6-digit sign-in code to' },
-  'client-trust': { title: 'New device', blurb: "To confirm it's you, we sent a 6-digit code to" },
-  reset: { title: 'Choose a new password', blurb: 'Enter the 6-digit code we sent to' },
+const TITLE: Record<Purpose, string> = {
+  'verify-signup': 'Confirm your email',
+  'sign-in-code': 'Check your email',
+  'client-trust': 'New device, quick check',
+  reset: 'Reset your password',
 };
 
+const RESEND_S = 30;
+
 /**
- * The one code screen for four jobs, drawn as the pass at the gate: six cells over one real input
- * (so typing, pasting and one-time-code autofill all work), and the stub's gate code fills in as
- * you type. Clerk keeps the in-flight sign-in or sign-up on its client, so this screen picks up
- * exactly where the pass left it; only the purpose, the address and the passenger travel as params.
+ * The one code screen for four jobs: six cells over one real input, so typing, pasting and the
+ * code iOS lifts from Mail (`oneTimeCode`) all land in the same place, and a full code submits
+ * itself. Clerk keeps the in-flight sign-in or sign-up on its client, so this screen picks up
+ * exactly where the last one left it; only the purpose and the address travel as params.
+ *
+ * A reset verifies the code here and chooses the password on the next screen, so each screen
+ * asks for one thing.
  */
-export default function AuthCodeScreen() {
-  const { purpose: raw, email, passenger } = useLocalSearchParams<{ purpose?: string; email?: string; passenger?: string }>();
-  const purpose: Purpose = raw && Object.hasOwn(COPY, raw) ? (raw as Purpose) : 'sign-in-code';
+export default function SignInCode() {
+  const { purpose: raw, email = '' } = useLocalSearchParams<{ purpose?: string; email?: string }>();
+  const purpose: Purpose = raw && Object.hasOwn(TITLE, raw) ? (raw as Purpose) : 'sign-in-code';
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
   const finish = useFinishAuth();
+  const { error, setError, step } = useClerkStep();
   const input = useRef<TextInput>(null);
-
   const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [resent, setResent] = useState(false);
   const [focused, setFocused] = useState(true);
+  const [resendIn, setResendIn] = useState(RESEND_S);
 
-  async function step(run: () => Promise<{ error?: unknown } | void>): Promise<boolean> {
-    try {
-      const result = await run();
-      if (result && result.error) {
-        setError(clerkMessage(result.error));
-        return false;
-      }
-      return true;
-    } catch (err) {
-      setError(clerkMessage(err));
-      return false;
-    }
-  }
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
-  /** Why Continue would get nowhere yet. The button stays live and says so on press (DESIGN.md). */
-  const gap =
-    code.trim().length !== 6
-      ? 'Enter the 6-digit code.'
-      : purpose === 'reset' && password.length < PASSWORD_MIN
-        ? `Use at least ${PASSWORD_MIN} characters for your new password.`
-        : undefined;
-
-  async function submit() {
-    if (gap) {
-      setError(gap);
-      return;
-    }
+  async function submit(value: string) {
     setBusy(true);
     setError(null);
-    const resource = purpose === 'verify-signup' ? signUp : signIn;
     let ok: boolean;
-    if (purpose === 'verify-signup') {
-      ok = await step(() => signUp.verifications.verifyEmailCode({ code }));
-    } else if (purpose === 'sign-in-code') {
-      ok = await step(() => signIn.emailCode.verifyCode({ code }));
-    } else if (purpose === 'client-trust') {
-      ok = await step(() => signIn.mfa.verifyEmailCode({ code }));
-    } else {
-      // A rejected new password (breached, too weak) leaves the code already verified and the
-      // status at `needs_new_password`; verifying again would error, so the retry skips it.
-      ok =
-        (signIn.status === 'needs_new_password' || (await step(() => signIn.resetPasswordEmailCode.verifyCode({ code })))) &&
-        (await step(() => signIn.resetPasswordEmailCode.submitPassword({ password, signOutOfOtherSessions: true })));
-    }
-    // A step can succeed without finishing (sign-up missing fields, a second factor): say so
-    // rather than re-enabling the button on nothing.
-    if (ok) {
+    if (purpose === 'verify-signup') ok = await step(() => signUp.verifications.verifyEmailCode({ code: value }));
+    else if (purpose === 'sign-in-code') ok = await step(() => signIn.emailCode.verifyCode({ code: value }));
+    else if (purpose === 'client-trust') ok = await step(() => signIn.mfa.verifyEmailCode({ code: value }));
+    else ok = await step(() => signIn.resetPasswordEmailCode.verifyCode({ code: value }));
+
+    if (!ok) setCode('');
+    else if (purpose === 'reset') router.push({ pathname: '/signin/reset', params: { email } });
+    else {
+      // A step can succeed without finishing (sign-up missing fields, a second factor): say so
+      // rather than leaving the traveller on a filled code.
+      const resource = purpose === 'verify-signup' ? signUp : signIn;
       if (resource.status === 'complete') {
         if (await step(() => resource.finalize({ navigate: () => {} }))) await finish();
       } else setError(unsupportedStepMessage(resource));
@@ -96,114 +71,83 @@ export default function AuthCodeScreen() {
 
   async function resend() {
     setError(null);
-    const sent =
+    const send =
       purpose === 'verify-signup'
-        ? await step(() => signUp.verifications.sendEmailCode())
+        ? () => signUp.verifications.sendEmailCode()
         : purpose === 'client-trust'
-          ? await step(() => signIn.mfa.sendEmailCode())
+          ? () => signIn.mfa.sendEmailCode()
           : purpose === 'reset'
-            ? await step(() => signIn.resetPasswordEmailCode.sendCode())
-            : await step(() => signIn.emailCode.sendCode());
-    setResent(sent);
+            ? () => signIn.resetPasswordEmailCode.sendCode()
+            : () => signIn.emailCode.sendCode();
+    if (await step(send)) setResendIn(RESEND_S);
   }
 
-  const digits = code.padEnd(6, ' ').split('');
+  const next = Math.min(code.length, 5);
 
   return (
-    <PassScreen below={<PassBelow />}>
-      <Pass
-        stage="At the gate"
-        head={<QuietLink title="Change email" onPress={() => router.back()} />}
-        stub={
-          <>
-            <StubRows passenger={passenger || email?.split('@')[0] || 'You'} />
-            <StubFoot
-              label="Gate code"
-              figure={
-                <View style={styles.gateCode} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                  {digits.map((d, i) => (
-                    <Text key={i} style={styles.gateDigit}>
-                      {d.trim() || '·'}
-                    </Text>
-                  ))}
-                </View>
-              }
-              note="From your email, typed or filled in by the keyboard."
-            />
-          </>
-        }>
-        <Text style={passStyles.title} accessibilityRole="header">
-          {COPY[purpose].title}
-        </Text>
-        <Text style={passStyles.lead}>
-          {COPY[purpose].blurb} {email}.
-        </Text>
-
-        {/* The cells are drawing only; the one TextInput over them is what is typed into. */}
-        <Pressable onPress={() => input.current?.focus()} style={styles.code} accessible={false}>
-          {digits.map((d, i) => (
-            <View
-              key={i}
-              style={[styles.cell, d.trim() ? styles.cellHas : null, focused && i === Math.min(code.length, 5) ? styles.cellNext : null]}>
-              <Text style={styles.cellText}>{d.trim()}</Text>
-            </View>
-          ))}
-          <TextInput
-            ref={input}
-            value={code}
-            onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            keyboardType="number-pad"
-            autoComplete="one-time-code"
-            textContentType="oneTimeCode"
-            maxLength={6}
-            autoFocus
-            caretHidden
-            accessibilityLabel="6-digit code"
-            style={styles.codeInput}
-          />
-        </Pressable>
-
-        {purpose === 'reset' ? (
-          <PaperInput
-            label="New password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoComplete="new-password"
-            textContentType="newPassword"
-          />
-        ) : null}
-
-        {error ? <PaperError>{error}</PaperError> : null}
-        {resent ? <Text style={passStyles.hint}>Sent again.</Text> : null}
-
-        <SignalButton large title="Continue" onPress={submit} busy={busy} accessibilityHint={gap} />
-        <QuietLink title="Send it again" onPress={resend} />
-      </Pass>
-    </PassScreen>
+    <GlassStep
+      step={3}
+      title={TITLE[purpose]}
+      sub={
+        <>
+          A six-digit code went to <Text style={glassText.strong}>{email}</Text>. It fills in from Mail.
+        </>
+      }>
+      {/* The cells are drawing only; the one TextInput over them is what is typed into. */}
+      <Pressable onPress={() => input.current?.focus()} style={styles.code} accessible={false}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <Glass key={i} style={styles.cell} ring={error ? Polar.alertNight : focused && i === next && !busy ? Polar.signal : null}>
+            <Text style={styles.digit}>{code[i] ?? ''}</Text>
+          </Glass>
+        ))}
+        <TextInput
+          ref={input}
+          value={code}
+          // Ignored while a code is being checked, rather than `editable={false}`: that takes the
+          // keyboard away, and a wrong code wants it back at once for the retry.
+          onChangeText={(v) => {
+            if (busy) return;
+            const digits = v.replace(/\D/g, '').slice(0, 6);
+            setCode(digits);
+            setError(null);
+            if (digits.length === 6) void submit(digits);
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          keyboardType="number-pad"
+          keyboardAppearance="dark"
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          maxLength={6}
+          autoFocus
+          caretHidden
+          accessibilityLabel="Six-digit code"
+          style={styles.codeInput}
+        />
+      </Pressable>
+      <Note error={error} />
+      {busy ? (
+        <View style={styles.wait}>
+          <ActivityIndicator color={Polar.ice} />
+          <Text style={styles.waitText}>Checking the code…</Text>
+        </View>
+      ) : (
+        <PlainButton
+          title={resendIn > 0 ? `Send a new code in 0:${String(resendIn).padStart(2, '0')}` : 'Send a new code'}
+          disabled={resendIn > 0}
+          onPress={resend}
+        />
+      )}
+    </GlassStep>
   );
 }
 
 const styles = StyleSheet.create({
-  code: { flexDirection: 'row', gap: 7, marginTop: PolarSpace.s1 },
-  cell: {
-    flex: 1,
-    height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: PolarRadius.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(31,42,68,0.15)',
-    backgroundColor: Polar.snow,
-  },
-  cellHas: { borderColor: Polar.ink, backgroundColor: Polar.ice },
-  cellNext: { borderColor: Polar.signal, borderWidth: 2 },
-  cellText: { fontFamily: PolarFonts.condensed, fontSize: 24, color: Polar.ink },
+  code: { flexDirection: 'row', gap: 8 },
+  cell: { flex: 1, height: 58, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  digit: { fontSize: 26, fontWeight: '600', color: Polar.ice, fontVariant: ['tabular-nums'] },
   // Over the cells and invisible, so a tap anywhere on them lands in it and autofill has a target.
   codeInput: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, opacity: 0.02, color: 'transparent', fontSize: 16 },
-  gateCode: { flexDirection: 'row', justifyContent: 'space-between' },
-  gateDigit: { fontFamily: PolarFonts.condensed, fontSize: 34, lineHeight: 38, color: Polar.ink, fontVariant: ['tabular-nums'] },
+  wait: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44 },
+  waitText: { fontSize: 15, color: Polar.frost68 },
 });

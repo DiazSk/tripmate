@@ -1,4 +1,4 @@
-import { authGap, crossFieldProblem, gapSentence, hasImportContent, planGap } from './formGap';
+import { crossFieldProblem, gapSentence, hasImportContent, planGap } from './formGap';
 
 const complete = {
   destination: 'Kyoto, Japan',
@@ -46,31 +46,6 @@ describe('planGap', () => {
       field: 'dates',
       reason: 'Pick your arrival and departure dates.',
     });
-  });
-});
-
-describe('authGap', () => {
-  it('finds nothing to ask for when both fields are ready', () => {
-    expect(authGap('traveller@example.com', 'fifteen-or-longer')).toBeNull();
-  });
-
-  it('asks for the email first', () => {
-    expect(authGap('  ', 'short')).toEqual({ field: 'email', reason: 'Add your email address.' });
-  });
-
-  it('asks for a longer password', () => {
-    expect(authGap('traveller@example.com', 'short')).toEqual({
-      field: 'password',
-      reason: 'Passwords are at least 15 characters.',
-    });
-  });
-
-  it('accepts a password of exactly fifteen characters', () => {
-    expect(authGap('traveller@example.com', '123456789012345')).toBeNull();
-  });
-
-  it('still asks at fourteen', () => {
-    expect(authGap('traveller@example.com', '12345678901234')?.field).toBe('password');
   });
 });
 
