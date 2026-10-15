@@ -273,14 +273,14 @@ export function TimeField({
 }
 
 /** The next whole hour — a plausible opening value that is never "00:00 because nothing was set". */
-function nowTime(): string {
+export function nowTime(): string {
   const d = new Date();
   d.setHours(d.getHours() + 1, 0, 0, 0);
   return toClock(d);
 }
 
 /** `"14:00"` onto today's date. Only the clock is read back out, so the day does not matter. */
-function toTimeDate(clock: string): Date {
+export function toTimeDate(clock: string): Date {
   const [h, m] = clock.split(':').map(Number);
   const d = new Date();
   if (Number.isFinite(h) && Number.isFinite(m)) d.setHours(h, m, 0, 0);
@@ -288,7 +288,7 @@ function toTimeDate(clock: string): Date {
 }
 
 /** Back to `"HH:MM"`, zero-padded and 24-hour whatever the picker displayed. */
-function toClock(d: Date): string {
+export function toClock(d: Date): string {
   return `${`${d.getHours()}`.padStart(2, '0')}:${`${d.getMinutes()}`.padStart(2, '0')}`;
 }
 
@@ -299,7 +299,7 @@ function toClock(d: Date): string {
  * UTC, reading locally) silently shifts the day by one at large offsets: UTC midday is already
  * tomorrow in UTC+13. Midday rather than midnight so no offset can cross a date boundary.
  */
-function toDate(iso: string): Date {
+export function toDate(iso: string): Date {
   const parts = iso.split('-');
   if (parts.length === 3) {
     const [y, m, d] = parts.map(Number);
@@ -319,7 +319,7 @@ function toDate(iso: string): Date {
  * other way. `toDate` builds at midday for the same reason: neither direction can then cross a
  * date boundary on a timezone offset.
  */
-function toIso(d: Date): string {
+export function toIso(d: Date): string {
   const y = d.getFullYear();
   const m = `${d.getMonth() + 1}`.padStart(2, '0');
   const day = `${d.getDate()}`.padStart(2, '0');

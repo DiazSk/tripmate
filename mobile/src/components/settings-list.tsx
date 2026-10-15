@@ -85,8 +85,9 @@ export function ChoiceRow<T extends string>({
   options,
   onChange,
 }: {
-  icon: SymbolName;
-  tint: string;
+  /** Optional: the planner's rows carry no icon. */
+  icon?: SymbolName;
+  tint?: string;
   label: string;
   value: T;
   options: readonly { value: T; label: string }[];
@@ -94,7 +95,7 @@ export function ChoiceRow<T extends string>({
 }) {
   return (
     <View style={styles.row}>
-      <RowIcon name={icon} tint={color} />
+      {icon && color ? <RowIcon name={icon} tint={color} /> : null}
       <Text style={styles.label} numberOfLines={1}>
         {label}
       </Text>

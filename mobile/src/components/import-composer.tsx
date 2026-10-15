@@ -2,11 +2,13 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { ImportItem } from '@/api/types';
 import { PillButton } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
+import { SettingsColors } from '@/components/settings-list';
+import { Polar } from '@/constants/polar';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { hasImportContent } from '@/lib/formGap';
 import { importItemsFrom, type PickedImage } from '@/lib/importItems';
@@ -33,6 +35,7 @@ export function ImportComposer({
   initialText = '',
   onSubmit,
   below,
+  light = false,
 }: {
   busy: boolean;
   unread: string[];
@@ -43,6 +46,9 @@ export function ImportComposer({
   onSubmit: (items: ImportItem[], text: string) => Promise<boolean>;
   /** Drawn under the box, above the unread lines. */
   below?: (text: string) => React.ReactNode;
+  /** Drawn for the grouped light the planner uses: a white box, black ink, the action as a tinted
+   *  capsule — the night's slate capsule reads as a hole in white. Behaviour is identical. */
+  light?: boolean;
 }) {
   const [text, setText] = useState(initialText);
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -118,19 +124,19 @@ export function ImportComposer({
           also resolves a count: with the screen's primary permanently jade, a jade-filled
           action here would be the screen's second fill, which the Primary Action Surface rule
           allows one of. */}
-      <View style={styles.composer}>
+      <View style={[styles.composer, light && styles.composerLight]}>
         <TextInput
           ref={box}
           value={text}
           onChangeText={setText}
           placeholder={placeholder}
-          placeholderTextColor={Colors.muted}
-          selectionColor={Colors.accent}
+          placeholderTextColor={light ? SettingsColors.faint : Colors.muted}
+          selectionColor={light ? Polar.ember : Colors.accent}
           multiline
           maxFontSizeMultiplier={1.6}
-          style={styles.composerInput}
+          style={[styles.composerInput, light && styles.inkLight]}
         />
-        <View style={styles.composerFooter}>
+        <View style={[styles.composerFooter, light && styles.footerLight]}>
           <Pressable
             onPress={() => void pickScreenshots()}
             accessibilityRole="button"
@@ -142,7 +148,7 @@ export function ImportComposer({
               // Object form, never a bare SF string — the Android path renders nothing at all
               // given one, silently.
               name={{ ios: 'photo.on.rectangle', android: 'image' }}
-              tintColor={images.length > 0 ? Colors.foreground : Colors.muted}
+              tintColor={light ? Polar.ember : images.length > 0 ? Colors.foreground : Colors.muted}
               size={16}
               fallback={
                 <ThemedText type="detail" themeColor="muted">
@@ -150,14 +156,23 @@ export function ImportComposer({
                 </ThemedText>
               }
             />
-            <ThemedText type="detail" themeColor={images.length > 0 ? 'foreground' : 'muted'}>
+            <ThemedText
+              type="detail"
+              themeColor={images.length > 0 ? 'foreground' : 'muted'}
+              style={light ? styles.attachLight : undefined}>
               {images.length > 0 ? `Screenshots (${images.length})` : 'Screenshots'}
             </ThemedText>
           </Pressable>
           {/* No `disabled`: an empty box is incomplete, not unavailable. Pressing it puts the
               cursor in the box and says nothing — the gap is two centimetres away and a cursor
               arriving explains itself, where a field three rows up does not. */}
-          <PillButton compact title={actionTitle} busy={busy} onPress={() => void submit()} />
+          {light ? (
+            <Pressable onPress={() => void submit()} accessibilityRole="button" style={styles.actionLight}>
+              {busy ? <ActivityIndicator color={Polar.ember} /> : <Text style={styles.actionLightText}>{actionTitle}</Text>}
+            </Pressable>
+          ) : (
+            <PillButton compact title={actionTitle} busy={busy} onPress={() => void submit()} />
+          )}
         </View>
       </View>
 
@@ -226,4 +241,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.tight,
   },
   importUnread: { gap: Spacing.hair },
+  composerLight: { backgroundColor: '#fff', borderColor: 'transparent', borderRadius: 12 },
+  inkLight: { color: '#000', fontSize: 17, lineHeight: 22 },
+  footerLight: { borderTopColor: SettingsColors.separator },
+  attachLight: { color: Polar.ember },
+  actionLight: {
+    minHeight: 34,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(118,118,128,0.12)',
+  },
+  actionLightText: { fontSize: 15, fontWeight: '600', color: Polar.ember },
 });

@@ -2,6 +2,8 @@ import { Stack, useGlobalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
+import { SettingsColors } from '@/components/settings-list';
+import { Polar } from '@/constants/polar';
 import { Colors } from '@/constants/theme';
 import { PlanDraftProvider, type PlanPrefillParams } from '@/lib/planDraft';
 
@@ -41,6 +43,22 @@ function CloseButton() {
   );
 }
 
+const SHEETS = ['into', 'pace', 'needs', 'booked', 'saved', 'must'] as const;
+
+const SHEET_OPTIONS: React.ComponentProps<typeof Stack.Screen>['options'] = {
+  presentation: 'formSheet',
+  sheetAllowedDetents: [0.55, 1],
+  sheetGrabberVisible: true,
+  sheetCornerRadius: 24,
+  headerShown: true,
+  headerTransparent: false,
+  headerShadowVisible: false,
+  headerStyle: { backgroundColor: SettingsColors.ground },
+  headerTitleStyle: { color: '#000' },
+  headerTintColor: Polar.ember,
+  contentStyle: { backgroundColor: SettingsColors.ground },
+};
+
 export default function PlanLayout() {
   // A link into the wizard — the landing's "Plan one like it" and its closing form — carries the
   // fields it can speak for as params on /plan/basics. The provider reads them once, at mount.
@@ -48,7 +66,13 @@ export default function PlanLayout() {
   return (
     <PlanDraftProvider prefill={params}>
       <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
-        <Stack.Screen name="basics" options={{ headerLeft: () => <CloseButton /> }} />
+        <Stack.Screen name="basics" options={{ headerShown: false }} />
+        {/* The planner's half sheets: native form sheets opening at the medium detent and
+            draggable to large, over the page that opened them. Light, like the page — set
+            explicitly, since the app's own appearance is the night and would draw the header dark. */}
+        {SHEETS.map((name) => (
+          <Stack.Screen key={name} name={name} options={SHEET_OPTIONS} />
+        ))}
         <Stack.Screen name="own" options={{ headerLeft: () => <CloseButton /> }} />
         <Stack.Screen name="generating" options={{ headerLeft: () => <CloseButton /> }} />
       </Stack>

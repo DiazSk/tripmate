@@ -189,11 +189,11 @@ export default function Generating() {
     [draft.destination, raw, wikiExtract]
   );
   /**
-   * Review, with every answer as it was: the draft lives in the wizard's layout, which this does not
-   * leave. `replace`, not `back` — every step reaches this screen with `replace`, so Review is not
-   * underneath it and `back` would leave the wizard altogether.
+   * The planner, with every answer as it was: the draft lives in the plan layout, which this does
+   * not leave. `replace`, not `back` — the planner reaches this screen with `replace`, so it is not
+   * underneath, and `back` would leave the flow altogether.
    */
-  const backToReview = () => router.replace('/plan/review');
+  const backToReview = () => router.replace('/plan/basics');
 
   // `complete` is always false here: the screen hands off to the trip the moment the plan is saved,
   // so the plan opening is the success. A sketch alone is not streaming — only a real stop is.
