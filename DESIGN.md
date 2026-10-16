@@ -51,229 +51,256 @@ colors:
   map-glass: "rgb(9 11 16)"
   map-glass-edge: "rgb(255 255 255 / 0.16)"
   city-boundary: "#ece6de"
+  ice: "#ffffff"
+  snow: "#f5f5f5"
+  paper: "#f3f1ec"
+  mushroom: "#e9e7e1"
+  ink: "#1f2a44"
+  ash: "#2c374b"
+  charcoal: "#535353"
+  stone: "#a4a29c"
+  ember: "#b4530a"
+  route: "#6af0ff"
+  alert-text: "#d10f0f"
+  accent-text-light: "#a64c09"
+  positive-light: "#0e6670"
+  night-text-2: "#a8acb3"
+  rule: "rgba(31, 42, 68, 0.12)"
+  gridline: "rgba(31, 42, 68, 0.07)"
+  frost-20: "rgba(255, 255, 255, 0.2)"
+  veil-05: "rgba(31, 42, 68, 0.05)"
+  veil-15: "rgba(31, 42, 68, 0.15)"
+  veil-50: "rgba(31, 42, 68, 0.5)"
 typography:
   root:
     fontSize: "16px"
-    note: "A flat 16px root. Fluidity lives in the two display classes' own clamp(), not in html."
+    note: "html stays at a flat 16px, so rem breakpoints and the browser's own text size hold. Polar's fluid scale lives on `.tm` (polar-base below), never on the root."
+  polar-base:
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "clamp(14px, 1.111vw, 18px)"
+    fontWeight: 500
+    note: "`--wd-base` on `.tm` (src/components/polar/PolarLanding.css:3). Every Polar size below is an em of it, so a whole screen scales with the viewport width as one; 16px at 1440."
   tracking:
-    display: "-0.018em"
-    heading: "-0.012em"
+    display: "0.005em"
+    heading: "0em"
     body: "0em"
     label: "0.18em"
-    note: "Four tokens, replacing 20 literals. Tracking belongs to the face, so every literal in the codebase was invalidated the day the face changed — the display negatives were still at -0.085em/-0.106em, tuned for Wix Madefor. Three literals survive on purpose and are documented at their declaration: 0.02em and 0.05em on map labels over imagery, -0.005em on .price-display."
-  hero:
-    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
-    fontSize: "clamp(2.5rem, 6.2vw, 5.25rem)"
-    fontWeight: 400
-    lineHeight: 1.04
-    letterSpacing: "var(--tracking-display)"
-  display:
-    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
-    fontSize: "clamp(2rem, 5vw, 3.75rem)"
-    fontWeight: 400
-    lineHeight: 1.08
-    letterSpacing: "var(--tracking-display)"
-  display-quiet:
-    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
-    fontSize: "clamp(1.75rem, 3.6vw, 2.75rem)"
-    fontWeight: 400
-    lineHeight: 1.08
-    letterSpacing: "var(--tracking-display)"
-    note: "`.font-scene-display.is-quiet` — the second display step, so four consecutive landing bands do not all open at the same size. A class rather than a `text-[...]` utility, because `.font-scene-display` is unlayered and carries its own font-size; an arbitrary utility would be emitted inside @layer utilities and lose to it. Carried by the two quiet bands (HowItWorks, DestinationMap)."
-  display-xl:
-    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
-    fontWeight: 400
-    lineHeight: 1.04
-    letterSpacing: "var(--tracking-display)"
-    note: "`.font-display-xl` — the serif at whatever size the caller sets (the /trips and /profile mastheads). Declares no font-size, so a `text-*` utility beside it is live; it DOES declare line-height, so a `leading-*` utility beside it is dead."
+    note: "`--tracking-*` in globals.css. Polar's uppercase labels still carry their own literals (0.12–0.175em, see Open Items), the condensed monuments run slightly negative (-0.005 / -0.01em), and map labels over imagery keep their own legibility values."
   monument:
     fontFamily: "Oswald, Arial Narrow, Arial, sans-serif"
+    fontSize: "clamp(5.5em, 21vw, 20em)"
     fontWeight: 400
     lineHeight: 1
     letterSpacing: "-0.005em"
-    note: "Polar's condensed face, for exactly two things: the landing's full-width place names over photographs (`.tm-monument`, `.tm-fb-monument`) and the nav's TRIPMATE wordmark (`.polar-wordmark`). Always uppercase. Line height 1 with no negative margin, so Oswald's baseline sits ~0.05em above the box and the word is never cropped by an overflow-hidden parent."
-  headline:
-    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 600
-    lineHeight: 1.2
-    letterSpacing: "var(--tracking-heading)"
-    note: "`.font-display` — the SANS heading class, despite the name. It and `.font-display-xl` were one class until Melodrama landed and the 20px navbar wordmark came out spindly in a display serif. Declares no font-size: `text-base` through `text-2xl` beside it are live."
+    note: "`.tm-monument` (the landing hero's place name) and `.tm-fb-monument` (22.5vw, the closing TRIPMATE). Always uppercase. Line height 1 with no negative margin, so Oswald's baseline sits ~0.05em above the box and an overflow-hidden parent never crops the word. The planner's and the writing screen's monuments are smaller cuts of the same rule."
+  display:
+    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
+    fontSize: "clamp(2.4em, 5.2vw, 3.75em)"
+    fontWeight: 400
+    lineHeight: 1
+    letterSpacing: "0.005em"
+    note: "`.tm-display`, uppercase: section titles and the /trips and /profile mastheads. Larger cuts: `.tm-fb-title` clamp(3em, 7vw, 6.25em) closing the landing, `.pp-title` clamp(2.6em, 5.4vw, 4.6em) on the planner."
   title:
-    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.125rem"
-    fontWeight: 600
-    lineHeight: 1.3
+    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
+    fontSize: "1.9em"
+    fontWeight: 400
+    lineHeight: 1.1
+    note: "Sentence case. The trip's day title (`.tb-day-titles h2`) and the sample-plan names (`.tm-strip-title`, clamp(2em, 3.6vw, 2.9em))."
+  voice:
+    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
+    fontSize: "1.375em"
+    fontWeight: 500
+    lineHeight: 1.2
+    note: "Italic. The product speaking in a line rather than labelling: `.tm-hero-lead` (max 17ch), `.tm-kicker` (1.125em), `.pp-lead`, the writing screen's facts."
+  city:
+    fontFamily: "Oswald, Arial Narrow, Arial, sans-serif"
+    fontSize: "2.5em"
+    fontWeight: 400
+    letterSpacing: "-0.005em"
+    note: "Uppercase. `.tb-city`, the trip's name on its board."
+  wordmark:
+    fontFamily: "Oswald, Arial Narrow, Arial, sans-serif"
+    fontSize: "1.15rem"
+    letterSpacing: "0.06em"
+    note: "Uppercase TRIPMATE beside the LogoMark in the nav (`.polar-wordmark`)."
   body:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "0.875rem"
-    fontWeight: 400
-    lineHeight: 1.625
-  standfirst:
-    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.0625rem"
-    fontSizeSm: "1.125rem"
+    fontSize: "0.95em"
     fontWeight: 500
-    lineHeight: 1.55
-    maxWidth: "46ch"
-    note: "Hero.tsx only — the one line under the hero, and the only body step above `prose`. It steps up at `sm` because the hero headline steps up with the viewport and the gap between them has to stay readable; every other body role holds a stable size. 46ch, not 58ch: this sits under a 5.25rem headline capped at 18ch and a longer measure under it reads as two unrelated blocks."
-  prose:
+    lineHeight: 1.5
+    note: "`.tm-body`. `.tm` itself sets weight 500; there is no 400 body on Polar surfaces."
+  ui:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.65
-    maxWidth: "58ch"
-    note: "`.scene-prose` carries the size as well as the leading, so a standfirst cannot pick its own. 58ch is the one measure value in the system — HowItWorks, /trips and the print page all use it; nothing else runs uncapped."
-  field:
+    fontSize: "0.875em"
+    fontWeight: 600
+    note: "`.tm-ui` — buttons, chips, nav chips."
+  caption:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 500
+    fontSize: "0.8em"
     lineHeight: 1.4
-    note: "16px is a floor, not a step: below it iOS Safari zooms the viewport on focus."
+  eyebrow:
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.875em"
+    fontWeight: 600
+    letterSpacing: "0.175em"
+    note: "Uppercase. `.tm-eyebrow`."
   label:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.6875rem"
-    fontWeight: 600
-    letterSpacing: "var(--tracking-label)"
-    note: "Uppercase. THE label step — one size, one tracking, one spelling (`text-[0.6875rem]`). Replaced six sizes in a 3px range (9.92/10/11/11.2/12/13px) written four ways, at four tracking values. Section openers, entry-capsule cells, map day badges, the DAY n OF m stamp."
-  caption:
+    letterSpacing: "0.16em"
+    note: "Uppercase. The label floor: 11px. `.tb-label` and `.tb-day-when` sit at 0.66em today, under it (Open Items)."
+  coord:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "0.75rem"
-    fontWeight: 400
-    note: "12px, and deliberately distinct from `label`: no uppercase, no tracking. dl keys, footnotes, third-party chrome. The smallest step that sets real words rather than a tracked-out label."
-  price:
-    fontFamily: "Cormorant Garamond, ui-serif, Georgia, serif"
-    fontWeight: 400
-    fontFeature: "proportional-nums lining-nums"
-    letterSpacing: "-0.005em"
-    note: "`.price-display`, landing prices and the export's day total. The currency mark is a child span at 0.42em / 60% opacity / translateY(-0.62em), so the figure is what gets read. Proportional, not tabular — nothing is being compared in a column here."
+    fontSize: "0.75em"
+    letterSpacing: "0.06em"
+    note: "`.tm-coord` — the `[ 30° 19′ 20″ N, 35° 27′ 07″ E ]` readouts. Never wraps."
   figure:
-    fontFamily: "Inter Tight (tabular figures), ui-sans-serif, system-ui, sans-serif"
-    fontSize: "0.875rem"
-    fontWeight: 600
+    fontFamily: "Oswald, Arial Narrow, Arial, sans-serif"
     fontFeature: "tabular-nums"
-    note: "Values compared IN A COLUMN, and nothing else — five sites: the dl columns, the stop-time gutter, the day totals, the budget readout, the how-it-works step numbers. Only the last is on a landing route and it sits in the third band, so the face ships preload: false rather than competing with the first viewport. Never a sentence, never a stamp, never a price meant to be felt."
-  cardTitle:
+    note: "Money and times compared in a column on the board (`.tb-budget b` 1.2em, `.tb-total dd`). `--font-mono` resolves to Inter Tight with tabular figures for the older surfaces; there is no separate figure face."
+  field:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.75rem"
-    fontWeight: 600
-    lineHeight: 1.2
-    letterSpacing: "var(--tracking-heading)"
-    note: "Plan-card titles on the landing's featured row. A step above `headline` and below the section display."
+    fontSize: "1rem"
+    note: "16px is a floor, not a step: below it iOS Safari zooms the viewport on focus."
   map-day-label:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.8125rem"
-    fontWeight: 700
-    letterSpacing: "var(--tracking-label)"
-    note: "`.marker-day-label` only — uppercase day badges standing on the globe. The product's own text face: there is no map-native typeface any more."
+    note: "`.marker-day-label` only — uppercase day badges standing on the map."
   map-stop-label:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.9375rem"
-    fontWeight: 600
-    letterSpacing: "0.02em"
     note: "Map-native. `.marker-title-card` and `.marker-place-label` only. Keeps a literal tracking value: this is a legibility register over imagery, not the interface one."
 rounded:
-  node: "4px"
-  surface-sm: "5px"
-  surface-md: "6px"
-  surface-lg: "8px"
+  hairline: "0.125em"
+  sm: "0.25em"
+  card: "0.375em"
+  nav: "2px"
+  pill: "999px"
   panel: "16px"
-  full: "9999px"
 spacing:
-  xs: "4px"
-  sm: "8px"
-  md: "12px"
-  lg: "20px"
-  xl: "24px"
+  space-1: "0.35em"
+  space-2: "0.75em"
+  space-3: "1.1em"
+  space-4: "1.5em"
+  space-5: "2em"
+  space-6: "2.75em"
+  space-8: "4em"
+  space-10: "5.5em"
+  space-12: "7em"
+  gutter: "0.75em"
+  pad: "1.25em"
+  nav-h: "3.5rem"
 components:
   button-primary:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.accent-foreground}"
-    rounded: "{rounded.full}"
-    padding: "12px 26px"
-    typography: "{typography.title}"
+    rounded: "{rounded.hairline}"
+    height: "2.5em"
+    padding: "0 1.15em"
+    typography: "{typography.ui}"
   button-primary-hover:
     backgroundColor: "{colors.accent-hover}"
+    textColor: "{colors.accent-foreground}"
   button-ghost:
     backgroundColor: "transparent"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.full}"
-    padding: "8px 16px"
-  button-destructive:
-    backgroundColor: "{colors.alert}"
-    textColor: "{colors.canvas}"
-    rounded: "{rounded.full}"
-    padding: "8px 16px"
+    textColor: "{colors.foreground}"
+    height: "2.5em"
+    typography: "{typography.ui}"
+  button-quiet:
+    backgroundColor: "{colors.veil-05}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.hairline}"
+    typography: "{typography.ui}"
+  chip-destination:
+    backgroundColor: "rgba(9, 11, 16, 0.18)"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.hairline}"
+    height: "2.2em"
+    typography: "{typography.ui}"
+  chip-destination-selected:
+    backgroundColor: "{colors.ice}"
+    textColor: "{colors.ink}"
+  nav-chip:
+    backgroundColor: "rgb(14 17 24 / 0.72)"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.nav}"
+    height: "2.5rem"
+    padding: "0 0.95rem"
+  nav-cta:
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.accent-foreground}"
+    rounded: "{rounded.nav}"
+    height: "2.5rem"
+  input-night:
+    backgroundColor: "rgba(255, 255, 255, 0.05)"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.sm}"
+    height: "2.9em"
+    typography: "{typography.field}"
+  panel-glass-night:
+    backgroundColor: "rgba(9, 11, 16, 0.45)"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.card}"
+  board-paper:
+    backgroundColor: "{colors.ice}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.card}"
+  stop-card:
+    backgroundColor: "{colors.ice}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.card}"
+    width: "14.5rem"
+  stop-card-lit:
+    backgroundColor: "{colors.snow}"
+  day-row-selected:
+    backgroundColor: "{colors.ice}"
+    textColor: "{colors.ink}"
+  map-control:
+    backgroundColor: "rgba(9, 11, 16, 0.6)"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.sm}"
+    size: "2.75rem"
+  sheet-paper:
+    backgroundColor: "{colors.ice}"
+    textColor: "{colors.ink}"
+    width: "min(100%, 30em)"
+    padding: "2em"
+  chip-neutral:
+    backgroundColor: "{colors.tag-neutral-bg}"
+    textColor: "{colors.tag-neutral-fg}"
+    rounded: "{rounded.pill}"
+    padding: "2px 8px"
+  chip-positive:
+    backgroundColor: "{colors.tag-positive-bg}"
+    textColor: "{colors.tag-positive-fg}"
+    rounded: "{rounded.pill}"
+    padding: "2px 8px"
+  chip-highlight:
+    backgroundColor: "{colors.tag-highlight-bg}"
+    textColor: "{colors.tag-highlight-fg}"
+    rounded: "{rounded.pill}"
+    padding: "2px 8px"
   card-glass:
     backgroundColor: "{colors.surface-deep}"
     textColor: "{colors.foreground}"
     rounded: "{rounded.panel}"
     padding: "20px"
-  hero-capsule:
-    backgroundColor: "rgb(247 245 242 / 0.97)"
-    textColor: "{colors.canvas}"
-    rounded: "{rounded.full}"
-    padding: "6px"
-  hero-capsule-cell:
-    backgroundColor: "transparent"
-    textColor: "{colors.canvas}"
-    padding: "9px 20px"
-    typography: "{typography.field}"
-  chip-neutral:
-    backgroundColor: "{colors.tag-neutral-bg}"
-    textColor: "{colors.tag-neutral-fg}"
-    rounded: "{rounded.full}"
-    padding: "2px 8px"
-  chip-positive:
-    backgroundColor: "{colors.tag-positive-bg}"
-    textColor: "{colors.tag-positive-fg}"
-    rounded: "{rounded.full}"
-    padding: "2px 8px"
-  chip-highlight:
-    backgroundColor: "{colors.tag-highlight-bg}"
-    textColor: "{colors.tag-highlight-fg}"
-    rounded: "{rounded.full}"
-    padding: "2px 8px"
-  day-tab-active:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.accent-foreground}"
-    rounded: "{rounded.full}"
-    padding: "8px 28px"
-  budget-tile:
-    backgroundColor: "{colors.tile}"
-    textColor: "{colors.tile-foreground}"
-    rounded: "{rounded.surface-lg}"
-    padding: "12px"
-  budget-tile-total:
-    backgroundColor: "{colors.tile}"
-    textColor: "{colors.money}"
-    rounded: "{rounded.surface-lg}"
-    padding: "12px"
-    typography: "{typography.figure}"
   marker-title-card:
-    backgroundColor: "rgb(18 16 15 / 0.75)"
-    textColor: "rgb(244 247 250 / 0.97)"
-    rounded: "{rounded.surface-sm}"
+    backgroundColor: "rgb(9 11 16 / 0.75)"
+    textColor: "{colors.on-deep}"
+    rounded: "5px"
     padding: "0.3rem 0.55rem 0.34rem"
     typography: "{typography.map-stop-label}"
   marker-day-label:
-    backgroundColor: "rgb(18 16 15 / 0.75)"
-    rounded: "{rounded.surface-md}"
+    backgroundColor: "rgb(9 11 16 / 0.75)"
+    rounded: "6px"
     padding: "0.34rem 0.7rem 0.36rem"
     typography: "{typography.map-day-label}"
 ---
-> **Polar Interior — tokens landed, screens in progress (2026-10-13, branch `feat/polar-redesign`).**
-> The frontmatter above now carries the Polar Night values the app ships (`:root` in
-> `src/app/globals.css`, `Dark` in `mobile/src/constants/palette.ts`). Polar Light lives in the
-> `[data-appearance="light"]` scope and `Light`, and a screen opts in when it is redesigned. The prose
-> below still describes **Kiln** — its reasoning about roles, glass and the globe mostly carries over,
-> but where it quotes a hex value, a contrast ratio, Melodrama, Switzer or Tabular, the frontmatter and
-> the canvas's "Polar — Token Mapping" sheet are current and the prose is not. It gets rewritten from
-> the built app when the screens are done, the way this file was written the first time.
->
+
 > **Recorded exceptions, the landing's "a day you can imagine" and the planner built from the canvas (2026-10-14, confirmed by Zaid).** These
 > values are off the ramp above on purpose: they are the approved MagicPath canvas's own steps for this
-> one page, and they fold into the ramp when the prose is rewritten. Web only; the phone's styles are
+> one page, and they stay recorded here rather than widening the ramp. Web only; the phone's styles are
 > numbers and the design check does not read them.
 >
 > | Value | Where | What it is |
@@ -292,567 +319,187 @@ components:
 > The design check's matching ignores live in `.impeccable/config.json`, scoped to those files. That
 > folder is gitignored here, so this table is the shared record.
 
-
 # Design System: TripMate
 
 ## Overview
 
-**Creative North Star: "The Kiln"**
+**Creative North Star: "Polar Interior"**
 
-The product is one continuous scene: a live photorealistic globe on two surfaces, a real photograph
-on the landing, and everything else floating over them as frosted glass cut from a single warm
-near-black. The ground is `#121110` — warm, but only just. That near-neutrality was the correction
-that made the system work: a genuinely brown ground composites the card to `rgb(32,24,20)`, a
-12-point spread between channels, and a gold money figure printed on brown is two neighbouring hues
-with nowhere to separate. This ground composites the card to `rgb(26,24,22)`, a 4-point spread, so
-gold, jade and coral each get clean air while the whole thing still reads warm rather than clinical.
+Night under frosted glass wherever the world shows through — the map, a destination's photograph —
+and ice and paper wherever it does not. The product is a few large, quiet scenes rather than a page
+of panels: the landing is a photograph with a place's name set across it in a condensed face; the
+planner asks its questions over the place being planned; the plan writes itself over the night map;
+the trip lays its days out on paper beside a live map. One colour acts. Everything else is ink,
+night and the greys between them.
 
-The register is a consumer travel product finished to the craft level of Airbnb and Vercel, not an
-instrument panel and not an awwwards poster. The first viewport does work: a full-bleed photograph
-on a scroll parallax, a two-line proposition, and a destination-plus-dates capsule that opens the
-wizard already filled in. It refuses the one-enormous-word-over-a-stock-mountain move; there is no
-withheld CTA and no kicker anywhere in the product.
+The approved MagicPath canvas (project `460590324033662976`) is the visual reference for every Polar
+screen; code comments name the variant each was built from. Where the build and the latest revision
+disagree, the design wins unless code or `docs/` record a deliberate deviation. The register is
+**considered** rather than luxurious: precision, restraint, material quality, on a product whose whole
+thesis is that a trip costs what you said it would.
 
-The system's whole discipline is that **each colour means exactly one thing**. The predecessor ran
-on a single amber accent that painted 55 elements on one screen of `/trip/[id]` — the primary
-button, a "DAY 1 OF 3" label, the budget-bar fill, the download control and the selected day tab —
-so there was no way to tell an action from a readout, and a healthy budget printed in the warning
-colour. Three named roles replaced it: jade acts, gold counts, coral warns. Everything else is the
-one slate at some alpha.
+The arrangement is conventional on purpose — a photo hero, a marketing scroll, the plan's first
+question at the close — and the craft goes into execution: one type ramp that scales as a piece,
+hairline edges, glass only where something is behind it, and the world (the photograph, the map)
+always the largest thing on screen.
 
 **Key Characteristics:**
-- One material: `--surface-deep-rgb` at varying alpha and blur radius, never a second grey.
-- Three semantic colour roles, each with one meaning and each measured AA against the card ground.
-- Three interface typefaces with one job apiece — display, text, and a mono that sets every figure.
-- Round what you touch, square what you read.
-- Exactly one light surface in the whole product: the hero's entry capsule.
-- The globe is the page's ongoing motion; nothing else loops.
+- Two materials: night glass over the world, opaque ice and paper away from it. Never a third grey.
+- One action colour, signal orange, on what you press and on the focus ring. Money has no hue.
+- Three faces with one job each: Cormorant Garamond speaks, Inter Tight is read, Oswald names places.
+- A whole Polar screen is an em of one fluid base, so it scales with the viewport as one piece.
+- Nearly square: hairline radii on what you press, a slightly softer corner on cards and sheets.
+- The world moves (the map, the photograph's scroll); the interface does not loop.
 
 ## Colors
 
-A warm near-neutral near-black under warm off-white type, with three saturated roles that are
-rationed rather than decorative.
+Night and ice, ink between them, one orange that acts, and a cyan that belongs to the map.
 
 ### Primary
-- **Kiln Jade** (`{colors.accent}`): **action, and only action.** Primary buttons, the selected day
-  tab, focus rings, the hovered or selected stop on the globe, the hairline that draws in under a
-  stop's name on hover. Never a label, never a figure, never a fill that merely reports a number.
-  It is a *light* colour, so its foreground is dark — `{colors.accent-foreground}`, drawn from the
-  jade's own hue rather than from the canvas so a filled control reads as a solid object and not as
-  a hole punched through to the page behind it (6.55:1 on the jade).
-- **Jade Hover** (`{colors.accent-hover}`): the only hover treatment a filled action gets. No lift,
-  no glow.
+- **Signal** (`{colors.accent}`, `--wd-signal`): the one action colour — the primary button, the nav's
+  Plan a trip, Play, Send, and every focus ring (`.tm :focus-visible`, 2px, 3px offset). It carries ink
+  text (`{colors.accent-foreground}`, 5.60:1), never white (2.55:1). Hover lightens to
+  `{colors.accent-hover}`. On night it may be text (7.73:1); on ice or paper it may not (2.55:1) —
+  action-as-text on light surfaces is `{colors.accent-text-light}` (5.08:1 on paper), used through
+  `--accent-text`.
 
 ### Secondary
-- **Kiln Gold** (`{colors.money}`): **money, and only money.** Per-stop costs, day totals, the Total
-  row, the on-plan portion of the budget bar, the price on a tier card. A figure is information, not
-  an invitation, so it never borrows the action colour. `{colors.money-soft}` is its only fill.
-- **Ember Coral** (`{colors.alert}`): **over-plan and failure.** The over-budget figure and its "over
-  budget" line, failed requests, the destructive confirmation. `{colors.alert-soft}` backs the inline
-  warning rows. Before this role existed, roughly thirty sites reached for raw Tailwind red literals
-  because the one-accent rule left nowhere for a warning to live.
+- **Ember** (`{colors.ember}`, `--wd-ember`): small type on light surfaces that belongs to an action or
+  a note of it — eyebrows on the trip drawer, the sign-in pass, "clears" on the memories wall. 5.02:1
+  on ice, but 4.45:1 on paper, which fails AA (Open Items); keep it on ice.
+- **Route** (`{colors.route}`, `--wd-route`): the map's own colour — routes on the night map, the
+  writing screen's live stop, the planner's pace bars, positive tags on night (14.55:1). Never a
+  button, never interface chrome.
+
+### Tertiary
+- **Alert** (`{colors.alert}` on night, 7.09:1; `{colors.alert-text}` on light, 4.91:1 on paper): an
+  overspend, a failed request, an invalid field. Paired with words, never colour alone.
+- **Positive (light)** (`{colors.positive-light}`, 5.90:1 on paper): the rare "this is fine" on a light
+  surface.
+- **The route pool** (`{colors.route-day-1}` … `{colors.route-day-5}` with their glows): one hue per day
+  on the map and on the board's day rows, earth pigments chosen to separate from each other and from
+  the basemap, cycling past five days.
 
 ### Neutral
-- **Kiln Ground** (`{colors.canvas}`): the page floor, and the colour `GlobeBackground` reads at
-  Viewer init for Cesium's own `scene.backgroundColor`, so the WebGL clear colour and the DOM around
-  it cannot drift apart and show a seam at the canvas edge.
-- **The One Slate** (`{colors.surface-deep}`, authored as channels so alpha can vary): every frosted
-  panel, control pill, badge, scrim, nav bar and loader. One step up from the ground.
-- **Warm Paper** (`{colors.foreground}` / `{colors.on-deep}`): body text everywhere, and text over
-  any dark surface — a header band, a photo overlay, the map.
-- **Muted Paper** (`{colors.muted}`): secondary prose, built as the paper white at 62% rather than
-  as a sampled grey, so it stays correct on every surface alpha instead of being tuned for one.
-- **Hairline** (`{colors.card-border}`): every divider, panel edge and drawn rule.
-- **Chips and tiles** (`{colors.tag-neutral-bg}` / `{colors.tag-positive-bg}` /
-  `{colors.tag-highlight-bg}` / `{colors.tile}`): glass chrome, not warm paper. With three real roles
-  the positive chip gets its green back — under the previous single-accent rule it had to give it up,
-  and a positive chip and a neutral chip were indistinguishable.
+- **Night** (`{colors.canvas}`, `--wd-night`): the ground under everything dark — the shell, the
+  writing screen, the footer, the story bar.
+- **Deep** (`{colors.surface-deep}`, `--wd-deep`): the glass slate, authored as channels so its alpha
+  can vary.
+- **Ice** (`{colors.ice}`): the brightest surface — the trip board, sheets, the spotlight, light inputs.
+- **Snow** (`{colors.snow}`), **Paper** (`{colors.paper}`), **Mushroom** (`{colors.mushroom}`): steps of
+  the light ground — a lit card, the memories wall and profile, a pressed segment.
+- **Ink** (`{colors.ink}`): text on light (12.63:1 on paper), the dark half of every light control.
+- **Ash** (`{colors.ash}`) and **Charcoal** (`{colors.charcoal}`): secondary text on light (charcoal
+  6.81:1 on paper).
+- **Night text 2** (`{colors.night-text-2}`, `--muted` on night): secondary text on dark (8.64:1).
+- **Stone** (`{colors.stone}`): rules, disabled marks, fills. **Not text**: 2.26:1 on paper.
+- **Lines**: `{colors.frost-20}` on night; `{colors.rule}` and `{colors.veil-15}` on light;
+  `{colors.gridline}` for the landing's 12-column grid; the veils (`{colors.veil-05}` …
+  `{colors.veil-50}`) are ink at an alpha for quiet fills and scrims on light.
 
-### The light appearance (mobile, 2026-09-30)
-
-A **token-level prototype behind a flag**, defaulting to dark, in `mobile/src/constants/palette.ts`.
-It exists because "no light mode" was never a rule here: it appeared only in
-`docs/design-board/REVIEW-PROMPT.md`, written for outside reviewers, and a comment in `theme.ts`
-cited this document for it — which this document did not say.
-
-**It is total or it is nothing.** `--postcard-paper` was an opaque cream surface backing My
-Memories, and it was deleted because a visitor crossing from dark translucent slate to tilted cream
-stationery in one click read it as a different application. That is the strongest evidence here on
-the subject, and it argues against a *partial* light appearance rather than against a light one.
-
-**It is the same two anchors swapped, not a second design.** Paper is dark's `{colors.foreground}`;
-ink is dark's `{colors.canvas}`. Ink on paper therefore measures 17.33:1, the identical figure
-dark ships, and no grey is sampled anywhere. Muted Paper becomes the ink at 62%, for its own stated
-reason.
-
-**One Slate survives literally.** Every light panel, pill and bar is still the one slate, at a ramp
-mirrored by **perceptual step** rather than by alpha — 2.7% / 3.5% / 3.9% / 4.7% over paper against
-0.55 / 0.62 / 0.72 / 0.82 over the ground, which lands within 0.4 ΔL\* of dark's own ladder at every
-rung. Mirroring the alpha instead would put 62% slate over paper, which is a dark grey card rather
-than a surface one step in. Effectively opaque at those alphas, which is the "warm opaque surfaces"
-a fourth reviewer asked for, arrived at without leaving the rule.
-
-**Only the three roles move, and only in lightness.** Jade, gold and coral as shipped measure 2.15,
-1.62 and 3.17 as ink on paper. The darkened cuts are `#245E48` (6.97), `#886019` (5.17) and
-`#AE3F2C` (5.44) — hues at 157.2° / 38.4° / 8.8° against the originals' 156.8° / 39.7° / 8.0°, so
-jade stays inside `ACCENT_HUE_BAND` and nothing the map does is affected. The soft tints keep their
-**shipped hex** at a new alpha, so "no new accent colours" holds literally for tints too.
-
-**Two Foregrounds survives by inverting, and its reasoning gets sharper.** A paper-coloured ink on a
-jade fill standing on a paper canvas is letters the colour of the page behind them, so the light
-`{colors.accent-foreground}` is a jade-tinted near-white (`#EAFAF4`): the fill's own hue carried
-into its ink. **The rule is the relationship, not the polarity** — and `{colors.on-deep}` is the one
-that does not move.
-
-**What does not change, and why.** The photograph stays dark in both appearances; the map is
-map-native and already outside this palette; `RouteDayCore`, `RouteDayGlow` and `DiscInk` are
-untouched. That makes `--on-deep` load-bearing for the first time rather than a synonym — anything
-standing on a photograph or on the map keeps paper ink and a dark material in both appearances.
-**The emphasised stop disc belongs to that group too**, and did not until it was measured: it is the
-one mark that borrows the action colour, so under paper it became `DiscInk` on `#245E48` at 2.49:1
-against 7.50 in dark. A map mark standing beside four day cores that do not move must not move.
-
-**Named gaps, not bugs.** `app.json` still pins `userInterfaceStyle: "dark"` so the flag ships
-inert, which leaves the keyboard, the native date picker, the tab bar's system materials and the
-**native** splash dark under the light appearance. Closing that costs a prebuild and belongs to a
-commitment rather than to a look.
-
-The splash is half a gap rather than a whole one. The JS overlay that continues it takes
-`Colors.canvas`, so what stays dark is only the frame the OS draws before any JS has loaded —
-which cannot read the preference, because the preference is a file this app writes.
-`expo-splash-screen` does take a `dark` variant that would resolve it natively and for free, and
-the pin is exactly what makes that variant dead.
-
-### The token table (both appearances)
-
-The lookup. The reasoning is above — this is the place to read a value off.
-
-**Authority:** `mobile/src/constants/palette.ts` for both appearances. This file's own front-matter
-`colors:` block is the **dark set as the web ships it** and carries neither the light values nor
-the mobile-only surface ramp, so it is not the place to check light.
-
-| Token | Dark | Light |
-|---|---|---|
-| `canvas` | `#121110` | `#F7F5F2` |
-| `surfaceDeep` | `#1C1A18` | `#EBE9E6` |
-| `panel` | `#1C1A189E` (62%) | `#1C1A1809` (3.5%) |
-| `control` | `#1C1A188C` (55%) | `#1C1A1807` (2.7%) |
-| `bar` | `#1C1A18B8` (72%) | `#1C1A180A` (3.9%) |
-| `pressed` | `#1C1A18D1` (82%) | `#1C1A180C` (4.7%) |
-| `foreground` | `#F7F5F2` | `#121110` |
-| `muted` | `#F7F5F29E` (62%) | `#1211109E` (62%) |
-| `cardBorder` | `#FFFFFF1F` (12%) | `#0000001F` (12%) |
-| `accent` | `#28B981` | `#245E48` |
-| `accentForeground` | `#06241A` | `#EAFAF4` |
-| `accentWash` | `#28B98117` (9%) | `#28B9812D` (18%) |
-| `money` | `#E9B44C` | `#886019` |
-| `moneySoft` | `#E9B44C2E` (18%) | `#E9B44C5A` (35%) |
-| `alert` | `#E4553F` | `#AE3F2C` |
-| `alertSoft` | `#E4553F29` (16%) | `#E4553F2F` (18%) |
-| `onDeep` | `#F7F5F2` | **unchanged** |
-| `onDeepMuted` | `#F7F5F29E` | **unchanged** |
-| `photoBorder` | `#FFFFFF24` | **unchanged** |
-
-Four things the table encodes rather than states:
-
-- **The four surface rows are one colour.** `#1C1A18` at four alphas in dark, the same slate at
-  four much smaller alphas over paper. A fifth grey never appears.
-- **`foreground` and `canvas` trade places.** Nothing else in the neutral column is sampled.
-- **The soft tints keep their dark hex** and change only alpha, which is how "no new accent
-  colours" holds for tints as well as for roles.
-- **The last three rows are the ones that do not move**, because they are drawn on photography
-  rather than on a page.
-
-And the colours outside the palette, invariant by the same logic — they are measured against
-terrain, not against the page:
-
-| Token | Value | Where |
-|---|---|---|
-| `RouteDayCore` | `#4E8C99` `#A46E93` `#C4784B` `#7E9C5E` `#7B77AE` | a day's route line, and its disc |
-| `RouteDayGlow` | `#7FB3BD` `#C596B6` `#DFA079` `#A6BF89` `#A6A2D0` | the halo under that line |
-| `DiscInk` | `#12110FEB` | the numeral on a day disc |
-| `OverPhotograph.accentDisc` | `#28B981` | the emphasised stop, which keeps the bright jade |
-| `OverPhotograph.money` | `#E9B44C` | a cost on glass over imagery |
-| `PhotoScrim` | `0.58` | the scrim over destination photography |
-| `PhotoScrimLight` | `0.34` | parked; the number if those mastheads ever go light |
-
-The two `OverPhotograph` entries exist because the light cuts failed on the device and not on
-paper: `#245E48` with `DiscInk` on a stop pin measures **2.49:1**, and `#886019` on dark glass over
-rooftops is an olive smudge. A mark standing on the map takes the map's values.
-
-**Light is mobile-only.** `src/app/globals.css` has no `prefers-color-scheme` or `[data-theme]`
-block at all — the web is the dark column, full stop. On mobile the appearance is chosen once at
-module load and defaults to dark; see the section above for the flag and its named gaps.
-
-### Tertiary (map-native, outside the interface palette)
-These are the route's own colours. They are **not** part of the interface palette and must never
-appear in a panel, chip or button — the globe gets its own colours because it is photography, not a
-surface. They live in `:root` only so there is one place to change them; JS reads them back through
-`getComputedStyle`.
-
-- **The day pool** (`{colors.route-day-1}` and its four siblings, each a **pair**: a core and a
-  softer companion). The core draws the ribbon body, the ring cores, the beam core and the day
-  badge's border; the companion draws the halo, the outermost radar ring and the outer footprint
-  disc. Five pairs, cycling every five days.
-
-  **Pigments, not neon, and the name changed with the values.** This pool was
-  `--route-neon-*` — a saturated cyan/magenta/amber/lime/violet set, drawn as emissive with coloured
-  blooms. A finish review named it a foreign register sitting inside this system on the product's
-  core screen, and it was re-derived rather than desaturated: five earth pigments at a deliberately
-  tight luminance band (0.205–0.290), so no day reads as "the faint one" — a complaint the old
-  pool's own notes recorded about its fifth entry. Adjacent separation never drops below 54°.
-
-  **None of the five falls inside `ACCENT_HUE_BAND`**, and that is the property to preserve. The old
-  pool had exactly one day colliding with the accent and relied on `emphasisColorFor` swapping the
-  hover tint to white; that mitigation has one fallback colour and no more. Not needing it is
-  strictly better than spending it. `src/lib/mapRoute.test.mjs` guards this — it asserts every
-  shipped palette clears the band, *and* that the guard still fires for a colour inside it.
-  **The numbered stop disc is the one licensed crossing.** A day's list draws each stop's disc in
-  that day's core hue — a route colour on a surface, which reads as a contradiction of the rule
-  above. It is deliberate: the disc in the list is the same mark as the disc on the map, and
-  carrying the hue across is what makes the two agree about which stop is which. Identity rather
-  than chrome. The numeral on it is a near-black ink, never the hue, and no other interface element
-  may take a route colour. `mobile/src/constants/theme.ts` holds the mobile spelling.
-
-- **Route Casing** (`{colors.route-casing}`): the dark stroke down both ribbon edges. Near-black
-  rather than pure black — a true black edge reads as a hole punched in the photography, a warm
-  near-black reads as depth. **The casing, not the hue, is what makes a route legible over
-  uncontrolled aerial imagery**, and always was.
-- **Map Glass** (`{colors.map-glass}` / `{colors.map-glass-edge}`): the backdrop behind every label
-  standing on the globe. One deep near-opaque ink, so a label is legible over anything the tiles can
-  put behind it — which no text-shadow alone can promise over a white plaza at noon.
-- **City Boundary** (`{colors.city-boundary}`): the destination's administrative outline. A cool
-  near-white rather than a hue, because the boundary is context for everything else on the map and
-  any colour of its own would compete with the day ramp above it.
+### Two appearances
+Night is the default on `:root`. **Polar Light** is a scope, `[data-appearance="light"]`
+(`globals.css:442`), that re-points the app-level roles (`--foreground` to ink, `--muted` to charcoal,
+`--accent-text`, `--alert`, `--positive`) so shared components reused inside a light surface take light
+values. A Polar surface opts in on its own root: the landing's sections, the trip board, the
+spotlight, the drawer, the date and time pickers. The writing screen sets `"dark"` explicitly. The
+planner, sign-in, memories wall and offline page paint their `.tm` colours directly. The phone mirrors
+both appearances value for value in `mobile/src/constants/palette.ts`.
 
 ### Named Rules
+**The One Hand Rule.** Signal marks what you can press, and the focus ring. Not a readout, not a
+total, not a selected tab, not a decoration. If it is orange and you cannot press it, it is wrong.
 
-**The One Meaning Rule.** Jade acts, gold counts, coral warns. A colour that means two things means
-nothing, and this palette exists because the last one meant five. If a new element needs colour, ask
-which of the three verbs it is doing; if the answer is "none", it is the one slate at an alpha.
+**The Map Owns Cyan Rule.** Route cyan and the day pool are the map's vocabulary. Interface chrome
+does not borrow them, so a coloured line always means "a way through the world".
 
-**The One Slate Rule.** Every panel, pill, badge, scrim and loader is `--surface-deep-rgb` at some
-alpha. If a new surface needs a background it takes this token at a new alpha — it does not take a
-new grey, and it does not leave the material for `--canvas`. Full opacity is where that step ends
-(`.glass-nav-menu`, `.glass-itinerary.is-opaque`).
-
-**The Primary Action Surface.** One control per screen may be a solid jade fill: that screen's
-primary action, with `--accent-foreground` ink on it (`PrimaryButton` in
-`mobile/src/components/form.tsx`). Every other action is the one slate with jade ink — `PillButton`
-is that shape, and its own note records why filling it would make a second primary.
-
-The limit is a count, not a style. Two jade fills on one screen is the defect this licenses
-against: it makes the thing you must do indistinguishable from the thing you might, which is
-exactly why the auth chooser's `Log in` is a slate capsule rather than a second green one — see **The
-Auth Entry** below. One Meaning is untouched — jade is still only ever action, whether it is the ink or the ground.
-
-An outside review read One Slate together with the tint clause below and concluded that the app's
-most prominent controls broke its own system. It was right that nothing written licensed them: the
-rule was silent, not the product wrong.
-
-**The Semantic Tint Exception, written down because the app already does it.** A surface may
-carry a tint of jade or coral to signal *state* or *alert*. Exactly two signals are licensed:
-a selected row (`accentWash`, `#28B98117` in `mobile/src/constants/theme.ts`) and a row something
-cannot happen in (`alertSoft`, `#E4553F29` there; `--alert-soft`, the same colour, in the web's
-`globals.css`). A tint never signals *action* — jade's One Meaning holds wherever jade is ink
-rather than wash.
-
-**The ceiling is a perceptual step, not a hex.** No tint may exceed **ΔL\* 8.3** from its ground,
-which is the step `alertSoft` ships today. On the near-black ground that lands at `29` hex, which is
-how this clause was first written — but the hex was always a proxy, and the proxy does not survive a
-change of ground: the same alpha over paper is a far weaker signal, so a light appearance needs
-`2D`–`2F` to carry the same step. State the step and both appearances are covered by one number.
-
-**And never print a role's ink on that role's own soft tint.** Coral on `alertSoft` measures 4.28:1
-today and fails AA; paper on it measures 14.56:1. The wash carries the signal, `foreground` carries
-the words. This is what the app already does, and it holds in either appearance for the same reason.
-
-**`money-soft` is a fill, not a state tint, so this clause never governed it.** It ships at 18%
-(`2E`), heavier than the ceiling above and gold rather than jade or coral, which reads as a third
-licensed signal and is not one. The Colors section already says it: gold "never borrows the action
-colour, and `money-soft` is its only fill." Two signals are licensed *as state*; a fill is a
-different thing.
-
-One Slate as first written forbade a coral alert panel, and the product shipped one on every
-conflict row anyway; a rule the product knowingly breaks stops being a rule. The clause is narrow
-on purpose — two named tokens and a ceiling — so "at some alpha" cannot become a third tint next
-cycle.
-
-**The web spells the coral half of this already**, as `--alert-soft` in `globals.css` — the same
-coral at the same 16%, reached through `bg-alert-soft` by nine components including `ErrorNote`,
-`ItineraryCard` and `FocusEditMode`. So the clause licenses both clients, and the two tokens above
-are the mobile spelling of it. There is **no jade wash on the web**: the only accent tint there is
-a radial at 10% behind the hero, which is decoration rather than state. A selected-row wash on the
-web would be a new signal and needs its own argument.
-
-**The Two Foregrounds Rule.** `--accent-foreground` means "text on jade". `--on-deep` means "text
-on something dark". They are not interchangeable, and conflating them is the specific bug this
-palette was rebuilt to fix.
-
-**The rule is the relationship, not the polarity.** Today they happen to be dark and light
-respectively, and it is tempting to name them that way — but under a light appearance
-`--accent-foreground` becomes *light* and the ground's own foreground becomes *dark*, and they
-remain as non-interchangeable as before. `--accent-foreground`'s stated reason survives the
-inversion and gets sharper: it is drawn from the accent's own hue rather than from the canvas, so a
-filled control reads as a solid object rather than a hole punched through to the page. Invert it and
-the failure is worse, because a paper-coloured ink on a jade fill standing on a paper canvas is
-letters the exact colour of the page behind them — which is why the light cut is a jade-tinted
-near-white rather than plain white.
-
-**`--on-deep` is the one that does not move.** Text over photography, a scrim or the map stays paper
-in both appearances, because the thing underneath it stays dark. `mobile/src/constants/theme.ts`
-collapsed these two into one token, since they are the same hex today; that collapse is a latent bug
-even in the dark app, and `OverPhotograph` there is the mobile spelling of this half.
-
-**The Darken-Never-Lighten Rule.** Anything layered over photography or terrain is tinted toward the
-one slate or toward black, never toward white. `.glass-control` darkens on hover (0.55 → 0.72 → 0.82)
-rather than lightening, because these pills float over a live globe that idles anywhere from open
-ocean to a snowfield and a white wash would cut contrast exactly where the terrain is brightest.
-
-**The direction follows the ground, and photography is the case this rule was written from.** The
-clause above reads as a blanket ban on a light control, and on the web it is one, because there the
-thing underneath is always the globe. On the phone the basemap changes: a vector map that follows
-the appearance, or satellite imagery that does not. So the rule generalises the same way the
-photograph scrim does — *a control moves away from what is under it, and which direction that is
-belongs to the ground rather than to the appearance.* Over the vector basemap the glass takes the
-appearance's own side; over satellite or hybrid it darkens in both appearances, which is the
-original clause applying exactly where it was aimed. Apple Maps resolves it identically, which is
-worth recording because it was measured rather than assumed: its chrome stays light over the vector
-modes and tints grey over satellite.
-
-**The Photograph-Is-Not-A-Surface Rule.** A scrim over destination photography makes *large* type
-safe and small type only apparently safe. Measured across eight cities, mean luminance ranges 0.040
-to 0.348 and Kyoto peaks at 0.947 — near-white sky, where white body text is 2.41:1 under a 60% scrim
-and 3.56:1 under 75%. So: **large type on the photograph, everything small or dense in a darkened
-band.** The generation screen and the itinerary header are both built on that split.
-
-**The scrim's direction is a function of the ink, not of the appearance.** A scrim moves the
-photograph *away from the ink* — toward black under paper ink, toward white under dark ink — and the
-rule above is that statement for the one ink this product has shipped. Darken-Never-Lighten is the
-same rule stated for the same ink: its own reason, that "a white wash would cut contrast exactly
-where the terrain is brightest", is an argument about *white type*, not about white. Photography
-stays dark in both appearances — it is the atmosphere, and inverting it is what would make a light
-appearance read as a second product — so `PhotoScrim` does not fork. The light derivation exists
-and is parked unused in `palette.ts`: dark ink under a 34% white scrim clears 7.01:1 against the
-worst pixel a photograph can produce, where the shipped 0.58 reaches only 2.05:1 for paper against
-its worst. The easier derivation is the one we are not taking, deliberately.
-
-**The Contrast Floor.** Every role is measured against the composited card ground `rgb(26,24,22)`:
-body 16.27:1, descriptions 8.41:1, times and micro-labels 4.84:1, money 9.36:1, alert 4.78:1, accent
-7.04:1, and dark ink on the jade button 6.55:1. All AA including the dimmest. The system this
-replaced did not clear that bar and said so in its own comments. Keep it cleared, and re-measure
-against the *composited* ground rather than against `--canvas`.
-
-**The Hue Band Lives in TypeScript Too.** `ACCENT_HUE_BAND` in `src/lib/mapRoute.ts` is a
-`[135, 180]` literal that encodes where `--accent` sits on the hue wheel, and `emphasisColorFor`
-swaps the hover tint to white on any day whose own core falls inside it. **Move `--accent` and you
-must move that literal by hand** — a CSS-only sweep misses it, and the failure is silent: pointing at
-a stop still fires, the feedback simply disappears.
+**The No-Grey-Text-On-Paper Rule.** Text on a light surface is ink, ash, charcoal, or a role colour that
+measures 4.5:1 on that exact surface. Stone, signal and ember-on-paper do not.
 
 ## Typography
 
-**Display Font:** Melodrama (`--font-display-stack`), self-hosted variable woff2, 39.6KB
-**Body Font:** Switzer (`--font-sans-stack`), self-hosted variable woff2, 42.2KB
-**Figure Font:** Tabular (`--font-mono-stack`), self-hosted variable woff2, 22.3KB, `preload: false`
-**Map-native faces:** none. Three faces ship, and the globe uses the same three.
+**Display Font:** Cormorant Garamond (with ui-serif, Georgia)
+**Body Font:** Inter Tight (with ui-sans-serif, system-ui)
+**Monument Font:** Oswald (with Arial Narrow, Arial)
 
-All three are Fontshare (Indian Type Foundry), free for commercial use with self-hosting permitted,
-delivered through `next/font/local` from committed files in `public/fonts/` rather than a CDN.
+**Character:** a classical serif that speaks — upright for titles, italic when the product talks to
+you — against a neutral, slightly tight grotesk that carries everything you read, and a condensed
+sans used only to name a place at the scale of the photograph behind it.
 
-**Character:** A high-contrast display serif against a neutral grotesk — the pairing a hotel folio
-or an auction catalogue uses, and the reason the product reads as considered rather than as
-well-made SaaS. Melodrama carries thin-to-thick modulation and appears at exactly one weight, 400;
-its restraint is the point, and a bold cut of it would undo the whole effect. Switzer is upright and
-unremarkable on purpose. Nothing is italic.
-
-This replaced Wix Madefor Display + Text + Sometype Mono, chosen three days earlier by elimination
-and competent at everything except the one thing this surface has to do in its first second.
+All three are self-hosted through `next/font/local` (`src/app/layout.tsx`) as variable files with
+`display: swap`, exposed as `--font-display-stack`, `--font-sans-stack` and
+`--font-condensed-stack` and aliased on `.tm` as `--wd-font-display`, `--wd-font-sans` and
+`--wd-font-condensed`. **Refer to them only through those variables**: `next/font` does not register
+the family names, so a rule that asks for `'Oswald'` by name silently gets Arial Narrow (Open Items).
 
 ### Hierarchy
-- **Hero** (Melodrama 400, `clamp(2.5rem, 6.2vw, 5.25rem)`, 1.04, `--tracking-display`):
-  `.font-scene-hero`, the landing proposition and nothing else.
-- **Display** (Melodrama 400, `clamp(2rem, 5vw, 3.75rem)`, 1.08, `--tracking-display`):
-  `.font-scene-display`, every landing section heading and the destination on the generation screen.
-- **Display at any size** (Melodrama 400, 1.04, `--tracking-display`): `.font-display-xl`, the serif
-  where the caller sets the size — `/trips` and `/profile` mastheads. Owns `line-height`, so a
-  `leading-*` utility beside it is dead; see the Unlayered-Beats-Utility rule below.
-- **Heading** (Switzer 600, `--tracking-heading`): `.font-display`, panel and card headings at the
-  app's 16–24px step. **This is the sans class, not the serif one** — they were one class until
-  Melodrama landed and the 20px navbar wordmark came out spindly. The serif is `.font-display-xl`.
-- **Body** (Switzer 400, 1rem / 0.875rem, 1.6): product copy — day rows, stop notes, descriptions.
-- **Standfirst** (Switzer 500, 1.0625rem → 1.125rem at `sm`, 1.55, capped 46ch): the hero support
-  line and nothing else. The only body step above `prose`, and the only one that scales with the
-  viewport — it has to hold its distance from a headline that does.
-- **Prose** (Switzer 400–500, 1rem, 1.65): `.scene-prose` on marketing paragraphs; the app's own
-  panels stay dense. Capped at **58ch** wherever it runs long — `HowItWorks`, `/trips`, the print
-  page. That is the one measure value; there is not a second.
-- **Field** (Switzer 500, 1rem, 1.4): every input. 16px is a hard floor.
-- **Label** (Switzer 500–600, **0.6875rem**, **`--tracking-label`**, uppercase): section openers,
-  entry-capsule cell labels, map day badges, the `DAY n OF m` stamp. One size, one tracking, one
-  spelling.
-- **Caption** (Switzer 400, 0.75rem): the distinct quieter role — dl keys, footnotes. Not a label:
-  no uppercase, no tracking.
-- **Price** (Melodrama 400, `proportional-nums lining-nums`, `-0.005em`): `.price-display`. The
-  currency mark is subordinated to `0.42em` at 60% opacity and raised `-0.62em`, so what a visitor
-  reads is the figure. Landing prices only.
-- **Figure** (Tabular 600, `tabular-nums`): values compared **in a column**. Five sites.
+Every Polar size is an em of `{typography.polar-base}` — `clamp(14px, 1.111vw, 18px)`, 16px at 1440.
+- **Monument** (Oswald 400, `clamp(5.5em, 21vw, 20em)`, line-height 1, uppercase): the place name
+  across the landing hero; TRIPMATE closing the page; smaller cuts on the planner and writing screen.
+- **Display** (Cormorant 400, `clamp(2.4em, 5.2vw, 3.75em)`, line-height 1, uppercase): section titles
+  and mastheads; larger cuts close the landing and open the planner.
+- **Title** (Cormorant 400, 1.9em, 1.1, sentence case): a day's title on the trip, a sample plan's name.
+- **Voice** (Cormorant 500 italic, 1.125–1.375em, 1.2): the lead, kickers, the writing screen's facts.
+  Max 17ch on the hero.
+- **City** (Oswald 400, 2.5em, uppercase): the trip's name on its board.
+- **Body** (Inter Tight 500, 0.95em, 1.5): everything read.
+- **UI** (Inter Tight 600, 0.875em): buttons, chips, nav.
+- **Caption** (Inter Tight, 0.8em, 1.4).
+- **Eyebrow / Label** (Inter Tight 600, uppercase, tracked): eyebrows at 0.875em / 0.175em; labels at
+  the 11px floor (`0.6875rem`, 0.16em).
+- **Coordinates** (Inter Tight, 0.75em, 0.06em, never wrapping).
+- **Figures** (Oswald, tabular): money and times compared in a column on the board.
 
 ### Named Rules
+**The One-Base Rule.** Inside `.tm`, size in em of `--wd-base`, never in px. A px size inside a Polar
+screen stops scaling with the rest of it and drifts out of proportion at both ends of the range —
+ImagineDay's px-based `.pl` sections are the current case (Open Items). Recorded canvas exceptions
+are in the table above.
 
-**The Three Faces Rule.** Melodrama sets headings, the hero and the landing price. Switzer sets
-everything read as prose or operated as a control. Tabular sets figures in columns. A fourth
-interface face needs a fourth job, and there isn't one.
+**The Three Jobs Rule.** Cormorant speaks, Inter Tight is read, Oswald names. A paragraph is never
+set in Cormorant, a label never in Oswald, a place name never in Inter Tight at monument scale.
 
-**The Figure Rule, narrowed — and this is the version that is actually true.** A census found the
-previous rule ("mono for every figure") honoured in about a quarter of cases: 5 of 19 money renders,
-and no date, time, duration or temperature anywhere. So the rule is now **tabular mono where values
-are compared in a column** — the dl columns, the stop-time gutter, the day totals, the budget
-readout, the how-it-works step numbers. Everything else that used to reach for mono goes elsewhere:
-
-- A price a visitor is meant to *feel* rather than compare is `.price-display`, at display scale in
-  the serif. That is what a menu or a lot listing does and what a monospace can never do.
-- A sentence is never mono. Three of `ImageRow`'s four "stat" lines contain no digit at all
-  ("Lodging, food, and transit — itemized") and were set in mono with `tabular-nums` on them,
-  aligning nothing.
-- A stamp is not a column. `DAY 2 OF 5` has two numerals and nothing to align them against.
-
-Mono reaches the landing at exactly one place — the how-it-works step numbers, in the third band —
-which is why it ships `preload: false` rather than being dropped: nothing in the first viewport
-paints it, so it should not compete with the hero photograph and the two faces that do.
-
-**The Tracking-Is-A-Token Rule.** Four values, and no fifth:
-
-| Token | Value | Where |
-|---|---|---|
-| `--tracking-display` | `-0.018em` | the serif at display scale |
-| `--tracking-heading` | `-0.012em` | headings and card titles |
-| `--tracking-body` | `0em` | prose, controls, buttons, small text |
-| `--tracking-label` | `0.18em` | every uppercase label |
-
-The census that preceded this found **20 distinct letter-spacing values**, six of them on uppercase
-labels 10–13px apart with no two derived from each other. Worse, the display negatives ran to
-`-0.085em` and `-0.106em` — numbers tuned for Wix Madefor and never revisited when the face changed,
-which at the footer's 45px links meant −3.8px per gap and letters touching in Switzer. **Tracking
-belongs to the face, so a face swap invalidates every literal in the codebase.** Tokens are how that
-stops being true.
-
-Three literal values survive on purpose, all documented at their declaration: `0.02em` and `0.05em`
-on map labels over imagery (a legibility register, not the interface one) and `-0.005em` on
-`.price-display` (optical, for the serif's figure widths).
-
-**Where the Unlayered-Beats-Utility Rule bites hardest.** That rule is stated in full under
-Elevation & Depth; type is where it is met most often, so the type-specific half is here. Every
-class above is declared unlayered in `globals.css`, so a `leading-`, `text-`, or `font-` utility
-beside a class that already declares that property **does nothing**, in silence. Which property each
-class owns:
-
-| Class | Owns | So a utility beside it that is dead |
-|---|---|---|
-| `.font-display` | family, weight, letter-spacing | `font-semibold` (18 inert sites, left alone) |
-| `.font-display-xl` | family, weight, letter-spacing, **line-height** | `leading-*` |
-| `.font-scene-hero` / `.font-scene-display` | all of the above **and font-size** | `text-*`, `leading-*` |
-| `.scene-prose` | font-size, line-height | `text-*`, `leading-*` |
-
-It has bitten four times: line-height, font-size, display utilities, and a `--font-display` key in
-`@theme inline` whose generated utility collided **by name** with the unlayered `.font-display`
-class — two rules on one selector, resolved by layer order rather than by anyone. That key was
-removed; `--font-sans` and `--font-mono` are real utilities and stay.
-
-**The Fluid-Type-Is-Scoped Rule.** `html` is a flat `16px`. A viewport-derived root
-(`clamp(16px, 1.13vw, 20px)`) was removed deliberately: `clamp()` with absolute px bounds overrides
-the visitor's own browser font-size at every width, so someone who set their default to 20px was
-served 16px regardless. Fluidity lives in `.font-scene-display` and `.font-scene-hero`, where it can
-be reasoned about, while body copy and dense instrument panels hold a stable step.
-
-**The World-Face Boundary is retired, and deliberately.** There used to be two typefaces reachable
-only from the marker layer — Orbitron for the day badges, Rajdhani for stop names — fenced by a rule
-that said labels standing on the globe are objects in the *world* rather than surfaces in the
-interface. The argument was real. The result was not: a square techno face with a glowing chip read
-as a sci-fi HUD dropped into a restrained product. Both faces are gone; the globe sets its labels in
-the product's own display and text faces.
-
-**What that cost, recorded so nobody rediscovers it.** Rajdhani was *condensed*, and the marker
-declutter budget (`MIN_SEPARATION_X_PX` in `StopMarkerLayer`) is measured in the horizontal pixels a
-name occupies — so a wider face means marginally fewer stop names survive the separation scan at a
-given zoom. If the label field ever reads too sparse, lower that constant. Do not reintroduce a
-fourth typeface for it.
-
-The **colour** half of the boundary stands unchanged: route colour is map-native and must never
-appear in a panel, chip or button, and interface colour stays off the globe — with `--accent`
-marking a hovered or selected stop as the one documented exception.
-
-### The third boundary: native settings surfaces (iOS, 2026-09-21)
-
-**A settings-shaped screen in the iOS app uses the system's type ramp and geometry, not this
-one.** This file describes a web app, and every rule above assumes the product draws its own
-chrome. On a native preferences list that assumption inverts: `List(.insetGrouped)` owns the row
-height, the separator insets, the header and footer styling, the chevrons and — the part none of
-the rules above can deliver — **Dynamic Type**. Overriding that with `--font-sans` at hand-picked
-points is what made `ProfileView` read as a web form rather than an iOS screen, which is the
-defect this boundary exists to stop recurring.
-
-So on those surfaces:
-
-- **SF at the system text styles carries the list.** Rows, values, section headers and footers
-  set no custom face at all. Apple's own split is the licence for this — body, labels and
-  controls stay on the system face, a brand face appears in display moments — and taking it is
-  what buys Dynamic Type.
-- **Melodrama does not appear at all.** The header card that carried it named the screen it sat
-  under ("Your travel profile" beneath a "Profile" large title), and replacing that card with the
-  avatar every mobile profile opens with took the serif with it. Recorded because it was tried
-  twice: a display face at the top of a settings list is a landing-page move, and putting it on
-  `@ScaledMetric` to survive the accessibility sizes was the second sign it did not belong there.
-- **The list reserves the floating tab bar with `contentMargins`, not a `safeAreaInset`.**
-  `AppShell` insets the panel, and that does not reach through a `NavigationStack` — the last row
-  came to rest behind the bar, unreadable and untappable. Scroll content is where the room has to
-  go, so content still passes under the glass and still stops clear of it.
-- **A `List` is laid out full-bleed.** `PanelContent`'s own 20pt inset is skipped for it, or the
-  grouped inset doubles up and the cards sit narrower than both the large title and the tab bar.
-- **Tabular still sets figures**, unchanged: a column of compared values is a column of compared
-  values on any platform.
-- **The palette does not change.** Kiln needs no adaptation here, and that is a genuine
-  coincidence worth recording: `--surface-deep` is `rgb(28,26,24)` and iOS dark's own grouped-row
-  background is `#1C1C1E`. A real `List` wears this palette with
-  `.scrollContentBackground(.hidden)` and `.listRowBackground(…)` and nothing looks borrowed.
-- **The One Meaning Rule reaches row glyphs.** `.tint(--accent)` is required on the stack, or
-  every checkmark renders system blue — but it reaches SF Symbols too, and a column of jade icons
-  reads as a column of actions. Row glyphs take the secondary label colour. iOS tints those tiles
-  for *identity*; this palette has no colour spare for that job.
-
-This is a boundary, not a licence: it applies to preferences and settings lists. The trip, the
-landing and the map keep the system above.
+**The Field Floor Rule.** Inputs are 16px (`{typography.field}`) whatever the em scale says; below it
+iOS Safari zooms the page on focus.
 
 ## Layout
 
-`AppShell` renders exactly four layers on every route and that structure never varies: the globe at
+`AppShell` renders exactly four layers on every route and that structure never varies: the map at
 `z-0`, the floating stop markers at `z-5`, a viewport-spanning content overlay at `z-10`, and app
 chrome (navbar, map controls) at `z-20`. `.app-shell` is `h-dvh overflow-hidden` — **the document
-never scrolls**; `.content-overlay` does. Every scroll-driven animation in the app therefore binds to
-the named `--story` timeline declared on `.content-overlay`.
+never scrolls**; `.content-overlay` does. Polar's scrolling pages (the landing, `/trips`, `/profile`)
+run Lenis on that overlay, driven by the GSAP ticker, with ScrollTrigger scrubs bound to it
+(`src/components/polar/motion.ts`); reduced motion skips both entirely and the page is its finished
+layout. App screens that hold the map (the trip page, generation) keep the viewport frame and put
+their panels in `position: fixed` with `pointer-events: auto`.
 
-Two heights are tokens because more than one thing has to clear them: `--nav-h` (`3.5rem`, read by
-the navbar, `<main>`'s top padding, `ScrollStory`'s cancelling margins and `DockedPanel`'s offset) and
-`--capsule-h` (`3.5rem`, the collapsed docked panel, read by the mobile map-control rule that has to
-sit above it). 44px is the hard floor inside the bar and it is a touch-target floor, not a taste one:
-every interactive child is `min-h-11`, and anything tighter than `3.5rem` has to drop those targets
-first.
+Two heights are tokens because more than one thing has to clear them: `--nav-h` (`3.5rem`, read by the
+navbar, `<main>`'s top padding and every fixed panel's top) and `--capsule-h` (`3.5rem`, the collapsed
+docked panel on the `/` result view, read by the mobile map-control rule that has to sit above it).
+44px is the touch-target floor inside the bar.
 
-Page gutters are `px-5` rising to `sm:px-8`. Panels are `p-5 sm:p-6`. Full-bleed bands (the landing
-beats, `/trips`' hero, the footer) cancel `<main>`'s padding with matching negative margins so they
-reach all four viewport edges, including the top behind the fixed nav. Breakpoints are `rem`-based
-and resolve against the root's *initial* 16px, so they never move.
+**Polar spacing** is an em ladder on `.tm`: `{spacing.space-1}` … `{spacing.space-12}` (0.35em to 7em),
+a `{spacing.gutter}` between columns and a `{spacing.pad}` page edge (with 3em more on the right of the
+landing to clear the How it works tab). The landing draws a 12-column gridline field; sections use
+`auto-fit, minmax(min(100%, 17em), 1fr)` grids. Only ImagineDay caps a width (1440px); full-bleed
+photographs and the night map reach all four edges, cancelling `<main>`'s padding.
 
-Responsive behaviour worth knowing: below `sm` the docked panel is full-bleed and the map controls
-are hidden until the panel collapses into its capsule, at which point a reduced set — the zoom pill
-and the compass — appears in the space that opened up. The tilt slider and the 2D/3D toggle stay
-behind `sm:`, because a 15px rotated thumb is not a touch target.
+**Breakpoints are not yet a shared set.** In use: 1100 / 760 / 560 on the landing; 960 on the trip
+board, drawer, story player and profile; 900 on the spotlight, offline page and night map; 860 on
+sign-in; 640 / 1100 on the planner; plus Tailwind's `sm`/`md`/`lg`. New work should reuse one of
+these rather than add a twelfth, and a wide-but-short laptop (about 1470×830 CSS px on a 13" MacBook
+Air) is the case to check first: sizes follow width, so height runs out before width does.
+
+**Short screens condense, then scroll.** Type and controls keep their designed size; spacing and
+decorative type may shrink with the viewport's height; what still does not fit scrolls — the page on
+the landing, the panel on an app screen. Never scale a composition to fit.
 
 ### Named Rules
 
-**The Named-Timeline Rule (`--story`).** Every scroll-driven animation binds to
+**The Named-Timeline Rule (`--story`).** A CSS scroll-driven animation (Polar's scrubs are GSAP, which reads the overlay directly) binds to
 `animation-timeline: --story` — never to `scroll(nearest block)` or `scroll(root)`. `nearest` resolves
 to the nearest ancestor *scroll container*, and `overflow: hidden` makes an element one: it has a
-scrolling box, it simply never scrolls. The landing hero and both scene bands all carry
+scrolling box, it simply never scrolls. Polar's sections carry
 `overflow-hidden`, so `nearest` binds to a section pinned at `scrollTop` 0 forever and the animation
 sits frozen at 0% progress with no error anywhere. `root` resolves to the document, which never
 scrolls either. If a new scroll-driven animation appears not to run, check the timeline's source
@@ -862,8 +509,8 @@ before checking the range.
 draggable, which also takes its scroller out of hit-testing. `.content-overlay:not(:has(.docked-panel))`
 hands pointer events back on every route that scrolls the overlay itself. This is not a touch-only
 problem: a wheel's scroll target is resolved by hit-testing first and *then* by walking the hit
-element's ancestor chain, and the Cesium canvas is the overlay's **sibling**, so a wheel over any
-patch of viewport with no `pointer-events-auto` box under it lands on Cesium's handler, which
+element's ancestor chain, and the map canvas is the overlay's **sibling**, so a wheel over any
+patch of viewport with no `pointer-events-auto` box under it lands on the map's handler, which
 consumes it as a camera zoom. The page does not move, the globe lurches, and tiles start streaming.
 
 **The Scroll-Anchor Rule.** `.docked-panel-body` sets `overflow-anchor: none`, and it is load-bearing.
@@ -874,26 +521,31 @@ down by the same amount. Measured in Chromium, scrolling to 40, 80, 120 and 160p
 
 ## Elevation & Depth
 
-Depth comes from **material, not from shadow**. Every surface is the one slate at an alpha behind a
-backdrop blur; what separates two surfaces is how much of the world shows through them, not how far
-they appear to float. Shadows exist only to keep an object from dissolving into what is behind it, and
-every one of them is soft and non-directional. There are no hard offset shadows anywhere in the
-product.
+Depth comes from **material, then from shadow**. Over the world, a surface is night at an alpha
+behind a backdrop blur, and what separates two surfaces is how much of the world shows through.
+Away from it, surfaces are opaque ice and paper with no blur at all, and a soft, long, low shadow is
+what lifts a board or a sheet off the map. Every shadow is non-directional; there are no hard offset
+shadows.
 
-Alpha and blur rise with how much content a surface carries: control pills at 0.55 / 20px, the nav bar
-at 0.72 / 16px, the itinerary and card panels at 0.62 / 56px, full-viewport surfaces at alpha 1 with
-no blur at all — because nothing shows through an opaque surface and a 56px blur of nothing is a
-render surface for no reason.
+Glass, by how much it carries: 3px on the faintest chips and scrims; 5px on the destination chips and
+planner steps (`rgba(9, 11, 16, 0.18)`); 7.5px on the landing's beat cards (veil-50); 10px on the trip
+page's map controls (`rgba(9, 11, 16, 0.6)`); 15px on the night panels — the footer form, the planner's
+panel and bar (`0.45`–`0.62`); 16px plus `saturate(1.1)` on the dark nav (`rgb(14 17 24 / 0.72)`).
+The story bar uses none on purpose: it is near-opaque night (`0.96`) because it moves with a flying
+map and a blur would re-raster every frame.
+
+Photographs carry gradient scrims, not flat veils: the hero darkens at both sides and at top and
+bottom, the footer runs dark-light-dark, the planner darkens from the left where the questions sit.
 
 ### Shadow Vocabulary
-- **Control** (`0 4px 16px 0 rgba(0,0,0,0.32)`): floating chrome over the globe — `.glass-control`.
-- **Panel** (`0 8px 32px 0 rgba(0,0,0,0.37)`): `.glass-itinerary`, every card and panel.
-- **Object on the map** (`0 2px 10px rgb(0 0 0 / 0.55)` plus a 1px inset white highlight): the marker
-  title card, sitting on real photography.
-- **Capsule** (`0 24px 58px rgb(0 0 0 / 0.55)`): the hero's entry capsule only. The one place a
-  shadow is doing lift rather than separation, because it is the one light object in a dark product.
-- **Hover lift** (`0 16px 34px rgba(0,0,0,0.5)` with `translateY(-3px)`): memory cards, and nothing
-  else.
+- **Board** (`0 -1em 4em -1.5em rgba(0,0,0,0.7)`): the trip board rising off the foot of the map.
+- **Panel** (`0 2em 4em -1.5em rgba(0,0,0,0.7)`): the drawer and the split editor.
+- **Spotlight** (`0 2em 5em -1.5em rgba(0,0,0,0.8)`, closed `0 1em 2.5em -1em rgba(0,0,0,0.7)`).
+- **Pass** (`0 2.5em 5em -2em rgba(0,0,0,0.55)`): the sign-in boarding pass.
+- **Popover** (`0 24px 64px rgba(9,11,16,0.45), 0 0 0 1px rgba(31,42,68,0.08)`): the date-range picker.
+- **Object on the map** (`0 2px 10px rgb(0 0 0 / 0.55)` plus a 1px inset white highlight): marker title
+  cards on real ground.
+- **Pressed** (`0 1px 2px rgba(31,42,68,0.12)`): the selected segment of a light segmented control.
 
 ### Named Rules
 
@@ -913,7 +565,8 @@ offset. Not `ring-*` (it compiles to `box-shadow` and has already silently lost 
 hero's button matched `:focus-visible` while every ring slot stayed `rgba(0,0,0,0)`), and not
 `focus-visible:outline-accent` (the utility generates correctly and the computed colour still stayed
 at Chrome's default). The longhands are deliberate: `currentColor` is what an incomplete outline
-decays to, which on a jade-filled button is a silent, invisible focus indicator.
+decays to, which on a signal-filled button is a silent, invisible focus indicator. Polar's
+`.tm :focus-visible` is the same rule: 2px signal at a 3px offset.
 
 **The Blur-Of-Nothing Rule.** A `backdrop-filter` costs a render surface, and moving a render surface
 re-rasters everything behind it. Never put one on a surface with nothing behind it (`.is-opaque` on
@@ -924,584 +577,113 @@ not free here the way it is in a document.
 
 ## Shapes
 
-**Round what you touch, square what you read.** Anything you press or drag is a full pill
-(`9999px`): buttons, the entry capsule and its go button, day tabs, chips, control pills, the nav's
-menu rows. Anything you read is near-square: the map labels at 4–6px, the marker card at 5px, small
-surfaces at 8px.
+Nearly square, and the radius grows with the object: `{rounded.hairline}` (0.125em) on what you
+press — buttons, chips, board tools; `{rounded.sm}` (0.25em) on inputs, photos and small cards;
+`{rounded.card}` (0.375em) on cards, panels, the board, sheets and the pass; `{rounded.nav}` (2px) on
+the nav's chips and CTA. Pills (`{rounded.pill}`) are kept for the spotlight's tokens and category row,
+the story player's controls and a few profile pills — round things that are filters or toggles.
+Circles are reserved for markers, Play and avatars. `{rounded.panel}` (16px) survives only on the
+older glass surfaces (`.glass-itinerary`, the confirm dialog) and is not for new work.
 
-**The exemption is a slot, not a style.** The platform owns a nav bar's leading and trailing slots,
-a sheet's title bar, and a list row's trailing accessory column. A control sitting in one of those
-follows the platform, which on iOS means text, and the licensed cases are exactly three: `Done`,
-`Close`, and a row's trailing `Edit`. A capsuled `Done` would read as a foreign object in an app
-that otherwise hands settings surfaces back to the platform.
+Edges are hairlines: `{colors.frost-20}` on night, `{colors.rule}` on light. A selected day row is
+marked by a 3px edge in that day's own route colour (left on desktop, bottom on a phone).
 
-What makes `Done` legible is the *slot* — a place the system has taught readers that only controls
-appear — and a tint sitting in prose has no slot to borrow that from. So **a control anywhere else
-in the content takes a shape and a 44pt / 48dp target, whatever its tint.** An earlier wording said
-the exemption "means text", and that is exactly how a tinted text button in a page body came to
-cite the nav-bar precedent from outside a nav bar. It is a closed list of three, not an example.
-
-**A pressable that is a full-width row or card takes the surface radius, not the pill.** The pill is
-for a control that sizes to its own words; a row spanning the column is read as much as it is
-pressed. This is already what the app does in five places — the repair options, the edit bar, Plan
-Health's disclosure card, the destination suggestions, the group rows — and writing it down retires
-them as exceptions. The reason is the one the entry capsule gives two sections down: a full pill on
-a tall stacked box renders as a lozenge.
-
-Borders are hairlines — one pixel of `--card-border`, or of white at 0.08–0.16 over photography. The
-system draws *rules* rather than boxing things: the navbar is a ruled grid (a bottom hairline across
-the bar, a vertical one closing the wordmark off from the links), the section opener is a label
-against a bottom rule, and the itinerary's day rows separate with a hairline rather than a card edge.
-Where a rule spans a cell, the cell must be `items-stretch` and re-centre its own content — a rule can
-only span the full height if the box carrying it is that tall.
-
-No clip-path silhouettes, no angled cuts, no decorative geometry. The one drawn mark in the system is
-`LogoMark`: a glass globe, a route lifting off it, and the jade stop it lands on (the small cut
-of the Meridian app icon, masters in `mobile/assets/brand/`). `SectionOpener`'s six-stroke rule and the
-four-point `ButtonMark` are the landing's own punctuation and are deliberately not the logo. Every
-icon in the product is inline SVG, sized in `em` so it tracks its type step.
-
-**The Radius Drift, recorded honestly.** The Kiln edge rule is 5–8px on surfaces, and the surfaces
-built under it hold that. The incumbent panels — `.glass-itinerary`, the memory cards, the confirm
-dialog — are still at the previous system's 16px, because the retokenization deliberately left the
-itinerary card and the map structurally untouched. `{rounded.panel}` records what those panels
-actually are; new surfaces take `{rounded.surface-lg}` or tighter.
+The one drawn mark is `LogoMark`: a glass globe, a route lifting off it and the stop it lands on — the
+small cut of the Meridian app icon (masters in `mobile/assets/brand/`). Every icon is inline SVG sized
+in em so it tracks its type step. No clip-path silhouettes and no decorative geometry; the landing's
+inset clips are scroll effects on photographs, not shapes.
 
 ## Components
 
 ### Buttons
-- **Shape:** full pill (`{rounded.full}`) on every variant.
-- **Primary:** jade fill with its own dark ink, `12px 26px`. Hover is `{colors.accent-hover}` and
-  nothing else; press is `scale(0.98)`. No lift, no glow, no shadow growth.
-- **Focus:** the `.focus-ring` outline in full-strength jade, offset 2px clear of the fill so the
-  indicator sits against the dark panel rather than jade-on-jade. On the hero's go button, which
-  *is* jade, the outline flips to `--accent-foreground` — the Two Foregrounds rule again.
-- **Ghost:** transparent with muted text, same pill, same padding rhythm. `BackButton` is a chevron
-  plus this class list and renders a `<button>`, never a `<Link>` — two of its call sites reverse
-  in-page state rather than navigating.
-- **Destructive:** coral fill, the only place the app spends its alert colour on a button someone
-  presses on purpose.
-- **Disabled, in three states.** The web said only "avoid", and the mobile port read that as
-  licence to grey out anything unfinished — which on the plan wizard's first step produced six
-  controls, none of them carrying jade, because an untouched draft disables almost everything.
-  The three situations are different and only one of them is disabled:
-  - **Unavailable** — offline, no handler, a range limit. Nothing the reader types fixes it.
-    `disabled`, with the inert slate fill and muted ink (`buttonInert`). The `disabled={offline}`
-    controls in `trip/[id].tsx` and `day-page.tsx` are this.
-  - **In flight** — `busy`. Keeps its fill and shows a spinner. Draining the surface would report
-    the action unavailable at the moment it is working.
-  - **Incomplete** — the form is not filled in yet. **Not disabled.** The control stays
-    full-strength and pressing it names what is missing and focuses that field, which is what the
-    hero's `aria-disabled` has always done on the web: no consumer product ships a greyed-out
-    hero CTA. `src/lib/formGap.ts` decides what is missing; `accessibilityHint` carries the reason
-    to a screen reader, and `accessibilityState.disabled` must stay **false**, or VoiceOver
-    announces "dimmed" on a button that is genuinely pressable.
-
-  The one exception is a composer's send button beside its own empty box (`chat-sheet.tsx`), where
-  greying is the universal convention and the gap is the thing you are already looking at.
-
-### The Entry Capsule (signature)
-**The one light surface in the product, and the only place the system inverts.** A near-white pill
-(`rgb(247 245 242 / 0.97)`) on the darkened hero photograph, holding a destination cell, two date
-cells and a jade go button, with hairline dividers between cells inset top and bottom so they never
-touch the capsule's own curve. Everything else in the app is glass over a dark ground, which is right
-for a panel you read and wrong for the single control the whole first viewport is asking you to use.
-It is the highest-contrast object on the screen without being the loudest colour on it — the jade is
-reserved for the button inside, so the capsule reads as a place to type and the button reads as the
-action.
-
-Focus is an *inset* 2px jade ring on the **cell**, not the field: a ring on a borderless input inside
-a pill draws a rectangle floating in a curve, while on the cell it reads as the segment lighting up.
-Empty date inputs render their own copy through a `::before` on the cell with the widget's text made
-transparent, and the platform calendar glyph is replaced by an inline SVG — a UA glyph renders in
-whatever the platform decides and cannot take a stroke weight, and two unstyled OS widgets in the
-product's one light surface were the strongest template tell on the page. Below `md` the capsule
-stacks and drops to an 18px radius, because a full pill on a tall stacked box renders as a lozenge;
-the button keeps its own pill, because the button is still the thing you press.
-
-### Cards / Containers
-- **Corner:** `{rounded.panel}` on the incumbent glass panels (see the radius-drift note above).
-- **Background:** `.glass-itinerary` — the one slate at 0.62 under a 56px blur at 180% saturation. The
-  radius pair is measured: 56px is where large backdrop structures (city blocks, coastlines) stop
-  reading as recognizable shapes, while 32px still leaves their edges visible.
-- **Border:** a single hairline of white at 0.12.
-- **Padding:** `p-5 sm:p-6`.
-- **Token scoping:** the class overrides `--foreground`, `--muted` and `--card-border` *within its
-  own subtree*, so every child using `text-foreground` / `text-muted` / `border-card-border` retints
-  for free. That free retint is the whole reason to override a token rather than restyle a component.
-- **Opaque variant:** `.glass-itinerary.is-opaque` (two classes, so it cannot lose a source-order coin
-  toss) drops the blur and goes to alpha 1 on the three surfaces with nothing painted behind them.
-  Fill only — the hairline, the shadow and every token override still apply.
-- **Never hand-write `-webkit-backdrop-filter`.** Lightning CSS collapses the pair down to the
-  prefixed property alone, which current Chrome no longer supports; that silently killed the blur
-  entirely. Lightning emits the prefix itself when targets need it.
-
-### Inputs / Fields
-- **Style:** transparent or a low white wash inside a hairline trough, 16px text, generous cell
-  padding rather than a drawn box per field.
-- **Focus:** a jade ring or an inset jade stroke on the cell. Never a colour change alone.
-- **`color-scheme: dark` is set on `:root` and is load-bearing.** Without it the UA renders native
-  controls in its light scheme, and the date field's calendar indicator and the number field's
-  spinners paint as dark glyphs on near-black inputs — which is where three of the four trip-form
-  fields live.
-- **16px minimum, always.** Below it iOS Safari zooms the viewport on focus. This includes the small
-  "Actual" spend inputs, which were 12px.
+- **Shape:** hairline corners (`{rounded.hairline}`), 2.5em tall (3.1em for `-lg`).
+- **Primary (Signal):** ink on signal, UI type, 1.15em side padding. Hover lightens to
+  `{colors.accent-hover}`; on a fine pointer the label slides 0.5em and an arrow scales in; active
+  presses 1px down; disabled is 0.6 opacity.
+- **Ghost:** white text between two frost hairlines, for the secondary action over a photograph; on
+  hover the gap between text and arrow opens from 2.5em to 3.5em and the rules brighten.
+- **Quiet:** ink on veil-05, veil-15 on hover — the light-surface secondary.
+- **Focus:** every Polar control takes `.tm :focus-visible` — a 2px signal outline at 3px offset.
 
 ### Chips
-- **Style:** full pill, `2px 8px`, a low-alpha fill with a matching lifted foreground.
-- **Variants:** neutral glass, positive jade-tinted, highlight gold-tinted. The positive variant is a
-  real green again — under the previous single-accent rule it had to resolve to the same neutral
-  glass as everything else, which made a positive and a neutral chip indistinguishable.
+- **Destination chips:** a radio group over the hero photograph — night glass (5px blur), white text,
+  frost edge brightening on hover. The checked chip turns ice with ink text, and a 2px signal bar along
+  its foot fills over the rotation interval (`--rotate-ms`), pausing on hover or focus.
+- **Planner chips** (`.pp-chip`): hairline corners, multi-select, filled when chosen.
+- **Spotlight tokens and categories:** pills, each category with its dot in the map's colour for it.
+- **Tags** (`chip-neutral`, `chip-positive`, `chip-highlight`): small pills on the older surfaces.
+
+### Cards / Containers
+- **The board** (`board-paper`): ice, card corners, the Board shadow; a 17.5rem trip column beside the
+  day. Paper and ice cards inside it carry no shadow of their own.
+- **Stop cards** (`stop-card`): 14.5rem wide, a 16:10 photo with small corners, name, duration and cost,
+  a three-line "why"; hover or the stop being lit turns the card snow.
+- **Beat cards** (landing): an 11:14 photograph with a night-glass card; hover or focus opens the card's
+  copy and scales the photo 1.04.
+- **Sample-plan strip** (landing): an accordion of photographs whose open panel grows to 4.5× the
+  others; closed panels desaturate and blur slightly. Below 760px it becomes a vertical accordion.
+- **Night glass panels** (`panel-glass-night`): the landing's footer form, the planner's panel.
+- **Sheets** (`sheet-paper`): How it works slides in from the right (0.8s), ice, 2em padding.
+
+### Inputs / Fields
+- **On night** (`input-night`): 2.9em, white at 0.05, small corners, frost edge; hover brightens the edge
+  to 0.45; focus turns it signal with a 3px signal ring at 0.25; an error is alert red with a message.
+- **On light:** snow fields with a 1px signal ring on focus; the spotlight's field takes an inset 2px
+  signal underline; money fields on the board turn their border signal on focus-within.
+- **Always 16px text** (`{typography.field}`).
 
 ### Navigation
-A single fixed, frosted `Navbar` spanning every route at `z-20` and `h-[var(--nav-h)]`.
+One bar, `.polar-nav`, `--nav-h` tall, in three themes chosen by the band under it (`data-nav-theme`):
+**dark** (night glass, 16px blur), **photo** (no ground; chips at 0.2 with a 3px blur over a photograph)
+and **light**. The LogoMark and the Oswald wordmark sit centred in a three-column grid; route links
+are chips (2.5rem, `{rounded.nav}`) and the current one inverts to foreground on canvas; the landing
+adds a Plan a trip CTA in signal. The bar hides on scroll down and returns on scroll up. On a phone
+the links collapse into a full-screen menu (not a dropdown). The landing's CTA is currently hidden
+below `sm`; the 2026-10-16 ruling is that it stays visible on phones, as the design shows.
 
-- **One bar, every route — no route branch of any kind.** This is the rule the others serve. The
-  header is the one component a visitor carries between pages, so it is the last thing that should
-  redraw itself underneath them. Nothing about its ground, blur, rules or cell structure varies by
-  path; only the middle cell's *contents* do, which is navigation rather than design.
-- **`.glass-nav` is the one slate at 0.72 under a 16px blur, and the alpha is a legibility floor
-  rather than a taste one.** It was 0.15 under 12px once — defensible over a photograph you chose,
-  wrong over a live map. **MapLibre is the default engine, so the ordinary case is white vector
-  tiles, not dark satellite.** Composited, 0.15 over a white tile renders `rgb(219,224,225)` and the
-  white links measure **1.33:1** (1.51:1 over a pale road fill, 13.79:1 over dark satellite) — the
-  bar was legible in exactly the configuration nobody sees by default. It went to 0.86, which was
-  unarguably safe and heavier than it needed to be, and then to 0.72 when the landing's transparent
-  variant was removed and one value had to serve every ground. **0.72 measures 6.86:1 over a white
-  tile and 9.33:1 over the hero photograph's brightest band.** Do not go below 0.60 — that is 4.54:1
-  over white, passing with nothing spare, and those tiles are not ours to control.
-- **There was a transparent variant on the landing, and removing it is what set the alpha.**
-  `.glass-nav.is-over-hero` gave the landing a groundless bar on the argument that its first
-  viewport is a photograph we chose and darkened ourselves. The argument was true and the outcome
-  was a header that changed what it *was* depending on the route. Its removal paid for itself twice:
-  the bar became consistent, and the hero's top scrim — which existed solely to give a groundless
-  bar something to sit on — went with it, returning roughly 140px of the photograph's brightest,
-  most detailed band.
-- **The bar is a ruled grid, not a padded strip.** A bottom hairline under the whole bar, a vertical
-  one closing the wordmark off from the links, and a trailing cell that is never empty and never
-  holds two things. The bar carries no horizontal padding; the two cells do, and the bar is
-  `items-stretch` — a rule can only span the bar's full height if the box carrying it is that tall.
-- **There is no route table.** There was: `isUserFacing = isHome || /trips || isTripDetail ||
-  isProfile` gated both vertical rules and the trailing cell, so `/offline`, `/backend`,
-  `/backend/pipeline`, `/bench` and Next's built-in 404 rendered a bare wordmark on an empty bar —
-  a second bar *shape*, shipped to defend a content argument ("an internal dashboard has no business
-  carrying a Profile link"). The content argument is answered by content: those routes have nowhere
-  to navigate to, so their middle cell is empty. The frame does not change. A 404 is the worst place
-  of all to hand someone a smaller, different header than the one they arrived with — it is the page
-  they most need a way out of. The two dashboards are dev-only and 404 in production, so the Profile
-  link they now inherit is only ever seen by us.
-- **Mobile menu: a full-screen surface, not a dropdown.** `fixed inset-x-0 top-[var(--nav-h)] bottom-0`,
-  always mounted, `inert` plus `pointer-events-none` when closed. The bar and the panel become one
-  field while it is open (`.glass-nav.is-menu-open` goes opaque and drops its blur), so the only line
-  in the composition is the panel's own `border-t`. The toggle icon is a custom 3-bar mark that
-  morphs continuously into an X — Lucide's `Menu` and `X` share no geometry, so swapping them is
-  always an instant cut however well the panel animates. Escape closes it and returns focus to the
-  toggle; there is deliberately no close-on-outside-tap, because full-screen there is no outside.
+### The Monument (signature)
+A place's name set in Oswald across the full width of its photograph — PETRA on the landing hero,
+TRIPMATE closing the page, the destination on the planner and the writing screen. Uppercase, line
+height 1, sized by the viewport; it rises and fades in once (1.4s) and never loops. It is a picture
+of a word; on the landing hero it is currently also the page's only `h1`, which changes as the hero rotates (Open Items).
 
-### The Auth Entry (mobile, `src/app/signin/`)
-**Two screens with one job each, under one photograph.** A chooser, then a form. The screen this
-replaced did both at once and asked for three things in one stack — a task (`Sign in`), an
-alternative *mode* (`Create an account instead`) and a way *out* (`Keep planning without an
-account`) — with the last two wearing the same slate capsule. Three calls to action at two levels,
-over a staircase: full width, then 218pt, then 272pt, because `PillButton` sets
-`alignSelf: 'flex-start'` and two of them stacked under a full-width button is the one arrangement
-where that rule yields a ragged edge.
+### The Night Map on the landing (signature)
+`PlanGlobe` — a MapLibre map in the night style, cyan route over dark ground, flying to the sample
+place as its section enters the screen, with a compact plan card over it. It is the landing's only
+live map.
 
-- **The chooser is three choices at three weights sharing one edge.** The mark, then `Sign up`
-  (the one jade fill), `Log in` (the slate capsule, stretched by `PillButton`'s `block`), and
-  `Keep planning without an account` (`tone="quiet"` — jade ink, no fill, no hairline, the 44pt
-  target intact). The escape stops competing with a task because on this screen it is the same
-  *kind* of thing as the other two. `block` is documented at the component as this exception: the
-  rule it relaxes is about a capsule standing *in* content, and these are peers of the primary
-  above them.
-- **Sign up takes the one jade fill** under the Primary Action Surface rule. Since 2026-10-13 a
-  bare signed-out launch opens the Polar landing (`/landing`) rather than this screen, and the
-  landing's Sign in leads here — so this screen is reached by choosing, by somebody with no account
-  on this device, and sign-up is the action that moves their anonymous planning onto one through
-  `claimAnonymousOwner`.
-- **The mode switch is deleted, not moved.** You arrived by choosing, so **back** is the switch.
-  That also removes a collision the old screen carried: `Create account` sat directly above
-  `Sign in`, and a press on the lower one silently flipped the form.
-- **The band is mounted in the group's `_layout.tsx`, above its `Stack`, and that placement is the
-  whole reason this is a route group.** A band rendered inside each screen would remount on every
-  navigation — the reel would restart and you would land on a different photograph than the one
-  you left. One instance outside the `Stack` means the picture holds still while the content below
-  it pushes, which is the only argument for the form screen keeping a band at all. The beat index
-  and the keyboard collapse live there too, because both belong to the flow rather than to a
-  screen.
-- **Both screens keep the band at 46% of the window, and that is a resolution number rather than a
-  rhythm one.** The four photographs are 1200x1309; 46% of a 932pt window asks for ~1290px at 3x
-  and lands near-native, while 56% would want 1468px and upscale. It collapses to a 132pt sliver
-  under the keyboard and past `fontScale > 1.2` — a sliver rather than nothing, because the
-  photograph leaving entirely makes the screen look like it navigated somewhere.
-- **The logo is the mono cut, tinted, and the obvious asset cannot be used.** `assets/brand/
-  lockup.png` is 1024x1024 **opaque RGB** with a baked `#121110` ground — byte-identical to the
-  dark canvas, so seamless there and a near-black square on paper — and there is no transparent
-  lockup raster, which `brand/README.md` forbids retouching one into existence. Those same rules
-  forbid the full-colour mark on a light ground and prescribe `mono.svg` in `#121110`. So the
-  chooser carries `assets/images/android-icon-monochrome.png`, which is that master's alpha-only
-  render, tinted `Colors.foreground`: near-black on paper, paper on near-black, one asset and one
-  prop in both appearances. The name does not appear, which the brand rules already accept ("No
-  text in the app icon. The name appears only in the lockup."); putting it there means a new mono
-  *lockup* master and render, and belongs to the brand folder.
-- **`buttonInert` is the slate fill with muted ink, not `opacity: 0.4`.** The opacity faded the
-  fill and the label together, so a disabled primary measured **1.92:1** against its own button in
-  light and **2.04:1** in dark, and in light the fill composited to `#A3B9AE` — a pastel that read
-  as a brand colour rather than as unavailability. Slate with muted ink measures 4.76:1 and
-  6.71:1. It is shared, so every disabled primary in the app changed with it, including the plan
-  wizard's. `palette.test.ts` carries the assertion, with the 0.4 pairing as a negative control.
-- **The 8-character hint shows in both modes**, so an inert button always has a reason beside it.
-  It used to render only in create mode, which left the sign-in form with a dead button and
-  nothing explaining it.
+### Writing the Plan (signature)
+The generating screen: the night lens over the real map (the basemap taken down to night under the
+plan), the destination's monument at the foot, a lede with Meri, "Planning {city}", the trip's span and
+budget, a rotating destination fact in the voice face, a skeleton row per day that fills as the stream
+names it, and a foot strip with the progress hairline, the four named steps (NOW / WAITING / DONE)
+and the forecast. Cancel appears after ten seconds. `html[data-writing-plan]` stands the map's own
+chrome down while it shows.
 
-### The Landing Sequence (`src/components/blue-hour/`)
-Six beats composed by `ScrollStory` inside a wrapper that cancels `<main>`'s padding so every section
-reaches all four viewport edges, including the top behind the transparent nav.
+### The Trip Board (signature)
+The trip page's plan, on ice, along the foot of the map (canvas "Trip page · B"): the trip column
+(city, span, Play, Share, Download, draft notice, budget bar, day rows each edged in its route colour)
+beside the day (title, stay, travel modes, Refine with AI, Edit day, then stop cards in a horizontal
+strip with walking legs between them, then the day's total). It shuts to a one-line ticket over the
+map and becomes a day strip while a stop's drawer is open. **Decided 2026-10-16:** at 961px and wider
+the board becomes the right-hand column of "Trip page · A", stops first, with the map full height
+beside it (see `docs/superpowers/specs/2026-10-16-web-evaluation-findings.md`).
 
-- **`Hero`** — a scroll-scrubbed film, a two-line proposition, and the entry capsule. See **The
-  Hero Film** below for the sequence itself; what matters here is the structure it needs.
-  `.hero-track` owns the height (one viewport, or 400dvh once the film can run) and **must never own
-  `overflow`**; `.hero-stage` inside it is `position: sticky` and owns the `overflow-hidden`.
-  `.hero-scrim` is two stacked gradients
-  doing two jobs — a top wash giving the transparent navbar something to sit on, and a bottom wash
-  that is the ground the headline and capsule stand in, landing on `--canvas` exactly at 100% so the
-  hero dissolves into the next beat with no seam. `.hero-dusk` is a scroll-driven wash of the one
-  slate that takes the whole composition down as it leaves. All three are CSS on the `--story`
-  timeline and **`Hero` runs no JavaScript at all**: a Chrome trace found scrolling frames resolving
-  on the main thread, and stripping this component's five GSAP tweens and its pointer parallax was
-  the fix.
-- **`.hero-photo` is no longer the hero's, and its crop is `SceneBackdrop`'s now.**
-  `object-position: 54% 44%` at landscape, `26% 56%` below `48rem`. The frame was chosen for a
-  terracotta wall in its left third and a street of people at its base; the phone crop at the
-  landscape position landed on cold dusk sky behind both headline lines and pushed the warm wall to
-  a left-edge sliver. The hero's own poster is frame 1 of the film at a plain centred `object-cover`
-  and must stay that way — it has to register with the canvas's cover-fit to the pixel, and an
-  art-directed offset there shows as a jump at the hand-off. See
-  **Open Items**.
-- **`SectionOpener`** — a right-aligned uppercase label at `0.6875rem` / `--tracking-label` against a bottom
-  hairline, with the asterisk mark in jade. One row, one rule; there is no two-column opener.
-- **`SiteFooter`'s closing banner and `SceneBackdrop`** — re-sourced 2026-09-09, and the second one
-  was a defect rather than a refresh. The footer's Val di Funes frame had no recorded origin at all;
-  it is now the Engadin from above (Pexels 34451716, Oskar Gross), chosen because it *recedes* —
-  a page about going somewhere should close on distance — and deliberately over a better-looking
-  Tuscan dawn, since Vernazza already opens `ImageRow` and Val d'Orcia is the first plan card, and a
-  third Italian landscape argues against "anywhere you can name". `SceneBackdrop` meanwhile had been
-  contradicting its own rule — "the same photograph, not a matching one" — ever since the hero
-  became a film: it showed a Seattle street behind the wizard while the hero showed Petra. It now
-  renders `HERO_SEQUENCE.poster`, frame one of the film, so pressing Plan keeps the traveller in the
-  canyon they were already in. That retired `heroScene.ts`, a 652KB photograph, and **`.hero-photo`**
-  — whose art-directed `object-position` had been measured against a terracotta wall in a frame
-  nothing renders any more. A crop tuned for a retired picture is worse than no crop, because it
-  silently art-directs the wrong one.
-- **The budget bar reads by day.** `BudgetBar` said how much and never when. It is now one gold
-  fill cut into a span per day, and no hue is introduced to do it — the separator is the panel's own
-  slate at an alpha cutting through the fill, per **The One Meaning Rule**'s "if the answer is none,
-  it is the one slate at an alpha", plus an alternating lightness step so adjacent days stay legible
-  where a thirty-day trip makes the spans narrow. **Days are deliberately not colour-coded**, and the
-  question is worth answering once because it will be asked again. Hue encodes categories with no
-  natural order; days have both an order and a position, and they are already laid left to right in
-  sequence. Two concrete reasons beyond the rule: `MAX_TRIP_DAYS` is 30 and no thirty-hue palette
-  stays distinguishable, so any scheme cycles and day 1 shares a colour with day 8 — worse than
-  none; and the per-day breakdown lower on the same card *is* categorical (Food / Entry / Transit /
-  Other / Stay), so a multi-coloured bar directly above it would invite exactly the wrong reading.
-  The zebra is safe where an arbitrary ramp would not be, because a strict parity alternation reads
-  as structure rather than as data — the same reason table zebra striping works. The stripe only
-  ever goes *darker* and the active day only ever goes *lighter*, so the two cannot be confused.
-  Three
-  decisions worth keeping: the denominator is **always the budget**, so a span's length means the
-  same thing under, at and over it; over budget the days fill in order and the one that crosses is
-  drawn partial, which is both the honest reading (*it ran out on day four*) and why the spans sum
-  to exactly 100 with no rounding slack; and the separator is a `border-right` rather than a flex
-  `gap`, because a gap is layout and twenty-nine of them would shorten a full bar by ~29px of a
-  470px track, making the fill's end stop meaning `spend / budget`. The arithmetic lives in
-  `budgetSegments` in `lib/itinerary.ts` beside the other money functions — the file whose docblock
-  records three summations that once disagreed on screen — because a calculation inside a component
-  is one `npm test` cannot reach. The rejected alternative was rescaling every span so all days stay
-  visible: it silently swaps the denominator to the spend the moment you cross, so a span would mean
-  "share of budget" on Monday and "share of spend" on Tuesday.
-- **`ImageRow`** — four photo cards on a scene band. The photographs are never veiled: an earlier
-  pass blurred every photo at rest and cleared it on hover, which at 2x read as four out-of-focus
-  images and got the *source files* blamed for it. What survives is a flat 0.16 darkening tint that
-  keeps the labels legible, faded on hover and never shown on touch at all.
-  - **The frames open; the cards no longer fly in.** The entrance was an 80px slide from the left on
-    `power3.out` — the only non-house easing among the scene tweens, and a generic reveal under a
-    heading that says "What a plan actually knows". The band's claim is *evidence*, so the material
-    is a wipe rather than travel: each photograph is uncovered from its own bottom edge on a
-    `clip-path` inset while its card settles the last 14px, on `expo.out` at a 0.09 stagger matching
-    `useLineReveal` on the heading directly above. Nothing travels horizontally any more, which
-    retires the reason `overflow-hidden` was called load-bearing on this band — the attribute stays,
-    because it is now doing a different job and removing it is its own change.
-  - **The photographs were re-sourced 2026-09-09, and the earlier suspicion of the source files
-    turned out to be half right.** The blur was the bug, but the pictures were weak too: a stock
-    skyline, a cluttered night food stall, a busy rain-street and a generic palm sunset, as four
-    2400px JPEGs totalling 2.3MB **with no recorded origin anywhere in the repo** — so they could
-    not be re-cropped, re-encoded, or shown to be licensed. Now Vernazza at true blue hour, spice
-    barrels ranked in a market window, storm cloud over a forested ridge, and a room opening onto
-    its own view; all Pexels, all credited in `sceneBeats.ts`, all 1200×1309 WebP at 649KB total.
-    Each frame states its beat rather than gesturing at its topic — the outgoing skyline had a sky
-    already gone black, which argues against a caption whose whole claim is that for twenty minutes
-    the town and the sky are the same brightness. **The last one is deliberately not the prettier
-    picture**: a riad courtyard was shortlisted and rejected because a tier photograph must not take
-    a side, and PRODUCT.md's one standing tension is that luxury imagery on a budget-honest product
-    reads as a mismatch. A room with a view is what all three tiers buy.
-- **`HowItWorks`** — the mechanism explainer, no photos, a line-masked heading reveal.
-- **`FeaturedPlans` had no entrance at all** until 2026-09-09 — the heading revealed and four
-  fully-formed cards were simply already there, which on a page where every other beat arrives read
-  as the one section that had not loaded. The authored moment is the **figure**, not the card: these
-  four exist to evidence "a trip that costs what you said it would", so the cards arrive on the house
-  entrance and each price settles 0.12s behind its own card. A second-level offset rather than one
-  blanket reveal, which is the difference between a list appearing and a claim being made.
-- **`FeaturedPlans`** — four worked examples, text left and photograph right with zero gap and
-  adjacent cells sharing one hairline. Every budget is grounded in `estimateTierTotal` within $50 of
-  a real tier estimate, and each card stores a **season** (`startMonthDay` plus `days`, resolved to
-  the next occurrence at or after today) rather than a date, so a card can never prefill a value the
-  form's `min={todayISO()}` rejects.
-- **`DestinationMap`** — the world map beat, and the one band where the *density* of the drawing is
-  the argument. The heading is "Anywhere you can name" and the standfirst says there is no list of
-  supported cities to be missing from; the band shipped for a week with **exactly twelve pins**,
-  which states the opposite, four of them flagged `featured` and none of those four the same place
-  as any plan the site actually sells. Every one of the twelve also wore an accent radial glow while
-  doing nothing, against **The One Meaning Rule**'s "jade acts".
-  - **The land is a stipple**, not a flat alpha: one SVG `<pattern>` (14-unit cell, a 0.028 wash
-    plus a `r=1.35` mark at 0.115) used as the existing Natural Earth path's `fill`, which clips to
-    the continents for free. Hundreds of faint marks across every landmass is "anywhere" stated in
-    the artifact rather than only in the heading — and it needs no generated geometry, which is why
-    it beat the costed alternative of rasterising the path offline to sample a grid. The hairline
-    coastline stays, so the continents keep their edges rather than dissolving into texture.
-  - **Ninety-odd destination marks**, from `mapPlaces.ts`, on every inhabited continent — a real
-    point symbol each (hairline ring plus solid core, the same geometry as a plan marker) in the one
-    slate rather than jade, unlabelled and non-interactive. The first cut carried only the four
-    plans, and four marks on a world map reads as half-finished, which is the twelve-pin defect seen
-    from the other side. **Quantity is what resolves it**: twelve is a countable set and reads as an
-    inventory; ninety is not counted and reads as "the world is full of places". The cut after that
-    drew them as faint 4px dots to avoid re-inventing `featured: true`, and **that was the wrong
-    reading** — at that weight they were texture, not places, so the map still said "four locations
-    plus a speckle". `featured`'s sin was flagging four *arbitrary* cities as special; the four
-    shipped plans genuinely differ, by being the ones you can press. So the separation is hue, label
-    and size (**ratio 1.6x at 1440, never below 1.5x above `lg`**), and nothing inside the
-    destination layer is ranked: one radius, one alpha, all ninety. Its radius is **clamped above
-    100rem** via CSS `r`, because SVG scales with the viewBox while the plan markers are fixed at
-    13px — unclamped the ring reached 10px at 2560 and the ratio fell to 1.3x. Where CSS geometry
-    properties are unsupported the `r` *attribute* still applies, so the fallback is the unclamped
-    mark rather than a broken one. Four of them sit in open water on purpose — Natural Earth
-    110m cannot carry Santorini, Malé, the Galápagos or Bora Bora, and dropping French Polynesia
-    from a travel map to satisfy a coastline dataset has the priority backwards. The layer renders
-    at every width, which is what stops the phone getting a bare stipple.
-  - **Hovering a destination names it**, in the same type step and shadow as a plan marker's label,
-    from one delegated listener rather than eighty-seven. **The name is all it says, and that is a
-    decision rather than an omission**: there is no destination-level cost data anywhere in this
-    codebase — `estimateTierTotal` is destination-independent, so a 7-day budget trip computes to
-    $730 whether it is Hanoi or Zurich — so a per-city "from $X" would either be identical on every
-    mark or invented. Neither belongs on the page headed "Plan a trip that costs what you said it
-    would." The four real prices stay the only figures on the map, which is what makes them mean
-    something. Hover-only and hover-only on purpose: these marks are `aria-hidden` decoration, and
-    making them focusable would put 87 tab stops between the heading and the footer to reveal names
-    a screen reader gains nothing from. No transition on the tooltip either — sweeping across
-    Europe re-anchors it twenty times a second, and a fade on each is both jitter and twenty
-    navbar-blur re-rasters.
-  - **Four destinations are filtered out where a plan marker already occupies the pixel** — Rome
-    (4.8 units from Val d'Orcia), Agra (7.4 from Jaipur), Jerusalem (7.4 from Wadi Rum), Venice
-    (8.4). A plan ring is 6.5 in radius and a destination ring 4, so anything under 10.5 is two
-    rings drawn through each other, which reads as a rendering fault. The threshold is that sum and
-    it is **computed from `planExamples`**, not applied by deleting rows: a plan's coordinates can
-    move, and a hand-pruned list would silently start colliding again or leave a hole where a plan
-    used to be.
-  - **Four plan marks, and each one is a control.** They are the four `planExamples` read straight from
-    the data module — the coordinates now live on `PlanExample`, so the `featured` fiction cannot
-    come back — and clicking one opens the wizard prefilled through the same `toPrefill` path
-    `FeaturedPlans` uses one band above. Hairline jade ring, 4px solid core, place name in the label
-    step, price in **gold tabular mono** because these four are read across the map to be compared.
-    No halo: zero-offset coloured glow is the tell this system already records removing from the
-    app's own day badges. Accent-bearing elements in the band go **24 → 4** (measured, plus
-    `SectionOpener`'s asterisk either way), and all four are now buttons with accessible names —
-    the only accent-bearing and only interactive things on the field, which is what keeps the two
-    layers legible as "places exist" and "these four you can press". The labels carry
-    `.hero-legible`'s device at a tighter radius, and that is measured rather than precautionary:
-    with the destination layer in, a mark landed inside all four label boxes and one sat mid-glyph
-    on Val d'Orcia's price, reading as punctuation. Both layers of the shadow are **centred**, not
-    offset downward like the hero's — the hero sits over a photograph where a downward shadow reads
-    as light from above, while the interference here arrives from every direction.
-  - **The marks are `lg`-and-up in full, and the breakpoint is measured.** Three of the four plans
-    are in western Eurasia: at 375px the map is 335px wide and Val d'Orcia, Sinaia and Wadi Rum land
-    inside a 22×17px box, where three rings are a smudge and three tap targets 13px apart fail WCAG
-    2.2's target spacing outright. `display: none` rather than a visual hide, so they leave the tab
-    order too. Below `lg` the band is the field and the paragraph. Label anchors are hand-placed for
-    the same reason a solver was not written for four things — Val d'Orcia leaves left, Sinaia up,
-    the other two right; closest approach between label boxes is 48px at 1440 and 62px at 2560.
-  - **Motion is one pass and it terminates.** A GSAP `ScrollTrigger` timeline resolves the field's
-    opacity, then staggers the marks on **`expo.out`**, which deletes the app's only
-    `back.out(1.7)` — an overshoot that ran two inches under a heading revealing on `expo.out`, and
-    the wrong gesture for a claim about coverage. Deliberately **not** on the `--story` timeline:
-    its offsets are absolute scroll lengths from the scroller's origin and this band is fifth of
-    six, so any `animation-range` here would shift whenever a band above it changed height.
-    `trigger` + `start` is element-relative and immune. Nothing loops, per **The Blur-Of-Nothing
-    Rule** — the fixed navbar's `backdrop-filter` is on screen at every scroll position, so a
-    pulsing marker would re-raster it at refresh rate for as long as the band were in view.
-  - Its `.destination-*` rules are **unlayered in `globals.css`**, and that is deliberate rather
-    than incidental: `.destination-dot` existed for a year as a GSAP selector only, with no hover or
-    focus state to lose because the dots were not controls. Now that they are, a `hover:` or
-    `ring-*` utility here would be emitted inside `@layer utilities` and lose to any unlayered rule
-    touching the same property. Focus is `.focus-ring`, per **The Focus-Ring Rule**.
-- **`HeroSearch`** — the entry capsule, documented above.
+### Map Search (signature)
+The trip page's spotlight (canvas "Map search · 4"): ⌘K opens it over the map with the day's gaps on a
+timeline, category chips, results that fit a gap ("Add at 3:35 PM") and rows that open to the place's
+address and hours. **Decided 2026-10-16:** it moves to the left side sheet of "Map search · 3", keeping
+every per-place detail.
 
-### The Hero Film (signature)
-100 AVIF frames of a camera dolly out of a cave toward Al-Khazneh, drawn to a `<canvas>` at
-whatever frame the scroll position asks for. `HeroFrames.tsx` is the engine;
-`scripts/build-frame-sequence.mjs` produces the frames from footage kept out of the repo, and
-`scripts/extract-frames.swift` pulls them from the source video via AVFoundation.
+### The Story Player (signature)
+A film of a day (canvas "Story mode · 1 Subtitles"): the narration as subtitles above a near-opaque
+night bar, 4.75rem tall, with Previous, an ice Play disc, Next, a 3px scrub track that turns signal on
+hover, drag or focus. The board hides while it plays.
 
-**Frames come out of the MP4 losslessly, not through a web converter.** The first two cuts read a
-zip of PNGs exported by ezgif, which had written 24fps source into a 30fps container: 60 of 300
-frames were byte-identical repeats on a 5n+3 stride, and every frame carried an extra compression
-generation. AVFoundation decodes the original H.264 once and returns the exact frame at the exact
-presentation time. `requestedTimeTolerance` is pinned to zero at both ends — without it the
-generator returns the nearest *keyframe*, so asking for frame 37 can hand back frame 24, silently,
-and the result looks exactly like footage that stalls.
-
-**The arc is the whole point: you start inside the cave and it opens onto the temple.** All 240
-frames of the source are used, with **nothing excluded** — see the rigidity rule below for why the
-current footage needs no surgery where its predecessor did. Measured frame-by-frame on the
-*previous* clip, kept because it is the reason the metric changed:
-
-| unique | edge energy (27.2 median) | luminance | what it is |
-|---|---|---|---|
-| 1-57 | **34.4-35.5 — the crispest in the reel** | 88 → 99 | inside the cave, slow push |
-| 59-71 | 34.2 → 22.2 | 97 → 80 | into the dark passage |
-| **72-78** | **20.4-21.4** | 77 → 69 | **the double-exposure artifact — excluded** |
-| 79-147 | 21.9 → 33 | 66 → 125 | out of the dark, brightening |
-| 149-163 | 32 → 28 | sky peaks 12.1% | the reveal |
-| 165-239 | 27.7 → 21.4 | 119 → 98 | closing on the facade |
-
-**A cut that dropped frames 1-85 was shipped and reverted, and the reason is worth keeping.** It
-was justified on the camera being nearly static through 1-57 — true, difference 1-6 against a 6.8
-median — so those frames bought little scroll travel per byte. But that section *is* the cave,
-which is the reason for using this footage, and it is also the highest edge energy in the reel. A
-motion metric said "cheap" about the most valuable material in the shot. **If this window is ever
-narrowed again, narrow it from the end.**
-
-**The Rigidity Rule, and it exists because edge energy was the wrong metric.** The previous
-footage had a zone where the render morphed and the canyon walls changed identity mid-shot. Finding
-it took three attempts, because the metric in use — edge energy — is structurally blind to it:
-morphing geometry keeps its *texture* sharp while its *structure* drifts, so the broken frames
-scored 34-35 against a 27 median, i.e. the crispest in the reel.
-
-The metric that sees it is rigidity. Block-match consecutive frames, fit a radial expansion (which
-is what a forward dolly produces), and measure the residual. Run on both clips at identical
-spacing: the old footage came in at a **median 0.541px with 94 of 120 pairs above 0.4px**, this one
-at **median 0.095px with 0 of 120** — 5.7x more rigid, which is why nothing is excluded now.
-**After any new footage lands, run rigidity, not edge energy.**
-
-**Geometry.** A 400dvh `.hero-track` containing a 100dvh `position: sticky` `.hero-stage`, so the
-travel is exactly 300dvh and scroll progress maps 0→1 across precisely the pinned run — the film
-starts as the hero pins and finishes as it unpins, rather than approximately. At ~27px of scroll per
-frame it reads as continuous.
-
-**The 400dvh is opt-in, and that is the whole fallback story.** The track is one viewport until
-`data-seq` is set, which `Hero` does only once it knows the film can run. No JavaScript, reduced
-motion, **a request to move less data**, or a frame that fails to load all leave the hero exactly
-one screen tall showing the poster. Nobody is ever made to scroll three empty viewports past a
-still image.
-
-**The Decoration-Is-Not-Worth-Ten-Megabytes Rule.** The film is 9.76MB and it is ornament — so it
-is gated on bandwidth as well as on motion. `prefers-reduced-data: reduce`, `navigator.connection.
-saveData`, and an `effectiveType` of `2g`/`slow-2g` each decline it, and declining costs nothing
-because the poster hero is already the fallback. The first two are the visitor *asking*; the third
-is inferred, and it is included anyway because the error is asymmetric — a false positive costs a
-decorative film with a good fallback, a false negative saturates a connection somebody is trying to
-use for the actual page. `3g` is deliberately excluded: the film loads progressively and is
-scrubbable from a quarter of its frames, so a 3G visitor gets something rather than nothing.
-`npm run verify-hero` asserts the collapse.
-
-**Named Rules**
-
-**The Track-Owns-Height, Stage-Owns-Overflow Rule.** They cannot be one element. `overflow: hidden`
-makes an element a scroll container, so a sticky box inside one resolves against a scrollport that
-never scrolls and pins at its start offset forever — indistinguishable from sticky never having
-been applied, with nothing logged. The corollary is that the whole chain from `.hero-track` up to
-`.content-overlay` must stay free of `overflow`, `contain` and `content-visibility`. **Adding any of
-those three to `<main>` or to `ScrollStory`'s wrapper silently unpins the hero.**
-`scripts/browser-matrix.mjs` asserts the pin per route per engine because the failure is invisible.
-
-**The Sticky-Is-Not-The-Deleted-Pin Rule.** A `ScrollTrigger({ pin: true, scrub: true })` hero
-shipped here once and was removed for five reasons. Three were properties of GSAP's pin, not of
-pinning: `pinType: "transform"` rewriting `translateY` every frame because the scroller is an
-element, a pin spacer mutating the scroller's `scrollHeight` mid-gesture, and `refreshPriority: -1`
-sorting the pin *last* so every trigger below measured against a spacer-less layout and fired a
-viewport early. CSS `position: sticky` has none of them. **Do not reintroduce `pin: true` here.**
-
-**The Draw-On-Change Rule.** The rAF loop eases a float index toward the target but only calls
-`drawImage` when `Math.round()` of it changes, and it terminates itself once settled. Measured: **0
-draws over 3 seconds idle, and exactly one draw per frame index the scroll crosses** (36 draws for
-36.6 indices), so the rate tracks scroll speed rather than refresh rate. That is the actual
-mitigation for the navbar's `backdrop-filter` re-rastering, and it is why `.hero-light`'s 24s
-infinite loop is *paused* while the film is live — two ambient motions at once was never the intent,
-and that one kept the navbar re-rasterising at refresh rate whether or not anyone was scrolling.
-
-**The Readiness-Is-`onload` Rule.** Not `img.decode()`. Measured in this app's own preview engine,
-`decode()`'s promise **never settles** — not detached, not attached, not even after `onload` has
-fired with `complete === true`. A promise that never settles deadlocks the load queue and sticks the
-film near frame 1, which is the exact defect the technique exists to avoid. `onload` is the signal;
-a one-pixel draw into a scratch canvas forces the decode off the scroll path.
-
-**The Equal-Visual-Change Rule.** Frames are sampled so each carries the same amount of picture
-change, not at an even frame index. The camera does not travel at a constant rate: consecutive-frame
-difference across the raw sequence swings **14×**, so an even-index sample mapped linearly to scroll
-crawls where the camera crawls and rips where it accelerates — most of what read as awkward.
-Sampling along a cumulative-change curve leaves exactly one step above 1.6× the median, and that
-one is the deliberate exclusion seam. Through the cave the sampler runs out of frames to skip and
-lands *below* target, so that section is smoother than asked for rather than steppier.
-
-**Never blank, never stuck.** If the frame the scroll asks for is not decoded, the nearest decoded
-frame within ±8 is drawn instead and the last good frame is held otherwise. Frames load in a
-stride-halving order (every 16th, then 8th, 4th…), so after eight requests the entire run is
-coarsely scrubbable rather than being sharp at the start and empty everywhere else.
-
-**Two tiers, and the portrait one is a different crop.** 1600×900 landscape (9.76 MB, 100 KB/frame
-at q44) and 540×960 portrait (4.33 MB at q50); a visitor downloads one. No blur.
-
-**AVIF, and the decision reversed on measurement.** AVIF was tested and rejected on the previous
-footage, where it only beat WebP below q52 and was *larger* at q60 — because that clip was
-noise-dominated, and noise is the one thing AVIF has no advantage on. This footage carries real
-detail instead (edge energy 36 against the old 27 median), which is exactly where AVIF wins: 37%
-smaller at matched quality, and at 1:1 against a q88 reference the carved frieze, the capitals and
-the rock striations are indistinguishable. **Re-measure the format per clip rather than inheriting
-the verdict.** The `browserslist` floor is Safari 16.4 / iOS 16.4, precisely the release AVIF landed
-in, so every browser this project declares support for can decode these; one that cannot degrades
-down the same path reduced-motion takes — frames fail, `data-seq` never reaches "live", the track
-stays one viewport and the poster is the hero. A 16:9 frame cover-fitted into a 9:16 viewport keeps
-27% of the source width, which on a phone is canyon wall and no Treasury — so portrait gets its own
-centre crop, which the shot's dead-centre subject makes safe. Backing store is capped at DPR 1.25 — see above; raising it buys
-no sharpness once the source is the limit and only costs fill rate.
-
-**No pre-blur, and the version that had one is recorded because the reasoning was seductive.**
-Quality alone cannot compress this footage — q72 to q36 saves only 33%, the signature of a noisy
-render spending its bits on grain — so an earlier cut pre-blurred 1.0px and took 1152×648 from
-123KB/frame to 44KB. A 3× win, and it read as mush, because it compounded with the canvas
-upscaling a 1152px source into a 2160px retina backing store: **1.88×**. The rule out of it:
-**sharpen the source and match the backing store; never soften the source to save bytes.** 1600px
-against a `DPR_CAP` of 1.25 gives a 1.13× upscale at 1440 CSS — those two numbers are a pair, and
-moving one alone reintroduces the problem.
-
-**The scrim is a touch deeper while the film is live, and that is a measured fix rather than a
-preference.** The film is brighter than the photograph the scrim was tuned against, and brightest
-exactly where the headline sits. On the untouched scrim the worst pixel behind the headline ran
-**1.92:1, with 36 of 80 frames below the 2.38:1 the outgoing photograph measured** — concentrated
-in frames 23-64, the stretch a visitor reads longest. Three deeper ramps were measured and the
-shallowest that clears the bar ships; the next two reach 3.33 and 4.25 but bury the imagery. Re-run
-against the restored cave arc it still holds unchanged — **2.56:1 worst, 3.17:1 mean, 0 of 100 below
-baseline** — so the ramp was not retuned. 41 of 100 sit below the 3:1 AA-large threshold at the
-single worst pixel, which is the standing condition of type over photography on this beat and was
-true of the photograph before it too. Scoped to `[data-seq="live"]`, so the poster and
-every fallback keep the original. The mechanism carrying type over photography is unchanged —
-`.hero-legible`'s three-layer text-shadow, which contrast-ratio maths does not model.
-
-**The Frame-URLs-Are-Content-Addressed Rule.** Frames are served from `/scenes/petra/<hash>/`,
-where the hash covers the window, the frame count, the tier config and the source archive. This is
-not tidiness: `next.config.ts` serves that path `immutable`, and `immutable` means the browser
-never revalidates. An earlier cut shipped `immutable` against fixed filenames on the reasoning that
-the build rewrites the whole directory; the next run disproved it, serving 74,022 cached bytes
-against 77,002 on disk. In production that is a returning visitor scrubbing a *mixture* of two
-edits. **Never point `immutable` at a path whose contents can change.**
+### The Pass, the Postcard Wall, Field Notes
+Sign-in is a boarding pass on paper (canvas "Sign in · B"); `/trips` is a wall of 4:3
+postcards on paper (canvas "My memories · A"); `/profile` is a field notebook (canvas "Profile · B").
+All three are light Polar surfaces on the same tokens.
 
 ### Map Controls
 
@@ -1515,7 +697,7 @@ over the Shadow Vocabulary's **Control** entry, and `ControlShadow` in `mobile/s
 is that entry ported. The explicit `…Light`/`…Dark` variants rather than the adaptive one, because
 `app.json` pins `userInterfaceStyle: "dark"` and the adaptive value follows the *system* rather than
 the app. Glyphs are neutral ink; the accent appears only while the locate button is actually
-moving the camera, which is Apple's own rule for its blue arrow and the One Meaning Rule's for jade.
+moving the camera, which is Apple's own rule for its blue arrow and The One Hand Rule's for signal.
 
 **Three modes, named for MapKit's own and not for its `MapType` strings: Explore, Driving,
 Satellite.** The sheet shipped with a fourth, `satellite`, which was a mistake made by reading the
@@ -1554,7 +736,7 @@ phone grows its own: a round glass button above the mode pill, present only whil
 the way MapKit's own is, pressing to north, its heading read off `getCamera()` throttled to roughly
 every fourth frame while a gesture runs — there is no heading event, and `onRegionChange` reports
 that the view moved and nothing about its bearing. **The needle carries no colour.** Apple's north
-half is red; here coral is an alert and jade is "act on this", so the two tones of the chrome's own
+half is red; here red is an alert and signal is "act on this", so the two tones of the chrome's own
 ink and a tail shorter than the point do the work instead.
 
 **The chrome rests 62pt up, and that is a floor rather than a taste.** Apple's logo and `Legal`
@@ -1642,13 +824,14 @@ screen. There is no lift — the screen hands off to the trip the moment the pla
 and design-doc name only: a trip mate *is* a companion, so the product's own name names it, where a
 second unrelated word would read as a second brand.
 
-**On the web Meri appears in four places**, drawn by `src/components/Meridian.tsx` from the same
+**On the web Meri appears in these places**, drawn by `src/components/Meridian.tsx` from the same
 `meridianMotion` table (`src/lib/meri.ts`) the phone uses:
 
 - leading the narration stage's transport row (32px);
 - heading the edit chat (28px), with "TripMate" over "● Replying" or "Ask for a change";
 - beside "Planning {city}" in the generation band (40px);
-- in place of the sparkle on each day's Refine with AI button (16px).
+- in place of the sparkle on each day's Refine with AI button (16px);
+- since Polar, also in the writing screen's lede, the welcome and the offline page.
 
 Its motion is CSS keyframes on `transform` alone, applied only under `prefers-reduced-motion:
 no-preference`, so it rides the compositor over a flying map. The Refine Meri is `quiet`: still until
@@ -1669,8 +852,9 @@ clamp reaches zero. `opacity: 0` hides a control from the eye and from nothing e
 compressed, a real pointer at the lower half of the Download link landed on an invisible `<a download>`
 floating over the compact title strip, and it was still a tab stop.
 
-The money surfaces show the palette's whole argument: costs and the day Total are gold mono figures,
-the over-budget line is coral, and the day tab you are on is the only jade thing in the panel. The
+The card now renders only on the `/` result view; the trip page uses the board. Money is a figure in
+white on night with no hue of its own, the over-budget line is alert red with the word "over", and the
+day tab you are on is the only signal-coloured thing in the panel. The
 Total row is no longer a filled slab in the action colour — a solid button-coloured bar whose entire
 content is a number was the single clearest case of an action hue reporting a readout.
 
@@ -1781,7 +965,7 @@ All of it is built in `mapRoute.ts` and floats at one sampled altitude:
   gone: it cost a render surface per card and never exceeded 0.675px anyway. If the far end reads
   flat, widen the opacity ramp rather than bringing a filter back.
 - **A day badge per cluster** (`.marker-day-label`): louder than a stop name in four ways at once —
-  tracked out, uppercased, set in the map display face, and edged and lit in that day's own core and
+  tracked out, uppercased, set in the interface's text face, and edged and lit in that day's own core and
   glow. It has to win the eye at a zoom where the stop names are at their 0.55 depth floor, and it is
   the only label drawn at all while the plan panel is shut. **Colour is never the whole message: the
   label says which day in words**, so a six-day cycle and a colour-blind reader both stay fine.
@@ -1860,28 +1044,6 @@ what makes `day` free rather than a fourth case. Night is a deep blue rather tha
 toward neutral just underexposes the photo and reads as a dimmed screen. Alphas are tuned against the
 route arcs, not just the ground — the arcs live inside the Cesium canvas and get multiplied too.
 
-### Tier Cards (signature)
-A three-up grid of 200px-tall image buttons: a full-bleed SVG illustration scaling to 1.05 on hover, a
-`from-black/85 via-black/25 to-transparent` bottom-up gradient, a display headline and a two-line
-clamped description at the base. Price rides in a top-right slate badge as a gold mono figure.
-Selection is an inset jade ring plus a round jade check badge; hover is `ring-white/40`. Over-budget is
-expressed as weight and text alpha only — the badge keeps its slate backing, because this state is
-reachable mid-keystroke and the price is data. Each card carries a small cursor-driven tilt
-(`perspective(800px) rotateX/rotateY`, capped at 8 degrees) on its **inner** visual layer, gated behind
-a one-time `(pointer: fine)` plus reduced-motion check on mount.
-
-### Memory Cards (signature)
-`/trips`' saved trips as photo cards: `usePlacePhoto(trip.destination, "full")` resolving onto a
-`next/image` `fill` layer over a permanent `--tile` base — the Constant-Ground Rule, since a slow photo
-lookup must not blank the card and a resolved photo must not repaint the tile itself. The photo tile is
-a **16:10 ratio**, not a fixed height: uncapped and three-up a card passes 600px, and 600x200 is a 3:1
-letterbox that centre-crops straight through the landmark. `sizes` tracks the column count per The
-Optimized-Photo Rule. The card is `.glass-itinerary`; `.memory-card` adds only what glass does not — a
-`translateY(-3px)` lift and a deeper shadow on hover, in two separate rules so the two states never
-contend over one property list. The dashed postage stamp, the paper ground and the per-card tilt are
-all gone: they made this route a third visual language in a product that should have one, and a
-visitor arriving from a trip detail crossed from dark glass to tilted cream stationery in one click.
-
 ### Confirm Dialog
 The app's one modal, and deliberately its only one: it exists for actions that cannot be undone and
 nothing else. Native `<dialog>` driven by `showModal()`, which buys the four things a modal has to get
@@ -1894,6 +1056,9 @@ focus trap and no backdrop — so an effect must translate the prop into imperat
 thinks it is open.
 
 ### The Wait (signature)
+Since Polar, a new plan is written on **Writing the Plan** (above); this band shows only while an
+existing plan is being refined.
+
 A plan takes a few minutes to write, and the map behind is where it appears. The generation stream draws
 each stop as the model produces it, so the route and the pins build themselves over the wait. Everything
 there is to read sits in one darkened band at the foot of the screen:
@@ -2014,7 +1179,7 @@ both the trip-wide line and every day's own route line. The day index and the da
 device at two scales, not two different metaphors.
 
 ### Typography
-**Display Font:** Melodrama · **Body Font:** Switzer — the app's own two, inlined as base64 `woff2`
+**Display Font:** Melodrama · **Body Font:** Switzer — Kiln's two, kept for the export and inlined as base64 `woff2`
 data URIs by `exportFont.ts`, each degrading independently to the system stack if its file is
 missing. ~84KB against ~420KB of photographs in the same file.
 
@@ -2065,14 +1230,14 @@ grammar is drawn with lines and circles, not silhouette.
 ## Do's and Don'ts
 
 ### Do:
-- **Do** build every new surface from `.glass-itinerary` with `p-5 sm:p-6`, and let its scoped
-  `--foreground` / `--muted` / `--card-border` do the colour work.
-- **Do** ask which of the three verbs a new coloured element is doing — act, count, or warn. If the
-  answer is none, it is the one slate at an alpha.
-- **Do** reserve jade for things the user acts on, and put the dark `--accent-foreground` on top of it
-  — never white.
-- **Do** set every money figure, time, duration, distance and count in `font-mono` with
-  `tabular-nums`, and colour money `text-money`.
+- **Do** build a new Polar surface inside `.tm`, from its tokens: em sizes off `--wd-base`, the
+  `--wd-space-*` ladder, night glass over the world and ice or paper (with `data-appearance="light"`)
+  away from it.
+- **Do** ask of every orange element whether it can be pressed. If it cannot, it is ink, night, white
+  or a role colour (The One Hand Rule).
+- **Do** put ink (`--accent-foreground`) on signal, never white: 5.60:1 against 2.55:1.
+- **Do** set figures compared in a column with tabular numerals (Oswald on the board, `font-mono` —
+  Inter Tight tabular — on the older surfaces). A price meant to be felt is not a column.
 - **Do** compose new surface tints as `rgb(var(--surface-deep-rgb) / α)` rather than introducing a new
   grey.
 - **Do** darken toward the one slate or black over photography and terrain, never toward white.
@@ -2114,14 +1279,8 @@ grammar is drawn with lines and circles, not silhouette.
   Under `requestRenderMode` nothing renders unless something asked.
 - **Do** judge globe detail by **minimum geometric error**, not triangle count. Two regions can hit an
   identical error with a 10× triangle difference; error is what a setting controls, triangles are not.
-- **Do** let the globe be the page's ongoing motion. Everything else moves on one curve,
-  `cubic-bezier(0.16, 1, 0.3, 1)`, in a small set of sizes, all `backwards`-filled so the resting state
-  is the finished composition and all gated behind `prefers-reduced-motion: no-preference`:
-  `.hero-rise` (600ms, 12px) for a surface arriving; `.settle-in` (420ms, 6px + `blur(5px)`) for the
-  trip console's cells, applied to the cells and never the console, since a `filter` on the container
-  rasterizes its hairline dividers; `.value-in` (260ms, 4px) for a part settling inside a surface that
-  is already arriving, or a figure just recalculated; `.pop-in` (320ms, scale 0.55) for a control that
-  appears under the cursor.
+- **Do** let the world (the map, a scrolled photograph) be the motion. Interface motion is one-shot, on
+  the `--wd-ease-*` curves, and nothing loops.
 - **Do** set a stagger delay as an inline `style={{ animationDelay }}`, never as `[animation-delay:90ms]`.
   That Tailwind arbitrary property generates no rule in this project — the Hero shipped with the class
   form for months and the stagger never once ran.
@@ -2136,16 +1295,8 @@ grammar is drawn with lines and circles, not silhouette.
   needs.
 
 ### Don't:
-- **Don't** use a second colour for a job one of the three roles already owns, and don't let one of the
-  three take a second job. Gold is money, not "highlight"; coral is over-plan and failure, not
-  "important"; jade is action, not "on".
-- **Don't** put a scrim, panel, gradient or blur *between* the landing hero headline and its
-  photograph. The darkening belongs to `.hero-scrim` under the type and to `.hero-legible`'s three-layer
-  text-shadow, which hugs the glyphs: a 1px/3px hard edge at 0.9, a 3px/14px local pool at 0.75, and a
-  6px/44px halo at 0.5 that reads as depth rather than as a box. Known and accepted cost: text-shadow
-  does not count toward a WCAG ratio, so over worst-case bright content the subline's computed ratio can
-  fall below 4.5:1. Reinstating a measurable scrim is the fix if that ever has to be countable; it is
-  not a question to reopen otherwise.
+- **Don't** add a second action colour, and don't give money a hue; a figure is the subject in ink or
+  white.
 - **Don't** put a `hover:`, `active:`, `focus-visible:` or any other state utility on an element
   carrying a `.glass-*` class, or on any property a `globals.css` component rule already sets. It will
   not apply — see The Unlayered-Beats-Utility Rule. Define the state beside the base rule in CSS.
@@ -2158,16 +1309,13 @@ grammar is drawn with lines and circles, not silhouette.
   disjoint ranges, never a rule plus a guess. This has bitten five times.
 - **Don't** hand-write `-webkit-backdrop-filter` next to `backdrop-filter`.
 - **Don't** unmount, re-key, or conditionally render `GlobeBackground`.
-- **Don't** introduce a solid, opaque card surface as a new colour. If a panel needs to be more legible,
-  raise its alpha within the one slate; do not leave the material for `--canvas`.
-- **Don't** put a kicker, eyebrow, or all-caps label above a headline. The uppercase label step exists
-  for a control label or a section rule, never as a line standing over a heading.
+- **Don't** introduce a new surface colour. Over the world, raise the glass alpha or blur; away from it,
+  use ice, snow or paper.
+- **Don't** add a kicker or eyebrow above a headline the canvas does not draw. The landing and planner
+  carry the ones MagicPath specifies; new surfaces do not inherit them.
 - **Don't** use a hard offset shadow, and don't use glyph or icon-font icons — every icon in the system
   is inline SVG.
-- **Don't** let map-native colours or the two map-native faces into the interface. Interface colours stay
-  off the globe too, with the single documented exception of `--accent` marking the hovered or selected
-  stop — and `emphasisColorFor` swapping that to white on the one day whose core falls inside the
-  accent's hue band.
+- **Don't** let route cyan or the day pool into interface chrome (The Map Owns Cyan Rule).
 - **Don't** ship a control that only appears on hover. Pair every `:hover` reveal with `:focus-within`
   so it is reachable by keyboard, and with `@media (hover: none)` so it is simply always visible on
   touch. The memory card's delete button does all three; `ImageRow`'s cards hand touch the resolved
@@ -2207,61 +1355,51 @@ grammar is drawn with lines and circles, not silhouette.
 
 ## Open Items
 
-Recorded because a finish review scored the build and left these unresolved. They are findings, not
-rules, and nothing here should be inherited by a new surface.
+Findings the build carries today, recorded so nothing here is inherited by a new surface. The
+layout and performance findings of the 2026-10-16 evaluation (sliced text, stacks that collide on short
+screens, the trip map framing a hill town off screen) are tracked in
+`docs/superpowers/specs/2026-10-16-web-evaluation-findings.md`, not repeated here.
 
-1. ~~**The map's foreign register on `/trip/[id]`.**~~ **Closed 2026-09-08.** A finish review found
-   the five-hue neon day ramp and the Orbitron/Rajdhani map labels reading as a different design
-   language inside the Kiln one, on the product's core screen. It sat outside the scope the user had
-   set (tokens plus the landing world, map and itinerary card structurally untouched), so it was put
-   to them as its own decision rather than corrected silently — and they funded it. The ramp was
-   re-derived as five earth pigments, the badge is printed rather than lit, and both map faces are
-   gone; see **The Day on the Globe** and **The World-Face Boundary is retired**. Kept in this list
-   as a record of how it was handled, not as an open item.
-2. **The hero photograph's warm/cool split.** The frame reads warm on the left third and cool across the
-   right two thirds at desktop widths. The crop was made viewport-dependent (`object-position: 54% 44%`
-   landscape, `26% 56%` below `48rem`) to fix the phone case, where the warm terracotta wall the
-   photograph was sourced for was cropped to a left-edge sliver. The desktop split remains. Partial,
-   open.
-3. ~~**The export still carries the previous system's amber.**~~ **Closed 2026-09-09, both halves.**
-   The type half went first: the export was entirely in Archivo, the face the app had removed, and now
-   ships Melodrama + Switzer on the app's tracking steps (`archivo-latin-var.woff2`, 88KB, was its last
-   reference and is deleted). The colour half followed: `#fb9826` / `#A85C05` became jade `#28b981` /
-   `#0D6042`, re-hued by re-running the export's own all-pairs and CVD validation rather than by
-   copying the app's hex — and the fills/strokes split it introduced lifted the map's active route line
-   from 1.86:1 to 6.48:1, fixing a graphical-object contrast shortfall the amber had. See
-   **The Trip Line → Colors**. Kept in this list as a record of how a divergence was tracked rather
-   than quietly aligned.
-4. **Radius drift on incumbent panels.** The Kiln edge rule is 5–8px on surfaces; `.glass-itinerary` and
-   its descendants are still at 16px from the previous system. Recorded as `{rounded.panel}` so the
-   frontmatter tells the truth about what the build is, not as a second doctrine.
+1. **Muted text below AA on light surfaces.** Stone as text: `.tb-total p` (2.26:1 on paper), the
+   spotlight's placeholder, hour labels and remove control, the drawer's placeholder and grip, the
+   profile's index numbers. Signal as text on ice in the spotlight's category counts (2.55:1). Ember on
+   paper (4.45:1) on the memories wall's "clears"; `--wd-ember` was never deepened the way `--accent-text`
+   was (`#a64c09`).
+2. **Labels under the 11px floor.** `.tb-label`, `.tb-day-when` and the walk tags render at 0.66em
+   (10.8px at 1470 wide).
+3. **Faces named by family.** The time picker asks for `'Cormorant Garamond'` and `'Oswald'` by name
+   (`PlanningFlow.css` `.tmp-read input`, `.tmp-k`); `next/font` registers neither, so they render in
+   Georgia and Arial Narrow.
+4. **A keyframe that does not exist.** `tm-in` is used eight times across `WritingThePlan.css` and
+   `PlanningFlow.css` and defined nowhere, so those entrances — including each rotating fact's — never
+   run.
+5. **Sizes outside the one base.** ImagineDay's `.pl` sections size in px and keep their own copy of
+   the action colour, whose hover darkens (`#e86f0c`) where the system's lightens (`#ff9440`); the
+   story player and the map search size in rem (0.64–1.6rem in `StoryPlayer.css` and
+   `TripSpotlight.css`). Both stop scaling with the rest of their screen, and the design check reports
+   them as off the ramp. Fold them onto `--wd-base` ems rather than widening the ramp to fit them.
+6. **The mark's stop is still Kiln jade** (`#28b981` in `LogoMark.tsx`), the one Kiln colour left in the
+   interface.
+7. **The landing's only `h1` rotates.** The hero's heading is the place name, remounted every six
+   seconds, so a screen reader hears the page heading change; the ghost CTA keeps naming Petra.
+8. **Breakpoints are not shared** (see Layout).
+9. **Radius drift on the older glass surfaces.** `.glass-itinerary` and the confirm dialog keep 16px
+   (`{rounded.panel}`) from before Polar; recorded so the frontmatter tells the truth, not as doctrine.
 
 ## History
 
-- **Kiln II type revision** (current; 2026-09-09). Kiln II's colour, layout and component decisions
-  stand unchanged; only the type system moved. Three strategies were comped at 1440 and 390 against
-  the real hero, a real price and a real day row — 1 *Quiet* (Switzer alone, hierarchy from size and
-  space), 2 *Contrast* (a display serif at a light weight against a neutral grotesk), 3
-  *Numerals-first* (a restrained sans with every figure re-set by role). The user took **2 + 3**.
-
-  A role-by-role census ran first and changed the order of work: **the ramp was not coherent enough
-  for any face choice to read as premium.** It found 20 letter-spacing values, six label sizes in a
-  3px range written four ways, five body sizes, `.font-display` spanning 16→72px on one tracking
-  value while its own comment claimed the opposite, and prose running to 96–110ch in three places.
-  It also found the figure rule honoured in about a quarter of cases. Phase 1 fixed the foundation;
-  the faces landed on top of it. Face payload went 115KB (three Google families) to 104KB, of which
-  22KB no longer preloads, and `archivo-latin-var.woff2` (88KB) left the repo with the export.
-
-- **"Kiln II"** (current; approved 2026-09-08, comp `.impeccable/comps/2026-09-08-kiln-ii-APPROVED.md`,
-  direction seed `02f66ad0`). Three systems were comped first — A Basalt (cool graphite / azure), B Clay
-  (warm clay / jade), C Negative (warm near-black, colour reserved for data). The user asked for "B + C",
-  so D Kiln was built as the fusion and rejected as "muddy and dull", which was correct and measurable:
-  D inherited Clay's brown card at `rgb(32,24,20)`. E Kiln II moved the ground to Negative's near-neutral
-  `#121110`. What it replaced: a single amber accent painting 55 elements on one screen, one typeface
-  reaching every register through tracking, a fluid `clamp()` root that overrode the visitor's own font
-  size, a two-layer alpha-cut photographic hero, and a two-column section opener. The globe, the map
-  renderer contract, the marker layer, the route geometry and the export were left structurally
-  untouched by design.
+- **"Polar Interior"** (current; shipped 2026-10-13 on `feat/polar-redesign`, from the approved MagicPath
+  project `460590324033662976`). Replaced Kiln's warm near-black, its three colour roles (jade acts,
+  gold counts, coral warns) and its Melodrama / Switzer / Tabular faces with night and ice, one action
+  colour, money without a hue, and Cormorant Garamond / Inter Tight / Oswald. The landing became the
+  Polar landing (the Blue Hour landing code is kept unmounted pending a decision, `docs/frontend.md`).
+  Kept from Kiln: the four-layer shell, glass over the map, the route pool and the map's day rendering,
+  the focus-ring, unlayered-beats-utility and blur-of-nothing rules, and the export's own world.
+  `docs/design-history.md` records Kiln.
+- **Kiln II type revision** (superseded by Polar; 2026-09-09): Melodrama + Switzer + Tabular over Kiln
+  II's colour system, after a role-by-role census of the ramp.
+- **"Kiln II"** (superseded by Polar; approved 2026-09-08): a warm near-black `#121110` with jade, gold
+  and coral roles, fused from comps B Clay and C Negative after the first fusion read as muddy.
 - **"The Trip Line"** (additive, still current): the downloadable export's own world. Did not replace
   anything — no app custom property was touched and no route's rendered output changed.
 - **"The Blue Hour Expedition"** (superseded by Kiln II's landing): a scoped cobalt-teal alternate
@@ -2271,7 +1409,7 @@ rules, and nothing here should be inherited by a new surface.
   surface; the poster went because a reveal that lands softer than the evidence before it is not a
   reveal, and the ask moved into the hero.
 - **"The Lit Cockpit Over a Turning Earth"** (superseded): one slate `rgb(15 23 42)`, one amber accent,
-  Archivo throughout. Its material argument survives intact in the One Slate Rule; its colour and type
+  Archivo throughout. Its material argument survives in glass over the map; its colour and type
   strategy did not.
 - **"Overcast"** (superseded): full-bleed globe with steel-blue translucent cards. The steel-blue
   register never resolved and legibility over a moving map was inconsistent.

@@ -4,11 +4,11 @@
 
 ## Platform
 
-web, ios, android
+web
 
 ## Stack
 
-Next.js (App Router, TypeScript) + Tailwind v4 for the web client and the server every client shares. **SQLite via `libsql`** — a single local `tripmate.db` by default, or a hosted Turso database by setting `TURSO_DATABASE_URL`; the API stayed synchronous through that swap, which is why it was a constructor change rather than a port. Accounts are email and password (Better Auth). Until someone signs in, identity is an owner id in a cookie, and signing in moves that owner's trips, places and profile onto the account.
+This file describes the repo root, which is the web client; the native apps live in `mobile/` and carry the same identity (see Brand Commitments). Next.js (App Router, TypeScript) + Tailwind v4 for the web client and the server every client shares. **SQLite via `libsql`** — a single local `tripmate.db` by default, or a hosted Turso database by setting `TURSO_DATABASE_URL`; the API stayed synchronous through that swap, which is why it was a constructor change rather than a port. **Accounts are Clerk** (email and password with a code, Google, and Apple on the phone); an `accounts` row maps each Clerk user to a UUID owner, so nothing below the request's owner knows Clerk exists. Accounts switch off entirely without the Clerk keys and the app runs signed out. Until someone signs in, identity is an owner id in a cookie, and signing in moves that owner's trips, places and profile onto the account.
 
 **A React Native client (`mobile/`, Expo SDK 57 + expo-router) targets iOS and Android from one codebase** and talks to the same REST routes unchanged. It ships the plan wizard end to end, SSE generation with stops appearing as they stream, Keep, a trip screen with map/chat/spend, a memories wall and a profile tab. **The earlier SwiftUI app in `ios/` is frozen rather than deleted** — `ios/TripMateKit` remains the reference both later clients were ported from.
 
@@ -32,7 +32,7 @@ Most trip planners either hand back generic top-10 lists or ignore the budget en
 
 Behind that sits a governing rule set — a single ordered precedence for what wins when constraints collide — plus deterministic checks in code that run over the finished plan and hand what they find to a review pass. **Arithmetic is code's job and judgment is the model's:** whether a plan suits this traveler is a model question; whether 13:30 + 90min + 28min reaches a 15:15 reservation is not.
 
-The screen is one persistent scene rather than a dashboard: a full-bleed, always-live 3D map that flies to your destination and to each place you tap, with the itinerary — real times, durations, per-day category budget breakdowns — floating above it as dark frosted glass. Tapping a stop swaps in a guidebook-style entry instead of a one-line description. It is also the only one of its kind that can route generation through the user's own Claude CLI session instead of a paid LLM API.
+A trip is one scene rather than a dashboard: a full-bleed, live 3D map that flies to your destination and to each place you tap, with the plan — real times, durations, per-day budget — laid out beside it on paper, and the plan writing itself over the night map while it is generated. Tapping a stop swaps in a guidebook-style entry instead of a one-line description. It is also the only one of its kind that can route generation through the user's own Claude CLI session instead of a paid LLM API.
 
 ## Operating Context
 
@@ -40,15 +40,15 @@ Three distinct moments of use:
 
 1. **Planning** — fill in trip details, answer a short profile (who's going, pace, interests, dietary and access needs, anything already booked, anything they must see or want avoided), generate, refine in plain language, Keep.
 2. **During-trip** — revisit the saved trip, tap a stop to fly the map to it and open a detailed view, log actual spend per stop so remaining days can be rebalanced if a day runs over.
-3. **Playback (web only)** — press Play on a day and the camera flies each stop while a voice reads a story-format script and the matching line lights up.
+3. **Playback** — press Play on a day and the camera flies each stop while a voice reads a story-format script and the matching line lights up. Both clients have it; the phone narrates with its own speech engine.
 
 A plan is persisted the moment it is generated, as a `draft`, so a back press or a closed tab no longer discards a two-minute generation; Keep promotes that same row to `saved`. Unkept drafts are swept after a TTL.
 
 ## Capabilities and Constraints
 
 **Accounts and data**
-- Accounts are email and password (Better Auth). Until someone signs in, identity is an owner id in a cookie, and signing in moves that owner's trips, places and profile onto the account. The React Native client mints its own id and sends it as a header, because RN's networking owns cookies end to end and a hand-set `Cookie` was being overwritten from the native store.
-- `trips` rows are not yet scoped by owner — the profile is, trips are not. Adding real auth means a `trips` migration, not just a login screen.
+- Accounts are Clerk; a signed-in user's trips belong to a UUID owner, not to the Clerk id. Until someone signs in, identity is an owner id in a cookie, and every sign-in (not only sign-up) claims that owner's trips, places and profile onto the account — a client that skips the claim strands them. The React Native client mints its own id and sends it as a header, because RN's networking owns cookies end to end and a hand-set `Cookie` was being overwritten from the native store.
+- Trips, saved places and the profile are all scoped by owner. A trip page is its owner's editor only; a shared trip is served read-only from a token its owner chose to mint.
 
 **What the traveler can state, and what happens to it**
 - Destination, dates, budget (with a **per-person / whole-party basis** — the plan reads and prices everything as a party total), party composition down to children and infants, pace, energy, crowd tolerance, interests with up to three starred as primary.
@@ -59,6 +59,7 @@ A plan is persisted the moment it is generated, as a `draft`, so a back press or
 **Generation and checking**
 - Two generation paths coexist. The traveler-facing route is the incumbent; a staged pipeline (facts digested into a context file, rules held in a separate skill, the ask held separately again) is the intended direction and is where generation logic should be extended. Migration is blocked on a data contract, not on missing work.
 - A review pass runs over the finished plan and can rewrite days it finds wanting. Deterministic checks — travel-time feasibility, overlapping stops, over-long days, budget ceiling, duplicate stops, booked commitments, named must-sees — run in code and are handed to that pass as fact.
+- A traveller can also bring their own plan: it is read into days and saved as an imported draft, and the model only copies it and fills cost, duration, category and description — it may not add, drop or reorder a stop.
 - A benchmark harness scores generations against frozen fixtures on route efficiency, constraint adherence, weather/feasibility, meal and vibe fit, and coverage/grounding, with an optional blinded model judge. `docs/itinerary-quality.md` records the measured before/after of the current rule set, including the one axis that regressed.
 
 **Known limits**
@@ -67,34 +68,35 @@ A plan is persisted the moment it is generated, as a `draft`, so a back press or
 - Trip length is capped at 30 days, enforced client- and server-side; no model call is attempted beyond it.
 - Coordinates the model writes are corrected against OSM where a name resolves; unmatched names keep the model's guess.
 - Place-detail text and photos are generated on demand and not persisted — reopening a stop regenerates the text.
-- Narrated playback is web-only, and its natural voice downloads 88–326MB on first use, disclosed with a live percentage. The platform voice narrates the download and is the fallback at every level.
-- Full-viewport 3D map on web; the React Native client uses a day-scoped map rather than a persistent globe.
+- On the web the narration's natural voice downloads 88–326MB on first use, disclosed with a live percentage; the platform voice narrates the download and is the fallback at every level. The phone uses its own speech engine only.
+- On the web the 3D map is the scene of the trip page and of generation; the landing, the memories wall and the profile are photograph and paper pages with no live map behind them. The React Native client uses a day-scoped map rather than a persistent globe.
 
 ## Brand Commitments
 
-Product name is "TripMate." No logo — a drawn six-point asterisk mark beside the wordmark, no wordmark
-lockup beyond that.
+Product name is "TripMate." The mark is a small drawn globe — a glass sphere with a route arc and one
+stop — set beside an uppercase condensed TRIPMATE wordmark in the nav. It is the small cut of the
+Meridian app icon (masters in `mobile/assets/brand/`). On screen the character that mark stands for
+is "your TripMate".
 
-The visual identity is "Kiln", shipped 2026-09-08 and documented in DESIGN.md: a warm near-neutral
-near-black ground with translucent glass floating over the persistent map, and **three named colour
-roles rather than one accent** — jade for action, gold for money, coral for alert. Edges follow one
-rule: round what you touch, square what you read.
+The visual identity is **"Polar Interior"**, shipped 2026-10-13 from an approved MagicPath redesign
+and documented in DESIGN.md: night (`#090b10`) under frosted glass wherever the map or a photograph is
+behind, ice and paper where it is not, and **one action colour — signal orange — for acting and
+nothing else**; money has no hue of its own. Edges are nearly square: hairline radii on what you
+press, a slightly softer corner on cards and sheets.
 
-**The type system is Melodrama + Switzer + Tabular, shipped 2026-09-09**, replacing the Wix Madefor
-superfamily Kiln launched with. See DESIGN.md § Typography; the short version is a high-contrast
-display serif at a single light weight against a neutral grotesk, with the landing price re-set as
-the serif's own moment rather than as a monospace figure.
+**The type system is Cormorant Garamond + Inter Tight + Oswald.** A display serif (upright for
+titles, italic for the voice lines), a neutral grotesk for everything read, and a condensed face for
+the monuments: the place names set across a photograph and the wordmark. The downloadable export
+keeps its own earlier faces on purpose (DESIGN.md § The Trip Line).
 
-**The identity crosses to mobile under a ratified boundary** (DESIGN.md's third boundary, extended
-from iOS to Android): Kiln owns the content surfaces; Profile is settings-shaped and takes each
-platform's native list conventions with the palette unchanged. Melodrama and Tabular carry display
-and figures, but **system sans carries all body text — that is what buys Dynamic Type and Android
-font scaling**, and a custom face there would freeze it.
+**The identity crosses to mobile with the palette unchanged** (Polar Night and Polar Light, both
+platforms). The phone sets display in Cormorant and most text in Inter Tight; the system face remains
+for the text that must follow Dynamic Type and Android font scaling.
 
 **Standing preference, recorded because it governs future design work: the arrangement is
 conventional on purpose.** Offered a choice between four distinct visual worlds and the category
 standard played straight, the user chose the standard. So this product competes on execution rather
-than on concept: a photo hero, a marketing scroll page, a search capsule in the first viewport. Do
+than on concept: a photo hero, a marketing scroll page, the plan's first question at the close. Do
 not "differentiate" the arrangement on a later pass — sharpen the execution instead. **That
 instruction stands. The bar it is measured against has moved.**
 
@@ -110,11 +112,13 @@ Luxury *language* on a budget-honest product reads as a mismatch, and chasing ex
 wrong move. The target is **considered**: precision, restraint, material quality. Every reference
 above is on the list for restraint, not for price.
 
-Kiln superseded three earlier looks: a steel-blue glass treatment, a warm cream/teal split-pane
-system, and "The Lit Cockpit Over a Turning Earth" (teal-black, one amber accent, a single Archivo
-face). The last of those had its palette, root scale, type system and several landing devices
-measured off an external reference site and adopted verbatim; replacing that layer is what Kiln is
-for, and `docs/design-history.md` records it.
+**The MagicPath designs are the visual reference.** Project `460590324033662976` holds the approved
+canvas for every Polar screen; where the build and the latest revision disagree, the design wins
+unless code or docs record a deliberate deviation.
+
+Polar superseded "Kiln" (a warm near-black with jade, gold and coral roles), which had superseded a
+steel-blue glass treatment, a warm cream/teal split-pane system and "The Lit Cockpit Over a Turning
+Earth". `docs/design-history.md` records each.
 
 Treat DESIGN.md, not this section, as the source of truth for anything visual; this section exists
 only to record that the identity is settled, not in progress.
