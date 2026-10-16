@@ -107,6 +107,18 @@ export default function RootLayout() {
               `+native-intent` opens here directly, and it replaces to the tabs rather than trying
               to pop. Nothing is *gated* by this screen, which is the part that has always
               mattered. */}
+          {/* How it works: Apple's "What's New" sheet over Home, full height with a grabber. */}
+          <Stack.Screen
+            name="how-it-works"
+            options={{
+              presentation: 'formSheet',
+              sheetAllowedDetents: [1],
+              sheetGrabberVisible: true,
+              sheetCornerRadius: 34,
+              headerShown: false,
+              contentStyle: { backgroundColor: SettingsColors.ground },
+            }}
+          />
           {/* A trip somebody sent you: its cover runs under the status bar, so no header. */}
           <Stack.Screen name="s/[token]" options={{ headerShown: false }} />
           <Stack.Screen name="signin" options={{ presentation: 'fullScreenModal', headerShown: false }} />
