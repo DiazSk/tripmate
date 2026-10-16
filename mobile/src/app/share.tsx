@@ -1,23 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { readAsStringAsync } from 'expo-file-system/legacy';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { importPlaces, saveSavedPlaces } from '@/api/tripMateApi';
 import type { ImportItem, ImportResult, SavedSource } from '@/api/types';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { ShareSheet, type SharedThing, type ShareState } from '@/components/share-sheet';
 import { planShare } from '@/lib/shareItems';
-
-type State =
-  | { kind: 'reading' }
-  | { kind: 'done'; names: string[]; reminders: number; truncated: boolean; unread: string[] }
-  | { kind: 'importFailed' }
-  | { kind: 'saveFailed'; names: string[] };
-
-const INSTAGRAM_NOTE = "Instagram doesn't let apps read posts. Share a screenshot or the downloaded reel instead.";
 
 /** One source label for the whole share — the inbox groups by city, not by item. */
 function sourceOf(items: ImportItem[], hasVideo: boolean): SavedSource {
@@ -33,9 +22,30 @@ function sourceOf(items: ImportItem[], hasVideo: boolean): SavedSource {
   return 'text';
 }
 
+/** What came in, said the way a person would, for the sheet's header. */
+function describe(items: ImportItem[], meta: { hasVideo: boolean; instagramUrls: string[] }): SharedThing {
+  const images = items.filter((i) => i.kind === 'image').length;
+  const source = sourceOf(items, meta.hasVideo);
+  if (meta.hasVideo) return { label: 'A video', icon: { ios: 'play.rectangle', android: 'smart_display' } };
+  if (images) return { label: images === 1 ? 'A screenshot' : `${images} screenshots`, icon: { ios: 'photo.on.rectangle', android: 'image' } };
+  if (source === 'tiktok') return { label: 'A TikTok', icon: { ios: 'play.rectangle', android: 'smart_display' } };
+  if (source === 'youtube') return { label: 'A YouTube video', icon: { ios: 'play.rectangle', android: 'smart_display' } };
+  if (source === 'gmaps') return { label: 'A Maps link', icon: { ios: 'map', android: 'map' } };
+  if (source === 'url') return { label: 'A link', icon: { ios: 'link', android: 'link' } };
+  if (source === 'text' && items.length) return { label: 'A note', icon: { ios: 'text.alignleft', android: 'notes' } };
+  if (meta.instagramUrls.length) return { label: 'An Instagram post', icon: { ios: 'camera', android: 'photo_camera' } };
+  return { label: 'Something shared', icon: { ios: 'square.and.arrow.down', android: 'download' } };
+}
+
+/**
+ * Share to TripMate: something shared in from another app is read for the places in it, and they
+ * are saved for the next trip under the city they are in. This reads and saves; `ShareSheet` draws
+ * it (the canvas design "Phone share in · 1 A sheet that saves"), presented as a form sheet by the
+ * root layout.
+ */
 export default function ShareScreen() {
   const { shareIntent, hasShareIntent, resetShareIntent } = useShareIntentContext();
-  const [state, setState] = useState<State>({ kind: 'reading' });
+  const [state, setState] = useState<ShareState>({ kind: 'reading', found: [] });
   const [items, setItems] = useState<ImportItem[] | null>(null);
   const [meta, setMeta] = useState({ hasVideo: false, truncated: false, instagramUrls: [] as string[] });
   const lastResult = useRef<ImportResult | null>(null);
@@ -70,10 +80,10 @@ export default function ShareScreen() {
 
   const run = useCallback(async () => {
     if (!items) return;
-    setState({ kind: 'reading' });
+    setState({ kind: 'reading', found: [] });
     for (const url of meta.instagramUrls) await saveSavedPlaces({ places: [], source: 'instagram', url });
     if (items.length === 0) {
-      setState({ kind: 'done', names: [], reminders: meta.instagramUrls.length, truncated: meta.truncated, unread: [] });
+      setState({ kind: 'done', names: [], city: null, reminders: meta.instagramUrls.length, truncated: meta.truncated, unread: [] });
       return;
     }
     const result = lastResult.current ?? (await importPlaces(items));
@@ -89,7 +99,7 @@ export default function ShareScreen() {
       source: sourceOf(items, meta.hasVideo),
     });
     setState(ok
-      ? { kind: 'done', names, reminders: meta.instagramUrls.length, truncated: meta.truncated, unread: result.unread.map((u) => u.reason) }
+      ? { kind: 'done', names, city: result.destinationGuess?.split(',')[0].trim() || null, reminders: meta.instagramUrls.length, truncated: meta.truncated, unread: result.unread.map((u) => u.reason) }
       : { kind: 'saveFailed', names });
   }, [items, meta]);
 
@@ -111,57 +121,16 @@ export default function ShareScreen() {
   };
 
   return (
-    <ThemedView style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {state.kind === 'reading' && <ThemedText>Reading what you shared…</ThemedText>}
-        {state.kind === 'done' && (
-          <>
-            {state.names.length > 0 && (
-              <ThemedText type="heading">
-                Found {state.names.length} {state.names.length === 1 ? 'place' : 'places'}: {state.names.join(', ')}. Saved for your next trip.
-              </ThemedText>
-            )}
-            {state.names.length === 0 && meta.hasVideo && <ThemedText>Couldn&apos;t find places in this video.</ThemedText>}
-            {state.reminders > 0 && <ThemedText>{INSTAGRAM_NOTE}</ThemedText>}
-            {state.truncated && <ThemedText themeColor="muted">Used the first 20</ThemedText>}
-            {state.unread.map((u, i) => (
-              <ThemedText key={i} themeColor="muted">{u}</ThemedText>
-            ))}
-          </>
-        )}
-        {state.kind === 'importFailed' && <ThemedText>Couldn&apos;t read these right now.</ThemedText>}
-        {state.kind === 'saveFailed' && (
-          <>
-            <ThemedText>Found: {state.names.join(', ')}</ThemedText>
-            <ThemedText>Couldn&apos;t save them. Try again.</ThemedText>
-          </>
-        )}
-        {(state.kind === 'importFailed' || state.kind === 'saveFailed') && (
-          <Pressable accessibilityRole="button" onPress={run} style={styles.button}>
-            <ThemedText type="label" themeColor="accentForeground">Retry</ThemedText>
-          </Pressable>
-        )}
-        {state.kind !== 'reading' && (
-          <Pressable accessibilityRole="button" onPress={close} style={[styles.button, styles.buttonSecondary]}>
-            <ThemedText type="label">Done</ThemedText>
-          </Pressable>
-        )}
-      </ScrollView>
-    </ThemedView>
+    <ShareSheet
+      shared={describe(items ?? [], meta)}
+      state={state}
+      onRetry={run}
+      onDone={close}
+      onPlan={(city) => {
+        resetShareIntent();
+        // The planner opens on the city; the places just saved are waiting on its Saved places sheet.
+        router.replace({ pathname: '/plan/basics', params: { destination: city } });
+      }}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  content: { padding: Spacing.read, paddingTop: 80, gap: Spacing.read },
-  button: {
-    minHeight: 44,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.accent,
-    paddingHorizontal: Spacing.rows,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
-  },
-  buttonSecondary: { backgroundColor: Colors.control },
-});

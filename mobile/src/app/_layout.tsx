@@ -12,6 +12,7 @@ import { InterTight_500Medium, InterTight_600SemiBold } from '@expo-google-fonts
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { APPEARANCE } from '@/constants/appearance';
 import { ClerkBridge } from '@/components/clerk-bridge';
+import { SettingsColors } from '@/components/settings-list';
 import { Colors } from '@/constants/theme';
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/clerkConfig';
 
@@ -77,8 +78,19 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           {/* The plan flow has its own Stack, which draws the per-step headers. */}
           <Stack.Screen name="plan" options={{ headerShown: false }} />
-          {/* SPIKE ONLY — replaced in Task 5. */}
-          <Stack.Screen name="share" options={{ presentation: 'modal', headerShown: false }} />
+          {/* Share to TripMate: a form sheet at about half height over wherever it landed, so getting
+              back to what you were doing is one swipe; it rises when there are many places. */}
+          <Stack.Screen
+            name="share"
+            options={{
+              presentation: 'formSheet',
+              sheetAllowedDetents: [0.6, 1],
+              sheetGrabberVisible: true,
+              sheetCornerRadius: 24,
+              headerShown: false,
+              contentStyle: { backgroundColor: SettingsColors.ground },
+            }}
+          />
           {/* **Full screen, not a sheet — the screen was drawn for the whole device.** `signin`'s
               band is explicitly full-bleed so the photograph runs under the status bar, and in a
               sheet it cannot: the card is inset from the top and rounded, so the one screen that
