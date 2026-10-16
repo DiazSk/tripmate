@@ -79,8 +79,27 @@ function Icon({ name, size = 18, color = Polar.ice }: { name: SymbolName; size?:
 /**
  * One step: the top bar (back, how far, close), the headline high, the controls low. Steps are
  * screens in the group's stack, so moving on is a native push and back is the edge swipe.
+ *
+ * The welcome after sign-up is the same frame over its own photographs, so sign-up and the
+ * questions after it read as one flow: it passes `count` for its five questions and swaps the close
+ * for its Skip (`trailing`), and its `sub` is your TripMate's line rather than a sentence.
  */
-export function GlassStep({ step, title, sub, children }: { step?: 1 | 2 | 3; title: string; sub?: ReactNode; children: ReactNode }) {
+export function GlassStep({
+  step,
+  count = 3,
+  title,
+  sub,
+  trailing,
+  children,
+}: {
+  step?: number;
+  count?: number;
+  title: string;
+  sub?: ReactNode;
+  /** What sits top right. Sign-in's close by default. */
+  trailing?: ReactNode;
+  children: ReactNode;
+}) {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.flex}>
@@ -90,10 +109,8 @@ export function GlassStep({ step, title, sub, children }: { step?: 1 | 2 | 3; ti
         ) : (
           <Text style={styles.mark}>TripMate</Text>
         )}
-        {step ? <Dots step={step} /> : <View />}
-        <View style={styles.topEnd}>
-          <RoundButton icon="xmark" label="Not now" onPress={leaveSignIn} />
-        </View>
+        {step ? <Dots step={step} count={count} /> : <View />}
+        <View style={styles.topEnd}>{trailing === undefined ? <RoundButton icon="xmark" label="Not now" onPress={leaveSignIn} /> : trailing}</View>
       </View>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
@@ -104,7 +121,7 @@ export function GlassStep({ step, title, sub, children }: { step?: 1 | 2 | 3; ti
           <Text style={styles.title} accessibilityRole="header">
             {title}
           </Text>
-          {sub ? <Text style={styles.sub}>{sub}</Text> : null}
+          {typeof sub === 'string' ? <Text style={styles.sub}>{sub}</Text> : sub ? <View style={styles.subRow}>{sub}</View> : null}
           <View style={styles.controls}>{children}</View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -112,7 +129,7 @@ export function GlassStep({ step, title, sub, children }: { step?: 1 | 2 | 3; ti
   );
 }
 
-function RoundButton({ icon, label, onPress }: { icon: SymbolName; label: string; onPress: () => void }) {
+export function RoundButton({ icon, label, onPress }: { icon: SymbolName; label: string; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
       <Glass style={styles.round}>
@@ -122,12 +139,13 @@ function RoundButton({ icon, label, onPress }: { icon: SymbolName; label: string
   );
 }
 
-/** Three steps at most: the address, then the password or the account, then a code. */
-function Dots({ step }: { step: 1 | 2 | 3 }) {
+/** Sign-in is three steps at most (the address, then the password or the account, then a code); the
+ *  welcome is five questions. */
+function Dots({ step, count }: { step: number; count: number }) {
   return (
     <Glass style={styles.dots}>
-      <View style={styles.dotsRow} accessible accessibilityLabel={`Step ${step} of 3`}>
-        {[1, 2, 3].map((i) => (
+      <View style={styles.dotsRow} accessible accessibilityLabel={`Step ${step} of ${count}`}>
+        {Array.from({ length: count }, (_, i) => i + 1).map((i) => (
           <View key={i} style={[styles.dot, i < step && styles.dotPast, i === step && styles.dotOn]} />
         ))}
       </View>
@@ -194,14 +212,14 @@ export const PasswordField = forwardRef<TextInput, TextInputProps & { fresh?: bo
 });
 
 /** The one signal-orange action, as a capsule. */
-export function SignalCapsule({ title, onPress, busy = false }: { title: string; onPress: () => void; busy?: boolean }) {
+export function SignalCapsule({ title, onPress, busy = false, disabled = false }: { title: string; onPress: () => void; busy?: boolean; disabled?: boolean }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={busy}
+      disabled={busy || disabled}
       accessibilityRole="button"
-      accessibilityState={{ busy }}
-      style={({ pressed }) => [styles.capsule, styles.signal, pressed && styles.signalPressed]}>
+      accessibilityState={{ busy, disabled }}
+      style={({ pressed }) => [styles.capsule, styles.signal, disabled && styles.signalOff, pressed && styles.signalPressed]}>
       {busy ? <ActivityIndicator color={Polar.ink} /> : <Text style={styles.signalText}>{title}</Text>}
     </Pressable>
   );
@@ -299,6 +317,7 @@ const styles = StyleSheet.create({
   body: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 26 },
   title: { fontFamily: PolarFonts.display, fontSize: 44, lineHeight: 46, color: Polar.ice },
   sub: { marginTop: 10, fontSize: 15, lineHeight: 21, color: Polar.frost68 },
+  subRow: { marginTop: 12 },
   controls: { gap: 10, marginTop: 'auto', paddingTop: 24 },
   capsule: { height: 54, borderRadius: 27, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   field: { justifyContent: 'flex-start', gap: 10, paddingLeft: 18, paddingRight: 8 },
@@ -307,6 +326,8 @@ const styles = StyleSheet.create({
   eye: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   signal: { height: 52, borderRadius: 26, backgroundColor: Polar.signal },
   signalPressed: { backgroundColor: Polar.signalPressed, transform: [{ scale: 0.98 }] },
+  // Waiting on an answer, as the welcome's Continue does until one is chosen.
+  signalOff: { opacity: 0.4 },
   signalText: { fontSize: 17, fontWeight: '600', color: Polar.ink },
   button: { height: 50, borderRadius: 25, gap: 8 },
   buttonSmall: { height: 44, borderRadius: 22 },

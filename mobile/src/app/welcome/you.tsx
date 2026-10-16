@@ -6,10 +6,9 @@ import { firstName, photoLine } from '@shared/travelCard';
 
 import { updateName, useAccount } from '@/api/auth';
 import { Avatar } from '@/components/avatar';
-import { FieldTrough, PrimaryButton, TextField } from '@/components/form';
-import { ThemedText } from '@/components/themed-text';
+import { Glass, GlassField, SignalCapsule } from '@/components/glass-auth';
 import { WelcomeFrame } from '@/components/welcome-frame';
-import { Colors } from '@/constants/theme';
+import { Polar } from '@/constants/polar';
 import { useWelcome } from '@/lib/welcomeDraft';
 
 export default function WelcomeYou() {
@@ -24,29 +23,31 @@ export default function WelcomeYou() {
     seen.current = image;
   }, [image, answers.name, react]);
 
-  const next = () => guard(async () => {
-    const name = answers.name.trim();
-    if (name && name !== account?.name && (await updateName(name))) flagUnsaved();
-    router.push('/welcome/who');
-  });
+  const ready = answers.name.trim().length > 0;
+  const next = () =>
+    guard(async () => {
+      if (!ready) return;
+      const name = answers.name.trim();
+      if (name && name !== account?.name && (await updateName(name))) flagUnsaved();
+      router.push('/welcome/who');
+    });
   return (
-    <WelcomeFrame step="you" cta={<PrimaryButton title="Continue" disabled={!answers.name.trim()} busy={busy} onPress={next} />}>
-      <ThemedText type="display">Hello, {firstName(answers.name)}.</ThemedText>
-      <FieldTrough><TextField label="Name" value={answers.name} maxLength={40} autoComplete="name" onChangeText={(name) => set({ name })} /></FieldTrough>
-      <View style={styles.photoRow}>
-        <Avatar account={account} size={96} editable />
+    <WelcomeFrame step="you" title={`Hello, ${firstName(answers.name)}.`} cta={<SignalCapsule title="Continue" busy={busy} disabled={!ready} onPress={next} />}>
+      <GlassField icon="person" value={answers.name} maxLength={40} autoComplete="name" textContentType="name" placeholder="Your name" onChangeText={(name) => set({ name })} returnKeyType="next" onSubmitEditing={next} />
+      <Glass style={styles.photo}>
+        <Avatar account={account} size={56} editable />
         <View style={styles.copy}>
           <Text style={styles.strong}>{image ? 'Looking good.' : 'Add a face to the card'}</Text>
           <Text style={styles.muted}>{image ? 'Tap the photo to change it.' : 'Optional. It shows on your profile.'}</Text>
         </View>
-      </View>
+      </Glass>
     </WelcomeFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  copy: { flex: 1, gap: 4 },
-  strong: { color: Colors.foreground, fontSize: 15, fontWeight: '600' },
-  muted: { color: Colors.muted, fontSize: 13, lineHeight: 18 },
+  photo: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 12, borderRadius: 22 },
+  copy: { flex: 1, gap: 2 },
+  strong: { fontSize: 16, fontWeight: '600', color: Polar.ice },
+  muted: { fontSize: 13, lineHeight: 18, color: Polar.frost68 },
 });
