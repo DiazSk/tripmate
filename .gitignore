@@ -117,3 +117,6 @@ ios/**/build/
 # shots/web/ are what build.py actually reads, and index.html embeds them, so these
 # originals are only worth keeping locally for a higher-resolution rebuild.
 docs/design-board/shots/*.png
+
+# Layout gate screenshots (scripts/layout-matrix.mjs)
+.layout-matrix/

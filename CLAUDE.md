@@ -13,6 +13,7 @@ npm run lint     # eslint (no path arg needed)
 npx tsc --noEmit -p tsconfig.json   # typecheck — not wired to a script
 node scripts/browser-matrix.mjs     # cross-engine boot check against a running server
 npm run verify-hero                 # asserts the hero film works (needs a running server)
+npm run verify-layout               # layout gate: 10 viewports × landing/planner/writing/trip (needs a production server, default :3200)
 ```
 
 **`npm run build` fails the build if any emitted chunk cannot be parsed.** That second step is

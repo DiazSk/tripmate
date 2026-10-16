@@ -11,7 +11,8 @@
     "test": "node --import ./scripts/test-db.mjs --import ./scripts/ts-resolve.mjs --test \"src/**/*.test.mjs\"",
     "perf-bench": "node scripts/perf-bench.mjs",
     "browser-matrix": "node scripts/browser-matrix.mjs",
-    "verify-hero": "node scripts/verify-hero.mjs"
+    "verify-hero": "node scripts/verify-hero.mjs",
+    "verify-layout": "node scripts/layout-matrix.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
