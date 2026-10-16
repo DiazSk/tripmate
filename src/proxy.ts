@@ -115,5 +115,7 @@ export const config = {
    * the trips routes read this cookie, and a curl against them should get the same legacy-owner
    * fallback a cookieless browser would.
    */
-  matcher: ["/((?!_next/static|_next/image|cesium|favicon.ico|sitemap.xml|robots.txt).*)"],
+  // `.well-known` too: Apple's and Google's fetchers must get the association files with no cookie,
+  // no Clerk handshake and no redirect, or they treat the domain as unclaimed (`src/lib/appLinks.ts`).
+  matcher: ["/((?!_next/static|_next/image|cesium|favicon.ico|sitemap.xml|robots.txt|\\.well-known).*)"],
 };

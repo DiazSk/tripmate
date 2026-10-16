@@ -83,7 +83,9 @@ export default function SharedTripScreen() {
   );
   const navStyle = useAnimatedStyle(() => ({ opacity: interpolate(scrollY.value, [STICK - 60, STICK], [0, 1], 'clamp') }));
 
-  // White over the photograph, dark once the light ground is under it.
+  // White over the photograph, dark once the light ground is under it. iOS 26 ignores this and picks
+  // the bar's colour from what is under it, which is why the cover shades its own head (`Cover`);
+  // it still governs earlier systems.
   const overPhoto = typeof trip === 'object' && trip !== null && !compact && face === 'list';
   const bar = <StatusBar style={overPhoto ? 'light' : 'dark'} />;
 

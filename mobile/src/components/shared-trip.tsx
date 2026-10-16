@@ -5,7 +5,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Path, Rect, Stop as GradientStop } from 'react-native-svg';
 
 import { usePlacePhoto } from '@/api/placePhotos';
 import type { DayPlan, SharedTrip, Stop } from '@/api/types';
@@ -60,6 +60,20 @@ export function Cover({ trip, onClose, onShare }: { trip: SharedTrip; onClose: (
       {/* Darker at the foot, where the words are, and a touch at the head, under the buttons. */}
       <View style={[StyleSheet.absoluteFill, styles.scrimAll]} />
       <View style={styles.scrimFoot} />
+      {/* And a fall of shade under the status bar. **On iOS 26 the bar's colour follows what is under
+          it, not what the app asks**: measured on this screen, React Native held "light-content" and a
+          pale sky still drew a black clock, and a black band under it drew a white one. This is the
+          lightest shade that tips it to white over Val d'Orcia's sky. */}
+      <Svg style={[styles.scrimHead, { height: insets.top + 130 }]} width="100%" height={insets.top + 130} pointerEvents="none">
+        <Defs>
+          <LinearGradient id="head" x1="0" y1="0" x2="0" y2="1">
+            <GradientStop offset="0" stopColor="#090B10" stopOpacity={0.72} />
+            <GradientStop offset="0.45" stopColor="#090B10" stopOpacity={0.42} />
+            <GradientStop offset="1" stopColor="#090B10" stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#head)" />
+      </Svg>
       <View style={[styles.corner, { top: insets.top + 4 }]}>
         <RoundButton icon={{ ios: 'xmark', android: 'close' }} label="Close" onPress={onClose} />
         <RoundButton icon={{ ios: 'square.and.arrow.up', android: 'share' }} label="Share the link" onPress={onShare} />
@@ -398,6 +412,7 @@ const styles = StyleSheet.create({
 
   cover: { height: COVER_HEIGHT, backgroundColor: '#1C1C1E', overflow: 'hidden' },
   scrimAll: { backgroundColor: 'rgba(9,11,16,0.18)' },
+  scrimHead: { position: 'absolute', top: 0, left: 0, right: 0 },
   scrimFoot: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '58%', backgroundColor: 'rgba(9,11,16,0.5)' },
   corner: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between' },
   coverText: { position: 'absolute', left: 22, right: 22, bottom: 24 },

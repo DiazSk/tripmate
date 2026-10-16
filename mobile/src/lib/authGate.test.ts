@@ -27,6 +27,10 @@ test('a deep link is never gated', () => {
   // `GET /api/trips/:id` is readable by anyone holding the id, so a shared trip must open.
   expect(launchTarget({ path: 'tripmate:///trip/abc', initial: true, signedIn: false })).toBeNull();
   expect(launchTarget({ path: 'tripmate://trip/abc', initial: true, signedIn: false })).toBeNull();
+  // A trip somebody sent, by either form of its link: the app's own and the https one a universal
+  // link delivers. Opening it needs no account.
+  expect(launchTarget({ path: 'tripmate:///s/5a1e7f2c', initial: true, signedIn: false })).toBeNull();
+  expect(launchTarget({ path: 'https://tripmate.example/s/5a1e7f2c', initial: true, signedIn: false })).toBeNull();
   // The whole planning flow works under the anonymous owner.
   expect(launchTarget({ path: 'exp://10.0.0.2:8081/--/plan/basics', initial: true, signedIn: false })).toBeNull();
 });
