@@ -66,24 +66,49 @@ export function TextRow({
   );
 }
 
-/** A date, by the platform's compact picker: the date in a tinted capsule that opens a calendar. */
+/**
+ * A date, by the platform's compact picker: the date in a tinted capsule that opens a calendar.
+ *
+ * `placeholder` makes an empty value stay empty, as `TimeRow` does: a picker always draws *some*
+ * date, so an unanswered start would read as today while the screen still treats it as missing.
+ * Until tapped it is the placeholder, which sets today and shows the picker.
+ */
 export function DateRow({
   label,
   value,
   minimumDate,
+  placeholder,
   onChange,
 }: {
   label: string;
   value: string;
   minimumDate?: string;
+  placeholder?: string;
   onChange: (iso: string) => void;
 }) {
+  if (!value && placeholder) {
+    return (
+      <View style={styles.row}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={styles.dateWrap}>
+          <Pressable
+            onPress={() => onChange(toIso(new Date()))}
+            accessibilityRole="button"
+            accessibilityLabel={`Set ${label.toLowerCase()}`}
+            hitSlop={8}>
+            <Text style={styles.placeholder}>{placeholder}</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
       {/* In a right-aligned box with an explicit size, as `DateField` does: the native view reports
           no usable intrinsic width, and laid out without the box it picks the short numeric
-          format on some passes and the spelled-out one on others. */}
+          format on some passes and the spelled-out one on others. It cannot be replaced by a label
+          with the picker hidden over it: the calendar it opens inherits the picker's opacity. */}
       <View style={styles.dateWrap}>
         <NativeDatePicker
           style={styles.datePicker}

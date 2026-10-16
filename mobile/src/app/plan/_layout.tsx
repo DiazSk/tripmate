@@ -19,7 +19,7 @@ import { PlanDraftProvider, type PlanPrefillParams } from '@/lib/planDraft';
  *
  * Steps 2-4 are pushed, so they keep their ordinary back button and are deliberately not listed.
  */
-function CloseButton() {
+function CloseButton({ tint = Colors.foreground }: { tint?: string }) {
   const router = useRouter();
   return (
     <Pressable
@@ -35,7 +35,7 @@ function CloseButton() {
         // Object form, never a bare SF string: given one, the Android path renders nothing at
         // all, silently.
         name={{ ios: 'xmark', android: 'close' }}
-        tintColor={Colors.foreground}
+        tintColor={tint}
         size={18}
         fallback={<Text style={styles.fallback}>Close</Text>}
       />
@@ -73,7 +73,18 @@ export default function PlanLayout() {
         {SHEETS.map((name) => (
           <Stack.Screen key={name} name={name} options={SHEET_OPTIONS} />
         ))}
-        <Stack.Screen name="own" options={{ headerLeft: () => <CloseButton /> }} />
+        {/* On the planner's grouped light, so its bar is too, with the ember tint the sheets use. */}
+        <Stack.Screen
+          name="own"
+          options={{
+            headerLeft: () => <CloseButton tint={Polar.ember} />,
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: SettingsColors.ground },
+            headerTitleStyle: { color: '#000' },
+            headerTintColor: Polar.ember,
+            contentStyle: { backgroundColor: SettingsColors.ground },
+          }}
+        />
         <Stack.Screen name="generating" options={{ headerLeft: () => <CloseButton /> }} />
       </Stack>
     </PlanDraftProvider>

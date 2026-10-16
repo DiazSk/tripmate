@@ -1,5 +1,5 @@
 import type { ImportedPlan } from '@/api/types';
-import { forgetPlaces, isFound, looseAnchors, ownPlanGap, renameStop, suggestedStart } from './ownPlan';
+import { dayDate, forgetPlaces, isFound, looseAnchors, ownPlanGap, renameStop, sourceLines, suggestedStart } from './ownPlan';
 
 const plan = (days: ImportedPlan['days']): ImportedPlan => ({
   destinationGuess: 'Lisbon, Portugal',
@@ -61,5 +61,46 @@ describe('looseAnchors', () => {
   it('hands the wizard the places as imported wants', () => {
     const list: ImportedPlan = { ...plan([]), isPlan: false, loose: ['LX Factory'] };
     expect(looseAnchors(list)).toEqual([{ name: 'LX Factory', lat: null, lng: null, priority: 'want', source: 'import' }]);
+  });
+});
+
+describe('sourceLines', () => {
+  const text = `Lisbon, Oct 22 to 24
+
+Thu
+9:30 Jerónimos Monastery
+lunch at Time Out Market
+
+Fri
+Tram 28 up to the castle
+Castelo de Sao Jorge
+lunch at the market again
+
+Sat
+Sintra day trip: Pena Palace, then Quinta da Regaleira`;
+  const read = plan([
+    { stops: [{ name: 'Jeronimos Monastery' }, { name: 'Time Out Market' }] },
+    { stops: [{ name: 'Tram 28' }, { name: 'Castelo de São Jorge' }, { name: 'Lunch, Time Out Market' }] },
+    { stops: [{ name: 'Pena Palace' }, { name: 'Quinta da Regaleira' }, { name: 'Cabo da Roca' }] },
+  ]);
+  it('finds each stop by its name, ignoring accents and punctuation, in reading order', () => {
+    expect(sourceLines(text, read)).toEqual([
+      [3, 4],
+      // The second lunch is matched by its words, and from day 2 onward rather than day 1's line.
+      [7, 8, 9],
+      // Two stops can come from one line; a stop in no line of the text gets no tag.
+      [12, 12, null],
+    ]);
+  });
+  it('says nothing for a plan read only from screenshots', () => {
+    expect(sourceLines('', read)).toEqual([[null, null], [null, null, null], [null, null, null]]);
+  });
+});
+
+describe('dayDate', () => {
+  it("uses the plan's own date, else counts on from the chosen start", () => {
+    expect(dayDate({ date: '2026-10-22' }, 0, '')).toBe('Thu 22 Oct');
+    expect(dayDate({}, 2, '2026-10-22')).toBe('Sat 24 Oct');
+    expect(dayDate({}, 0, '')).toBe('');
   });
 });
