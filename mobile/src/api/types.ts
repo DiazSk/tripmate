@@ -196,6 +196,22 @@ export interface Trip {
   shared?: boolean;
 }
 
+/**
+ * A trip somebody shared, as `GET /api/shared/[token]` returns it. Mirrors `SharedTrip` in
+ * `src/lib/sharedTrip.ts`: the plan and what is needed to draw it, and none of the sender's own
+ * fields (no id, no answers, no chat).
+ */
+export interface SharedTrip {
+  destination: string;
+  startDate: string;
+  endDate: string;
+  budget: number;
+  itinerary: Itinerary;
+  timezone: string | null;
+  /** The sender's first name, or null when there is none to show. */
+  sharedBy: string | null;
+}
+
 export type GroupType = "solo" | "couple" | "family_with_kids" | "other";
 /** Two answers in one field — superseded by `PacePreference` + `DiscoveryPreference`, and kept
  *  because every stored row and the frozen Swift app carry it. See the server's own note. */

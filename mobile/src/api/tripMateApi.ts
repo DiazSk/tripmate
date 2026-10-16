@@ -23,6 +23,7 @@ import type {
   ProfileStats,
   SavedPlace,
   SavedSource,
+  SharedTrip,
   SketchEvent,
   StageEvent,
   StoryScript,
@@ -341,6 +342,33 @@ export async function shareTrip(id: string): Promise<{ url: string } | undefined
     const res = await fetchWithSession(`/api/trips/${id}/share`, { method: 'POST' });
     if (!res.ok) return undefined;
     return (await res.json()) as { url: string };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A trip somebody shared with you. `null` is the server's one answer for a link that is unknown or
+ * withdrawn; `undefined` is "could not ask", so the screen can offer Try again instead of saying the
+ * link is dead when the phone is merely offline.
+ */
+export async function getSharedTrip(token: string): Promise<SharedTrip | null | undefined> {
+  try {
+    const res = await fetchWithSession(`/api/shared/${encodeURIComponent(token)}`, {});
+    if (res.status === 404) return null;
+    if (!res.ok) return undefined;
+    return ((await res.json()) as { trip: SharedTrip }).trip;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Save a copy of a shared trip into your own trips. The new trip's id, or undefined on failure. */
+export async function copySharedTrip(token: string): Promise<string | undefined> {
+  try {
+    const res = await fetchWithSession(`/api/shared/${encodeURIComponent(token)}/copy`, { method: 'POST' });
+    if (!res.ok) return undefined;
+    return ((await res.json()) as { id: string }).id;
   } catch {
     return undefined;
   }

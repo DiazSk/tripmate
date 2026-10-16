@@ -1460,6 +1460,15 @@ export interface AccountRow {
   created_at: string;
 }
 
+/** The Clerk user behind an owner id, or null for an owner with no account (an anonymous one, or the
+ *  legacy bucket). Read only to name who shared a trip. */
+export function clerkUserForOwner(ownerId: string): string | null {
+  const row = db.prepare(`SELECT clerk_user_id FROM accounts WHERE owner_id = ?`).get(ownerId) as
+    | { clerk_user_id: string }
+    | undefined;
+  return row?.clerk_user_id ?? null;
+}
+
 /**
  * The account for a Clerk user, created on first sight. Read first: this runs on every signed-in
  * request, and against Turso an unconditional insert is a write round trip each time. Only a miss

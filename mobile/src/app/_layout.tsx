@@ -107,6 +107,8 @@ export default function RootLayout() {
               `+native-intent` opens here directly, and it replaces to the tabs rather than trying
               to pop. Nothing is *gated* by this screen, which is the part that has always
               mattered. */}
+          {/* A trip somebody sent you: its cover runs under the status bar, so no header. */}
+          <Stack.Screen name="s/[token]" options={{ headerShown: false }} />
           <Stack.Screen name="signin" options={{ presentation: 'fullScreenModal', headerShown: false }} />
           {/* New accounts only: sign-up replaces itself with this, and sign-in never opens it. */}
           <Stack.Screen name="welcome" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
