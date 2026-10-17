@@ -1743,8 +1743,8 @@ html[data-story-mode="true"] .marker-day-label {
 .polar-nav-cta {
   display: inline-flex;
   align-items: center;
-  height: 2.5rem;
-  padding: 0 1.1rem;
+  height: 2.75rem; /* 44px touch floor on a phone; 2.5rem again from sm, like the chips */
+  padding: 0 0.85rem;
   border-radius: 2px;
   font-size: 0.875rem;
   font-weight: 600;
@@ -1752,6 +1752,12 @@ html[data-story-mode="true"] .marker-day-label {
   background: var(--accent);
   white-space: nowrap;
   transition: background-color 0.3s cubic-bezier(0.5, 1, 0.89, 1);
+}
+@media (width >= 40rem) {
+  .polar-nav-cta {
+    height: 2.5rem;
+    padding: 0 1.1rem;
+  }
 }
 .polar-nav-cta:hover {
   background: var(--accent-hover);

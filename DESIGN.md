@@ -638,8 +638,9 @@ One bar, `.polar-nav`, `--nav-h` tall, in three themes chosen by the band under 
 and **light**. The LogoMark and the Oswald wordmark sit centred in a three-column grid; route links
 are chips (2.5rem, `{rounded.nav}`) and the current one inverts to foreground on canvas; the landing
 adds a Plan a trip CTA in signal. The bar hides on scroll down and returns on scroll up. On a phone
-the links collapse into a full-screen menu (not a dropdown). The landing's CTA is currently hidden
-below `sm`; the 2026-10-16 ruling is that it stays visible on phones, as the design shows.
+the links collapse into a full-screen menu (not a dropdown). The landing's CTA stays visible on phones
+(2026-10-16 ruling, as the design shows): beside the menu button, 44px tall with tighter padding
+below `sm`, back to the chips' 2.5rem from `sm`.
 
 ### The Monument (signature)
 A place's name set in Oswald across the full width of its photograph — PETRA on the landing hero,

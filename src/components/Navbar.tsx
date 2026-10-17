@@ -280,6 +280,19 @@ export default function Navbar() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
+  // The menu and its toggle are `sm:hidden`, so a phone menu left open when the window widens (a
+  // rotated tablet, an unfolded phone, a resized split view) has nothing left to close it with:
+  // the bar would keep `is-menu-open`'s solid ground. Close it the moment the wide query matches.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const wide = window.matchMedia("(min-width: 40rem)");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setMenuOpen(false);
+    };
+    wide.addEventListener("change", onChange);
+    return () => wide.removeEventListener("change", onChange);
+  }, [menuOpen]);
+
   /**
    * The menu's own CTA. It closes and scrolls to the top, where the hero's "Plan a trip" is.
    *
@@ -372,14 +385,17 @@ export default function Navbar() {
             </Link>
           </span>
         )}
-        {/* The landing's one "Plan a trip" above the fold; the hero carries none. Hidden on a phone,
-            where the bar is the wordmark and the menu, and the menu's own button takes over. */}
+        {/* The landing's one "Plan a trip" above the fold; the hero carries none. Visible on every width
+            (owner ruling 2026-10-16, as the MagicPath design shows): a phone's first screen needs its
+            call to action, so it sits beside the menu button rather than behind it. `.polar-nav-cta`
+            trims its padding below `sm` to leave the centred wordmark room at 375px. */}
         {onLanding && (
-          <span className="hidden sm:inline-flex">
-            <button type="button" onClick={requestPlan} className="polar-nav-cta">
-              Plan a trip
-            </button>
-          </span>
+          // planFromMenu, not requestPlan: it also closes the menu, which a pathname change would
+          // otherwise be the only thing to do. `invisible` while the menu is open keeps the bar from
+          // showing a second "Plan a trip" above the panel's own, without moving the wordmark.
+          <button type="button" onClick={planFromMenu} className={`polar-nav-cta ${menuOpen ? "max-sm:invisible" : ""}`}>
+            Plan a trip
+          </button>
         )}
         {onLanding && (
           <button
@@ -389,7 +405,7 @@ export default function Navbar() {
             aria-expanded={menuOpen}
             aria-controls="nav-menu"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
-            className="polar-chip -mr-1 inline-flex min-h-10 min-w-10 items-center justify-center focus-visible:outline-2 focus-visible:outline-accent sm:hidden"
+            className="polar-chip -mr-1 inline-flex min-h-11 min-w-11 items-center justify-center focus-visible:outline-2 focus-visible:outline-accent sm:hidden"
           >
             {/* Three bars morphing into an X: one continuous shape, where swapping two icons is a cut. */}
             <span className="relative flex h-3.5 w-4.5 flex-col justify-between">
