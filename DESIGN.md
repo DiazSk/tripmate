@@ -134,7 +134,12 @@ typography:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.875em"
     fontWeight: 600
-    note: "`.tm-ui` — buttons, chips, nav chips."
+    note: "`.tm-ui` — chips and nav chips. The signal button sets its own size (typography.button)."
+  button:
+    fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.9em"
+    fontWeight: 600
+    note: "`.tm-signal`; `.tm-signal-lg` is 0.95em."
   caption:
     fontFamily: "Inter Tight, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.8em"
@@ -198,15 +203,15 @@ components:
     rounded: "{rounded.hairline}"
     height: "2.5em"
     padding: "0 1.15em"
-    typography: "{typography.ui}"
+    typography: "{typography.button}"
   button-primary-hover:
     backgroundColor: "{colors.accent-hover}"
     textColor: "{colors.accent-foreground}"
   button-ghost:
     backgroundColor: "transparent"
     textColor: "{colors.foreground}"
-    height: "2.5em"
-    typography: "{typography.ui}"
+    padding: "0.65em 0.2em"
+    typography: "{typography.body}"
   button-quiet:
     backgroundColor: "{colors.veil-05}"
     textColor: "{colors.ink}"
@@ -447,7 +452,8 @@ Every Polar size is an em of `{typography.polar-base}` — `clamp(14px, 1.111vw,
   Max 17ch on the hero.
 - **City** (Oswald 400, 2.5em, uppercase): the trip's name on its board.
 - **Body** (Inter Tight 500, 0.95em, 1.5): everything read.
-- **UI** (Inter Tight 600, 0.875em): buttons, chips, nav.
+- **UI** (Inter Tight 600, 0.875em): chips, nav. The signal button is a shade larger: 0.9em, 0.95em
+  for `-lg`.
 - **Caption** (Inter Tight, 0.8em, 1.4).
 - **Eyebrow / Label** (Inter Tight 600, uppercase, tracked): eyebrows at 0.875em / 0.175em; labels at
   the 11px floor (`0.6875rem`, 0.16em).
@@ -488,10 +494,17 @@ landing to clear the How it works tab). The landing draws a 12-column gridline f
 `auto-fit, minmax(min(100%, 17em), 1fr)` grids. Only ImagineDay caps a width (1440px); full-bleed
 photographs and the night map reach all four edges, cancelling `<main>`'s padding.
 
-**Breakpoints are not yet a shared set.** In use: 1100 / 760 / 560 on the landing; 960 on the trip
-board, drawer, story player and profile; 900 on the spotlight, offline page and night map; 860 on
-sign-in; 640 / 1100 on the planner; plus Tailwind's `sm`/`md`/`lg`. New work should reuse one of
-these rather than add a twelfth, and a wide-but-short laptop (about 1470×830 CSS px on a 13" MacBook
+**Breakpoints are not yet a shared set.** In use, by surface:
+- **Landing:** 1100 / 760 / 560 wide, 899 tall; ImagineDay's two columns at 1024 (`lg`); the night
+  map at 899.
+- **Planner:** 640 / 760 / 1100. **Writing screen:** 760 wide, 860 / 520 tall.
+- **Trip page:** the board's column at `(width > 960px)` and its drawer at `(width <= 960px)`; the
+  drawer widens at 64rem; the spotlight at 40rem, plus a `@container tsl (width < 23rem)` query.
+- **Shell (globals.css):** 40rem (the phone navbar closes there), 48rem, 64rem, 100rem, and 760.
+- **Elsewhere:** story player 960; profile 960 / 720 / 640; memories 1100 / 680; sign-in 860; offline
+  900 / 520.
+
+Plus Tailwind's `sm`/`md`/`lg`. New work should reuse one of these rather than add another, and a wide-but-short laptop (about 1470×830 CSS px on a 13" MacBook
 Air) is the case to check first: sizes follow width, so height runs out before width does.
 
 **Short screens condense, then scroll.** Type and controls keep their designed size; spacing and
@@ -600,11 +613,13 @@ inset clips are scroll effects on photographs, not shapes.
 ## Components
 
 ### Buttons
-- **Shape:** hairline corners (`{rounded.hairline}`), 2.5em tall (3.1em for `-lg`).
-- **Primary (Signal):** ink on signal, UI type, 1.15em side padding. Hover lightens to
+- **Shape:** hairline corners (`{rounded.hairline}`); the signal button is 2.5em tall (3.1em for `-lg`).
+- **Primary (Signal):** ink on signal, Inter Tight 600 at 0.9em (0.95em for `-lg`), 1.15em side padding
+  (1.6em for `-lg`). Hover lightens to
   `{colors.accent-hover}`; on a fine pointer the label slides 0.5em and an arrow scales in; active
   presses 1px down; disabled is 0.6 opacity.
-- **Ghost:** white text between two frost hairlines, for the secondary action over a photograph; on
+- **Ghost:** white body text (0.95em, 500) between two frost hairlines, sized by its padding (0.65em
+  0.2em, at least 12em wide) rather than a fixed height, for the secondary action over a photograph; on
   hover the gap between text and arrow opens from 2.5em to 3.5em and the rules brighten.
 - **Quiet:** ink on veil-05, veil-15 on hover — the light-surface secondary.
 - **Focus:** every Polar control takes `.tm :focus-visible` — a 2px signal outline at 3px offset.
@@ -1289,7 +1304,9 @@ grammar is drawn with lines and circles, not silhouette.
 - **Do** judge globe detail by **minimum geometric error**, not triangle count. Two regions can hit an
   identical error with a 10× triangle difference; error is what a setting controls, triangles are not.
 - **Do** let the world (the map, a scrolled photograph) be the motion. Interface motion is one-shot, on
-  the `--wd-ease-*` curves, and nothing loops.
+  the `--wd-ease-*` curves (`--wd-ease-sheet` is the How it works sheet's), and nothing loops. Recorded
+  exceptions: the sheet's backdrop fades on a sine curve, ImagineDay keeps its own `--ease`, and
+  the app shell's marker and map-curtain curves in `globals.css` predate Polar.
 - **Do** set a stagger delay as an inline `style={{ animationDelay }}`, never as `[animation-delay:90ms]`.
   That Tailwind arbitrary property generates no rule in this project — the Hero shipped with the class
   form for months and the stagger never once ran.

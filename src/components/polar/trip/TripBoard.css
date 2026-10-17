@@ -774,7 +774,7 @@
   border-radius: 0.375rem;
   box-shadow: 0 2em 4em -1.5em rgba(0, 0, 0, 0.7);
   overflow: hidden;
-  animation: trip-drawer-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: trip-drawer-in 0.4s var(--wd-ease-reveal) both;
 }
 .trip-drawer-body {
   flex: 1;

@@ -153,7 +153,7 @@
 }
 .nm-stop-pin {
   position: relative;
-  transition: opacity 0.45s cubic-bezier(0.76, 0, 0.24, 1);
+  transition: opacity 0.45s var(--wd-ease-expedition);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -168,7 +168,7 @@
   color: #fff;
   background: #090b10;
   border: 1.5px solid #fff;
-  transition: background-color 0.3s cubic-bezier(0.5, 1, 0.89, 1), color 0.3s, border-color 0.3s, box-shadow 0.45s cubic-bezier(0.76, 0, 0.24, 1);
+  transition: background-color 0.3s var(--wd-ease-out), color 0.3s, border-color 0.3s, box-shadow 0.45s var(--wd-ease-expedition);
 }
 .nm-stop-pin.is-past .nm-stop-n {
   background: #fff;

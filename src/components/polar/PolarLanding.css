@@ -48,6 +48,7 @@
   --wd-ease-expedition: cubic-bezier(0.76, 0, 0.24, 1);
   --wd-ease-slide: cubic-bezier(0.4, 0, 0.2, 1);
   --wd-ease-reveal: cubic-bezier(0.16, 1, 0.3, 1);
+  --wd-ease-sheet: cubic-bezier(0.87, 0, 0.13, 1);
 
   --wd-gutter: 0.75em;
   --wd-pad: 1.25em;
@@ -970,12 +971,12 @@
   overflow-y: auto;
   transform: translateX(100%);
   visibility: hidden;
-  transition: transform 0.8s cubic-bezier(0.87, 0, 0.13, 1), visibility 0s 0.8s;
+  transition: transform 0.8s var(--wd-ease-sheet), visibility 0s 0.8s;
 }
 .tm-sheet.is-on {
   transform: translateX(0);
   visibility: visible;
-  transition: transform 0.8s cubic-bezier(0.87, 0, 0.13, 1), visibility 0s;
+  transition: transform 0.8s var(--wd-ease-sheet), visibility 0s;
 }
 .tm-sheet-head {
   display: flex;

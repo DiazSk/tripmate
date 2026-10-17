@@ -428,7 +428,7 @@
 }
 .tsl-what .tsl-fit {
   font-weight: 600;
-  color: #0e6670;
+  color: var(--tag-positive-fg); /* {colors.positive-light} under data-appearance="light" */
 }
 .tsl-what .tsl-fit.is-no {
   color: var(--wd-charcoal);
