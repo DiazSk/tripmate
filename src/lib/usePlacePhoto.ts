@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type Photo = { thumbnailUrl: string | null; imageUrl: string | null; extract: string | null };
+type Photo = { thumbnailUrl: string | null; wideUrl?: string | null; imageUrl: string | null; extract: string | null };
 
 const resolved = new Map<string, Photo>();
 // Same name is requested concurrently by several components (a stop's avatar and its stacked
@@ -37,14 +37,15 @@ function fetchPhoto(name: string): Promise<Photo | null> {
 }
 
 /**
- * `variant: "full"` asks for the larger `imageUrl` (header backgrounds), `"extract"` for the
+ * `variant: "full"` asks for the larger `imageUrl` (full-bleed backgrounds, up to 3840px), `"wide"`
+ * for a ~1280px rendition (a header photo a few hundred CSS px across, a tenth of the bytes), `"extract"` for the
  * Wikipedia one-paragraph description that arrives in the same response; default is the small
  * thumbnail. All three variants share one request and one cache entry per name, so asking for
  * the extract alongside a photo costs nothing extra.
  */
 export function usePlacePhoto(
   name: string,
-  variant: "thumb" | "full" | "extract" = "thumb"
+  variant: "thumb" | "wide" | "full" | "extract" = "thumb"
 ): string | null | undefined {
   const [state, setState] = useState(() => ({ name, photo: resolved.get(name) }));
 
@@ -74,5 +75,7 @@ export function usePlacePhoto(
   // with no photo comes back as an object whose urls are null.
   if (!photo) return undefined;
   if (variant === "extract") return photo.extract;
+  // `wideUrl` is absent from a response served by an older server; the original is the safe stand-in.
+  if (variant === "wide") return photo.wideUrl ?? photo.imageUrl;
   return variant === "full" ? photo.imageUrl : photo.thumbnailUrl;
 }

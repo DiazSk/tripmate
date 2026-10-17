@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Image from "next/image";
 import { Bike, Car, Footprints } from "lucide-react";
 
 import type { DayPlan, Itinerary, Stop, Trip } from "@/lib/types";
@@ -109,9 +110,10 @@ export default function TripBoard({
   const story = useStoryControls();
   const { showTripRoute, showLegPaths, hoveredIndex, setHoveredIndex, activeIndex } = useMapCamera();
   const heroPhoto = usePlacePhoto(trip.destination, "thumb");
-  // The column's head is the city across its full width, so it takes the original rather than the
-  // ticket's thumbnail. One request either way: both variants share a cache entry.
-  const headPhoto = usePlacePhoto(trip.destination, "full");
+  // The column's head is the city across its full width (520 CSS px), so it takes a ~1280px
+  // rendition rather than the ticket's 330px thumbnail or the 3840px original (2,881KB, for a box
+  // that needs 1040px at 2x). One request either way: all variants share a cache entry.
+  const headPhoto = usePlacePhoto(trip.destination, "wide");
   /** The open board stands as a wall on the right rather than along the foot. `docked-panel` on it
    *  is what `panelLeftEdgePx` measures, so the camera aims the day beside it, exactly as beside a
    *  drawer — and only then: on the bottom board that class would read as a wall at x = 0. */
@@ -308,8 +310,11 @@ export default function TripBoard({
             {column && (
               <span className="tb-trip-photo" aria-hidden="true">
                 {headPhoto && (
-                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary Wikipedia originals; next/image throws on an unconfigured host
-                  <img src={headPhoto} alt="" className="value-in" />
+                  // next/image, not a bare <img>: the browser never touches Wikimedia, whose image hosts
+                  // set cookies (`WMF-Uniq`, `NetworkProbeLimit`) that failed Lighthouse's
+                  // third-party-cookies audit (best practices 100 -> 78) at any size, and the optimizer
+                  // re-encodes the 1280px source to ~1080px WebP for this 520px box at 2x.
+                  <Image src={headPhoto} alt="" fill sizes="(max-width: 640px) 100vw, 520px" className="value-in" />
                 )}
               </span>
             )}

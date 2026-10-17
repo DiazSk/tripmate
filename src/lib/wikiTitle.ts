@@ -109,6 +109,28 @@ export interface Summary {
   wikibase_item?: string;
 }
 
+/**
+ * A ~1280px rendition of the article's lead image, for a box that is wider than the 330px
+ * thumbnail and far narrower than the original. Wikipedia's `originalimage.source` is not the
+ * file itself but a Wikimedia thumbnail capped at 3840px (2,881KB for Val d'Orcia), and the width
+ * is a path segment, so a smaller one is a string rewrite rather than another request.
+ *
+ * **1280, not 1200, and that is measured**: Wikimedia only serves a fixed ladder of widths now
+ * (...960, 1280, 1920, 3840), and `1200px-` answers 400 with a 2KB error body. 1280 is 297KB for the
+ * same photo and covers a 520 CSS px box at 2x with room. A URL that is already <= 1280 or carries no
+ * `Npx-` segment (a small original, a non-Wikimedia host) passes through untouched, so this never
+ * upscales, which Wikimedia refuses too.
+ */
+export const WIDE_IMAGE_PX = 1280;
+
+export function wideImage(summary: Pick<Summary, "thumbnail" | "originalimage">): string | null {
+  const src = summary.originalimage?.source ?? summary.thumbnail?.source;
+  if (!src) return null;
+  return src.replace(/\/(\d+)px-([^/?]+)(\?.*)?$/, (m, w: string, file: string, q = "") =>
+    Number(w) > WIDE_IMAGE_PX ? `/${WIDE_IMAGE_PX}px-${file}${q}` : m
+  );
+}
+
 /** The one place that calls Wikipedia's summary endpoint. Previously duplicated in
  *  `exportPhotos.ts` (with a timeout) and `place-photo/route.ts` (without one) — the
  *  timeout is not optional, it's what keeps an undici fetch from sitting for ~5 minutes. */

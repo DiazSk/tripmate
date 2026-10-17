@@ -90,7 +90,7 @@ export default function SplitEditor({
 }) {
   // The same cache key `ItineraryCard` and the /trips collage already use, so the picture is
   // usually resolved before this opens and costs no request.
-  const headerPhoto = usePlacePhoto(trip.destination, "full");
+  const headerPhoto = usePlacePhoto(trip.destination, "wide");
   /** The day whose stops are being edited, or `null` for "All Days". */
   const [activeDay, setActiveDay] = useState<number | null>(null);
   const [dragging, setDragging] = useState<{

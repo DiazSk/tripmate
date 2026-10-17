@@ -278,7 +278,7 @@ export default function ItineraryCard({
     if (onActiveDayChange) onActiveDayChange(value);
     else setUncontrolledDayIndex(value);
   };
-  const headerPhoto = usePlacePhoto(destination, "full");
+  const headerPhoto = usePlacePhoto(destination, "wide");
   const dayIndex = Math.min(activeDayIndex, itinerary.days.length - 1);
   const day = itinerary.days[dayIndex];
   const { showTripRoute, showLegPaths, hoveredIndex, setHoveredIndex, activeIndex } =

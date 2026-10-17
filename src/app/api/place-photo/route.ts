@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchSummary, resolveTitle } from "@/lib/wikiTitle";
+import { fetchSummary, resolveTitle, wideImage } from "@/lib/wikiTitle";
 
 export async function GET(req: NextRequest) {
   const name = req.nextUrl.searchParams.get("name");
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const title = await resolveTitle(name);
     if (!title) {
       // A genuine miss (no matching page) — 200 so the client caches it rather than retrying.
-      return NextResponse.json({ thumbnailUrl: null, imageUrl: null, extract: null });
+      return NextResponse.json({ thumbnailUrl: null, wideUrl: null, imageUrl: null, extract: null });
     }
 
     const data = await fetchSummary(title);
@@ -37,6 +37,8 @@ export async function GET(req: NextRequest) {
     const isPlace = !!data.coordinates;
     return NextResponse.json({
       thumbnailUrl: isPlace ? (data.thumbnail?.source ?? null) : null,
+      // ~1280px: for a box that is wide but not full-bleed. See `wideImage`.
+      wideUrl: isPlace ? wideImage(data) : null,
       imageUrl: isPlace ? (data.originalimage?.source ?? data.thumbnail?.source ?? null) : null,
       // The same summary response the photo comes from already carries a one-paragraph
       // description, so returning it costs nothing — this request was being made either way.
